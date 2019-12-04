@@ -85,6 +85,38 @@ def list_one_entry_at_a_time(fs, dirpath):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
+def copy_file(fs, src, dst, mode, uid, gid):
+    """
+    Copy a regular file from @src to @dst. @dst is overwritten if it exists.
+    """
+    src_fd = dst_fd = None
+    try:
+        src_fd = fs.open(src, os.O_RDONLY);
+        dst_fd = fs.open(dst, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, mode)
+        fs.chown(dst, uid, gid)
+    except cephfs.Error as e:
+        if src_fd is not None:
+            fs.close(src_fd)
+        if dst_fd is not None:
+            fs.close(dst_fd)
+        raise VolumeException(-e.args[0], e.args[1])
+
+    IO_SIZE = 8 * 1024 * 1024
+    try:
+        while True:
+            data = fs.read(src_fd, -1, IO_SIZE)
+            if not len(data):
+                break
+            written = 0
+            while written < len(data):
+                written += fs.write(dst_fd, data[written:], -1)
+        fs.fsync(dst_fd, 0)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+    finally:
+        fs.close(src_fd)
+        fs.close(dst_fd)
+
 def get_ancestor_xattr(fs, path, attr):
     """
     Helper for reading layout information: if this xattr is missing

@@ -168,6 +168,18 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             subvolume_status["source"] = self._get_clone_source()
         return subvolume_status
 
+    @property
+    def state(self):
+        return self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE)
+
+    @state.setter
+    def state(self, val):
+        state = val[0]
+        flush = val[1]
+        self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, state)
+        if flush:
+            self.metadata_mgr.flush()
+
     def remove(self):
         self.trash_base_dir()
 
@@ -175,10 +187,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         subvol_path = self.path
         return self._resize(subvol_path, newsize, noshrink)
 
+    def snapshot_path(self, snapname):
+        return os.path.join(self.path,
+                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
+                            snapname.encode('utf-8'))
+
     def create_snapshot(self, snapname):
-        snappath = os.path.join(self.path,
-                                self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                                snapname.encode('utf-8'))
+        snappath = self.snapshot_path(snapname)
         mksnap(self.fs, snappath)
 
     def is_snapshot_protected(self, snapname):
@@ -204,9 +219,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def remove_snapshot(self, snapname):
         if self.is_snapshot_protected(snapname):
             raise VolumeException(-errno.EINVAL, "snapshot '{0}' is protected".format(snapname))
-        snappath = os.path.join(self.path,
-                                self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                                snapname.encode('utf-8'))
+        snappath = self.snapshot_path(snapname)
         rmsnap(self.fs, snappath)
 
     def list_snapshots(self):
