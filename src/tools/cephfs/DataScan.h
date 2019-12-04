@@ -174,7 +174,7 @@ class MetadataTool
    * Try and read a dentry from a dirfrag
    */
   int read_dentry(inodeno_t parent_ino, frag_t frag,
-                  const std::string &dname, InodeStore *inode);
+		  const std::string &dname, InodeStore *inode, snapid_t *dnfirst=nullptr);
 };
 
 /**
@@ -220,7 +220,7 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
 
     int inject_linkage(
         inodeno_t dir_ino, const std::string &dname,
-        const frag_t fragment, const InodeStore &inode);
+        const frag_t fragment, const InodeStore &inode, snapid_t dnfirst=CEPH_NOSNAP);
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
