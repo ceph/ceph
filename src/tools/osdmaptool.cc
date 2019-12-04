@@ -390,8 +390,8 @@ int main(int argc, const char **argv)
       cout << "No pools available" << std::endl;
       goto skip_upmap;
     }
-    srand(time(0));
-    random_shuffle (pools.begin(), pools.end());
+    std::random_device rd;
+    std::shuffle(pools.begin(), pools.end(), std::mt19937{rd()});
     cout << "pools ";
     for (auto& i: pools)
       cout << osdmap.get_pool_name(i) << " ";
