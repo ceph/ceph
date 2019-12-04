@@ -29,6 +29,8 @@ ListWatchersRequest<I>::ListWatchersRequest(I &image_ctx, int flags,
                                             Context *on_finish)
   : m_image_ctx(image_ctx), m_flags(flags), m_watchers(watchers),
     m_on_finish(on_finish), m_cct(m_image_ctx.cct) {
+  ceph_assert((m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) == 0 ||
+              (m_flags & LIST_WATCHERS_MIRROR_INSTANCES_ONLY) == 0);
 }
 
 template<typename I>
@@ -75,8 +77,8 @@ void ListWatchersRequest<I>::handle_list_image_watchers(int r) {
 template<typename I>
 void ListWatchersRequest<I>::list_mirror_watchers() {
   if ((m_object_watchers.empty()) ||
-      (m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) == 0 ||
-      (m_image_ctx.features & RBD_FEATURE_JOURNALING) == 0) {
+      (m_flags & (LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES |
+                  LIST_WATCHERS_MIRROR_INSTANCES_ONLY)) == 0) {
     finish(0);
     return;
   }
@@ -128,14 +130,18 @@ void ListWatchersRequest<I>::finish(int r) {
             continue;
           }
         }
+        auto it = std::find_if(m_mirror_watchers.begin(),
+                               m_mirror_watchers.end(),
+                               [w] (obj_watch_t &watcher) {
+                                 return (strncmp(w.addr, watcher.addr,
+                                                 sizeof(w.addr)) == 0);
+                               });
         if ((m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) != 0) {
-          auto it = std::find_if(m_mirror_watchers.begin(),
-                                 m_mirror_watchers.end(),
-                                 [w] (obj_watch_t &watcher) {
-                                   return (strncmp(w.addr, watcher.addr,
-                                                   sizeof(w.addr)) == 0);
-                                 });
           if (it != m_mirror_watchers.end()) {
+            continue;
+          }
+        } else if ((m_flags & LIST_WATCHERS_MIRROR_INSTANCES_ONLY) != 0) {
+          if (it == m_mirror_watchers.end()) {
             continue;
           }
         }
