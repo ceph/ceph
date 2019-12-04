@@ -18,7 +18,7 @@ from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
-class MDSThrasher(Greenlet, Thrasher):
+class MDSThrasher(Thrasher, Greenlet):
     """
     MDSThrasher::
 
@@ -98,8 +98,7 @@ class MDSThrasher(Greenlet, Thrasher):
     """
 
     def __init__(self, ctx, manager, config, fs, max_mds):
-        Greenlet.__init__(self)
-        Thrasher.__init__(self, "MDSThrasher")
+        super(MDSThrasher, self).__init__()
 
         self.config = config
         self.ctx = ctx
@@ -137,7 +136,7 @@ class MDSThrasher(Greenlet, Thrasher):
             #   File "/usr/lib/python2.7/traceback.py", line 13, in _print
             #     file.write(str+terminator)
             # 2017-02-03T14:34:01.261 CRITICAL:root:IOError
-            self.exception = e
+            self.set_thrasher_exception(e)
             self.logger.exception("exception:")
             # allow successful completion so gevent doesn't see an exception...
 
@@ -417,7 +416,6 @@ def task(ctx, config):
 
     for fs in status.get_filesystems():
         thrasher = MDSThrasher(ctx, manager, config, Filesystem(ctx, fs['id']), fs['mdsmap']['max_mds'])
-        thrasher.name = thrasher.name + " on fs." + thrasher.fs.name
         thrasher.start()
         ctx.ceph[config['cluster']].thrashers.append(thrasher)
 
