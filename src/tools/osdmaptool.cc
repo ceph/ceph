@@ -433,8 +433,8 @@ int main(int argc, const char **argv)
     vector<int> rules;
     for (auto& r: pools_by_rule)
       rules.push_back(r.first);
-    srand(time(0));
-    random_shuffle (rules.begin(), rules.end());
+    std::random_device rd;
+    std::shuffle(rules.begin(), rules.end(), std::mt19937{rd()});
     if (debug) {
       for (auto& r: rules)
         cout << "rule: " << r << " " << pools_by_rule[r] << std::endl;
