@@ -26,6 +26,7 @@
 
 #include "common/config.h"
 #include "common/strtol.h"
+#include "common/numa.h"
 
 #include "mon/MonMap.h"
 #include "mds/MDSDaemon.h"
@@ -93,6 +94,25 @@ int main(int argc, const char **argv)
 			 0, "mds_data");
   ceph_heap_profiler_init();
 
+  int numa_node = g_conf().get_val<int64_t>("mds_numa_node");
+  size_t numa_cpu_set_size = 0;
+  cpu_set_t numa_cpu_set;
+  if (numa_node >= 0) {
+    int r = get_numa_node_cpu_set(numa_node, &numa_cpu_set_size, &numa_cpu_set);
+    if (r < 0) {
+      dout(1) << __func__ << " unable to determine mds numa node " << numa_node
+              << " CPUs" << dendl;
+      numa_node = -1;
+    } else {
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
+      if (r < 0) {
+        derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
+        << dendl;
+      }
+    }
+  } else {
+    dout(1) << __func__ << " not setting numa affinity" << dendl;
+  }
   std::string val, action;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
