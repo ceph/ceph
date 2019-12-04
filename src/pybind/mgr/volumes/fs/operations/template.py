@@ -111,6 +111,15 @@ class SubvolumeTemplate(object):
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
+    def snapshot_path(self, snapname):
+        """
+        return the snapshot path for a given snapshot name
+
+        :param: subvolume snapshot name
+        :return: snapshot path
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
     def list_snapshots(self):
         """
         list all subvolume snapshots.
