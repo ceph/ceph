@@ -73,14 +73,14 @@ class OrchestratorControllerTest(ControllerTestCase):
                 'name': 'host-0',
                 'devices': [
                     {'path': 'nvme0n1'},
-                    {'path': 'sdb'},
-                    {'path': 'sdc'},
+                    {'path': '/dev/sdb'},
+                    {'path': '/dev/sdc'},
                 ]
             },
             {
                 'name': 'host-1',
                 'devices': [
-                    {'path': 'sda'},
+                    {'path': '/dev/sda'},
                     {'path': 'sdb'},
                 ]
             }
