@@ -22,16 +22,12 @@ OSD_LV_NAME=${SCRIPT_NAME%.*}
 [ -z "$SUDO" ] && SUDO=sudo
 
 if [ -z "$CEPH_DAEMON" ]; then
-    [ -x src/ceph-daemon/ceph-daemon ] && CEPH_DAEMON=src/ceph-daemon/ceph-daemon
-    [ -x ../src/ceph-daemon/ceph-daemon ] && CEPH_DAEMON=../src/ceph-daemon/ceph-daemon
-    [ -x ./ceph-daemon/ceph-daemon ] && CEPH_DAEMON=./ceph-daemon/ceph-daemon
-    [ -x ./ceph-daemon ] && CEPH_DAEMON=.ceph-daemon
-    which ceph-daemon && CEPH_DAEMON=$(which ceph-daemon)
+    CEPH_DAEMON=${SCRIPT_DIR}/../../src/ceph-daemon/ceph-daemon
 fi
 
 # at this point, we need $CEPH_DAEMON set
-if [ -z "$CEPH_DAEMON" ]; then
-    echo "ceph-daemon not found.Please set \$CEPH_DAEMON"
+if ! [ -x "$CEPH_DAEMON" ]; then
+    echo "ceph-daemon not found. Please set \$CEPH_DAEMON"
     exit 1
 fi
 
