@@ -1207,13 +1207,19 @@ class ObjectStoreTool:
                 self.manager.wait_till_osd_is_up(self.osd, 300)
 
 
+# XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
+# the same name.
 class CephManager:
     """
     Ceph manager object.
     Contains several local functions that form a bulk of this module.
 
-    Note: this class has nothing to do with the Ceph daemon (ceph-mgr) of
-    the same name.
+    :param controller: the remote machine where the Ceph commands should be
+                       executed
+    :param ctx: the cluster context
+    :param config: path to Ceph config file
+    :param logger: for logging messages
+    :param cluster: name of the Ceph cluster
     """
 
     def __init__(self, controller, ctx=None, config=None, logger=None,
@@ -1320,6 +1326,53 @@ class CephManager:
             args.append("--watch-channel")
             args.append(watch_channel)
         return self.controller.run(args=args, wait=False, stdout=StringIO(), stdin=run.PIPE)
+
+    def get_mon_socks(self):
+        """
+        Get monitor sockets.
+
+        :return socks: tuple of strings; strings are individual sockets.
+        """
+        from json import loads
+
+        output = loads(self.raw_cluster_cmd(['--format=json', 'mon', 'dump']))
+        socks = []
+        for mon in output['mons']:
+            for addrvec_mem in mon['public_addrs']['addrvec']:
+                socks.append(addrvec_mem['addr'])
+        return tuple(socks)
+
+    def get_msgrv1_mon_socks(self):
+        """
+        Get monitor sockets that use msgrv1 to operate.
+
+        :return socks: tuple of strings; strings are individual sockets.
+        """
+        from json import loads
+
+        output = loads(self.raw_cluster_cmd('--format=json', 'mon', 'dump'))
+        socks = []
+        for mon in output['mons']:
+            for addrvec_mem in mon['public_addrs']['addrvec']:
+                if addrvec_mem['type'] == 'v1':
+                    socks.append(addrvec_mem['addr'])
+        return tuple(socks)
+
+    def get_msgrv2_mon_socks(self):
+        """
+        Get monitor sockets that use msgrv2 to operate.
+
+        :return socks: tuple of strings; strings are individual sockets.
+        """
+        from json import loads
+
+        output = loads(self.raw_cluster_cmd('--format=json', 'mon', 'dump'))
+        socks = []
+        for mon in output['mons']:
+            for addrvec_mem in mon['public_addrs']['addrvec']:
+                if addrvec_mem['type'] == 'v2':
+                    socks.append(addrvec_mem['addr'])
+        return tuple(socks)
 
     def flush_pg_stats(self, osds, no_wait=None, wait_for_mon=300):
         """
