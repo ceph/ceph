@@ -15,6 +15,14 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
+  char buf[64];
+  const auto len = snprintf(buf, sizeof(buf), "%010ld.%06ld.%s", (long)ts.sec(), (long)ts.usec(), hash.c_str());
+  if (len > 0) {
+    id.assign(buf, len);
+  }
+}
+
 bool rgw_s3_key_filter::decode_xml(XMLObj* obj) {
   XMLObjIter iter = obj->find("FilterRule");
   XMLObj *o;
@@ -738,7 +746,7 @@ void RGWUserPubSub::SubWithEvents<EventType>::list_events_result::dump(Formatter
 
   Formatter::ArraySection s(*f, EventType::json_type_plural);
   for (auto& event : events) {
-    encode_json(EventType::json_type_single, event, f);
+    encode_json("", event, f);
   }
 }
 
