@@ -465,8 +465,10 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 	ceph_assert(it.second == DIRTY_NEW);
 	// find omap object to store the key
 	for (unsigned i = first_free_idx; i < omap_num_objs; i++) {
-	  if (omap_num_items[i] < MAX_ITEMS_PER_OBJ)
+	  if (omap_num_items[i] < MAX_ITEMS_PER_OBJ) {
 	    omap_idx = i;
+	    break;
+	  }
 	}
 	if (omap_idx < 0) {
 	  ++omap_num_objs;
