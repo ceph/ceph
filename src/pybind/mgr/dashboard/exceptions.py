@@ -105,3 +105,7 @@ class RoleNotInUser(Exception):
 
 class GrafanaError(Exception):
     pass
+
+
+class PasswordCheckException(Exception):
+    pass

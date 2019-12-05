@@ -6,40 +6,19 @@ import cherrypy
 from . import BaseController, ApiController, RESTController, Endpoint
 from .. import mgr
 from ..exceptions import DashboardException, UserAlreadyExists, \
-    UserDoesNotExist
+    UserDoesNotExist, PasswordCheckException
 from ..security import Scope
 from ..services.access_control import SYSTEM_ROLES, PasswordCheck
 from ..services.auth import JwtManager
 
 
-def check_password_complexity(password, username, old_password=None):
-    password_complexity = PasswordCheck(password, username, old_password)
-    if password_complexity.check_if_as_the_old_password():
-        raise DashboardException(msg='Password cannot be the\
-                                      same as the previous one.',
-                                 code='pwd-must-not-be-last-one',
-                                 component='user')
-    if password_complexity.check_if_contains_username():
-        raise DashboardException(msg='Password cannot contain username.',
-                                 code='pwd-must-not-contain-username',
-                                 component='user')
-    if password_complexity.check_if_contains_forbidden_words():
-        raise DashboardException(msg='Password cannot contain keywords.',
-                                 code='pwd-must-not-contain-forbidden-keywords',
-                                 component='user')
-    if password_complexity.check_if_repetetive_characters():
-        raise DashboardException(msg='Password cannot contain repetitive \
-                                      characters.',
-                                 code='pwd-must-not-contain-repetitive-chars',
-                                 component='user')
-    if password_complexity.check_if_sequential_characters():
-        raise DashboardException(msg='Password cannot contain sequential \
-                                      characters.',
-                                 code='pwd-must-not-contain-sequential-chars',
-                                 component='user')
-    if password_complexity.check_password_characters() < 10:
-        raise DashboardException(msg='Password is too weak.',
-                                 code='pwd-too-weak',
+def validate_password_policy(password, username, old_password=None):
+    pw_check = PasswordCheck(password, username, old_password)
+    try:
+        pw_check.check_all()
+    except PasswordCheckException as ex:
+        raise DashboardException(msg=str(ex),
+                                 code='password_policy_validation_failed',
                                  component='user')
 
 
@@ -84,7 +63,7 @@ class User(RESTController):
         if roles:
             user_roles = User._get_user_roles(roles)
         if password:
-            check_password_complexity(password, username)
+            validate_password_policy(password, username)
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(username, password, name,
                                                   email, enabled)
@@ -124,7 +103,7 @@ class User(RESTController):
         if roles:
             user_roles = User._get_user_roles(roles)
         if password:
-            check_password_complexity(password, username)
+            validate_password_policy(password, username)
             user.set_password(password)
         user.name = name
         user.email = email
@@ -152,6 +131,6 @@ class UserChangePassword(BaseController):
             raise DashboardException(msg='Invalid old password',
                                      code='invalid_old_password',
                                      component='user')
-        check_password_complexity(new_password, username, old_password)
+        validate_password_policy(new_password, username, old_password)
         user.set_password(new_password)
         mgr.ACCESS_CTRL_DB.save()
