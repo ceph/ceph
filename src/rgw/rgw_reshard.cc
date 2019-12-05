@@ -375,7 +375,7 @@ int RGWBucketReshard::cancel()
 class BucketInfoReshardUpdate
 {
   rgw::sal::RGWRadosStore *store;
-  RGWBucketInfo bucket_info;
+  RGWBucketInfo& bucket_info;
   std::map<string, bufferlist> bucket_attrs;
 
   bool in_progress{false};
