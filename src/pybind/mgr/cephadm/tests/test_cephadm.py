@@ -10,7 +10,7 @@ except ImportError:
     pass
 
 from orchestrator import ServiceDescription, raise_if_exception, Completion, InventoryNode, \
-    StatelessServiceSpec, PlacementSpec, RGWSpec, parse_host_specs
+    StatelessServiceSpec, PlacementSpec, RGWSpec, parse_host_specs, StatefulServiceSpec
 from ..module import CephadmOrchestrator
 from tests import mock
 from .fixtures import cephadm_module
@@ -34,7 +34,7 @@ def mon_command(*args, **kwargs):
     return 0, '', ''
 
 
-class TestSSH(object):
+class TestCephadm(object):
     def _wait(self, m, c):
         # type: (CephadmOrchestrator, Completion) -> Any
         m.process([c])
@@ -85,7 +85,8 @@ class TestSSH(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_mon_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.update_mons(1, [parse_host_specs('test:0.0.0.0=a')])
+            ps = PlacementSpec(nodes=['test:0.0.0.0=a'], count=1)
+            c = cephadm_module.update_mons(StatefulServiceSpec(placement=ps))
             assert self._wait(cephadm_module, c) == ["(Re)deployed mon.a on host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
@@ -94,7 +95,8 @@ class TestSSH(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_mgr_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.update_mgrs(1, [parse_host_specs('test:0.0.0.0')])
+            ps = PlacementSpec(nodes=['test:0.0.0.0=a'], count=1)
+            c = cephadm_module.update_mgrs(StatefulServiceSpec(placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed mgr." in out
             assert " on host 'test'" in out
@@ -115,8 +117,8 @@ class TestSSH(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_mds(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test'])
-            c = cephadm_module.add_mds(StatelessServiceSpec('name', ps))
+            ps = PlacementSpec(nodes=['test'], count=1)
+            c = cephadm_module.add_mds(StatelessServiceSpec('name', placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed mds.name." in out
             assert " on host 'test'" in out
@@ -127,8 +129,8 @@ class TestSSH(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_rgw(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test'])
-            c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', ps))
+            ps = PlacementSpec(nodes=['test'], count=1)
+            c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed rgw.realm.zone." in out
             assert " on host 'test'" in out
@@ -158,8 +160,8 @@ class TestSSH(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_rbd_mirror(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test'])
-            c = cephadm_module.add_rbd_mirror(StatelessServiceSpec('name', ps))
+            ps = PlacementSpec(nodes=['test'], count=1)
+            c = cephadm_module.add_rbd_mirror(StatelessServiceSpec(name='name', placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed rbd-mirror." in out
             assert " on host 'test'" in out
