@@ -5040,7 +5040,13 @@ int
 rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
                                             STS::SessionToken& token) const
 {
-  string decodedSessionToken = rgw::from_base64(session_token);
+  string decodedSessionToken;
+  try {
+    decodedSessionToken = rgw::from_base64(session_token);
+  } catch (...) {
+    ldpp_dout(dpp, 0) << "ERROR: Invalid session token, not base64 encoded." << dendl;
+    return -EINVAL;
+  }
 
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {
