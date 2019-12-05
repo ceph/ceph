@@ -213,7 +213,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         'name=host,type=CephString '
         'name=label,type=CephString',
         'Add a host label')
-    def _host_label_add(self, host, label):
+    def _host_label_rm(self, host, label):
         completion = self.remove_host_label(host, label)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -494,9 +494,9 @@ Usage:
         'orchestrator rgw update',
         'name=zone_name,type=CephString '
         'name=realm_name,type=CephString '
-        "name=num,type=CephInt,req=false "
-        "name=label,type=CephString,req=false "
-        "name=hosts,type=CephString,n=N,req=false",
+        'name=num,type=CephInt,req=false '
+        'name=label,type=CephString,req=false '
+        'name=hosts,type=CephString,n=N,req=false',
         'Update the number of RGW instances for the given zone')
     def _rgw_update(self, zone_name, realm_name, num=None, label=None, hosts=[]):
         spec = orchestrator.RGWSpec(
@@ -608,7 +608,7 @@ Usage:
         placement = orchestrator.PlacementSpec(label=label, count=num, nodes=hosts)
         if not hosts and not label:
             # Improve Error message. Point to parse_host_spec examples
-            raise Exception("Mons need a host spec. (host, network, name(opt))")
+            raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
             # TODO: Scaling without a HostSpec doesn't work right now.
             # we need network autodetection for that.
             # placement = orchestrator.PlacementSpec(count=num)
