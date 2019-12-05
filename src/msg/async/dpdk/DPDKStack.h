@@ -141,6 +141,11 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     uint64_t seglen = 0;
     while (len < available && left_pbrs--) {
       seglen = pb->length();
+      // Buffer length is zero, no need to send, so skip it
+      if (seglen == 0) {
+        ++pb;
+        continue;
+      }
       if (len + seglen > available) {
         // don't continue if we enough at least 1 fragment since no available
         // space for next ptr.
