@@ -78,6 +78,10 @@ class Ceph(object):
 
 class Monitoring(object):
     # define the configs for the monitoring containers
+    port_map = {
+        "prometheus": 9095  # Avoid default 9090, due to conflict with cockpit UI
+    }
+
     components = {
         "prometheus": {
             "image": {
@@ -86,7 +90,7 @@ class Monitoring(object):
                 "args": [
                     "--config.file=/etc/prometheus/prometheus.yml",
                     "--storage.tsdb.path=/prometheus",
-                    "--web.listen-address=:9095"
+                    "--web.listen-address=:{}".format(port_map['prometheus'])
                 ]
             },
             "config": [
@@ -101,7 +105,7 @@ class Monitoring(object):
                             "job_name": "prometheus",
                             "static_configs": [
                                 { "targets": [
-                                    'localhost:9095'
+                                    'localhost:{}'.format(port_map['prometheus'])
                                 ]}
                             ]
                         }
@@ -111,6 +115,18 @@ class Monitoring(object):
         }
     }
 
+
+def port_in_use(port_num):
+    """Detect whether a port is in use on the local machine"""
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect(("127.0.0.1",port_num))
+    except ConnectionRefusedError:
+        return False
+    else:
+        s.close()
+        return True
 
 ##################################
 # Popen wrappers, lifted from ceph-volume
@@ -1109,7 +1125,7 @@ def command_bootstrap():
         raise Error('must specify --mon-ip or --mon-addrv')
     if not cp.has_section('global'):
         cp.add_section('global')
-    cp.set('global', 'fsid', fsid);
+    cp.set('global', 'fsid', fsid)
     cp.set('global', 'mon host', addr_arg)
     cp.set('global', 'container_image', args.image)
     cpf = StringIO()
@@ -1457,6 +1473,14 @@ def command_deploy():
     else:
         # monitoring daemon - prometheus, grafana, alertmanager
         monitoring_args = []
+
+        # Default Checks
+        daemon_port = Monitoring.port_map[daemon_type]
+        if port_in_use(daemon_port):
+            raise Error("TCP Port '{}' required for {} is already in use".format(daemon_port, daemon_type))
+        elif args.image == DEFAULT_IMAGE:
+            raise Error("--image parameter must be supplied for {}".format(daemon_type))
+
         if daemon_type == 'prometheus':
             if not args.mgr_list:
                 raise Error("mgr-list parameter is needed when deploying prometheus service")
