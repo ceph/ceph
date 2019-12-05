@@ -21,7 +21,7 @@ import subprocess
 from ceph.deployment import inventory
 from mgr_module import MgrModule
 import orchestrator
-from orchestrator import OrchestratorError, HostSpec
+from orchestrator import OrchestratorError, HostSpec, OrchestratorValidationError
 
 from . import remotes
 
@@ -788,7 +788,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._refresh_host_services(wait_for_args).then(
             _get_services_result)
 
-
     def describe_service(self, service_type=None, service_id=None,
                          node_name=None, refresh=False):
         if service_type not in ("mds", "osd", "mgr", "mon", 'rgw', "nfs", None):
@@ -931,7 +930,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         host = drive_group.hosts(all_hosts)[0]
         self._require_hosts(host)
-
 
         # get bootstrap key
         ret, keyring, err = self.mon_command({
@@ -1121,11 +1119,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                                    extra_args=extra_args)
 
     def update_mons(self, spec):
-        # type: (int, List[orchestrator.HostSpec]) -> orchestrator.Completion
+        # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts).load()
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mon').load()
         return self._update_mons(spec)
 
     def _update_mons(self, spec):
@@ -1188,7 +1186,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         Adjust the number of cluster managers.
         """
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts).load()
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
         return self._get_services('mgr').then(lambda daemons: self._update_mgrs(spec, daemons))
 
     def _update_mgrs(self, spec, daemons):
@@ -1280,7 +1278,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._create_mds(args)
 
     def update_mds(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts).load()
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
         return self._update_service('mds', self.add_mds, spec)
 
     @async_map_completion
@@ -1373,7 +1371,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._get_services('rgw').then(_remove_rgw)
 
     def update_rgw(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts).load()
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rgw').load()
         return self._update_service('rgw', self.add_rgw, spec)
 
     def add_rbd_mirror(self, spec):
@@ -1429,7 +1427,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._get_services('rbd-mirror').then(_remove_rbd_mirror)
 
     def update_rbd_mirror(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts).load()
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rbd-mirror').load()
         return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
 
     def _get_container_image_id(self, image_name):
@@ -1528,10 +1526,13 @@ class NodeAssignment(object):
                  spec=None,  # type: orchestrator.PlacementSpec
                  scheduler=None,  # type: BaseScheduler
                  get_hosts_func=None,  # type: Callable
+                 service_type=None,  # type: str
                  ):
+        assert spec and get_hosts_func and service_type
         self.spec = spec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
+        self.service_type = service_type
 
     def load(self):
         # type: () -> orchestrator.PlacementSpec
@@ -1564,11 +1565,26 @@ class NodeAssignment(object):
         # If no imperative or declarative host assignments, use the scheduler to pick from the
         # host pool (assuming `count` is set)
         if not self.spec.placement.label and not self.spec.placement.nodes and self.spec.placement.count:
-            logger.info("Found only count spec. Using {} to assign nodes.".format(self.scheduler))
+            logger.info("Found num spec. Looking for labeled nodes.".format(self.scheduler))
+            # TODO: actually query for labels (self.service_type)
+            candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()],
+                                              count=self.spec.placement.count)
+            # Not enough nodes to deploy on
+            if len(candidates) != self.spec.placement.count:
+                logger.warning("Did not find enough labeled nodes to \
+                               scale to <{}> services. Falling back to unlabeled nodes.".
+                               format(self.spec.placement.count))
+            else:
+                logger.info('Assigning nodes to spec: {}'.format(candidates))
+                self.spec.placement.set_nodes(candidates)
+                return None
+
             candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()], count=self.spec.placement.count)
-            if len(candidates) < self.spec.placement.count:
-                raise Exception("Cannot place {} services on {} hosts.".
-                                format(self.spec.placement.count, len(candidates)))
+            # Not enough nodes to deploy on
+            if len(candidates) != self.spec.placement.count:
+                raise OrchestratorValidationError("Cannot place {} services on {} hosts.".
+                                                  format(self.spec.placement.count, len(candidates)))
+
             logger.info('Assigning nodes to spec: {}'.format(candidates))
             self.spec.placement.set_nodes(candidates)
->>>>>>> 1a4ee9e96... mgr/ssh: Add SimpleScheduler and streamline arg passing
+            return None
