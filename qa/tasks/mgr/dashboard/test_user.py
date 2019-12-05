@@ -8,7 +8,6 @@ from .helper import DashboardTestCase
 
 
 class UserTest(DashboardTestCase):
-
     @classmethod
     def _create_user(cls, username=None, password=None, name=None, email=None, roles=None, enabled=True):
         data = {}
@@ -179,62 +178,67 @@ class UserTest(DashboardTestCase):
         self.assertError(code='invalid_old_password', component='user')
 
     def test_change_password_as_old_password(self):
-        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
         self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
             'old_password': 'mypassword10#',
             'new_password': 'mypassword10#'
         })
         self.assertStatus(400)
-        self.assertError(code='pwd-must-not-be-last-one', component='user')
+        self.assertError('password_policy_validation_failed', 'user',
+                         'Password cannot be the same as the previous one.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_username(self):
-        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
         self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
             'old_password': 'mypassword10#',
             'new_password': 'mypasstest1@#'
         })
         self.assertStatus(400)
-        self.assertError(code='pwd-must-not-contain-username', component='user')
+        self.assertError('password_policy_validation_failed', 'user',
+                         'Password cannot contain username.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_forbidden_words(self):
-        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
         self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
             'old_password': 'mypassword10#',
             'new_password': 'mypassOSD01'
         })
         self.assertStatus(400)
-        self.assertError(code='pwd-must-not-contain-forbidden-keywords', component='user')
+        self.assertError('password_policy_validation_failed', 'user',
+                         'Password cannot contain keywords.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_sequential_characters(self):
-        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
         self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
             'old_password': 'mypassword10#',
             'new_password': 'mypass123456!@$'
         })
         self.assertStatus(400)
-        self.assertError(code='pwd-must-not-contain-sequential-chars', component='user')
+        self.assertError('password_policy_validation_failed', 'user',
+                         'Password cannot contain sequential characters.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_repetetive_characters(self):
-        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
         self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
             'old_password': 'mypassword10#',
             'new_password': 'aaaaA1@!#'
         })
         self.assertStatus(400)
-        self.assertError(code='pwd-must-not-contain-repetitive-chars', component='user')
+        self.assertError('password_policy_validation_failed', 'user',
+                         'Password cannot contain repetitive characters.')
         self._reset_login_to_admin('test1')
 
     def test_change_password(self):
-        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
         self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
             'old_password': 'mypassword10#',
@@ -247,3 +251,42 @@ class UserTest(DashboardTestCase):
         self.assertError(code='invalid_credentials', component='auth')
         self.delete_user('test1')
         self.login('admin', 'admin')
+
+    def test_create_user_password_cli(self):
+        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create',
+                                          'test1', 'mypassword10#'])
+        self.assertEqual(exitcode, 0)
+        self.delete_user('test1')
+
+    def test_change_user_password_cli(self):
+        self.create_user('test2', 'foo_bar_10#', force_password=False)
+        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
+                                          'test2', 'foo_new-password01#'])
+        self.assertEqual(exitcode, 0)
+        self.delete_user('test2')
+
+    def test_create_user_password_force_cli(self):
+        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create',
+                                          '--force-password', 'test11',
+                                          'bar'])
+        self.assertEqual(exitcode, 0)
+        self.delete_user('test11')
+
+    def test_change_user_password_force_cli(self):
+        self.create_user('test22', 'foo_bar_10#', force_password=False)
+        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
+                                          '--force-password', 'test22',
+                                          'bar'])
+        self.assertEqual(exitcode, 0)
+        self.delete_user('test22')
+
+    def test_create_user_password_cli_fail(self):
+        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create', 'test3', 'foo'])
+        self.assertNotEqual(exitcode, 0)
+
+    def test_change_user_password_cli_fail(self):
+        self.create_user('test4', 'x1z_tst+_10#', force_password=False)
+        exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
+                                          'test4', 'bar'])
+        self.assertNotEqual(exitcode, 0)
+        self.delete_user('test4')
