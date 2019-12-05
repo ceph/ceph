@@ -56,6 +56,8 @@ cluster to retrieve configuration stored centrally for the entire
 cluster.  Once a complete view of the configuration is available, the
 daemon or process startup will proceed.
 
+.. _bootstrap-options:
+
 Bootstrap options
 -----------------
 
