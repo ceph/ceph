@@ -6,6 +6,8 @@ export class CdTableAction {
   // or none if it's not needed
   routerLink?: string | Function;
 
+  preserveFragment? = false;
+
   // This is the function that will be triggered on a click event if defined
   click?: Function;
 

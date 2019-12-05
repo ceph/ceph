@@ -5,7 +5,8 @@
             class="btn btn-{{btnColor}}"
             [ngClass]="{'disabled': disableSelectionAction(action)}"
             (click)="useClickAction(action)"
-            [routerLink]="useRouterLink(action)">
+            [routerLink]="useRouterLink(action)"
+            [preserveFragment]="action.preserveFragment ? '' : null">
       <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
     </button>
   </ng-container>
@@ -28,6 +29,7 @@
         <a class="dropdown-item"
            (click)="useClickAction(action)"
            [routerLink]="useRouterLink(action)"
+           [preserveFragment]="action.preserveFragment ? '' : null"
            [ngClass]="{'disabled': disableSelectionAction(action)}">
           <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
         </a>
