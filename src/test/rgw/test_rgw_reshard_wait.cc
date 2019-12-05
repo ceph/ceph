@@ -13,6 +13,7 @@
  */
 
 #include "rgw/rgw_reshard.h"
+#include <spawn/spawn.hpp>
 
 #include <gtest/gtest.h>
 
@@ -64,7 +65,7 @@ TEST(ReshardWait, wait_yield)
   RGWReshardWait waiter(wait_duration);
 
   boost::asio::io_context context;
-  boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
+  spawn::spawn(context, [&] (spawn::yield_context yield) {
       EXPECT_EQ(0, waiter.wait(optional_yield{context, yield}));
     });
 
@@ -89,8 +90,8 @@ TEST(ReshardWait, stop_yield)
   RGWReshardWait short_waiter(short_duration);
 
   boost::asio::io_context context;
-  boost::asio::spawn(context,
-    [&] (boost::asio::yield_context yield) {
+  spawn::spawn(context,
+    [&] (spawn::yield_context yield) {
       EXPECT_EQ(-ECANCELED, long_waiter.wait(optional_yield{context, yield}));
     });
 
@@ -133,13 +134,13 @@ TEST(ReshardWait, stop_multiple)
   // spawn 4 coroutines
   boost::asio::io_context context;
   {
-    auto async_waiter = [&] (boost::asio::yield_context yield) {
+    auto async_waiter = [&] (spawn::yield_context yield) {
         EXPECT_EQ(-ECANCELED, long_waiter.wait(optional_yield{context, yield}));
       };
-    boost::asio::spawn(context, async_waiter);
-    boost::asio::spawn(context, async_waiter);
-    boost::asio::spawn(context, async_waiter);
-    boost::asio::spawn(context, async_waiter);
+    spawn::spawn(context, async_waiter);
+    spawn::spawn(context, async_waiter);
+    spawn::spawn(context, async_waiter);
+    spawn::spawn(context, async_waiter);
   }
 
   const auto start = Clock::now();
