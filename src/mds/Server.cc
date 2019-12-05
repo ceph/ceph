@@ -3305,8 +3305,7 @@ private:
  * as appropriate: forwarded on, or the client's been replied to */
 CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
 				    bool want_auth,
-				    bool no_want_auth,
-				    bool want_layout)
+				    bool no_want_auth)
 {
   const filepath& refpath = mdr->get_filepath();
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
@@ -3325,8 +3324,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
   }
   if (want_auth)
     flags |= MDS_TRAVERSE_WANT_AUTH;
-  if (want_layout)
-    flags |= MDS_TRAVERSE_WANT_DIRLAYOUT;
   int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[0], &mdr->in[0]);
   if (r > 0)
     return nullptr; // delayed
@@ -5103,25 +5100,63 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
+bool Server::xlock_policylock(MDRequestRef& mdr, CInode *in, bool want_layout, bool xlock_snaplock)
+{
+  if (mdr->locking_state & MutationImpl::ALL_LOCKED)
+    return true;
+
+  MutationImpl::LockOpVec lov;
+  lov.add_xlock(&in->policylock);
+  if (xlock_snaplock)
+    lov.add_xlock(&in->snaplock);
+  else
+    lov.add_rdlock(&in->snaplock);
+  if (!mds->locker->acquire_locks(mdr, lov))
+    return false;
+
+  if (want_layout && in->get_projected_inode()->has_layout()) {
+    mdr->dir_layout = in->get_projected_inode()->layout;
+    want_layout = false;
+  }
+  if (CDentry *pdn = in->get_projected_parent_dn(); pdn) {
+    if (!mds->locker->try_rdlock_snap_layout(pdn->get_dir()->get_inode(), mdr, 0, want_layout))
+      return false;
+  }
+
+  mdr->locking_state |= MutationImpl::ALL_LOCKED;
+  return true;
+}
+
+CInode* Server::try_get_auth_inode(MDRequestRef& mdr, inodeno_t ino)
+{
+  CInode *in = mdcache->get_inode(ino);
+  if (!in || in->state_test(CInode::STATE_PURGING)) {
+    respond_to_request(mdr, -ESTALE);
+    return nullptr;
+  }
+  if (!in->is_auth()) {
+    mdcache->request_forward(mdr, in->authority().first);
+    return nullptr;
+  }
+
+  return in;
+}
+
 void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true, false, true);
-  if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP) {
-    respond_to_request(mdr, -EROFS);
+  // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
+  CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+  if (!cur)
     return;
-  }
 
   if (!cur->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
     return;
   }
 
-  MutationImpl::LockOpVec lov;
-  lov.add_xlock(&cur->policylock);
-  if (!mds->locker->acquire_locks(mdr, lov))
+  if (!xlock_policylock(mdr, cur, true))
     return;
 
   // validate layout
@@ -5406,12 +5441,14 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
   }
 
   bool new_realm = false;
-  MutationImpl::LockOpVec lov;
   if (name.compare(0, 15, "ceph.dir.layout") == 0) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
       return;
     }
+
+    if (!xlock_policylock(mdr, cur, true))
+      return;
 
     file_layout_t layout;
     if (cur->get_projected_inode()->has_layout())
@@ -5423,10 +5460,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
 
     rest = name.substr(name.find("layout"));
     if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
-      return;
-
-    lov.add_xlock(&cur->policylock);
-    if (!mds->locker->acquire_locks(mdr, lov))
       return;
 
     auto &pi = cur->project_inode();
@@ -5448,6 +5481,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
       return;
 
+    MutationImpl::LockOpVec lov;
     lov.add_xlock(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, lov))
       return;
@@ -5472,13 +5506,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       return;
     }
 
-    lov.add_xlock(&cur->policylock);
-    if (quota.is_enable() && !cur->get_projected_srnode()) {
-      lov.add_xlock(&cur->snaplock);
+    if (quota.is_enable() && !cur->get_projected_srnode())
       new_realm = true;
-    }
 
-    if (!mds->locker->acquire_locks(mdr, lov))
+    if (!xlock_policylock(mdr, cur, false, new_realm))
       return;
 
     auto &pi = cur->project_inode(false, new_realm);
@@ -5512,8 +5543,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       return;
     }
 
-    lov.add_xlock(&cur->policylock);
-    if (!mds->locker->acquire_locks(mdr, lov))
+    if (!xlock_policylock(mdr, cur))
       return;
 
     auto &pi = cur->project_inode();
@@ -5626,13 +5656,19 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
   string name(req->get_path2());
-  MutationImpl::LockOpVec lov;
-  CInode *cur;
 
-  if (name.compare(0, 15, "ceph.dir.layout") == 0)
-    cur = rdlock_path_pin_ref(mdr, true, false, true);
-  else
-    cur = rdlock_path_pin_ref(mdr, true);
+  // magic ceph.* namespace?
+  if (name.compare(0, 5, "ceph.") == 0) {
+    // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
+    CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+    if (!cur)
+      return;
+
+    handle_set_vxattr(mdr, cur);
+    return;
+  }
+
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur)
     return;
 
@@ -5643,12 +5679,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
 
   int flags = req->head.args.setxattr.flags;
 
-  // magic ceph.* namespace?
-  if (name.compare(0, 5, "ceph.") == 0) {
-    handle_set_vxattr(mdr, cur);
-    return;
-  }
-
+  MutationImpl::LockOpVec lov;
   lov.add_xlock(&cur->xattrlock);
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
@@ -5725,21 +5756,22 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   const cref_t<MClientRequest> &req = mdr->client_request;
   std::string name(req->get_path2());
 
-  CInode *cur;
-  if (name == "ceph.dir.layout")
-    cur = rdlock_path_pin_ref(mdr, true, false, true);
-  else
-    cur = rdlock_path_pin_ref(mdr, true);
+  if (name.compare(0, 5, "ceph.") == 0) {
+    // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
+    CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+    if (!cur)
+      return;
+
+    handle_remove_vxattr(mdr, cur);
+    return;
+  }
+
+  CInode* cur = rdlock_path_pin_ref(mdr, true);
   if (!cur)
     return;
 
   if (mdr->snapid != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
-    return;
-  }
-
-  if (name.compare(0, 5, "ceph.") == 0) {
-    handle_remove_vxattr(mdr, cur);
     return;
   }
 
@@ -9564,15 +9596,10 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   // traverse to path
-  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
-     respond_to_request(mdr, -ESTALE);
-     return;
-  }
-  if (!diri->is_auth()) {
-    mdcache->request_forward(mdr, diri->authority().first);
+  CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+  if (!diri)
     return;
-  }
+
   if (!diri->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
     return;
@@ -9686,16 +9713,9 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
     return;
   }
 
-  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
-    respond_to_request(mdr, -ESTALE);
+  CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+  if (!diri)
     return;
-  }
-
-  if (!diri->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, diri->authority().first);
-    return;
-  }
 
   // dir only
   if (!diri->is_dir()) {
@@ -9856,15 +9876,10 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
 
-  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
-    respond_to_request(mdr, -ESTALE);
+  CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+  if (!diri)
     return;
-  }
-  if (!diri->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, diri->authority().first);
-    return;
-  }
+
   if (!diri->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
     return;
@@ -9998,16 +10013,9 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
     return;
   }
 
-  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
-    respond_to_request(mdr, -ESTALE);
+  CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+  if (!diri)
     return;
-  }
-
-  if (!diri->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, diri->authority().first);
-    return;
-  }
 
   if (!diri->is_dir()) { // dir only
     respond_to_request(mdr, -ENOTDIR);
