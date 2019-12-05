@@ -441,6 +441,18 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_STARTUP)
     .set_default("ceph/daemon-base:latest-master-devel"),
 
+    Option("no_config_file", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
+    .add_service("common")
+    .add_tag("config")
+    .set_description("signal that we don't require a config file to be present")
+    .set_long_description("When specified, we won't be looking for a "
+			  "configuration file, and will instead expect that "
+			  "whatever options or values are required for us to "
+			  "work will be passed as arguments."),
+
     // lockdep
     Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("enable lockdep lock dependency analyzer")
