@@ -10,14 +10,17 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../../testing/unit-test-helper';
+import { CoreModule } from '../../../../core/core.module';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../../shared/shared.module';
-import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
-import { AlertListComponent } from './alert-list.component';
+import { CephModule } from '../../../ceph.module';
+import { DashboardModule } from '../../../dashboard/dashboard.module';
+import { ClusterModule } from '../../cluster.module';
+import { ActiveAlertListComponent } from './active-alert-list.component';
 
-describe('AlertListComponent', () => {
-  let component: AlertListComponent;
-  let fixture: ComponentFixture<AlertListComponent>;
+describe('ActiveAlertListComponent', () => {
+  let component: ActiveAlertListComponent;
+  let fixture: ComponentFixture<ActiveAlertListComponent>;
 
   configureTestBed({
     imports: [
@@ -25,14 +28,18 @@ describe('AlertListComponent', () => {
       TabsModule.forRoot(),
       RouterTestingModule,
       ToastrModule.forRoot(),
-      SharedModule
+      SharedModule,
+      ClusterModule,
+      DashboardModule,
+      CephModule,
+      CoreModule
     ],
-    declarations: [AlertListComponent, PrometheusTabsComponent],
+    declarations: [],
     providers: [i18nProviders]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(AlertListComponent);
+    fixture = TestBed.createComponent(ActiveAlertListComponent);
     component = fixture.componentInstance;
   });
 
@@ -50,39 +57,39 @@ describe('AlertListComponent', () => {
 
     expect(tableActions).toEqual({
       'create,update,delete': {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       'create,update': {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       'create,delete': {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       create: {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       'update,delete': {

@@ -48,6 +48,8 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   appendParentKey = true;
   @Input()
   hideEmpty = false;
+  @Input()
+  hideKeys = []; // Keys of pairs not to be displayed
 
   // If set, the classAddingTpl is used to enable different css for different values
   @Input()
@@ -100,7 +102,11 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     if (!this.data) {
       return; // Wait for data
     }
-    this.tableData = this.makePairs(this.data);
+    let pairs = this.makePairs(this.data);
+    if (this.hideKeys) {
+      pairs = pairs.filter((pair) => !this.hideKeys.includes(pair.key));
+    }
+    this.tableData = pairs;
   }
 
   private makePairs(data: any): KeyValueItem[] {

@@ -1,0 +1,8 @@
+<cd-table [data]="data"
+          [columns]="columns"
+          (updateSelection)="selectionUpdated($event)"
+          [selectionType]="'single'"></cd-table>
+
+<cd-table-key-value [data]="selectedRule"
+                    [renderObjects]="true"
+                    [hideKeys]="hideKeys"></cd-table-key-value>

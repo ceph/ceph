@@ -45,7 +45,7 @@ describe('SilenceFormComponent', () => {
   let ifPrometheusSpy;
   // Helper
   let prometheus: PrometheusHelper;
-  let formH: FormHelper;
+  let formHelper: FormHelper;
   let fixtureH: FixtureHelper;
   let params;
   // Date mocking related
@@ -86,10 +86,10 @@ describe('SilenceFormComponent', () => {
 
   const changeAction = (action: string) => {
     const modes = {
-      add: '/silence/add',
-      alertAdd: '/silence/add/someAlert',
-      recreate: '/silence/recreate/someExpiredId',
-      edit: '/silence/edit/someNotExpiredId'
+      add: '/monitoring/silence/add',
+      alertAdd: '/monitoring/silence/add/someAlert',
+      recreate: '/monitoring/silence/recreate/someExpiredId',
+      edit: '/monitoring/silence/edit/someNotExpiredId'
     };
     Object.defineProperty(router, 'url', { value: modes[action] });
     callInit();
@@ -108,11 +108,22 @@ describe('SilenceFormComponent', () => {
     );
     ifPrometheusSpy = spyOn(prometheusService, 'ifPrometheusConfigured').and.callFake((fn) => fn());
     rulesSpy = spyOn(prometheusService, 'getRules').and.callFake(() =>
-      of([
-        prometheus.createRule('alert0', 'someSeverity', [prometheus.createAlert('alert0')]),
-        prometheus.createRule('alert1', 'someSeverity', []),
-        prometheus.createRule('alert2', 'someOtherSeverity', [prometheus.createAlert('alert2')])
-      ])
+      of({
+        groups: [
+          {
+            file: '',
+            interval: 0,
+            name: '',
+            rules: [
+              prometheus.createRule('alert0', 'someSeverity', [prometheus.createAlert('alert0')]),
+              prometheus.createRule('alert1', 'someSeverity', []),
+              prometheus.createRule('alert2', 'someOtherSeverity', [
+                prometheus.createAlert('alert2')
+              ])
+            ]
+          }
+        ]
+      })
     );
 
     router = TestBed.get(Router);
@@ -127,7 +138,7 @@ describe('SilenceFormComponent', () => {
     fixtureH = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     form = component.form;
-    formH = new FormHelper(form);
+    formHelper = new FormHelper(form);
     fixture.detectChanges();
   });
 
@@ -322,7 +333,7 @@ describe('SilenceFormComponent', () => {
 
       it('should raise invalid start date error', fakeAsync(() => {
         changeStartDate('No valid date');
-        formH.expectError('startsAt', 'bsDate');
+        formHelper.expectError('startsAt', 'bsDate');
         expect(form.getValue('startsAt').toString()).toBe('Invalid Date');
         expect(form.getValue('endsAt')).toEqual(new Date('2022-02-22T02:00:00'));
       }));
@@ -330,9 +341,9 @@ describe('SilenceFormComponent', () => {
 
     describe('on duration change', () => {
       it('changes end date if duration is changed', () => {
-        formH.setValue('duration', '15m');
+        formHelper.setValue('duration', '15m');
         expect(form.getValue('endsAt')).toEqual(new Date('2022-02-22T00:15'));
-        formH.setValue('duration', '5d 23h');
+        formHelper.setValue('duration', '5d 23h');
         expect(form.getValue('endsAt')).toEqual(new Date('2022-02-27T23:00'));
       });
     });
@@ -352,7 +363,7 @@ describe('SilenceFormComponent', () => {
 
       it('should raise invalid end date error', fakeAsync(() => {
         changeEndDate('No valid date');
-        formH.expectError('endsAt', 'bsDate');
+        formHelper.expectError('endsAt', 'bsDate');
         expect(form.getValue('endsAt').toString()).toBe('Invalid Date');
         expect(form.getValue('startsAt')).toEqual(baseTime);
       }));
@@ -360,20 +371,20 @@ describe('SilenceFormComponent', () => {
   });
 
   it('should have a creator field', () => {
-    formH.expectValid('createdBy');
-    formH.expectErrorChange('createdBy', '', 'required');
-    formH.expectValidChange('createdBy', 'Mighty FSM');
+    formHelper.expectValid('createdBy');
+    formHelper.expectErrorChange('createdBy', '', 'required');
+    formHelper.expectValidChange('createdBy', 'Mighty FSM');
   });
 
   it('should have a comment field', () => {
-    formH.expectError('comment', 'required');
-    formH.expectValidChange('comment', 'A pretty long comment');
+    formHelper.expectError('comment', 'required');
+    formHelper.expectValidChange('comment', 'A pretty long comment');
   });
 
   it('should be a valid form if all inputs are filled and at least one matcher was added', () => {
     expect(form.valid).toBeFalsy();
-    formH.expectValidChange('createdBy', 'Mighty FSM');
-    formH.expectValidChange('comment', 'A pretty long comment');
+    formHelper.expectValidChange('createdBy', 'Mighty FSM');
+    formHelper.expectValidChange('comment', 'A pretty long comment');
     addMatcher('job', 'someJob', false);
     expect(form.valid).toBeTruthy();
   });
@@ -514,7 +525,7 @@ describe('SilenceFormComponent', () => {
 
     const fillAndSubmit = () => {
       ['createdBy', 'comment'].forEach((attr) => {
-        formH.setValue(attr, silence[attr]);
+        formHelper.setValue(attr, silence[attr]);
       });
       silence.matchers.forEach((matcher) =>
         addMatcher(matcher.name, matcher.value, matcher.isRegex)
@@ -563,10 +574,10 @@ describe('SilenceFormComponent', () => {
       expect(router.navigate).not.toHaveBeenCalled();
     });
 
-    it('should route back to "/silence" on success', () => {
+    it('should route back to previous tab on success', () => {
       fillAndSubmit();
       expect(form.valid).toBeTruthy();
-      expect(router.navigate).toHaveBeenCalledWith(['/silence']);
+      expect(router.navigate).toHaveBeenCalledWith(['/monitoring'], { fragment: 'silences' });
     });
 
     it('should create a silence', () => {
