@@ -13,6 +13,14 @@
  */
 
 #include "common/pick_address.h"
+
+#include <netdb.h>
+#include <string>
+#include <string.h>
+#include <vector>
+
+#include <fmt/format.h>
+
 #include "include/ipaddr.h"
 #include "include/str_list.h"
 #include "common/ceph_context.h"
@@ -23,11 +31,6 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/numa.h"
-
-#include <netdb.h>
-#include <string>
-#include <string.h>
-#include <vector>
 
 #define dout_subsys ceph_subsys_
 
@@ -511,21 +514,23 @@ int get_iface_numa_node(
   const std::string& iface,
   int *node)
 {
-  enum { IFACE_PHY_PORT = 1, IFACE_BOND_PORT = 2} ifatype = IFACE_PHY_PORT;
-  string ifa = iface;
-  int pos = ifa.find(":");
-  if (pos != string::npos) {
-    ifa.erase(pos);
+  enum class iface_t {
+    PHY_PORT,
+    BOND_PORT
+  } ifatype = iface_t::PHY_PORT;
+  string_view ifa{iface};
+  if (auto pos = ifa.find(":"); pos != ifa.npos) {
+    ifa.remove_suffix(ifa.size() - pos);
   }
-  string fn = std::string("/sys/class/net/") + ifa + "/device/numa_node";
+  string fn = fmt::format("/sys/class/net/{}/device/numa_node", ifa);
   int fd = ::open(fn.c_str(), O_RDONLY);
   if (fd < 0) {
-    fn = std::string("/sys/class/net/") + ifa + "/bonding/slaves";
+    fn = fmt::format("/sys/class/net/{}/bonding/slaves", ifa);
     fd = ::open(fn.c_str(), O_RDONLY);
     if (fd < 0) {
       return -errno;
     }
-    ifatype = IFACE_BOND_PORT;
+    ifatype = iface_t::BOND_PORT;
   }
 
   int r = 0;
@@ -541,7 +546,7 @@ int get_iface_numa_node(
   }
 
   switch (ifatype) {
-  case IFACE_PHY_PORT:
+  case iface_t::PHY_PORT:
     *node = strtoll(buf, &endptr, 10);
     if (endptr != buf + strlen(buf)) {
       r = -EINVAL;
@@ -549,7 +554,7 @@ int get_iface_numa_node(
     }
     r = 0;
     break;
-  case IFACE_BOND_PORT:
+  case iface_t::BOND_PORT:
     int bond_node = -1;
     std::vector<std::string> sv;
     std::string ifacestr = buf;
