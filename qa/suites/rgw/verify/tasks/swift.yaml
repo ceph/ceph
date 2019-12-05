@@ -1,4 +1,5 @@
 tasks:
 - swift:
     client.0:
+      force-branch: ceph-nautilus
       rgw_server: client.0
