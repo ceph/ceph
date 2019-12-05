@@ -213,7 +213,7 @@ public:
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
-			      bool no_want_auth=false, bool want_layout=false);
+			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
 				    bool okexist=false, bool want_layout=false);
   std::pair<CDentry*, CDentry*>
@@ -232,6 +232,9 @@ public:
   void handle_client_file_setlock(MDRequestRef& mdr);
   void handle_client_file_readlock(MDRequestRef& mdr);
 
+  bool xlock_policylock(MDRequestRef& mdr, CInode *in,
+			bool want_layout=false, bool xlock_snaplock=false);
+  CInode* try_get_auth_inode(MDRequestRef& mdr, inodeno_t ino);
   void handle_client_setattr(MDRequestRef& mdr);
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
