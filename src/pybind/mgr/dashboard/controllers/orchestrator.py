@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+import os.path
 
 import cherrypy
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
@@ -83,7 +84,8 @@ class OrchestratorInventory(RESTController):
             node_osds = device_osd_map.get(inventory_node['name'])
             for device in inventory_node['devices']:
                 if node_osds:
-                    device['osd_ids'] = sorted(node_osds.get(device['path'], []))
+                    dev_name = os.path.basename(device['path'])
+                    device['osd_ids'] = sorted(node_osds.get(dev_name, []))
                 else:
                     device['osd_ids'] = []
         return inventory_nodes
