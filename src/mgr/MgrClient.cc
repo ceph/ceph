@@ -193,7 +193,7 @@ void MgrClient::reconnect()
   while (p != command_table.get_commands().end()) {
     auto tid = p->first;
     auto& op = p->second;
-    ldout(cct,10) << "resending " << tid << dendl;
+    ldout(cct,10) << "resending " << tid << (op.tell ? " (tell)":" (cli)") << dendl;
     MessageRef m;
     if (op.tell) {
       if (op.name.size() && op.name != map.active_name) {
@@ -206,8 +206,9 @@ void MgrClient::reconnect()
 	command_table.erase(tid);
 	continue;
       }
-      // note: will not work for pre-octopus mgrs
-      m = op.get_message({}, false);
+      // Set fsid argument to signal that this is really a tell message (and
+      // we are not a legacy client sending a non-tell command via MCommand).
+      m = op.get_message(monmap->fsid, false);
     } else {
       m = op.get_message(
 	{},
