@@ -27,7 +27,7 @@ TODOs:
 
 def _run_ceph_daemon(ret):
     def foo(*args, **kwargs):
-        return ret, 0
+        return ret, '', 0
     return foo
 
 def mon_command(*args, **kwargs):
