@@ -106,7 +106,9 @@ build_dashboard_frontend() {
       BUILD_TARGET=":{${DASHBOARD_FRONTEND_LANGS_LIST}}"
     fi
   fi
-  [ -z "$MAX_DASHBOARD_PARALLEL_BUILDS" ] && MAX_DASHBOARD_PARALLEL_BUILDS=2
+  # number of frontend languages to build in parallel - default to 1 to work
+  # around https://tracker.ceph.com/issues/43152
+  [ -z "$MAX_DASHBOARD_PARALLEL_BUILDS" ] && MAX_DASHBOARD_PARALLEL_BUILDS=1
 
   . $TEMP_DIR/bin/activate
   NG_CLI_ANALYTICS="false" timeout 1h npm ci
