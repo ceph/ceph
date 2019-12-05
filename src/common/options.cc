@@ -7558,7 +7558,7 @@ std::vector<Option> get_mds_options() {
     .set_flag(Option::FLAG_RUNTIME),
 
     Option("mds_cache_memory_limit", Option::TYPE_SIZE, Option::LEVEL_BASIC)
-    .set_default(1*(1LL<<30))
+    .set_default(4_G)
     .set_description("target maximum memory usage of MDS cache")
     .set_flag(Option::FLAG_RUNTIME)
     .set_long_description("This sets a target maximum memory usage of the MDS cache and is the primary tunable to limit the MDS memory usage. The MDS will try to stay under a reservation of this limit (by default 95%; 1 - mds_cache_reservation) by trimming unused metadata in its cache and recalling cached items in the client caches. It is possible for the MDS to exceed this limit due to slow recall from clients. The mds_health_cache_threshold (150%) sets a cache full threshold for when the MDS signals a cluster health warning."),

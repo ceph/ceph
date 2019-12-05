@@ -6,7 +6,7 @@
 
 :Description: The memory limit the MDS should enforce for its cache.
 :Type:  64-bit Integer Unsigned
-:Default: ``1G``
+:Default: ``4G``
 
 ``mds cache reservation``
 
