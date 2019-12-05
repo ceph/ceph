@@ -250,6 +250,7 @@ class Module(MgrModule):
 
 
     def serve(self):
+        self.log.debug('serve enter')
         while not self.stop_server:
             try:
                 self._serve()
@@ -262,6 +263,7 @@ class Module(MgrModule):
             # Wait and clear the threading event
             self.serve_event.wait()
             self.serve_event.clear()
+        self.log.debug('serve exit')
 
     def refresh_keys(self):
         self.keys = {}
@@ -329,19 +331,26 @@ class Module(MgrModule):
             ),
             ssl_context=(cert_fname, pkey_fname),
         )
-
-        self.server.serve_forever()
+        if self.stop_server:
+            self.log.debug('made server, but stop flag set')
+        else:
+            self.log.debug('made server, serving forever')
+            self.server.serve_forever()
 
 
     def shutdown(self):
+        self.log.debug('shutdown enter')
         try:
             self.stop_server = True
             if self.server:
+                self.log.debug('calling server.shutdown')
                 self.server.shutdown()
+                self.log.debug('called server.shutdown')
             self.serve_event.set()
         except:
             self.log.error(str(traceback.format_exc()))
             raise
+        self.log.debug('shutdown exit')
 
 
     def restart(self):
