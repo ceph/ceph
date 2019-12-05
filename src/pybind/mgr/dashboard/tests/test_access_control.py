@@ -14,7 +14,7 @@ from .. import mgr
 from ..security import Scope, Permission
 from ..services.access_control import load_access_control_db, \
                                       password_hash, AccessControlDB, \
-                                      SYSTEM_ROLES
+                                      SYSTEM_ROLES, PasswordPolicy
 
 
 class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
@@ -791,3 +791,56 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'roles': ['administrator'],
             'enabled': True
         })
+
+    def test_password_policy_pw_length(self):
+        pw_policy = PasswordPolicy('foo')
+        self.assertTrue(pw_policy.check_password_length(3))
+
+    def test_password_policy_pw_length_fail(self):
+        pw_policy = PasswordPolicy('bar')
+        self.assertFalse(pw_policy.check_password_length())
+
+    def test_password_policy_credits_too_weak(self):
+        pw_policy = PasswordPolicy('foo')
+        pw_credits = pw_policy.check_password_characters()
+        self.assertEqual(pw_credits, 3)
+
+    def test_password_policy_credits_weak(self):
+        pw_policy = PasswordPolicy('mypassword1')
+        pw_credits = pw_policy.check_password_characters()
+        self.assertEqual(pw_credits, 11)
+
+    def test_password_policy_credits_ok(self):
+        pw_policy = PasswordPolicy('mypassword1!@')
+        pw_credits = pw_policy.check_password_characters()
+        self.assertEqual(pw_credits, 17)
+
+    def test_password_policy_credits_strong(self):
+        pw_policy = PasswordPolicy('testpassword0047!@')
+        pw_credits = pw_policy.check_password_characters()
+        self.assertEqual(pw_credits, 22)
+
+    def test_password_policy_credits_very_strong(self):
+        pw_policy = PasswordPolicy('testpassword#!$!@$')
+        pw_credits = pw_policy.check_password_characters()
+        self.assertEqual(pw_credits, 30)
+
+    def test_password_policy_forbidden_words(self):
+        pw_policy = PasswordPolicy('!@$testdashboard#!$')
+        self.assertTrue(pw_policy.check_if_contains_forbidden_words())
+
+    def test_password_policy_sequential_chars(self):
+        pw_policy = PasswordPolicy('!@$test123#!$')
+        self.assertTrue(pw_policy.check_if_sequential_characters())
+
+    def test_password_policy_repetetive_chars(self):
+        pw_policy = PasswordPolicy('!@$testfooo#!$')
+        self.assertTrue(pw_policy.check_if_repetetive_characters())
+
+    def test_password_policy_contain_username(self):
+        pw_policy = PasswordPolicy('%admin135)', 'admin')
+        self.assertTrue(pw_policy.check_if_contains_username())
+
+    def test_password_policy_is_old_pwd(self):
+        pw_policy = PasswordPolicy('foo', old_password='foo')
+        self.assertTrue(pw_policy.check_is_old_password())

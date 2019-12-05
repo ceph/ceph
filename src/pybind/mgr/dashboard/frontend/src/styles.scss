@@ -404,30 +404,30 @@ bfv-messages {
 }
 
 //Displaying the password strength
-.passwordStrengthLevel {
+.password-strength-level {
   flex: 100%;
   margin-top: 2px;
-  .passwordStrengthLevel1,
-  .passwordStrengthLevel2,
-  .passwordStrengthLevel3,
-  .passwordStrengthLevel4 {
+  .weak,
+  .ok,
+  .strong,
+  .very-strong {
     border-radius: 0.25rem;
     height: 13px;
   }
 
-  .passwordStrengthLevel1 {
+  .weak {
     width: 25%;
     background: $color-solid-red;
   }
-  .passwordStrengthLevel2 {
+  .ok {
     width: 50%;
     background: $color-bright-yellow;
   }
-  .passwordStrengthLevel3 {
+  .strong {
     width: 75%;
     background: $color-bright-green;
   }
-  .passwordStrengthLevel4 {
+  .very-strong {
     width: 100%;
     background: $color-green;
   }

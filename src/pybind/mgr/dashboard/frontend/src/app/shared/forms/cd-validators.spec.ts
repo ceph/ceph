@@ -555,4 +555,58 @@ describe('CdValidators', () => {
       );
     });
   });
+
+  describe('passwordPolicy', () => {
+    let valid: boolean;
+    let callbackCalled: boolean;
+
+    const fakeUserService = {
+      validatePassword: () => {
+        return observableOf({ valid: valid, credits: 17, valuation: 'foo' });
+      }
+    };
+
+    beforeEach(() => {
+      callbackCalled = false;
+      form = new CdFormGroup({
+        x: new FormControl(
+          '',
+          null,
+          CdValidators.passwordPolicy(
+            fakeUserService,
+            () => 'admin',
+            () => {
+              callbackCalled = true;
+            }
+          )
+        )
+      });
+      formHelper = new FormHelper(form);
+    });
+
+    it('should not error because of empty input', () => {
+      expectValid('');
+      expect(callbackCalled).toBeTruthy();
+    });
+
+    it('should not error because password matches the policy', fakeAsync(() => {
+      valid = true;
+      formHelper.setValue('x', 'abc', true);
+      tick(500);
+      formHelper.expectValid('x');
+    }));
+
+    it('should error because password does not match the policy', fakeAsync(() => {
+      valid = false;
+      formHelper.setValue('x', 'xyz', true);
+      tick(500);
+      formHelper.expectError('x', 'passwordPolicy');
+    }));
+
+    it('should call the callback function', fakeAsync(() => {
+      formHelper.setValue('x', 'xyz', true);
+      tick(500);
+      expect(callbackCalled).toBeTruthy();
+    }));
+  });
 });
