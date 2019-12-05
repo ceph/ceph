@@ -9,5 +9,6 @@ tasks:
   - print: "**** done rgw 4-final-workload"
   - swift:
       client.1:
+        force-branch: ceph-mimic
         rgw_server: client.1
   - print: "**** done swift 4-final-workload"
