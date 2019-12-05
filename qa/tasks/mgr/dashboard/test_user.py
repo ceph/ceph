@@ -6,7 +6,7 @@ import time
 
 from datetime import datetime, timedelta
 
-from .helper import DashboardTestCase
+from .helper import DashboardTestCase, JObj, JLeaf
 
 
 class UserTest(DashboardTestCase):
@@ -389,3 +389,81 @@ class UserTest(DashboardTestCase):
 
         self._delete('/api/user/user1')
         self._ceph_cmd(['dashboard', 'set-user-pwd-expiration-span', '0'])
+
+    def test_validate_password_weak(self):
+        data = self._post('/api/user/validate_password', {
+            'password': 'mypassword1'
+        })
+        self.assertStatus(200)
+        self.assertSchema(data, JObj(sub_elems={
+            'valid': JLeaf(bool),
+            'credits': JLeaf(int),
+            'valuation': JLeaf(str)
+        }))
+        self.assertTrue(data['valid'])
+        self.assertEqual(data['credits'], 11)
+        self.assertEqual(data['valuation'], 'Weak')
+
+    def test_validate_password_ok(self):
+        data = self._post('/api/user/validate_password', {
+            'password': 'mypassword1!@'
+        })
+        self.assertStatus(200)
+        self.assertTrue(data['valid'])
+        self.assertEqual(data['credits'], 17)
+        self.assertEqual(data['valuation'], 'OK')
+
+    def test_validate_password_strong(self):
+        data = self._post('/api/user/validate_password', {
+            'password': 'testpassword0047!@'
+        })
+        self.assertStatus(200)
+        self.assertTrue(data['valid'])
+        self.assertEqual(data['credits'], 22)
+        self.assertEqual(data['valuation'], 'Strong')
+
+    def test_validate_password_very_strong(self):
+        data = self._post('/api/user/validate_password', {
+            'password': 'testpassword#!$!@$'
+        })
+        self.assertStatus(200)
+        self.assertTrue(data['valid'])
+        self.assertEqual(data['credits'], 30)
+        self.assertEqual(data['valuation'], 'Very strong')
+
+    def test_validate_password_fail(self):
+        data = self._post('/api/user/validate_password', {
+            'password': 'foo'
+        })
+        self.assertStatus(200)
+        self.assertFalse(data['valid'])
+        self.assertEqual(data['credits'], 0)
+        self.assertEqual(data['valuation'], 'Password is too weak.')
+
+    def test_validate_password_fail_name(self):
+        data = self._post('/api/user/validate_password', {
+            'password': 'x1zhugo_10',
+            'username': 'hugo'
+        })
+        self.assertStatus(200)
+        self.assertFalse(data['valid'])
+        self.assertEqual(data['credits'], 0)
+        self.assertEqual(data['valuation'], 'Password cannot contain username.')
+
+    def test_validate_password_fail_oldpwd(self):
+        data = self._post('/api/user/validate_password', {
+            'password': 'x1zt-st10',
+            'old_password': 'x1zt-st10'
+        })
+        self.assertStatus(200)
+        self.assertFalse(data['valid'])
+        self.assertEqual(data['credits'], 0)
+        self.assertEqual(data['valuation'], 'Password cannot be the same as the previous one.')
+
+    @DashboardTestCase.RunAs('test', 'test', [{'user': ['read', 'delete']}])
+    def test_validate_password_invalid_permissions(self):
+        self._post('/api/user/validate_password', {
+            'password': 'foo'
+        })
+        self.assertStatus(403)
+        self.assertError(code='invalid_credentials', component='auth')
