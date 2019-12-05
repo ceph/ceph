@@ -39,7 +39,7 @@ fi
 PYTHONS="python3 python2"  # which pythons we test
 if [ -z "$PYTHON_KLUDGE" ]; then
    TMPBINDIR=`mktemp -d $TMPDIR`
-   trap "rm -rf $TMPBINDIR" TERM HUP INT
+   trap "rm -rf $TMPBINDIR" EXIT
    ORIG_CEPH_DAEMON="$CEPH_DAEMON"
    CEPH_DAEMON="$TMPBINDIR/ceph-daemon"
    for p in $PYTHONS; do
@@ -67,7 +67,7 @@ if ! [ "$loopdev" = "" ]; then
 fi
 
 TMPDIR=`mktemp -d -p .`
-trap "rm -rf $TMPDIR" TERM HUP INT
+trap "rm -rf $TMPDIR" EXIT
 
 function expect_false()
 {
