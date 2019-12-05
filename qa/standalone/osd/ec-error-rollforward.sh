@@ -53,10 +53,10 @@ function TEST_ec_error_rollforward() {
     kill $pids
     wait
 
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
-    run_osd $dir 3 || return 1
+    activate_osd $dir 0 || return 1
+    activate_osd $dir 1 || return 1
+    activate_osd $dir 2 || return 1
+    activate_osd $dir 3 || return 1
 
     wait_for_clean || return 1
 }
