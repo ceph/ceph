@@ -805,7 +805,7 @@ def update_firewalld(daemon_type):
         fw_ports.append(8443)  # dashboard
         fw_ports.append(9283)  # mgr/prometheus exporter
     elif daemon_type == 'prometheus':
-        fw_ports.append(9095)   # prometheus server
+        fw_ports.append(Monitoring.port_map['prometheus'])   # prometheus server
 
 
     for svc in fw_services:
