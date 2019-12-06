@@ -272,6 +272,15 @@ class LocalRemote(object):
         # None
         return mkdtemp(suffix=suffix, prefix='', dir=parentdir)
 
+    def mktemp(self, suffix=None, parentdir=None):
+        """
+        Make a remote temporary file
+
+        Returns: the path of the temp file created.
+        """
+        from tempfile import mktemp
+        return mktemp(suffix=suffix, dir=parentdir)
+
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
         # Since Python's shell simulation can only work when commands are
         # provided as a list of argumensts...
@@ -1001,6 +1010,12 @@ class LocalCephCluster(CephCluster):
     @property
     def admin_remote(self):
         return LocalRemote()
+
+    def set_config_opt(self, section, opt, val):
+        self.mon_manager.raw_cluster_cmd('config', 'set', section, opt, val)
+
+    def rm_config_opt(self, section, opt):
+        self.mon_manager.raw_cluster_cmd('config', 'rm', section, opt)
 
     def get_config(self, key, service_type=None):
         if service_type is None:
