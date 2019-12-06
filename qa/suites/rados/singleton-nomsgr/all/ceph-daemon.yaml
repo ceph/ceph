@@ -6,7 +6,6 @@ tasks:
     mon.a:
       - yum install -y python3 || apt install -y python3
 - workunit:
-    basedir: qa/standalone
     clients:
       client.0:
-        - test_ceph_daemon.sh
+        - ceph-daemon/test_ceph_daemon.sh
