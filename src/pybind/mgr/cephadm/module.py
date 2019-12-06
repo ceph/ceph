@@ -833,8 +833,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                        service_id=None):
         self.log.debug('service_action action %s type %s name %s id %s' % (
             action, service_type, service_name, service_id))
-        if action == 'reload':
-            return trivial_result(["Reload is a no-op"])
 
         def _proc_daemons(daemons):
             if service_name is None and service_id is None:
