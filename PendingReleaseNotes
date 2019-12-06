@@ -131,3 +131,10 @@
   The above options can be set with::
 
     ceph config set global <option> <value>
+
+12.2.7
+------
+
+* The MGR now accepts 'profile rbd' and 'profile rbd-read-only' user caps.
+  These caps can be used to provide users access to MGR-based RBD functionality
+  such as 'rbd perf image iostat' an 'rbd perf image iotop'.
