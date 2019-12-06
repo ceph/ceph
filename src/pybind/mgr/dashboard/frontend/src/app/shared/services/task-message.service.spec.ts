@@ -67,6 +67,10 @@ describe('TaskManagerMessageService', () => {
       testMessages(new TaskMessageOperation('Deleting', 'delete', 'Deleted'), involves);
     };
 
+    const testImport = (involves: string) => {
+      testMessages(new TaskMessageOperation('Importing', 'import', 'Imported'), involves);
+    };
+
     const testErrorCode = (code: number, msg: string) => {
       finishedTask.exception = _.assign(new TaskException(), {
         code: code
@@ -251,6 +255,18 @@ describe('TaskManagerMessageService', () => {
         modeMsg = `mirror mode for pool '${metadata.pool_name}'`;
         peerMsg = `mirror peer for pool '${metadata.pool_name}'`;
         finishedTask.metadata = metadata;
+      });
+      it('tests rbd/mirroring/site_name/edit messages', () => {
+        finishedTask.name = 'rbd/mirroring/site_name/edit';
+        testUpdate('mirroring site name');
+      });
+      it('tests rbd/mirroring/bootstrap/create messages', () => {
+        finishedTask.name = 'rbd/mirroring/bootstrap/create';
+        testCreate('bootstrap token');
+      });
+      it('tests rbd/mirroring/bootstrap/import messages', () => {
+        finishedTask.name = 'rbd/mirroring/bootstrap/import';
+        testImport('bootstrap token');
       });
       it('tests rbd/mirroring/pool/edit messages', () => {
         finishedTask.name = 'rbd/mirroring/pool/edit';
