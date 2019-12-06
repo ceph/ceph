@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_API_SNAPSHOT_H
 
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include <string>
 
 namespace librbd {
@@ -30,6 +31,24 @@ struct Snapshot {
   static int get_name(ImageCtxT *ictx, uint64_t snap_id, std::string *snap_name);
 
   static int get_id(ImageCtxT *ictx, const std::string& snap_name, uint64_t *snap_id);
+
+  static int list(ImageCtxT *ictx, std::vector<snap_info_t>& snaps);
+
+  static int exists(ImageCtxT *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
+		    const char *snap_name, bool *exists);
+
+  static int remove(ImageCtxT *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx);
+
+  static int get_limit(ImageCtxT *ictx, uint64_t *limit);
+
+  static int set_limit(ImageCtxT *ictx, uint64_t limit);
+
+  static int get_timestamp(ImageCtxT *ictx, uint64_t snap_id, struct timespec *timestamp);
+
+  static int is_protected(ImageCtxT *ictx, const char *snap_name, bool *protect);
+
+  static int get_namespace(ImageCtxT *ictx, const char *snap_name,
+                           cls::rbd::SnapshotNamespace *snap_namespace);
 
 };
 

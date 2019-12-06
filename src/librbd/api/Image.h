@@ -68,6 +68,8 @@ struct Image {
   static int remove(librados::IoCtx& io_ctx, const std::string &image_name,
                     ProgressContext& prog_ctx);
 
+  static int flatten_children(ImageCtxT *ictx, const char* snap_name, ProgressContext& pctx);
+
 };
 
 } // namespace api
