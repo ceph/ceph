@@ -313,6 +313,7 @@ BuildRequires:	python%{_python_buildid}-PyJWT
 BuildRequires:	python%{_python_buildid}-Routes
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-numpy-devel
+BuildRequires:	rpm-build
 BuildRequires:	xmlsec1-devel
 BuildRequires:	xmlsec1-openssl-devel
 %endif
