@@ -9,6 +9,7 @@ import operator
 import rados
 from threading import Event
 from datetime import datetime, timedelta, date, time
+import _strptime
 from six import iteritems
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
