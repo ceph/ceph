@@ -1066,7 +1066,7 @@ def command_bootstrap():
 
     # create initial monmap, tmp monmap file
     logger.info('Creating initial monmap...')
-    tmp_monmap = write_tmp('', uid, gid)
+    tmp_monmap = write_tmp('', 0, 0)
     out = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/monmaptool',
@@ -1080,6 +1080,9 @@ def command_bootstrap():
             tmp_monmap.name: '/tmp/monmap:z',
         },
     ).run()
+
+    # pass monmap file to ceph user for use by ceph-mon --mkfs below
+    os.fchown(tmp_monmap.fileno(), uid, gid)
 
     # create mon
     logger.info('Creating mon...')
