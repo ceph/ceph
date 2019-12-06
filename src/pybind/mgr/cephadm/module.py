@@ -18,10 +18,11 @@ import multiprocessing.pool
 import shutil
 import subprocess
 
-from ceph.deployment import inventory
+from ceph.deployment import inventory, translate
+from ceph.deployment.drive_selection import selector
 from mgr_module import MgrModule
 import orchestrator
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, InventoryFilter
 
 from . import remotes
 
@@ -931,17 +932,51 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return blink(locs)
 
-    @async_completion
-    def _create_osd(self, all_hosts_, drive_group):
-        all_hosts = orchestrator.InventoryNode.get_host_names(all_hosts_)
-        assert len(drive_group.hosts(all_hosts)) == 1
-        assert len(drive_group.data_devices.paths) > 0
-        assert all(map(lambda p: isinstance(p, six.string_types),
-            drive_group.data_devices.paths))
 
-        host = drive_group.hosts(all_hosts)[0]
+    def call_inventory(self, hosts, drive_groups):
+        def call_create(inventory):
+            return self._prepare_deployment(hosts, drive_groups, inventory)
+
+        return self.get_inventory().then(call_create)
+
+    def create_osds(self, drive_groups):
+        return self.get_hosts().then(lambda hosts: self.call_inventory(hosts, drive_groups))
+
+
+    def _prepare_deployment(self, all_hosts, drive_groups, inventory_list):
+        # type: (List[orchestrator.InventoryNode], List[orchestrator.DriveGroupSpecs], List[orchestrator.InventoryNode] -> orchestrator.Completion
+
+        for drive_group in drive_groups:
+            self.log.info("Processing DriveGroup {}".format(drive_group))
+            # 1) use fn_filter to determine matching_hosts
+            matching_hosts = drive_group.hosts([x.name for x in all_hosts])
+            # 2) Map the inventory to the InventoryNode object
+            # FIXME: lazy-load the inventory from a InventoryNode object;
+            #        this would save one call to the inventory(at least externally)
+
+            def _find_inv_for_host(hostname, inventory_list):
+                # This is stupid and needs to be loaded with the host
+                for _inventory in inventory_list:
+                    if _inventory.name == hostname:
+                        return _inventory
+
+            cmds = []
+            # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
+            for host in matching_hosts:
+                inventory_for_host = _find_inv_for_host(host, inventory_list)
+                drive_selection = selector.DriveSelection(drive_group, inventory_for_host.devices)
+                cmd = translate.ToCephVolume(drive_group, drive_selection).run()
+                if not cmd:
+                    self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.name))
+                    continue
+                cmds.append((host, cmd))
+
+        return self._create_osd(cmds)
+
+    @async_map_completion
+    def _create_osd(self, host, cmd):
+
         self._require_hosts(host)
-
 
         # get bootstrap key
         ret, keyring, err = self.mon_command({
@@ -959,20 +994,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             'keyring': keyring,
         })
 
-        devices = drive_group.data_devices.paths
-        for device in devices:
-            out, err, code = self._run_cephadm(
-                host, 'osd', 'ceph-volume',
-                [
-                    '--config-and-keyring', '-',
-                    '--',
-                    'lvm', 'prepare',
-                    "--cluster-fsid", self._cluster_fsid,
-                    "--{}".format(drive_group.objectstore),
-                    "--data", device,
-                ],
-                stdin=j)
-            self.log.debug('ceph-volume prepare: %s' % out)
+        split_cmd = cmd.split(' ')
+        _cmd = ['--config-and-keyring', '-', '--']
+        _cmd.extend(split_cmd)
+        out, code = self._run_ceph_daemon(
+            host, 'osd', 'ceph-volume',
+            _cmd,
+            stdin=j)
+        self.log.debug('ceph-volume prepare: %s' % out)
 
         # check result
         out, err, code = self._run_cephadm(
@@ -990,10 +1019,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     self.log.debug('mismatched fsid, skipping %s' % osd)
                     continue
-                if len(list(set(devices) & set(osd['devices']))) == 0 and osd.get('lv_path') not in devices:
-                    self.log.debug('mismatched devices, skipping %s' % osd)
-                    continue
-
                 # create
                 ret, keyring, err = self.mon_command({
                     'prefix': 'auth get',
@@ -1006,22 +1031,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                     ])
 
         return "Created osd(s) on host '{}'".format(host)
-
-    def create_osds(self, drive_group):
-        """
-        Create a new osd.
-
-        The orchestrator CLI currently handles a narrow form of drive
-        specification defined by a single block device using bluestore.
-
-        :param drive_group: osd specification
-
-        TODO:
-          - support full drive_group specification
-          - support batch creation
-        """
-
-        return self.get_hosts().then(lambda hosts: self._create_osd(hosts, drive_group))
 
     def remove_osds(self, name):
         def _search(daemons):
