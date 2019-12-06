@@ -18,7 +18,6 @@ beanstalkc3==0.4.0
 boto3==1.9.161
 boto==2.46.1
 botocore==1.12.161        # via boto3, s3transfer
-bunch==1.0.1
 certifi==2019.3.9         # via requests
 cffi==1.10.0              # via bcrypt, cryptography, pynacl
 chardet==3.0.4            # via requests
@@ -38,8 +37,8 @@ first==2.0.1              # via pip-tools
 funcsigs==1.0.2           # via debtcollector, oslo.utils, pytest
 functools32==3.2.3.post2  # via jsonschema
 futures==3.2.0            # via s3transfer
-gevent==1.2.1
-greenlet==0.4.12          # via gevent
+gevent==1.4.0
+greenlet==0.4.15          # via gevent
 httplib2==0.10.3
 idna==2.5                 # via requests
 ipaddress==1.0.18         # via cryptography
@@ -92,7 +91,7 @@ python-neutronclient==6.2.0
 python-novaclient==8.0.0
 python-openstackclient==3.9.0
 pytz==2017.2              # via babel, oslo.serialization, oslo.utils
-pyyaml==5.1
+PyYAML==5.1.2
 raven==6.0.0
 requests==2.22.0
 requestsexceptions==1.2.0  # via os-client-config
@@ -107,6 +106,5 @@ unicodecsv==0.14.1        # via cliff
 urllib3==1.25.3           # via botocore, requests
 virtualenv==15.1.0        # via tox
 warlock==1.2.0            # via python-glanceclient
-web.py==0.38
 wrapt==1.10.10            # via debtcollector, positional, python-glanceclient
 xmltodict==0.12.0
