@@ -77,7 +77,7 @@ wait_for_pool_healthy()
 
     for s in `seq 1 40`; do
         test $s -ne 1 && sleep 30
-        state=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'health:' | cut -d' ' -f 2)
+        state=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'image health:' | cut -d' ' -f 3)
         test "${state}" = "ERROR" && break
         test "${state}" = "OK" && return 0
     done

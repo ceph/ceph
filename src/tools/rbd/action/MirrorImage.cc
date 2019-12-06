@@ -320,6 +320,7 @@ int execute_status(const po::variables_map &vm,
     }
   }
 
+  auto mirror_service = daemon_service_info.get_by_instance_id(instance_id);
   if (formatter != nullptr) {
     formatter->open_object_section("image");
     formatter->dump_string("name", image_name);
@@ -328,7 +329,9 @@ int execute_status(const po::variables_map &vm,
       formatter->dump_string("state", utils::mirror_image_site_status_state(
         local_status));
       formatter->dump_string("description", local_status.description);
-      daemon_service_info.dump(instance_id, formatter);
+      if (mirror_service != nullptr) {
+        mirror_service->dump_image(formatter);
+      }
       formatter->dump_string("last_update", utils::timestr(
         local_status.last_update));
     }
@@ -360,9 +363,9 @@ int execute_status(const po::variables_map &vm,
       std::cout << "  state:       " << utils::mirror_image_site_status_state(
                   local_status) << "\n"
                 << "  description: " << local_status.description << "\n";
-      if (!instance_id.empty()) {
+      if (mirror_service != nullptr) {
         std::cout << "  service:     " <<
-          daemon_service_info.get_description(instance_id) << "\n";
+          mirror_service->get_image_description() << "\n";
       }
       std::cout << "  last_update: " << utils::timestr(
         local_status.last_update) << std::endl;
