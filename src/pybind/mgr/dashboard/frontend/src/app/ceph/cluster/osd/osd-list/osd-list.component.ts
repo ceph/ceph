@@ -204,10 +204,11 @@ export class OsdListComponent implements OnInit {
     ];
     this.columns = [
       { prop: 'host.name', name: this.i18n('Host') },
-      { prop: 'id', name: this.i18n('ID'), cellTransformation: CellTemplate.bold },
+      { prop: 'id', name: this.i18n('ID'), flexGrow: 1, cellTransformation: CellTemplate.bold },
       {
         prop: 'collectedStates',
         name: this.i18n('Status'),
+        flexGrow: 1,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
@@ -219,8 +220,29 @@ export class OsdListComponent implements OnInit {
           }
         }
       },
-      { prop: 'stats.numpg', name: this.i18n('PGs') },
-      { prop: 'stats.stat_bytes', name: this.i18n('Size'), pipe: this.dimlessBinaryPipe },
+      {
+        prop: 'tree.device_class',
+        name: this.i18n('Device class'),
+        flexGrow: 1,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            hdd: { class: 'badge-hdd' },
+            ssd: { class: 'badge-ssd' }
+          }
+        }
+      },
+      {
+        prop: 'stats.numpg',
+        name: this.i18n('PGs'),
+        flexGrow: 1
+      },
+      {
+        prop: 'stats.stat_bytes',
+        name: this.i18n('Size'),
+        flexGrow: 1,
+        pipe: this.dimlessBinaryPipe
+      },
       { prop: 'stats.usage', name: this.i18n('Usage'), cellTemplate: this.osdUsageTpl },
       {
         prop: 'stats_history.out_bytes',
