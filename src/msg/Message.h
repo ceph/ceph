@@ -192,6 +192,7 @@
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 #define MSG_MDS_METRICS            0x501  // for mds metric aggregator
 #define MSG_MDS_PING               0x502  // for mds pinger
+#define MSG_MDS_RSTATS             0x503
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600

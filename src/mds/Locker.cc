@@ -25,7 +25,6 @@
 #include "MDLog.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
-#include "messages/MInodeFileCaps.h"
 #include "messages/MMDSPeerRequest.h"
 #include "Migrator.h"
 #include "msg/Messenger.h"
@@ -86,6 +85,10 @@ void Locker::dispatch(const cref_t<Message> &m)
     // inter-mds caps
   case MSG_MDS_INODEFILECAPS:
     handle_inode_file_caps(ref_cast<MInodeFileCaps>(m));
+    break;
+    // inter-mds caps
+  case MSG_MDS_RSTATS:
+    handle_mds_rstats(ref_cast<MMDSRstats>(m));
     break;
     // client sync
   case CEPH_MSG_CLIENT_CAPS:
@@ -5002,6 +5005,14 @@ void Locker::mark_dirty_rstat_dirfrag(CDir *dir)
   it->second.dirfrags.push_back(&dir->item_dirty_rstat);
 }
 
+void Locker::update_rstat_remote_gathered(utime_t dirty_from)
+{
+  dout(7) << __func__ << " e" << mds_rstat_epoch << " " << dirty_from << dendl;
+  auto it = dirty_rstat_states.lower_bound(dirty_from);
+  ceph_assert(it != dirty_rstat_states.end());
+  it->second.epoch_remote_gathered = mds_rstat_epoch;
+}
+
 void Locker::_advance_dirty_rstats(utime_t stamp)
 {
   auto ret = dirty_rstat_states.emplace(std::piecewise_construct,
@@ -5022,27 +5033,75 @@ void Locker::_advance_dirty_rstats(utime_t stamp)
     if (dir->get_rstat_dirty_from() <= stamp)
       it->second.dirfrags.push_back(&dir->item_dirty_rstat);
   }
+  it->second.epoch_remote_gathered = next->second.epoch_remote_gathered;
 }
 
 void Locker::advance_dirty_rstats()
 {
-  if (mds->get_nodeid() == 0) {
-    if (dirty_rstat_states.size() > 1) {
-      auto last = dirty_rstat_states.end();
-      --last;
+  if (mds->is_cluster_degraded())
+    return;
 
-      utime_t flushed_to;
+  if (mds->get_nodeid() == 0) {
+    auto last = dirty_rstat_states.end();
+    --last;
+
+    set<mds_rank_t> up_mds;
+    mds->get_mds_map()->get_up_mds_set(up_mds);
+
+    if (dirty_rstat_states.size() > 1) {
+      if (mds_rstat_states.size() >= up_mds.size()) {
+	bool fully_acked = true;
+	utime_t flushed_to;
+	for (const auto& state : mds_rstat_states) {
+	  if (state.epoch_acked != mds_rstat_epoch) {
+	    fully_acked = false;
+	    break;
+	  }
+	  if (flushed_to.is_zero() || flushed_to > state.flushed_to)
+	    flushed_to = state.flushed_to;
+	}
+	if (fully_acked) {
+	  // Locker::handle_mds_rstats() does not advance individual mds'
+	  // 'flushed_to' if it has propagated dirty rstats to other mds
+	  // since previous epoch. Let's assume, at time 'A', we got reports
+	  // from all mds for previous epoch. This guarantees that there is
+	  // no inter-mds rstat progagation since time 'A'.
+	  if (mds_rstat_epoch_fully_acked + 1 == mds_rstat_epoch &&
+	      flushed_to > rstat_flushed_to)
+	    finish_flush_dirty_rstats(flushed_to);
+
+	  mds_rstat_epoch_fully_acked = mds_rstat_epoch;
+	}
+      }
+
+      utime_t flushed_to = rstat_flushed_to;
       for (auto it = dirty_rstat_states.begin(); it != last; ++it) {
 	if (!it->second.empty())
 	  break;
 	flushed_to = it->first;
       }
-      if (flushed_to > rstat_flushed_to)
-	finish_flush_dirty_rstats(flushed_to);
+
+      if (mds_rstat_states.size() != up_mds.size())
+	mds_rstat_states.resize(up_mds.size());
+
+      ++mds_rstat_epoch;
+
+      auto& state = mds_rstat_states.at(0);
+      state.flushed_to = flushed_to;
+      state.epoch_acked = mds_rstat_epoch;
     }
 
     if (dirty_rstat_states.size() == 1)
       _advance_dirty_rstats(ceph_clock_now());
+
+    --last;
+    utime_t advance_to = last->first;
+    for (const auto& r : up_mds) {
+      if (r == 0)
+	continue;
+      auto m = make_message<MMDSRstats>(mds_rstat_epoch, rstat_flushed_to, advance_to);
+      mds->send_message_mds(m, r);
+    }
   }
 
   flush_dirty_rstats();
@@ -5068,17 +5127,71 @@ void Locker::flush_dirty_rstats()
 
 void Locker::finish_flush_dirty_rstats(utime_t flushed_to)
 {
-  dout(7) << __func__ << " " << rstat_flushed_to << "->" << flushed_to << dendl;
+  dout(7) << __func__ << " e" << mds_rstat_epoch << " "
+	  << rstat_flushed_to << " -> " << flushed_to << dendl;
 
   auto it = dirty_rstat_states.begin();
   while (it->first <= flushed_to) {
-    if (it->second.empty()) {
-      dirty_rstat_states.erase(it++);
-    } else {
-      ++it;
+    if (!it->second.empty()) {
+      dout(7) << __func__ << " non-empty " << it->first << dendl;
+      return;
     }
+    dirty_rstat_states.erase(it++);
   }
   rstat_flushed_to = flushed_to;
+}
+
+void Locker::handle_mds_rstats(const cref_t<MMDSRstats> &m)
+{
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  dout(7) << __func__ << " e" << m->get_epoch()
+	  << " flushed_to=" <<  m->get_flushed_to()
+	  << " advance_to=" << m->get_advance_to()
+	  << " from mds." << from << dendl;
+
+  if (from == 0) {
+    if (mds_rstat_epoch != m->get_epoch() - 1) {
+      mds_rstat_epoch = m->get_epoch() - 1;
+      for (auto& p : dirty_rstat_states) {
+	if (p.second.epoch_remote_gathered)
+	  p.second.epoch_remote_gathered = mds_rstat_epoch;
+      }
+    }
+
+    if (!m->get_advance_to().is_zero())
+      _advance_dirty_rstats(m->get_advance_to());
+
+    utime_t flushed_to = rstat_flushed_to;
+
+    ceph_assert(!dirty_rstat_states.empty());
+    auto last = dirty_rstat_states.end();
+    --last;
+    for (auto it = dirty_rstat_states.begin(); it != last; ++it) {
+      if (!it->second.empty() ||
+	  // Don't advance my 'flushed_to' if any dirty rstat was propagated
+	  // to other mds since previous epoch. Because the other mds might
+	  // get the dirty rstat after it reports its rstat status. Also see
+	  // comments in Locker::advance_dirty_rstats()
+	  it->second.epoch_remote_gathered >= mds_rstat_epoch)
+	break;
+      flushed_to = it->first;
+    }
+
+    mds_rstat_epoch = m->get_epoch();
+
+    if (m->get_flushed_to() > rstat_flushed_to)
+      finish_flush_dirty_rstats(m->get_flushed_to());
+
+    auto ack = make_message<MMDSRstats>(mds_rstat_epoch, flushed_to, utime_t());
+    mds->send_message_mds(ack, 0);
+  } else {
+    if (mds_rstat_epoch == m->get_epoch() &&
+	(size_t)from < mds_rstat_states.size()) {
+      auto& state = mds_rstat_states[from];
+      state.flushed_to = m->get_flushed_to();
+      state.epoch_acked = m->get_epoch();
+    }
+  }
 }
 
 /*

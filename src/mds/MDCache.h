@@ -35,7 +35,6 @@
 #include "messages/MDiscoverReply.h"
 #include "messages/MGatherCaps.h"
 #include "messages/MGenericMessage.h"
-#include "messages/MInodeFileCaps.h"
 #include "messages/MLock.h"
 #include "messages/MMDSCacheRejoin.h"
 #include "messages/MMDSFindIno.h"

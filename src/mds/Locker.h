@@ -21,6 +21,8 @@
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MLock.h"
+#include "messages/MInodeFileCaps.h"
+#include "messages/MMDSRstats.h"
 
 #include "CInode.h"
 #include "SimpleLock.h"
@@ -130,9 +132,13 @@ public:
   void mark_updated_scatterlock(ScatterLock *lock);
 
   void mark_dirty_rstat_dirfrag(CDir *dir);
-  void advance_dirty_rstats(utime_t stamp);
+  void update_rstat_remote_gathered(utime_t dirty_from);
+  void _advance_dirty_rstats(utime_t stamp);
+  void advance_dirty_rstats();
   void flush_dirty_rstats();
   void finish_flush_dirty_rstats(utime_t flushed_to);
+
+  void handle_mds_rstats(const cref_t<MMDSRstats> &m);
 
   void handle_reqrdlock(SimpleLock *lock, const cref_t<MLock> &m);
 
@@ -256,10 +262,20 @@ protected:
   // Dirty rstats
   struct dirty_rstat_state_t {
     elist<CDir*> dirfrags;
+    unsigned epoch_remote_gathered = 0;
     dirty_rstat_state_t();
     bool empty() const { return dirfrags.empty(); }
   };
   std::map<utime_t, dirty_rstat_state_t> dirty_rstat_states;
+
+  unsigned mds_rstat_epoch = 2;
+  unsigned mds_rstat_epoch_fully_acked = 0;
+  struct mds_rstat_state_t {
+    utime_t flushed_to;
+    unsigned epoch_acked = 0;
+  };
+  std::vector<mds_rstat_state_t> mds_rstat_states;
+
   utime_t rstat_flushed_to = utime_t(0, 1); // smallest non-zero time
 
 private:
