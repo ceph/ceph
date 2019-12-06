@@ -119,6 +119,96 @@ tasks:
 - print: "**** done workload v13.2.2"
 
 
+#######  upgrade to v13.2.3
+- install.upgrade:
+    exclude_packages: ['python3-cephfs','python3-rados']
+    mon.a:
+      tag: v13.2.3
+    mon.b:
+      tag: v13.2.3
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done parallel mimic v13.2.3"
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done workload v13.2.3"
+
+
+#######  upgrade to v13.2.4
+- install.upgrade:
+    exclude_packages: ['python3-cephfs','python3-rados']
+    mon.a:
+      tag: v13.2.4
+    mon.b:
+      tag: v13.2.4
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done parallel mimic v13.2.4"
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done workload v13.2.4"
+
+
+#######  upgrade to v13.2.5
+- install.upgrade:
+    exclude_packages: ['python3-cephfs','python3-rados']
+    mon.a:
+      tag: v13.2.5
+    mon.b:
+      tag: v13.2.5
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done parallel mimic v13.2.5"
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done workload v13.2.5"
+
+
+#######  upgrade to v13.2.6
+- install.upgrade:
+    exclude_packages: ['python3-cephfs','python3-rados']
+    mon.a:
+      tag: v13.2.6
+    mon.b:
+      tag: v13.2.6
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done parallel mimic v13.2.6"
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done workload v13.2.6"
+
+
+#######  upgrade to v13.2.7
+- install.upgrade:
+    exclude_packages: ['python3-cephfs','python3-rados']
+    mon.a:
+      tag: v13.2.7
+    mon.b:
+      tag: v13.2.7
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done parallel mimic v13.2.7"
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done workload v13.2.7"
+
+
 #######  upgrade to v13.2.x TO BE ADDED for future point releases
 ### - install.upgrade:
 ###    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev','python34-cephfs','python34-rados']
