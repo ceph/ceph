@@ -1,5 +1,6 @@
 import errno
 import json
+import yaml
 from functools import wraps
 
 from ceph.deployment.inventory import Device
@@ -14,7 +15,7 @@ except ImportError:
 
 
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError, \
-    DeviceSelection
+    DeviceSelection, DriveGroupSpecs
 from mgr_module import MgrModule, CLICommand, HandleCommandResult
 
 import orchestrator
@@ -331,13 +332,15 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
         usage = """
 Usage:
-  ceph orchestrator osd create -i <json_file>
+  ceph orchestrator osd create -i <json_file/yaml_file>
   ceph orchestrator osd create host:device1,device2,...
 """
 
+        # TODO: try if inbuf file is yaml of json
         if inbuf:
             try:
-                drive_group = DriveGroupSpec.from_json(json.loads(inbuf))
+                dgs = DriveGroupSpecs(json.loads(inbuf))
+                drive_groups = dgs.drive_groups
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
@@ -351,14 +354,13 @@ Usage:
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
             devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(node_name, data_devices=devs)
+            drive_groups = [DriveGroupSpec(node_name, data_devices=devs)]
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
-        completion = self.create_osds(drive_group)
+        completion = self.create_osds(drive_groups)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        self.log.warning(str(completion.result))
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
