@@ -11,6 +11,7 @@ except ImportError:
 
 from ceph.deployment import drive_selection
 from ceph.tests.factories import InventoryFactory
+from ceph.tests.utils import _mk_inventory, _mk_device
 
 
 class TestMatcher(object):
@@ -672,39 +673,6 @@ class TestFilter(object):
         assert ret.is_matchable is False
 
 
-def _mk_device(rotational=True, locked=False):
-    return [Device(
-        path='??',
-        sys_api={
-            "rotational": '1' if rotational else '0',
-            "vendor": "Vendor",
-            "human_readable_size": "394.27 GB",
-            "partitions": {},
-            "locked": int(locked),
-            "sectorsize": "512",
-            "removable": "0",
-            "path": "??",
-            "support_discard": "",
-            "model": "Model",
-            "ro": "0",
-            "nr_requests": "128",
-            "size": 423347879936
-        },
-        available=not locked,
-        rejected_reasons=['locked'] if locked else [],
-        lvs=[],
-        device_id="Model-Vendor-foobar"
-    )]
-
-
-def _mk_inventory(devices):
-    devs = []
-    for dev_, name in zip(devices, map(chr, range(ord('a'), ord('z')))):
-        dev = Device.from_json(dev_.to_json())
-        dev.path = '/dev/sd' + name
-        dev.sys_api = dict(dev_.sys_api, path='/dev/sd' + name)
-        devs.append(dev)
-    return Devices(devices=devs)
 
 
 class TestDriveSelection(object):
