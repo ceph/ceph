@@ -28,17 +28,25 @@ def humansize(nbytes):
     f = ('%d' % nbytes).rstrip('.')
     return '%s%s' % (f, suffixes[i])
 
+def str_to_bool(val):
+    val = val.strip()
+    trueval = ['true', 'yes', 'y', '1']
+    return True if val == 1 or val.lower() in trueval else False
+
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
-    def run_cephfs_shell_cmd(self, cmd, mount_x=None, opts=None, stdin=None):
+    def run_cephfs_shell_cmd(self, cmd, mount_x=None, opts=None, stdin=None, config_path=None):
         if mount_x is None:
             mount_x = self.mount_a
+        if config_path is None:
+            config_path = self.mount_a.config_path
 
         if isinstance(cmd, list):
             cmd = " ".join(cmd)
 
-        args = ["cephfs-shell", "-c", mount_x.config_path]
+        args = ["cephfs-shell", "-c", config_path]
+
         if opts is not None:
             args.extend(opts)
 
@@ -54,9 +62,10 @@ class TestCephFSShell(CephFSTestCase):
             getvalue().strip()
 
     def get_cephfs_shell_cmd_output(self, cmd, mount_x=None, opts=None,
-                                    stdin=None):
-        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stdout.\
-            getvalue().strip()
+                                    stdin=None, config_path=None):
+        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin,
+                                         config_path).\
+            stdout.getvalue().strip()
 
     def get_cephfs_shell_script_output(self, script, mount_x=None, stdin=None):
         return self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
@@ -671,11 +680,8 @@ class TestMisc(TestCephFSShell):
         dirname = 'somedirectory'
         self.run_cephfs_shell_cmd(['mkdir', dirname])
 
-        # TODO: Once cephfs-shell can pickup its config variables from
-        # ceph.conf, set colors Never there and get rid of the same in
-        # following comamnd.
         output = self.mount_a.client_remote.run(args=['cephfs-shell', '-c',
-            self.mount_a.config_path, 'set colors Never, ls'],
+            self.mount_a.config_path, 'ls'],
             stdout=StringIO()).stdout.getvalue().strip()
 
         if sys_version_info.major >= 3:
@@ -691,3 +697,52 @@ class TestMisc(TestCephFSShell):
         """
         o = self.get_cephfs_shell_cmd_output("help all")
         log.info("output:\n{}".format(o))
+
+class TestConfReading(TestCephFSShell):
+
+    def test_reading_conf_opt(self):
+        """
+        Read conf without duplicate sections/options.
+        """
+        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
+                                                       'client','debug_shell')
+        debugval = str_to_bool(debugval)
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        output = self.get_cephfs_shell_cmd_output('set debug')
+        new_debug_val = \
+            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
+        assert not debugval == new_debug_val
+
+    def test_reading_conf_after_setting_opt_twice(self):
+        """
+        Read conf without duplicate sections/options.
+        """
+        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
+                                                       'client','debug_shell')
+        debugval = str_to_bool(debugval)
+
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        output = self.get_cephfs_shell_cmd_output('set debug')
+        new_debug_val = \
+            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
+        assert not debugval == new_debug_val
+
+    def test_reading_conf_after_resetting_opt(self):
+        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
+                                                       'client','debug_shell')
+        debugval = str_to_bool(debugval)
+
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        self.fs.mon_manager.raw_cluster_cmd('config', 'rm', 'client',
+                                            'debug_shell')
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        output = self.get_cephfs_shell_cmd_output('set debug')
+        new_debug_val = \
+            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
+        assert not debugval == new_debug_val
