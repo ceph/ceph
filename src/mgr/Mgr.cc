@@ -225,15 +225,14 @@ void Mgr::handle_signal(int signum)
   shutdown();
 }
 
-// A reference for use by the signal handler
-static Mgr *signal_mgr = nullptr;
-
 static void handle_mgr_signal(int signum)
 {
   derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
-  if (signal_mgr) {
-    signal_mgr->handle_signal(signum);
-  }
+
+  // The python modules don't reliably shut down, so don't even
+  // try. The mon will blacklist us (and all of our rados/cephfs
+  // clients) anyway. Just exit!
+
   _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
 }
 
@@ -244,7 +243,6 @@ void Mgr::init()
   ceph_assert(!initialized);
 
   // Enable signal handlers
-  signal_mgr = this;
   register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
