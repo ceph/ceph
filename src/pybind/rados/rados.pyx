@@ -290,6 +290,7 @@ cdef extern from "rados/librados.h" nogil:
                        const char * in_buf, size_t in_len, char * buf, size_t out_len)
 
     int rados_aio_setxattr(rados_ioctx_t io, const char *o, rados_completion_t completion, const char *name, const char *buf, size_t len)
+    int rados_aio_rmxattr(rados_ioctx_t io, const char *o, rados_completion_t completion, const char *name)
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
@@ -2647,6 +2648,40 @@ cdef class Ioctx(object):
         if ret < 0:
             completion._cleanup()
             raise make_ex(ret, "Failed to set xattr %r" % xattr_name)
+        return completion
+
+    @requires(('object_name', str_type), ('xattr_name', str_type), ('oncomplete', opt(Callable)))
+    def aio_rmxattr(self, object_name, xattr_name, oncomplete = None):
+        """
+        Asynchronously delete an extended attribute from an object
+
+        :param object_name: the name of the object to remove xattr from
+        :type object_name: str
+        :param xattr_name: which extended attribute to remove
+        :type xattr_name: str
+        :param oncomplete: what to do when the rmxattr completes
+        :type oncomplete: completion
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+        object_name = cstr(object_name, 'object_name')
+        xattr_name = cstr(xattr_name , 'xattr_name')
+
+        cdef:
+            Completion completion
+            char* _object_name = object_name
+            char* _xattr_name = xattr_name
+
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_rmxattr(self.io, _object_name,
+                                    completion.rados_comp, _xattr_name)
+
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to remove xattr %r" % xattr_name)
         return completion
 
     @requires(('object_name', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
