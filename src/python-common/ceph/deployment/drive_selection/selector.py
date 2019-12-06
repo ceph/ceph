@@ -23,10 +23,16 @@ class DriveSelection(object):
         self.disks = disks.copy()
         self.spec = spec
 
-        self._data = self.assign_devices(self.spec.data_devices)
-        self._wal = self.assign_devices(self.spec.wal_devices)
-        self._db = self.assign_devices(self.spec.db_devices)
-        self._jornal = self.assign_devices(self.spec.journal_devices)
+        if self.spec.data_devices.paths:
+            self._data = self.spec.data_devices.paths
+            self._db = []
+            self._wal = []
+            self._journal = []
+        else:
+            self._data = self.assign_devices(self.spec.data_devices)
+            self._wal = self.assign_devices(self.spec.wal_devices)
+            self._db = self.assign_devices(self.spec.db_devices)
+            self._journal = self.assign_devices(self.spec.journal_devices)
 
     def data_devices(self):
         # type: () -> List[Device]
@@ -42,7 +48,7 @@ class DriveSelection(object):
 
     def journal_devices(self):
         # type: () -> List[Device]
-        return self._jornal
+        return self._journal
 
     @staticmethod
     def _limit_reached(device_filter, len_devices,
@@ -95,7 +101,7 @@ class DriveSelection(object):
 
         return a sorted(by path) list of devices
         """
-        if device_filter is None:
+        if not device_filter and not self.spec.data_devices.paths:
             logger.debug('device_filter is None')
             return []
         devices = list()  # type: List[Device]
