@@ -694,8 +694,8 @@ def update_firewalld(daemon_type):
             logger.info('Enabling firewalld service %s in current zone...' % svc)
             out, err, ret = call([cmd, '--permanent', '--add-service', svc])
             if ret:
-                raise RuntimeError('unable to add service %s to current zone:' %
-                                   (svc, err))
+                raise RuntimeError(
+                    'unable to add service %s to current zone: %s' % (svc, err))
         else:
             logger.debug('firewalld service %s is enabled in current zone' % svc)
     for port in fw_ports:
