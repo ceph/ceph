@@ -27,6 +27,7 @@ Ceph Conf: {ceph_path}
         self.mapper = {
             'lvm': devices.lvm.LVM,
             'simple': devices.simple.Simple,
+            'raw': devices.raw.Raw,
             'inventory': inventory.Inventory,
         }
         self.plugin_help = "No plugins found/loaded"
