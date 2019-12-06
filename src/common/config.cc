@@ -320,6 +320,11 @@ int md_config_t::set_mon_vals(CephContext *cct,
 		  << " cleared (was " << Option::to_str(config->second) << ")"
 		  << dendl;
     values.rm_val(name, CONF_MON);
+    // if this is a debug option, it needs to propagate to teh subsys;
+    // this isn't covered by update_legacy_vals() below.  similarly,
+    // we want to trigger a config notification for these items.
+    const Option *o = find_option(name);
+    _refresh(values, *o);
   });
   values_bl.clear();
   update_legacy_vals(values);
