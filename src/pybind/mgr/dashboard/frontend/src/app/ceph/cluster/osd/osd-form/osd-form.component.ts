@@ -223,17 +223,9 @@ export class OsdFormComponent implements OnInit {
   }
 
   submit() {
-    let allHosts = [];
-    if (this.hostname === '') {
-      // wildcard * to match all hosts, provide hosts we can see
-      allHosts = _.sortedUniq(_.map(this.allDevices, 'hostname').sort());
-    } else {
-      allHosts = [this.hostname];
-    }
     const options: ModalOptions = {
       initialState: {
-        driveGroup: this.driveGroup,
-        allHosts: allHosts
+        driveGroup: this.driveGroup
       }
     };
     const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, options);

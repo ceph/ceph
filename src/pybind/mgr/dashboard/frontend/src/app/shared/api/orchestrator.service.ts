@@ -49,13 +49,10 @@ export class OrchestratorService {
     return this.http.get(this.serviceURL, options);
   }
 
-  osdCreate(driveGroup: {}, all_hosts: string[]) {
+  osdCreate(driveGroup: {}) {
     const request = {
       drive_group: driveGroup
     };
-    if (!_.isEmpty(all_hosts)) {
-      request['all_hosts'] = all_hosts;
-    }
     return this.http.post(this.osdURL, request, { observe: 'response' });
   }
 }
