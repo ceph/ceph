@@ -10364,7 +10364,7 @@ OSDShard::OSDShard(
     shard_lock_name(shard_name + "::shard_lock"),
     shard_lock{make_mutex(shard_lock_name)},
     scheduler(ceph::osd::scheduler::make_scheduler(cct)),
-    context_queue(sdata_wait_lock, sdata_cond)
+    context_queue(sdata_wait_lock, sdata_cond, shard_in_progress)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
 }
@@ -10422,9 +10422,13 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       wait_lock.unlock();
     } else if (!sdata->stop_waiting) {
       dout(20) << __func__ << " empty q, waiting" << dendl;
+      if (is_smallest_thread_index)
+	sdata->shard_in_progress = false;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
       sdata->shard_lock.unlock();
       sdata->sdata_cond.wait(wait_lock);
+      if (is_smallest_thread_index)
+	sdata->shard_in_progress = true;
       wait_lock.unlock();
       sdata->shard_lock.lock();
       if (sdata->scheduler->empty() &&

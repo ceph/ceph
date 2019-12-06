@@ -1034,6 +1034,7 @@ struct OSDShard {
   bool stop_waiting = false;
 
   ContextQueue context_queue;
+  bool shard_in_progress = false;
 
   void _attach_pg(OSDShardPGSlot *slot, PG *pg);
   void _detach_pg(OSDShardPGSlot *slot);
