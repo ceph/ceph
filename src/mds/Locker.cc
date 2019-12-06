@@ -5140,7 +5140,6 @@ void Locker::scatter_tick()
     updated_scatterlocks.pop_front();
     scatter_nudge(lock, 0);
   }
-  mds->mdlog->flush();
 }
 
 
