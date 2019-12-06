@@ -27,7 +27,7 @@ rm -f $OSD_IMAGE_NAME
 
 cat <<EOF > c
 [global]
-log to file = true
+	log to file = true
 EOF
 
 $CEPH_DAEMON $A \

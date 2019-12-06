@@ -100,7 +100,7 @@ KEYRING=`mktemp -p $TMPDIR`
 IP=127.0.0.1
 cat <<EOF > $ORIG_CONFIG
 [global]
-log to file = true
+	log to file = true
 EOF
 $SUDO $CEPH_DAEMON --image $IMAGE_MASTER bootstrap \
       --mon-id a \
