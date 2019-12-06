@@ -186,14 +186,15 @@ to create buckets with that placement target unless their user info contains
 at least one matching tag in its ``placement_tags`` field. This can be useful
 to restrict access to certain types of storage.
 
-The ``radosgw-admin`` command cannot modify these fields directly, so the json
-format must be edited manually:
+The ``radosgw-admin`` command can modify these fields directly with:
 
 ::
 
-  $ radosgw-admin metadata get user:<user-id> > user.json
-  $ vi user.json
-  $ radosgw-admin metadata put user:<user-id> < user.json
+  $ radosgw-admin user modify \
+        --uid <user-id> \
+        --placement-id <default-placement-id> \
+        --storage-class <default-storage-class> \
+        --tags <tag1,tag2>
 
 .. _s3_bucket_placement:
 
