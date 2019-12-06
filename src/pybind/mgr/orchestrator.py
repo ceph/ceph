@@ -857,7 +857,7 @@ class Orchestrator(object):
         * If using service_id, perform the action on a single specific daemon
           instance.
 
-        :param action: one of "start", "stop", "reload", "restart", "redeploy"
+        :param action: one of "start", "stop", "restart", "redeploy"
         :param service_type: e.g. "mds", "rgw", ...
         :param service_name: name of logical service ("cephfs", "us-east", ...)
         :param service_id: service daemon instance (usually a short hostname)
