@@ -94,6 +94,11 @@ export class TaskMessageService {
       this.i18n('Removing'),
       this.i18n('remove'),
       this.i18n('Removed')
+    ),
+    import: new TaskMessageOperation(
+      this.i18n('Importing'),
+      this.i18n('import'),
+      this.i18n('Imported')
     )
   };
 
@@ -139,6 +144,8 @@ export class TaskMessageService {
   };
 
   rbd_mirroring = {
+    site_name: () => this.i18n('mirroring site name'),
+    bootstrap: () => this.i18n('bootstrap token'),
     pool: (metadata) =>
       this.i18n(`mirror mode for pool '{{id}}'`, {
         id: `${metadata.pool_name}`
@@ -327,6 +334,21 @@ export class TaskMessageService {
       }
     ),
     // RBD mirroring tasks
+    'rbd/mirroring/site_name/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      this.rbd_mirroring.site_name,
+      () => ({})
+    ),
+    'rbd/mirroring/bootstrap/create': this.newTaskMessage(
+      this.commonOperations.create,
+      this.rbd_mirroring.bootstrap,
+      () => ({})
+    ),
+    'rbd/mirroring/bootstrap/import': this.newTaskMessage(
+      this.commonOperations.import,
+      this.rbd_mirroring.bootstrap,
+      () => ({})
+    ),
     'rbd/mirroring/pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool,

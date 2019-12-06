@@ -1,0 +1,108 @@
+<cd-modal [modalRef]="modalRef">
+  <ng-container i18n
+                class="modal-title">Import Bootstrap Token</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="importBootstrapForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="importBootstrapForm"
+          novalidate>
+      <div class="modal-body">
+        <p>
+          <ng-container i18n>To import a bootstrap token which was created
+          by a peer site cluster, provide the local site's name, select
+          which pools will have mirroring enabled, provide the generated
+          token, and click&nbsp;<kbd>Import</kbd>.</ng-container>
+        </p>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="siteName">
+            <span i18n>Site Name</span>
+            <span class="required"></span>
+          </label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="Name..."
+                 i18n-placeholder
+                 id="siteName"
+                 name="siteName"
+                 formControlName="siteName"
+                 autofocus>
+          <span *ngIf="importBootstrapForm.showError('siteName', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="direction">
+            <span i18n>Direction</span>
+          </label>
+          <select id="direction"
+                  name="direction"
+                  class="form-control custom-select"
+                  formControlName="direction">
+            <option *ngFor="let direction of directions"
+                    [value]="direction.key">{{ direction.desc }}</option>
+          </select>
+        </div>
+
+        <div class="form-group"
+             formGroupName="pools">
+          <label class="col-form-label"
+                 for="pools">
+            <span i18n>Pools</span>
+            <span class="required"></span>
+          </label>
+          <div class="custom-control custom-checkbox"
+               *ngFor="let pool of pools">
+            <input type="checkbox"
+                   class="custom-control-input"
+                   id="{{ pool.name }}"
+                   name="{{ pool.name }}"
+                   formControlName="{{ pool.name }}">
+            <label class="custom-control-label"
+                   for="{{ pool.name }}">{{ pool.name }}</label>
+          </div>
+          <span *ngIf="importBootstrapForm.showError('pools', formDir, 'requirePool')"
+                class="invalid-feedback"
+                i18n>At least one pool is required.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="token">
+            <span i18n>Token</span>
+            <span class="required"></span>
+          </label>
+          <textarea class="form-control resize-vertical"
+                    placeholder="Generated token..."
+                    i18n-placeholder
+                    id="token"
+                    formControlName="token">
+          </textarea>
+          <span *ngIf="importBootstrapForm.showError('token', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+          <span *ngIf="importBootstrapForm.showError('token', formDir, 'invalidToken')"
+                class="invalid-feedback"
+                i18n>The token is invalid.</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button i18n
+                            [form]="importBootstrapForm"
+                            (submitAction)="import()">Import</cd-submit-button>
+          <cd-back-button [back]="modalRef.hide"
+                          name="Close"
+                          i18n-name>
+          </cd-back-button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
