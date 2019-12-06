@@ -52,11 +52,12 @@ test_data = {
 
 class OrchestratorControllerTest(DashboardTestCase):
 
-    AUTH_ROLES = ['read-only']
+    AUTH_ROLES = ['cluster-manager']
 
     URL_STATUS = '/api/orchestrator/status'
     URL_INVENTORY = '/api/orchestrator/inventory'
     URL_SERVICE = '/api/orchestrator/service'
+    URL_OSD = '/api/orchestrator/osd'
 
 
     @property
@@ -154,3 +155,33 @@ class OrchestratorControllerTest(DashboardTestCase):
         resp_services = sorted(data, key=sorting_key)
         for test, resp in zip(test_services, resp_services):
             self._validate_service(test, resp)
+
+    def test_create_osds(self):
+        data = {
+            'drive_group': {
+                'host_pattern': '*',
+                'data_devices': {
+                    'vendor': 'abc',
+                    'model': 'cba',
+                    'rotational': True,
+                    'size': '4 TB'
+                },
+                'wal_devices': {
+                    'vendor': 'def',
+                    'model': 'fed',
+                    'rotational': False,
+                    'size': '1 TB'
+                },
+                'db_devices': {
+                    'vendor': 'ghi',
+                    'model': 'ihg',
+                    'rotational': False,
+                    'size': '512 GB'
+                },
+                'wal_slots': 5,
+                'db_slots': 5,
+                'encrypted': True
+            }
+        }
+        self._post(self.URL_OSD, data)
+        self.assertStatus(201)
