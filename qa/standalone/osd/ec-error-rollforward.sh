@@ -37,7 +37,7 @@ function TEST_ec_error_rollforward() {
 
     rados -p ec put foo /etc/passwd
 
-    kill -STOP `cat $dir/osd.2.pid`
+    kill -STOP $(cat $dir/osd.2.pid)
 
     rados -p ec rm foo &
     pids="$!"
@@ -49,7 +49,9 @@ function TEST_ec_error_rollforward() {
     rados -p ec rm c &
     pids+=" $!"
     sleep 1
-    kill -9 `cat $dir/osd.?.pid`
+    # Use SIGKILL so stopped osd.2 will terminate
+    # and kill_daemons waits for daemons to die
+    kill_daemons $dir KILL osd
     kill $pids
     wait
 
