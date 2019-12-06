@@ -86,24 +86,6 @@ class TestList(object):
         with pytest.raises(SystemExit):
             lvm.listing.List([]).list(args)
 
-    def test_lvs_list_is_created_just_once(self, monkeypatch, is_root, volumes, factory):
-        api.volumes_obj_create_count = 0
-
-        def monkey_populate(self):
-            api.volumes_obj_create_count += 1
-            for lv_item in api.get_api_lvs():
-                self.append(api.Volume(**lv_item))
-        monkeypatch.setattr(api.Volumes, '_populate', monkey_populate)
-
-        args = factory(format='pretty', device='/dev/sda1')
-        with pytest.raises(SystemExit):
-            lvm.listing.List([]).list(args)
-
-        # XXX: Ideally, the count should be just 1. Volumes._populate() is
-        # being called thrice out of which only twice is moneky_populate.
-        assert api.volumes_obj_create_count == 2
-
-
 class TestFullReport(object):
 
     def test_no_ceph_lvs(self, volumes, monkeypatch):
