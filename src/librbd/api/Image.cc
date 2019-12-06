@@ -12,6 +12,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Trash.h"
@@ -23,6 +24,8 @@
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::api::Image: " << __func__ << ": "
+
+using librados::snap_t;
 
 namespace librbd {
 namespace api {
@@ -832,6 +835,93 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
   req->send();
 
   return cond.wait();
+}
+
+template <typename I>
+int Image<I>::flatten_children(I *ictx, const char* snap_name,
+                               ProgressContext& pctx) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "children flatten " << ictx->name << dendl;
+
+  int r = ictx->state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  std::shared_lock l{ictx->image_lock};
+  snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
+                                     snap_name);
+
+  cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                        ictx->md_ctx.get_namespace(),
+                                        ictx->id, snap_id};
+  std::vector<librbd::linked_image_spec_t> child_images;
+  r = list_children(ictx, parent_spec, &child_images);
+  if (r < 0) {
+    return r;
+  }
+
+  size_t size = child_images.size();
+  if (size == 0) {
+    return 0;
+  }
+
+  librados::IoCtx child_io_ctx;
+  int64_t child_pool_id = -1;
+  size_t i = 0;
+  for (auto &child_image : child_images){
+    std::string pool = child_image.pool_name;
+    if (child_pool_id == -1 ||
+        child_pool_id != child_image.pool_id ||
+        child_io_ctx.get_namespace() != child_image.pool_namespace) {
+      r = util::create_ioctx(ictx->md_ctx, "child image",
+                             child_image.pool_id, child_image.pool_namespace,
+                             &child_io_ctx);
+      if (r < 0) {
+        return r;
+      }
+
+      child_pool_id = child_image.pool_id;
+    }
+
+    ImageCtx *imctx = new ImageCtx("", child_image.image_id, nullptr,
+                                   child_io_ctx, false);
+    r = imctx->state->open(0);
+    if (r < 0) {
+      lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if ((imctx->features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
+        !imctx->snaps.empty()) {
+      lderr(cct) << "snapshot in-use by " << pool << "/" << imctx->name
+                 << dendl;
+      imctx->state->close();
+      return -EBUSY;
+    }
+
+    librbd::NoOpProgressContext prog_ctx;
+    r = imctx->operations->flatten(prog_ctx);
+    if (r < 0) {
+      lderr(cct) << "error flattening image: " << pool << "/"
+                 << (child_image.pool_namespace.empty() ?
+                      "" : "/" + child_image.pool_namespace)
+                 << child_image.image_name << cpp_strerror(r) << dendl;
+      imctx->state->close();
+      return r;
+    }
+
+    r = imctx->state->close();
+    if (r < 0) {
+      lderr(cct) << "failed to close image: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    pctx.update_progress(++i, size);
+    ceph_assert(i <= size);
+  }
+
+  return 0;
 }
 
 } // namespace api

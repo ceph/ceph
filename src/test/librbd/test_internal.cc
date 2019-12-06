@@ -17,6 +17,7 @@
 #include "librbd/api/Image.h"
 #include "librbd/api/Migration.h"
 #include "librbd/api/PoolMetadata.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -1776,7 +1777,7 @@ TEST_F(TestInternal, MissingDataPool) {
   ASSERT_EQ(0, librbd::info(ictx, info, sizeof(info)));
 
   vector<librbd::snap_info_t> snaps;
-  EXPECT_EQ(0, librbd::snap_list(ictx, snaps));
+  EXPECT_EQ(0, librbd::api::Snapshot<>::list(ictx, snaps));
   EXPECT_EQ(1U, snaps.size());
   EXPECT_EQ("snap1", snaps[0].name);
 

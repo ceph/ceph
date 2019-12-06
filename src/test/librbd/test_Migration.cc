@@ -11,6 +11,7 @@
 #include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Namespace.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/internal.h"
@@ -70,8 +71,8 @@ struct TestMigration : public TestFixture {
     vector<librbd::snap_info_t> src_snaps, dst_snaps;
 
     EXPECT_EQ(m_ref_ictx->size, m_ictx->size);
-    EXPECT_EQ(0, librbd::snap_list(m_ref_ictx, src_snaps));
-    EXPECT_EQ(0, librbd::snap_list(m_ictx, dst_snaps));
+    EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_ref_ictx, src_snaps));
+    EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_ictx, dst_snaps));
     EXPECT_EQ(src_snaps.size(), dst_snaps.size());
     for (size_t i = 0; i <= src_snaps.size(); i++) {
       const char *src_snap_name = nullptr;
