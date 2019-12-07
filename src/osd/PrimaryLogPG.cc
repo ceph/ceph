@@ -491,6 +491,20 @@ void PrimaryLogPG::schedule_recovery_work(
   osd->queue_recovery_context(this, c);
 }
 
+void PrimaryLogPG::replica_clear_repop_obc(
+  const vector<pg_log_entry_t> &logv,
+  ObjectStore::Transaction &t)
+{
+  for (auto &&e: logv) {
+    /* Have to blast all clones, they share a snapset */
+    object_contexts.clear_range(
+      e.soid.get_object_boundary(), e.soid.get_head());
+    ceph_assert(
+      snapset_contexts.find(e.soid.get_head()) ==
+      snapset_contexts.end());
+  }
+}
+
 bool PrimaryLogPG::should_send_op(
   pg_shard_t peer,
   const hobject_t &hoid) {

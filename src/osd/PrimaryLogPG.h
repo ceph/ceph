@@ -474,10 +474,17 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
+    if (!is_primary() && !is_ec_pg()) {
+      replica_clear_repop_obc(logv, t);
+    }
     recovery_state.append_log(
       logv, trim_to, roll_forward_to, min_last_complete_ondisk,
       t, transaction_applied, async);
   }
+
+  void replica_clear_repop_obc(
+    const vector<pg_log_entry_t> &logv,
+    ObjectStore::Transaction &t);
 
   void op_applied(const eversion_t &applied_version) override;
 
