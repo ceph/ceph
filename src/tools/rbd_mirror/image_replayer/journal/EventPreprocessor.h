@@ -19,6 +19,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 namespace image_replayer {
+namespace journal {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class EventPreprocessor {
@@ -113,10 +114,11 @@ private:
 
 };
 
+} // namespace journal
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd
 
-extern template class rbd::mirror::image_replayer::EventPreprocessor<librbd::ImageCtx>;
+extern template class rbd::mirror::image_replayer::journal::EventPreprocessor<librbd::ImageCtx>;
 
 #endif // RBD_MIRROR_IMAGE_REPLAYER_EVENT_PREPROCESSOR_H

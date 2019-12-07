@@ -27,9 +27,9 @@
 #include "Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
-#include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/journal/ReplayStatusFormatter.h"
 
 #define dout_context g_ceph_context
@@ -633,7 +633,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
     std::swap(m_on_start_finish, on_finish);
   }
 
-  m_event_preprocessor = image_replayer::EventPreprocessor<I>::create(
+  m_event_preprocessor = image_replayer::journal::EventPreprocessor<I>::create(
     *m_local_image_ctx, *m_remote_journaler, m_local_mirror_uuid,
     &m_client_meta, m_threads->work_queue);
 
@@ -1543,7 +1543,8 @@ void ImageReplayer<I>::shut_down(int r) {
           m_local_journal->stop_external_replay();
           m_local_replay = nullptr;
 
-          image_replayer::EventPreprocessor<I>::destroy(m_event_preprocessor);
+          image_replayer::journal::EventPreprocessor<I>::destroy(
+            m_event_preprocessor);
           m_event_preprocessor = nullptr;
           ctx->complete(0);
         });
