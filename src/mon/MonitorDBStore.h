@@ -106,6 +106,14 @@ class MonitorDBStore
       }
     }
 
+    int approx_size() const {
+      return 6 + 1 +
+	4 + prefix.size() +
+	4 + key.size() +
+	4 + endkey.size() +
+	4 + bl.length();
+    }
+
     static void generate_test_instances(list<Op*>& ls) {
       ls.push_back(new Op);
       // we get coverage here from the Transaction instances
@@ -118,7 +126,7 @@ class MonitorDBStore
     list<Op> ops;
     uint64_t bytes, keys;
 
-    Transaction() : bytes(0), keys(0) {}
+    Transaction() : bytes(6 + 4 + 8*2), keys(0) {}
 
     enum {
       OP_PUT	= 1,
@@ -130,7 +138,7 @@ class MonitorDBStore
     void put(const string& prefix, const string& key, const bufferlist& bl) {
       ops.push_back(Op(OP_PUT, prefix, key, bl));
       ++keys;
-      bytes += prefix.length() + key.length() + bl.length();
+      bytes += ops.back().approx_size();
     }
 
     void put(const string& prefix, version_t ver, const bufferlist& bl) {
@@ -149,7 +157,7 @@ class MonitorDBStore
     void erase(const string& prefix, const string& key) {
       ops.push_back(Op(OP_ERASE, prefix, key));
       ++keys;
-      bytes += prefix.length() + key.length();
+      bytes += ops.back().approx_size();
     }
 
     void erase(const string& prefix, version_t ver) {
@@ -162,7 +170,7 @@ class MonitorDBStore
 		     const string& end) {
       ops.push_back(Op(OP_ERASE_RANGE, prefix, begin, end));
       ++keys;
-      bytes += prefix.length() + begin.length() + end.length();
+      bytes += ops.back().approx_size();
     }
 
     void compact_prefix(const string& prefix) {
@@ -407,38 +415,6 @@ class MonitorDBStore
     StoreIteratorImpl() : done(false) { }
     virtual ~StoreIteratorImpl() { }
 
-    bool add_chunk_entry(TransactionRef tx,
-			 const string &prefix,
-			 const string &key,
-			 bufferlist &value,
-			 uint64_t max) {
-      auto tmp(std::make_shared<Transaction>());
-      bufferlist tmp_bl;
-      tmp->put(prefix, key, value);
-      tmp->encode(tmp_bl);
-
-      bufferlist tx_bl;
-      tx->encode(tx_bl);
-
-      size_t len = tx_bl.length() + tmp_bl.length();
-
-      if (!tx->empty() && (len > max)) {
-	return false;
-      }
-
-      tx->append(tmp);
-      last_key.first = prefix;
-      last_key.second = key;
-
-      if (g_conf()->mon_sync_debug) {
-	encode(prefix, crc_bl);
-	encode(key, crc_bl);
-	encode(value, crc_bl);
-      }
-
-      return true;
-    }
-
     virtual bool _is_valid() = 0;
 
   public:
@@ -453,7 +429,8 @@ class MonitorDBStore
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
-    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) = 0;
+    virtual void get_chunk_tx(TransactionRef tx, uint64_t max_bytes,
+			      uint64_t max_keys) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
   typedef std::shared_ptr<StoreIteratorImpl> Synchronizer;
@@ -481,7 +458,8 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    void get_chunk_tx(TransactionRef tx, uint64_t max) override {
+    void get_chunk_tx(TransactionRef tx, uint64_t max_bytes,
+		      uint64_t max_keys) override {
       ceph_assert(done == false);
       ceph_assert(iter->valid() == true);
 
@@ -490,8 +468,25 @@ class MonitorDBStore
 	string key(iter->raw_key().second);
 	if (sync_prefixes.count(prefix)) {
 	  bufferlist value = iter->value();
-	  if (!add_chunk_entry(tx, prefix, key, value, max))
+	  if (tx->empty() ||
+	      (tx->get_bytes() + value.length() + key.size() +
+	       prefix.size() < max_bytes &&
+	       tx->get_keys() < max_keys)) {
+	    // NOTE: putting every key in a separate transaction is
+	    // questionable as far as efficiency goes
+	    auto tmp(std::make_shared<Transaction>());
+	    tmp->put(prefix, key, value);
+	    tx->append(tmp);
+	    if (g_conf()->mon_sync_debug) {
+	      encode(prefix, crc_bl);
+	      encode(key, crc_bl);
+	      encode(value, crc_bl);
+	    }
+	  } else {
+	    last_key.first = prefix;
+	    last_key.second = key;
 	    return;
+	  }
 	}
 	iter->next();
       }
