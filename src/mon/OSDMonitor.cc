@@ -464,20 +464,22 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
 
 void OSDMonitor::_set_cache_autotuning()
 {
-  mon_memory_autotune = g_conf()->mon_memory_autotune;
-  if (!mon_memory_autotune && pcm != nullptr) {
+  if (!g_conf()->mon_memory_autotune && pcm != nullptr) {
     // Disable cache autotuning
     std::lock_guard l(balancer_lock);
     pcm = nullptr;
   }
 
-  if (mon_memory_autotune && pcm == nullptr) {
+  if (g_conf()->mon_memory_autotune && pcm == nullptr) {
     int r = register_cache_with_pcm();
     if (r < 0) {
       dout(10) << __func__
                << " Error while registering osdmon caches with pcm."
                << " Cache auto tuning not enabled."
                << dendl;
+      mon_memory_autotune = false;
+    } else {
+      mon_memory_autotune = true;
     }
   }
 }
@@ -913,7 +915,10 @@ int OSDMonitor::register_cache_with_pcm()
   }
 
   rocksdb_binned_kv_cache = mon->store->get_priority_cache();
-  ceph_assert(rocksdb_binned_kv_cache);
+  if (!rocksdb_binned_kv_cache) {
+    derr << __func__ << " not using rocksdb" << dendl;
+    return -EINVAL;
+  }
 
   int r = _set_cache_ratios();
   if (r < 0) {
