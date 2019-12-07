@@ -2279,8 +2279,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
     reported << st.reported_epoch << ":" << st.reported_seq;
 
     ostringstream upstr, actingstr;
-    upstr << st.up << 'p' << st.up_primary;
-    actingstr << st.acting << 'p' << st.acting_primary;
+    upstr << pg_vector_string(st.up) << 'p' << st.up_primary;
+    actingstr << pg_vector_string(st.acting) << 'p' << st.acting_primary;
     tab << *i
         << st.stats.sum.num_objects
         << st.stats.sum.num_objects_degraded
