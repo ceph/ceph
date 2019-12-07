@@ -17,12 +17,14 @@
 #define dout_subsys ceph_subsys_rbd_mirror
 
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::mirror::image_replayer::EventPreprocessor: " \
-                           << this << " " << __func__
+#define dout_prefix *_dout << "rbd::mirror::image_replayer::journal::" \
+                           << "EventPreprocessor: " << this << " " << __func__ \
+                           << ": "
 
 namespace rbd {
 namespace mirror {
 namespace image_replayer {
+namespace journal {
 
 using librbd::util::create_context_callback;
 
@@ -72,7 +74,7 @@ void EventPreprocessor<I>::refresh_image() {
 
 template <typename I>
 void EventPreprocessor<I>::handle_refresh_image(int r) {
-  dout(20) << ": r=" << r << dendl;
+  dout(20) << "r=" << r << dendl;
 
   if (r < 0) {
     derr << "error encountered during image refresh: " << cpp_strerror(r)
@@ -104,14 +106,13 @@ void EventPreprocessor<I>::preprocess_event() {
 template <typename I>
 int EventPreprocessor<I>::preprocess_snap_rename(
     librbd::journal::SnapRenameEvent &event) {
-  dout(20) << ": "
-           << "remote_snap_id=" << event.snap_id << ", "
+  dout(20) << "remote_snap_id=" << event.snap_id << ", "
            << "src_snap_name=" << event.src_snap_name << ", "
            << "dest_snap_name=" << event.dst_snap_name << dendl;
 
   auto snap_seq_it = m_snap_seqs.find(event.snap_id);
   if (snap_seq_it != m_snap_seqs.end()) {
-    dout(20) << ": remapping remote snap id " << snap_seq_it->first << " "
+    dout(20) << "remapping remote snap id " << snap_seq_it->first << " "
              << "to local snap id " << snap_seq_it->second << dendl;
     event.snap_id = snap_seq_it->second;
     return 0;
@@ -120,13 +121,13 @@ int EventPreprocessor<I>::preprocess_snap_rename(
   auto snap_id_it = m_local_image_ctx.snap_ids.find({cls::rbd::UserSnapshotNamespace(),
 						     event.src_snap_name});
   if (snap_id_it == m_local_image_ctx.snap_ids.end()) {
-    dout(20) << ": cannot map remote snapshot '" << event.src_snap_name << "' "
+    dout(20) << "cannot map remote snapshot '" << event.src_snap_name << "' "
              << "to local snapshot" << dendl;
     event.snap_id = CEPH_NOSNAP;
     return -ENOENT;
   }
 
-  dout(20) << ": mapping remote snap id " << event.snap_id << " "
+  dout(20) << "mapping remote snap id " << event.snap_id << " "
            << "to local snap id " << snap_id_it->second << dendl;
   m_snap_seqs_updated = true;
   m_snap_seqs[event.snap_id] = snap_id_it->second;
@@ -157,7 +158,7 @@ void EventPreprocessor<I>::update_client() {
 
 template <typename I>
 void EventPreprocessor<I>::handle_update_client(int r) {
-  dout(20) << ": r=" << r << dendl;
+  dout(20) << "r=" << r << dendl;
 
   if (r < 0) {
     derr << "failed to update mirror peer journal client: "
@@ -187,7 +188,7 @@ bool EventPreprocessor<I>::prune_snap_map(SnapSeqs *snap_seqs) {
 
 template <typename I>
 void EventPreprocessor<I>::finish(int r) {
-  dout(20) << ": r=" << r << dendl;
+  dout(20) << "r=" << r << dendl;
 
   Context *on_finish = m_on_finish;
   m_on_finish = nullptr;
@@ -197,8 +198,9 @@ void EventPreprocessor<I>::finish(int r) {
   m_work_queue->queue(on_finish, r);
 }
 
+} // namespace journal
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd
 
-template class rbd::mirror::image_replayer::EventPreprocessor<librbd::ImageCtx>;
+template class rbd::mirror::image_replayer::journal::EventPreprocessor<librbd::ImageCtx>;
