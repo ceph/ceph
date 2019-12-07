@@ -600,8 +600,8 @@ function TEST_repair_stats() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
@@ -673,8 +673,8 @@ function TEST_repair_stats_ec() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
