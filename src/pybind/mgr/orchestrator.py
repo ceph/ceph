@@ -76,7 +76,7 @@ def parse_host_specs(host, require_network=True):
         return host_spec
 
     from ipaddress import ip_network, ip_address
-    networks = list()
+    networks = list()  # type: List[str]
     network = host_spec.network
     # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
     if ',' in network:
@@ -173,11 +173,11 @@ class _Promise(object):
 
     def __init__(self,
                  _first_promise=None,  # type: Optional["_Promise"]
-                 value=NO_RESULT,  # type: Optional
+                 value=NO_RESULT,  # type: Optional[Any]
                  on_complete=None,    # type: Optional[Callable]
                  name=None,  # type: Optional[str]
                  ):
-        self._on_complete = on_complete
+        self._on_complete_ = on_complete
         self._name = name
         self._next_promise = None  # type: Optional[_Promise]
 
@@ -189,7 +189,19 @@ class _Promise(object):
 
         # _Promise is not a continuation monad, as `_result` is of type
         # T instead of (T -> r) -> r. Therefore we need to store the first promise here.
-        self._first_promise = _first_promise or self  # type: 'Completion'
+        self._first_promise = _first_promise or self  # type: '_Promise'
+
+    @property
+    def _on_complete(self):
+        # type: () -> Optional[Callable]
+        # https://github.com/python/mypy/issues/4125
+        return self._on_complete_
+
+    @_on_complete.setter
+    def _on_complete(self, val):
+        # type: (Optional[Callable]) -> None
+        self._on_complete_ = val
+
 
     def __repr__(self):
         name = self._name or getattr(self._on_complete, '__name__', '??') if self._on_complete else 'None'
@@ -208,8 +220,6 @@ class _Promise(object):
         else:
             name = self._on_complete.__class__.__name__
         val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
-        if hasattr(val, 'debug_str'):
-            val = val.debug_str()
         prefix = {
             self.INITIALIZED: '      ',
             self.RUNNING:     '   >>>',
@@ -278,6 +288,7 @@ class _Promise(object):
             assert self not in next_result
             next_result._append_promise(self._next_promise)
             self._set_next_promise(next_result)
+            assert self._next_promise
             if self._next_promise._value is self.NO_RESULT:
                 self._next_promise._value = self._value
             self.propagate_to_next()
@@ -453,7 +464,7 @@ class Completion(_Promise):
     def __init__(self,
                  _first_promise=None,  # type: Optional["Completion"]
                  value=_Promise.NO_RESULT,  # type: Any
-                 on_complete=None,  # type: Optional[Callable],
+                 on_complete=None,  # type: Optional[Callable]
                  name=None,  # type: Optional[str]
                  ):
         super(Completion, self).__init__(_first_promise, value, on_complete, name)
@@ -462,7 +473,7 @@ class Completion(_Promise):
     def _progress_reference(self):
         # type: () -> Optional[ProgressReference]
         if hasattr(self._on_complete, 'progress_id'):
-            return self._on_complete
+            return self._on_complete  # type: ignore
         return None
 
     @property
@@ -483,7 +494,7 @@ class Completion(_Promise):
     def with_progress(cls,  # type: Any
                       message,  # type: str
                       mgr,
-                      _first_promise=None,  # type: Optional["Completions"]
+                      _first_promise=None,  # type: Optional["Completion"]
                       value=_Promise.NO_RESULT,  # type: Any
                       on_complete=None,  # type: Optional[Callable]
                       calc_percent=None  # type: Optional[Callable[[], Any]]
@@ -788,21 +799,21 @@ class Orchestrator(object):
         return self.get_inventory()
 
     def add_host_label(self, host, label):
-        # type: (str) -> WriteCompletion
+        # type: (str, str) -> Completion
         """
         Add a host label
         """
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def remove_host_label(self, host, label):
-        # type: (str) -> WriteCompletion
+        # type: (str, str) -> Completion
         """
         Remove a host label
         """
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def get_inventory(self, node_filter=None, refresh=False):
-        # type: (InventoryFilter, bool) -> Completion
+        # type: (Optional[InventoryFilter], bool) -> Completion
         """
         Returns something that was created by `ceph-volume inventory`.
 
@@ -826,7 +837,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def service_action(self, action, service_type, service_name=None, service_id=None):
-        # type: (str, str, str, str) -> Completion
+        # type: (str, str, Optional[str], Optional[str]) -> Completion
         """
         Perform an action (start/stop/reload) on a service.
 
@@ -878,7 +889,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def blink_device_light(self, ident_fault, on, locations):
-        # type: (str, bool, List[DeviceLightLoc]) -> WriteCompletion
+        # type: (str, bool, List[DeviceLightLoc]) -> Completion
         """
         Instructs the orchestrator to enable or disable either the ident or the fault LED.
 
@@ -1237,13 +1248,13 @@ class RGWSpec(StatelessServiceSpec):
     @property
     def rgw_multisite_endpoint_addr(self):
         """Returns the first host. Not supported for Rook."""
-        return self.hosts[0]
+        return self.placement.hosts[0]
 
     @property
     def rgw_multisite_endpoints_list(self):
         return ",".join(["{}://{}:{}".format(self.rgw_multisite_proto,
                              host,
-                             self.rgw_frontend_port) for host in self.hosts])
+                             self.rgw_frontend_port) for host in self.placement.hosts])
 
     def genkey(self, nchars):
         """ Returns a random string of nchars
@@ -1282,11 +1293,13 @@ class InventoryFilter(object):
 
     """
     def __init__(self, labels=None, nodes=None):
-        # type: (List[str], List[str]) -> None
-        self.labels = labels  # Optional: get info about nodes matching labels
-        self.nodes = nodes  # Optional: get info about certain named nodes only
+        # type: (Optional[List[str]], Optional[List[str]]) -> None
 
+        #: Optional: get info about nodes matching labels
+        self.labels = labels
 
+        #: Optional: get info about certain named nodes only
+        self.nodes = nodes
 
 
 class InventoryNode(object):
@@ -1295,7 +1308,7 @@ class InventoryNode(object):
     InventoryNode.
     """
     def __init__(self, name, devices=None, labels=None):
-        # type: (str, inventory.Devices, List[str]) -> None
+        # type: (str, Optional[inventory.Devices], Optional[List[str]]) -> None
         if devices is None:
             devices = inventory.Devices([])
         if labels is None:
@@ -1459,13 +1472,13 @@ class OutdatableData(object):
         # type: (Optional[dict], Optional[datetime.datetime]) -> None
         self._data = data
         if data is not None and last_refresh is None:
-            self.last_refresh = datetime.datetime.utcnow()
+            self.last_refresh = datetime.datetime.utcnow()  # type: Optional[datetime.datetime]
         else:
             self.last_refresh = last_refresh
 
     def json(self):
         if self.last_refresh is not None:
-            timestr = self.last_refresh.strftime(self.DATEFMT)
+            timestr = self.last_refresh.strftime(self.DATEFMT)  # type: Optional[str]
         else:
             timestr = None
 
@@ -1515,16 +1528,16 @@ class OutdatableDictMixin(object):
 
     def __getitem__(self, item):
         # type: (str) -> OutdatableData
-        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))
+        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))  # type: ignore
 
     def __setitem__(self, key, value):
         # type: (str, OutdatableData) -> None
         val = None if value is None else value.json()
-        super(OutdatableDictMixin, self).__setitem__(key, val)
+        super(OutdatableDictMixin, self).__setitem__(key, val)  # type: ignore
 
     def items(self):
-        # type: () -> Iterator[Tuple[str, OutdatableData]]
-        for item in super(OutdatableDictMixin, self).items():
+        ## type: () -> Iterator[Tuple[str, OutdatableData]]
+        for item in super(OutdatableDictMixin, self).items():  # type: ignore
             k, v = item
             yield k, OutdatableData.from_json(v)
 
@@ -1543,7 +1556,7 @@ class OutdatableDictMixin(object):
     def remove_outdated(self):
         outdated = [item[0] for item in self.items() if item[1].outdated()]
         for o in outdated:
-            del self[o]
+            del self[o]  # type: ignore
 
     def invalidate(self, key):
         self[key] = OutdatableData(self[key].data,

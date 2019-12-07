@@ -1,7 +1,7 @@
 import ceph_module  # noqa
 
 try:
-    from typing import Set, Tuple, Iterator, Any
+    from typing import Set, Tuple, Iterator, Any, Dict, Optional, Callable, List
 except ImportError:
     # just for type checking
     pass
@@ -251,7 +251,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
         return osd_list
 
     def device_class_counts(self):
-        result = defaultdict(int)
+        result = defaultdict(int)  # type: Dict[str, int]
         # TODO don't abuse dump like this
         d = self.dump()
         for device in d['devices']:
@@ -262,7 +262,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
 
 class CLICommand(object):
-    COMMANDS = {}
+    COMMANDS = {}  # type: Dict[str, CLICommand]
 
     def __init__(self, prefix, args="", desc="", perm="rw"):
         self.prefix = prefix
@@ -270,7 +270,7 @@ class CLICommand(object):
         self.args_dict = {}
         self.desc = desc
         self.perm = perm
-        self.func = None
+        self.func = None  # type: Optional[Callable]
         self._parse_args()
 
     def _parse_args(self):
@@ -300,6 +300,7 @@ class CLICommand(object):
             kwargs[a.replace("-", "_")] = cmd_dict[a]
         if inbuf:
             kwargs['inbuf'] = inbuf
+        assert self.func
         return self.func(mgr, **kwargs)
 
     @classmethod
@@ -528,8 +529,8 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     from their active peer), and to configuration settings (read only).
     """
 
-    MODULE_OPTIONS = []
-    MODULE_OPTION_DEFAULTS = {}
+    MODULE_OPTIONS = []  # type: List[Dict[str, Any]]
+    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     def __init__(self, module_name, capsule):
         super(MgrStandbyModule, self).__init__(capsule)
@@ -605,9 +606,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
 
 
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
-    COMMANDS = []
-    MODULE_OPTIONS = []
-    MODULE_OPTION_DEFAULTS = {}
+    COMMANDS = []  # type: List[Any]
+    MODULE_OPTIONS = []  # type: List[dict]
+    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -810,8 +811,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return ''
 
     def _perfpath_to_path_labels(self, daemon, path):
-        label_names = ("ceph_daemon",)
-        labels = (daemon,)
+        # type: (str, str) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]
+        label_names = ("ceph_daemon",)  # type: Tuple[str, ...]
+        labels = (daemon,)  # type: Tuple[str, ...]
 
         if daemon.startswith('rbd-mirror.'):
             match = re.match(
@@ -1284,7 +1286,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         value.
         """
 
-        result = defaultdict(dict)
+        result = defaultdict(dict)  # type: Dict[str, dict]
 
         for server in self.list_servers():
             for service in server['services']:
