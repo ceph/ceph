@@ -34,18 +34,17 @@ class PerfCounters;
 namespace journal {
 
 struct CacheManagerHandler;
-
 class Journaler;
 class ReplayHandler;
 
-}
+} // namespace journal
 
 namespace librbd {
 
 class ImageCtx;
 namespace journal { template <typename> class Replay; }
 
-}
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -54,9 +53,14 @@ template <typename> struct InstanceWatcher;
 template <typename> struct MirrorStatusUpdater;
 template <typename> struct Threads;
 
-namespace image_replayer { template <typename> class BootstrapRequest; }
-namespace image_replayer { template <typename> class EventPreprocessor; }
-namespace image_replayer { template <typename> class ReplayStatusFormatter; }
+namespace image_replayer {
+
+template <typename> class BootstrapRequest;
+template <typename> class EventPreprocessor;
+
+namespace journal { template <typename> class ReplayStatusFormatter; }
+
+} // namespace image_replayer
 
 /**
  * Replays changes from a remote cluster for a single image.
@@ -308,8 +312,8 @@ private:
   bool m_resync_requested = false;
 
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
-  image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
-    nullptr;
+  image_replayer::journal::ReplayStatusFormatter<ImageCtxT>*
+    m_replay_status_formatter = nullptr;
   ImageCtxT *m_local_image_ctx = nullptr;
   std::string m_local_image_tag_owner;
 

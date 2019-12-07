@@ -30,7 +30,7 @@
 #include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
-#include "tools/rbd_mirror/image_replayer/ReplayStatusFormatter.h"
+#include "tools/rbd_mirror/image_replayer/journal/ReplayStatusFormatter.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -621,8 +621,9 @@ void ImageReplayer<I>::handle_start_replay(int r) {
     return;
   }
 
-  m_replay_status_formatter = image_replayer::ReplayStatusFormatter<I>::create(
-    m_remote_journaler, m_local_mirror_uuid);
+  m_replay_status_formatter =
+    image_replayer::journal::ReplayStatusFormatter<I>::create(
+      m_remote_journaler, m_local_mirror_uuid);
 
   Context *on_finish(nullptr);
   {
@@ -1643,7 +1644,8 @@ void ImageReplayer<I>::handle_shut_down(int r) {
   }
 
   dout(10) << "stop complete" << dendl;
-  image_replayer::ReplayStatusFormatter<I>::destroy(m_replay_status_formatter);
+  image_replayer::journal::ReplayStatusFormatter<I>::destroy(
+    m_replay_status_formatter);
   m_replay_status_formatter = nullptr;
 
   Context *on_start = nullptr;
