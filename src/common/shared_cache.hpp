@@ -172,6 +172,23 @@ public:
     }
   }
 
+  /* Clears weakrefs in the interval [from, to] -- note that to is inclusive */
+  void clear_range(
+    const K& from,
+    const K& to) {
+    list<VPtr> vals; // release any refs we have after we drop the lock
+    {
+      std::lock_guard l{lock};
+      auto from_iter = weak_refs.lower_bound(from);
+      auto to_iter = weak_refs.upper_bound(to);
+      for (auto i = from_iter; i != to_iter; ) {
+	vals.push_back(i->second.first.lock());
+	lru_remove((i++)->first);
+      }
+    }
+  }
+
+
   void purge(const K &key) {
     VPtr val; // release any ref we have after we drop the lock
     {
