@@ -9,6 +9,14 @@ import time
 
 from mgr_module import MgrModule, CommandResult
 
+# Importing scipy early appears to avoid a future deadlock when
+# we try to do
+#
+#  from .predictor import get_diskfailurepredictor_path
+#
+# in a command thread.  See https://tracker.ceph.com/issues/42764
+import scipy
+
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 TIME_DAYS = 24*60*60
