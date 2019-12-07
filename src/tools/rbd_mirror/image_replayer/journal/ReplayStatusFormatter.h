@@ -16,6 +16,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 namespace image_replayer {
+namespace journal {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class ReplayStatusFormatter {
@@ -53,8 +54,11 @@ private:
   void format(std::string *description);
 };
 
+} // namespace journal
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd
+
+extern template class rbd::mirror::image_replayer::journal::ReplayStatusFormatter<librbd::ImageCtx>;
 
 #endif // RBD_MIRROR_IMAGE_REPLAYER_REPLAY_STATUS_FORMATTER_H

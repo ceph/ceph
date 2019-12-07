@@ -39,8 +39,8 @@ public:
                                            const std::string &global_image_id,
                                            const std::string &local_mirror_uuid,
                                            const std::string &local_image_id,
-                                           const journal::Settings &settings,
-                                           journal::CacheManagerHandler *cache_manager_handler,
+                                           const ::journal::Settings &settings,
+                                           ::journal::CacheManagerHandler *cache_manager_handler,
                                            std::string *remote_mirror_uuid,
                                            std::string *remote_image_id,
                                            Journaler **remote_journaler,
@@ -61,8 +61,8 @@ public:
                             const std::string &global_image_id,
                             const std::string &local_mirror_uuid,
                             const std::string &local_image_id,
-                            const journal::Settings &journal_settings,
-                            journal::CacheManagerHandler *cache_manager_handler,
+                            const ::journal::Settings &journal_settings,
+                            ::journal::CacheManagerHandler *cache_manager_handler,
                             std::string *remote_mirror_uuid,
                             std::string *remote_image_id,
                             Journaler **remote_journaler,
@@ -111,8 +111,8 @@ private:
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
   std::string m_local_image_id;
-  journal::Settings m_journal_settings;
-  journal::CacheManagerHandler *m_cache_manager_handler;
+  ::journal::Settings m_journal_settings;
+  ::journal::CacheManagerHandler *m_cache_manager_handler;
   std::string *m_remote_mirror_uuid;
   std::string *m_remote_image_id;
   Journaler **m_remote_journaler;

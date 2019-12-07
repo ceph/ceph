@@ -13,12 +13,14 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::mirror::image_replayer::ReplayStatusFormatter: " \
-    << this << " " << __func__ << ": "
+#define dout_prefix *_dout << "rbd::mirror::image_replayer::journal::" \
+                           << "ReplayStatusFormatter: " << this << " " \
+                           << __func__ << ": "
 
 namespace rbd {
 namespace mirror {
 namespace image_replayer {
+namespace journal {
 
 using librbd::util::unique_lock_name;
 
@@ -238,9 +240,9 @@ void ReplayStatusFormatter<I>::format(std::string *description) {
   *description = ss.str();
 }
 
+} // namespace journal
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd
 
-template class
-rbd::mirror::image_replayer::ReplayStatusFormatter<librbd::ImageCtx>;
+template class rbd::mirror::image_replayer::journal::ReplayStatusFormatter<librbd::ImageCtx>;
