@@ -125,7 +125,7 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("mds", "add", "service_name")
 
     def test_rgw_add(self):
-        self._orch_cmd("rgw", "add", "service_name")
+        self._orch_cmd("rgw", "add", "myrealm", "myzone")
 
     def test_nfs_add(self):
         self._orch_cmd("nfs", "add", "service_name", "pool", "--namespace", "ns")
