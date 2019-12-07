@@ -138,7 +138,7 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("mds", "rm", "foo")
 
     def test_rgw_rm(self):
-        self._orch_cmd("rgw", "rm", "foo")
+        self._orch_cmd("rgw", "rm", "myrealm", "myzone")
 
     def test_nfs_rm(self):
         self._orch_cmd("nfs", "rm", "service_name")
