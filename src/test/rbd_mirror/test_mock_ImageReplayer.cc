@@ -120,17 +120,6 @@ class InstanceWatcher<librbd::MockTestImageCtx> {
 
 namespace image_replayer {
 
-using ::testing::_;
-using ::testing::AtLeast;
-using ::testing::DoAll;
-using ::testing::InSequence;
-using ::testing::Invoke;
-using ::testing::MatcherCast;
-using ::testing::Return;
-using ::testing::ReturnArg;
-using ::testing::SetArgPointee;
-using ::testing::WithArg;
-
 template<>
 struct PrepareLocalImageRequest<librbd::MockTestImageCtx> {
   static PrepareLocalImageRequest* s_instance;
@@ -353,17 +342,28 @@ ReplayStatusFormatter<librbd::MockTestImageCtx>* ReplayStatusFormatter<librbd::M
 namespace rbd {
 namespace mirror {
 
+using ::testing::_;
+using ::testing::AtLeast;
+using ::testing::DoAll;
+using ::testing::InSequence;
+using ::testing::Invoke;
+using ::testing::MatcherCast;
+using ::testing::Return;
+using ::testing::ReturnArg;
+using ::testing::SetArgPointee;
+using ::testing::WithArg;
+
 class TestMockImageReplayer : public TestMockFixture {
 public:
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
   typedef ImageDeleter<librbd::MockTestImageCtx> MockImageDeleter;
   typedef MirrorStatusUpdater<librbd::MockTestImageCtx> MockMirrorStatusUpdater;
-  typedef BootstrapRequest<librbd::MockTestImageCtx> MockBootstrapRequest;
-  typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
-  typedef EventPreprocessor<librbd::MockTestImageCtx> MockEventPreprocessor;
-  typedef PrepareLocalImageRequest<librbd::MockTestImageCtx> MockPrepareLocalImageRequest;
-  typedef PrepareRemoteImageRequest<librbd::MockTestImageCtx> MockPrepareRemoteImageRequest;
-  typedef ReplayStatusFormatter<librbd::MockTestImageCtx> MockReplayStatusFormatter;
+  typedef image_replayer::BootstrapRequest<librbd::MockTestImageCtx> MockBootstrapRequest;
+  typedef image_replayer::CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
+  typedef image_replayer::EventPreprocessor<librbd::MockTestImageCtx> MockEventPreprocessor;
+  typedef image_replayer::PrepareLocalImageRequest<librbd::MockTestImageCtx> MockPrepareLocalImageRequest;
+  typedef image_replayer::PrepareRemoteImageRequest<librbd::MockTestImageCtx> MockPrepareRemoteImageRequest;
+  typedef image_replayer::ReplayStatusFormatter<librbd::MockTestImageCtx> MockReplayStatusFormatter;
   typedef librbd::journal::Replay<librbd::MockTestImageCtx> MockReplay;
   typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
   typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
