@@ -691,10 +691,8 @@ ConnectionRef AsyncMessenger::connect_to(int type,
     }
   }
 
-  std::lock_guard l{lock};
-
   auto av = _filter_addrs(addrs);
-
+  std::lock_guard l{lock};
   if (anon) {
     return create_connect(av, type, anon);
   }
