@@ -76,7 +76,6 @@ function expect_false()
 }
 
 ## prepare + check host
-$SUDO $CEPH_DAEMON prepare-host
 $SUDO $CEPH_DAEMON check-host
 
 ## version + --image
