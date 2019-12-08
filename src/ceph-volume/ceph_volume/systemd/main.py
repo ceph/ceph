@@ -92,7 +92,7 @@ def main(args=None):
     logger.info('parsed sub-command: %s, extra data: %s', sub_command, extra_data)
     command = ['ceph-volume', sub_command, 'trigger', extra_data]
 
-    tries = os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30)
+    tries = os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 2000)
     interval = os.environ.get('CEPH_VOLUME_SYSTEMD_INTERVAL', 5)
     while tries > 0:
         try:
