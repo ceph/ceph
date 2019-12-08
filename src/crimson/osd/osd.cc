@@ -73,6 +73,8 @@ OSD::OSD(int id, uint32_t nonce,
     heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
     heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
+    asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
+    admin{std::make_unique<crimson::admin::OsdAdmin>(this)},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -274,6 +276,10 @@ seastar::future<> OSD::start()
     return heartbeat->start(public_msgr.get_myaddrs(),
                             cluster_msgr.get_myaddrs());
   }).then([this] {
+    // create the admin-socket server, and the objects that register
+    // to handle incoming commands
+    return start_asok_admin();
+  }).then([this] {
     return start_boot();
   });
 }
@@ -391,12 +397,62 @@ seastar::future<> OSD::_send_alive()
   }
 }
 
+/*
+  The OSD's Admin Socket object created here has two servers (i.e. - blocks of commands
+  to handle) registered to it:
+  - OSD's specific commands are handled by the OSD object;
+  - there are some common commands registered to be directly handled by the AdminSocket object
+    itself.
+*/
+seastar::future<> OSD::start_asok_admin()
+{
+  auto asok_path = local_conf().get_val<std::string>("admin_socket");
+
+  return asok->start(asok_path).then([this] {
+    // register OSD-specific admin-socket hooks
+    return admin->register_admin_commands();
+  });
+}
+
+/*
+  Note: stop_asok_admin() is executed as part of a destruction process,
+  and may occur even before 'start' is complete. We thus take nothing for granted,
+  and all interfaces are checked for existence.
+*/
+seastar::future<> OSD::stop_asok_admin()
+{
+  return ([this] {
+    if (admin) {
+      return admin->unregister_admin_commands();
+    } else {
+      return seastar::make_ready_future<>();
+    }
+  })().then([this] {
+    if (asok) {
+      return asok->stop().then([this]() {
+        asok.release();
+        return seastar::make_ready_future<>();
+      });
+    } else {
+      return seastar::make_ready_future<>();
+    }
+  }).handle_exception([](auto ep) {
+    logger().error("exception on admin-stop: {}", ep);
+    return seastar::make_ready_future<>();
+  }).finally([] {
+    logger().info("OSD::stop_asok_admin(): Admin-sock service destructed");
+  });
+}
+
 seastar::future<> OSD::stop()
 {
   logger().info("stop");
   // see also OSD::shutdown()
   state.set_stopping();
+
   return gate.close().then([this] {
+    return stop_asok_admin();
+  }).then([this] {
     return heartbeat->stop();
   }).then([this] {
     return monc->stop();

@@ -15,6 +15,10 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
+#ifdef WITH_SEASTAR
+#include "crimson/admin/admin_socket.h"
+#else
+
 #include <condition_variable>
 #include <mutex>
 #include <string>
@@ -210,4 +214,5 @@ private:
   friend class GetdescsHook;
 };
 
+#endif
 #endif
