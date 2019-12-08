@@ -85,6 +85,7 @@ class Monitoring(object):
     components = {
         "prometheus": {
             "image": {
+                "image": "prom/prometheus:latest",
                 "cpus": '2',
                 "memory": '4GB',
                 "args": [
@@ -93,8 +94,8 @@ class Monitoring(object):
                     "--web.listen-address=:{}".format(port_map['prometheus'])
                 ]
             },
-            "config": [
-                {
+            "config": {
+                "prometheus.yml": {
                     "global": {
                        "scrape_interval": "5s",
                         "evaluation_interval": "10s"
@@ -111,7 +112,7 @@ class Monitoring(object):
                         }
                     ]
                 }
-            ]
+            }
         }
     }
 
@@ -315,10 +316,7 @@ def makedirs(dir, uid, gid, mode):
 
 def get_data_dir(fsid, t, n):
     # type: (str, str, Union[int, str]) -> str
-    if n:
-        return os.path.join(args.data_dir, fsid, '%s.%s' % (t, n))
-    else:
-        return os.path.join(args.data_dir, fsid, '%s' % (t))
+    return os.path.join(args.data_dir, fsid, '%s.%s' % (t, n))
 
 def get_log_dir(fsid):
     # type: (str) -> str
@@ -512,24 +510,73 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
         makedirs(os.path.join(data_dir_root,'etc/prometheus'), uid, gid, 0o755)
         makedirs(os.path.join(data_dir_root,'data'), uid, gid, 0o755)
 
+        config = get_parm(args.config_json)
+        if not config:
+            raise Error("Prometheus deployment requires config-json to be set")
+
+        prometheus_yml = dict()
+
+        if "prometheus.yml" in config:
+            # trust the provided version is appropriate
+            prometheus_yml = config.get('prometheus.yml')
+            logger.debug("Using supplied prometheus.yml definition")
+        else:
+            if "mgrs" in config:
+                prometheus_yml = Monitoring.components['prometheus']['config']['prometheus.yml']
+                if isinstance(config['mgrs'], list):
+                    targets=[]
+                    for mgr in config['mgrs']:
+                        targets.append('{}:9283'.format(mgr))
+                    prometheus_yml['scrape_configs'].append({
+                            "job_name": "ceph",
+                            "static_configs": [
+                                { "targets": targets,
+                                  "labels": {
+                                    "instance": "ceph_cluster"
+                                    }
+                                }
+                            ],
+                        })
+                    logger.debug("Using default prometheus settings with supplied list of ceph mgrs")
+                else:
+                    raise Error("config-json supplied with invalid mgrs setting - must be a list")
+            else:
+                raise Error("config-json must either specify a valid prometheus.yml, or a mgrs list")
+
         # create configs
         with open(os.path.join(data_dir_root,'etc/prometheus/prometheus.yml'), 'w') as f:
             os.fchown(f.fileno(), uid, gid)
             os.fchmod(f.fileno(), 0o600)
-            config = Monitoring.components['prometheus']['config'][0]
-            targets = []
-            for mgr in args.mgr_list.split(','):
-                targets.append('{}:9283'.format(mgr))
-            config['scrape_configs'].append({
-                "job_name": "ceph",
-                "static_configs": [
-                    { "targets": targets,
-                      "labels": {
-                          "instance": "ceph_cluster"
-                      } }
-                ],
-            })
-            f.write(yaml.safe_dump(config, explicit_start=True, indent=2))
+            f.write(yaml.safe_dump(prometheus_yml, explicit_start=True, indent=2))
+
+def get_parm(option):
+    """Read requested arg, and return as a dict"""
+
+    if not option:
+        return None
+
+    if option == '-':
+        try:
+            j = injected_stdin
+        except NameError:
+            j = sys.stdin.read()
+    else:
+        # inline json string
+        if option[0] == '{' and option[-1] == '}':
+            j = option
+        # json file
+        elif os.path.exists(option):
+            with open(option, 'r') as f:
+                j = f.read()
+        else:
+            raise Error("Config file {} not found".format(option))
+    
+    try:
+        js = json.loads(j)
+    except ValueError:
+        raise Error("Invalid JSON in {}".format(option))
+    else:
+        return js
 
 def get_config_and_keyring():
     # type: () -> Tuple[str, str]
@@ -600,7 +647,7 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
             if os.path.exists(crash_dir):
                 mounts[crash_dir] = '/var/lib/ceph/crash:z'
 
-    if daemon_id:
+    if daemon_type in Ceph.daemons and daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
         if daemon_type == 'rgw':
             cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (daemon_id)
@@ -647,20 +694,18 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         entrypoint = None
         name = daemon_type
     
-    id_str = '.{}'.format(daemon_id)
-    name_args = ['-n', name, '-f']
+    ceph_args = ['-n', name, '-f']
 
     if daemon_type in Monitoring.components:
-        id_str = ''
-        name_args = []
+        ceph_args = []
 
     return CephContainer(
         image=args.image,
         entrypoint=entrypoint,
-        args=name_args + get_daemon_args(fsid, daemon_type, daemon_id),
+        args=ceph_args + get_daemon_args(fsid, daemon_type, daemon_id),
         container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
-        cname='ceph-%s-%s%s' % (fsid, daemon_type, id_str),
+        cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
 
 def extract_uid_gid(img=None, file_path='/etc/ceph'):
@@ -955,9 +1000,6 @@ def deploy_crash(fsid, uid, gid, config, keyring):
 
 def get_unit_file(fsid, uid, gid):
     # type: (str, int, int) -> str
-    #
-    # FIXME - should monitoring containers be included in the ceph.target group?
-    #
     install_path = find_program('install')
     u = """[Unit]
 Description=Ceph daemon for {fsid}
@@ -1393,17 +1435,14 @@ def command_bootstrap():
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
         logger.info('Waiting for the module to be available...')
+        # FIXME: potential for an endless loop?
 
-        limit = 20
         while True:
             c_out = cli(['-h'])
             if 'dashboard' in c_out:
                 break
-            logger.info('Dashboard not yet available, waiting...({})'.format(limit))
+            logger.info('Dashboard not yet available, waiting...')
             time.sleep(1)
-            limit -= 1
-            if limit == 0:
-                raise Error("Timeout waiting for dashboard to be available")
 
         logger.info('Generating a dashboard self-signed certificate...')
         cli(['dashboard', 'create-self-signed-cert'])
@@ -1441,7 +1480,7 @@ def command_deploy():
         (daemon_type, daemon_id) = args.name.split('.', 1)
     else:
         daemon_type = args.name
-        daemon_id = None
+        daemon_id = get_hostname()
     
     crash_keyring = None
     
@@ -1482,8 +1521,8 @@ def command_deploy():
             raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
         if daemon_type == 'prometheus':
-            if not args.mgr_list:
-                raise Error("mgr-list parameter is needed when deploying prometheus service")
+            if not args.config_json:
+                raise Error("config-json parameter is needed when deploying prometheus service")
 
             uid, gid = extract_uid_gid(file_path='/etc/prometheus')
             metadata = Monitoring.components['prometheus']['image']
@@ -1827,7 +1866,7 @@ def command_rm_daemon():
         (daemon_type, daemon_id) = args.name.split('.', 1)
     else:
         daemon_type = args.name
-        daemon_id = None
+        daemon_id = get_hostname()
 
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise Error('must pass --force to proceed: '
@@ -2181,6 +2220,9 @@ def _get_parser():
         '--config', '-c',
         help='config file for new daemon')
     parser_deploy.add_argument(
+        '--config-json',
+        help='Additional configuration information in JSON format')
+    parser_deploy.add_argument(
         '--keyring',
         help='keyring for new daemon')
     parser_deploy.add_argument(
@@ -2192,10 +2234,6 @@ def _get_parser():
     parser_deploy.add_argument(
         '--config-and-keyrings',
         help='JSON file with config and keyrings for the daemon and crash agent')
-    parser_deploy.add_argument(
-        '--mgr-list',
-        help='Comma separated list of ceph mgr IP address or names e.g. mgr-1,mgr2'
-    )
     parser_deploy.add_argument(
         '--mon-ip',
         help='mon IP')
