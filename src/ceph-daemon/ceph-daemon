@@ -1731,51 +1731,6 @@ def command_check_host():
 
     logger.info('Host looks OK')
 
-def command_prepare_host():
-    # if there is no systemd we're SOL
-    if not find_program('systemctl'):
-        raise RuntimeError('unable to location systemctl')
-
-    if not container_path:
-        logger.info('Trying to install podman or docker...')
-        out, err, ret = call(['dnf', 'install', '-y', 'podman'])
-        if err:
-            out, err, ret = call(['yum', 'install', '-y', 'podman'])
-        if err:
-            out, err, ret = call(['apt', 'install', '-y', 'podman'])
-        if err:
-            out, err, ret = call(['apt', 'install', '-y', 'docker.io'])
-        if err:
-            out, err, ret = call(['zypper', '-n', 'install', 'podman'])
-        if err:
-            out, err, ret = call(['zypper', '-n', 'install', 'docker'])
-        if err:
-            raise RuntimeError('unable to install podman|docker via dnf|yum|apt|zypper')
-
-    if not find_program('lvcreate'):
-        logger.info('Trying to install LVM2...')
-        out, err, ret = call(['dnf', 'install', '-y', 'lvm2'])
-        if err:
-            out, err, ret = call(['yum', 'install', '-y', 'lvm2'])
-        if err:
-            out, err, ret = call(['apt', 'install', '-y', 'lvm2'])
-        if err:
-            out, err, ret = call(['zypper', '-n', 'install', 'lvm2'])
-        if err:
-            raise RuntimeError('unable to install lvm2 via dnf|yum|apt|zypper')
-
-    if not check_time_sync():
-        # install chrony
-        logger.info('Trying to install chrony...')
-        out, err, ret = call(['dnf', 'install', '-y', 'chrony'])
-        if err:
-            out, err, ret = call(['yum', 'install', '-y', 'chrony'])
-        if err:
-            out, err, ret = call(['apt', 'install', '-y', 'chrony'])
-        if err:
-            out, err, ret = call(['zypper', '-n', 'install', 'chrony'])
-        if err:
-            raise RuntimeError('unable to install chrony via dnf|yum|apt|zypper')
 
 ##################################
 
@@ -2091,10 +2046,6 @@ def _get_parser():
         'check-host', help='check host configuration')
     parser_check_host.set_defaults(func=command_check_host)
 
-    parser_prepare_host = subparsers.add_parser(
-        'prepare-host', help='prepare host')
-    parser_prepare_host.set_defaults(func=command_prepare_host)
-
     return parser
 
 
@@ -2128,7 +2079,7 @@ if __name__ == "__main__":
                 break
             except Exception as e:
                 logger.debug('Could not locate %s: %s' % (i, e))
-        if not container_path and args.func != command_prepare_host:
+        if not container_path:
             sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
             sys.exit(1)
 
