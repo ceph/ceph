@@ -83,7 +83,9 @@ protected:
     m_trace.event("start");
   }
 
-
+  virtual bool finish_request_early() {
+    return false;
+  }
   virtual int clip_request();
   virtual void update_timestamp();
   virtual void send_request() = 0;
@@ -138,6 +140,7 @@ protected:
   }
 
   void send_request() override;
+  bool finish_request_early() override;
 
   virtual int prune_object_extents(
       LightweightObjectExtents* object_extents) const {
