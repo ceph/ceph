@@ -170,12 +170,16 @@ AssumeRoleRequestBase::AssumeRoleRequestBase( const string& duration,
   if (duration.empty()) {
     this->duration = DEFAULT_DURATION_IN_SECS;
   } else {
-    this->duration = std::stoull(duration);
+    this->duration = strict_strtoll(duration.c_str(), 10, &this->err_msg);
   }
 }
 
 int AssumeRoleRequestBase::validate_input() const
 {
+  if (!err_msg.empty()) {
+    return -EINVAL;
+  }
+
   if (duration < MIN_DURATION_IN_SECS ||
           duration > MAX_DURATION_IN_SECS) {
     return -EINVAL;
