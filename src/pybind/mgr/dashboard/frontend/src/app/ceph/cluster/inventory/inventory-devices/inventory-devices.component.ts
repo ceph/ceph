@@ -64,7 +64,6 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
         name: this.i18n('Type'),
         prop: 'human_readable_type',
         flexGrow: 1,
-        cellClass: 'text-center',
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
@@ -98,7 +97,6 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
         name: this.i18n('OSDs'),
         prop: 'osd_ids',
         flexGrow: 1,
-        cellClass: 'text-center',
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           class: 'badge-dark',
