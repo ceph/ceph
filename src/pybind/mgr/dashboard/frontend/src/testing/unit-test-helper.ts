@@ -111,7 +111,6 @@ export class PermissionHelper {
 
   setSelection(selection: object[]) {
     this.tac.selection.selected = selection;
-    this.tac.selection.update();
   }
 }
 

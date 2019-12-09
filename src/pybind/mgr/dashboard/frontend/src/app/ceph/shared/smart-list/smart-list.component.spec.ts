@@ -7,14 +7,14 @@ import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
 import _ = require('lodash');
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
-import { OsdService } from '../../../../shared/api/osd.service';
-import { SharedModule } from '../../../../shared/shared.module';
-import { OsdSmartListComponent } from './osd-smart-list.component';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { OsdService } from '../../../shared/api/osd.service';
+import { SharedModule } from '../../../shared/shared.module';
+import { SmartListComponent } from './smart-list.component';
 
 describe('OsdSmartListComponent', () => {
-  let component: OsdSmartListComponent;
-  let fixture: ComponentFixture<OsdSmartListComponent>;
+  let component: SmartListComponent;
+  let fixture: ComponentFixture<SmartListComponent>;
   let osdService: OsdService;
 
   const SMART_DATA_VERSION_1_0 = require('./fixtures/smart_data_version_1_0_response.json');
@@ -61,13 +61,13 @@ describe('OsdSmartListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [OsdSmartListComponent],
+    declarations: [SmartListComponent],
     imports: [TabsModule, SharedModule, HttpClientTestingModule],
     providers: [i18nProviders, TabsetComponent, TabsetConfig]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(OsdSmartListComponent);
+    fixture = TestBed.createComponent(SmartListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
 

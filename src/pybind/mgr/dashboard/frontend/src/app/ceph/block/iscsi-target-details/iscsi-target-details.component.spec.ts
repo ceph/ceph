@@ -74,7 +74,6 @@ describe('IscsiTargetDetailsComponent', () => {
         target_controls: { dataout_timeout: 2 }
       }
     ];
-    component.selection.update();
 
     fixture.detectChanges();
   });

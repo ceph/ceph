@@ -51,7 +51,6 @@ describe('CephfsTabsComponent', () => {
 
   const setSelection = (selection: object[]) => {
     component.selection.selected = selection;
-    component.selection.update();
     component.ngOnChanges();
   };
 
