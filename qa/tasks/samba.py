@@ -6,6 +6,8 @@ import logging
 import sys
 import time
 
+import six
+
 from teuthology import misc as teuthology
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
@@ -22,7 +24,7 @@ def get_sambas(ctx, roles):
     :param roles: roles for this test (extracted from yaml files)
     """
     for role in roles:
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         PREFIX = 'samba.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -196,7 +198,7 @@ def task(ctx, config):
                 exc_info = sys.exc_info()
                 log.exception('Saw exception from %s.%s', d.role, d.id_)
         if exc_info != (None, None, None):
-            raise exc_info[0], exc_info[1], exc_info[2]
+            six.reraise(exc_info[0], exc_info[1], exc_info[2])
 
         for id_, remote in samba_servers:
             remote.run(

@@ -54,7 +54,7 @@ def create_clones(ctx, config, managers):
             num_disks = client_config.get('disks', DEFAULT_NUM_DISKS)
             if isinstance(num_disks, list):
                 num_disks = len(num_disks)
-            for i in xrange(num_disks):
+            for i in range(num_disks):
                 create_config = {
                     client: {
                         'image_name':
@@ -122,7 +122,7 @@ def generate_iso(ctx, config):
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
         metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
 
-        with file(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
             test_setup = ''.join(f.readlines())
             # configuring the commands to setup the nfs mount
             mnt_dir = "/export/{client}".format(client=client)
@@ -130,7 +130,7 @@ def generate_iso(ctx, config):
                 mnt_dir=mnt_dir
             )
 
-        with file(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
             test_teardown = ''.join(f.readlines())
 
         user_data = test_setup
@@ -138,7 +138,7 @@ def generate_iso(ctx, config):
             num_disks = client_config.get('disks', DEFAULT_NUM_DISKS)
             if isinstance(num_disks, list):
                 num_disks = len(num_disks)
-            for i in xrange(1, num_disks):
+            for i in range(1, num_disks):
                 dev_letter = chr(ord('a') + i)
                 user_data += """
 - |
@@ -174,7 +174,7 @@ def generate_iso(ctx, config):
             ceph_sha1=ctx.config.get('sha1'))
         teuthology.write_file(remote, userdata_path, StringIO(user_data))
 
-        with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
             teuthology.write_file(remote, metadata_path, f)
 
         test_file = '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client)
@@ -395,7 +395,7 @@ def run_qemu(ctx, config):
         num_disks = client_config.get('disks', DEFAULT_NUM_DISKS)
         if isinstance(num_disks, list):
             num_disks = len(num_disks)
-        for i in xrange(num_disks):
+        for i in range(num_disks):
             suffix = '-clone' if clone else ''
             args.extend([
                 '-drive',

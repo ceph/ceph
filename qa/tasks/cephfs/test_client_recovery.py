@@ -447,10 +447,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.wait_until_mounted()
 
     def test_dir_fsync(self):
-	self._test_fsync(True);
+        self._test_fsync(True);
 
     def test_create_fsync(self):
-	self._test_fsync(False);
+        self._test_fsync(False);
 
     def _test_fsync(self, dirfsync):
         """
