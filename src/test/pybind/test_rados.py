@@ -316,6 +316,10 @@ class TestIoctx(object):
         self.ioctx.write_full('abc', b'd')
         eq(self.ioctx.read('abc'), b'd')
 
+    def test_writesame(self):
+        self.ioctx.writesame('ob', b'rzx', 9)
+        eq(self.ioctx.read('ob'), b'rzxrzxrzx')
+
     def test_append(self):
         self.ioctx.write('abc', b'a')
         self.ioctx.append('abc', b'b')
@@ -534,6 +538,12 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op, "object")
         eq(self.ioctx.read('object'), b"Hello, ebs!")
 
+    def test_writesame_op(self):
+        with WriteOpCtx() as write_op:
+            write_op.writesame(b'rzx', 9)
+            self.ioctx.operate_write_op(write_op, 'abc')
+            eq(self.ioctx.read('abc'), b'rzxrzxrzx')
+
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
@@ -693,6 +703,23 @@ class TestIoctx(object):
         eq(comp.get_return_value(), 0)
         contents = self.ioctx.read("foo")
         eq(contents, b"bar")
+        [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_writesame(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_writesame("abc", b"rzx", 9, 0, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(self.ioctx.read("abc"), b"rzxrzxrzx")
         [i.remove() for i in self.ioctx.list_objects()]
 
     def test_aio_stat(self):
