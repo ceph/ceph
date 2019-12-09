@@ -6,8 +6,10 @@ import pipes
 import os
 import re
 
-from tasks.util import get_remote_for_role
-from tasks.util.workunit import get_refspec_after_overrides
+import six
+
+from util import get_remote_for_role
+from util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
@@ -103,7 +105,7 @@ def task(ctx, config):
     # Create scratch dirs for any non-all workunits
     log.info('Making a separate scratch dir for every client...')
     for role in clients.keys():
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         if role == "all":
             continue
 
@@ -311,7 +313,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     to False is passed, the 'timeout' command is not used.
     """
     testdir = misc.get_testdir(ctx)
-    assert isinstance(role, basestring)
+    assert isinstance(role, six.string_types)
     cluster, type_, id_ = misc.split_role(role)
     assert type_ == 'client'
     remote = get_remote_for_role(ctx, role)

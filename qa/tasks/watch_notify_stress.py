@@ -4,6 +4,7 @@ test_stress_watch task
 import contextlib
 import logging
 
+import six
 from teuthology.orchestra import run
 from teuthology.task import proc_thrasher
 
@@ -36,7 +37,7 @@ def task(ctx, config):
     remotes = []
 
     for role in config.get('clients', ['client.0']):
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]

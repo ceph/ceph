@@ -134,7 +134,7 @@ def setup_venv(ctx, config):
     for (client, _) in config.items():
         run_in_keystone_dir(ctx, client,
             [   'source',
-		'{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
+                '{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
                 run.Raw('&&'),
                 'tox', '-e', 'venv', '--notest'
             ])
