@@ -1394,8 +1394,6 @@ public:
   }
 
 
-  /* what replica # is a given osd? 0 primary, -1 for none. */
-  static int calc_pg_rank(int osd, const std::vector<int>& acting, int nrep=0);
   static int calc_pg_role(int osd, const std::vector<int>& acting, int nrep=0);
   static bool primary_changed(
     int oldprimary,
@@ -1407,7 +1405,7 @@ public:
   int get_pg_acting_rank(pg_t pg, int osd) const {
     std::vector<int> group;
     pg_to_acting_osds(pg, group);
-    return calc_pg_rank(osd, group, group.size());
+    return calc_pg_role(osd, group, group.size());
   }
   /* role is -1 (stray), 0 (primary), 1 (replica) */
   int get_pg_acting_role(const pg_t& pg, int osd) const {

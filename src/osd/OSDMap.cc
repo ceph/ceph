@@ -2639,7 +2639,7 @@ void OSDMap::_pg_to_up_acting_osds(
     *acting_primary = _acting_primary;
 }
 
-int OSDMap::calc_pg_rank(int osd, const vector<int>& acting, int nrep)
+int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
 {
   if (!nrep)
     nrep = acting.size();
@@ -2647,11 +2647,6 @@ int OSDMap::calc_pg_rank(int osd, const vector<int>& acting, int nrep)
     if (acting[i] == osd)
       return i;
   return -1;
-}
-
-int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
-{
-  return calc_pg_rank(osd, acting, nrep);
 }
 
 bool OSDMap::primary_changed(
@@ -2666,8 +2661,8 @@ bool OSDMap::primary_changed(
     return true;     // was empty, now not, or vice versa
   if (oldprimary != newprimary)
     return true;     // primary changed
-  if (calc_pg_rank(oldprimary, oldacting) !=
-      calc_pg_rank(newprimary, newacting))
+  if (calc_pg_role(oldprimary, oldacting) !=
+      calc_pg_role(newprimary, newacting))
     return true;
   return false;      // same primary (tho replicas may have changed)
 }
