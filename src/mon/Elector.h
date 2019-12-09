@@ -46,7 +46,7 @@ class Elector : public ElectionOwner, RankProvider {
   map<int, utime_t> peer_sent_ping; // rank -> last ping stamp we sent
   set<int> live_pinging; // ranks which we are currently pinging
   double ping_timeout; // the timeout after which we consider a ping to be dead
-  const static int PING_DIVISOR = 2;  // TODO: make divisor configurable?
+  int PING_DIVISOR = 2;  // we time out pings
 
    /**
    * @defgroup Elector_h_internal_types Internal Types
