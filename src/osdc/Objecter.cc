@@ -2640,7 +2640,7 @@ bool Objecter::is_pg_changed(
   const vector<int>& newacting,
   bool any_change)
 {
-  if (OSDMap::primary_changed(
+  if (OSDMap::primary_changed_broken( // https://tracker.ceph.com/issues/43213
 	oldprimary,
 	oldacting,
 	newprimary,
