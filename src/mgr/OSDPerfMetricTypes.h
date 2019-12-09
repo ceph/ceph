@@ -7,6 +7,8 @@
 #include "include/denc.h"
 #include "include/stringify.h"
 
+#include "mgr/Types.h"
+
 #include <regex>
 
 typedef std::vector<std::string> OSDPerfMetricSubKey; // array of regex match
@@ -125,9 +127,6 @@ struct denc_traits<OSDPerfMetricKeyDescriptor> {
     }
   }
 };
-
-typedef std::pair<uint64_t,uint64_t> PerformanceCounter;
-typedef std::vector<PerformanceCounter> PerformanceCounters;
 
 enum class PerformanceCounterType : uint8_t {
   OPS = 0,
@@ -265,8 +264,6 @@ WRITE_CLASS_DENC(OSDPerfMetricLimit)
 std::ostream& operator<<(std::ostream& os, const OSDPerfMetricLimit &limit);
 
 typedef std::set<OSDPerfMetricLimit> OSDPerfMetricLimits;
-
-typedef int OSDPerfMetricQueryID;
 
 struct OSDPerfMetricQuery {
   bool operator<(const OSDPerfMetricQuery &other) const {
