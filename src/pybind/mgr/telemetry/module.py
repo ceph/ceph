@@ -29,7 +29,7 @@ LAST_REVISION_RE_OPT_IN = 2
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
-REVISION = 2
+REVISION = 3
 
 # History of revisions
 # --------------------
