@@ -52,25 +52,16 @@ export class PrometheusService {
   getRules(
     type: 'all' | 'alerting' | 'rewrites' = 'all'
   ): Observable<{ groups: PrometheusRuleGroup[] }> {
-    let rules = this.http.get<{ groups: PrometheusRuleGroup[] }>(`${this.baseURL}/rules`);
-    const filterByType = (_type: 'alerting' | 'rewrites') => {
-      return rules.pipe(
-        map((_rules) => {
-          _rules.groups = _rules.groups.map((group) => {
-            group.rules = group.rules.filter((rule) => rule.type === _type);
-            return group;
+    return this.http.get<{ groups: PrometheusRuleGroup[] }>(`${this.baseURL}/rules`).pipe(
+      map((rules) => {
+        if (['alerting', 'rewrites'].includes(type)) {
+          rules.groups.map((group) => {
+            group.rules = group.rules.filter((rule) => rule.type === type);
           });
-          return _rules;
-        })
-      );
-    };
-    switch (type) {
-      case 'alerting':
-      case 'rewrites':
-        rules = filterByType(type);
-        break;
-    }
-    return rules;
+        }
+        return rules;
+      })
+    );
   }
 
   setSilence(silence: AlertmanagerSilence) {
