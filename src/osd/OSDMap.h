@@ -1403,18 +1403,6 @@ public:
     return calc_pg_role(pg_shard_t(osd, pg.shard), group);
   }
 
-  bool osd_is_valid_op_target(pg_t pg, int osd) const {
-    int primary;
-    std::vector<int> group;
-    pg_to_acting_osds(pg, &group, &primary);
-    if (osd == primary)
-      return true;
-    if (pg_is_ec(pg))
-      return false;
-
-    return calc_pg_role(osd, group, group.size()) >= 0;
-  }
-
   bool try_pg_upmap(
     CephContext *cct,
     pg_t pg,                       ///< pg to potentially remap
