@@ -4809,10 +4809,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
   init_pg_ondisk(rctx.transaction, pgid, pp);
 
-  int role = startmap->calc_pg_role(whoami, acting, acting.size());
-  if (!pp->is_replicated() && role != pgid.shard) {
-    role = -1;
-  }
+  int role = startmap->calc_pg_role(pg_shard_t(whoami, pgid.shard), acting);
 
   PGRef pg = _make_pg(startmap, pgid);
   pg->ch = store->create_new_collection(pg->coll);
@@ -9001,12 +8998,16 @@ void OSD::handle_pg_create(OpRequestRef op)
 
     dout(20) << "mkpg " << on << " e" << created << "@" << ci->second << dendl;
 
+    spg_t pgid;
+    bool mapped = osdmap->get_primary_shard(on, &pgid);
+    ceph_assert(mapped);
+
     // is it still ours?
     vector<int> up, acting;
     int up_primary = -1;
     int acting_primary = -1;
     osdmap->pg_to_up_acting_osds(on, &up, &up_primary, &acting, &acting_primary);
-    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
+    int role = osdmap->calc_pg_role(pg_shard_t(whoami, pgid.shard), acting);
 
     if (acting_primary != whoami) {
       dout(10) << "mkpg " << on << "  not acting_primary (" << acting_primary
@@ -9014,9 +9015,6 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
 
-    spg_t pgid;
-    bool mapped = osdmap->get_primary_shard(on, &pgid);
-    ceph_assert(mapped);
 
     PastIntervals pi;
     pg_history_t history;

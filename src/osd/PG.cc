@@ -1153,11 +1153,7 @@ void PG::read_state(ObjectStore *store)
       acting,
       up_primary,
       primary);
-    int rr = OSDMap::calc_pg_role(osd->whoami, acting);
-    if (pool.info.is_replicated() || rr == pg_whoami.shard)
-      recovery_state.set_role(rr);
-    else
-      recovery_state.set_role(-1);
+    recovery_state.set_role(OSDMap::calc_pg_role(pg_whoami, acting));
   }
 
   // init pool options
