@@ -3795,6 +3795,9 @@ void PG::read_state(ObjectStore *store)
       set_role(-1);
   }
 
+  // init pool options
+  store->set_collection_opts(ch, pool.info.opts);
+
   PG::RecoveryCtx rctx(0, 0, 0, new ObjectStore::Transaction);
   handle_initialize(&rctx);
   // note: we don't activate here because we know the OSD will advance maps
@@ -6526,12 +6529,17 @@ void PG::handle_query_state(Formatter *f)
   recovery_state.handle_event(q, 0);
 }
 
-void PG::update_store_with_options()
+void PG::init_collection_pool_opts()
 {
   auto r = osd->store->set_collection_opts(ch, pool.info.opts);
-  if(r < 0 && r != -EOPNOTSUPP) {
+  if (r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << " set_collection_opts returns error:" << r << dendl;
   }
+}
+
+void PG::update_store_with_options()
+{
+  init_collection_pool_opts();
 }
 
 struct C_DeleteMore : public Context {

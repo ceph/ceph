@@ -4201,6 +4201,8 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     false,
     rctx.transaction);
 
+  pg->init_collection_pool_opts();
+
   pg->handle_initialize(&rctx);
   pg->handle_activate_map(&rctx);
 
@@ -8525,6 +8527,8 @@ void OSD::split_pgs(
       i->pgid,
       child,
       split_bits);
+
+    child->init_collection_pool_opts();
 
     child->finish_split_stats(*stat_iter, rctx->transaction);
     child->unlock();
