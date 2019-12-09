@@ -215,6 +215,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime)
     int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off)
     int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
+    int rados_writesame(rados_ioctx_t io, const char *oid, const char *buf, size_t data_len, size_t write_len, uint64_t off)
     int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
     int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off)
     int rados_remove(rados_ioctx_t io, const char *oid)
@@ -275,6 +276,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_aio_write(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len, uint64_t off)
     int rados_aio_append(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len)
     int rados_aio_write_full(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len)
+    int rados_aio_writesame(rados_ioctx_t io, const char *oid, rados_completion_t completion, const char *buf, size_t data_len, size_t write_len, uint64_t off)
     int rados_aio_remove(rados_ioctx_t io, const char * oid, rados_completion_t completion)
     int rados_aio_read(rados_ioctx_t io, const char * oid, rados_completion_t completion, char * buf, size_t len, uint64_t off)
     int rados_aio_flush(rados_ioctx_t io)
@@ -305,6 +307,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
     void rados_write_op_zero(rados_write_op_t write_op, uint64_t offset, uint64_t len)
     void rados_write_op_exec(rados_write_op_t write_op, const char *cls, const char *method, const char *in_buf, size_t in_len, int *prval)
+    void rados_write_op_writesame(rados_write_op_t write_op, const char *buffer, size_t data_len, size_t write_len, uint64_t offset)
     void rados_read_op_omap_get_vals2(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_keys2(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)
@@ -2183,6 +2186,25 @@ cdef class WriteOp(object):
         with nogil:
             rados_write_op_exec(self.write_op, _cls, _method, _data, _data_len, NULL)
 
+    @requires(('to_write', bytes), ('write_len', int), ('offset', int))
+    def writesame(self, to_write, write_len, offset=0):
+        """
+        Write the same buffer multiple times
+        :param to_write: data to write
+        :type to_write: bytes
+        :param write_len: total number of bytes to write
+        :type len: int
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+        """
+        cdef:
+            char *_to_write = to_write
+            size_t _data_len = len(to_write)
+            size_t _write_len = write_len
+            uint64_t _offset = offset
+        with nogil:
+             rados_write_op_writesame(self.write_op, _to_write, _data_len, _write_len, _offset)
+
 class WriteOpCtx(WriteOp, OpCtx):
     """write operation context manager"""
 
@@ -2424,6 +2446,49 @@ cdef class Ioctx(object):
             ret = rados_aio_write_full(self.io, _object_name,
                                     completion.rados_comp,
                                     _to_write, size)
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "error writing object %s" % object_name)
+        return completion
+
+    @requires(('object_name', str_type), ('to_write', bytes), ('write_len', int),
+              ('offset', int), ('oncomplete', opt(Callable)))
+    def aio_writesame(self, object_name, to_write, write_len, offset=0,
+                      oncomplete=None):
+        """    
+        Asynchronously write the same buffer multiple times
+
+        :param object_name: name of the object
+        :type object_name: str
+        :param to_write: data to write
+        :type to_write: bytes
+        :param write_len: total number of bytes to write
+        :type write_len: int
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+        :param oncomplete: what to do when the writesame is safe and 
+            complete in memory on all replicas
+        :type oncomplete: completion
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        object_name = cstr(object_name, 'object_name')
+
+        cdef:
+            Completion completion
+            char* _object_name = object_name
+            char* _to_write = to_write
+            size_t _data_len = len(to_write)
+            size_t _write_len = write_len
+            uint64_t _offset = offset
+
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_writesame(self.io, _object_name, completion.rados_comp, 
+                                       _to_write, _data_len, _write_len, _offset)
+
         if ret < 0:
             completion._cleanup()
             raise make_ex(ret, "error writing object %s" % object_name)
@@ -2815,6 +2880,39 @@ returned %d, but should return zero on success." % (self.name, ret))
         else:
             raise LogicError("Ioctx.write_full(%s): rados_write_full \
 returned %d, but should return zero on success." % (self.name, ret))
+
+    @requires(('key', str_type), ('data', bytes), ('write_len', int), ('offset', int))
+    def writesame(self, key, data, write_len, offset=0):
+        """
+        Write the same buffer multiple times
+        :param key: name of the object
+        :type key: str
+        :param data: data to write
+        :type data: bytes
+        :param write_len: total number of bytes to write
+        :type write_len: int
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+
+        :raises: :class:`TypeError`
+        :raises: :class:`LogicError`
+        """
+        self.require_ioctx_open()
+
+        key = cstr(key, 'key')
+        cdef:
+            char *_key = key
+            char *_data = data
+            size_t _data_len = len(data)
+            size_t _write_len = write_len
+            uint64_t _offset = offset
+
+        with nogil:
+            ret = rados_writesame(self.io, _key, _data, _data_len, _write_len, _offset)
+        if ret < 0:
+            raise make_ex(ret, "Ioctx.writesame(%s): failed to write %s"
+                           % (self.name, key))
+        assert(ret == 0)
 
     @requires(('key', str_type), ('data', bytes))
     def append(self, key, data):
