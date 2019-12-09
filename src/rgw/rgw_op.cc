@@ -2363,7 +2363,8 @@ void RGWListBuckets::execute()
       started = true;
     }
 
-    if (!m.empty()) {
+    if (read_count > 0 &&
+        !m.empty()) {
       map<string, rgw::sal::RGWBucket*>::reverse_iterator riter = m.rbegin();
       marker = riter->first;
 
