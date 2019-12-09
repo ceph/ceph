@@ -6950,9 +6950,9 @@ void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t ente
 
 ostream &operator<<(ostream &out, const PeeringState &ps) {
   out << "pg[" << ps.info
-      << " " << ps.up;
+      << " " << pg_vector_string(ps.up);
   if (ps.acting != ps.up)
-    out << "/" << ps.acting;
+    out << "/" << pg_vector_string(ps.acting);
   if (ps.is_ec_pg())
     out << "p" << ps.get_primary();
   if (!ps.async_recovery_targets.empty())
