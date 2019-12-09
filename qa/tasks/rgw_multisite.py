@@ -2,7 +2,6 @@
 rgw multisite configuration routines
 """
 import argparse
-import contextlib
 import logging
 import random
 import string
@@ -223,7 +222,7 @@ class Gateway(multisite.Gateway):
             # insert zone args before the first |
             pipe = args.index(run.Raw('|'))
             args = args[0:pipe] + zone.zone_args() + args[pipe:]
-        except ValueError, e:
+        except ValueError:
             args += zone.zone_args()
         self.daemon.command_kwargs['args'] = args
 

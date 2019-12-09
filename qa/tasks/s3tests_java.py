@@ -9,14 +9,11 @@ import os
 import random
 import string
 import yaml
-import socket
 import getpass
 
 from teuthology import misc as teuthology
-from teuthology.exceptions import ConfigError
 from teuthology.task import Task
 from teuthology.orchestra import run
-from teuthology.orchestra.remote import Remote
 
 log = logging.getLogger(__name__)
 
@@ -352,7 +349,7 @@ class S3tests_java(Task):
                         stdout=StringIO()
                     )
 
-                if gr is not 'All':
+                if gr != 'All':
                     self.ctx.cluster.only(client).run(
                         args=args + ['--tests'] + [gr] + extra_args,
                         stdout=StringIO()

@@ -232,7 +232,7 @@ def task(ctx, config):
     for i in range(DIVERGENT_WRITE + DIVERGENT_REMOVE):
         exit_status = rados(ctx, mon, ['-p', 'foo', 'get', 'existing_%d' % i,
                                        '/tmp/existing'])
-        assert exit_status is 0
+        assert exit_status == 0
 
     (remote,) = ctx.\
         cluster.only('osd.{o}'.format(o=divergent)).remotes.keys()
