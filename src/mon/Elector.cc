@@ -60,8 +60,11 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 
 Elector::Elector(Monitor *m) : logic(this, ElectionLogic::CLASSIC,
 				     &peer_tracker, m->cct),
-			       peer_tracker(this, m->rank, 12*60*60), // TODO: make configurable
-			       ping_timeout(2),
+			       peer_tracker(this, m->rank,
+					    m->cct->_conf.get_val<uint64_t>("mon_con_tracker_score_halflife"),
+					    m->cct->_conf.get_val<uint64_t>("mon_con_tracker_persist_interval")),
+			       ping_timeout(m->cct->_conf.get_val<double>("mon_elector_ping_timeout")),
+			       PING_DIVISOR(m->cct->_conf.get_val<uint64_t>("mon_elector_ping_divisor")),
 			       mon(m), elector(this) {
   bufferlist bl;
   mon->store->get(Monitor::MONITOR_NAME, "connectivity_scores", bl);
@@ -471,7 +474,7 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
     now = ceph_clock_now();
   }
   MMonPing *ping = new MMonPing(MMonPing::PING, now, peer_tracker.get_encoded_bl());
-  mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer)); // TODO: this is deprecated, figure out using Connection
+  mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer));
   peer_sent_ping[peer] = now;
 }
 

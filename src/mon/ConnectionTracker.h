@@ -153,6 +153,7 @@ class ConnectionTracker {
   double half_life;
   RankProvider *owner;
   int rank;
+  int persist_interval;
   bufferlist encoding;
   int get_my_rank() const { return rank; }
   ConnectionReport *reports(int p);
@@ -165,9 +166,10 @@ class ConnectionTracker {
   }
 
  public:
-  ConnectionTracker(RankProvider *o, int rank, double hl) :
+  ConnectionTracker(RankProvider *o, int rank, double hl,
+		    int persist_i) :
     epoch(0), version(0),
-    half_life(hl), owner(o), rank(rank) {
+    half_life(hl), owner(o), rank(rank), persist_interval(persist_i) {
     my_reports = &peer_reports[rank];
     my_reports->rank = rank;
   }
@@ -180,7 +182,8 @@ class ConnectionTracker {
   }
   ConnectionTracker(const ConnectionTracker& o) :
     epoch(o.epoch), version(o.version),
-    half_life(o.half_life), owner(o.owner), rank(o.rank)
+    half_life(o.half_life), owner(o.owner), rank(o.rank),
+    persist_interval(o.persist_interval)
   {
     peer_reports = o.peer_reports;
     my_reports = &peer_reports[rank];
