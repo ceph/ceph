@@ -424,6 +424,10 @@ void MDSDaemon::set_up_admin_socket()
                                      "name=number,type=CephInt,req=true",
 				     asok_hook,
 				     "dump inode by inode number");
+  r = admin_socket->register_command("get rstats",
+				     asok_hook,
+				     "Get recursive stats of file system root");
+  assert(r == 0);
   ceph_assert(r == 0);
   r = admin_socket->register_command("exit",
 				     asok_hook,

@@ -137,6 +137,7 @@ public:
   void advance_dirty_rstats();
   void flush_dirty_rstats();
   void finish_flush_dirty_rstats(utime_t flushed_to);
+  utime_t get_rstat_flushed_to() const { return rstat_flushed_to; }
 
   void handle_mds_rstats(const cref_t<MMDSRstats> &m);
 
