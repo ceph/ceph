@@ -3,14 +3,8 @@
 import json
 import shlex
 import subprocess
-import sys
 
-if sys.version_info[0] == 2:
-    string = basestring
-    unicode = unicode
-elif sys.version_info[0] == 3:
-    string = str
-    unicode = str
+import six
 
 
 class UnexpectedReturn(Exception):
@@ -18,7 +12,7 @@ class UnexpectedReturn(Exception):
         if isinstance(cmd, list):
             self.cmd = ' '.join(cmd)
         else:
-            assert isinstance(cmd, string) or isinstance(cmd, unicode), \
+            assert isinstance(cmd, six.string_types) or isinstance(cmd, six.text_type), \
                 'cmd needs to be either a list or a str'
             self.cmd = cmd
         self.cmd = str(self.cmd)
@@ -34,7 +28,7 @@ class UnexpectedReturn(Exception):
 def call(cmd):
     if isinstance(cmd, list):
         args = cmd
-    elif isinstance(cmd, string) or isinstance(cmd, unicode):
+    elif isinstance(cmd, six.string_types) or isinstance(cmd, six.text_type):
         args = shlex.split(cmd)
     else:
         assert False, 'cmd is not a string/unicode nor a list!'

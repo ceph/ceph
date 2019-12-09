@@ -186,7 +186,7 @@ class usage_acc:
                 x2 = s2['total']
             except Exception as ex:
                 r.append("malformed summary looking for totals for user "
-		    + e['user'] + " " + str(ex))
+                         + e['user'] + " " + str(ex))
                 break
             usage_acc_validate_fields(r, x, x2, "summary: totals for user" + e['user'])
         return r
@@ -199,10 +199,10 @@ class requestlog_queue():
         self.adder = add
     def handle_request_data(self, request, response, error=False):
         now = datetime.datetime.now()
-	if error:
-	    pass
-	elif response.status < 200 or response.status >= 400:
-	    error = True
+        if error:
+            pass
+        elif response.status < 200 or response.status >= 400:
+            error = True
         self.q.put({'t': now, 'o': request, 'i': response, 'e': error})
     def clear(self):
         with self.q.mutex:
@@ -210,17 +210,17 @@ class requestlog_queue():
     def log_and_clear(self, cat, bucket, user, add_entry = None):
         while not self.q.empty():
             j = self.q.get()
-	    bytes_out = 0
+            bytes_out = 0
             if 'Content-Length' in j['o'].headers:
-		bytes_out = int(j['o'].headers['Content-Length'])
+                bytes_out = int(j['o'].headers['Content-Length'])
             bytes_in = 0
             if 'content-length' in j['i'].msg.dict:
-		bytes_in = int(j['i'].msg.dict['content-length'])
+                bytes_in = int(j['i'].msg.dict['content-length'])
             log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
-		% (cat, bucket, user, bytes_out, bytes_in, j['e']))
-	    if add_entry == None:
-		add_entry = self.adder
-	    add_entry(cat, bucket, user, bytes_out, bytes_in, j['e'])
+                     % (cat, bucket, user, bytes_out, bytes_in, j['e']))
+            if add_entry == None:
+                add_entry = self.adder
+            add_entry(cat, bucket, user, bytes_out, bytes_in, j['e'])
 
 def create_presigned_url(conn, method, bucket_name, key_name, expiration):
     return conn.generate_url(expires_in=expiration,
@@ -1040,8 +1040,8 @@ def task(ctx, config):
     assert len(out['placement_pools']) == orig_placement_pools + 1
 
     zonecmd = ['zone', 'placement', 'rm',
-	'--rgw-zone', 'default',
-	'--placement-id', 'new-placement']
+               '--rgw-zone', 'default',
+               '--placement-id', 'new-placement']
 
     (err, out) = rgwadmin(ctx, client, zonecmd, check_status=True)
 
@@ -1054,14 +1054,14 @@ import argparse;
 
 def main():
     if len(sys.argv) == 3:
-	user = sys.argv[1] + "@"
-	host = sys.argv[2]
+        user = sys.argv[1] + "@"
+        host = sys.argv[2]
     elif len(sys.argv) == 2:
         user = ""
-	host = sys.argv[1]
+        host = sys.argv[1]
     else:
         sys.stderr.write("usage: radosgw_admin.py [user] host\n")
-	exit(1)
+        exit(1)
     client0 = remote.Remote(user + host)
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,

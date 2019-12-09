@@ -133,7 +133,7 @@ def task(ctx, config):
 
     # Mount objects, sorted by ID
     if hasattr(ctx, 'mounts'):
-        mounts = [v for k, v in sorted(ctx.mounts.items(), lambda a, b: cmp(a[0], b[0]))]
+        mounts = [v for k, v in sorted(ctx.mounts.items(), key=lambda mount: mount[0])]
     else:
         # The test configuration has a filesystem but no fuse/kclient mounts
         mounts = []

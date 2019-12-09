@@ -1,9 +1,11 @@
-""" 
+"""
 Run an autotest test on the ceph cluster.
 """
 import json
 import logging
 import os
+
+import six
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
@@ -48,7 +50,7 @@ def task(ctx, config):
 
     log.info('Making a separate scratch dir for every client...')
     for role in config.keys():
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -103,7 +105,7 @@ def _run_tests(testdir, remote, role, tests):
     """
     Spawned to run test on remote site
     """
-    assert isinstance(role, basestring)
+    assert isinstance(role, six.string_types)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]

@@ -4,6 +4,8 @@ Run omapbench executable within teuthology
 import contextlib
 import logging
 
+import six
+
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 
@@ -48,7 +50,7 @@ def task(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     print(str(config.get('increment',-1)))
     for role in config.get('clients', ['client.0']):
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
