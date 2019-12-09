@@ -1380,15 +1380,9 @@ public:
   bool is_up_acting_osd_shard(spg_t pg, int osd) const {
     std::vector<int> up, acting;
     _pg_to_up_acting_osds(pg.pgid, &up, NULL, &acting, NULL, false);
-    if (pg.shard == shard_id_t::NO_SHARD) {
-      if (calc_pg_role(osd, acting, acting.size()) >= 0 ||
-	  calc_pg_role(osd, up, up.size()) >= 0)
-	return true;
-    } else {
-      if (pg.shard < (int)acting.size() && acting[pg.shard] == osd)
-	return true;
-      if (pg.shard < (int)up.size() && up[pg.shard] == osd)
-	return true;
+    if (calc_pg_role(pg_shard_t(osd, pg.shard), acting) >= 0 ||
+	calc_pg_role(pg_shard_t(osd, pg.shard), up) >= 0) {
+      return true;
     }
     return false;
   }
