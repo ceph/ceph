@@ -1402,12 +1402,6 @@ public:
     pg_to_acting_osds(pg, group);
     return calc_pg_role(osd, group, group.size());
   }
-  /* role is -1 (stray), 0 (primary), 1 (replica) */
-  int get_pg_acting_role(const pg_t& pg, int osd) const {
-    std::vector<int> group;
-    pg_to_acting_osds(pg, group);
-    return calc_pg_role(osd, group, group.size());
-  }
 
   bool osd_is_valid_op_target(pg_t pg, int osd) const {
     int primary;
