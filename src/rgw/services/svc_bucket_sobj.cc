@@ -246,18 +246,6 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
   int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker, y);
-  if (ret == -EEXIST) {
-    /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
-     * bucket operation on this specific bucket (e.g., being synced from the master), but
-     * since bucket instace meta object is unique for this specific bucket instace, we don't
-     * need to return an error.
-     * A scenario where we'd get -EEXIST here, is in a multi-zone config, we're not on the
-     * master, creating a bucket, sending bucket creation to the master, we create the bucket
-     * locally, while in the sync thread we sync the new bucket.
-     */
-    ret = 0;
-  }
-
   if (ret < 0) {
     return ret;
   }
