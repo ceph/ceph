@@ -200,8 +200,8 @@
              let-value="value">
   <span *ngFor="let item of (value | array); last as last">
     <span class="badge"
-          [ngClass]="column?.customTemplateConfig?.map[item]?.class ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')">
-      {{ column?.customTemplateConfig?.map[item]?.value ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
+          [ngClass]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')">
+      {{ (column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
     </span>
     <span *ngIf="!last">&nbsp;</span>
   </span>
