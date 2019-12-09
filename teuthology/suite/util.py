@@ -146,6 +146,9 @@ def get_distro_defaults(distro, machine_type):
     elif distro == 'fedora':
         os_type = distro
         os_version = '20'
+    elif distro == 'opensuse':
+        os_type = distro
+        os_version = '15.1'
     else:
         raise ValueError("Invalid distro value passed: %s", distro)
     _os = OS(name=os_type, version=os_version)
