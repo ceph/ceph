@@ -132,7 +132,6 @@ std::string with_healthy_cluster(rados_t* cluster,
       throw pool_op_error{pool_name, "wait_for_healthy", r};
     }
   } catch (const pool_op_error& e) {
-    rados_shutdown(*cluster);
     return e.what();
   }
   return "";
