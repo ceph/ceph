@@ -737,6 +737,9 @@ void PeeringState::on_new_interval()
       continue;
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
+  psdout(20) << __func__ << " upacting_features 0x" << std::hex
+	     << upacting_features << std::dec
+	     << " from " << acting << "+" << up << dendl;
 
   psdout(20) << __func__ << " checking missing set deletes flag. missing = "
 	     << get_pg_log().get_missing() << dendl;
@@ -1129,9 +1132,13 @@ void PeeringState::send_lease()
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
   if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
+    psdout(20) << __func__ << " no-op, upacting_features 0x" << std::hex
+	       << upacting_features << std::dec
+	       << " does not include SERVER_OCTOPUS" << dendl;
     return;
   }
   if (!is_nonprimary()) {
+    psdout(20) << __func__ << " no-op, !nonprimary" << dendl;
     return;
   }
   psdout(10) << __func__ << " " << l << dendl;
