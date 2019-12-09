@@ -6,27 +6,17 @@ from cStringIO import StringIO
 import argparse
 import configobj
 import contextlib
-import errno
 import logging
 import os
 import json
-import time
-import gevent
-import re
-import socket
 import uuid
 
-from paramiko import SSHException
-from ceph_manager import CephManager, write_conf
+from ceph_manager import CephManager
 from tarfile import ReadError
-from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology import exceptions
 from teuthology.orchestra import run
-import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
-from tasks.daemonwatchdog import DaemonWatchdog
 from teuthology.config import config as teuth_config
 
 # these items we use from ceph.py should probably eventually move elsewhere
@@ -93,7 +83,6 @@ def normalize_hostnames(ctx):
 @contextlib.contextmanager
 def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
-    testdir = teuthology.get_testdir(ctx)
 
     if config.get('cephadm_mode') != 'cephadm-package':
         ref = config.get('cephadm_branch', ref)
@@ -179,13 +168,13 @@ def ceph_log(ctx, config):
             path = os.path.join(ctx.archive, 'remote')
             try:
                 os.makedirs(path)
-            except OSError as e:
+            except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
                 sub = os.path.join(path, remote.name)
                 try:
                     os.makedirs(sub)
-                except OSError as e:
+                except OSError:
                     pass
                 teuthology.pull_directory(remote, '/var/log/ceph/' + fsid,
                                           os.path.join(sub, 'log'))
@@ -207,19 +196,19 @@ def ceph_crash(ctx, config):
             path = os.path.join(ctx.archive, 'remote')
             try:
                 os.makedirs(path)
-            except OSError as e:
+            except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
                 sub = os.path.join(path, remote.name)
                 try:
                     os.makedirs(sub)
-                except OSError as e:
+                except OSError:
                     pass
                 try:
                     teuthology.pull_directory(remote,
                                               '/var/lib/ceph/%s/crash' % fsid,
                                               os.path.join(sub, 'crash'))
-                except ReadError as e:
+                except ReadError:
                     pass
 
 @contextlib.contextmanager
@@ -387,7 +376,6 @@ def ceph_mons(ctx, config):
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
-    testdir = teuthology.get_testdir(ctx)
     num_mons = 1
 
     try:
@@ -457,7 +445,6 @@ def ceph_mgrs(ctx, config):
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
-    testdir = teuthology.get_testdir(ctx)
 
     try:
         nodes = []
@@ -549,7 +536,6 @@ def ceph_mdss(ctx, config):
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
-    testdir = teuthology.get_testdir(ctx)
 
     nodes = []
     daemons = {}
@@ -628,7 +614,6 @@ def shell(ctx, config):
     """
     Execute (shell) commands
     """
-    testdir = teuthology.get_testdir(ctx)
     cluster_name = config.get('cluster', 'ceph')
 
     if 'all' in config and len(config) == 1:
@@ -724,7 +709,7 @@ def restart(ctx, config):
             healthy(ctx=ctx, config=dict(cluster=cluster))
     if config.get('wait-for-osds-up', False):
         for cluster in clusters:
-            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
+            ctx.managers[cluster].wait_for_all_osds_up()
     yield
 
 @contextlib.contextmanager

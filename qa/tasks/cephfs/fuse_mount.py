@@ -1,4 +1,3 @@
-
 from StringIO import StringIO
 import json
 import time
@@ -10,7 +9,6 @@ from teuthology.contextutil import MaxWhileTries
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 from .mount import CephFSMount
-from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
@@ -166,7 +164,7 @@ class FuseMount(CephFSMount):
         try:
             self.inst = status['inst_str']
             self.addr = status['addr_str']
-        except KeyError as e:
+        except KeyError:
             sessions = self.fs.rank_asok(['session', 'ls'])
             for s in sessions:
                 if s['id'] == self.id:

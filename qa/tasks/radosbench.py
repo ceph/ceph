@@ -81,7 +81,7 @@ def task(ctx, config):
                 pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
         osize = config.get('objectsize', 65536)
-        if osize is 0:
+        if osize == 0:
             objectsize = []
         else:
             objectsize = ['-O', str(osize)]
@@ -135,5 +135,5 @@ def task(ctx, config):
         log.info('joining radosbench (timing out after %ss)', timeout)
         run.wait(radosbench.itervalues(), timeout=timeout)
 
-        if pool is not 'data' and create_pool:
+        if pool != 'data' and create_pool:
             manager.remove_pool(pool)

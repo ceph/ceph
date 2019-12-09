@@ -1,7 +1,6 @@
 import logging
 import signal
 import time
-import random
 
 from gevent import sleep
 from gevent.greenlet import Greenlet

@@ -76,7 +76,6 @@ def test_create_from_peer(ctx, config):
     4. delete a pool, verify pgs go active.
     """
     pg_num = config.get('pg_num', 1)
-    pool_size = config.get('pool_size', 2)
     from_primary = config.get('from_primary', True)
 
     manager = ctx.managers['ceph']
@@ -121,7 +120,6 @@ def test_create_from_peer(ctx, config):
 def task(ctx, config):
     assert isinstance(config, dict), \
         'osd_max_pg_per_osd task only accepts a dict for config'
-    manager = ctx.managers['ceph']
     if config.get('test_create_from_mon', True):
         test_create_from_mon(ctx, config)
     else:
