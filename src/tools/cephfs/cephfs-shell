@@ -55,9 +55,14 @@ except ImportError:
         return argparser_decorator
 
 
-cephfs = None
-shell = None
+cephfs = None   # holds CephFS Python bindings
+shell = None    # holds instance of class CephFSShell
 
+#########################################################################
+#
+# Following are methods are generically useful through class CephFSShell
+#
+#######################################################################
 
 def poutput(s, end='\n'):
     shell.poutput(s, end=end)
@@ -65,28 +70,6 @@ def poutput(s, end='\n'):
 
 def perror(msg, **kwargs):
     shell.perror(msg, **kwargs)
-
-
-def setup_cephfs(config_file):
-    """
-    Mounting a cephfs
-    """
-    from cephfs import ObjectNotFound
-    from cephfs import Error
-
-    global cephfs
-    try:
-        cephfs = libcephfs.LibCephFS(conffile=config_file)
-        cephfs.mount()
-    except ObjectNotFound as e:
-        print('couldn\'t find ceph configuration not found')
-        sys.exit(1)
-    except Error as e:
-        print(e)
-        sys.exit(1)
-    else:
-        del ObjectNotFound
-        del Error
 
 
 def mode_notation(mode):
@@ -348,6 +331,12 @@ def dirwalk(path):
                 yield x
 
 
+##################################################################
+#
+# Following methods are implementation for CephFS Shell commands
+#
+#################################################################
+
 class CephFSShell(Cmd):
 
     def __init__(self):
@@ -544,9 +533,9 @@ class CephFSShell(Cmd):
                               action=ModeAction,
                               help='Sets the access mode for the new directory.')
     mkdir_parser.add_argument('-p', '--parent', action='store_true',
-                              help='Create parent directories as necessary. \
-When this option is specified, no error is reported if a directory already \
-exists.')
+                              help='Create parent directories as necessary. '
+                                   'When this option is specified, no error is'
+                                   'reported if a directory already exists.')
 
     @with_argparser(mkdir_parser)
     def do_mkdir(self, args):
@@ -845,9 +834,10 @@ exists.')
     rmdir_parser.add_argument('paths', help='Directory Path.', nargs='+',
                               action=path_to_bytes)
     rmdir_parser.add_argument('-p', '--parent', action='store_true',
-                              help='Remove parent directories as necessary. \
-When this option is specified, no error is reported if a directory has any \
-sub-directories, files')
+                              help='Remove parent directories as necessary. '
+                                   'When this option is specified, no error '
+                                    'is reported if a directory has any '
+                                    'sub-directories, files')
 
     @with_argparser(rmdir_parser)
     def do_rmdir(self, args):
@@ -1397,15 +1387,44 @@ sub-directories, files')
                 mtime = stat.st_mtime.isoformat(' ')
                 ctime = stat.st_mtime.isoformat(' ')
 
-                poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n\
-Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: {:o}/{}\tUid: {:d}\tGid: {:d}\n\
-Access: {}\nModify: {}\nChange: {}".format(path.decode('utf-8'), stat.st_size,
-                             stat.st_blocks, stat.st_blksize, stat.st_dev,
-                             stat.st_ino, stat.st_nlink, stat.st_mode,
-                             mode_notation(stat.st_mode), stat.st_uid,
-                             stat.st_gid, atime, mtime, ctime))
+                poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n"
+                        "Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: "
+                        "{:o}/{}\tUid: {:d}\tGid: {:d}\n\Access: {}\nModify: "
+                        "{}\nChange: {}".format(path.decode('utf-8'),
+                        stat.st_size, stat.st_blocks, stat.st_blksize,
+                        stat.st_dev, stat.st_ino, stat.st_nlink, stat.st_mode,
+                        mode_notation(stat.st_mode), stat.st_uid, stat.st_gid,
+                        atime, mtime, ctime))
             except libcephfs.Error as e:
                 perror(e)
+
+
+#######################################################
+#
+# Following are methods that get cephfs-shell started.
+#
+#####################################################
+
+def setup_cephfs(config_file):
+    """
+    Mounting a cephfs
+    """
+    from cephfs import ObjectNotFound
+    from cephfs import Error
+
+    global cephfs
+    try:
+        cephfs = libcephfs.LibCephFS(conffile=config_file)
+        cephfs.mount()
+    except ObjectNotFound as e:
+        print('couldn\'t find ceph configuration not found')
+        sys.exit(1)
+    except Error as e:
+        print(e)
+        sys.exit(1)
+    else:
+        del ObjectNotFound
+        del Error
 
 def get_bool_vals_for_boolopts(val):
     if val.lower() in ['true', 'yes']:
@@ -1446,7 +1465,9 @@ def read_ceph_conf(shell, config_file):
 
 if __name__ == '__main__':
     config_file = ''
+
     exe = sys.argv[0]
+
     main_parser = argparse.ArgumentParser(description='')
     main_parser.add_argument('-c', '--config', action='store',
                              help='Configuration file_path', type=str)
@@ -1467,6 +1488,7 @@ if __name__ == '__main__':
             args.commands = ['run_script ' +  args.batch, ',quit']
     if args.test:
         args.commands.extend(['-t,'] + [arg + ',' for arg in args.test])
+
     sys.argv.clear()
     sys.argv.append(exe)
     sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])
