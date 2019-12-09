@@ -110,7 +110,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         name: this.i18n('State'),
         prop: 'is_protected',
         flexGrow: 1,
-        cellClass: 'text-center',
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {

@@ -42,7 +42,6 @@ export class IscsiComponent implements OnInit {
         name: this.i18n('State'),
         prop: 'state',
         flexGrow: 1,
-        cellClass: 'text-center',
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
