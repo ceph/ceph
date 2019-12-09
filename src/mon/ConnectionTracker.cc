@@ -81,7 +81,7 @@ void ConnectionTracker::increase_version()
   encoding.clear();
   ++version;
   my_reports->epoch_version = version;
-  if ((version % 10) == 0 ) { // TODO: make this configurable?
+  if ((version % persist_interval) == 0 ) {
     owner->persist_connectivity_scores();
   }
 }
