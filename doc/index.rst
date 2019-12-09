@@ -95,7 +95,6 @@ about Ceph, see our `Architecture`_ section.
    bootstrap
    start/index
    install/index
-   start/kube-helm
    rados/index
    cephfs/index
    rbd/index
