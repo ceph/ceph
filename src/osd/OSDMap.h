@@ -1397,10 +1397,10 @@ public:
     const std::vector<int> &newacting);
   
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
-  int get_pg_acting_rank(pg_t pg, int osd) const {
+  int get_pg_acting_role(spg_t pg, int osd) const {
     std::vector<int> group;
-    pg_to_acting_osds(pg, group);
-    return calc_pg_role(osd, group, group.size());
+    pg_to_acting_osds(pg.pgid, group);
+    return calc_pg_role(pg_shard_t(osd, pg.shard), group);
   }
 
   bool osd_is_valid_op_target(pg_t pg, int osd) const {

@@ -4868,7 +4868,7 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
   if (is_mon_create) {
     pending_creates_from_mon++;
   } else {
-    bool is_primary = osdmap->get_pg_acting_rank(pgid.pgid, whoami) == 0;
+    bool is_primary = osdmap->get_pg_acting_role(pgid, whoami) == 0;
     pending_creates_from_osd.emplace(pgid, is_primary);
   }
   dout(1) << __func__ << " withhold creation of pg " << pgid
@@ -8725,7 +8725,7 @@ void OSD::consume_map()
     std::lock_guard l(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.begin();
 	 pg != pending_creates_from_osd.end();) {
-      if (osdmap->get_pg_acting_rank(pg->first.pgid, whoami) < 0) {
+      if (osdmap->get_pg_acting_role(pg->first, whoami) < 0) {
 	dout(10) << __func__ << " pg " << pg->first << " doesn't map here, "
 		 << "discarding pending_create_from_osd" << dendl;
 	pg = pending_creates_from_osd.erase(pg);
