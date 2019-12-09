@@ -2649,6 +2649,23 @@ int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
   return -1;
 }
 
+int OSDMap::calc_pg_role(pg_shard_t who, const vector<int>& acting)
+{
+  int nrep = acting.size();
+  if (who.shard == shard_id_t::NO_SHARD) {
+    for (int i=0; i<nrep; i++) {
+      if (acting[i] == who.osd) {
+	return i;
+      }
+    }
+  } else {
+    if (who.shard < nrep && acting[who.shard] == who.osd) {
+      return who.shard;
+    }
+  }
+  return -1;
+}
+
 bool OSDMap::primary_changed(
   int oldprimary,
   const vector<int> &oldacting,
