@@ -4869,7 +4869,7 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
     pending_creates_from_mon++;
   } else {
     bool is_primary = osdmap->get_pg_acting_rank(pgid.pgid, whoami) == 0;
-    pending_creates_from_osd.emplace(pgid.pgid, is_primary);
+    pending_creates_from_osd.emplace(pgid, is_primary);
   }
   dout(1) << __func__ << " withhold creation of pg " << pgid
 	  << ": " << num_pgs << " >= "<< max_pgs_per_osd << dendl;
@@ -4918,8 +4918,8 @@ void OSD::resume_creating_pg()
     while (spare_pgs > 0 && pg != pending_creates_from_osd.cend()) {
       dout(20) << __func__ << " pg " << pg->first << dendl;
       vector<int> acting;
-      osdmap->pg_to_up_acting_osds(pg->first, nullptr, nullptr, &acting, nullptr);
-      service.queue_want_pg_temp(pg->first, twiddle(acting), true);
+      osdmap->pg_to_up_acting_osds(pg->first.pgid, nullptr, nullptr, &acting, nullptr);
+      service.queue_want_pg_temp(pg->first.pgid, twiddle(acting), true);
       pg = pending_creates_from_osd.erase(pg);
       do_sub_pg_creates = true;
       spare_pgs--;
@@ -8725,7 +8725,7 @@ void OSD::consume_map()
     std::lock_guard l(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.begin();
 	 pg != pending_creates_from_osd.end();) {
-      if (osdmap->get_pg_acting_rank(pg->first, whoami) < 0) {
+      if (osdmap->get_pg_acting_rank(pg->first.pgid, whoami) < 0) {
 	dout(10) << __func__ << " pg " << pg->first << " doesn't map here, "
 		 << "discarding pending_create_from_osd" << dendl;
 	pg = pending_creates_from_osd.erase(pg);
