@@ -400,7 +400,9 @@ void MgrClient::_send_report()
 			    &last_config_bl_version);
 
   if (get_perf_report_cb) {
-    get_perf_report_cb(&report->osd_perf_metric_reports);
+    MetricPayload payload = get_perf_report_cb();
+    MetricReportMessage message(payload);
+    report->metric_report_message = message;
   }
 
   session->con->send_message2(report);
@@ -437,8 +439,11 @@ bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
     stats_threshold = m->stats_threshold;
   }
 
-  if (set_perf_queries_cb) {
-    set_perf_queries_cb(m->osd_perf_metric_queries);
+  if (!m->osd_perf_metric_queries.empty()) {
+    handle_config_payload(m->osd_perf_metric_queries);
+  } else if (m->metric_config_message) {
+    const MetricConfigMessage &message = *m->metric_config_message;
+    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
   }
 
   bool starting = (stats_period == 0) && (m->stats_period != 0);

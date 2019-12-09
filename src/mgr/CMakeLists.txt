@@ -17,6 +17,7 @@ if(WITH_MGR)
     Gil.cc
     Mgr.cc
     MgrStandby.cc
+    MetricCollector.cc
     OSDPerfMetricTypes.cc
     OSDPerfMetricCollector.cc
     PyFormatter.cc
