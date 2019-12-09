@@ -24,16 +24,16 @@ The ``ceph-daemon`` utility is used to bootstrap a new Ceph Cluster.
 
 Use curl to fetch the standalone script::
 
-  [monitor 1] # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/ceph-daemon/ceph-daemon
-  [monitor 1] # chmod +x ceph-daemon
+  [monitor 1] $ sudo curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/ceph-daemon/ceph-daemon
+  [monitor 1] $ sudo chmod +x ceph-daemon
   
 You can also get the utility by installing a package provided by
 your Linux distribution::
 
-   [monitor 1] # apt install -y ceph-daemon   # or
-   [monitor 1] # dnf install -y ceph-daemon   # or
-   [monitor 1] # yum install -y ceph-daemon   # or
-   [monitor 1] # zypper install -y ceph-daemon
+   [monitor 1] $ sudo apt install -y ceph-daemon   # or
+   [monitor 1] $ sudo dnf install -y ceph-daemon   # or
+   [monitor 1] $ sudo yum install -y ceph-daemon   # or
+   [monitor 1] $ sudo zypper install -y ceph-daemon
 
 
 Bootstrap a new cluster
@@ -74,7 +74,7 @@ files to the default locations in ``/etc/ceph`` inside the container
 to allow the ``ceph`` CLI utility to work without additional
 arguments.  Inside the container, you can check the cluster status with::
 
-  [ceph: root@monitor_1_hostname /]# ceph status
+  [ceph: root@monitor_1_hostname /] $ sudo ceph status
 
 In order to interact with the Ceph cluster outside of a container
 (that is, from the command line), install the Ceph
@@ -96,11 +96,11 @@ For each new host you'd like to add to the cluster, you need to do two things:
 #. Install the cluster's public SSH key in the new host's root user's
    ``authorized_keys`` file.  For example,::
 
-     [monitor 1] # cat ceph.pub | ssh root@*newhost* tee -a /root/.ssh/authorized_keys
+     [monitor 1] $ sudo cat ceph.pub | ssh root@*newhost* tee -a /root/.ssh/authorized_keys
 
 #. Tell Ceph that the new node is part of the cluster::
 
-     [monitor 1] # ceph orchestrator host add *newhost*
+     [monitor 1] $ sudo ceph orchestrator host add *newhost*
 
 Deploying additional monitors
 =============================
@@ -112,12 +112,12 @@ either as a simple IP address or as a CIDR network name.
 
 To deploy additional monitors,::
 
-  [monitor 1] # ceph orchestrator mon update *<new-num-monitors>* *<host1:network1> [<host1:network2>...]*
+  [monitor 1] $ sudo ceph orchestrator mon update *<new-num-monitors>* *<host1:network1> [<host1:network2>...]*
 
 For example, to deploy a second monitor on ``newhost`` using an IP
 address in network ``10.1.2.0/24``,::
 
-  [monitor 1] # ceph orchestrator mon update 2 newhost:10.1.2.0/24
+  [monitor 1] $ sudo ceph orchestrator mon update 2 newhost:10.1.2.0/24
 
 Deploying OSDs
 ==============
@@ -125,11 +125,11 @@ Deploying OSDs
 To add an OSD to the cluster, you need to know the device name for the
 block device (hard disk or SSD) that will be used.  Then,::
 
-  [monitor 1] # ceph orchestrator osd create *<host>*:*<path-to-device>*
+  [monitor 1] $ sudo ceph orchestrator osd create *<host>*:*<path-to-device>*
 
 For example, to deploy an OSD on host *newhost*'s SSD,::
 
-  [monitor 1] # ceph orchestrator osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
+  [monitor 1] $ sudo ceph orchestrator osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
 
 Deploying manager daemons
 =========================
@@ -137,7 +137,7 @@ Deploying manager daemons
 It is a good idea to have at least one backup manager daemon.  To
 deploy one or more new manager daemons,::
 
-  [monitor 1] # ceph orchestrator mgr update *<new-num-mgrs>* [*<host1>* ...]
+  [monitor 1] $ sudo ceph orchestrator mgr update *<new-num-mgrs>* [*<host1>* ...]
 
 Deploying MDSs
 ==============
