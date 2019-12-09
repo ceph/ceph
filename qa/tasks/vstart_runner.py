@@ -41,7 +41,6 @@ import shutil
 import re
 import os
 import time
-import json
 import sys
 import errno
 from unittest import suite, loader
@@ -833,7 +832,7 @@ def scan_tests(modules):
     max_required_mgr = 0
     require_memstore = False
 
-    for suite, case in enumerate_methods(overall_suite):
+    for suite_, case in enumerate_methods(overall_suite):
         max_required_mds = max(max_required_mds,
                                getattr(case, "MDSS_REQUIRED", 0))
         max_required_clients = max(max_required_clients,

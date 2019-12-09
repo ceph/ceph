@@ -150,7 +150,6 @@ class TestExports(CephFSTestCase):
         status = self.fs.wait_for_daemons()
 
         rank1 = self.fs.get_rank(rank=1, status=status)
-        name1 = 'mds.'+rank1['name']
 
         # Create a directory that is pre-exported to rank 1
         self.mount_a.run_shell(["mkdir", "-p", "a/aa"])

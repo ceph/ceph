@@ -10,8 +10,6 @@ import os
 import random
 import string
 
-import util.rgw as rgw_utils
-
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.config import config as teuth_config

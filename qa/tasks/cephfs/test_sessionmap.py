@@ -1,4 +1,3 @@
-from StringIO import StringIO
 import time
 import json
 import logging

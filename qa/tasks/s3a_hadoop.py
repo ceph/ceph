@@ -1,6 +1,5 @@
 import contextlib
 import logging
-import time
 from teuthology import misc
 from teuthology.orchestra import run
 

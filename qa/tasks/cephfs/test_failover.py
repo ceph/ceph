@@ -1,13 +1,11 @@
 import time
 import signal
-import json
 import logging
 from unittest import case, SkipTest
 from random import randint
 
 from cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
-from teuthology import misc as teuthology
 from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
@@ -25,7 +23,7 @@ class TestClusterResize(CephFSTestCase):
         log.info("status = {0}".format(status))
 
         original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        original_standbys = set([info['gid'] for info in status.get_standbys()])
+        _ = set([info['gid'] for info in status.get_standbys()])
 
         oldmax = self.fs.get_var('max_mds')
         self.assertTrue(n > oldmax)
@@ -45,7 +43,7 @@ class TestClusterResize(CephFSTestCase):
         log.info("status = {0}".format(status))
 
         original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        original_standbys = set([info['gid'] for info in status.get_standbys()])
+        _ = set([info['gid'] for info in status.get_standbys()])
 
         oldmax = self.fs.get_var('max_mds')
         self.assertTrue(n < oldmax)
@@ -361,7 +359,7 @@ class TestStandbyReplay(CephFSTestCase):
 
     def _confirm_no_replay(self):
         status = self.fs.status()
-        standby_count = len(list(status.get_standbys()))
+        _ = len(list(status.get_standbys()))
         self.assertEqual(0, len(list(self.fs.get_replays(status=status))))
         return status
 

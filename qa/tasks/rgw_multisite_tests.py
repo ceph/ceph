@@ -2,7 +2,6 @@
 rgw multisite testing
 """
 import logging
-import sys
 import nose.core
 import nose.config
 
