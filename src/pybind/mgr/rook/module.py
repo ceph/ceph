@@ -5,7 +5,7 @@ import os
 from ceph.deployment import inventory
 
 try:
-    from typing import List, Dict, Optional, Callable, TypeVar
+    from typing import List, Dict, Optional, Callable, Any
     from ceph.deployment.drive_group import DriveGroupSpec
 except ImportError:
     pass  # just for type checking
@@ -97,7 +97,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     MODULE_OPTIONS = [
         # TODO: configure k8s API addr instead of assuming local
-    ]
+    ]  # type: List[Dict[str, Any]]
 
     def process(self, completions):
         # type: (List[RookCompletion]) -> None
@@ -146,13 +146,16 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @property
     def k8s(self):
+        # type: () -> client.CoreV1Api
         self._initialized.wait()
+        assert self._k8s is not None
         return self._k8s
 
     @property
     def rook_cluster(self):
         # type: () -> RookCluster
         self._initialized.wait()
+        assert self._rook_cluster is not None
         return self._rook_cluster
 
     def serve(self):
@@ -346,9 +349,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def update_mds(self, spec):
         num = spec.count
-        return RookWriteCompletion(
-            lambda: self.rook_cluster.update_mds_count(spec.name, num), None,
-                "Updating MDS server count in {0} to {1}".format(spec.name, num))
+        return write_completion(
+            lambda: self.rook_cluster.update_mds_count(spec.name, num),
+            "Updating MDS server count in {0} to {1}".format(spec.name, num),
+            mgr=self
+        )
 
     def update_nfs(self, spec):
         num = spec.count
@@ -395,7 +400,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         def has_osds(all_hosts):
             # Find OSD pods on this host
             pod_osd_ids = set()
-            pods = self._k8s.list_namespaced_pod(self._rook_env.namespace,
+            pods = self.k8s.list_namespaced_pod(self._rook_env.namespace,
                                                  label_selector="rook_cluster={},app=rook-ceph-osd".format(self._rook_env.cluster_name),
                                                  field_selector="spec.nodeName={0}".format(
                                                      drive_group.hosts(all_hosts)[0]
