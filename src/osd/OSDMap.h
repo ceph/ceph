@@ -1395,6 +1395,7 @@ public:
 
 
   static int calc_pg_role(int osd, const std::vector<int>& acting, int nrep=0);
+  static int calc_pg_role(pg_shard_t who, const std::vector<int>& acting);
   static bool primary_changed(
     int oldprimary,
     const std::vector<int> &oldacting,
