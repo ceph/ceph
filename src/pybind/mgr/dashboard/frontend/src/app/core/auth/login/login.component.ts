@@ -62,7 +62,7 @@ export class LoginComponent implements OnInit {
   }
 
   login() {
-    this.authService.login(this.model).then(() => {
+    this.authService.login(this.model).subscribe(() => {
       this.router.navigate(['']);
     });
   }
