@@ -94,10 +94,8 @@ describe('SilenceListComponent', () => {
   });
 
   describe('expire silence', () => {
-    const setSelectedSilence = (silenceName: string) => {
-      component.selection.selected = [{ id: silenceName }];
-      component.selection.update();
-    };
+    const setSelectedSilence = (silenceName: string) =>
+      (component.selection.selected = [{ id: silenceName }]);
 
     const expireSilence = () => {
       component.expireSilence();
