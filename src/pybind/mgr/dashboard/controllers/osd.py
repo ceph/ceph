@@ -103,6 +103,19 @@ class Osd(RESTController):
             'histogram': histogram,
         }
 
+    def set(self, svc_id, device_class):
+        old_device_class = CephService.send_command('mon', 'osd crush get-device-class',
+                                                    ids=[svc_id])
+        old_device_class = old_device_class[0]['device_class']
+        if old_device_class != device_class:
+            CephService.send_command('mon', 'osd crush rm-device-class',
+                                     ids=[svc_id])
+            if device_class:
+                CephService.send_command('mon', 'osd crush set-device-class', **{
+                    'class': device_class,
+                    'ids': [svc_id]
+                })
+
     @RESTController.Resource('POST', query_params=['deep'])
     @UpdatePermission
     def scrub(self, svc_id, deep=False):
