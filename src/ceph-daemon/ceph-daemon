@@ -1932,6 +1932,31 @@ def command_rm_cluster():
 
 ##################################
 
+
+class CustomValidation(argparse.Action):
+
+    def _check_name(self, values):
+
+        try:
+            (daemon_type, daemon_id) = values.split('.', 1)
+        except ValueError:
+            raise argparse.ArgumentError(self,
+                                         "must be of the format <type>.<id>. For example, osd.1 or prometheus.myhost.com")
+        
+        daemons = Ceph.daemons.copy()
+        daemons.extend(Monitoring.components.keys())
+        
+        if daemon_type not in daemons:
+            raise argparse.ArgumentError(self, 
+                                         "name must declare the type of daemon e.g. "
+                                         "{}".format(', '.join(daemons)))
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if self.dest == "name":
+            self._check_name(values)
+            setattr(namespace, self.dest, values)
+
+
 def _get_parser():
     # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser(
@@ -2014,6 +2039,7 @@ def _get_parser():
     parser_rm_daemon.add_argument(
         '--name', '-n',
         required=True,
+        action=CustomValidation,
         help='daemon name (type.id)')
     parser_rm_daemon.add_argument(
         '--fsid',
@@ -2202,6 +2228,7 @@ def _get_parser():
     parser_deploy.set_defaults(func=command_deploy)
     parser_deploy.add_argument(
         '--name',
+        action=CustomValidation,
         required=True,
         help='daemon name (type.id)')
     parser_deploy.add_argument(
