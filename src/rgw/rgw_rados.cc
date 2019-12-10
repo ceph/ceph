@@ -2117,6 +2117,8 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 
     RGWObjVersionTracker& objv_tracker = info.objv_tracker;
 
+    objv_tracker.read_version.clear();
+
     if (pobjv) {
       objv_tracker.write_version = *pobjv;
     } else {
