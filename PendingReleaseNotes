@@ -148,7 +148,7 @@
   If you are not comfortable sharing device metrics, you can disable that
   channel first before re-opting-in:
 
-    ceph config set mgr mgr/telemetry/channel_crash false
+    ceph config set mgr mgr/telemetry/channel_device false
     ceph telemetry on
 
 * The telemetry module now reports more information about CephFS file systems,
