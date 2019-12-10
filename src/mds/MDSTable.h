@@ -25,28 +25,11 @@ class MDSRank;
 
 class MDSTable {
 public:
-  MDSRank *mds;
-protected:
-  std::string table_name;
-  bool per_mds;
-  mds_rank_t rank;
+  friend class C_IO_MT_Load;
+  friend class C_IO_MT_Save;
 
-  
-  static const int STATE_UNDEF   = 0;
-  static const int STATE_OPENING = 1;
-  static const int STATE_ACTIVE  = 2;
-  //static const int STATE_COMMITTING = 3;
-  int state;
-  
-  version_t version, committing_version, committed_version, projected_version;
-  
-  map<version_t, MDSContext::vec > waitfor_save;
-  
-public:
   MDSTable(MDSRank *m, std::string_view n, bool is_per_mds) :
-    mds(m), table_name(n), per_mds(is_per_mds), rank(MDS_RANK_NONE),
-    state(STATE_UNDEF),
-    version(0), committing_version(0), committed_version(0), projected_version(0) {}
+    mds(m), table_name(n), per_mds(is_per_mds) {}
   virtual ~MDSTable() {}
 
   void set_rank(mds_rank_t r)
@@ -88,8 +71,21 @@ public:
   virtual void decode_state(bufferlist::const_iterator& p) = 0;
   virtual void encode_state(bufferlist& bl) const = 0;
 
-  friend class C_IO_MT_Load;
-  friend class C_IO_MT_Save;
-};
+  MDSRank *mds;
+protected:
+  static const int STATE_UNDEF   = 0;
+  static const int STATE_OPENING = 1;
+  static const int STATE_ACTIVE  = 2;
+  //static const int STATE_COMMITTING = 3;
 
+  std::string table_name;
+  bool per_mds;
+  mds_rank_t rank = MDS_RANK_NONE;
+
+  int state = STATE_UNDEF;
+
+  version_t version = 0, committing_version = 0, committed_version = 0, projected_version = 0;
+
+  map<version_t, MDSContext::vec > waitfor_save;
+};
 #endif
