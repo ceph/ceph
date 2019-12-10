@@ -145,7 +145,7 @@ class CephTestCase(unittest.TestCase):
                         elapsed, expect_val, val
                     ))
                 else:
-                    log.debug("wait_until_equal: {0} != {1}, waiting...".format(val, expect_val))
+                    log.debug("wait_until_equal: {0} != {1}, waiting (timeout={2})...".format(val, expect_val, timeout))
                 time.sleep(period)
                 elapsed += period
 
@@ -162,8 +162,6 @@ class CephTestCase(unittest.TestCase):
                 if elapsed >= timeout:
                     raise RuntimeError("Timed out after {0}s".format(elapsed))
                 else:
-                    log.debug("wait_until_true: waiting...")
+                    log.debug("wait_until_true: waiting (timeout={0})...".format(timeout))
                 time.sleep(period)
                 elapsed += period
-
-
