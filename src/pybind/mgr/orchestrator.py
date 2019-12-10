@@ -26,7 +26,8 @@ from mgr_util import format_bytes
 
 try:
     from ceph.deployment.drive_group import DriveGroupSpec
-    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, Type
+    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
+        Type, Sequence
 except ImportError:
     pass
 
@@ -606,7 +607,7 @@ class Completion(_Promise):
 
 
 def pretty_print(completions):
-    # type: (List[Completion]) -> str
+    # type: (Sequence[Completion]) -> str
     return ', '.join(c.pretty_print() for c in completions)
 
 
