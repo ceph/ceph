@@ -1,4 +1,5 @@
 import fnmatch
+from ceph.deployment.inventory import Device
 try:
     from typing import Optional, List, Dict, Any
 except ImportError:
@@ -31,8 +32,8 @@ class DeviceSelection(object):
         """
         ephemeral drive group device specification
         """
-        #: List of absolute paths to the devices.
-        self.paths = [] if paths is None else paths  # type: List[str]
+        #: List of Device objects for devices paths.
+        self.paths = [] if paths is None else [Device(path) for path in paths]  # type: List[Device]
 
         #: A wildcard string. e.g: "SDD*" or "SanDisk SD8SN8U5"
         self.model = model
@@ -107,18 +108,20 @@ class DriveGroupValidationError(Exception):
 
 
 class DriveGroupSpecs(object):
+    """ Container class to parse drivegroups """
 
-    def __init__(self, drive_group_json: dict):
-        self.drive_group_json: dict = drive_group_json
-        self.drive_groups: list = list()
+    def __init__(self, drive_group_json):
+        # type: (dict) -> None
+        self.drive_group_json = drive_group_json
+        self.drive_groups = list()  # type: list
         self.build_drive_groups()
 
-    def build_drive_groups(self) -> list:
+    def build_drive_groups(self):
         for drive_group_name, drive_group_spec in self.drive_group_json.items():
             self.drive_groups.append(DriveGroupSpec.from_json
                                      (drive_group_spec, name=drive_group_name))
 
-    def __repr__(self) -> str:
+    def __repr__(self):
         return ", ".join([repr(x) for x in self.drive_groups])
 
 
@@ -212,7 +215,7 @@ class DriveGroupSpec(object):
 
     @classmethod
     def from_json(cls, json_drive_group, name=None):
-        # type: (dict) -> DriveGroupSpec
+        # type: (dict, Optional[str]) -> DriveGroupSpec
         """
         Initialize 'Drive group' structure
 
@@ -235,13 +238,13 @@ class DriveGroupSpec(object):
                     json_drive_group.items()}
             if not args:
                 raise DriveGroupValidationError("Didn't find Drivegroup specs")
-            return DriveGroupSpec(**args, name=name) # noqa, that's no syntax error
+            return DriveGroupSpec(name=name, **args)
         except (KeyError, TypeError) as e:
             raise DriveGroupValidationError(str(e))
 
     def hosts(self, all_hosts):
         # type: (List[str]) -> List[str]
-        return fnmatch.filter(all_hosts, self.host_pattern)
+        return fnmatch.filter(all_hosts, self.host_pattern)  # type: ignore
 
     def validate(self, all_hosts):
         # type: (List[str]) -> None

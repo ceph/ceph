@@ -347,10 +347,9 @@ Usage:
   ceph orchestrator osd create host:device1,device2,...
 """
 
-        # TODO: try if inbuf file is yaml of json
         if inbuf:
             try:
-                dgs = DriveGroupSpecs(json.loads(inbuf))
+                dgs = DriveGroupSpecs(yaml.load(inbuf))
                 drive_groups = dgs.drive_groups
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage

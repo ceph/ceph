@@ -5,7 +5,7 @@ from ceph.deployment.drive_selection.selector import DriveSelection
 logger = logging.getLogger(__name__)
 
 
-class ToCephVolume(object):
+class to_ceph_volume(object):
 
     def __init__(self,
                  spec,  # type: DriveGroupSpec

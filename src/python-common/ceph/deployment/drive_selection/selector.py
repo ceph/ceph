@@ -23,11 +23,13 @@ class DriveSelection(object):
         self.disks = disks.copy()
         self.spec = spec
 
-        if self.spec.data_devices.paths:
-            self._data = self.spec.data_devices.paths
-            self._db = []
-            self._wal = []
-            self._journal = []
+        if self.spec.data_devices.paths:  # type: ignore
+            # re: type: ignore there is *always* a path attribute assigned to DeviceSelection
+            # it's just None if actual drivegroups are used
+            self._data = self.spec.data_devices.paths  # type: ignore
+            self._db = []  # type: List
+            self._wal = []  # type: List
+            self._journal = []  # type: List
         else:
             self._data = self.assign_devices(self.spec.data_devices)
             self._wal = self.assign_devices(self.spec.wal_devices)
