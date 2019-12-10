@@ -435,12 +435,18 @@ int ImageState<I>::register_update_watcher(UpdateWatchCtx *watcher,
 }
 
 template <typename I>
-int ImageState<I>::unregister_update_watcher(uint64_t handle) {
+void ImageState<I>::unregister_update_watcher(uint64_t handle,
+                                              Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << ": handle=" << handle << dendl;
 
+  m_update_watchers->unregister_watcher(handle, on_finish);
+}
+
+template <typename I>
+int ImageState<I>::unregister_update_watcher(uint64_t handle) {
   C_SaferCond ctx;
-  m_update_watchers->unregister_watcher(handle, &ctx);
+  unregister_update_watcher(handle, &ctx);
   return ctx.wait();
 }
 

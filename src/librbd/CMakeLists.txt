@@ -104,6 +104,17 @@ set(librbd_internal_srcs
   mirror/GetInfoRequest.cc
   mirror/GetStatusRequest.cc
   mirror/PromoteRequest.cc
+  mirror/snapshot/CreateNonPrimaryRequest.cc
+  mirror/snapshot/CreatePrimaryRequest.cc
+  mirror/snapshot/DemoteRequest.cc
+  mirror/snapshot/GetImageStateRequest.cc
+  mirror/snapshot/PromoteRequest.cc
+  mirror/snapshot/RemoveImageStateRequest.cc
+  mirror/snapshot/SetImageStateRequest.cc
+  mirror/snapshot/Types.cc
+  mirror/snapshot/UnlinkPeerRequest.cc
+  mirror/snapshot/Utils.cc
+  mirror/snapshot/WriteImageStateRequest.cc
   object_map/CreateRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc

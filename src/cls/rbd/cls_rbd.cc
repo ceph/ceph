@@ -5662,6 +5662,82 @@ int mirror_image_map_list(cls_method_context_t hctx,
   return 0;
 }
 
+int image_snapshot_unlink_peer(cls_method_context_t hctx,
+                               uint64_t snap_id,
+                               std::string mirror_peer_uuid) {
+  cls_rbd_snap snap;
+  std::string snap_key;
+  key_from_snap_id(snap_id, &snap_key);
+  int r = read_key(hctx, snap_key, &snap);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("Could not read snapshot meta off disk: %s",
+              cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  auto primary = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+    &snap.snapshot_namespace);
+  if (primary == nullptr) {
+    CLS_LOG(5, "mirror_image_snapshot_unlink_peer " \
+            "not mirroring snapshot snap_id=%" PRIu64, snap_id);
+    return -EINVAL;
+  }
+
+  if (primary->mirror_peer_uuids.count(mirror_peer_uuid) == 0) {
+    return -ENOENT;
+  }
+
+  if (primary->mirror_peer_uuids.size() == 1) {
+    // return a special error when trying to unlink the last peer
+    return -ERESTART;
+  }
+
+  primary->mirror_peer_uuids.erase(mirror_peer_uuid);
+
+  r = image::snapshot::write(hctx, snap_key, std::move(snap));
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int image_snapshot_set_copy_progress(cls_method_context_t hctx,
+                                     uint64_t snap_id, bool copied,
+                                     uint64_t last_copied_object_number) {
+  cls_rbd_snap snap;
+  std::string snap_key;
+  key_from_snap_id(snap_id, &snap_key);
+  int r = read_key(hctx, snap_key, &snap);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("Could not read snapshot meta off disk: %s",
+              cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  auto non_primary = boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
+    &snap.snapshot_namespace);
+  if (non_primary == nullptr) {
+    CLS_LOG(5, "mirror_image_snapshot_set_copy_progress " \
+            "not mirroring snapshot snap_id=%" PRIu64, snap_id);
+    return -EINVAL;
+  }
+
+  non_primary->copied = copied;
+  non_primary->last_copied_object_number = last_copied_object_number;
+
+  r = image::snapshot::write(hctx, snap_key, std::move(snap));
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 } // namespace mirror
 
 /**
@@ -6640,6 +6716,74 @@ int mirror_image_map_remove(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
+  return 0;
+}
+
+
+/**
+ * Input:
+ * @param snap_id: snapshot id
+ * @param mirror_peer_uuid: mirror peer uuid
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_snapshot_unlink_peer(cls_method_context_t hctx, bufferlist *in,
+                                      bufferlist *out) {
+  uint64_t snap_id;
+  std::string mirror_peer_uuid;
+  try {
+    auto iter = in->cbegin();
+    decode(snap_id, iter);
+    decode(mirror_peer_uuid, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20,
+          "mirror_image_snapshot_unlink_peer snap_id=%" PRIu64 " peer_uuid=%s",
+          snap_id, mirror_peer_uuid.c_str());
+
+  int r = mirror::image_snapshot_unlink_peer(hctx, snap_id, mirror_peer_uuid);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param snap_id: snapshot id
+ * @param copied: true if shapshot fully copied
+ * @param last_copied_object_number: last copied object number
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_snapshot_set_copy_progress(cls_method_context_t hctx,
+                                            bufferlist *in,
+                                            bufferlist *out) {
+  uint64_t snap_id;
+  bool copied;
+  uint64_t last_copied_object_number;
+  try {
+    auto iter = in->cbegin();
+    decode(snap_id, iter);
+    decode(copied, iter);
+    decode(last_copied_object_number, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "mirror_image_snapshot_set_copy_progress snap_id=%" PRIu64 \
+          " copied=%d last_copied_object_number=%" PRIu64, snap_id, copied,
+          last_copied_object_number);
+
+  int r = mirror::image_snapshot_set_copy_progress(hctx, snap_id, copied,
+                                                   last_copied_object_number);
+  if (r < 0) {
+    return r;
+  }
   return 0;
 }
 
@@ -8011,6 +8155,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_image_map_list;
   cls_method_handle_t h_mirror_image_map_update;
   cls_method_handle_t h_mirror_image_map_remove;
+  cls_method_handle_t h_mirror_image_snapshot_unlink_peer;
+  cls_method_handle_t h_mirror_image_snapshot_set_copy_progress;
   cls_method_handle_t h_group_dir_list;
   cls_method_handle_t h_group_dir_add;
   cls_method_handle_t h_group_dir_remove;
@@ -8356,6 +8502,14 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "mirror_image_map_remove",
                           CLS_METHOD_WR, mirror_image_map_remove,
                           &h_mirror_image_map_remove);
+  cls_register_cxx_method(h_class, "mirror_image_snapshot_unlink_peer",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_image_snapshot_unlink_peer,
+                          &h_mirror_image_snapshot_unlink_peer);
+  cls_register_cxx_method(h_class, "mirror_image_snapshot_set_copy_progress",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_image_snapshot_set_copy_progress,
+                          &h_mirror_image_snapshot_set_copy_progress);
 
   /* methods for the groups feature */
   cls_register_cxx_method(h_class, "group_dir_list",

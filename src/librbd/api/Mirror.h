@@ -81,12 +81,17 @@ struct Mirror {
   static void image_get_info(ImageCtxT *ictx,
                              mirror_image_info_t *mirror_image_info,
                              Context *on_finish);
+  static int image_get_mode(ImageCtxT *ictx, mirror_image_mode_t *mode);
+  static void image_get_mode(ImageCtxT *ictx, mirror_image_mode_t *mode,
+                             Context *on_finish);
   static int image_get_global_status(ImageCtxT *ictx,
                                      mirror_image_global_status_t *status);
   static void image_get_global_status(ImageCtxT *ictx,
                                       mirror_image_global_status_t *status,
                                       Context *on_finish);
   static int image_get_instance_id(ImageCtxT *ictx, std::string *instance_id);
+
+  static int image_snapshot_create(ImageCtxT *ictx, uint64_t *snap_id);
 };
 
 } // namespace api

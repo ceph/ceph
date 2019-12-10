@@ -37,7 +37,6 @@ set(rbd_mirror_internal
   image_replayer/CreateImageRequest.cc
   image_replayer/EventPreprocessor.cc
   image_replayer/GetMirrorImageIdRequest.cc
-  image_replayer/IsPrimaryRequest.cc
   image_replayer/OpenImageRequest.cc
   image_replayer/OpenLocalImageRequest.cc
   image_replayer/PrepareLocalImageRequest.cc

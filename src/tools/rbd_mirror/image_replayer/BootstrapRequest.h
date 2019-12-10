@@ -8,8 +8,10 @@
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "librbd/mirror/Types.h"
 #include "tools/rbd_mirror/BaseRequest.h"
 #include "tools/rbd_mirror/Types.h"
 #include <list>
@@ -101,7 +103,7 @@ private:
    *    |                                                   *
    *    |/--------------------------------------------------*---\
    *    v                                                   *   |
-   * IS_PRIMARY * * * * * * * * * * * * * * * * * * * * *   *   |
+   * GET_REMOTE_MIRROR_INFO * * * * * * * * * * * * * * *   *   |
    *    |                                               *   *   |
    *    | (remote image primary, no local image id)     *   *   |
    *    \----> UPDATE_CLIENT_IMAGE  * * * * * * * * * * *   *   |
@@ -169,7 +171,9 @@ private:
   cls::journal::Client m_client;
   uint64_t m_remote_tag_class = 0;
   ImageCtxT *m_remote_image_ctx = nullptr;
-  bool m_primary = false;
+  cls::rbd::MirrorImage m_mirror_image;
+  librbd::mirror::PromotionState m_promotion_state =
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   int m_ret_val = 0;
   ImageSync<ImageCtxT> *m_image_sync = nullptr;
 
@@ -184,8 +188,8 @@ private:
   void open_remote_image();
   void handle_open_remote_image(int r);
 
-  void is_primary();
-  void handle_is_primary(int r);
+  void get_remote_mirror_info();
+  void handle_get_remote_mirror_info(int r);
 
   void update_client_state();
   void handle_update_client_state(int r);

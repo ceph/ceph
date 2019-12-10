@@ -191,6 +191,8 @@ int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 void set_protection_status(librados::ObjectWriteOperation *op,
                            snapid_t snap_id, uint8_t protection_status);
 
+void snapshot_get_limit_start(librados::ObjectReadOperation *op);
+int snapshot_get_limit_finish(bufferlist::const_iterator *it, uint64_t *limit);
 int snapshot_get_limit(librados::IoCtx *ioctx, const std::string &oid,
                        uint64_t *limit);
 void snapshot_set_limit(librados::ObjectWriteOperation *op,
@@ -388,6 +390,9 @@ int mirror_peer_ping(librados::IoCtx *ioctx,
 void mirror_peer_ping(librados::ObjectWriteOperation *op,
                       const std::string& site_name,
                       const std::string& fsid);
+void mirror_peer_list_start(librados::ObjectReadOperation *op);
+int mirror_peer_list_finish(bufferlist::const_iterator *it,
+                            std::vector<cls::rbd::MirrorPeer> *peers);
 int mirror_peer_list(librados::IoCtx *ioctx,
                      std::vector<cls::rbd::MirrorPeer> *peers);
 int mirror_peer_add(librados::IoCtx *ioctx,
@@ -515,6 +520,21 @@ void mirror_image_map_update(librados::ObjectWriteOperation *op,
                              const cls::rbd::MirrorImageMap &image_map);
 void mirror_image_map_remove(librados::ObjectWriteOperation *op,
                              const std::string &global_image_id);
+
+void mirror_image_snapshot_unlink_peer(librados::ObjectWriteOperation *op,
+                                       snapid_t snap_id,
+                                       const std::string &mirror_peer_uuid);
+int mirror_image_snapshot_unlink_peer(librados::IoCtx *ioctx,
+                                      const std::string &oid,
+                                      snapid_t snap_id,
+                                      const std::string &mirror_peer_uuid);
+void mirror_image_snapshot_set_copy_progress(librados::ObjectWriteOperation *op,
+                                             snapid_t snap_id, bool copied,
+                                             uint64_t copy_progress);
+int mirror_image_snapshot_set_copy_progress(librados::IoCtx *ioctx,
+                                            const std::string &oid,
+                                            snapid_t snap_id, bool copied,
+                                            uint64_t copy_progress);
 
 // Groups functions
 int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,

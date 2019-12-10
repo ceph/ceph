@@ -916,24 +916,36 @@ void set_protection_status(librados::ObjectWriteOperation *op,
   op->exec("rbd", "set_protection_status", in);
 }
 
+void snapshot_get_limit_start(librados::ObjectReadOperation *op)
+{
+  bufferlist bl;
+  op->exec("rbd", "snapshot_get_limit", bl);
+}
+
+int snapshot_get_limit_finish(bufferlist::const_iterator *it, uint64_t *limit)
+{
+  try {
+    decode(*limit, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 int snapshot_get_limit(librados::IoCtx *ioctx, const std::string &oid,
                        uint64_t *limit)
 {
-  bufferlist in, out;
-  int r =  ioctx->exec(oid, "rbd", "snapshot_get_limit", in, out);
+  librados::ObjectReadOperation op;
+  snapshot_get_limit_start(&op);
 
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
   if (r < 0) {
     return r;
   }
 
-  try {
-    auto iter = out.cbegin();
-    decode(*limit, iter);
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
-  }
-
-  return 0;
+  auto it = out_bl.cbegin();
+  return snapshot_get_limit_finish(&it, limit);
 }
 
 void snapshot_set_limit(librados::ObjectWriteOperation *op, uint64_t limit)
@@ -1810,22 +1822,37 @@ int mirror_mode_set(librados::IoCtx *ioctx,
   return 0;
 }
 
+void mirror_peer_list_start(librados::ObjectReadOperation *op) {
+  bufferlist bl;
+  op->exec("rbd", "mirror_peer_list", bl);
+}
+
+int mirror_peer_list_finish(bufferlist::const_iterator *it,
+                            std::vector<cls::rbd::MirrorPeer> *peers) {
+  peers->clear();
+  try {
+    decode(*peers, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 int mirror_peer_list(librados::IoCtx *ioctx,
                      std::vector<cls::rbd::MirrorPeer> *peers) {
-  bufferlist in_bl;
+  librados::ObjectReadOperation op;
+  mirror_peer_list_start(&op);
+
   bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_list", in_bl,
-                      out_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
   if (r < 0) {
     return r;
   }
 
-  peers->clear();
-  try {
-    auto bl_it = out_bl.cbegin();
-    decode(*peers, bl_it);
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
+  auto it = out_bl.cbegin();
+  r = mirror_peer_list_finish(&it, peers);
+  if (r < 0) {
+    return r;
   }
   return 0;
 }
@@ -2428,6 +2455,45 @@ void mirror_image_map_remove(librados::ObjectWriteOperation *op,
   encode(global_image_id, bl);
 
   op->exec("rbd", "mirror_image_map_remove", bl);
+}
+
+void mirror_image_snapshot_unlink_peer(librados::ObjectWriteOperation *op,
+                                       snapid_t snap_id,
+                                       const std::string &mirror_peer_uuid) {
+  bufferlist bl;
+  encode(snap_id, bl);
+  encode(mirror_peer_uuid, bl);
+
+  op->exec("rbd", "mirror_image_snapshot_unlink_peer", bl);
+}
+
+int mirror_image_snapshot_unlink_peer(librados::IoCtx *ioctx,
+                                      const std::string &oid,
+                                      snapid_t snap_id,
+                                      const std::string &mirror_peer_uuid) {
+  librados::ObjectWriteOperation op;
+  mirror_image_snapshot_unlink_peer(&op, snap_id, mirror_peer_uuid);
+  return ioctx->operate(oid, &op);
+}
+
+void mirror_image_snapshot_set_copy_progress(librados::ObjectWriteOperation *op,
+                                             snapid_t snap_id, bool copied,
+                                             uint64_t copy_progress) {
+  bufferlist bl;
+  encode(snap_id, bl);
+  encode(copied, bl);
+  encode(copy_progress, bl);
+
+  op->exec("rbd", "mirror_image_snapshot_set_copy_progress", bl);
+}
+
+int mirror_image_snapshot_set_copy_progress(librados::IoCtx *ioctx,
+                                            const std::string &oid,
+                                            snapid_t snap_id, bool copied,
+                                            uint64_t copy_progress) {
+  librados::ObjectWriteOperation op;
+  mirror_image_snapshot_set_copy_progress(&op, snap_id, copied, copy_progress);
+  return ioctx->operate(oid, &op);
 }
 
 // Groups functions

@@ -4,6 +4,8 @@
 #ifndef CEPH_LIBRBD_OPERATION_ENABLE_FEATURES_REQUEST_H
 #define CEPH_LIBRBD_OPERATION_ENABLE_FEATURES_REQUEST_H
 
+#include "cls/rbd/cls_rbd_types.h"
+
 #include "librbd/operation/Request.h"
 
 class Context;
@@ -52,8 +54,11 @@ private:
    * STATE_BLOCK_WRITES
    *    |
    *    v
-   * STATE_GET_MIRROR_MODE
-   *    |
+   * STATE_GET_MIRROR_MODE (skip if not
+   *    |                   enabling journaling)
+   *    v
+   * STATE_GET_MIRROR_IMAGE (skip if mirror mode
+   *    |                    is not IMAGE)
    *    v
    * STATE_CREATE_JOURNAL (skip if not
    *    |                  required)
@@ -70,9 +75,9 @@ private:
    * STATE_CREATE_OBJECT_MAP (skip if not
    *    |                     required)
    *    v
-   * STATE_ENABLE_MIRROR_IMAGE
-   *    |
-   *    V
+   * STATE_ENABLE_MIRROR_IMAGE (skip if not
+   *    |                       required)
+   *    v
    * STATE_NOTIFY_UPDATE
    *    |
    *    | (unblock writes)
@@ -81,6 +86,8 @@ private:
    * @endverbatim
    *
    */
+
+  cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
 
   uint64_t m_features;
 
@@ -102,6 +109,9 @@ private:
 
   void send_get_mirror_mode();
   Context *handle_get_mirror_mode(int *result);
+
+  void send_get_mirror_image();
+  Context *handle_get_mirror_image(int *result);
 
   void send_create_journal();
   Context *handle_create_journal(int *result);

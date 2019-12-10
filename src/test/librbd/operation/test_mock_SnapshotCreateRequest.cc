@@ -8,9 +8,40 @@
 #include "common/bit_vector.hpp"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/mirror/snapshot/SetImageStateRequest.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+
+namespace librbd {
+namespace mirror {
+namespace snapshot {
+
+template<>
+class SetImageStateRequest<MockImageCtx> {
+public:
+  static SetImageStateRequest *s_instance;
+  Context *on_finish = nullptr;
+
+  static SetImageStateRequest *create(MockImageCtx *image_ctx, uint64_t snap_id,
+                                      Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  SetImageStateRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+SetImageStateRequest<MockImageCtx> *SetImageStateRequest<MockImageCtx>::s_instance;
+
+} // namespace snapshot
+} // namespace mirror
+} // namespace librbd
 
 // template definitions
 #include "librbd/operation/SnapshotCreateRequest.cc"
@@ -29,6 +60,7 @@ using ::testing::WithArg;
 class TestMockOperationSnapshotCreateRequest : public TestMockFixture {
 public:
   typedef SnapshotCreateRequest<MockImageCtx> MockSnapshotCreateRequest;
+  typedef mirror::snapshot::SetImageStateRequest<MockImageCtx> MockSetImageStateRequest;
 
   void expect_block_writes(MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
@@ -85,6 +117,14 @@ public:
     }
   }
 
+  void expect_set_image_state(
+      MockImageCtx &mock_image_ctx,
+      MockSetImageStateRequest &mock_set_image_state_request, int r) {
+    EXPECT_CALL(mock_set_image_state_request, send())
+      .WillOnce(FinishRequest(&mock_set_image_state_request, r,
+                              &mock_image_ctx));
+  }
+
   void expect_update_snap_context(MockImageCtx &mock_image_ctx) {
     // state machine checks to ensure a refresh hasn't already added the snap
     EXPECT_CALL(mock_image_ctx, get_snap_info(_))
@@ -96,7 +136,6 @@ public:
     EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes())
                   .Times(1);
   }
-
 };
 
 TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
@@ -302,6 +341,48 @@ TEST_F(TestMockOperationSnapshotCreateRequest, SkipObjectMap) {
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
       "snap1", 0, true);
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    req->send();
+  }
+  ASSERT_EQ(0, cond_ctx.wait());
+}
+
+TEST_F(TestMockOperationSnapshotCreateRequest, SetImageState) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+
+  expect_verify_lock_ownership(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  ::testing::InSequence seq;
+  expect_block_writes(mock_image_ctx);
+  expect_allocate_snap_id(mock_image_ctx, 0);
+  expect_snap_create(mock_image_ctx, 0);
+  expect_object_map_snap_create(mock_image_ctx);
+  MockSetImageStateRequest mock_set_image_state_request;
+  expect_set_image_state(mock_image_ctx, mock_set_image_state_request, 0);
+  expect_update_snap_context(mock_image_ctx);
+  expect_unblock_writes(mock_image_ctx);
+
+  C_SaferCond cond_ctx;
+  MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
+    mock_image_ctx, &cond_ctx, cls::rbd::MirrorPrimarySnapshotNamespace(),
+      "snap1", 0, false);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
