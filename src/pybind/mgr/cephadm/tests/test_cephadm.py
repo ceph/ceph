@@ -124,9 +124,9 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_create_osds(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            dg = DriveGroupSpec('test', DeviceSelection(paths=['']))
-            c = cephadm_module.create_osds(dg)
-            assert wait(cephadm_module, c) == "Created osd(s) on host 'test'"
+            dg = DriveGroupSpec('test', data_devices=DeviceSelection(paths=['']))
+            c = cephadm_module.create_osds([dg])
+            assert wait(cephadm_module, c) == ["Created osd(s) on host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([

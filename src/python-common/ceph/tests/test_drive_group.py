@@ -1,20 +1,25 @@
 import pytest
-import mock
 
 from ceph.deployment import drive_selection, translate
+from ceph.deployment.inventory import Device
 from ceph.tests.utils import _mk_inventory, _mk_device
-from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
+from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
+                                        DeviceSelection, DriveGroupValidationError
 
 
 def test_DriveGroup():
-    dg_json = {
-        'host_pattern': 'hostname',
-        'data_devices': {'paths': ['/dev/sda']}
-    }
+    dg_json = {'testing_drivegroup':
+               {'host_pattern': 'hostname',
+                'data_devices': {'paths': ['/dev/sda']}
+                }
+               }
 
-    dg = DriveGroupSpec.from_json(dg_json)
-    assert dg.hosts(['hostname']) == ['hostname']
-    assert dg.data_devices.paths == ['/dev/sda']
+    dgs = DriveGroupSpecs(dg_json)
+    for dg in dgs.drive_groups:
+        assert dg.hosts(['hostname']) == ['hostname']
+        assert dg.name == 'testing_drivegroup'
+        assert all([isinstance(x, Device) for x in dg.data_devices.paths])
+        assert dg.data_devices.paths[0].path == '/dev/sda'
 
 
 def test_DriveGroup_fail():
@@ -30,7 +35,8 @@ def test_drivegroup_pattern():
 def test_drive_selection():
     devs = DeviceSelection(paths=['/dev/sda'])
     spec = DriveGroupSpec('node_name', data_devices=devs)
-    assert spec.data_devices.paths == ['/dev/sda']
+    assert all([isinstance(x, Device) for x in spec.data_devices.paths])
+    assert spec.data_devices.paths[0].path == '/dev/sda'
 
     with pytest.raises(DriveGroupValidationError, match='exclusive'):
         DeviceSelection(paths=['/dev/sda'], rotational=False)
@@ -42,7 +48,7 @@ def test_ceph_volume_command_0():
                           )
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.ToCephVolume(spec, sel).run()
+    cmd = translate.to_ceph_volume(spec, sel).run()
     assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd'
 
 
@@ -53,8 +59,9 @@ def test_ceph_volume_command_1():
                           )
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.ToCephVolume(spec, sel).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc /dev/sdd --yes --no-systemd'
+    cmd = translate.to_ceph_volume(spec, sel).run()
+    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+                   '--db-devices /dev/sdc /dev/sdd --yes --no-systemd')
 
 
 def test_ceph_volume_command_2():
@@ -68,8 +75,10 @@ def test_ceph_volume_command_2():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.ToCephVolume(spec, sel).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf --yes --no-systemd'
+    cmd = translate.to_ceph_volume(spec, sel).run()
+    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+                   '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
+                   '--yes --no-systemd')
 
 
 def test_ceph_volume_command_3():
@@ -84,8 +93,11 @@ def test_ceph_volume_command_3():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.ToCephVolume(spec, sel).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf --dmcrypt --yes --no-systemd'
+    cmd = translate.to_ceph_volume(spec, sel).run()
+    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+                   '--db-devices /dev/sdc /dev/sdd '
+                   '--wal-devices /dev/sde /dev/sdf --dmcrypt '
+                   '--yes --no-systemd')
 
 
 def test_ceph_volume_command_4():
@@ -103,8 +115,11 @@ def test_ceph_volume_command_4():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.ToCephVolume(spec, sel).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf --block-wal-size 500M --block-db-size 500M --dmcrypt --osds-per-device 3 --yes --no-systemd'
+    cmd = translate.to_ceph_volume(spec, sel).run()
+    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+                   '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
+                   '--block-wal-size 500M --block-db-size 500M --dmcrypt '
+                   '--osds-per-device 3 --yes --no-systemd')
 
 
 def test_ceph_volume_command_5():
@@ -114,7 +129,7 @@ def test_ceph_volume_command_5():
                           )
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.ToCephVolume(spec, sel).run()
+    cmd = translate.to_ceph_volume(spec, sel).run()
     assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --filestore --yes --no-systemd'
 
 
@@ -127,5 +142,7 @@ def test_ceph_volume_command_6():
                           )
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.ToCephVolume(spec, sel).run()
-    assert cmd == 'lvm batch --no-auto /dev/sdc /dev/sdd --journal-size 500M --journal-devices /dev/sda /dev/sdb --filestore --yes --no-systemd'
+    cmd = translate.to_ceph_volume(spec, sel).run()
+    assert cmd == ('lvm batch --no-auto /dev/sdc /dev/sdd '
+                   '--journal-size 500M --journal-devices /dev/sda /dev/sdb '
+                   '--filestore --yes --no-systemd')
