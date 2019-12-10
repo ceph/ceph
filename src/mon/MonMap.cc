@@ -190,6 +190,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   encode(removed_ranks, blist);
   uint8_t t = strategy;
   encode(t, blist);
+  encode(disallowed_leaders, blist);
   ENCODE_FINISH(blist);
 }
 
@@ -243,6 +244,7 @@ void MonMap::decode(bufferlist::const_iterator& p)
     uint8_t t;
     decode(t, p);
     strategy = static_cast<election_strategy>(t);
+    decode(disallowed_leaders, p);
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -350,6 +352,7 @@ void MonMap::dump(Formatter *f) const
   f->dump_unsigned("min_mon_release", min_mon_release);
   f->dump_string("min_mon_release_name", ceph_release_name(min_mon_release));
   f->dump_int ("election_strategy", strategy);
+  f->dump_stream("disallowed_leaders") << disallowed_leaders;
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
