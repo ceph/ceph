@@ -40,7 +40,7 @@ class TestClientLimits(CephFSTestCase):
 
         # Set MDS cache memory limit to a low value that will make the MDS to
         # ask the client to trim the caps.
-        cache_memory_limit = "1M"
+        cache_memory_limit = "1K"
 
         self.set_conf('mds', 'mds_cache_memory_limit', cache_memory_limit)
         self.set_conf('mds', 'mds_recall_max_caps', open_files/2)
