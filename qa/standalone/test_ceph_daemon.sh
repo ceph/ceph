@@ -11,7 +11,12 @@ IMAGE_MASTER=${IMAGE_MASTER:-'ceph/daemon-base:latest-master-devel'}
 IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'ceph/daemon-base:latest-mimic'}
 
-TEST_TARS=${SCRIPT_DIR}/test_ceph_daemon/*.tgz
+CORPUS_GIT_SUBMOD="ceph-daemon-adoption-corpus"
+TMPDIR=$(mktemp -d)
+trap "rm -rf $TMPDIR" EXIT
+git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
+CORPUS_DIR=${TMPDIR}/archive
+TEST_TARS=$(find ${CORPUS_DIR} -type f -iname *.tgz)
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -34,7 +39,7 @@ fi
 # respawn ourselves with a shebang
 PYTHONS="python3 python2"  # which pythons we test
 if [ -z "$PYTHON_KLUDGE" ]; then
-   TMPBINDIR=`mktemp -d $TMPDIR`
+   TMPBINDIR=$(mktemp -d)
    trap "rm -rf $TMPBINDIR" EXIT
    ORIG_CEPH_DAEMON="$CEPH_DAEMON"
    CEPH_DAEMON="$TMPBINDIR/ceph-daemon"
@@ -198,10 +203,6 @@ for tarball in $TEST_TARS; do
     $SUDO tar xzvf $tarball -C $TMP_TAR_DIR
     NAMES=$($CEPH_DAEMON ls --legacy-dir $TMP_TAR_DIR | jq -r '.[].name')
     for name in $NAMES; do
-        # TODO: skip osd test for now
-        if [[ $name =~ "osd" ]]; then
-           continue
-        fi
         $CEPH_DAEMON adopt \
                 --style legacy \
                 --legacy-dir $TMP_TAR_DIR \
