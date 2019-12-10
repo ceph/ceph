@@ -118,16 +118,20 @@ class Monitoring(object):
 
 
 def port_in_use(port_num):
-    """Detect whether a port is in use on the local machine"""
+    """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s.connect(("127.0.0.1",port_num))
-    except ConnectionRefusedError:
-        return False
-    else:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1",port_num))
+        s.close()
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        s.bind(("::1",port_num))
+        s.close()
+    except OSError:
         s.close()
         return True
+    else:
+        return False
 
 ##################################
 # Popen wrappers, lifted from ceph-volume
