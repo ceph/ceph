@@ -17,6 +17,8 @@ should be issued on which systems.
 of this installation guide means that the associated command
 can be run on any node.
 
+.. highlight:: console
+
 Get ceph-daemon
 ===============
 
