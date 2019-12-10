@@ -9,7 +9,7 @@ if(IWYU_BIN)
   endif()
 
   if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    message(STATUS "Found IWYU, but clang++ is not used used. To enable IWYU, set CMAKE_C_COMPILER to \"clang\" and CMAKE_CXX_COMPILER to \"clang++\" and build again.")
+    message(STATUS "Found IWYU, but clang++ is not used. To enable IWYU, set CMAKE_C_COMPILER to \"clang\" and CMAKE_CXX_COMPILER to \"clang++\" and build again.")
     return()
   endif()
 
@@ -22,6 +22,4 @@ if(IWYU_BIN)
     )
 
   message(STATUS "Found IWYU. To perform header analysis using IWYU, use: \"make iwyu\". Results will be stored in \"iwyu.txt\".")
-else()
-  message(STATUS "Could not find IWYU. To perform header analysis using IWYU install the tool (e.g. \"yum install iwyu\").")
 endif()
