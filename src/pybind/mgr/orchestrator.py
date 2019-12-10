@@ -769,8 +769,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def add_host(self, host):
-        # type: (str) -> Completion
+    def add_host(self, host, labels):
+        # type: (str, List[str]) -> Completion
         """
         Add a host to the orchestrator inventory.
 

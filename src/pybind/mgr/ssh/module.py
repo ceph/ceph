@@ -653,13 +653,22 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self.inventory_cache.items_filtered(wanted)
 
     @async_completion
-    def add_host(self, host):
+    def add_host(self, host, labels):
         """
         Add a host to be managed by the orchestrator.
 
         :param host: host name
         """
-        self.inventory[host] = {}
+        if host not in self.inventory:
+            self.inventory[host] = {
+                'labels': labels,
+            }
+        else:
+            if 'labels' not in self.inventory[host]:
+                self.inventory[host]['labels'] = list()
+            for l in labels:
+                if l not in self.inventory[host]['labels']:
+                    self.inventory[host]['labels'].append(l)
         self._save_inventory()
         self.inventory_cache[host] = orchestrator.OutdatableData()
         self.service_cache[host] = orchestrator.OutdatableData()

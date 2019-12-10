@@ -48,8 +48,8 @@ class TestSSH(object):
         assert False, "timeout" + str(c._state)
 
     @contextmanager
-    def _with_host(self, m, name):
-        self._wait(m, m.add_host(name))
+    def _with_host(self, m, name, labels):
+        self._wait(m, m.add_host(name, labels))
         yield
         self._wait(m, m.remove_host(name))
 
@@ -62,29 +62,29 @@ class TestSSH(object):
         assert new_mon != 'mon.a'
 
     def test_host(self, ssh_module):
-        with self._with_host(ssh_module, 'test'):
-            assert self._wait(ssh_module, ssh_module.get_hosts()) == [InventoryNode('test')]
+        with self._with_host(ssh_module, 'test', ['a', 'b']):
+            assert self._wait(ssh_module, ssh_module.get_hosts()) == [InventoryNode('test', labels=['a', 'b'])]
         c = ssh_module.get_hosts()
         assert self._wait(ssh_module, c) == []
 
     @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
     def test_service_ls(self, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', ['a', 'b']):
             c = ssh_module.describe_service()
             assert self._wait(ssh_module, c) == []
 
     @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
     def test_device_ls(self, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', ['a', 'b']):
             c = ssh_module.get_inventory()
-            assert self._wait(ssh_module, c) == [InventoryNode('test')]
+            assert self._wait(ssh_module, c) == [InventoryNode('test', labels=['a', 'b'])]
 
     @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_mon_update(self, _send_command, _get_connection, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', ['a']):
             c = ssh_module.update_mons(1, [parse_host_specs('test:0.0.0.0=a')])
             assert self._wait(ssh_module, c) == ["(Re)deployed mon.a on host 'test'"]
 
@@ -93,7 +93,7 @@ class TestSSH(object):
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_mgr_update(self, _send_command, _get_connection, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', ['a']):
             c = ssh_module.update_mgrs(1, [parse_host_specs('test:0.0.0.0')])
             [out] = self._wait(ssh_module, c)
             assert "(Re)deployed mgr." in out
@@ -104,7 +104,7 @@ class TestSSH(object):
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_create_osds(self, _send_command, _get_connection, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', ['a']):
             dg = DriveGroupSpec('test', DeviceSelection(paths=['']))
             c = ssh_module.create_osds(dg)
             assert self._wait(ssh_module, c) == "Created osd(s) on host 'test'"
@@ -114,7 +114,7 @@ class TestSSH(object):
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_mds(self, _send_command, _get_connection, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', []):
             ps = PlacementSpec(nodes=['test'])
             c = ssh_module.add_mds(StatelessServiceSpec('name', ps))
             [out] = self._wait(ssh_module, c)
@@ -126,7 +126,7 @@ class TestSSH(object):
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_rgw(self, _send_command, _get_connection, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', []):
             ps = PlacementSpec(nodes=['test'])
             c = ssh_module.add_rgw(RGWSpec('realm', 'zone', ps))
             [out] = self._wait(ssh_module, c)
@@ -147,7 +147,7 @@ class TestSSH(object):
     ))
     def test_remove_rgw(self, ssh_module):
         ssh_module._cluster_fsid = "fsid"
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', []):
             c = ssh_module.remove_rgw('myrgw')
             out = self._wait(ssh_module, c)
             assert out == ["Removed rgw.myrgw.foobar from host 'test'"]
@@ -157,7 +157,7 @@ class TestSSH(object):
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_rbd_mirror(self, _send_command, _get_connection, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', []):
             ps = PlacementSpec(nodes=['test'])
             c = ssh_module.add_rbd_mirror(StatelessServiceSpec('name', ps))
             [out] = self._wait(ssh_module, c)
@@ -169,7 +169,7 @@ class TestSSH(object):
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_blink_device_light(self, _send_command, _get_connection, ssh_module):
-        with self._with_host(ssh_module, 'test'):
+        with self._with_host(ssh_module, 'test', []):
             c = ssh_module.blink_device_light('ident', True, [('test', '')])
             assert self._wait(ssh_module, c) == ['Set ident light for test: on']
 
