@@ -1109,25 +1109,53 @@ sub-directories, files')
         """
         poutput(os.getcwd())
 
+    def complete_df(self, text, line, begidx, endidx):
+        """
+        auto complete of file name.
+        """
+        return self.complete_filenames(text, line, begidx, endidx)
+
+    df_parser = argparse.ArgumentParser(description='Show information about\
+                the amount of available disk space')
+    df_parser.add_argument('file', help='Name of the file', nargs='*',
+                           default=['.'], action=path_to_bytes)
+
+    @with_argparser(df_parser)
     def do_df(self, arglist):
         """
         Display the amount of available disk space for file systems
         """
-        for index, i in enumerate(ls(b".", opts='A')):
-            if index == 0:
-                poutput('{:25s}\t{:5s}\t{:15s}{:10s}{}'.format(
-                    "1K-blocks", "Used", "Available", "Use%", "Stored on"))
-            if not is_dir_exists(i.d_name):
-                statfs = cephfs.statfs(i.d_name)
-                stat = cephfs.stat(i.d_name)
-                block_size = statfs['f_blocks'] * statfs['f_bsize'] // 1024
+        header = True    # Set to true for printing header only once
+        if b'.' == arglist.file[0]:
+            arglist.file = ls(b'.')
+
+        for file in arglist.file:
+            if isinstance(file, libcephfs.DirEntry):
+                file = file.d_name
+            if file == b'.' or file == b'..':
+                continue
+            try:
+                statfs = cephfs.statfs(file)
+                stat = cephfs.stat(file)
+                block_size = statfs['f_blocks']*statfs['f_bsize'] // 1024
                 available = block_size - stat.st_size
                 use = 0
+
                 if block_size > 0:
-                    use = (stat.st_size * 100 // block_size)
-                poutput('{:25d}\t{:5d}\t{:10d}\t{:5s} {}'.format(
-                    statfs['f_fsid'], stat.st_size, available,
-                    str(int(use)) + '%', i.d_name.decode('utf-8')))
+                    use = (stat.st_size*100 // block_size)
+
+                if header:
+                    header = False
+                    poutput('{:25s}\t{:5s}\t{:15s}{:10s}{}'.format(
+                            "1K-blocks", "Used", "Available", "Use%",
+                            "Stored on"))
+
+                poutput('{:d}\t{:18d}\t{:8d}\t{:10s} {}'.format(block_size,
+                        stat.st_size, available, str(int(use)) + '%',
+                        file.decode('utf-8')))
+            except libcephfs.OSError as e:
+                perror("could not statfs {}: {}".format(file.decode('utf-8'),
+                       e.strerror))
 
     locate_parser = argparse.ArgumentParser(
         description='Find file within file system')
