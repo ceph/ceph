@@ -2172,6 +2172,11 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
         if (r < 0) {
 	  ldout(cct, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
 	}
+        r = ctl.bucket->remove_bucket_instance_info(info.bucket, info, null_yield);
+        if (r < 0) {
+          ldout(cct, 0) << "WARNING: " << __func__ << "(): failed to remove bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;
+          /* continue anyway */
+        }
       }
       /* ret == -EEXIST here */
     }
@@ -7481,13 +7486,6 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
 						                          .set_exclusive(exclusive)
 									  .set_objv_tracker(&ot)
 									  .set_mtime(mtime));
-  if (exclusive && ret == -EEXIST) {
-    int r = ctl.bucket->remove_bucket_instance_info(info.bucket, info, null_yield);
-    if (r < 0) {
-      ldout(cct, 0) << "WARNING: " << __func__ << "(): failed to remove bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;
-      /* continue anyway */
-    }
-  }
   if (ret < 0)
     return ret;
 
