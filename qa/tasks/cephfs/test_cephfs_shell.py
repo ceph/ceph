@@ -334,43 +334,40 @@ class TestSnapshots(TestCephFSShell):
         # create the snapshot - must pass
         o = self.get_cephfs_shell_cmd_output("snap create snap1 /data_dir")
         log.info("cephfs-shell output:\n{}".format(o))
-        assert(o == "")
+        self.assertEqual("", o)
         o = self.mount_a.stat(sdn)
         log.info("mount_a output:\n{}".format(o))
-        assert(('st_mode' in str(o)) == True)
+        self.assertIn('st_mode', o)
 
         # create the same snapshot again - must fail with an error message
         o = self.get_cephfs_shell_cmd_error("snap create snap1 /data_dir")
         log.info("cephfs-shell output:\n{}".format(o))
-        o = o.split('\n')
-        assert(o[0] == "ERROR: snapshot 'snap1' already exists")
+        self.assertIn("snapshot 'snap1' already exists", o)
         o = self.mount_a.stat(sdn)
         log.info("mount_a output:\n{}".format(o))
-        assert(('st_mode' in str(o)) == True)
+        self.assertIn('st_mode', o)
 
         # delete the snapshot - must pass
         o = self.get_cephfs_shell_cmd_output("snap delete snap1 /data_dir")
         log.info("cephfs-shell output:\n{}".format(o))
-        assert(o == "")
+        self.assertEqual("", o)
         try:
             o = self.mount_a.stat(sdn)
         except:
             # snap dir should not exist anymore
             pass
         log.info("mount_a output:\n{}".format(o))
-        assert(('st_mode' in str(o)) == False)
+        self.assertNotIn('st_mode', o)
 
         # delete the same snapshot again - must fail with an error message
         o = self.get_cephfs_shell_cmd_error("snap delete snap1 /data_dir")
-        o = o.strip()
-        o = o.split('\n')
-        assert(o[0] == "ERROR: 'snap1': no such snapshot")
+        self.assertIn("'snap1': no such snapshot", o)
         try:
             o = self.mount_a.stat(sdn)
         except:
             pass
         log.info("mount_a output:\n{}".format(o))
-        assert(('st_mode' in str(o)) == False)
+        self.assertNotIn('st_mode', o)
 
 class TestCD(TestCephFSShell):
     CLIENTS_REQUIRED = 1
@@ -740,7 +737,6 @@ class TestMisc(TestCephFSShell):
         log.info("output:\n{}".format(o))
 
 class TestConfReading(TestCephFSShell):
-
     def test_reading_conf_opt(self):
         """
         Read conf without duplicate sections/options.
