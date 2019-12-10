@@ -639,6 +639,47 @@ class TestDU(TestCephFSShell):
                         "expected_output -\n{}\ndu_output -\n{}\n".format(
                         expected_output, du_output)
 
+
+class TestDF(TestCephFSShell):
+    def validate_df(self, filename):
+        df_output = self.get_cephfs_shell_cmd_output('df '+filename)
+        log.info("cephfs-shell df output:\n{}".format(df_output))
+
+        shell_df = df_output.splitlines()[1].split()
+
+        block_size = int(self.mount_a.df()["total"]) // 1024
+        log.info("cephfs df block size output:{}\n".format(block_size))
+
+        st_size = int(self.mount_a.stat(filename)["st_size"])
+        log.info("cephfs stat used output:{}".format(st_size))
+        log.info("cephfs available:{}\n".format(block_size - st_size))
+
+        self.assertTupleEqual((block_size, st_size, block_size - st_size),
+            (int(shell_df[0]), int(shell_df[1]) , int(shell_df[2])))
+
+    def test_df_with_no_args(self):
+        expected_output = ''
+        df_output = self.get_cephfs_shell_cmd_output('df')
+        assert df_output == expected_output
+
+    def test_df_for_valid_directory(self):
+        dir_name = 'dir1'
+        mount_output = self.mount_a.run_shell('mkdir ' + dir_name)
+        log.info("cephfs-shell mount output:\n{}".format(mount_output))
+        self.validate_df(dir_name)
+
+    def test_df_for_invalid_directory(self):
+        dir_abspath = path.join(self.mount_a.mountpoint, 'non-existent-dir')
+        proc = self.run_cephfs_shell_cmd('df ' + dir_abspath)
+        assert proc.stderr.getvalue().find('error in stat') != -1
+
+    def test_df_for_valid_file(self):
+        s = 'df test' * 14145016
+        o = self.get_cephfs_shell_cmd_output("put - dumpfile", stdin=s)
+        log.info("cephfs-shell output:\n{}".format(o))
+        self.validate_df("dumpfile")
+
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
