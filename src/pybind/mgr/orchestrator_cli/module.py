@@ -22,8 +22,16 @@ import orchestrator
 
 class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = [
-        {'name': 'orchestrator'}
+        {
+            'name': 'orchestrator',
+            'default': None,
+            'desc': 'Orchestrator backend',
+            'enum_allowed': ['ssh', 'rook', 'ansible', 'deepsea',
+                             'test_orchestrator'],
+            'runtime': True,
+        },
     ]
+    NATIVE_OPTIONS = []
 
     def __init__(self, *args, **kwargs):
         super(OrchestratorCli, self).__init__(*args, **kwargs)
@@ -718,3 +726,14 @@ Usage:
 
         c = orchestrator.TrivialReadCompletion(result=True)
         assert c.has_result
+
+    @orchestrator._cli_write_command(
+        'upgrade check',
+        'name=image,type=CephString,req=false '
+        'name=ceph_version,type=CephString,req=false',
+        desc='Check service versions vs available and target containers')
+    def _upgrade_check(self, image=None, ceph_version=None):
+        completion = self.upgrade_check(image=image, version=ceph_version)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
