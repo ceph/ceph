@@ -591,6 +591,22 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
   std::string outs;
   bufferlist outbl;
 
+  // If someone is using a closed session for sending commands (e.g.
+  // the ceph CLI) then we should feel free to clean up this connection
+  // as soon as we've sent them a response.
+  const bool live_session =
+    session->get_state_seq() > 0 &&
+    mds_rank &&
+    mds_rank->sessionmap.get_session(session->info.inst.name);
+
+  if (!live_session) {
+    // This session only existed to issue commands, so terminate it
+    // as soon as we can.
+    ceph_assert(session->is_closed());
+    session->get_connection()->mark_disposable();
+  }
+  priv.reset();
+
   if (!session->auth_caps.allow_all()) {
     dout(1) << __func__
       << ": received command from client without `tell` capability: "
@@ -609,22 +625,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
     cct->get_admin_socket()->queue_tell_command(m);
     return;
   }
-
-  // If someone is using a closed session for sending commands (e.g.
-  // the ceph CLI) then we should feel free to clean up this connection
-  // as soon as we've sent them a response.
-  const bool live_session =
-    session->get_state_seq() > 0 &&
-    mds_rank &&
-    mds_rank->sessionmap.get_session(session->info.inst.name);
-
-  if (!live_session) {
-    // This session only existed to issue commands, so terminate it
-    // as soon as we can.
-    ceph_assert(session->is_closed());
-    session->get_connection()->mark_disposable();
-  }
-  priv.reset();
 
   auto reply = make_message<MCommandReply>(r, outs);
   reply->set_tid(m->get_tid());
