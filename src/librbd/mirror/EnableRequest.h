@@ -46,8 +46,11 @@ private:
    * GET_MIRROR_IMAGE * * * * * * *
    *    |                         * (on error)
    *    v                         *
-   * GET_TAG_OWNER  * * * * * * * *
+   * GET_FEATURES * * * * * * * * *
    *    |                         *
+   *    v                         *
+   * GET_TAG_OWNER  * * * * * * * *
+   *    |  (skip if not needed)   *
    *    v                         *
    * SET_MIRROR_IMAGE * * * * * * *
    *    |                         *
@@ -77,6 +80,9 @@ private:
 
   void send_get_mirror_image();
   Context *handle_get_mirror_image(int *result);
+
+  void send_get_features();
+  Context *handle_get_features(int *result);
 
   void send_get_tag_owner();
   Context *handle_get_tag_owner(int *result);

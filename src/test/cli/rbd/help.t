@@ -87,6 +87,7 @@
                                         mirroring.
       mirror image resync               Force resync to primary image for RBD
                                         mirroring.
+      mirror image snapshot             Create RBD mirroring image snapshot.
       mirror image status               Show RBD mirroring status for an image.
       mirror pool demote                Demote all primary images in the pool.
       mirror pool disable               Disable RBD mirroring by default within a
@@ -1578,6 +1579,22 @@
                                  <image-spec> 
   
   Force resync to primary image for RBD mirroring.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+  
+  rbd help mirror image snapshot
+  usage: rbd mirror image snapshot [--pool <pool>] [--namespace <namespace>] 
+                                   [--image <image>] 
+                                   <image-spec> 
+  
+  Create RBD mirroring image snapshot.
   
   Positional arguments
     <image-spec>         image specification

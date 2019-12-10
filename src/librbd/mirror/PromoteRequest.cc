@@ -10,6 +10,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/mirror/GetInfoRequest.h"
+#include "librbd/mirror/snapshot/PromoteRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -72,7 +73,16 @@ void PromoteRequest<I>::promote() {
 
   auto ctx = create_context_callback<
     PromoteRequest<I>, &PromoteRequest<I>::handle_promote>(this);
-  Journal<I>::promote(&m_image_ctx, ctx);
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    Journal<I>::promote(&m_image_ctx, ctx);
+  } else if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    auto req = mirror::snapshot::PromoteRequest<I>::create(&m_image_ctx,
+                                                           m_force, ctx);
+    req->send();
+  } else {
+    lderr(cct) << "unknown image mirror mode: " << m_mirror_image.mode << dendl;
+    finish(-EOPNOTSUPP);
+  }
 }
 
 template <typename I>

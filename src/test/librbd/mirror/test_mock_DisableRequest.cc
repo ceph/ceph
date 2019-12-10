@@ -10,6 +10,7 @@
 #include "librbd/MirroringWatcher.h"
 #include "librbd/journal/PromoteRequest.h"
 #include "librbd/mirror/DisableRequest.h"
+#include "librbd/mirror/GetInfoRequest.h"
 
 namespace librbd {
 
@@ -21,24 +22,6 @@ struct MockTestImageCtx : public MockImageCtx {
 };
 
 } // anonymous namespace
-
-template <>
-struct Journal<librbd::MockTestImageCtx> {
-  static Journal *s_instance;
-  static void is_tag_owner(librbd::MockTestImageCtx *, bool *is_primary,
-                           Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->is_tag_owner(is_primary, on_finish);
-  }
-
-  Journal() {
-    s_instance = this;
-  }
-
-  MOCK_METHOD2(is_tag_owner, void(bool*, Context*));
-};
-
-Journal<librbd::MockTestImageCtx> *Journal<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 template <>
 struct MirroringWatcher<librbd::MockTestImageCtx> {
@@ -89,11 +72,44 @@ PromoteRequest<librbd::MockTestImageCtx> *PromoteRequest<librbd::MockTestImageCt
 
 } // namespace journal
 
+namespace mirror {
+
+template <>
+struct GetInfoRequest<librbd::MockTestImageCtx> {
+  cls::rbd::MirrorImage *mirror_image;
+  PromotionState *promotion_state;
+  Context *on_finish = nullptr;
+  static GetInfoRequest *s_instance;
+  static GetInfoRequest *create(librbd::MockTestImageCtx &,
+                                cls::rbd::MirrorImage *mirror_image,
+                                PromotionState *promotion_state,
+                                Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->mirror_image = mirror_image;
+    s_instance->promotion_state = promotion_state;
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  GetInfoRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+GetInfoRequest<librbd::MockTestImageCtx> *GetInfoRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+} // namespace mirror
 } // namespace librbd
 
 // template definitions
 #include "librbd/mirror/DisableRequest.cc"
 template class librbd::mirror::DisableRequest<librbd::MockTestImageCtx>;
+
+ACTION_P(TestFeatures, image_ctx) {
+  return ((image_ctx->features & arg0) != 0);
+}
 
 namespace librbd {
 namespace mirror {
@@ -101,8 +117,8 @@ namespace mirror {
 using ::testing::_;
 using ::testing::DoAll;
 using ::testing::InSequence;
+using ::testing::Invoke;
 using ::testing::Return;
-using ::testing::SetArgPointee;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
@@ -112,27 +128,24 @@ public:
   typedef Journal<MockTestImageCtx> MockJournal;
   typedef MirroringWatcher<MockTestImageCtx> MockMirroringWatcher;
   typedef journal::PromoteRequest<MockTestImageCtx> MockPromoteRequest;
+  typedef mirror::GetInfoRequest<MockTestImageCtx> MockGetInfoRequest;
 
-  void expect_get_mirror_image(MockTestImageCtx &mock_image_ctx,
-                               const cls::rbd::MirrorImage &mirror_image,
-                               int r) {
-    using ceph::encode;
-    bufferlist bl;
-    encode(mirror_image, bl);
+  void expect_get_mirror_info(MockTestImageCtx &mock_image_ctx,
+                              MockGetInfoRequest &mock_get_info_request,
+                              const cls::rbd::MirrorImage &mirror_image,
+                              PromotionState promotion_state, int r) {
 
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"),
-                     _, _, _))
-      .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(bl)),
-                      Return(r)));
-  }
-
-  void expect_is_tag_owner(MockTestImageCtx &mock_image_ctx,
-                           MockJournal &mock_journal,
-                           bool is_primary, int r) {
-    EXPECT_CALL(mock_journal, is_tag_owner(_, _))
-      .WillOnce(DoAll(SetArgPointee<0>(is_primary),
-                      WithArg<1>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
+    EXPECT_CALL(mock_get_info_request, send())
+      .WillOnce(
+        Invoke([this, &mock_image_ctx, &mock_get_info_request, mirror_image,
+                promotion_state, r]() {
+                 if (r == 0) {
+                   *mock_get_info_request.mirror_image = mirror_image;
+                   *mock_get_info_request.promotion_state = promotion_state;
+                 }
+                 mock_image_ctx.op_work_queue->queue(
+                   mock_get_info_request.on_finish, r);
+               }));
   }
 
   void expect_set_mirror_image(MockTestImageCtx &mock_image_ctx, int r) {
@@ -215,7 +228,6 @@ TEST_F(TestMockMirrorDisableRequest, Success) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
 
   expect_op_work_queue(mock_image_ctx);
@@ -223,10 +235,12 @@ TEST_F(TestMockMirrorDisableRequest, Success) {
   expect_snap_remove(mock_image_ctx, "snap 2", 0);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -261,16 +275,17 @@ TEST_F(TestMockMirrorDisableRequest, SuccessNoRemove) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -290,17 +305,18 @@ TEST_F(TestMockMirrorDisableRequest, SuccessNonPrimary) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
   MockPromoteRequest mock_promote_request;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, false, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -325,16 +341,17 @@ TEST_F(TestMockMirrorDisableRequest, NonPrimaryError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, false, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
 
   C_SaferCond ctx;
   auto req = new MockDisableRequest(&mock_image_ctx, false, false, &ctx);
@@ -342,47 +359,28 @@ TEST_F(TestMockMirrorDisableRequest, NonPrimaryError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockMirrorDisableRequest, MirrorImageGetError) {
+TEST_F(TestMockMirrorDisableRequest, GetMirrorInfoError) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx, {}, -EBADMSG);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, -EINVAL);
 
   C_SaferCond ctx;
   auto req = new MockDisableRequest(&mock_image_ctx, false, true, &ctx);
   req->send();
-  ASSERT_EQ(-EBADMSG, ctx.wait());
-}
-
-TEST_F(TestMockMirrorDisableRequest, IsTagOwnerError) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
-
-  expect_op_work_queue(mock_image_ctx);
-
-  InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, -EBADMSG);
-
-  C_SaferCond ctx;
-  auto req = new MockDisableRequest(&mock_image_ctx, false, true, &ctx);
-  req->send();
-  ASSERT_EQ(-EBADMSG, ctx.wait());
+  ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 TEST_F(TestMockMirrorDisableRequest, MirrorImageSetError) {
@@ -392,15 +390,16 @@ TEST_F(TestMockMirrorDisableRequest, MirrorImageSetError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, -ENOENT);
 
   C_SaferCond ctx;
@@ -416,17 +415,18 @@ TEST_F(TestMockMirrorDisableRequest, JournalPromoteError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
   MockPromoteRequest mock_promote_request;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, false, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -446,16 +446,17 @@ TEST_F(TestMockMirrorDisableRequest, JournalClientListError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -475,7 +476,6 @@ TEST_F(TestMockMirrorDisableRequest, SnapRemoveError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
 
   expect_op_work_queue(mock_image_ctx);
@@ -483,10 +483,12 @@ TEST_F(TestMockMirrorDisableRequest, SnapRemoveError) {
   expect_snap_remove(mock_image_ctx, "snap 2", -EPERM);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -515,7 +517,6 @@ TEST_F(TestMockMirrorDisableRequest, JournalClientUnregisterError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
 
   expect_op_work_queue(mock_image_ctx);
@@ -523,10 +524,12 @@ TEST_F(TestMockMirrorDisableRequest, JournalClientUnregisterError) {
   expect_snap_remove(mock_image_ctx, "snap 2", 0);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -556,16 +559,17 @@ TEST_F(TestMockMirrorDisableRequest, MirrorImageRemoveError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal;
   MockMirroringWatcher mock_mirroring_watcher;
 
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mirror_image(mock_image_ctx,
-                          {"global id", cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                          0);
-  expect_is_tag_owner(mock_image_ctx, mock_journal, true, 0);
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_PRIMARY, 0);
   expect_set_mirror_image(mock_image_ctx, 0);
   expect_notify_image_updated(mock_image_ctx, mock_mirroring_watcher,
                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
@@ -581,4 +585,3 @@ TEST_F(TestMockMirrorDisableRequest, MirrorImageRemoveError) {
 
 } // namespace mirror
 } // namespace librbd
-

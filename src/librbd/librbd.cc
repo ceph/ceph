@@ -2333,6 +2333,34 @@ namespace librbd {
                                                         original_name);
   }
 
+  int Image::snap_get_mirror_primary_namespace(
+      uint64_t snap_id, snap_mirror_primary_namespace_t *mirror_snap,
+      size_t mirror_snap_size) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    if (mirror_snap_size != sizeof(snap_mirror_primary_namespace_t)) {
+      return -ERANGE;
+    }
+
+    int r = librbd::api::Snapshot<>::get_mirror_primary_namespace(
+        ictx, snap_id, mirror_snap);
+    return r;
+  }
+
+  int Image::snap_get_mirror_non_primary_namespace(
+      uint64_t snap_id, snap_mirror_non_primary_namespace_t *mirror_snap,
+      size_t mirror_snap_size) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    if (mirror_snap_size != sizeof(snap_mirror_non_primary_namespace_t)) {
+      return -ERANGE;
+    }
+
+    int r = librbd::api::Snapshot<>::get_mirror_non_primary_namespace(
+        ictx, snap_id, mirror_snap);
+    return r;
+  }
+
   int Image::snap_set_limit(uint64_t limit)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -2782,6 +2810,12 @@ namespace librbd {
     return librbd::api::Mirror<>::image_resync(ictx);
   }
 
+  int Image::mirror_image_create_snapshot(uint64_t *snap_id)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Mirror<>::image_snapshot_create(ictx, snap_id);
+  }
+
   int Image::mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                                    size_t info_size) {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -2791,6 +2825,12 @@ namespace librbd {
     }
 
     return librbd::api::Mirror<>::image_get_info(ictx, mirror_image_info);
+  }
+
+  int Image::mirror_image_get_mode(mirror_image_mode_t *mode) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    return librbd::api::Mirror<>::image_get_mode(ictx, mode);
   }
 
   int Image::mirror_image_get_global_status(
@@ -2875,6 +2915,16 @@ namespace librbd {
       ictx, mirror_image_info,
       new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
                           get_aio_completion(c)));
+    return 0;
+  }
+
+  int Image::aio_mirror_image_get_mode(mirror_image_mode_t *mode,
+                                       RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    librbd::api::Mirror<>::image_get_mode(
+      ictx, mode, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                      get_aio_completion(c)));
     return 0;
   }
 
@@ -6131,6 +6181,13 @@ extern "C" int rbd_mirror_image_resync(rbd_image_t image)
   return librbd::api::Mirror<>::image_resync(ictx);
 }
 
+extern "C" int rbd_mirror_image_create_snapshot(rbd_image_t image,
+                                                uint64_t *snap_id)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Mirror<>::image_snapshot_create(ictx, snap_id);
+}
+
 extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
                                          rbd_mirror_image_info_t *mirror_image_info,
                                          size_t info_size)
@@ -6149,6 +6206,14 @@ extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
 
   mirror_image_info_cpp_to_c(cpp_mirror_image, mirror_image_info);
   return 0;
+}
+
+extern "C" int rbd_mirror_image_get_mode(rbd_image_t image,
+                                         rbd_mirror_image_mode_t *mode)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+
+  return librbd::api::Mirror<>::image_get_mode(ictx, mode);
 }
 
 extern "C" int rbd_mirror_image_get_global_status(
@@ -6254,6 +6319,18 @@ extern "C" int rbd_aio_mirror_image_get_info(rbd_image_t image,
                               get_aio_completion(comp)));
   librbd::api::Mirror<>::image_get_info(
     ictx, &ctx->cpp_mirror_image_info, ctx);
+  return 0;
+}
+
+extern "C" int rbd_aio_mirror_image_get_mode(rbd_image_t image,
+                                             rbd_mirror_image_mode_t *mode,
+                                             rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  librbd::api::Mirror<>::image_get_mode(
+    ictx, mode, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                    get_aio_completion(comp)));
   return 0;
 }
 
@@ -6781,7 +6858,6 @@ extern "C" int rbd_snap_get_group_namespace(rbd_image_t image, uint64_t snap_id,
 extern "C" int rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_snap,
                                                 size_t snap_group_namespace_size) {
   if (snap_group_namespace_size != sizeof(rbd_snap_group_namespace_t)) {
-    tracepoint(librbd, snap_get_group_namespace_exit, -ERANGE);
     return -ERANGE;
   }
 
@@ -6809,6 +6885,90 @@ extern "C" int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
   strcpy(original_name, cpp_original_name.c_str());
   return 0;
 }
+
+extern "C" int rbd_snap_get_mirror_primary_namespace(
+    rbd_image_t image, uint64_t snap_id,
+    rbd_snap_mirror_primary_namespace_t *mirror_snap,
+    size_t mirror_snap_size) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+
+  if (mirror_snap_size != sizeof(rbd_snap_mirror_primary_namespace_t)) {
+    return -ERANGE;
+  }
+
+  librbd::snap_mirror_primary_namespace_t mirror_namespace;
+  int r = librbd::api::Snapshot<>::get_mirror_primary_namespace(
+      ictx, snap_id, &mirror_namespace);
+  if (r < 0) {
+    return r;
+  }
+
+  mirror_snap->demoted = mirror_namespace.demoted;
+  mirror_snap->mirror_peer_uuids_count =
+    mirror_namespace.mirror_peer_uuids.size();
+  size_t len = 0;
+  for (auto &peer : mirror_namespace.mirror_peer_uuids) {
+    len += peer.size() + 1;
+  }
+  mirror_snap->mirror_peer_uuids = (char *)malloc(len);
+  char *p = mirror_snap->mirror_peer_uuids;
+  for (auto &peer : mirror_namespace.mirror_peer_uuids) {
+    strncpy(p, peer.c_str(), peer.size() + 1);
+    p += peer.size() + 1;
+  }
+
+  return 0;
+}
+
+extern "C" int rbd_snap_mirror_primary_namespace_cleanup(
+    rbd_snap_mirror_primary_namespace_t *mirror_snap,
+    size_t mirror_snap_size) {
+  if (mirror_snap_size != sizeof(rbd_snap_mirror_primary_namespace_t)) {
+    return -ERANGE;
+  }
+
+  free(mirror_snap->mirror_peer_uuids);
+  return 0;
+}
+
+extern "C" int rbd_snap_get_mirror_non_primary_namespace(
+    rbd_image_t image, uint64_t snap_id,
+    rbd_snap_mirror_non_primary_namespace_t *mirror_snap,
+    size_t mirror_snap_size) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+
+  if (mirror_snap_size != sizeof(rbd_snap_mirror_non_primary_namespace_t)) {
+    return -ERANGE;
+  }
+
+  librbd::snap_mirror_non_primary_namespace_t mirror_namespace;
+  int r = librbd::api::Snapshot<>::get_mirror_non_primary_namespace(
+      ictx, snap_id, &mirror_namespace);
+  if (r < 0) {
+    return r;
+  }
+
+  mirror_snap->primary_mirror_uuid =
+    strdup(mirror_namespace.primary_mirror_uuid.c_str());
+  mirror_snap->primary_snap_id = mirror_namespace.primary_snap_id;
+  mirror_snap->copied = mirror_namespace.copied;
+  mirror_snap->last_copied_object_number =
+    mirror_namespace.last_copied_object_number;
+
+  return 0;
+}
+
+extern "C" int rbd_snap_mirror_non_primary_namespace_cleanup(
+    rbd_snap_mirror_non_primary_namespace_t *mirror_snap,
+    size_t mirror_snap_size) {
+  if (mirror_snap_size != sizeof(rbd_snap_mirror_non_primary_namespace_t)) {
+    return -ERANGE;
+  }
+
+  free(mirror_snap->primary_mirror_uuid);
+  return 0;
+}
+
 extern "C" int rbd_watchers_list(rbd_image_t image,
 				 rbd_image_watcher_t *watchers,
 				 size_t *max_watchers) {

@@ -74,6 +74,18 @@ namespace librbd {
   } snap_group_namespace_t;
 
   typedef struct {
+    bool demoted;
+    std::set<std::string> mirror_peer_uuids;
+  } snap_mirror_primary_namespace_t;
+
+  typedef struct {
+    std::string primary_mirror_uuid;
+    uint64_t primary_snap_id;
+    bool copied;
+    uint64_t last_copied_object_number;
+  } snap_mirror_non_primary_namespace_t;
+
+  typedef struct {
     std::string client;
     std::string cookie;
     std::string address;
@@ -96,6 +108,7 @@ namespace librbd {
     time_t last_seen;
   } mirror_peer_site_t;
 
+  typedef rbd_mirror_image_mode_t mirror_image_mode_t;
   typedef rbd_mirror_image_state_t mirror_image_state_t;
 
   typedef struct {
@@ -602,6 +615,12 @@ public:
                                snap_group_namespace_t *group_namespace,
                                size_t snap_group_namespace_size);
   int snap_get_trash_namespace(uint64_t snap_id, std::string* original_name);
+  int snap_get_mirror_primary_namespace(
+      uint64_t snap_id, snap_mirror_primary_namespace_t *mirror_namespace,
+      size_t snap_mirror_namespace_size);
+  int snap_get_mirror_non_primary_namespace(
+      uint64_t snap_id, snap_mirror_non_primary_namespace_t *mirror_namespace,
+      size_t snap_mirror_namespace_size);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
@@ -714,8 +733,10 @@ public:
   int mirror_image_promote(bool force);
   int mirror_image_demote();
   int mirror_image_resync();
+  int mirror_image_create_snapshot(uint64_t *snap_id);
   int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                             size_t info_size);
+  int mirror_image_get_mode(mirror_image_mode_t *mode);
   int mirror_image_get_global_status(
       mirror_image_global_status_t *mirror_image_global_status,
       size_t status_size);
@@ -727,6 +748,8 @@ public:
   int aio_mirror_image_demote(RBD::AioCompletion *c);
   int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                                 size_t info_size, RBD::AioCompletion *c);
+  int aio_mirror_image_get_mode(mirror_image_mode_t *mode,
+                                RBD::AioCompletion *c);
   int aio_mirror_image_get_global_status(
       mirror_image_global_status_t *mirror_image_global_status,
       size_t status_size, RBD::AioCompletion *c);

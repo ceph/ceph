@@ -23,6 +23,14 @@ struct Snapshot {
   static int get_trash_namespace(ImageCtxT *ictx, uint64_t snap_id,
                                  std::string *original_name);
 
+  static int get_mirror_primary_namespace(
+      ImageCtxT *ictx, uint64_t snap_id,
+      snap_mirror_primary_namespace_t *mirror_snap);
+
+  static int get_mirror_non_primary_namespace(
+      ImageCtxT *ictx, uint64_t snap_id,
+      snap_mirror_non_primary_namespace_t *mirror_snap);
+
   static int get_namespace_type(ImageCtxT *ictx, uint64_t snap_id,
 			        snap_namespace_type_t *namespace_type);
 

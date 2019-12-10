@@ -10,6 +10,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/mirror/snapshot/SetImageStateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -220,9 +221,7 @@ Context *SnapshotCreateRequest<I>::send_create_object_map() {
   if (image_ctx.object_map == nullptr || m_skip_object_map) {
     image_ctx.image_lock.unlock_shared();
 
-    update_snap_context();
-    image_ctx.io_work_queue->unblock_writes();
-    return this->create_context_finisher(0);
+    return send_create_image_state();
   }
 
   CephContext *cct = image_ctx.cct;
@@ -238,6 +237,46 @@ Context *SnapshotCreateRequest<I>::send_create_object_map() {
 
 template <typename I>
 Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to snapshot object map: "
+               << cpp_strerror(*result) << dendl;
+
+    update_snap_context();
+    image_ctx.io_work_queue->unblock_writes();
+    return this->create_context_finisher(*result);
+  }
+
+  return send_create_image_state();
+}
+
+template <typename I>
+Context *SnapshotCreateRequest<I>::send_create_image_state() {
+  I &image_ctx = this->m_image_ctx;
+  auto type = cls::rbd::get_snap_namespace_type(m_snap_namespace);
+
+  if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY) {
+    update_snap_context();
+    image_ctx.io_work_queue->unblock_writes();
+    return this->create_context_finisher(0);
+  }
+
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+
+  auto req = mirror::snapshot::SetImageStateRequest<I>::create(
+      &image_ctx, m_snap_id, create_context_callback<
+      SnapshotCreateRequest<I>,
+      &SnapshotCreateRequest<I>::handle_create_image_state>(this));
+  req->send();
+  return nullptr;
+}
+
+template <typename I>
+Context *SnapshotCreateRequest<I>::handle_create_image_state(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
