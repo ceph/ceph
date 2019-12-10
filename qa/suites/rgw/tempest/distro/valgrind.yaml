@@ -1,4 +1,4 @@
-os_type: centos
+# os_type: centos
 overrides:
   rgw:
     client.0:
