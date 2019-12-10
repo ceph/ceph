@@ -111,7 +111,7 @@ def task(ctx, config):
             'source',
             'venv/bin/activate',
             run.Raw(';'),
-            run.Raw('pip install --upgrade setuptools'),
+            run.Raw('pip3 install --upgrade setuptools'),
             run.Raw(';'),
             'deactivate'])
 
@@ -120,7 +120,7 @@ def task(ctx, config):
             'source',
             'venv/bin/activate',
             run.Raw(';'),
-            run.Raw('pip install boto boto3 names PyYaml psutil ConfigParser'),
+            run.Raw('pip3 install boto boto3 names PyYaml psutil ConfigParser'),
             run.Raw(';'),
             'deactivate'])
 

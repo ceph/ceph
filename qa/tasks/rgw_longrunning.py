@@ -162,7 +162,7 @@ def task(ctx, config):
             'source',
             'venv/bin/activate',
             run.Raw(';'),
-            run.Raw('pip install boto boto3 names PyYaml ConfigParser'),
+            run.Raw('pip3 install boto boto3 names PyYaml ConfigParser'),
             run.Raw(';'),
             'deactivate'])
     time.sleep(60)
