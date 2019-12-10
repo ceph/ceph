@@ -1476,11 +1476,7 @@ def command_bootstrap():
 
 def command_deploy():
     # type: () -> None
-    if '.' in args.name:
-        (daemon_type, daemon_id) = args.name.split('.', 1)
-    else:
-        daemon_type = args.name
-        daemon_id = get_hostname()
+    (daemon_type, daemon_id) = args.name.split('.', 1)
     
     crash_keyring = None
     
@@ -1862,11 +1858,7 @@ def command_adopt():
 
 def command_rm_daemon():
     # type: () -> None
-    if '.' in args.name:
-        (daemon_type, daemon_id) = args.name.split('.', 1)
-    else:
-        daemon_type = args.name
-        daemon_id = get_hostname()
+    (daemon_type, daemon_id) = args.name.split('.', 1)
 
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise Error('must pass --force to proceed: '
