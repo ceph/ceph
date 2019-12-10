@@ -676,7 +676,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * the proposal delay being 0.0 seconds. This is key for PaxosService to
      * trigger the proposal immediately.
      * 0.0 seconds of delay.
-     *
+n     *
      * From the above, there's no point in performing further checks on the
      * pending_map, as we don't ever have multiple proposals in-flight in
      * this service. As we've established the committed state contains the
@@ -691,10 +691,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
     entity_addrvec_t addrs = pending_map.get_addrs(name);
     pending_map.remove(name);
-    int removed_rank = pending_map.get_rank(name);
-    if (removed_rank >= 0) {
-      pending_map.removed_ranks.push_back(removed_rank);
-    }
     pending_map.last_changed = ceph_clock_now();
     ss << "removing mon." << name << " at " << addrs
        << ", there will be " << pending_map.size() << " monitors" ;
@@ -878,6 +874,49 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
     err = 0;
     pending_map.strategy = strategy;
+    propose = true;
+  } else if (prefix == "mon add disallowed_leader") {
+    string name;
+    if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (pending_map.disallowed_leaders.count(name)) {
+      ss << "mon." << name << " is already disallowed";
+      err = 0;
+      goto reply;
+    }
+    if (pending_map.disallowed_leaders.size() == pending_map.size() - 1) {
+      ss << "mon." << name << " is the only remaining allowed leader!";
+      err = -EINVAL;
+      goto reply;
+    }
+    pending_map.disallowed_leaders.insert(name);
+    err = 0;
+    propose = true;
+  } else if (prefix == "mon rm disallowed_leader") {
+    string name;
+    if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (!pending_map.disallowed_leaders.count(name)) {
+      ss << "mon." << name << " is already allowed";
+      err = 0;
+      goto reply;
+    }
+    pending_map.disallowed_leaders.erase(name);
+    err = 0;
     propose = true;
   } else {
     ss << "unknown command " << prefix;

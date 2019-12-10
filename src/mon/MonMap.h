@@ -154,6 +154,7 @@ class MonMap {
     CONNECTIVITY = 3 // includes DISALLOW, extends to prefer stronger connections
   };
   election_strategy strategy = CLASSIC;
+  std::set<std::string> disallowed_leaders; // can't be leader under CONNECTIVITY/DISALLOW
 
 public:
   void calc_legacy_ranks();
@@ -240,8 +241,13 @@ public:
   void remove(const std::string &name) {
     // this must match what we do in ConnectionTracker::notify_rank_removed
     ceph_assert(mon_info.count(name));
+    int rank = get_rank(name);
     mon_info.erase(name);
+    disallowed_leaders.erase(name);
     ceph_assert(mon_info.count(name) == 0);
+    if (rank >= 0 ) {
+      removed_ranks.push_back(rank);
+    }
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
       ranks.erase(std::find(ranks.begin(), ranks.end(), name));

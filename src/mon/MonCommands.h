@@ -472,6 +472,14 @@ COMMAND("mon set election_strategy " \
 	"name=strategy,type=CephString", \
 	"set the election strategy to use; choices CLASSIC, DISALLOW, CONNECTIVITY", \
 	"mon", "rw")
+COMMAND("mon add disallowed_leader " \
+	"name=name,type=CephString", \
+	"prevent the named mon from being a leader", \
+	"mon", "rw")
+COMMAND("mon rm disallowed_leader " \
+	"name=name,type=CephString", \
+	"allow the named mon to be a leader again", \
+	"mon", "rw")
 
 /*
  * OSD commands
