@@ -11255,6 +11255,10 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
     int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
     ceph_assert(r == 0);
     txc->state = TransContext::STATE_KV_SUBMITTED;
+    if (txc->osr->kv_submitted_waiters) {
+      std::lock_guard l(txc->osr->qlock);
+      txc->osr->qcond.notify_all();
+    }
 
 #if defined(WITH_LTTNG)
     if (txc->tracing) {
@@ -11727,12 +11731,6 @@ void BlueStore::_kv_sync_thread()
 	if (txc->state == TransContext::STATE_KV_QUEUED) {
 	  _txc_apply_kv(txc, false);
 	  --txc->osr->kv_committing_serially;
-	  txc->state = TransContext::STATE_KV_SUBMITTED;
-	  if (txc->osr->kv_submitted_waiters) {
-	    std::lock_guard l(txc->osr->qlock);
-	    txc->osr->qcond.notify_all();
-	  }
-
 	} else {
 	  ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	}
