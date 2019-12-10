@@ -25,6 +25,4 @@ if(CPPCHECK_BIN)
     )
 
   message(STATUS "Found cppcheck. To perform static analysis using cppcheck, use: \"make cppcheck\". Results will be stored in \"cppcheck.txt\".")
-else()
-  message(STATUS "Could not find cppcheck. To perform static analysis using cppcheck install the tool (e.g. \"yum install cppcheck\").")
 endif()
