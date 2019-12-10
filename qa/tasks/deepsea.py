@@ -4,6 +4,7 @@ Task (and subtasks) for automating deployment of Ceph using DeepSea
 Linter:
     flake8 --max-line-length=100
 """
+import json
 import logging
 import time
 import yaml
@@ -17,6 +18,7 @@ from util import (
     get_remote_for_role,
     get_rpm_pkg_version,
     introspect_roles,
+    process_health_detail,
     remote_exec,
     remote_run_script_as_root,
     sudo_append_to_file,
@@ -936,10 +938,18 @@ class Orch(DeepSea):
         self.log.debug("munged config is {}".format(self.config))
 
     def __ceph_health_test(self):
+        remote = self.master_remote
         cmd = 'sudo salt-call wait.until status=HEALTH_OK timeout=900 check=1'
         if self.quiet_salt:
             cmd += ' 2> /dev/null'
-        self.master_remote.run(args=cmd)
+        try:
+            self.master_remote.run(args=cmd)
+        except CommandFailedError:
+            health_dict = json.loads(
+                              remote.sh("sudo ceph health detail --format json").rstrip()
+                          )
+            process_health_detail(health_dict, self.log, remote)
+            raise
 
     def __check_ceph_test_rpm_version(self):
         """Checks rpm version for ceph and ceph-test; logs warning if differs"""
@@ -1784,11 +1794,13 @@ class Toolbox(DeepSea):
         self.log.info("Waiting up to ->{}<- minutes for HEALTH_OK".format(timeout_minutes))
         remote = get_remote_for_role(self.ctx, "client.salt_master")
         cluster_status = ""
+        health_dict = {}
         for minute in range(1, timeout_minutes+1):
             remote.sh("sudo ceph status")
-            cluster_status = remote.sh(
-                "sudo ceph health detail --format json | jq -r '.status'"
-                ).rstrip()
+            health_dict = json.loads(
+                              remote.sh("sudo ceph health detail --format json").rstrip()
+                          )
+            cluster_status = health_dict['status']
             if cluster_status == "HEALTH_OK":
                 break
             self.log.info("Waiting for one minute for cluster to reach HEALTH_OK"
@@ -1798,6 +1810,7 @@ class Toolbox(DeepSea):
         if cluster_status == "HEALTH_OK":
             self.log.info(anchored("Cluster is healthy"))
         else:
+            process_health_detail(health_dict, self.log, remote)
             raise RuntimeError("Cluster still not healthy (current status ->{}<-) "
                                "after reaching timeout"
                                .format(cluster_status))
@@ -2027,7 +2040,7 @@ class Validation(DeepSea):
     def osd_count_check(self):
         """
         Function that checks the number of OSDs. First time it's called it saves
-        the osd count in 'deepsea_ctx' and the second time it checks if the current 
+        the osd count in 'deepsea_ctx' and the second time it checks if the current
         count is the  same.
         """
         if 'osds' in deepsea_ctx:
@@ -2042,7 +2055,6 @@ class Validation(DeepSea):
         else:
             deepsea_ctx['osds'] = self.master_remote.sh('sudo ceph osd tree'
                                                         '| grep osd | wc -l')
-
 
     def begin(self):
         self.log.debug("Processing tests: ->{}<-".format(self.config.keys()))

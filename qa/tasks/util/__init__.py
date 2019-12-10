@@ -204,6 +204,26 @@ def introspect_roles(ctx, logger, quiet=True):
             logger.info("{} == {}".format(var, ctx[var]))
 
 
+def process_health_detail(health_dict, logger, remote):
+    """
+    health_dict is the output of "ceph health detail --format json", converted
+    into a Python dictionary.
+    """
+    if health_dict['status'] == 'HEALTH_ERR':
+        logger.err("Cluster is in HEALTH_ERR status!")
+    elif health_dict['status'] == 'HEALTH_WARN':
+        logger.info("Cluster is in HEALTH_WARN status")
+    else:
+        assert False, \
+            "Cluster in {} status, which is neither HEALTH_ERR nor HEALTH_WARN".format(
+                health_dict['status']
+            )
+    failing_checks = health_dict['checks'].keys()
+    logger.info("Failing checks: {}".format(", ".join(failing_checks)))
+    if health_dict['status'] == 'HEALTH_WARN' and 'RECENT_CRASH' in failing_checks:
+        remote.sh('sudo ceph crash ls-new')
+
+
 def remote_exec(remote, cmd_str, logger, log_spec, quiet=True, rerun=False, tries=0):
     """
     Execute cmd_str and catch CommandFailedError and ConnectionLostError (and
