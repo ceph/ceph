@@ -580,11 +580,8 @@ void PeeringState::start_peering_interval(
   else
     state_clear(PG_STATE_REMAPPED);
 
-  int role = osdmap->calc_pg_role(pg_whoami.osd, acting, acting.size());
-  if (pool.info.is_replicated() || role == pg_whoami.shard)
-    set_role(role);
-  else
-    set_role(-1);
+  int role = osdmap->calc_pg_role(pg_whoami, acting);
+  set_role(role);
 
   // did acting, up, primary|acker change?
   if (!lastmap) {
@@ -737,6 +734,9 @@ void PeeringState::on_new_interval()
       continue;
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
+  psdout(20) << __func__ << " upacting_features 0x" << std::hex
+	     << upacting_features << std::dec
+	     << " from " << acting << "+" << up << dendl;
 
   psdout(20) << __func__ << " checking missing set deletes flag. missing = "
 	     << get_pg_log().get_missing() << dendl;
@@ -1129,9 +1129,13 @@ void PeeringState::send_lease()
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
   if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
+    psdout(20) << __func__ << " no-op, upacting_features 0x" << std::hex
+	       << upacting_features << std::dec
+	       << " does not include SERVER_OCTOPUS" << dendl;
     return;
   }
   if (!is_nonprimary()) {
+    psdout(20) << __func__ << " no-op, !nonprimary" << dendl;
     return;
   }
   psdout(10) << __func__ << " " << l << dendl;
@@ -2924,7 +2928,7 @@ void PeeringState::split_into(
     newacting,
     up_primary,
     primary);
-  child->role = OSDMap::calc_pg_role(pg_whoami.osd, child->acting);
+  child->role = OSDMap::calc_pg_role(pg_whoami, child->acting);
 
   // this comparison includes primary rank via pg_shard_t
   if (get_primary() != child->get_primary())
@@ -6950,9 +6954,9 @@ void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t ente
 
 ostream &operator<<(ostream &out, const PeeringState &ps) {
   out << "pg[" << ps.info
-      << " " << ps.up;
+      << " " << pg_vector_string(ps.up);
   if (ps.acting != ps.up)
-    out << "/" << ps.acting;
+    out << "/" << pg_vector_string(ps.acting);
   if (ps.is_ec_pg())
     out << "p" << ps.get_primary();
   if (!ps.async_recovery_targets.empty())

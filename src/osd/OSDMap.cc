@@ -2639,8 +2639,11 @@ void OSDMap::_pg_to_up_acting_osds(
     *acting_primary = _acting_primary;
 }
 
-int OSDMap::calc_pg_rank(int osd, const vector<int>& acting, int nrep)
+int OSDMap::calc_pg_role_broken(int osd, const vector<int>& acting, int nrep)
 {
+  // This implementation is broken for EC PGs since the osd may appear
+  // multiple times in the acting set.  See
+  // https://tracker.ceph.com/issues/43213
   if (!nrep)
     nrep = acting.size();
   for (int i=0; i<nrep; i++) 
@@ -2649,12 +2652,24 @@ int OSDMap::calc_pg_rank(int osd, const vector<int>& acting, int nrep)
   return -1;
 }
 
-int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
+int OSDMap::calc_pg_role(pg_shard_t who, const vector<int>& acting)
 {
-  return calc_pg_rank(osd, acting, nrep);
+  int nrep = acting.size();
+  if (who.shard == shard_id_t::NO_SHARD) {
+    for (int i=0; i<nrep; i++) {
+      if (acting[i] == who.osd) {
+	return i;
+      }
+    }
+  } else {
+    if (who.shard < nrep && acting[who.shard] == who.osd) {
+      return who.shard;
+    }
+  }
+  return -1;
 }
 
-bool OSDMap::primary_changed(
+bool OSDMap::primary_changed_broken(
   int oldprimary,
   const vector<int> &oldacting,
   int newprimary,
@@ -2666,8 +2681,8 @@ bool OSDMap::primary_changed(
     return true;     // was empty, now not, or vice versa
   if (oldprimary != newprimary)
     return true;     // primary changed
-  if (calc_pg_rank(oldprimary, oldacting) !=
-      calc_pg_rank(newprimary, newacting))
+  if (calc_pg_role_broken(oldprimary, oldacting) !=
+      calc_pg_role_broken(newprimary, newacting))
     return true;
   return false;      // same primary (tho replicas may have changed)
 }
