@@ -29,6 +29,8 @@ releases:
 
   mimic:
     releases:
+      - version: 13.2.8
+        released: 2019-12-13
       - version: 13.2.7
         released: 2019-11-25
       - version: 13.2.6

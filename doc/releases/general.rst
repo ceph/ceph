@@ -130,6 +130,7 @@ Release timeline
 .. _14.2.0: ../nautilus#v14-2-0-nautilus
 
 .. _Mimic: ../mimic
+.. _13.2.8: ../mimic#v13-2-8-mimic
 .. _13.2.7: ../mimic#v13-2-7-mimic
 .. _13.2.6: ../mimic#v13-2-6-mimic
 .. _13.2.5: ../mimic#v13-2-5-mimic
