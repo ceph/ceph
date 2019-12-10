@@ -2200,6 +2200,15 @@ public:
   bool needs_backfill() const;
 
   /**
+   * Returns whether a particular object can be safely read on this replica
+   */
+  bool can_serve_replica_read(const hobject_t &hoid) {
+    ceph_assert(!is_primary());
+    return !pg_log.get_log().has_write_since(
+      hoid, get_min_last_complete_ondisk());
+  }
+
+  /**
    * Returns whether all peers which might have unfound objects have been
    * queried or marked lost.
    */
