@@ -147,7 +147,6 @@ int main(int argc, const char **argv)
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
-  bool debug = false;
 
   std::string val;
   std::ostringstream err;
@@ -187,8 +186,6 @@ int main(int argc, const char **argv)
       createsimple = true;
     } else if (ceph_argparse_flag(args, i, "--health", (char*)NULL)) {
       health = true;
-    } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
-      debug = true;
     } else if (ceph_argparse_flag(args, i, "--with-default-pool", (char*)NULL)) {
       createpool = true;
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
@@ -406,55 +403,27 @@ int main(int argc, const char **argv)
       cout << "No pools available" << std::endl;
       goto skip_upmap;
     }
-    if (debug) {
-      cout << "pools ";
-      for (auto& i: pools)
-        cout << osdmap.get_pool_name(i) << " ";
-      cout << std::endl;
-    }
-    map< int, set<int64_t> > pools_by_rule;
-    for (auto&i: pools) {
-      const string& pool_name = osdmap.get_pool_name(i);
-      const pg_pool_t *p = osdmap.get_pg_pool(i);
-      const int rule = p->get_crush_rule();
-      if (!osdmap.crush->rule_exists(rule)) {
-	cout << " pool " << pool_name << " does not exist" << std::endl;
-	continue;
-      }
-      if (p->get_pg_num() > p->get_pg_num_target()) {
-	cout << "pool " << pool_name << " has pending PG(s) for merging, skipping for now" << std::endl;
-	continue;
-      }
-      if (debug) {
-        cout << "pool " << i << " rule " << rule << std::endl;
-      }
-      pools_by_rule[rule].emplace(i);
-    }
-    vector<int> rules;
-    for (auto& r: pools_by_rule)
-      rules.push_back(r.first);
     std::random_device rd;
-    std::shuffle(rules.begin(), rules.end(), std::mt19937{rd()});
-    if (debug) {
-      for (auto& r: rules)
-        cout << "rule: " << r << " " << pools_by_rule[r] << std::endl;
-    }
+    std::shuffle(pools.begin(), pools.end(), std::mt19937{rd()});
+    cout << "pools ";
+    for (auto& i: pools)
+      cout << osdmap.get_pool_name(i) << " ";
+    cout << std::endl;
     int total_did = 0;
-    int available = upmap_max;
-    for (auto& r: rules) {
-      // Assume all PGs are active+clean
-      // available = upmap_max - (num_pg - num_pg_active_clean)
+    int left = upmap_max;
+    for (auto& i: pools) {
+      set<int64_t> one_pool;
+      one_pool.insert(i);
       int did = osdmap.calc_pg_upmaps(
         g_ceph_context, upmap_deviation,
-        available, pools_by_rule[r],
+        left, one_pool,
         &pending_inc);
-      cout << "prepared " << did << " changes for pools(s) ";
-      for (auto i: pools_by_rule[r])
-        cout << osdmap.get_pool_name(i) << " ";
-      cout << std::endl;
       total_did += did;
+      left -= did;
+      if (left <= 0)
+        break;
     }
-    cout << "prepared " << total_did << " changes in total" << std::endl;
+    cout << "prepared " << total_did << "/" << upmap_max  << " changes" << std::endl;
     if (total_did > 0) {
       print_inc_upmaps(pending_inc, upmap_fd);
       if (upmap_save) {
@@ -464,7 +433,6 @@ int main(int argc, const char **argv)
       }
     } else {
       cout << "Unable to find further optimization, "
-	   << "or pool(s) pg_num is decreasing, "
 	   << "or distribution is already perfect"
 	   << std::endl;
     }
