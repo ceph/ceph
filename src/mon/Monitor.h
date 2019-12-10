@@ -216,6 +216,11 @@ public:
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
+  int quorum_age() const {
+    auto age = ceph::mono_clock::now() - quorum_since;
+    return age.count();
+  }
+
   // -- elector --
 private:
   std::unique_ptr<Paxos> paxos;
