@@ -4799,10 +4799,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
   init_pg_ondisk(rctx.transaction, pgid, pp);
 
-  int role = startmap->calc_pg_role(whoami, acting, acting.size());
-  if (!pp->is_replicated() && role != pgid.shard) {
-    role = -1;
-  }
+  int role = startmap->calc_pg_role(pg_shard_t(whoami, pgid.shard), acting);
 
   PGRef pg = _make_pg(startmap, pgid);
   pg->ch = store->create_new_collection(pg->coll);
@@ -4861,8 +4858,8 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
   if (is_mon_create) {
     pending_creates_from_mon++;
   } else {
-    bool is_primary = osdmap->get_pg_acting_rank(pgid.pgid, whoami) == 0;
-    pending_creates_from_osd.emplace(pgid.pgid, is_primary);
+    bool is_primary = osdmap->get_pg_acting_role(pgid, whoami) == 0;
+    pending_creates_from_osd.emplace(pgid, is_primary);
   }
   dout(1) << __func__ << " withhold creation of pg " << pgid
 	  << ": " << num_pgs << " >= "<< max_pgs_per_osd << dendl;
@@ -4911,8 +4908,8 @@ void OSD::resume_creating_pg()
     while (spare_pgs > 0 && pg != pending_creates_from_osd.cend()) {
       dout(20) << __func__ << " pg " << pg->first << dendl;
       vector<int> acting;
-      osdmap->pg_to_up_acting_osds(pg->first, nullptr, nullptr, &acting, nullptr);
-      service.queue_want_pg_temp(pg->first, twiddle(acting), true);
+      osdmap->pg_to_up_acting_osds(pg->first.pgid, nullptr, nullptr, &acting, nullptr);
+      service.queue_want_pg_temp(pg->first.pgid, twiddle(acting), true);
       pg = pending_creates_from_osd.erase(pg);
       do_sub_pg_creates = true;
       spare_pgs--;
@@ -8718,7 +8715,7 @@ void OSD::consume_map()
     std::lock_guard l(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.begin();
 	 pg != pending_creates_from_osd.end();) {
-      if (osdmap->get_pg_acting_rank(pg->first, whoami) < 0) {
+      if (osdmap->get_pg_acting_role(pg->first, whoami) < 0) {
 	dout(10) << __func__ << " pg " << pg->first << " doesn't map here, "
 		 << "discarding pending_create_from_osd" << dendl;
 	pg = pending_creates_from_osd.erase(pg);
@@ -8991,12 +8988,16 @@ void OSD::handle_pg_create(OpRequestRef op)
 
     dout(20) << "mkpg " << on << " e" << created << "@" << ci->second << dendl;
 
+    spg_t pgid;
+    bool mapped = osdmap->get_primary_shard(on, &pgid);
+    ceph_assert(mapped);
+
     // is it still ours?
     vector<int> up, acting;
     int up_primary = -1;
     int acting_primary = -1;
     osdmap->pg_to_up_acting_osds(on, &up, &up_primary, &acting, &acting_primary);
-    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
+    int role = osdmap->calc_pg_role(pg_shard_t(whoami, pgid.shard), acting);
 
     if (acting_primary != whoami) {
       dout(10) << "mkpg " << on << "  not acting_primary (" << acting_primary
@@ -9004,9 +9005,6 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
 
-    spg_t pgid;
-    bool mapped = osdmap->get_primary_shard(on, &pgid);
-    ceph_assert(mapped);
 
     PastIntervals pi;
     pg_history_t history;

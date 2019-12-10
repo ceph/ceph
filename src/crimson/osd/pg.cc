@@ -316,11 +316,8 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 	acting,
 	up_primary,
 	primary);
-    int rr = OSDMap::calc_pg_role(pg_whoami.osd, acting);
-    if (peering_state.get_pool().info.is_replicated() || rr == pg_whoami.shard)
-	peering_state.set_role(rr);
-    else
-	peering_state.set_role(-1);
+    int rr = OSDMap::calc_pg_role(pg_whoami, acting);
+    peering_state.set_role(rr);
 
     epoch_t epoch = get_osdmap_epoch();
     shard_services.start_operation<LocalPeeringEvent>(
