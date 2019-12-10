@@ -850,7 +850,7 @@ Unit test caveats
 .. _`integration testing`:
 .. _`integration tests`:
 
-Testing - integration tests
+Testing - Integration Tests
 ===========================
 
 Ceph has two types of tests: `make check`_ tests and integration tests.
@@ -880,7 +880,7 @@ Teuthology deploys these platforms on machines (bare-metal or
 cloud-provisioned), installs the packages on them, and deploys Ceph
 clusters on them - all as called for by the test.
 
-The nightlies
+The Nightlies
 -------------
 
 A number of integration tests are run on a regular basis in the `Sepia
@@ -894,7 +894,7 @@ test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.
 
-Testing priority
+Testing Priority
 ----------------
 
 The ``teuthology-suite`` command includes an almost mandatory option ``-p <N>``
@@ -923,7 +923,12 @@ the following recommendations should be followed:
 
 * **200 <= Priority < 1000:** Use this priority for large test runs that can be done over the course of a week.
 
-Suites inventory
+In case you don't know how many jobs would be triggered by
+``teuthology-suite`` command, use ``--dry-run`` to get a count first and then
+issue ``teuthology-suite`` command again, this time without ``--dry-run`` and
+with ``-p`` and an appropriate number as an argument to it.
+
+Suites Inventory
 ----------------
 
 The ``suites`` directory of the `ceph/qa sub-directory`_ contains
