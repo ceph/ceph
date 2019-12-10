@@ -305,7 +305,7 @@ Watch::~Watch() {
   dout(10) << "~Watch" << dendl;
   // users must have called remove() or discard() prior to this point
   ceph_assert(!obc);
-  ceph_assert(!conn);
+  ceph_assert(!is_connected());
 }
 
 Context *Watch::get_delayed_cb()
@@ -348,14 +348,14 @@ void Watch::unregister_cb()
 void Watch::got_ping(utime_t t)
 {
   last_ping = t;
-  if (conn) {
+  if (is_connected()) {
     register_cb();
   }
 }
 
 void Watch::connect(ConnectionRef con, bool _will_ping)
 {
-  if (conn == con) {
+  if (is_connected(con.get())) {
     dout(10) << __func__ << " con " << con << " - already connected" << dendl;
     return;
   }
@@ -408,7 +408,7 @@ void Watch::discard_state()
   in_progress_notifies.clear();
   unregister_cb();
   discarded = true;
-  if (conn) {
+  if (is_connected()) {
     if (auto priv = conn->get_priv(); priv) {
       auto session = static_cast<Session*>(priv.get());
       session->wstate.removeWatch(self.lock());
@@ -426,7 +426,7 @@ bool Watch::is_discarded() const
 void Watch::remove(bool send_disconnect)
 {
   dout(10) << "remove" << dendl;
-  if (send_disconnect && conn) {
+  if (send_disconnect && is_connected()) {
     bufferlist empty;
     MWatchNotify *reply(new MWatchNotify(cookie, 0, 0,
 					 CEPH_WATCH_EVENT_DISCONNECT, empty));
