@@ -45,6 +45,7 @@ import json
 import logging
 import os
 import random
+import re
 import select
 import shutil
 import socket
@@ -179,6 +180,19 @@ def call_throws(command, **kwargs):
     return out, err, ret
 
 ##################################
+
+def read_config(fn):
+    # type: (Optional[str]) -> ConfigParser
+    # bend over backwards here because py2's ConfigParser doesn't like
+    # whitespace before config option names (e.g., '\n foo = bar\n').
+    # Yeesh!
+    cp = ConfigParser()
+    if fn:
+        with open(fn, 'r') as f:
+            raw_conf = f.read()
+        nice_conf = re.sub('\n(\s)+', '\n', raw_conf)
+        cp.readfp(StringIO(nice_conf))
+    return cp
 
 def pathify(p):
     # type: (str) -> str
@@ -392,8 +406,7 @@ def get_legacy_config_fsid(cluster, legacy_dir=None):
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)
 
-    config = ConfigParser()
-    config.read(config_file)
+    config = read_config(config_file)
 
     if config.has_section('global') and config.has_option('global', 'fsid'):
         return config.get('global', 'fsid')
@@ -985,9 +998,7 @@ def command_bootstrap():
     logging.info('Cluster fsid: %s' % fsid)
 
     # config
-    cp = ConfigParser()
-    if args.config:
-        cp.read(args.config)
+    cp = read_config(args.config)
     if args.mon_ip:
         addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
         mon_ip = args.mon_ip
