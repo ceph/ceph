@@ -124,7 +124,7 @@ static ceph::spinlock debug_lock;
 
     static void operator delete(void *ptr) {
       raw_combined *raw = (raw_combined *)ptr;
-      ::free((void *)raw->data);
+      aligned_free((void *)raw->data);
     }
   };
 
@@ -176,7 +176,7 @@ static ceph::spinlock debug_lock;
 	    << " l=" << l << ", align=" << align << bendl;
     }
     ~raw_posix_aligned() override {
-      ::free(data);
+      aligned_free(data);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << bendl;
     }
     raw* clone_empty() override {

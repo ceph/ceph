@@ -292,8 +292,11 @@ int lchown(const char *path, uid_t owner, gid_t group);
 
 #ifdef __cplusplus
 }
-
 #endif
+
+// Use "aligned_free" when freeing memory allocated using posix_memalign or
+// _aligned_malloc. Using "free" will crash.
+#define aligned_free(ptr) _aligned_free(ptr)
 
 // O_CLOEXEC is not defined on Windows. Since handles aren't inherited
 // with subprocesses unless explicitly requested, we'll define this
@@ -301,9 +304,11 @@ int lchown(const char *path, uid_t owner, gid_t group);
 #define O_CLOEXEC 0
 #define SOCKOPT_VAL_TYPE char*
 
-#else
+#else /* WIN32 */
 
 #define SOCKOPT_VAL_TYPE void*
+
+#define aligned_free(ptr) free(ptr)
 
 #endif /* WIN32 */
 
