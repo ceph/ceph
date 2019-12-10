@@ -2154,6 +2154,9 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     }
 
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
+    if (ret == -ECANCELED) {
+      ret = -EEXIST;
+    }
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
       RGWBucketInfo orig_info;
