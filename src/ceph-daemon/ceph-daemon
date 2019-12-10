@@ -493,8 +493,8 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
                        config=None, keyring=None):
     # type: (str, str, Union[int, str], int, int, str, str) ->  None
-    data_dir = make_data_dir(fsid, daemon_type, daemon_id, uid, gid)
-    make_log_dir(fsid, uid, gid)
+    data_dir = make_data_dir(fsid, daemon_type, daemon_id, uid=uid, gid=gid)
+    make_log_dir(fsid)
 
     if config:
         with open(data_dir + '/config', 'w') as f:
@@ -1934,9 +1934,6 @@ def command_rm_cluster():
     call_throws(['rm', '-f', args.logrotate_dir + '/ceph-%s' % args.fsid])
 
 
-##################################
-
-
 class CustomValidation(argparse.Action):
 
     def _check_name(self, values):
@@ -1960,6 +1957,38 @@ class CustomValidation(argparse.Action):
             self._check_name(values)
             setattr(namespace, self.dest, values)
 
+
+def check_time_sync():
+    units = ['chronyd.service', 'systemd-timesyncd.service', 'ntpd.service']
+    for u in units:
+        (enabled, state) = check_unit(u)
+        if enabled and state == 'running':
+            logger.info('Time sync unit %s is enabled and running' % u)
+            return True
+    logger.warning('No time sync service is running; checked for %s' % units)
+    return False
+
+def command_check_host():
+    # caller already checked for docker/podman
+    logger.info('podman|docker (%s) is present' % container_path)
+
+    if not find_program('systemctl'):
+        raise RuntimeError('unable to location systemctl')
+    logger.info('systemctl is present')
+
+    if not find_program('lvcreate'):
+        raise RuntimeError('LVM does not appear to be installed')
+    logger.info('LVM2 is present')
+
+    # check for configured+running chronyd or ntp
+    if not check_time_sync():
+        raise RuntimeError('No time synchronization is active (checked all of %s)' %
+                           units)
+
+    logger.info('Host looks OK')
+
+
+##################################
 
 def _get_parser():
     # type: () -> argparse.ArgumentParser
