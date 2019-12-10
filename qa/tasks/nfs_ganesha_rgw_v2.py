@@ -54,11 +54,11 @@ def task(ctx, config):
 
     # clone the repo
 
-    rgw[0].run(args=['sudo', 'rm', '-rf', 'nfs-ganesha-rgw'], check_status=False)
+    rgw[0].run(args=['sudo', 'rm', '-rf', 'nfs_ganesha_rgw'], check_status=False)
     rgw[0].run(args=['sudo', 'rm', '-rf', run.Raw('/tmp/nfs-ganesh-rgw_log*')], check_status=False)
-    rgw[0].run(args=['mkdir', '-p', 'nfs-ganesha-rgw'])
+    rgw[0].run(args=['mkdir', '-p', 'nfs_ganesha_rgw'])
 
-    # stop native nfs-ganesha service.
+    # stop native nfs_ganesha service.
 
     rgw[0].run(args=['sudo', 'systemctl', 'stop', 'nfs-server.service'])  # systemctl stop nfs-server.service
     rgw[0].run(args=['sudo', 'systemctl', 'disable', 'nfs-server.service'])  # systemctl disable nfs-server.service
@@ -68,7 +68,7 @@ def task(ctx, config):
     v_as_out = out.read()
     teuthology.create_file(rgw[0], '/etc/ceph/ceph.client.admin.keyring', data=v_as_out, sudo=True)
 
-    # parsing nfs-ganesha conf file
+    # parsing nfs_ganesha conf file
 
     out = cStringIO.StringIO()
     rgw[0].run(args=['sudo', 'cat', '/etc/ganesha/ganesha.conf'],
@@ -95,14 +95,14 @@ def task(ctx, config):
 
     log.info('restarting nfs_ganesha service')
 
-    rgw[0].run(args=['sudo', 'systemctl', 'restart', 'nfs-ganesha.service'])
+    rgw[0].run(args=['sudo', 'systemctl', 'restart', 'nfs_ganesha.service'])
 
     time.sleep(60)
 
-    rgw[0].run(args=['cd', 'nfs-ganesha-rgw', run.Raw(';'), 'git', 'clone',
+    rgw[0].run(args=['cd', 'nfs_ganesha_rgw', run.Raw(';'), 'git', 'clone',
                      'https://github.com/red-hat-storage/ceph-qe-scripts.git'])
 
-    rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', '%s' % branch])
+    rgw[0].run(args=['cd', 'nfs_ganesha_rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', '%s' % branch])
 
     rgw[0].run(args=['virtualenv', 'venv'])
 
@@ -147,7 +147,7 @@ def task(ctx, config):
         outfile.write(yaml.dump(rgw_user_config, default_flow_style=False))
 
     log.info('copying rgw_user_config_fname to the client node')
-    destination_location = 'nfs-ganesha-rgw/ceph-qe-scripts/rgw/v2/tests/nfs-ganesha/config/' + rgw_user_config_fname
+    destination_location = 'nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/config/' + rgw_user_config_fname
     rgw[0].put_file(local_file, destination_location)
 
     rgw[0].run(args=[run.Raw('sudo rm -rf %s' % local_file)], check_status=False)
@@ -156,9 +156,9 @@ def task(ctx, config):
 
     rgw[0].run(
         args=[run.Raw(
-            'sudo venv/bin/python2.7 nfs-ganesha-rgw/ceph-qe-scripts/rgw/v2/tests/nfs-ganesha/%s '
-            '-r nfs-ganesha-rgw/ceph-qe-scripts/rgw/v2/tests/nfs-ganesha/config/rgw_user.yaml '
-            '-c nfs-ganesha-rgw/ceph-qe-scripts/rgw/v2/tests/nfs-ganesha/config/%s ' % (script_name, test_name))])
+            'sudo venv/bin/python2.7 nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/%s '
+            '-r nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/config/rgw_user.yaml '
+            '-c nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/config/%s ' % (script_name, test_name))])
 
     try:
         yield
