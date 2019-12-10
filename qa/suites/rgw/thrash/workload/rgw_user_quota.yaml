@@ -1,5 +1,8 @@
 # Amazon/S3.pm (cpan) not available as an rpm
 tasks:
+- exec:
+    client.0:
+      - cpan install Amazon::S3
 - workunit:
     clients:
       client.0:
