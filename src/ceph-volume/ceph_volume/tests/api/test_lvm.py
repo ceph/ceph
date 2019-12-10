@@ -366,44 +366,9 @@ class TestVolumeGroups(object):
 
 class TestVolumeGroupFree(object):
 
-    def test_no_g_in_output(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free='')
-        with pytest.raises(RuntimeError):
-            vg.free
-
-    def test_g_without_size(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free='g')
-        with pytest.raises(RuntimeError):
-            vg.free
-
-    def test_size_without_g(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free='1')
-        with pytest.raises(RuntimeError):
-            vg.free
-
-    def test_error_message(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free='F')
-        with pytest.raises(RuntimeError) as error:
-            vg.free
-        assert "Unable to convert vg size to integer: 'F'" in str(error.value)
-
-    def test_invalid_float(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free=' g')
-        with pytest.raises(RuntimeError) as error:
-            vg.free
-        assert "Unable to convert to integer: ' '" in str(error.value)
-
     def test_integer_gets_produced(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free='100g')
-        assert vg.free == 100
-
-    def test_integer_gets_produced_whitespace(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free=' 100g ')
-        assert vg.free == 100
-
-    def test_integer_gets_rounded_down(self):
-        vg = api.VolumeGroup(vg_name='nosize', vg_free='100.99g')
-        assert vg.free == 100
+        vg = api.VolumeGroup(vg_name='nosize', vg_free_count=100, vg_extent_size=4194304)
+        assert vg.free == 100 * 4194304
 
 
 class TestCreateLVs(object):
@@ -560,14 +525,17 @@ class TestCreateLV(object):
 
     def setup(self):
         self.foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
+        self.foo_group = api.VolumeGroup(vg_name='foo_group',
+                                         vg_extent_size=4194304,
+                                         vg_free_count=100)
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
     @patch('ceph_volume.api.lvm.get_lv')
     def test_uses_size(self, m_get_lv, m_call, m_run, monkeypatch):
         m_get_lv.return_value = self.foo_volume
-        api.create_lv('foo', 0, vg='foo_group', size='5G', tags={'ceph.type': 'data'})
-        expected = ['lvcreate', '--yes', '-L', '5G', '-n', 'foo-0', 'foo_group']
+        api.create_lv('foo', 0, vg=self.foo_group, size=5368709120, tags={'ceph.type': 'data'})
+        expected = ['lvcreate', '--yes', '-l', '1280', '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
 
     @patch('ceph_volume.api.lvm.process.run')
@@ -575,8 +543,20 @@ class TestCreateLV(object):
     @patch('ceph_volume.api.lvm.get_lv')
     def test_uses_extents(self, m_get_lv, m_call, m_run, monkeypatch):
         m_get_lv.return_value = self.foo_volume
-        api.create_lv('foo', 0, vg='foo_group', extents='50', tags={'ceph.type': 'data'})
+        api.create_lv('foo', 0, vg=self.foo_group, extents='50', tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '50', '-n', 'foo-0', 'foo_group']
+        m_run.assert_called_with(expected)
+
+    @pytest.mark.parametrize("test_input,expected",
+                             [(2, 50),
+                              (3, 33),])
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_lv')
+    def test_uses_slots(self, m_get_lv, m_call, m_run, monkeypatch, test_input, expected):
+        m_get_lv.return_value = self.foo_volume
+        api.create_lv('foo', 0, vg=self.foo_group, slots=test_input, tags={'ceph.type': 'data'})
+        expected = ['lvcreate', '--yes', '-l', str(expected), '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
 
     @patch('ceph_volume.api.lvm.process.run')
@@ -584,7 +564,7 @@ class TestCreateLV(object):
     @patch('ceph_volume.api.lvm.get_lv')
     def test_uses_all(self, m_get_lv, m_call, m_run, monkeypatch):
         m_get_lv.return_value = self.foo_volume
-        api.create_lv('foo', 0, vg='foo_group', tags={'ceph.type': 'data'})
+        api.create_lv('foo', 0, vg=self.foo_group, tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '100%FREE', '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
 
@@ -594,7 +574,7 @@ class TestCreateLV(object):
     @patch('ceph_volume.api.lvm.get_lv')
     def test_calls_to_set_tags_default(self, m_get_lv, m_set_tags, m_call, m_run, monkeypatch):
         m_get_lv.return_value = self.foo_volume
-        api.create_lv('foo', 0, vg='foo_group', size='5G')
+        api.create_lv('foo', 0, vg=self.foo_group)
         tags = {
             "ceph.osd_id": "null",
             "ceph.type": "null",
@@ -609,7 +589,7 @@ class TestCreateLV(object):
     @patch('ceph_volume.api.lvm.get_lv')
     def test_calls_to_set_tags_arg(self, m_get_lv, m_set_tags, m_call, m_run, monkeypatch):
         m_get_lv.return_value = self.foo_volume
-        api.create_lv('foo', 0, vg='foo_group', size='5G', tags={'ceph.type': 'data'})
+        api.create_lv('foo', 0, vg=self.foo_group, tags={'ceph.type': 'data'})
         tags = {
             "ceph.type": "data",
             "ceph.data_device": "/path"
@@ -774,7 +754,7 @@ class TestCreateVG(object):
         monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
         api.create_vg(['/dev/sda', '/dev/sdb'], name='ceph')
         result = fake_run.calls[0]['args'][0]
-        expected = ['vgcreate', '-s', '1G', '--force', '--yes', 'ceph', '/dev/sda', '/dev/sdb']
+        expected = ['vgcreate', '--force', '--yes', 'ceph', '/dev/sda', '/dev/sdb']
         assert result == expected
 
     def test_name_prefix(self, monkeypatch, fake_run):

@@ -24,10 +24,12 @@ class TestLVM(object):
 
 class TestPrepareDevice(object):
 
-    def test_cannot_use_device(self):
+    def test_cannot_use_device(self, factory):
+        args = factory(data='/dev/var/foo')
         with pytest.raises(RuntimeError) as error:
-            lvm.prepare.Prepare([]).prepare_device(
-                    '/dev/var/foo', 'data', '0')
+            p = lvm.prepare.Prepare([])
+            p.args = args
+            p.prepare_data_device( 'data', '0')
         assert 'Cannot use device (/dev/var/foo)' in str(error.value)
         assert 'A vg/lv path or an existing device is needed' in str(error.value)
 

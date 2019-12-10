@@ -56,6 +56,19 @@ def common_parser(prog, description):
         help='OSD data path. A physical device or logical volume',
     )
 
+    required_group.add_argument(
+        '--data-size',
+        help='Size of data LV in case a device was passed in --data',
+        default=0,
+    )
+
+    required_group.add_argument(
+        '--data-slots',
+        help=('Intended number of slots on data device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        default=1,
+    )
+
     filestore_group.add_argument(
         '--filestore',
         action='store_true',
@@ -65,6 +78,12 @@ def common_parser(prog, description):
     filestore_group.add_argument(
         '--journal',
         help='(REQUIRED) A logical volume (vg_name/lv_name), or path to a device',
+    )
+
+    filestore_group.add_argument(
+        '--journal-size',
+        help='Size of journal LV in case a raw block device was passed in --journal',
+        default=0,
     )
 
     bluestore_group.add_argument(
@@ -80,9 +99,39 @@ def common_parser(prog, description):
     )
 
     bluestore_group.add_argument(
+        '--block.db-size',
+        dest='block_db_size',
+        help='Size of block.db LV in case device was passed in --block.db',
+        default=0,
+    )
+
+    required_group.add_argument(
+        '--block.db-slots',
+        dest='block_db_slots',
+        help=('Intended number of slots on db device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        default=1,
+    )
+
+    bluestore_group.add_argument(
         '--block.wal',
         dest='block_wal',
         help='Path to bluestore block.wal logical volume or device',
+    )
+
+    bluestore_group.add_argument(
+        '--block.wal-size',
+        dest='block_wal_size',
+        help='Size of block.wal LV in case device was passed in --block.wal',
+        default=0,
+    )
+
+    required_group.add_argument(
+        '--block.wal-slots',
+        dest='block_wal_slots',
+        help=('Intended number of slots on wal device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        default=1,
     )
 
     parser.add_argument(
