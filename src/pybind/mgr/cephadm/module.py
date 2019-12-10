@@ -19,6 +19,7 @@ import shutil
 import subprocess
 
 from ceph.deployment import inventory, translate
+from ceph.deployment.drive_group import DriveGroupSpecs
 from ceph.deployment.drive_selection import selector
 from mgr_module import MgrModule
 import orchestrator
@@ -932,7 +933,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return blink(locs)
 
-
     def call_inventory(self, hosts, drive_groups):
         def call_create(inventory):
             return self._prepare_deployment(hosts, drive_groups, inventory)
@@ -942,9 +942,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
     def create_osds(self, drive_groups):
         return self.get_hosts().then(lambda hosts: self.call_inventory(hosts, drive_groups))
 
-
-    def _prepare_deployment(self, all_hosts, drive_groups, inventory_list):
-        # type: (List[orchestrator.InventoryNode], List[orchestrator.DriveGroupSpecs], List[orchestrator.InventoryNode] -> orchestrator.Completion
+    def _prepare_deployment(self,
+                            all_hosts,  # type: List[orchestrator.InventoryNode]
+                            drive_groups,  # type: List[DriveGroupSpecs]
+                            inventory_list  # type: List[orchestrator.InventoryNode]
+                            ):
+        # type: (...) -> orchestrator.Completion
 
         for drive_group in drive_groups:
             self.log.info("Processing DriveGroup {}".format(drive_group))
@@ -959,13 +962,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                 for _inventory in inventory_list:
                     if _inventory.name == hostname:
                         return _inventory
+                    raise OrchestratorError("No inventory found for host: {}".format(hostname))
 
             cmds = []
             # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
             for host in matching_hosts:
                 inventory_for_host = _find_inv_for_host(host, inventory_list)
                 drive_selection = selector.DriveSelection(drive_group, inventory_for_host.devices)
-                cmd = translate.ToCephVolume(drive_group, drive_selection).run()
+                cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
                 if not cmd:
                     self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.name))
                     continue
@@ -997,7 +1001,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         split_cmd = cmd.split(' ')
         _cmd = ['--config-and-keyring', '-', '--']
         _cmd.extend(split_cmd)
-        out, code = self._run_ceph_daemon(
+        out, err, code = self._run_cephadm(
             host, 'osd', 'ceph-volume',
             _cmd,
             stdin=j)

@@ -673,8 +673,6 @@ class TestFilter(object):
         assert ret.is_matchable is False
 
 
-
-
 class TestDriveSelection(object):
 
     testdata = [
