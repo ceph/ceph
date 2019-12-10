@@ -150,7 +150,7 @@ class Prepare(object):
             return None
         return api.get_lv(lv_name=lv_name, vg_name=vg_name)
 
-    def setup_device(self, device_type, device_name, tags):
+    def setup_device(self, device_type, device_name, tags, size):
         """
         Check if ``device`` is an lv, if so, set the tags, making sure to
         update the tags with the lv_uuid and lv_path which the incoming tags
@@ -174,13 +174,18 @@ class Prepare(object):
             # We got a disk, create an lv
             lv_type = "osd-{}".format(device_type)
             uuid = system.generate_uuid()
+            tags['ceph.{}_uuid'.format(device_type)] = uuid
+            kwargs = {
+                'device': device_name,
+                'tags': tags,
+            }
+            if size != 0:
+                kwargs['size'] = disk.Size.parse(size)
             lv = api.create_lv(
                 lv_type,
                 uuid,
-                device=device_name,
-                tags={'ceph.type': device_type})
+                **kwargs)
             path = lv.lv_path
-            tags['ceph.{}_uuid'.format(device_type)] = uuid
             tags['ceph.{}_device'.format(device_type)] = path
             lv.set_tags(tags)
         else:
@@ -191,7 +196,7 @@ class Prepare(object):
             tags['ceph.%s_device' % device_type] = path
         return path, uuid, tags
 
-    def prepare_device(self, device, device_type, osd_uuid):
+    def prepare_data_device(self, device_type, osd_uuid):
         """
         Check if ``arg`` is a device or partition to create an LV out of it
         with a distinct volume group name, assigning LV tags on it and
@@ -202,14 +207,20 @@ class Prepare(object):
         :param device_type: Usually, either ``data`` or ``block`` (filestore vs. bluestore)
         :param osd_uuid: The OSD uuid
         """
+        device = self.args.data
         if disk.is_partition(device) or disk.is_device(device):
             # we must create a vg, and then a single lv
             lv_name_prefix = "osd-{}".format(device_type)
+            kwargs = {'device': device,
+                      'tags': {'ceph.type': device_type},
+                     }
+            logger.debug('data device size: {}'.format(self.args.data_size))
+            if self.args.data_size != 0:
+                kwargs['size'] = disk.Size.parse(self.args.data_size)
             return api.create_lv(
                 lv_name_prefix,
                 osd_uuid,
-                device=device,
-                tags={'ceph.type': device_type})
+                **kwargs)
         else:
             error = [
                 'Cannot use device ({}).'.format(device),
@@ -285,7 +296,7 @@ class Prepare(object):
 
             data_lv = self.get_lv(self.args.data)
             if not data_lv:
-                data_lv = self.prepare_device(self.args.data, 'data', osd_fsid)
+                data_lv = self.prepare_data_device('data', osd_fsid)
 
             tags['ceph.data_device'] = data_lv.lv_path
             tags['ceph.data_uuid'] = data_lv.lv_uuid
@@ -294,8 +305,7 @@ class Prepare(object):
             tags['ceph.vdo'] = api.is_vdo(data_lv.lv_path)
 
             journal_device, journal_uuid, tags = self.setup_device(
-                'journal', self.args.journal, tags
-            )
+                'journal', self.args.journal, tags, self.args.journal_size)
 
             tags['ceph.type'] = 'data'
             data_lv.set_tags(tags)
@@ -311,7 +321,7 @@ class Prepare(object):
         elif self.args.bluestore:
             block_lv = self.get_lv(self.args.data)
             if not block_lv:
-                block_lv = self.prepare_device(self.args.data, 'block', osd_fsid)
+                block_lv = self.prepare_data_device('block', osd_fsid)
 
             tags['ceph.block_device'] = block_lv.lv_path
             tags['ceph.block_uuid'] = block_lv.lv_uuid
@@ -319,8 +329,10 @@ class Prepare(object):
             tags['ceph.encrypted'] = encrypted
             tags['ceph.vdo'] = api.is_vdo(block_lv.lv_path)
 
-            wal_device, wal_uuid, tags = self.setup_device('wal', self.args.block_wal, tags)
-            db_device, db_uuid, tags = self.setup_device('db', self.args.block_db, tags)
+            wal_device, wal_uuid, tags = self.setup_device(
+                'wal', self.args.block_wal, tags, self.args.block_wal_size)
+            db_device, db_uuid, tags = self.setup_device(
+                'db', self.args.block_db, tags, self.args.block_db_size)
 
             tags['ceph.type'] = 'block'
             block_lv.set_tags(tags)
@@ -379,4 +391,4 @@ class Prepare(object):
         # cause both to be True
         if not self.args.bluestore and not self.args.filestore:
             self.args.bluestore = True
-        self.safe_prepare(self.args)
+        self.safe_prepare()
