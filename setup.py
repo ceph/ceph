@@ -10,8 +10,8 @@ setup(
     version=metadata['version'],
     packages=find_packages(),
     package_data={
-     'teuthology.task': ['valgrind.supp', 'adjust-ulimits', 'edit_sudoers.sh', 'daemon-helper'],
-     'teuthology.task': ['valgrind.supp', 'adjust-ulimits', 'edit_sudoers.sh', 'daemon-helper'],
+     'teuthology.task': ['adjust-ulimits', 'edit_sudoers.sh', 'daemon-helper'],
+     'teuthology.task': ['adjust-ulimits', 'edit_sudoers.sh', 'daemon-helper'],
      'teuthology.openstack': [
          'archive-key',
          'archive-key.pub',
