@@ -361,6 +361,16 @@ class Elector : public ElectionOwner, RankProvider {
   void notify_rank_removed(int rank_removed);
   void notify_strategy_maybe_changed(int strategy);
   /**
+   * Set the disallowed leaders. This has no effect
+   * if the disallowed set is identical; if it differs
+   * we call an election.
+   */
+  void set_disallowed_leaders(const set<int>& dl) {
+    if (dl == disallowed_leaders) return;
+    disallowed_leaders = dl;
+    call_election();
+  }
+  /**
    * @}
    */
 };

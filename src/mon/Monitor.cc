@@ -6431,4 +6431,9 @@ void Monitor::notify_new_monmap()
   for (auto i : monmap->removed_ranks) {
     elector.notify_rank_removed(i);
   }
+  set<int> dl;
+  for (auto name : monmap->disallowed_leaders) {
+    dl.insert(monmap->get_rank(name));
+  }
+  elector.set_disallowed_leaders(dl);
 }
