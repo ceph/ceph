@@ -937,10 +937,10 @@ all the integration tests, for all the Ceph components.
   verify the `integration testing`_ infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
-  test CephFS
+  test CephFS mounted using FUSE
 
 `kcephfs <https://github.com/ceph/ceph/tree/master/qa/suites/kcephfs>`_
-  test the CephFS kernel module
+  test CephFS mounted using kernel
 
 `krbd <https://github.com/ceph/ceph/tree/master/qa/suites/krbd>`_
   test the RBD kernel module
