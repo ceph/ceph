@@ -419,10 +419,10 @@ def get_legacy_config_fsid(cluster, legacy_dir=None):
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)
 
-    config = read_config(config_file)
-
-    if config.has_section('global') and config.has_option('global', 'fsid'):
-        return config.get('global', 'fsid')
+    if os.path.exists(config_file):
+        config = read_config(config_file)
+        if config.has_section('global') and config.has_option('global', 'fsid'):
+            return config.get('global', 'fsid')
     return None
 
 def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id, legacy_dir=None):
