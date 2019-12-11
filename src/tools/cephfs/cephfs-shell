@@ -132,8 +132,7 @@ def ls(path, opts=''):
                 yield dent
     except libcephfs.ObjectNotFound as e:
         perror(e)
-        shell.exit_code = 1
-
+        shell.exit_code = e.get_error_code()
 
 def glob(path, pattern):
     paths = []
@@ -261,7 +260,7 @@ def copy_from_local(local_path, remote_path):
         try:
             file_ = open(local_path, 'rb')
         except PermissionError:
-            self.exit_code = 1
+            shell.exit_code = 1
             perror('error: no permission to read local file {}'.format(
                    local_path.decode('utf-8')))
             return
@@ -270,7 +269,7 @@ def copy_from_local(local_path, remote_path):
         fd = cephfs.open(remote_path, 'w', 0o666)
     except libcephfs.Error as e:
         perror(e)
-        self.exit_code = 1
+        shell.exit_code = 1
         return
     progress = 0
     while True:
@@ -419,16 +418,17 @@ class CephFSShell(Cmd):
         except KeyboardInterrupt:
             perror('Command aborted')
             self.exit_code = 130
-        except libcephfs.Error as e:
-            perror(e.strerror)
-            if shell.debug:
-                traceback.print_exc(file=sys.stdout)
-            self.exit_code = 1
-        except Exception as e:
+        except (libcephfs.Error, Exception) as e:
             perror(e)
             if shell.debug:
                 traceback.print_exc(file=sys.stdout)
-            self.exit_code = 1
+
+            if hasattr(e, 'get_error_code'):
+                self.exit_code = e.get_error_code()
+            else:
+                # XXX: Setting it to 3 so that exceptions not stemming from
+                # CephFS Python bindings can be distinguished.
+                self.exit_code = 3
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -554,6 +554,7 @@ class CephFSShell(Cmd):
                     cephfs.mkdir(path, permission)
                 except libcephfs.Error as e:
                     perror(e)
+                    self.exit_code = e.get_error_code()
 
     def complete_put(self, text, line, begidx, endidx):
         """
@@ -603,6 +604,8 @@ class CephFSShell(Cmd):
                         root_dst_dir = a[0]
             else:
                 perror('error: no filename specified for destination')
+                # TODO: perhaps, we need a more suitable retval?
+                self.exit_code = 1
                 return
 
         if root_dst_dir[-1] != b'/':
@@ -613,8 +616,9 @@ class CephFSShell(Cmd):
                 if os.path.isfile(root_src_dir):
                     dst_file = root_dst_dir
                     if is_file_exists(dst_file):
-                        perror('{}: file exists! use --force to overwrite'.format(
-                               dst_file.decode('utf-8')))
+                        perror('{}: file exists! use --force to '
+                               'overwrite'.format(dst_file.decode('utf-8')))
+                        self.exit_code = 1
                         return
             if args.local_path == b'-':
                 root_src_dir = b'-'
@@ -637,6 +641,7 @@ class CephFSShell(Cmd):
                     try:
                         cephfs.mkdirs(dst_dir, 0o777)
                     except libcephfs.Error:
+                        # TODO: perhaps, set retval to 1?
                         pass
 
                 for dir_ in dirs:
@@ -645,6 +650,7 @@ class CephFSShell(Cmd):
                         try:
                             cephfs.mkdirs(dir_name, 0o777)
                         except libcephfs.Error:
+                            # TODO: perhaps, set retval to 1?
                             pass
 
                 for file_ in files:
@@ -686,6 +692,7 @@ class CephFSShell(Cmd):
         if args.local_path == b'-':
             if args.remote_path == b'.' or args.remote_path == b'./':
                 perror('error: no remote file name specified')
+                self.exit_code = 1
                 return
             copy_to_local(root_src_dir, b'-')
         elif is_file_exists(args.remote_path):
@@ -698,13 +705,13 @@ class CephFSShell(Cmd):
             if len(files) == 0:
                 try:
                     os.makedirs(root_dst_dir + b'/' + root_src_dir)
-                except OSError:
+                except OSError as e:
                     if args.force:
                         pass
                     else:
                         perror('{}: already exists! use --force to overwrite'.format(
                                root_src_dir.decode('utf-8')))
-                        self.exit_code = 1
+                        self.exit_code = e.get_error_code()
                         return
 
             for file_ in files:
@@ -722,8 +729,9 @@ class CephFSShell(Cmd):
                     if not args.force:
                         try:
                             os.stat(dst_path)
-                            perror('{}: file already exists! use --force to override'.format(
-                                   file_.decode('utf-8')))
+                            perror('{}: file already exists! use --force to '
+                                   'override'.format(file_.decode('utf-8')))
+                            self.exit_code = 1
                             return
                         except OSError:
                             copy_to_local(file_, dst_path)
@@ -883,6 +891,7 @@ class CephFSShell(Cmd):
                     cephfs.rmdir(path)
                 except libcephfs.Error as e:
                     perror(e)
+                    self.exit_code = e.get_error_code()
 
     def complete_rm(self, text, line, begidx, endidx):
         """
@@ -908,8 +917,9 @@ class CephFSShell(Cmd):
                 try:
                     cephfs.unlink(path)
                 except libcephfs.Error as e:
-                    # perhaps we need a better msg here
+                    # NOTE: perhaps we need a better msg here
                     perror(e)
+                    self.exit_code = e.get_error_code()
 
     def complete_mv(self, text, line, begidx, endidx):
         """
@@ -932,6 +942,7 @@ class CephFSShell(Cmd):
             cephfs.rename(args.src_path, args.dest_path)
         except libcephfs.Error as e:
             perror(e)
+            self.exit_code = e.get_error_code()
 
     def complete_cd(self, text, line, begidx, endidx):
         """
@@ -954,6 +965,7 @@ class CephFSShell(Cmd):
             self.set_prompt()
         except libcephfs.Error as e:
             perror(e)
+            self.exit_code = e.get_error_code()
 
     def do_cwd(self, arglist):
         """
@@ -983,6 +995,7 @@ class CephFSShell(Cmd):
                 cephfs.chmod(path, mode)
             except libcephfs.Error as e:
                 perror(e)
+                self.exit_code = e.get_error_code()
 
     def complete_cat(self, text, line, begidx, endidx):
         """
@@ -1004,6 +1017,7 @@ class CephFSShell(Cmd):
                 copy_to_local(path, b'-')
             else:
                 perror('{}: no such file'.format(path.decode('utf-8')))
+                self.exit_code = 1
 
     umask_parser = argparse.ArgumentParser(description='Set umask value.')
     umask_parser.add_argument('mode', help='Mode', type=str, action=ModeAction,
@@ -1057,7 +1071,7 @@ class CephFSShell(Cmd):
             os.chdir(os.path.expanduser(args.path))
         except OSError as e:
             perror("Cannot change to {}: {}".format(e.filename, e.strerror))
-            self.exit_code = 1
+            self.exit_code = e.get_error_code()
 
     def complete_lls(self, text, line, begidx, endidx):
         """
@@ -1086,7 +1100,7 @@ class CephFSShell(Cmd):
                     print_list(items)
                 except OSError as e:
                     perror("'{}': {}".format(e.filename, e.strerror))
-                    self.exit_code = 1
+                    self.exit_code = e.get_error_code()
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
@@ -1146,6 +1160,7 @@ class CephFSShell(Cmd):
             except libcephfs.OSError as e:
                 perror("could not statfs {}: {}".format(file.decode('utf-8'),
                        e.strerror))
+                self.exit_code = e.get_error_code()
 
     locate_parser = argparse.ArgumentParser(
         description='Find file within file system')
@@ -1217,7 +1232,7 @@ class CephFSShell(Cmd):
                         f.decode('utf-8')))
                 except libcephfs.Error as e:
                     perror(e)
-                    self.exit_code = 1
+                    self.exit_code = e.get_error_code()
                     continue
 
         for path in args.paths:
@@ -1246,12 +1261,14 @@ class CephFSShell(Cmd):
         """
         if not is_dir_exists(args.path):
             perror('error: no such directory {}'.format(args.path.decode('utf-8')))
+            self.exit_code = 1
             return
 
         if args.op == 'set':
             if (args.max_bytes == -1) and (args.max_files == -1):
                 perror('please specify either --max_bytes or --max_files or '
                        'both')
+                self.exit_code = 1
                 return
 
             if args.max_bytes >= 0:
@@ -1260,11 +1277,11 @@ class CephFSShell(Cmd):
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, os.XATTR_CREATE)
                     poutput('max_bytes set to %d' % args.max_bytes)
-                except libcephfs.Error:
+                except libcephfs.Error as e:
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, os.XATTR_REPLACE)
                     perror('max_bytes reset to %d' % args.max_bytes)
-                    self.exit_code = 1
+                    self.exit_code = e.get_error_code()
 
             if args.max_files >= 0:
                 max_files = to_bytes(str(args.max_files))
@@ -1272,29 +1289,27 @@ class CephFSShell(Cmd):
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, os.XATTR_CREATE)
                     poutput('max_files set to %d' % args.max_files)
-                except libcephfs.Error:
+                except libcephfs.Error as e:
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, os.XATTR_REPLACE)
                     perror('max_files reset to %d' % args.max_files)
-                    self.exit_code = 1
+                    self.exit_code = e.get_error_code()
         elif args.op == 'get':
             max_bytes = '0'
             max_files = '0'
             try:
                 max_bytes = cephfs.getxattr(args.path, 'ceph.quota.max_bytes')
                 poutput('max_bytes: {}'.format(max_bytes.decode('utf-8')))
-            except libcephfs.Error:
+            except libcephfs.Error as e:
                 perror('max_bytes is not set')
-                self.exit_code = 1
-                pass
+                self.exit_code = e.get_error_code()
 
             try:
                 max_files = cephfs.getxattr(args.path, 'ceph.quota.max_files')
                 poutput('max_files: {}'.format(max_files.decode('utf-8')))
-            except libcephfs.Error:
+            except libcephfs.Error as e:
                 perror('max_files is not set')
-                self.exit_code = 1
-                pass
+                self.exit_code = e.get_error_code()
 
     snap_parser = argparse.ArgumentParser(description='Snapshot Management')
     snap_parser.add_argument('op', type=str,
@@ -1324,9 +1339,13 @@ class CephFSShell(Cmd):
                 if is_dir_exists(args.dir):
                     cephfs.mkdir(os.path.join(args.dir, snapdir, args.name), 0o755)
                 else:
-                    self.perror("'{}': no such directory".format(args.dir.decode('utf-8')))
-            except libcephfs.Error:
-                self.perror("snapshot '{}' already exists".format(args.name.decode('utf-8')))
+                    self.perror("'{}': no such directory".format(
+                        args.dir.decode('utf-8')))
+                    self.exit_code = 1
+            except libcephfs.Error as e:
+                self.perror("snapshot '{}' already exists".format(
+                    args.name.decode('utf-8')))
+                self.exit_code = e.get_error_code()
         elif args.op == 'delete':
             snap_dir = os.path.join(args.dir, snapdir, args.name)
             try:
@@ -1334,11 +1353,17 @@ class CephFSShell(Cmd):
                     newargs = argparse.Namespace(paths=[snap_dir], parent=False)
                     self.do_rmdir_helper(newargs)
                 else:
-                    self.perror("'{}': no such snapshot".format(args.name.decode('utf-8')))
-            except libcephfs.Error:
-                self.perror("error while deleting '{}'".format(snap_dir.decode('utf-8')))
+                    self.perror("'{}': no such snapshot".format(
+                        args.name.decode('utf-8')))
+                    self.exit_code = 1
+            except libcephfs.Error as e:
+                self.perror("error while deleting '{}'".format(
+                    snap_dir.decode('utf-8')))
+                self.exit_code = e.get_error_code()
         else:
-            self.perror("snapshot can only be created or deleted; check - help snap")
+            self.perror("snapshot can only be created or deleted; check - "
+                        "help snap")
+            self.exit_code = e.get_error_code()
 
     def do_help(self, line):
         """
@@ -1391,6 +1416,7 @@ class CephFSShell(Cmd):
                         atime, mtime, ctime))
             except libcephfs.Error as e:
                 perror(e)
+                self.exit_code = e.get_error_code()
 
 
 #######################################################
@@ -1446,7 +1472,7 @@ def read_ceph_conf(shell, config_file):
         shell.timing = get_bool_vals_for_boolopts(cephfs.conf_get('timing'))
     except (OSError, libcephfs.Error) as e:
         perror(e)
-        shell.exit_code = 1
+        shell.exit_code = e.get_error_code()
 
 if __name__ == '__main__':
     config_file = ''
@@ -1482,7 +1508,6 @@ if __name__ == '__main__':
     shell = CephFSShell()
     shell.exit_code = 0
     read_ceph_conf(shell, config_file)
-
     shell.exit_code = shell.cmdloop()
 
     sys.exit(shell.exit_code)
