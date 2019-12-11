@@ -1,6 +1,6 @@
-============================
- Installation (ceph-daemon)
-============================
+========================
+ Installation (cephadm)
+========================
 
 A new Ceph cluster is deployed by bootstrapping a cluster on a single
 node, and then adding additional nodes and daemons via the CLI or GUI
@@ -19,23 +19,23 @@ can be run on any node.
 
 .. highlight:: console
 
-Get ceph-daemon
-===============
+Get cephadm
+===========
 
-The ``ceph-daemon`` utility is used to bootstrap a new Ceph Cluster.
+The ``cephadm`` utility is used to bootstrap a new Ceph Cluster.
 
 Use curl to fetch the standalone script::
 
-  [monitor 1] # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/ceph-daemon/ceph-daemon
-  [monitor 1] # chmod +x ceph-daemon
+  [monitor 1] # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/cephadm/cephadm
+  [monitor 1] # chmod +x cephadm
   
 You can also get the utility by installing a package provided by
 your Linux distribution::
 
-   [monitor 1] # apt install -y ceph-daemon   # or
-   [monitor 1] # dnf install -y ceph-daemon   # or
-   [monitor 1] # yum install -y ceph-daemon   # or
-   [monitor 1] # zypper install -y ceph-daemon
+   [monitor 1] # apt install -y cephadm   # or
+   [monitor 1] # dnf install -y cephadm   # or
+   [monitor 1] # yum install -y cephadm   # or
+   [monitor 1] # zypper install -y cephadm
 
 
 Bootstrap a new cluster
@@ -50,7 +50,7 @@ To create a new cluster, you need to know:
 
 To bootstrap the cluster run the following command::
 
-  [node 1] $ sudo ceph-daemon bootstrap --mon-ip *<mon-ip>*
+  [node 1] $ sudo cephadm bootstrap --mon-ip *<mon-ip>*
 
 This command does a few things:
 
@@ -69,7 +69,7 @@ Interacting with the cluster
 To interact with your cluster, start up a container that has all of 
 the Ceph packages installed::
 
-  [any node] $ sudo ceph-daemon shell --config ceph.conf --keyring ceph.keyring
+  [any node] $ sudo cephadm shell --config ceph.conf --keyring ceph.keyring
 
 The ``--config`` and ``--keyring`` arguments will bind those local
 files to the default locations in ``/etc/ceph`` inside the container
