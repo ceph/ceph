@@ -66,26 +66,17 @@ New health warnings:
 
 Changes in the telemetry module:
 
-* The telemetry module now has a 'device' channel, enabled by default, that
-  will report anonymized hard disk and SSD health metrics to telemetry.ceph.com
-  in order to build and improve device failure prediction algorithms. Because
-  the content of telemetry reports has changed, you will need to re-opt-in
-  with::
+* The telemetry module now reports more information.
 
-    ceph telemetry on
-
-  You can view exactly what information will be reported first with::
-
-    ceph telemetry show
-    ceph telemetry show device   # specifically show the device channel
-
-  If you are not comfortable sharing device metrics, you can disable that
-  channel first before re-opting-in:
+  First, there is a new 'device' channel, enabled by default, that
+  will report anonymized hard disk and SSD health metrics to
+  telemetry.ceph.com in order to build and improve device failure
+  prediction algorithms.  If you are not comfortable sharing device
+  metrics, you can disable that channel first before re-opting-in::
 
     ceph config set mgr mgr/telemetry/channel_device false
-    ceph telemetry on
 
-* The telemetry module now reports more information about CephFS file systems,
+  Second, we now report more information about CephFS file systems,
   including:
 
     - how many MDS daemons (in total and per file system)
