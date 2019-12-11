@@ -152,7 +152,7 @@ redirect=0
 smallmds=0
 short=0
 ec=0
-ssh=0
+cephadm=0
 parallel=true
 hitset=""
 overwrite_conf=1
@@ -237,7 +237,7 @@ usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
-usage=$usage"\t--ssh: enable ssh orchestrator with ~/.ssh/id_rsa[.pub]\n"
+usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
 
 usage_exit() {
@@ -299,8 +299,8 @@ case $1 in
     --msgr21 )
         msgr="21"
         ;;
-    --ssh )
-        ssh=1
+    --cephadm )
+        cephadm=1
         ;;
     --no-parallel )
         parallel=false
@@ -999,12 +999,12 @@ EOF
         fi
     fi
 
-    if [ "$ssh" -eq 1 ]; then
-        debug echo Enabling ssh orchestrator
+    if [ "$cephadm" -eq 1 ]; then
+        debug echo Enabling cephadm orchestrator
         ceph_adm config-key set mgr/ssh/ssh_identity_key -i ~/.ssh/id_rsa
         ceph_adm config-key set mgr/ssh/ssh_identity_pub -i ~/.ssh/id_rsa.pub
-        ceph_adm mgr module enable ssh
-        ceph_adm orchestrator set backend ssh
+        ceph_adm mgr module enable cephadm
+        ceph_adm orchestrator set backend cephadm
         ceph_adm orchestrator host add $HOSTNAME
     fi
 }

@@ -15,8 +15,8 @@ class TestOrchestratorCli(MgrTestCase):
     def setUp(self):
         super(TestOrchestratorCli, self).setUp()
         self._load_module("orchestrator_cli")
-        self._load_module("ssh")
-        self._orch_cmd("set", "backend", "ssh")
+        self._load_module("cephadm")
+        self._orch_cmd("set", "backend", "cephadm")
 
     def test_host_ls(self):
         self._orch_cmd("host", "add", "osd0")

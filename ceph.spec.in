@@ -486,7 +486,7 @@ Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
-Recommends:	ceph-mgr-ssh = %{_epoch_prefix}%{version}-%{release}
+Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{_python_buildid}-influxdb
 %endif
 %if 0%{?rhel} == 7
@@ -596,8 +596,8 @@ Requires:       python%{_python_buildid}-PyYAML
 ceph-mgr-k8sevents is a ceph-mgr plugin that sends every ceph-events
 to kubernetes' events API
 
-%package mgr-ssh
-Summary:        Ceph Manager plugin for SSH-based orchestration
+%package mgr-cephadm
+Summary:        Ceph Manager plugin for cephadm-based orchestration
 BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -611,9 +611,9 @@ Requires:       openssh
 %if 0%{?rhel} || 0%{?fedora}
 Requires:       openssh-clients
 %endif
-%description mgr-ssh
-ceph-mgr-ssh is a ceph-mgr module for orchestration functions using
-direct SSH connections for management operations.
+%description mgr-cephadm
+ceph-mgr-cephadm is a ceph-mgr module for orchestration functions using
+the integrated cephadm deployment tool management operations.
 
 %package fuse
 Summary:	Ceph fuse-based client
@@ -1040,7 +1040,7 @@ Group:		Development/Libraries/Python
 %{?python_provide:%python_provide python-ceph-common}
 %description -n python-ceph-common
 This package contains data structures, classes and functions used by Ceph.
-It also contains utilities used for the SSH orchestrator.
+It also contains utilities used for the cephadm orchestrator.
 %endif
 
 %package -n python%{python3_pkgversion}-ceph-common
@@ -1051,7 +1051,7 @@ Group:		Development/Libraries/Python
 %{?python_provide:%python_provide python%{python3_pkgversion}-ceph-common}
 %description -n python%{python3_pkgversion}-ceph-common
 This package contains data structures, classes and functions used by Ceph.
-It also contains utilities used for the SSH orchestrator.
+It also contains utilities used for the cephadm orchestrator.
 
 %if 0%{with cephfs_shell}
 %package -n cephfs-shell
@@ -1513,7 +1513,7 @@ fi
 %pre -n cephadm
 # create user
 if ! getent passwd | grep -q '^cephadm:'; then
-   useradd -r -s /bin/bash -c "cephadm user for mgr/ssh" -m cephadm
+   useradd -r -s /bin/bash -c "cephadm user for mgr/cephadm" -m cephadm
 fi
 # set up (initially empty) .ssh/authorized_keys file
 if ! test -d /home/cephadm/.ssh; then
@@ -1819,15 +1819,15 @@ if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
 
-%files mgr-ssh
-%{_datadir}/ceph/mgr/ssh
+%files mgr-cephadm
+%{_datadir}/ceph/mgr/cephadm
 
-%post mgr-ssh
+%post mgr-cephadm
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
 
-%postun mgr-ssh
+%postun mgr-cephadm
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi

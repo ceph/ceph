@@ -1,6 +1,6 @@
 #!/bin/sh
 # vim: set noet ts=8:
-# postinst script for ceph-mgr-ssh
+# postinst script for ceph-mgr-cephadm
 #
 # see: dh_installdeb(1)
 
@@ -39,5 +39,3 @@ esac
 #DEBHELPER#
 
 exit 0
-
-

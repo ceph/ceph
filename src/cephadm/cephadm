@@ -1243,14 +1243,14 @@ def command_bootstrap():
 
     # ssh
     if not args.skip_ssh:
-        logger.info('Enabling ssh module...')
-        cli(['mgr', 'module', 'enable', 'ssh'])
+        logger.info('Enabling cephadm module...')
+        cli(['mgr', 'module', 'enable', 'cephadm'])
         logger.info('Setting orchestrator backend to ssh...')
-        cli(['orchestrator', 'set', 'backend', 'ssh'])
+        cli(['orchestrator', 'set', 'backend', 'cephadm'])
 
         logger.info('Generating ssh key...')
-        cli(['ssh', 'generate-key'])
-        ssh_pub = cli(['ssh', 'get-pub-key'])
+        cli(['cephadm', 'generate-key'])
+        ssh_pub = cli(['cephadm', 'get-pub-key'])
 
         with open(args.output_pub_ssh_key, 'w') as f:
             f.write(ssh_pub)
