@@ -538,7 +538,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 
     {
       auto& addr = session->info.inst.addr;
-      session->set_client_metadata(client_metadata_t(m->metadata, m->supported_features));
+      session->set_client_metadata(client_metadata_t(m->metadata, m->supported_features, m->metric_spec));
       auto& client_metadata = session->info.client_metadata;
 
       auto log_session_status = [this, m, session](std::string_view status, std::string_view err) {
@@ -585,7 +585,8 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	infer_supported_features(session, client_metadata);
 
       dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN metadata entries:" << dendl;
-      dout(20) << "  features: '" << client_metadata.features << dendl;
+      dout(20) << " features: '" << client_metadata.features << "'" << dendl;
+      dout(20) << " metric specification: [" << client_metadata.metric_spec << "]" << dendl;
       for (const auto& p : client_metadata) {
 	dout(20) << "  " << p.first << ": " << p.second << dendl;
       }

@@ -1117,6 +1117,52 @@ inline std::ostream& operator<<(std::ostream& out, const feature_bitset_t& s) {
 }
 
 /*
+ * metric_spec_t
+ */
+struct metric_spec_t {
+  // set of metrics that a client is capable of forwarding
+  feature_bitset_t metric_flags;
+
+  metric_spec_t() {}
+  metric_spec_t(const metric_spec_t& other) :
+    metric_flags(other.metric_flags) {}
+  metric_spec_t(metric_spec_t&& other) :
+    metric_flags(std::move(other.metric_flags)) {}
+  metric_spec_t(const feature_bitset_t& mf) :
+    metric_flags(mf) {}
+  metric_spec_t(feature_bitset_t&& mf) :
+    metric_flags(std::move(mf)) {}
+
+  metric_spec_t& operator=(const metric_spec_t& other) {
+    metric_flags = other.metric_flags;
+    return *this;
+  }
+  metric_spec_t& operator=(metric_spec_t&& other) {
+    metric_flags = std::move(other.metric_flags);
+    return *this;
+  }
+
+  bool empty() const {
+    return metric_flags.empty();
+  }
+
+  void clear() {
+    metric_flags.clear();
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& p);
+  void dump(Formatter *f) const;
+  void print(ostream& out) const;
+};
+WRITE_CLASS_ENCODER(metric_spec_t)
+
+inline std::ostream& operator<<(std::ostream& out, const metric_spec_t& mst) {
+  mst.print(out);
+  return out;
+}
+
+/*
  * client_metadata_t
  */
 struct client_metadata_t {
@@ -1125,23 +1171,33 @@ struct client_metadata_t {
 
   kv_map_t kv_map;
   feature_bitset_t features;
+  metric_spec_t metric_spec;
 
   client_metadata_t() {}
   client_metadata_t(const client_metadata_t& other) :
-    kv_map(other.kv_map), features(other.features) {}
+    kv_map(other.kv_map),
+    features(other.features),
+    metric_spec(other.metric_spec) {}
   client_metadata_t(client_metadata_t&& other) :
-    kv_map(std::move(other.kv_map)), features(std::move(other.features)) {}
-  client_metadata_t(kv_map_t&& kv, feature_bitset_t &&f) :
-    kv_map(std::move(kv)), features(std::move(f)) {}
-  client_metadata_t(const kv_map_t& kv, const feature_bitset_t &f) :
-    kv_map(kv), features(f) {}
+    kv_map(std::move(other.kv_map)),
+    features(std::move(other.features)),
+    metric_spec(std::move(other.metric_spec)) {}
+  client_metadata_t(kv_map_t&& kv, feature_bitset_t &&f, metric_spec_t &&mst) :
+    kv_map(std::move(kv)),
+    features(std::move(f)),
+    metric_spec(std::move(mst)) {}
+  client_metadata_t(const kv_map_t& kv, const feature_bitset_t &f, const metric_spec_t &mst) :
+    kv_map(kv),
+    features(f),
+    metric_spec(mst) {}
   client_metadata_t& operator=(const client_metadata_t& other) {
     kv_map = other.kv_map;
     features = other.features;
+    metric_spec = other.metric_spec;
     return *this;
   }
 
-  bool empty() const { return kv_map.empty() && features.empty(); }
+  bool empty() const { return kv_map.empty() && features.empty() && metric_spec.empty(); }
   iterator find(const std::string& key) const { return kv_map.find(key); }
   iterator begin() const { return kv_map.begin(); }
   iterator end() const { return kv_map.end(); }
@@ -1150,10 +1206,12 @@ struct client_metadata_t {
   void merge(const client_metadata_t& other) {
     kv_map.insert(other.kv_map.begin(), other.kv_map.end());
     features = other.features;
+    metric_spec = other.metric_spec;
   }
   void clear() {
     kv_map.clear();
     features.clear();
+    metric_spec.clear();
   }
 
   void encode(bufferlist& bl) const;

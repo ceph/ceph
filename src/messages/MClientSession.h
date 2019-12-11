@@ -20,7 +20,7 @@
 
 class MClientSession : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -28,6 +28,7 @@ public:
 
   std::map<std::string, std::string> metadata;
   feature_bitset_t supported_features;
+  metric_spec_t metric_spec;
 
   int get_op() const { return head.op; }
   version_t get_seq() const { return head.seq; }
@@ -70,6 +71,9 @@ public:
       decode(metadata, p);
     if (header.version >= 3)
       decode(supported_features, p);
+    if (header.version >= 4) {
+      decode(metric_spec, p);
+    }
   }
   void encode_payload(uint64_t features) override { 
     using ceph::encode;
@@ -84,6 +88,7 @@ public:
       encode(metadata, payload);
       encode(supported_features, payload);
     }
+    encode(metric_spec, payload);
   }
 private:
   template<class T, typename... Args>
