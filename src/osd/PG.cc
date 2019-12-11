@@ -798,6 +798,11 @@ void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
       continue;
     }
 
+    if (peer_purged.count(peer)) {
+      dout(20) << __func__ << " skipping purged osd." << peer << dendl;
+      continue;
+    }
+
     map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(peer);
     if (iter != peer_info.end() &&
         (iter->second.is_empty() || iter->second.dne())) {
