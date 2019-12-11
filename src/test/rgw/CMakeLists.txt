@@ -40,9 +40,9 @@ add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
 target_link_libraries(unittest_rgw_reshard_wait ${rgw_libs})
 
-set(test_rgw_a_src
-  test_rgw_common.cc)
+set(test_rgw_a_src test_rgw_common.cc)
 add_library(test_rgw_a STATIC ${test_rgw_a_src})
+target_link_libraries(test_rgw_a ${rgw_libs})
 
 # ceph_test_rgw_manifest
 set(test_rgw_manifest_srcs test_rgw_manifest.cc)
@@ -50,7 +50,6 @@ add_executable(ceph_test_rgw_manifest
   ${test_rgw_manifest_srcs}
   )
 target_link_libraries(ceph_test_rgw_manifest
-  ${rgw_libs}
   test_rgw_a
   cls_rgw_client
   cls_lock_client
@@ -73,7 +72,6 @@ add_executable(ceph_test_rgw_obj
   ${test_rgw_obj_srcs}
   )
 target_link_libraries(ceph_test_rgw_obj
-  ${rgw_libs}
   test_rgw_a
   cls_rgw_client
   cls_lock_client
