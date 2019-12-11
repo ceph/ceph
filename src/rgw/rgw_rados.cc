@@ -2181,6 +2181,8 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
           /* continue anyway */
         }
       }
+
+      info = std::move(orig_info);
       /* ret == -EEXIST here */
     }
     return ret;
