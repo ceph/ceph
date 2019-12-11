@@ -1269,7 +1269,12 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 1);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.num_intervals(), 1u);
-    ASSERT_EQ(*to_collect.begin(), std::make_pair(100ul, 10ul));
+    {
+      auto it = to_collect.begin();
+      using p = decltype(*it);
+      auto v = p{100ul, 10ul};
+      ASSERT_EQ(*it, v);
+    }
 
     em.clear();
     old_extents.clear();
@@ -1339,10 +1344,21 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.num_intervals(), 2u);
-    ASSERT_TRUE((*to_collect.begin()) == std::make_pair(0x0ul ,0x8000ul) ||
-		  *(++to_collect.begin()) == std::make_pair(0x0ul, 0x8000ul));
-    ASSERT_TRUE((*to_collect.begin()) == std::make_pair(0x3f000ul, 0x1000ul) ||
-		  *(++to_collect.begin()) == std::make_pair(0x3f000ul, 0x1000ul));
+    {
+      auto it1 = to_collect.begin();
+      auto it2 = ++to_collect.begin();
+      using p = decltype(*it1);
+      {
+        auto v1 = p{0x0ul ,0x8000ul};
+        auto v2 = p{0x0ul, 0x8000ul};
+        ASSERT_TRUE(*it1 == v1 || *it2 == v2);
+      }
+      {
+        auto v1 = p{0x3f000ul, 0x1000ul};
+        auto v2 = p{0x3f000ul, 0x1000ul};
+        ASSERT_TRUE(*it1 == v1 || *it2 == v2);
+      }
+    }
 
     em.clear();
     old_extents.clear();
@@ -1460,10 +1476,21 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.num_intervals(), 2u);
-    ASSERT_TRUE(*to_collect.begin() == std::make_pair(0x0ul, 0x8000ul) ||
-		  *(++to_collect.begin()) == std::make_pair(0x0ul, 0x8000ul));
-    ASSERT_TRUE(*to_collect.begin() == std::make_pair(0x3f000ul, 0x1000ul) ||
-		  *(++to_collect.begin()) == std::make_pair(0x3f000ul, 0x1000ul));
+    {
+      auto it1 = to_collect.begin();
+      auto it2 = ++to_collect.begin();
+      using p = decltype(*it1);
+      {
+        auto v1 = p{0x0ul, 0x8000ul};
+        auto v2 = p{0x0ul, 0x8000ul};
+        ASSERT_TRUE(*it1 == v1 || *it2  == v2);
+      }
+      {
+        auto v1 = p{0x3f000ul, 0x1000ul};
+        auto v2 = p{0x3f000ul, 0x1000ul};
+        ASSERT_TRUE(*it1 == v1 || *it2 == v2);
+      }
+    }
 
     em.clear();
     old_extents.clear();
