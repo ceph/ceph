@@ -2225,6 +2225,11 @@ bool PeeringState::discover_all_missing(
       continue;
     }
 
+    if (peer_purged.count(peer)) {
+      psdout(20) << __func__ << " skipping purged osd." << peer << dendl;
+      continue;
+    }
+
     map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(peer);
     if (iter != peer_info.end() &&
         (iter->second.is_empty() || iter->second.dne())) {
