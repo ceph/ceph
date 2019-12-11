@@ -859,7 +859,7 @@ int RocksDBStore::column_family_delete(const std::string& cf_name)
   RWLock::WLocker l(api_lock);
   rocksdb::ColumnFamilyHandle* handle = cf_get_handle(cf_name);
   rocksdb::Status status = db->DropColumnFamily(handle);
-  if (!status.ok()) {
+  if (status.ok()) {
     column_families.erase(cf_name);
   } else {
       derr << __func__ << " problem deleting column family '" << cf_name << "'" << dendl;
