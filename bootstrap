@@ -12,6 +12,9 @@ else
   fi
 fi
 
+PYTHON=${PYTHON:-"python2"}
+VENV=${VENV:-"virtualenv"}
+
 case "$(uname -s)" in
 Linux)
     case "$(lsb_release --id --short)" in
@@ -118,32 +121,32 @@ Darwin)
 esac
 
 # Forcibly remove old virtualenvs which used system site-packages
-if [ -e ./virtualenv ]  && [ ! -e ./virtualenv/lib/python2.7/no-global-site-packages.txt ]; then
+if [ -e ./$VENV ]  && [ ! -e ./$VENV/lib/python*/no-global-site-packages.txt ]; then
     echo "Removing old virtualenv because it uses system site-packages"
-    rm -rf ./virtualenv
+    rm -rf ./$VENV
 fi
 
-if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
+if [ -z "$NO_CLOBBER" ] || [ ! -e ./$VENV ]; then
     if ! which virtualenv > /dev/null; then
         pip install virtualenv
     fi
-    virtualenv --python=python2 --setuptools virtualenv
+    virtualenv --python=$PYTHON --setuptools $VENV
 fi
 
 # Upgrade pip first
-./virtualenv/bin/pip install --upgrade pip
+./$VENV/bin/pip install --upgrade pip
 
 # Ensure setuptools is installed
-./virtualenv/bin/pip install setuptools --upgrade
+./$VENV/bin/pip install setuptools --upgrade
 
 # Install all requirements
-./virtualenv/bin/pip install --upgrade -r requirements.txt
+./$VENV/bin/pip install --upgrade -r requirements.txt
 
 # Check to make sure requirements are met
-./virtualenv/bin/pip check
+./$VENV/bin/pip check
 
 # Remove leftover .pyc files
 find teuthology -name '*.pyc' -exec rm {} \;
 
 # Install teuthology
-./virtualenv/bin/python setup.py develop
+./$VENV/bin/python setup.py develop
