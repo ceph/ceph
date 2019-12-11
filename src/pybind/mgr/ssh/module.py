@@ -279,7 +279,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         path = self.get_ceph_option('cephadm_path')
         try:
             with open(path, 'r') as f:
-                self._ceph_daemon = f.read()
+                self._cephadm = f.read()
         except (IOError, TypeError) as e:
             raise RuntimeError("unable to read cephadm at '%s': %s" % (
                 path, str(e)))
@@ -541,8 +541,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         'name=host,type=CephString',
         'Check whether we can access and manage a remote host')
     def _check_host(self, host):
-        out, err, code = self._run_ceph_daemon(host, '', 'check-host', [],
-                                               error_ok=True, no_fsid=True)
+        out, err, code = self._run_cephadm(host, '', 'check-host', [],
+                                           error_ok=True, no_fsid=True)
         if code:
             return 1, '', err
         return 0, 'host ok', err
@@ -552,8 +552,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         'name=host,type=CephString',
         'Try to prepare a host for remote management')
     def _prepare_host(self, host):
-        out, err, code = self._run_ceph_daemon(host, '', 'prepare-host', [],
-                                               error_ok=True, no_fsid=True)
+        out, err, code = self._run_cephadm(host, '', 'prepare-host', [],
+                                           error_ok=True, no_fsid=True)
         if code:
             return 1, '', err
         return 0, 'host ok', err
@@ -590,13 +590,13 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             executable_path))
         return executable_path
 
-    def _run_ceph_daemon(self, host, entity, command, args,
-                         stdin=None,
-                         no_fsid=False,
-                         error_ok=False,
-                         image=None):
+    def _run_cephadm(self, host, entity, command, args,
+                     stdin=None,
+                     no_fsid=False,
+                     error_ok=False,
+                     image=None):
         """
-        Run ceph-daemon on the remote host with the given command + args
+        Run cephadm on the remote host with the given command + args
         """
         conn = self._get_connection(host)
 
@@ -625,7 +625,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 script = 'injected_argv = ' + json.dumps(final_args) + '\n'
                 if stdin:
                     script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-                script += self._ceph_daemon
+                script += self._cephadm
                 out, err, code = remoto.process.check(
                     conn,
                     ['/usr/bin/python', '-u'],
@@ -727,7 +727,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @async_map_completion
     def _refresh_host_services(self, host):
-        out, err, code = self._run_ceph_daemon(
+        out, err, code = self._run_cephadm(
             host, 'mon', 'ls', [], no_fsid=True)
         data = json.loads(''.join(out))
         self.log.error('refreshed host %s services: %s' % (host, data))
@@ -761,8 +761,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             result = []
             for host, ls in services.items():
                 for d in ls:
-                    if not d['style'].startswith('ceph-daemon'):
-                        self.log.debug('ignoring non-ceph-daemon on %s: %s' % (host, d))
+                    if not d['style'].startswith('cephadm'):
+                        self.log.debug('ignoring non-cephadm on %s: %s' % (host, d))
                         continue
                     if d['fsid'] != self._cluster_fsid:
                         self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
@@ -863,7 +863,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         }
         name = '%s.%s' % (service_type, service_id)
         for a in actions[action]:
-            out, err, code = self._run_ceph_daemon(
+            out, err, code = self._run_cephadm(
                 host, name, 'unit',
                 ['--name', name, a],
                 error_ok=True)
@@ -894,7 +894,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             if host_info.outdated(self.inventory_cache_timeout) or refresh:
                 self.log.info("refresh stale inventory for '{}'".format(host))
-                out, err, code = self._run_ceph_daemon(
+                out, err, code = self._run_cephadm(
                     host, 'osd',
                     'ceph-volume',
                     ['--', 'inventory', '--format=json'])
@@ -919,7 +919,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     'on' if on else 'off'),
                 '--path', '/dev/' + dev,
             ]
-            out, err, code = self._run_ceph_daemon(
+            out, err, code = self._run_cephadm(
                 host, 'osd', 'shell', ['--'] + cmd,
                 error_ok=True)
             if code:
@@ -961,7 +961,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         devices = drive_group.data_devices.paths
         for device in devices:
-            out, err, code = self._run_ceph_daemon(
+            out, err, code = self._run_cephadm(
                 host, 'osd', 'ceph-volume',
                 [
                     '--config-and-keyring', '-',
@@ -975,7 +975,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             self.log.debug('ceph-volume prepare: %s' % out)
 
         # check result
-        out, err, code = self._run_ceph_daemon(
+        out, err, code = self._run_cephadm(
             host, 'osd', 'ceph-volume',
             [
                 '--',
@@ -1055,7 +1055,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 'crash_keyring': crash_keyring,
             })
 
-            out, err, code = self._run_ceph_daemon(
+            out, err, code = self._run_cephadm(
                 host, name, 'deploy',
                 [
                     '--name', name,
@@ -1079,7 +1079,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         Remove a daemon
         """
-        out, err, code = self._run_ceph_daemon(
+        out, err, code = self._run_cephadm(
             host, name, 'rm-daemon',
             ['--name', name])
         self.log.debug('_remove_daemon code %s out %s' % (code, out))
@@ -1442,7 +1442,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         if not host:
             raise OrchestratorError('no hosts defined')
         self.log.debug('using host %s' % host)
-        out, code = self._run_ceph_daemon(
+        out, code = self._run_cephadm(
             host, None, 'pull', [],
             image=image_name,
             no_fsid=True)

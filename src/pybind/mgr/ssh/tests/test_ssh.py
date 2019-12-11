@@ -25,7 +25,7 @@ TODOs:
 
 
 
-def _run_ceph_daemon(ret):
+def _run_cephadm(ret):
     def foo(*args, **kwargs):
         return ret, '', 0
     return foo
@@ -67,19 +67,19 @@ class TestSSH(object):
         c = ssh_module.get_hosts()
         assert self._wait(ssh_module, c) == []
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, ssh_module):
         with self._with_host(ssh_module, 'test'):
             c = ssh_module.describe_service()
             assert self._wait(ssh_module, c) == []
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_device_ls(self, ssh_module):
         with self._with_host(ssh_module, 'test'):
             c = ssh_module.get_inventory()
             assert self._wait(ssh_module, c) == [InventoryNode('test')]
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
@@ -88,7 +88,7 @@ class TestSSH(object):
             c = ssh_module.update_mons(1, [parse_host_specs('test:0.0.0.0=a')])
             assert self._wait(ssh_module, c) == ["(Re)deployed mon.a on host 'test'"]
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
@@ -99,7 +99,7 @@ class TestSSH(object):
             assert "(Re)deployed mgr." in out
             assert " on host 'test'" in out
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('{}'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
@@ -109,7 +109,7 @@ class TestSSH(object):
             c = ssh_module.create_osds(dg)
             assert self._wait(ssh_module, c) == "Created osd(s) on host 'test'"
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('{}'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
@@ -121,7 +121,7 @@ class TestSSH(object):
             assert "(Re)deployed mds.name." in out
             assert " on host 'test'" in out
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('{}'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
@@ -133,11 +133,11 @@ class TestSSH(object):
             assert "(Re)deployed rgw.realm.zone." in out
             assert " on host 'test'" in out
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon(
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
                 name='rgw.myrgw.foobar',
-                style='ceph-daemon',
+                style='cephadm',
                 fsid='fsid',
                 container_id='container_id',
                 version='version',
@@ -152,7 +152,7 @@ class TestSSH(object):
             out = self._wait(ssh_module, c)
             assert out == ["Removed rgw.myrgw.foobar from host 'test'"]
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('{}'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
@@ -164,7 +164,7 @@ class TestSSH(object):
             assert "(Re)deployed rbd-mirror." in out
             assert " on host 'test'" in out
 
-    @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('{}'))
+    @mock.patch("ssh.module.SSHOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
     @mock.patch("ssh.module.SSHOrchestrator.mon_command", mon_command)
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")

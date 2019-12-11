@@ -780,7 +780,7 @@ def install_base_units(fsid):
         first child (bash), but that isn't the ceph daemon.  This is simpler and
         should be harmless.
         """
-        f.write("""# created by ceph-daemon
+        f.write("""# created by cephadm
 /var/log/ceph/%s/*.log {
     rotate 7
     daily
@@ -1551,7 +1551,7 @@ def list_daemons(detail=True, legacy_dir=None):
                     else:
                         continue
                     i = {
-                        'style': 'ceph-daemon:v1',
+                        'style': 'cephadm:v1',
                         'name': name,
                         'fsid': fsid,
                     }
@@ -1685,7 +1685,7 @@ def command_rm_cluster():
     for d in list_daemons(detail=False):
         if d['fsid'] != args.fsid:
             continue
-        if d['style'] != 'ceph-daemon:v1':
+        if d['style'] != 'cephadm:v1':
             continue
         unit_name = get_unit_name(args.fsid, d['name'])
         call(['systemctl', 'stop', unit_name],
@@ -2095,11 +2095,11 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger('ceph-daemon')
+    logger = logging.getLogger('cephadm')
 
     # root?
     if os.geteuid() != 0:
-        sys.stderr.write('ERROR: ceph-daemon should be run as root\n')
+        sys.stderr.write('ERROR: cephadm should be run as root\n')
         sys.exit(1)
 
     # podman or docker?
