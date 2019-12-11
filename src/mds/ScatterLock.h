@@ -21,32 +21,6 @@
 #include "MDSContext.h"
 
 class ScatterLock : public SimpleLock {
-
-  struct more_bits_t {
-    xlist<ScatterLock*>::item item_updated;
-    utime_t update_stamp;
-
-    explicit more_bits_t(ScatterLock *lock) :
-      item_updated(lock)
-    {}
-  };
-
-  mutable std::unique_ptr<more_bits_t> _more;
-
-  more_bits_t *more() {
-    if (!_more)
-      _more.reset(new more_bits_t(this));
-    return _more.get();
-  }
-
-  enum {
-    SCATTER_WANTED   = 1 << 8,
-    UNSCATTER_WANTED = 1 << 9,
-    DIRTY            = 1 << 10,
-    FLUSHING         = 1 << 11,
-    FLUSHED          = 1 << 12,
-  };
-
 public:
   ScatterLock(MDSCacheObject *o, LockType *lt) :
     SimpleLock(o, lt) {}
@@ -231,6 +205,29 @@ public:
   }
 
 private:
+  struct more_bits_t {
+    xlist<ScatterLock*>::item item_updated;
+    utime_t update_stamp;
+
+    explicit more_bits_t(ScatterLock *lock) :
+      item_updated(lock)
+    {}
+  };
+
+  more_bits_t *more() {
+    if (!_more)
+      _more.reset(new more_bits_t(this));
+    return _more.get();
+  }
+
+  enum {
+    SCATTER_WANTED   = 1 << 8,
+    UNSCATTER_WANTED = 1 << 9,
+    DIRTY            = 1 << 10,
+    FLUSHING         = 1 << 11,
+    FLUSHED          = 1 << 12,
+  };
+
   void set_flushing() {
     state_flags |= FLUSHING;
   }
@@ -250,6 +247,8 @@ private:
       _more.reset();
     }
   }
+
+  mutable std::unique_ptr<more_bits_t> _more;
 };
 
 #endif
