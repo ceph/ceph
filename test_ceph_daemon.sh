@@ -12,7 +12,7 @@ OSD_TO_CREATE=6
 OSD_VG_NAME=${SCRIPT_NAME%.*}
 OSD_LV_NAME=${SCRIPT_NAME%.*}
 
-CEPH_DAEMON=../src/ceph-daemon/ceph-daemon
+CEPH_DAEMON=../src/cephadm/cephadm
 
 #A="-d"
 

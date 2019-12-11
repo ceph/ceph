@@ -5112,9 +5112,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("ceph_daemon_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/usr/sbin/ceph-daemon")
+    .set_default("/usr/sbin/cephadm")
     .add_service("mgr")
-    .set_description("Path to ceph-daemon utility"),
+    .set_description("Path to cephadm utility"),
 
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_DATADIR "/mgr")

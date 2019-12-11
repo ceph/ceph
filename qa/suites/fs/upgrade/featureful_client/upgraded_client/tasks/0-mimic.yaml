@@ -11,7 +11,7 @@ tasks:
       - ceph-mgr-diskprediction-cloud
       - ceph-mgr-rook
       - ceph-mgr-ssh
-      - ceph-daemon
+      - cephadm
     extra_packages: ['librados2']
 - print: "**** done installing mimic"
 - ceph:

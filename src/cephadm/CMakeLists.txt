@@ -1,4 +1,4 @@
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(ceph-daemon TOX_ENVS mypy)
+  add_tox_test(cephadm TOX_ENVS mypy)
 endif()

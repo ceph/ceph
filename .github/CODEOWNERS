@@ -8,7 +8,7 @@
 /doc/mgr/dashboard.rst                          @ceph/dashboard
 
 # For Orchestrator related PRs
-/src/ceph-daemon                                @ceph/orchestrators
+/src/cephadm                                    @ceph/orchestrators
 /src/pybind/mgr/ansible                         @ceph/orchestrators
 /src/pybind/mgr/orchestrator_cli                @ceph/orchestrators
 /src/pybind/mgr/orchestrator.py                 @ceph/orchestrators

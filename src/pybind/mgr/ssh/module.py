@@ -281,7 +281,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             with open(path, 'r') as f:
                 self._ceph_daemon = f.read()
         except (IOError, TypeError) as e:
-            raise RuntimeError("unable to read ceph-daemon at '%s': %s" % (
+            raise RuntimeError("unable to read cephadm at '%s': %s" % (
                 path, str(e)))
 
         self._worker_pool = multiprocessing.pool.ThreadPool(1)
@@ -418,7 +418,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         if self.mode == 'root':
             self.ssh_user = 'root'
         elif self.mode == 'ceph-daemon-package':
-            self.ssh_user = 'cephdaemon'
+            self.ssh_user = 'cephadm'
 
     @staticmethod
     def can_run():
@@ -633,12 +633,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             elif self.mode == 'ceph-daemon-package':
                 out, err, code = remoto.process.check(
                     conn,
-                    ['sudo', '/usr/bin/ceph-daemon'] + final_args,
+                    ['sudo', '/usr/bin/cephadm'] + final_args,
                     stdin=stdin)
             self.log.debug('exit code %s out %s err %s' % (code, out, err))
             if code and not error_ok:
                 raise RuntimeError(
-                    'ceph-daemon exited with an error code: %d, stderr:%s' % (
+                    'cephadm exited with an error code: %d, stderr:%s' % (
                         code, '\n'.join(err)))
             return out, err, code
 
