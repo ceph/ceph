@@ -604,6 +604,10 @@ private:
 
     template <class...>
     friend class ::seastar::future;
+
+    // let seastar::do_with to up-cast us to seastar::future.
+    template<typename T, typename F>
+    friend inline auto ::seastar::do_with(T&&, F&&);
   };
 
 public:
