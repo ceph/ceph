@@ -258,9 +258,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         {
             'name': 'mode',
             'type': 'str',
-            'enum_allowed': ['root', 'ceph-daemon-package'],
+            'enum_allowed': ['root', 'cephadm-package'],
             'default': 'root',
-            'desc': 'mode for remote execution of ceph-daemon',
+            'desc': 'mode for remote execution of cephadm',
         },
         {
             'name': 'container_image_base',
@@ -417,7 +417,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         if self.mode == 'root':
             self.ssh_user = 'root'
-        elif self.mode == 'ceph-daemon-package':
+        elif self.mode == 'cephadm-package':
             self.ssh_user = 'cephadm'
 
     @staticmethod
@@ -630,7 +630,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     conn,
                     ['/usr/bin/python', '-u'],
                     stdin=script.encode('utf-8'))
-            elif self.mode == 'ceph-daemon-package':
+            elif self.mode == 'cephadm-package':
                 out, err, code = remoto.process.check(
                     conn,
                     ['sudo', '/usr/bin/cephadm'] + final_args,

@@ -95,8 +95,8 @@ def download_ceph_daemon(ctx, config, ref):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
 
-    if config.get('ceph_daemon_mode') != 'packaged-ceph-daemon':
-        ref = config.get('ceph_daemon_branch', ref)
+    if config.get('cephadm_mode') != 'cephadm-package':
+        ref = config.get('cephadm_branch', ref)
         git_url = teuth_config.get_ceph_git_url()
         log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
         ctx.cluster.run(
@@ -130,7 +130,7 @@ def download_ceph_daemon(ctx, config, ref):
             '--force',
         ])
 
-        if config.get('ceph_daemon_mode') == 'root':
+        if config.get('cephadm_mode') == 'root':
             log.info('Removing cephadm ...')
             ctx.cluster.run(
                 args=[
@@ -779,11 +779,11 @@ def task(ctx, config):
     cluster_name = config['cluster']
     ctx.ceph[cluster_name] = argparse.Namespace()
 
-    # ceph-daemon mode?
-    if 'ceph_daemon_mode' not in config:
-        config['ceph_daemon_mode'] = 'root'
-    assert config['ceph_daemon_mode'] in ['root', 'packaged-ceph-daemon']
-    if config['ceph_daemon_mode'] == 'root':
+    # cephadm mode?
+    if 'cephadm_mode' not in config:
+        config['cephadm_mode'] = 'root'
+    assert config['cephadm_mode'] in ['root', 'cephadm-package']
+    if config['cephadm_mode'] == 'root':
         ctx.ceph_daemon = testdir + '/cephadm'
     else:
         ctx.ceph_daemon = 'cephadm'  # in the path
