@@ -12,12 +12,12 @@ OSD_TO_CREATE=6
 OSD_VG_NAME=${SCRIPT_NAME%.*}
 OSD_LV_NAME=${SCRIPT_NAME%.*}
 
-CEPH_DAEMON=../src/cephadm/cephadm
+CEPHADM=../src/cephadm/cephadm
 
 #A="-d"
 
 # clean up previous run(s)?
-$CEPH_DAEMON $A rm-cluster --fsid $fsid --force
+$CEPHADM $A rm-cluster --fsid $fsid --force
 vgchange -an $OSD_VG_NAME || true
 loopdev=$(losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
 if ! [ "$loopdev" = "" ]; then
@@ -30,7 +30,7 @@ cat <<EOF > c
 	log to file = true
 EOF
 
-$CEPH_DAEMON $A \
+$CEPHADM $A \
     --image $image \
     bootstrap \
     --mon-id a \
@@ -45,7 +45,7 @@ chmod 644 k c
 
 if [ -n "$ip2" ]; then
     # mon.b
-    $CEPH_DAEMON $A \
+    $CEPHADM $A \
     --image $image \
     deploy --name mon.b \
     --fsid $fsid \
@@ -59,7 +59,7 @@ bin/ceph -c c -k k auth get-or-create mgr.y \
 	 mon 'allow profile mgr' \
 	 osd 'allow *' \
 	 mds 'allow *' > k-mgr.y
-$CEPH_DAEMON $A \
+$CEPHADM $A \
     --image $image \
     deploy --name mgr.y \
     --fsid $fsid \
@@ -73,7 +73,7 @@ for id in k j; do
 	     mgr 'allow profile mds' \
 	     osd 'allow *' \
 	     mds 'allow *' > k-mds.$id
-    $CEPH_DAEMON $A \
+    $CEPHADM $A \
 	--image $image \
 	deploy --name mds.$id \
 	--fsid $fsid \
@@ -88,7 +88,7 @@ losetup $loop_dev $OSD_IMAGE_NAME
 pvcreate $loop_dev && vgcreate $OSD_VG_NAME $loop_dev
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
-    $SUDO $CEPH_DAEMON shell --config c --keyring k -- \
+    $SUDO $CEPHADM shell --config c --keyring k -- \
             ceph orchestrator osd create \
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
