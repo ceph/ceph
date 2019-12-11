@@ -88,7 +88,7 @@ class AsyncCompletion(orchestrator.Completion):
                  many=False, # type: bool
                  ):
 
-        assert SSHOrchestrator.instance is not None
+        assert CephadmOrchestrator.instance is not None
         self.many = many
         if name is None and on_complete is not None:
             name = on_complete.__name__
@@ -128,24 +128,24 @@ class AsyncCompletion(orchestrator.Completion):
                     self.fail(e)
 
         def run(value):
-            assert SSHOrchestrator.instance
+            assert CephadmOrchestrator.instance
             if self.many:
                 if not value:
                     logger.info('calling map_async without values')
                     callback([])
                 if six.PY3:
-                    SSHOrchestrator.instance._worker_pool.map_async(_callback, value,
+                    CephadmOrchestrator.instance._worker_pool.map_async(_callback, value,
                                                                     callback=callback,
                                                                     error_callback=error_callback)
                 else:
-                    SSHOrchestrator.instance._worker_pool.map_async(_callback, value,
+                    CephadmOrchestrator.instance._worker_pool.map_async(_callback, value,
                                                                     callback=callback)
             else:
                 if six.PY3:
-                    SSHOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
+                    CephadmOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
                                                                       callback=callback, error_callback=error_callback)
                 else:
-                    SSHOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
+                    CephadmOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
                                                                       callback=callback)
             return self.ASYNC_RESULT
 
@@ -229,7 +229,7 @@ def trivial_result(val):
     return AsyncCompletion(value=val, name='trivial_result')
 
 
-class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
+class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     _STORE_HOST_PREFIX = "host"
 
@@ -271,7 +271,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
     ]
 
     def __init__(self, *args, **kwargs):
-        super(SSHOrchestrator, self).__init__(*args, **kwargs)
+        super(CephadmOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid = self.get('mon_map')['fsid']
 
         self.config_notify()
@@ -288,7 +288,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._reconfig_ssh()
 
-        SSHOrchestrator.instance = self
+        CephadmOrchestrator.instance = self
         self.all_progress_references = list()  # type: List[orchestrator.ProgressReference]
 
         # load inventory
@@ -325,7 +325,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 del self.service_cache[h]
 
     def shutdown(self):
-        self.log.error('ssh: shutdown')
+        self.log.error('shutdown')
         self._worker_pool.close()
         self._worker_pool.join()
 
@@ -430,7 +430,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def available(self):
         """
-        The SSH orchestrator is always available.
+        The cephadm orchestrator is always available.
         """
         return self.can_run()
 
@@ -459,7 +459,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     unregistered_hosts))))
 
     @orchestrator._cli_write_command(
-        prefix='ssh set-ssh-config',
+        prefix='cephadm set-ssh-config',
         desc='Set the ssh_config file (use -i <ssh_config>)')
     def _set_ssh_config(self, inbuf=None):
         """
@@ -474,7 +474,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 0, "", ""
 
     @orchestrator._cli_write_command(
-        prefix='ssh clear-ssh-config',
+        prefix='cephadm clear-ssh-config',
         desc='Clear the ssh_config file')
     def _clear_ssh_config(self):
         """
@@ -485,7 +485,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 0, "", ""
 
     @orchestrator._cli_write_command(
-        'ssh generate-key',
+        'cephadm generate-key',
         desc='Generate a cluster SSH key (if not present)')
     def _generate_key(self):
         if not self.ssh_pub or not self.ssh_key:
@@ -513,7 +513,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 0, '', ''
 
     @orchestrator._cli_write_command(
-        'ssh clear-key',
+        'cephadm clear-key',
         desc='Clear cluster SSH key')
     def _clear_key(self):
         self.set_store('ssh_identity_key', None)
@@ -522,7 +522,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 0, '', ''
 
     @orchestrator._cli_read_command(
-        'ssh get-pub-key',
+        'cephadm get-pub-key',
         desc='Show SSH public key for connecting to cluster hosts')
     def _get_pub_key(self):
         if self.ssh_pub:
@@ -531,13 +531,13 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             return -errno.ENOENT, '', 'No cluster SSH key defined'
 
     @orchestrator._cli_read_command(
-        'ssh get-user',
+        'cephadm get-user',
         desc='Show user for SSHing to cluster hosts')
     def _get_user(self):
         return 0, self.ssh_user, ''
 
     @orchestrator._cli_read_command(
-        'ssh check-host',
+        'cephadm check-host',
         'name=host,type=CephString',
         'Check whether we can access and manage a remote host')
     def _check_host(self, host):
@@ -548,7 +548,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 0, 'host ok', err
 
     @orchestrator._cli_write_command(
-        'ssh prepare-host',
+        'cephadm prepare-host',
         'name=host,type=CephString',
         'Try to prepare a host for remote management')
     def _prepare_host(self, host):

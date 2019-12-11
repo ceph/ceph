@@ -16,7 +16,7 @@ tasks:
       - ceph-mgr-diskprediction-local
       - ceph-mgr-diskprediction-cloud
       - ceph-mgr-rook
-      - ceph-mgr-ssh
+      - ceph-mgr-cephadm
       - cephadm
       - ceph-mgr
       - libcephfs2

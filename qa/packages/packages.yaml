@@ -41,7 +41,7 @@ ceph:
   - ceph-mgr-diskprediction-cloud
   - ceph-mgr-diskprediction-local
   - ceph-mgr-rook
-  - ceph-mgr-ssh
+  - ceph-mgr-cephadm
   - ceph-fuse
   - libcephfs2
   - libcephfs-devel
