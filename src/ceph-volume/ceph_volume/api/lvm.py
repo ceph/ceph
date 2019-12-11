@@ -998,6 +998,12 @@ class Volume(object):
         )
         self.tags[key] = value
 
+    def deactivate(self):
+        """
+        Deactivate the LV by calling lvchange -an
+        """
+        process.call(['lvchange', '-an', self.lv_path])
+
 
 class Volumes(list):
     """
