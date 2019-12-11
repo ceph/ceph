@@ -681,7 +681,7 @@ class TestQuota(TestCephFSShell):
     dir_name = 'testdir'
 
     def create_dir(self):
-        mount_output = self.mount_a.run_shell('mkdir ' + self.dir_name)
+        mount_output = self.get_cephfs_shell_cmd_output('mkdir ' + self.dir_name)
         log.info("cephfs-shell mount output:\n{}".format(mount_output))
 
     def validate(self, input_val):
