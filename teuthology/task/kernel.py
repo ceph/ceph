@@ -871,7 +871,7 @@ def update_grub_rpm(remote, newversion):
     grub='grub2'
     # Check if grub2 is isntalled
     try:
-        remote.run(args=['sudo', 'rpm', '-qi', 'grub2'])
+        remote.run(args=['sudo', 'rpm', '-qi', 'grub2-tools'])
     except Exception:
         grub = 'legacy'
     log.info('Updating Grub Version: {grub}'.format(grub=grub))
