@@ -295,7 +295,15 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
       return seastar::now();
     },
     [] (auto&& ctx, ObjectContextRef obc) {
-      return seastar::now();
+      auto alive_watchers = obc->watchers | boost::adaptors::map_values
+                                          | boost::adaptors::filtered(
+        [] (const auto& w) {
+          // FIXME: filter as for the `is_ping` in `Watch::start_notify`
+          return w->is_alive();
+        });
+      return crimson::osd::Notify::create_n_propagate(
+        std::begin(alive_watchers),
+        std::end(alive_watchers));
   });
 }
 
