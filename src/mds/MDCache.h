@@ -186,16 +186,12 @@ class MDCache {
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
 
-  uint64_t cache_limit_inodes(void) {
-    return cache_inode_limit;
-  }
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
   }
   double cache_toofull_ratio(void) const {
-    double inode_reserve = cache_inode_limit*(1.0-cache_reservation);
     double memory_reserve = cache_memory_limit*(1.0-cache_reservation);
-    return fmax(0.0, fmax((cache_size()-memory_reserve)/memory_reserve, cache_inode_limit == 0 ? 0.0 : (CInode::count()-inode_reserve)/inode_reserve));
+    return fmax(0.0, (cache_size()-memory_reserve)/memory_reserve);
   }
   bool cache_toofull(void) const {
     return cache_toofull_ratio() > 0.0;
@@ -204,7 +200,7 @@ class MDCache {
     return mempool::get_pool(mempool::mds_co::id).allocated_bytes();
   }
   bool cache_overfull(void) const {
-    return (cache_inode_limit > 0 && CInode::count() > cache_inode_limit*cache_health_threshold) || (cache_size() > cache_memory_limit*cache_health_threshold);
+    return cache_size() > cache_memory_limit*cache_health_threshold;
   }
 
   void advance_stray() {
@@ -1269,7 +1265,6 @@ class MDCache {
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
-  uint64_t cache_inode_limit;
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;

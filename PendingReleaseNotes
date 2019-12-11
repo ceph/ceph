@@ -216,6 +216,10 @@
 
 * The format of MDSs in `ceph fs dump` has changed.
 
+* The ``mds_cache_size`` config option is completely removed. Since luminous,
+  the ``mds_cache_memory_limit`` config option has been preferred to configure
+  the MDS's cache limits.
+
 * The ``pg_autoscale_mode`` is now set to ``on`` by default for newly
   created pools, which means that Ceph will automatically manage the
   number of PGs.  To change this behavior, or to learn more about PG
