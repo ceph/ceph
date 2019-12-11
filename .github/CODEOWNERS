@@ -17,7 +17,7 @@
 /src/pybind/mgr/test_orchestrator               @ceph/orchestrators
 /src/python-common/ceph/deployment              @ceph/orchestrators
 /qa/workunits/cephadm/test_cephadm.sh           @ceph/orchestrators
-/qa/tasks/ceph2.py                              @ceph/orchestrators
+/qa/tasks/cephadm.py                            @ceph/orchestrators
 /qa/tasks/mgr/test_orchestrator_cli.py          @ceph/orchestrators
 /qa/tasks/mgr/test_cephadm_orchestrator.py      @ceph/orchestrators
 /doc/mgr/orchestrator_cli.rst                   @ceph/orchestrators
