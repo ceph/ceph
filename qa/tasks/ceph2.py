@@ -1,5 +1,5 @@
 """
-Ceph cluster task, deployed via ceph-daemon and ssh orchestrator
+Ceph cluster task, deployed via cephadm and ssh orchestrator
 """
 from cStringIO import StringIO
 
@@ -42,7 +42,7 @@ def _shell(ctx, cluster_name, remote, args, **kwargs):
     return remote.run(
         args=[
             'sudo',
-            ctx.ceph_daemon,
+            ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
             'shell',
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
@@ -76,7 +76,7 @@ def build_initial_config(ctx, config):
 def normalize_hostnames(ctx):
     """
     Ensure we have short hostnames throughout, for consistency between
-    remote.shortname and socket.gethostname() in ceph-daemon.
+    remote.shortname and socket.gethostname() in cephadm.
     """
     log.info('Normalizing hostnames...')
     ctx.cluster.run(args=[
@@ -91,7 +91,7 @@ def normalize_hostnames(ctx):
         pass
 
 @contextlib.contextmanager
-def download_ceph_daemon(ctx, config, ref):
+def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
 
@@ -108,13 +108,13 @@ def download_ceph_daemon(ctx, config, ref):
                 run.Raw('|'),
                 'tar', '-xO', 'src/cephadm/cephadm',
                 run.Raw('>'),
-                ctx.ceph_daemon,
+                ctx.cephadm,
                 run.Raw('&&'),
                 'test', '-s',
-                ctx.ceph_daemon,
+                ctx.cephadm,
                 run.Raw('&&'),
                 'chmod', '+x',
-                ctx.ceph_daemon,
+                ctx.cephadm,
             ],
         )
 
@@ -124,7 +124,7 @@ def download_ceph_daemon(ctx, config, ref):
         log.info('Removing cluster...')
         ctx.cluster.run(args=[
             'sudo',
-            ctx.ceph_daemon,
+            ctx.cephadm,
             'rm-cluster',
             '--fsid', ctx.ceph[cluster_name].fsid,
             '--force',
@@ -136,7 +136,7 @@ def download_ceph_daemon(ctx, config, ref):
                 args=[
                     'rm',
                     '-rf',
-                    ctx.ceph_daemon,
+                    ctx.cephadm,
                 ],
             )
 
@@ -263,7 +263,7 @@ def ceph_bootstrap(ctx, config):
         log.info('Bootstrapping...')
         cmd = [
             'sudo',
-            ctx.ceph_daemon,
+            ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
             'bootstrap',
             '--fsid', fsid,
@@ -784,14 +784,14 @@ def task(ctx, config):
         config['cephadm_mode'] = 'root'
     assert config['cephadm_mode'] in ['root', 'cephadm-package']
     if config['cephadm_mode'] == 'root':
-        ctx.ceph_daemon = testdir + '/cephadm'
+        ctx.cephadm = testdir + '/cephadm'
     else:
-        ctx.ceph_daemon = 'cephadm'  # in the path
+        ctx.cephadm = 'cephadm'  # in the path
 
     if first_ceph_cluster:
         # FIXME: this is global for all clusters
         ctx.daemons = DaemonGroup(
-            use_ceph_daemon=ctx.ceph_daemon)
+            use_cephadm=ctx.cephadm)
 
     # image
     ctx.ceph[cluster_name].image = config.get('image')
@@ -833,8 +833,7 @@ def task(ctx, config):
     with contextutil.nested(
             lambda: ceph_initial(),
             lambda: normalize_hostnames(ctx=ctx),
-            lambda: download_ceph_daemon(ctx=ctx, config=config,
-                                         ref=ref),
+            lambda: download_cephadm(ctx=ctx, config=config, ref=ref),
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
             lambda: ceph_bootstrap(ctx=ctx, config=config),
@@ -849,7 +848,7 @@ def task(ctx, config):
             ctx=ctx,
             logger=log.getChild('ceph_manager.' + cluster_name),
             cluster=cluster_name,
-            ceph_daemon=True,
+            cephadm=True,
         )
 
         try:
