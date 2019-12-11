@@ -1105,15 +1105,6 @@ def get_sha1_from_pkg_name(path):
     return sha1
 
 
-def remove_old_kernels(ctx):
-    for remote in ctx.cluster.remotes.keys():
-        package_type = remote.os.package_type
-        if package_type == 'rpm':
-            log.info("Removing old kernels from %s", remote)
-            args = ['sudo', 'package-cleanup', '-y', '--oldkernels']
-            remote.run(args=args)
-
-
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
@@ -1217,8 +1208,6 @@ def task(ctx, config):
     need_install = {}  # sha1 to dl, or path to rpm or deb
     need_version = {}  # utsrelease or sha1
     kdb = {}
-
-    remove_old_kernels(ctx)
 
     for role, role_config in config.items():
         # gather information about this remote
