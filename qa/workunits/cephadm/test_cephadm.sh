@@ -11,7 +11,7 @@ IMAGE_MASTER=${IMAGE_MASTER:-'ceph/daemon-base:latest-master-devel'}
 IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'ceph/daemon-base:latest-mimic'}
 
-CORPUS_GIT_SUBMOD="ceph-daemon-adoption-corpus"
+CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
 git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
