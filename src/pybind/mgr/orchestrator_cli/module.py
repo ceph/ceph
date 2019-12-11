@@ -87,7 +87,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             stdout=json.dumps({
                 'ident': list(self.ident),
                 'fault': list(self.fault)
-                }, indent=4))
+                }, indent=4, sort_keys=True))
 
     def light_on(self, fault_ident, devid):
         # type: (str, str) -> HandleCommandResult
@@ -184,7 +184,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         if format == 'json':
             hosts = [dict(host=node.name, labels=node.labels)
                      for node in completion.result]
-            output = json.dumps(hosts)
+            output = json.dumps(hosts, sort_keys=True)
         else:
             table = PrettyTable(
                 ['HOST', 'LABELS'],

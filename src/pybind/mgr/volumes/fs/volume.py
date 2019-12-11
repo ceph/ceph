@@ -365,7 +365,7 @@ class VolumeClient(object):
         fs_map = self.mgr.get("fs_map")
         for f in fs_map['filesystems']:
             result.append({'name': f['mdsmap']['fs_name']})
-        return 0, json.dumps(result, indent=2), ""
+        return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
     def group_exists(self, sv, spec):
         # default group need not be explicitly created (as it gets created
@@ -421,7 +421,7 @@ class VolumeClient(object):
         namedict = []
         for i in range(len(names)):
             namedict.append({'name': names[i].decode('utf-8')})
-        return json.dumps(namedict, indent=2)
+        return json.dumps(namedict, indent=4, sort_keys=True)
 
     ### subvolume operations
 

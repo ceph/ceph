@@ -404,7 +404,7 @@ class Module(MgrModule):
 
     def handle_command(self, inbuf, command):
         if command['prefix'] == 'zabbix config-show':
-            return 0, json.dumps(self.config), ''
+            return 0, json.dumps(self.config, index=4, sort_keys=True), ''
         elif command['prefix'] == 'zabbix config-set':
             key = command['key']
             value = command['value']

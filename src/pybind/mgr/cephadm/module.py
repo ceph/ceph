@@ -1475,4 +1475,4 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                     'current_name': s.container_image_name,
                     'current_id': s.container_image_id,
                 }
-        return trivial_result(json.dumps(r, indent=4))
+        return trivial_result(json.dumps(r, indent=4, sort_keys=True))

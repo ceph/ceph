@@ -439,11 +439,11 @@ class Module(MgrModule):
             'df_stats': df_stats
         }
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, sort_keys=True)
 
     def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == 'influx config-show':
-            return 0, json.dumps(self.config), ''
+            return 0, json.dumps(self.config, sort_keys=True), ''
         elif cmd['prefix'] == 'influx config-set':
             key = cmd['key']
             value = cmd['value']
