@@ -7,7 +7,7 @@ from ceph.deployment.drive_group import DriveGroupSpecs, DriveGroupValidationErr
 from mgr_util import get_most_recent_rate
 
 from . import ApiController, RESTController, Endpoint, Task
-from . import CreatePermission, ReadPermission, UpdatePermission
+from . import CreatePermission, ReadPermission, UpdatePermission, DeletePermission
 from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
 from ..exceptions import DashboardException
@@ -128,6 +128,20 @@ class Osd(RESTController):
                     'class': device_class,
                     'ids': [svc_id]
                 })
+
+    @DeletePermission
+    @raise_if_no_orchestrator
+    @handle_orchestrator_error('osd')
+    def delete(self, svc_id, force=None):
+        orch = OrchClient.instance()
+        if not force:
+            logger.info('Check for removing osd.%s...', svc_id)
+            check = orch.osds.check_remove([svc_id])
+            if not check['safe']:
+                logger.error('Unable to remove osd.%s: %s', svc_id, check['message'])
+                raise DashboardException(component='osd', msg=check['message'])
+        logger.info('Start removing osd.%s...', svc_id)
+        orch.osds.remove([svc_id])
 
     @RESTController.Resource('POST', query_params=['deep'])
     @UpdatePermission
@@ -264,6 +278,21 @@ class Osd(RESTController):
                 'message': str(e),
                 'is_safe_to_destroy': False,
             }
+
+    @Endpoint('GET', query_params=['svc_ids'])
+    @ReadPermission
+    @raise_if_no_orchestrator
+    @handle_orchestrator_error('osd')
+    def safe_to_delete(self, svc_ids):
+        """
+        :type ids: int|[int]
+        """
+        orch = OrchClient.instance()
+        check = orch.osds.check_remove([svc_ids])
+        return {
+            'is_safe_to_delete': check.get('safe', False),
+            'message': check.get('message', '')
+        }
 
     @RESTController.Resource('GET')
     def devices(self, svc_id):
