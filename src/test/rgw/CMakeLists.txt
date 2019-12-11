@@ -150,6 +150,8 @@ target_link_libraries(unittest_rgw_dmclock_scheduler radosgw_a dmclock)
 if(WITH_BOOST_CONTEXT)
   target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
   target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
+  target_include_directories(unittest_rgw_dmclock_scheduler PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)

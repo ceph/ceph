@@ -152,7 +152,8 @@ target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 
 if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_common PUBLIC spawn)
+  target_include_directories(rgw_common PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 if(WITH_LTTNG)
@@ -386,6 +387,9 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw_admin_user PRIVATE RDKafka::RDKafka)
+endif()
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(rgw_admin_user PRIVATE spawn)
 endif()
 
 if(WITH_TESTS)
