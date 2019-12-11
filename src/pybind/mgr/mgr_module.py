@@ -762,11 +762,11 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         if daemon.startswith('rbd-mirror.'):
             match = re.match(
-                r'^rbd_mirror_([^/]+)/(?:(?:([^/]+)/)?)(.*)\.(replay(?:_bytes|_latency)?)$',
+                r'^rbd_mirror_image_([^/]+)/(?:(?:([^/]+)/)?)(.*)\.(replay(?:_bytes|_latency)?)$',
                 path
             )
             if match:
-                path = 'rbd_mirror_' + match.group(4)
+                path = 'rbd_mirror_image_' + match.group(4)
                 pool = match.group(1)
                 namespace = match.group(2) or ''
                 image = match.group(3)
