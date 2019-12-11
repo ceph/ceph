@@ -5,10 +5,10 @@ import unittest
 
 if sys.version_info >= (3, 3):
     from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('ceph-daemon', 'ceph-daemon').load_module()
+    cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 else:
     import imp
-    cd = imp.load_source('ceph-daemon', 'ceph-daemon')
+    cd = imp.load_source('cephadm', 'cephadm')
 
 class TestCephDaemon(unittest.TestCase):
     def test_is_fsid(self):

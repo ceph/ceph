@@ -27,12 +27,12 @@ OSD_LV_NAME=${SCRIPT_NAME%.*}
 [ -z "$SUDO" ] && SUDO=sudo
 
 if [ -z "$CEPH_DAEMON" ]; then
-    CEPH_DAEMON=${SCRIPT_DIR}/../../src/ceph-daemon/ceph-daemon
+    CEPH_DAEMON=${SCRIPT_DIR}/../../src/cephadm/cephadm
 fi
 
 # at this point, we need $CEPH_DAEMON set
 if ! [ -x "$CEPH_DAEMON" ]; then
-    echo "ceph-daemon not found. Please set \$CEPH_DAEMON"
+    echo "cephadm not found. Please set \$CEPH_DAEMON"
     exit 1
 fi
 
@@ -42,7 +42,7 @@ if [ -z "$PYTHON_KLUDGE" ]; then
    TMPBINDIR=$(mktemp -d)
    trap "rm -rf $TMPBINDIR" EXIT
    ORIG_CEPH_DAEMON="$CEPH_DAEMON"
-   CEPH_DAEMON="$TMPBINDIR/ceph-daemon"
+   CEPH_DAEMON="$TMPBINDIR/cephadm"
    for p in $PYTHONS; do
        echo "=== re-running with $p ==="
        ln -s `which $p` $TMPBINDIR/python
@@ -211,7 +211,7 @@ for tarball in $TEST_TARS; do
         # validate after adopt
         out=$($CEPH_DAEMON ls | jq '.[]' \
                               | jq 'select(.name == "'$name'")')
-        echo $out | jq -r '.style' | grep 'ceph-daemon'
+        echo $out | jq -r '.style' | grep 'cephadm'
         echo $out | jq -r '.fsid' | grep $FSID_LEGACY
     done
     # clean-up before next iter

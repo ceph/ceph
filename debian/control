@@ -167,16 +167,16 @@ Description: debugging symbols for ceph-base
  .
  This package contains the debugging symbols for ceph-base.
 
-Package: ceph-daemon
+Package: cephadm
 Architecture: linux-any
 Depends: docker.io,
 	 ${python:Depends},
-Description: ceph-daemon utility to bootstrap ceph daemons with systemd and containers
+Description: cephadm utility to bootstrap ceph daemons with systemd and containers
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- The ceph-daemon utility is used to bootstrap a Ceph cluster and to manage
+ The cephadm utility is used to bootstrap a Ceph cluster and to manage
  ceph daemons deployed with systemd and containers.
 
 Package: ceph-mds
@@ -329,7 +329,7 @@ Description: kubernetes events plugin for ceph-mgr
 Package: ceph-mgr-ssh
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-	 ceph-daemon,
+	 cephadm,
 	 python-six,
          ${misc:Depends},
          ${python:Depends},

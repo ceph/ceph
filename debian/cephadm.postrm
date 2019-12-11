@@ -1,5 +1,5 @@
 #!/bin/sh
-# postrm script for ceph-daemon
+# postrm script for cephadm
 #
 # see: dh_installdeb(1)
 
@@ -21,7 +21,7 @@ set -e
 
 case "$1" in
     remove)
-	deluser --remove-home cephdaemon
+	deluser --remove-home cephadm
     ;;
 
     purge)

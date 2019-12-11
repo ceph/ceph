@@ -98,15 +98,15 @@ def download_ceph_daemon(ctx, config, ref):
     if config.get('ceph_daemon_mode') != 'packaged-ceph-daemon':
         ref = config.get('ceph_daemon_branch', ref)
         git_url = teuth_config.get_ceph_git_url()
-        log.info('Downloading ceph-daemon (repo %s ref %s)...' % (git_url, ref))
+        log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
         ctx.cluster.run(
             args=[
                 'git', 'archive',
                 '--remote=' + git_url,
                 ref,
-                'src/ceph-daemon/ceph-daemon',
+                'src/cephadm/cephadm',
                 run.Raw('|'),
-                'tar', '-xO', 'src/ceph-daemon/ceph-daemon',
+                'tar', '-xO', 'src/cephadm/cephadm',
                 run.Raw('>'),
                 ctx.ceph_daemon,
                 run.Raw('&&'),
@@ -131,7 +131,7 @@ def download_ceph_daemon(ctx, config, ref):
         ])
 
         if config.get('ceph_daemon_mode') == 'root':
-            log.info('Removing ceph-daemon ...')
+            log.info('Removing cephadm ...')
             ctx.cluster.run(
                 args=[
                     'rm',
@@ -784,9 +784,9 @@ def task(ctx, config):
         config['ceph_daemon_mode'] = 'root'
     assert config['ceph_daemon_mode'] in ['root', 'packaged-ceph-daemon']
     if config['ceph_daemon_mode'] == 'root':
-        ctx.ceph_daemon = testdir + '/ceph-daemon'
+        ctx.ceph_daemon = testdir + '/cephadm'
     else:
-        ctx.ceph_daemon = 'ceph-daemon'  # in the path
+        ctx.ceph_daemon = 'cephadm'  # in the path
 
     if first_ceph_cluster:
         # FIXME: this is global for all clusters
