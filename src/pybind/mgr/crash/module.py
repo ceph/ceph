@@ -173,7 +173,7 @@ class Module(MgrModule):
         crash = self.crashes.get(crashid)
         if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
-        val = json.dumps(crash, indent=4)
+        val = json.dumps(crash, indent=4, sort_keys=True)
         return 0, val, ''
 
     def do_post(self, cmd, inbuf):
@@ -206,7 +206,7 @@ class Module(MgrModule):
                  if 'archived' not in crash]
         r = sorted(t, key=lambda i: i.get('crash_id'))
         if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
-            return 0, json.dumps(r, indent=4), ''
+            return 0, json.dumps(r, indent=4, sort_keys=True), ''
         else:
             table = PrettyTable(['ID', 'ENTITY', 'NEW'],
                                 border=False)
@@ -333,7 +333,7 @@ class Module(MgrModule):
                 pname = "unknown"
             report[pname] += 1
 
-        return 0, '', json.dumps(report)
+        return 0, '', json.dumps(report, sort_keys=True)
 
     def self_test(self):
         # test time conversion

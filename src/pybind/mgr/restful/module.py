@@ -441,7 +441,7 @@ class Module(MgrModule):
             self.refresh_keys()
             return (
                 0,
-                json.dumps(self.keys, indent=2),
+                json.dumps(self.keys, indent=4, sort_keys=True),
                 "",
             )
 
