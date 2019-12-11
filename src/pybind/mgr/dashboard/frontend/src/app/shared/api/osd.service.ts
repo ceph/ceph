@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -138,12 +138,26 @@ export class OsdService {
     return this.http.post(`${this.path}/${id}/destroy`, null);
   }
 
+  delete(id: number, force?: boolean) {
+    const options = force ? { params: new HttpParams().set('force', 'true') } : {};
+    options['observe'] = 'response';
+    return this.http.delete(`${this.path}/${id}`, options);
+  }
+
   safeToDestroy(ids: string) {
     interface SafeToDestroyResponse {
-      'safe-to-destroy': boolean;
+      is_safe_to_destroy: boolean;
       message?: string;
     }
     return this.http.get<SafeToDestroyResponse>(`${this.path}/safe_to_destroy?ids=${ids}`);
+  }
+
+  safeToDelete(ids: string) {
+    interface SafeToDeleteResponse {
+      is_safe_to_delete: boolean;
+      message?: string;
+    }
+    return this.http.get<SafeToDeleteResponse>(`${this.path}/safe_to_delete?svc_ids=${ids}`);
   }
 
   getDevices(osdId: number) {

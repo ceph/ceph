@@ -55,12 +55,13 @@
 </ng-template>
 
 <ng-template #criticalConfirmationTpl
-             let-safeToDestroyResult="result"
+             let-safeToPerform="safeToPerform"
+             let-message="message"
              let-actionDescription="actionDescription">
-  <div *ngIf="!safeToDestroyResult['is_safe_to_destroy']"
+  <div *ngIf="!safeToPerform"
        class="danger">
     <cd-alert-panel type="warning"
-                    i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to destroy!</cd-alert-panel>
+                    i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to be {{ actionDescription }}! {{ message }}</cd-alert-panel>
   </div>
   <ng-container i18n><strong>OSD {{ getSelectedOsdIds() | join }}</strong> will be
 <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
