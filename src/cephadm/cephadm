@@ -11,7 +11,7 @@ CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1=r'[ceph: \u@\h \W]\$ '
 
 """
-You can invoke ceph-daemon in two ways:
+You can invoke cephadm in two ways:
 
 1. The normal way, at the command line.
 
