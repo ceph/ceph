@@ -310,6 +310,7 @@ def _yum_set_check_obsoletes(remote):
     conf_path = '/etc/yum/pluginconf.d/priorities.conf'
     conf_path_orig = conf_path + '.orig'
     cmd = [
+        'sudo', 'touch', '-a', '/etc/yum/pluginconf.d/priorities.conf', run.Raw(';'),
         'test', '-e', conf_path_orig, run.Raw('||'), 'sudo', 'cp', '-af',
         conf_path, conf_path_orig,
     ]
