@@ -8915,17 +8915,9 @@ int BlueStore::reshard(const std::string& new_sharding)
 int BlueStore::_reshard(const std::string& new_sharding)
 {
   KeyValueDB* source_db = nullptr;
-  int r = _mount(true, false);
+  int r = _mount(true, true);
   if (r < 0)
     return r;
-
-  stringstream err;
-  r = db->open(err);
-  if (r < 0) {
-    derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    _close_db();
-    return -EIO;
-  }
 
   BlueStore_DB_Hash* hdb = dynamic_cast<BlueStore_DB_Hash*>(db);
   //column families to iterate over
@@ -9001,7 +8993,7 @@ int BlueStore::_reshard(const std::string& new_sharding)
 
     while (data_source->valid()) {
       std::pair<std::string, std::string> raw_key = data_source->raw_key();
-      if (ops_in_transaction == 10000 || data_in_transaction > 10000000) {
+      if (keys_in_iterator == 10000 || data_in_iterator > 10000000) {
         data_source = create_iterator(raw_key.first, raw_key.second);
       }
 
