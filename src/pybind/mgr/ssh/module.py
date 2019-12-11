@@ -276,7 +276,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self.config_notify()
 
-        path = self.get_ceph_option('ceph_daemon_path')
+        path = self.get_ceph_option('cephadm_path')
         try:
             with open(path, 'r') as f:
                 self._ceph_daemon = f.read()
