@@ -913,11 +913,11 @@ the following recommendations should be followed:
 
 * **10 <= Priority < 50:** Use this if your tests are urgent and blocking other important development.
 
-* **50 <= Priority < 75:** Use this if you are testing a particular feature/fix and running fewer than about 25 jobs.
+* **50 <= Priority < 75:** Use this if you are testing a particular feature/fix and running fewer than about 25 jobs. This range can also be used for urgent release testing.
 
 * **75 <= Priority < 100:** Tech Leads will regularly schedule integration tests with this priority to verify pull requests against master.
 
-* **100 <= Priority < 150:** This priority is to be used for release QA.
+* **100 <= Priority < 150:** This priority is to be used for QE validation of point releases.
 
 * **150 <= Priority < 200:** Use this priority for 100 jobs or fewer of a particular feature/fix that you'd like results on in a day or so.
 
