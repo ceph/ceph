@@ -19,7 +19,7 @@ class TestCephDaemon(unittest.TestCase):
         args = p.parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
 
-    @mock.patch.dict(os.environ,{'CEPH_DAEMON_IMAGE':'bar'})
+    @mock.patch.dict(os.environ,{'CEPHADM_IMAGE':'bar'})
     def test__get_parser_image_with_envvar(self):
         p = cd._get_parser()
         args = p.parse_args(['version'])
