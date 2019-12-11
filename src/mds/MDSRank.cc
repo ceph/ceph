@@ -3176,7 +3176,6 @@ void MDSRank::create_logger()
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
     mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");
-    mds_plb.add_u64(l_mds_inode_max, "inode_max", "Max inodes, cache size");
     mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned", "Inodes pinned");
     mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired", "Inodes expired");
     mds_plb.add_u64(l_mds_inodes_with_caps, "inodes_with_caps",
@@ -3638,7 +3637,6 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_cache_memory_limit",
     "mds_cache_mid",
     "mds_cache_reservation",
-    "mds_cache_size",
     "mds_cache_trim_decay_rate",
     "mds_cap_revoke_eviction_timeout",
     "mds_dump_cache_threshold_file",

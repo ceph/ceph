@@ -38,15 +38,18 @@ class TestClientLimits(CephFSTestCase):
         :param use_subdir: whether to put test files in a subdir or use root
         """
 
-        cache_size = open_files/2
+        # Set MDS cache memory limit to a low value that will make the MDS to
+        # ask the client to trim the caps.
+        cache_memory_limit = "1K"
 
-        self.set_conf('mds', 'mds cache size', cache_size)
+        self.set_conf('mds', 'mds_cache_memory_limit', cache_memory_limit)
         self.set_conf('mds', 'mds_recall_max_caps', open_files/2)
         self.set_conf('mds', 'mds_recall_warning_threshold', open_files)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        mds_max_caps_per_client = int(self.fs.get_config("mds_max_caps_per_client"))
         mds_recall_warning_decay_rate = self.fs.get_config("mds_recall_warning_decay_rate")
         self.assertTrue(open_files >= mds_min_caps_per_client)
 
@@ -87,7 +90,7 @@ class TestClientLimits(CephFSTestCase):
             num_caps = self.get_session(mount_a_client_id)['num_caps']
             if num_caps <= mds_min_caps_per_client:
                 return True
-            elif num_caps < cache_size:
+            elif num_caps <= mds_max_caps_per_client:
                 return True
             else:
                 return False

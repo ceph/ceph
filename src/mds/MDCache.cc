@@ -147,7 +147,6 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
                         (g_conf()->mds_dir_max_commit_size << 20) :
                         (0.9 *(g_conf()->osd_max_write_size << 20));
 
-  cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
   cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
@@ -212,8 +211,6 @@ MDCache::~MDCache()
 
 void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
-  if (changed.count("mds_cache_size"))
-    cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
   if (changed.count("mds_cache_memory_limit"))
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
@@ -232,7 +229,6 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
 
 void MDCache::log_stat()
 {
-  mds->logger->set(l_mds_inode_max, cache_inode_limit ? : INT_MAX);
   mds->logger->set(l_mds_inodes, lru.lru_get_size());
   mds->logger->set(l_mds_inodes_pinned, lru.lru_get_num_pinned());
   mds->logger->set(l_mds_inodes_top, lru.lru_get_top());

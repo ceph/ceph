@@ -38,9 +38,9 @@ specific clients as misbehaving, you should investigate why they are doing so.
 
 Generally it will be the result of
 
-#. Overloading the system (if you have extra RAM, increase the "mds cache size"
-   config from its default 100000; having a larger active file set than your MDS
-   cache is the #1 cause of this!).
+#. Overloading the system (if you have extra RAM, increase the
+   "mds cache memory limit" config from its default 1GiB; having a larger active
+   file set than your MDS cache is the #1 cause of this!).
 
 #. Running an older (misbehaving) client.
 
