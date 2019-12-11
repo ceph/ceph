@@ -1257,6 +1257,15 @@ def get_lv_by_name(name):
     lvs = _output_parser(stdout, LV_FIELDS)
     return [Volume(**lv) for lv in lvs]
 
+def get_lvs_by_tag(lv_tag):
+    stdout, stderr, returncode = process.call(
+        ['lvs', '--noheadings', '--separator=";"', '-a', '-o', LV_FIELDS, '-S',
+         'lv_tags={{{}}}'.format(lv_tag)],
+        verbose_on_failure=False
+    )
+    lvs = _output_parser(stdout, LV_FIELDS)
+    return [Volume(**lv) for lv in lvs]
+
 def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None, lvs=None):
     """
     Return a matching lv for the current system, requiring ``lv_name``,
