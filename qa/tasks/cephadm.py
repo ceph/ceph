@@ -1,5 +1,5 @@
 """
-Ceph cluster task, deployed via cephadm and ssh orchestrator
+Ceph cluster task, deployed via cephadm orchestrator
 """
 from cStringIO import StringIO
 
@@ -56,7 +56,7 @@ def _shell(ctx, cluster_name, remote, args, **kwargs):
 def build_initial_config(ctx, config):
     cluster_name = config['cluster']
 
-    path = os.path.join(os.path.dirname(__file__), 'ceph2.conf')
+    path = os.path.join(os.path.dirname(__file__), 'cephadm.conf')
     conf = configobj.ConfigObj(path, file_error=True)
 
     conf.setdefault('global', {})
@@ -860,4 +860,3 @@ def task(ctx, config):
 
         finally:
             log.info('Teardown begin')
-

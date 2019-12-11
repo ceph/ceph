@@ -1,5 +1,5 @@
 overrides:
-  ceph2:
+  cephadm:
     cephadm_mode: cephadm-package
   install:
     extra_packages: [cephadm]
