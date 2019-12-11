@@ -184,7 +184,8 @@ def need_to_install(ctx, role, version):
         stdout=uname_fp,
         )
     cur_version = uname_fp.getvalue().rstrip('\n')
-    log.debug('current kernel version is {ver}'.format(ver=cur_version))
+    log.debug('current kernel version is {ver} vs {want}'.format(ver=cur_version,
+                                                                 want=version))
 
     if '.' in str(version):
         # version is utsrelease, yay
@@ -906,12 +907,23 @@ def grub2_kernel_select_generic(remote, newversion, ostype):
     remote.run(args=['sudo', mkconfig, '-o', grubconfig, ])
     grub2conf = teuthology.get_file(remote, grubconfig, True)
     entry_num = 0
-    for line in grub2conf.split('\n'):
-        if line.startswith('menuentry'):
-            if newversion in line:
+    if '\nmenuitem ' not in grub2conf:
+        # okay, do the newer (el8) grub2 thing
+        grub2conf = remote.sh('sudo /bin/ls /boot/loader/entries')
+        entry = None
+        for line in grub2conf.split('\n'):
+            if line.endswith('.conf') and newversion in line:
+                entry = line[:-5]  # drop .conf suffix
                 break
-            entry_num += 1
-    remote.run(args=['sudo', grubset, str(entry_num), ])
+    else:
+        # do old menuitem counting thing
+        for line in grub2conf.split('\n'):
+            if line.startswith('menuentry '):
+                if newversion in line:
+                    break
+                entry_num += 1
+        entry = str(entry_num)
+    remote.run(args=['sudo', grubset, entry])
 
 
 def generate_legacy_grub_entry(remote, newversion):
