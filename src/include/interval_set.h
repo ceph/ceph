@@ -160,7 +160,7 @@ class interval_set {
   };
 
   interval_set() : _size(0) {}
-  interval_set(Map& other) {
+  interval_set(Map&& other) {
     m.swap(other);
     _size = 0;
     for (auto& i : m) {
