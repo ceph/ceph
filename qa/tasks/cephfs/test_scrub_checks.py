@@ -43,7 +43,7 @@ class TestScrubControls(CephFSTestCase):
         log.info("client_path: {0}".format(client_path))
 
         log.info("Cloning repo into place")
-        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+        TestScrubChecks.clone_repo(self.mount_a, client_path)
 
         out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
@@ -66,7 +66,7 @@ class TestScrubControls(CephFSTestCase):
         log.info("client_path: {0}".format(client_path))
 
         log.info("Cloning repo into place")
-        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+        _ = TestScrubChecks.clone_repo(self.mount_a, client_path)
 
         out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
@@ -94,7 +94,7 @@ class TestScrubControls(CephFSTestCase):
         log.info("client_path: {0}".format(client_path))
 
         log.info("Cloning repo into place")
-        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+        _ = TestScrubChecks.clone_repo(self.mount_a, client_path)
 
         out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
@@ -307,7 +307,7 @@ class TestScrubChecks(CephFSTestCase):
 
         success, errstring = validator(jout, 0)
         if not success:
-            raise AsokCommandFailedError(command, rout, jout, errstring)
+            raise AsokCommandFailedError(command, 0, jout, errstring)
         return jout
 
     def asok_command(self, mds_rank, command, validator):

@@ -85,18 +85,18 @@ def ceph_crash(ctx, config):
             path = os.path.join(ctx.archive, 'remote')
             try:
                 os.makedirs(path)
-            except OSError as e:
+            except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
                 sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
-                except OSError as e:
+                except OSError:
                     pass
                 try:
                     teuthology.pull_directory(remote, '/var/lib/ceph/crash',
                                               os.path.join(sub, 'crash'))
-                except ReadError as e:
+                except ReadError:
                     pass
 
 
@@ -270,13 +270,13 @@ def ceph_log(ctx, config):
             path = os.path.join(ctx.archive, 'remote')
             try:
                 os.makedirs(path)
-            except OSError as e:
+            except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
                 sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
-                except OSError as e:
+                except OSError:
                     pass
                 teuthology.pull_directory(remote, '/var/log/ceph',
                                           os.path.join(sub, 'log'))
@@ -397,8 +397,6 @@ def create_rbd_pool(ctx, config):
 @contextlib.contextmanager
 def cephfs_setup(ctx, config):
     cluster_name = config['cluster']
-    testdir = teuthology.get_testdir(ctx)
-    coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
 
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()

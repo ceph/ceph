@@ -2,10 +2,8 @@
 
 from __future__ import print_function
 
-import json
 import subprocess
 import shlex
-from StringIO import StringIO
 import errno
 import sys
 import os
@@ -13,8 +11,7 @@ import io
 import re
 
 
-import rados
-from ceph_argparse import *
+from ceph_argparse import * # noqa
 
 keyring_base = '/tmp/cephtest-caps.keyring'
 

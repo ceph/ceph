@@ -1,7 +1,6 @@
 import errno
 import json
 import logging
-from tempfile import NamedTemporaryFile
 from time import sleep
 
 from teuthology.exceptions import CommandFailedError

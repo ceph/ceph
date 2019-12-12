@@ -4,7 +4,6 @@ import logging
 from textwrap import dedent
 import datetime
 import gevent
-import datetime
 
 from teuthology.orchestra.run import CommandFailedError, Raw
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
@@ -138,7 +137,7 @@ class TestStrays(CephFSTestCase):
             size_unit = 1024  # small, numerous files
             file_multiplier = 200
         else:
-            raise NotImplemented(throttle_type)
+            raise NotImplementedError(throttle_type)
 
         # Pick up config changes
         self.fs.mds_fail_restart()
@@ -225,7 +224,7 @@ class TestStrays(CephFSTestCase):
                             num_strays_purging, mds_max_purge_files
                         ))
                 else:
-                    raise NotImplemented(throttle_type)
+                    raise NotImplementedError(throttle_type)
 
                 log.info("Waiting for purge to complete {0}/{1}, {2}/{3}".format(
                     num_strays_purging, num_strays,

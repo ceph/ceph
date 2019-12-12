@@ -2,11 +2,8 @@
 Handle clock skews in monitors.
 """
 import logging
-import contextlib
 import ceph_manager
 import time
-import gevent
-from StringIO import StringIO
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
