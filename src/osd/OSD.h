@@ -1247,6 +1247,8 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  int last_require_osd_release = 0;
+
   bool store_is_rotational = true;
   bool journal_is_rotational = true;
 
@@ -2500,8 +2502,12 @@ private:
   float get_osd_recovery_sleep();
 
 public:
-  static int peek_meta(ObjectStore *store, string& magic,
-		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
+  static int peek_meta(ObjectStore *store,
+		       string *magic,
+		       uuid_d *cluster_fsid,
+		       uuid_d *osd_fsid,
+		       int *whoami,
+		       int *min_osd_release);
   
 
   // startup/shutdown

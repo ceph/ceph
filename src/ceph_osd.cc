@@ -27,6 +27,7 @@ using namespace std;
 #include "include/ceph_features.h"
 
 #include "common/config.h"
+#include "common/version.h"
 
 #include "mon/MonMap.h"
 
@@ -403,8 +404,10 @@ flushjournal_out:
   
   string magic;
   uuid_d cluster_fsid, osd_fsid;
+  int require_osd_release = 0;
   int w;
-  int r = OSD::peek_meta(store, magic, cluster_fsid, osd_fsid, w);
+  int r = OSD::peek_meta(store, &magic, &cluster_fsid, &osd_fsid, &w,
+			 &require_osd_release);
   if (r < 0) {
     derr << TEXT_RED << " ** ERROR: unable to open OSD superblock on "
 	 << g_conf->osd_data << ": " << cpp_strerror(-r)
@@ -432,6 +435,14 @@ flushjournal_out:
   if (get_osd_fsid) {
     cout << osd_fsid << std::endl;
     exit(0);
+  }
+
+  if (require_osd_release > 0 &&
+      require_osd_release + 2 < ceph_release()) {
+    derr << "OSD's recorded require_osd_release " << require_osd_release
+	 << " + 2 < this release " << ceph_release()
+	 << "; you can only upgrade 2 releases at a time" << dendl;
+    exit(1);
   }
 
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC
