@@ -45,6 +45,7 @@ import json
 import logging
 import os
 import random
+import re
 import select
 import shutil
 import socket
@@ -53,8 +54,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import yaml
-
 try:
     from typing import Dict, List, Tuple, Optional, Union
 except ImportError:
@@ -63,7 +62,7 @@ import uuid
 
 from distutils.spawn import find_executable
 from functools import wraps
-from glob import iglob
+from glob import glob
 
 
 container_path = None
@@ -77,7 +76,8 @@ class Ceph(object):
 
 
 class Monitoring(object):
-    # define the configs for the monitoring containers
+    """Define the configs for the monitoring containers"""
+
     port_map = {
         "prometheus": 9095  # Avoid default 9090, due to conflict with cockpit UI
     }
@@ -94,38 +94,23 @@ class Monitoring(object):
                     "--web.listen-address=:{}".format(port_map['prometheus'])
                 ]
             },
-            "config": {
-                "prometheus.yml": {
-                    "global": {
-                       "scrape_interval": "5s",
-                        "evaluation_interval": "10s"
-                    },
-                    "rule_files": [],
-                    "scrape_configs": [
-                        {
-                            "job_name": "prometheus",
-                            "static_configs": [
-                                { "targets": [
-                                    'localhost:{}'.format(port_map['prometheus'])
-                                ]}
-                            ]
-                        }
-                    ]
-                }
-            }
+            "config-json": [
+                "prometheus.yml"
+            ]
         }
     }
 
 
 def port_in_use(port_num):
+    # type (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
 
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(("127.0.0.1",port_num))
+        s.bind(("127.0.0.1", port_num))
         s.close()
         s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        s.bind(("::1",port_num))
+        s.bind(("::1", port_num))
         s.close()
     except OSError:
         s.close()
@@ -244,6 +229,19 @@ def call_throws(command, **kwargs):
 
 ##################################
 
+def read_config(fn):
+    # type: (Optional[str]) -> ConfigParser
+    # bend over backwards here because py2's ConfigParser doesn't like
+    # whitespace before config option names (e.g., '\n foo = bar\n').
+    # Yeesh!
+    cp = ConfigParser()
+    if fn:
+        with open(fn, 'r') as f:
+            raw_conf = f.read()
+        nice_conf = re.sub('\n(\s)+', '\n', raw_conf)
+        cp.readfp(StringIO(nice_conf))
+    return cp
+
 def pathify(p):
     # type: (str) -> str
     if not p.startswith('/'):
@@ -309,6 +307,15 @@ def infer_fsid(func):
         return func()
     return _infer_fsid
 
+def write_tmp(s, uid, gid):
+    tmp_f = tempfile.NamedTemporaryFile(mode='w',
+                                        prefix='ceph-tmp')
+    os.fchown(tmp_f.fileno(), uid, gid)
+    tmp_f.write(s)
+    tmp_f.flush()
+
+    return tmp_f
+
 def makedirs(dir, uid, gid, mode):
     # type: (str, int, int, int) -> None
     if not os.path.exists(dir):
@@ -352,46 +359,49 @@ def make_log_dir(fsid, uid=None, gid=None):
     makedirs(log_dir, uid, gid, LOG_DIR_MODE)
     return log_dir
 
-def copy_file(src, dst, uid=None, gid=None):
-    # type: (str, str, int, int) -> str
+def copy_files(src, dst, uid=None, gid=None):
+    # type: (List[str], str, int, int) -> None
     """
-    Copy a file from src to dst
-    """
-    if not uid or not gid:
-        (uid, gid) = extract_uid_gid()
-
-    if os.path.isdir(dst):
-        dst = os.path.join(dst, os.path.basename(src))
-
-    logger.debug('Copy \'%s\' -> \'%s\'' % (src, dst))
-    shutil.copyfile(src, dst)
-    os.chown(dst, uid, gid)
-
-    return dst
-
-def move_file(src, dst, uid=None, gid=None):
-    # type: (str, str, int, int) -> str
-    """
-    Move a file from src to dst
+    Copy a files from src to dst
     """
     if not uid or not gid:
         (uid, gid) = extract_uid_gid()
 
-    if os.path.isdir(dst):
-        dst = os.path.join(dst, os.path.basename(src))
+    for src_file in src:
+        dst_file = dst
+        if os.path.isdir(dst):
+            dst_file = os.path.join(dst, os.path.basename(src_file))
 
-    if os.path.islink(src):
-        # shutil.move() in python2 does not handle symlinks correctly
-        src_rl = os.readlink(src)
-        logger.debug('symlink \'%s\' -> \'%s\'' % (dst, src_rl))
-        os.symlink(src_rl, dst)
-        os.unlink(src)
-    else:
-        logger.debug('Move \'%s\' -> \'%s\'' % (src, dst))
-        shutil.move(src, dst)
-    os.chown(dst, uid, gid)
+        logger.debug('copy file \'%s\' -> \'%s\'' % (src_file, dst_file))
+        shutil.copyfile(src_file, dst_file)
 
-    return dst
+        logger.debug('chown %s:%s \'%s\'' % (uid, gid, dst_file))
+        os.chown(dst_file, uid, gid)
+
+def move_files(src, dst, uid=None, gid=None):
+    # type: (List[str], str, int, int) -> None
+    """
+    Move files from src to dst
+    """
+    if not uid or not gid:
+        (uid, gid) = extract_uid_gid()
+
+    for src_file in src:
+        dst_file = dst
+        if os.path.isdir(dst):
+            dst_file = os.path.join(dst, os.path.basename(src_file))
+
+        if os.path.islink(src_file):
+            # shutil.move() in py2 does not handle symlinks correctly
+            src_rl = os.readlink(src_file)
+            logger.debug("symlink '%s' -> '%s'" % (dst_file, src_rl))
+            os.symlink(src_rl, dst_file)
+            os.unlink(src_file)
+        else:
+            logger.debug("move file '%s' -> '%s'" % (src_file, dst_file))
+            shutil.move(src_file, dst_file)
+            logger.debug('chown %s:%s \'%s\'' % (uid, gid, dst_file))
+            os.chown(dst_file, uid, gid)
 
 def find_program(filename):
     # type: (str) -> str
@@ -447,8 +457,7 @@ def get_legacy_config_fsid(cluster, legacy_dir=None):
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)
 
-    config = ConfigParser()
-    config.read(config_file)
+    config = read_config(config_file)
 
     if config.has_section('global') and config.has_option('global', 'fsid'):
         return config.get('global', 'fsid')
@@ -475,7 +484,7 @@ def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id, legacy_dir=None):
 
 def get_daemon_args(fsid, daemon_type, daemon_id):
     # type: (str, str, Union[int, str]) -> List[str]
-    r = []
+    r = list()  # type: List[str]
 
     if daemon_type in Ceph.daemons:
         r += [
@@ -486,15 +495,16 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
         ]
 
     elif daemon_type in Monitoring.components:
-        metadata = Monitoring.components[daemon_type]['image']
-        r += metadata['args']
+        component = Monitoring.components[daemon_type]  # type: ignore
+        metadata = component.get('image', list())  # type: ignore
+        r += metadata.get('args', list())  # type: ignore
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
                        config=None, keyring=None):
     # type: (str, str, Union[int, str], int, int, str, str) ->  None
     data_dir = make_data_dir(fsid, daemon_type, daemon_id, uid=uid, gid=gid)
-    make_log_dir(fsid)
+    make_log_dir(fsid, uid=uid, gid=gid)
 
     if config:
         with open(data_dir + '/config', 'w') as f:
@@ -507,61 +517,45 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             os.fchown(f.fileno(), uid, gid)
             f.write(keyring)
 
-    if daemon_type == 'prometheus':
-        
-        # Set up directories
-        data_dir_root = get_data_dir(fsid, daemon_type, daemon_id)
-        makedirs(os.path.join(data_dir_root,'etc/prometheus'), uid, gid, 0o755)
-        makedirs(os.path.join(data_dir_root,'data'), uid, gid, 0o755)
+    if daemon_type in Monitoring.components.keys():
 
-        config = get_parm(args.config_json)
-        if not config:
-            raise Error("Prometheus deployment requires config-json to be set")
+        received_config = get_parm(args.config_json)
+        required_config = Monitoring.components[daemon_type].get('config-json', list())
+        if required_config:
+            if not received_config or not all(c in received_config.keys() for c in required_config):
+                raise Error("{} deployment requires config-json which must "
+                            "contain settings for {}".format(daemon_type.capitalize(), ', '.join(required_config)))
 
-        prometheus_yml = dict()
+        # Set up directories specific to the monitoring component
+        config_dir = ''
+        if daemon_type == 'prometheus':
+            data_dir_root = get_data_dir(fsid, daemon_type, daemon_id)
+            config_dir = 'etc/prometheus'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'alerting'), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
 
-        if "prometheus.yml" in config:
-            # trust the provided version is appropriate
-            prometheus_yml = config.get('prometheus.yml')
-            logger.debug("Using supplied prometheus.yml definition")
-        else:
-            if "mgrs" in config:
-                prometheus_yml = Monitoring.components['prometheus']['config']['prometheus.yml']
-                if isinstance(config['mgrs'], list):
-                    targets=[]
-                    for mgr in config['mgrs']:
-                        targets.append('{}:9283'.format(mgr))
-                    prometheus_yml['scrape_configs'].append({
-                            "job_name": "ceph",
-                            "static_configs": [
-                                { "targets": targets,
-                                  "labels": {
-                                    "instance": "ceph_cluster"
-                                    }
-                                }
-                            ],
-                        })
-                    logger.debug("Using default prometheus settings with supplied list of ceph mgrs")
-                else:
-                    raise Error("config-json supplied with invalid mgrs setting - must be a list")
+        # populate the config directory for the component from the config-json
+        for fname in required_config:
+            if isinstance(received_config[fname], list):
+                content = '\n'.join(received_config[fname])
             else:
-                raise Error("config-json must either specify a valid prometheus.yml, or a mgrs list")
+                content = received_config[fname]
 
-        # create configs
-        with open(os.path.join(data_dir_root,'etc/prometheus/prometheus.yml'), 'w') as f:
-            os.fchown(f.fileno(), uid, gid)
-            os.fchmod(f.fileno(), 0o600)
-            f.write(yaml.safe_dump(prometheus_yml, explicit_start=True, indent=2))
+            with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
+                os.fchown(f.fileno(), uid, gid)
+                os.fchmod(f.fileno(), 0o600)
+                f.write(content)
 
 def get_parm(option):
-    """Read requested arg, and return as a dict"""
+    # type: (str) -> Dict[str, str]
 
     if not option:
-        return None
+        return dict()
 
     if option == '-':
         try:
-            j = injected_stdin
+            j = injected_stdin  # type: ignore
         except NameError:
             j = sys.stdin.read()
     else:
@@ -574,7 +568,7 @@ def get_parm(option):
                 j = f.read()
         else:
             raise Error("Config file {} not found".format(option))
-    
+
     try:
         js = json.loads(j)
     except ValueError:
@@ -639,10 +633,11 @@ def get_config_and_both_keyrings():
 
 def get_container_mounts(fsid, daemon_type, daemon_id):
     # type: (str, str, Union[int, str, None]) -> Dict[str, str]
-    mounts = {}
+    mounts = dict()
+
     if daemon_type in Ceph.daemons:
         if fsid:
-            run_path = os.path.join('/var/run/ceph', fsid)
+            run_path = os.path.join('/var/run/ceph', fsid);
             if os.path.exists(run_path):
                 mounts[run_path] = '/var/run/ceph:z'
             log_dir = get_log_dir(fsid)
@@ -670,7 +665,8 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
-    if daemon_type in Monitoring.components:
+
+    if daemon_type in Monitoring.components and daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
         if daemon_type == 'prometheus':
             mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
@@ -684,7 +680,6 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
     if daemon_type in ['mon', 'osd'] or privileged:
         # mon and osd need privileged in order for libudev to query devices
         container_args += ['--privileged']
-
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
@@ -695,9 +690,9 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         entrypoint = '/usr/bin/ceph-' + daemon_type
         name = '%s.%s' % (daemon_type, daemon_id)
     elif daemon_type in Monitoring.components:
-        entrypoint = None
-        name = daemon_type
-    
+        entrypoint = ''
+        name = ''
+
     ceph_args = ['-n', name, '-f']
 
     if daemon_type in Monitoring.components:
@@ -712,8 +707,8 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
 
-def extract_uid_gid(img=None, file_path='/etc/ceph'):
-    # type: () -> Tuple[int, int]
+def extract_uid_gid(img='', file_path='/etc/ceph'):
+    # type: (str, str) -> Tuple[int, int]
 
     if not img:
         img = args.image
@@ -734,18 +729,10 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         assert config
         assert keyring
         # tmp keyring file
-        tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_keyring.fileno(), 0o600)
-        os.fchown(tmp_keyring.fileno(), uid, gid)
-        tmp_keyring.write(keyring)
-        tmp_keyring.flush()
+        tmp_keyring = write_tmp(keyring, uid, gid)
 
         # tmp config file
-        tmp_config = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_config.fileno(), 0o600)
-        os.fchown(tmp_config.fileno(), uid, gid)
-        tmp_config.write(config)
-        tmp_config.flush()
+        tmp_config = write_tmp(config, uid, gid)
 
         # --mkfs
         create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid)
@@ -841,21 +828,16 @@ def update_firewalld(daemon_type):
 
     fw_services = []
     fw_ports = []
-
-    # handle services (defined in /usr/lib/firewalld/services)
     if daemon_type == 'mon':
         fw_services.append('ceph-mon')
     elif daemon_type in ['mgr', 'mds', 'osd']:
         fw_services.append('ceph')
-
-    # handle individual ports
     if daemon_type == 'mgr':
         fw_ports.append(8080)  # dashboard
         fw_ports.append(8443)  # dashboard
         fw_ports.append(9283)  # mgr/prometheus exporter
     elif daemon_type == 'prometheus':
-        fw_ports.append(Monitoring.port_map['prometheus'])   # prometheus server
-
+        fw_ports.append(Monitoring.port_map['prometheus'])  # prometheus server
 
     for svc in fw_services:
         out, err, ret = call([cmd, '--permanent', '--query-service', svc])
@@ -985,7 +967,7 @@ def deploy_crash(fsid, uid, gid, config, keyring):
                 '[Service]\n'
                 'Type=simple\n'
                 'ExecStart={cmd}\n'
-                'ExecStop=-{container_path} stop ceph-{fsid}-crash\n'
+                'ExecStop=-{container_path} rm -f ceph-{fsid}-crash\n'
                 'Restart=always\n'
                 'RestartSec=10\n'
                 'StartLimitInterval=10min\n'
@@ -1025,7 +1007,7 @@ EnvironmentFile=-/etc/environment
 ExecStartPre=-{container_path} rm ceph-{fsid}-%i
 ExecStartPre=-{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}
 ExecStart=/bin/bash {data_dir}/{fsid}/%i/cmd
-ExecStop=-{container_path} stop ceph-{fsid}-%i
+ExecStop=-{container_path} rm -f ceph-{fsid}-%i
 Restart=on-failure
 RestartSec=10s
 TimeoutStartSec=120
@@ -1045,7 +1027,6 @@ WantedBy=ceph-{fsid}.target
     return u
 
 ##################################
-
 
 class CephContainer:
     def __init__(self,
@@ -1068,7 +1049,7 @@ class CephContainer:
         vols = [] # type: List[str]
         envs = [] # type: List[str]
         cname = [] # type: List[str]
-        entrypoint = []
+        entrypoint = [] # type: List[str]
         if self.entrypoint:
             entrypoint = ['--entrypoint', self.entrypoint]
 
@@ -1140,6 +1121,18 @@ def command_version():
 
 ##################################
 
+def command_pull():
+    # type: () -> None
+    logger.info('Pulling latest %s...' % args.image)
+    call_throws([container_path, 'pull', args.image])
+    out, err, ret = call_throws([
+        container_path, 'inspect',
+        '--format', '{{.Id}}',
+        args.image])
+    print(out.strip())
+
+##################################
+
 def command_bootstrap():
     # type: () -> int
 
@@ -1158,9 +1151,7 @@ def command_bootstrap():
     logging.info('Cluster fsid: %s' % fsid)
 
     # config
-    cp = ConfigParser()
-    if args.config:
-        cp.read(args.config)
+    cp = read_config(args.config)
     if args.mon_ip:
         addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
         mon_ip = args.mon_ip
@@ -1171,7 +1162,7 @@ def command_bootstrap():
         raise Error('must specify --mon-ip or --mon-addrv')
     if not cp.has_section('global'):
         cp.add_section('global')
-    cp.set('global', 'fsid', fsid)
+    cp.set('global', 'fsid', fsid);
     cp.set('global', 'mon host', addr_arg)
     cp.set('global', 'container_image', args.image)
     cpf = StringIO()
@@ -1235,16 +1226,11 @@ def command_bootstrap():
                % (mon_key, admin_key, mgr_id, mgr_key, hostname, crash_key))
 
     # tmp keyring file
-    tmp_bootstrap_keyring = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_bootstrap_keyring.fileno(), 0o600)
-    os.fchown(tmp_bootstrap_keyring.fileno(), uid, gid)
-    tmp_bootstrap_keyring.write(keyring)
-    tmp_bootstrap_keyring.flush()
+    tmp_bootstrap_keyring = write_tmp(keyring, uid, gid)
 
     # create initial monmap, tmp monmap file
     logger.info('Creating initial monmap...')
-    tmp_monmap = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_monmap.fileno(), 0o644)
+    tmp_monmap = write_tmp('', 0, 0)
     out = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/monmaptool',
@@ -1258,6 +1244,9 @@ def command_bootstrap():
             tmp_monmap.name: '/tmp/monmap:z',
         },
     ).run()
+
+    # pass monmap file to ceph user for use by ceph-mon --mkfs below
+    os.fchown(tmp_monmap.fileno(), uid, gid)
 
     # create mon
     logger.info('Creating mon...')
@@ -1292,18 +1281,10 @@ def command_bootstrap():
                   config=None, keyring=None)
 
     # client.admin key + config to issue various CLI commands
-    tmp_admin_keyring = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_admin_keyring.fileno(), 0o600)
-    os.fchown(tmp_admin_keyring.fileno(), uid, gid)
-    tmp_admin_keyring.write('[client.admin]\n'
-                      '\tkey = ' + admin_key + '\n')
-    tmp_admin_keyring.flush()
-
-    tmp_config = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_config.fileno(), 0o600)
-    os.fchown(tmp_config.fileno(), uid, gid)
-    tmp_config.write(config)
-    tmp_config.flush()
+    tmp_admin_keyring = write_tmp('[client.admin]\n'
+                                  '\tkey = ' + admin_key + '\n',
+                                       uid, gid)
+    tmp_config = write_tmp(config, uid, gid)
 
     # a CLI helper to reduce our typing
     def cli(cmd, extra_mounts={}):
@@ -1440,14 +1421,12 @@ def command_bootstrap():
         cli(['mgr', 'module', 'enable', 'dashboard'])
         logger.info('Waiting for the module to be available...')
         # FIXME: potential for an endless loop?
-
         while True:
             c_out = cli(['-h'])
             if 'dashboard' in c_out:
                 break
             logger.info('Dashboard not yet available, waiting...')
             time.sleep(1)
-
         logger.info('Generating a dashboard self-signed certificate...')
         cli(['dashboard', 'create-self-signed-cert'])
         logger.info('Creating initial admin user...')
@@ -1481,15 +1460,13 @@ def command_bootstrap():
 def command_deploy():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
-    
-    crash_keyring = None
-    
+
     supported_daemons = Ceph.daemons.copy()
     supported_daemons.extend(Monitoring.components)
 
     if daemon_type not in supported_daemons:
         raise Error('daemon type %s not recognized' % daemon_type)
-    
+
     if daemon_type in Ceph.daemons:
         (config, keyring, crash_keyring) = get_config_and_both_keyrings()
         if daemon_type == 'mon':
@@ -1503,15 +1480,18 @@ def command_deploy():
                                                                 args.mon_network)
             else:
                 raise Error('must specify --mon-ip or --mon-network')
-    
-    if daemon_type in Ceph.daemons:
+        
         (uid, gid) = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config, keyring)
+
+        if crash_keyring:
+            deploy_crash(args.fsid, uid, gid, config, crash_keyring)
+
     else:
         # monitoring daemon - prometheus, grafana, alertmanager
-        monitoring_args = []
+        monitoring_args = []  # type: List[str]
 
         # Default Checks
         daemon_port = Monitoring.port_map[daemon_type]
@@ -1525,24 +1505,22 @@ def command_deploy():
                 raise Error("config-json parameter is needed when deploying prometheus service")
 
             uid, gid = extract_uid_gid(file_path='/etc/prometheus')
-            metadata = Monitoring.components['prometheus']['image']
+            # Monitoring metadata is nested dicts, so asking mypy to ignore
+            p = Monitoring.components['prometheus']  # type: ignore
+            metadata = p.get('image', dict())  # type: ignore
             monitoring_args = [
                 '--user', 
                 str(uid),
                 '--cpus',
-                metadata.get('cpus', '2'),
+                metadata.get('cpus', '2'),  # type: ignore
                 '--memory',
-                metadata.get('memory', '4GB')
+                metadata.get('memory', '4GB')  # type: ignore
             ]
         else:
             raise Error("{} not implemented in command_deploy function".format(daemon_type))
 
         c = get_container(args.fsid, daemon_type, daemon_id, container_args=monitoring_args)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid)
-
-
-    if crash_keyring:
-        deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
 ##################################
 
@@ -1627,6 +1605,7 @@ def command_ceph_volume():
     if args.fsid:
         make_log_dir(args.fsid)
 
+    (uid, gid) = (0, 0) # ceph-volume runs as root
     mounts = get_container_mounts(args.fsid, 'osd', None)
 
     tmp_config = None
@@ -1638,16 +1617,10 @@ def command_ceph_volume():
         (config, keyring) = get_config_and_keyring()
 
         # tmp keyring file
-        tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_keyring.fileno(), 0o600)
-        tmp_keyring.write(keyring)
-        tmp_keyring.flush()
+        tmp_keyring = write_tmp(keyring, uid, gid)
 
         # tmp config file
-        tmp_config = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_config.fileno(), 0o600)
-        tmp_config.write(config)
-        tmp_config.flush()
+        tmp_config = write_tmp(config, uid, gid)
 
         mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
         mounts[tmp_keyring.name] = '/var/lib/ceph/bootstrap-osd/ceph.keyring:z'
@@ -1825,9 +1798,11 @@ def command_adopt():
         data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
                         (daemon_type, args.cluster, daemon_id))
         data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
-        data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id)
-        for data_file in iglob(os.path.join(data_dir_src, '*')):
-            move_file(data_file, data_dir_dst, uid=uid, gid=gid)
+        data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
+                                     uid=uid, gid=gid)
+        move_files(glob(os.path.join(data_dir_src, '*')),
+                   data_dir_dst,
+                   uid=uid, gid=gid)
         logger.debug('Remove dir \'%s\'' % (data_dir_src))
         if os.path.ismount(data_dir_src):
             call_throws(['umount', data_dir_src])
@@ -1837,7 +1812,7 @@ def command_adopt():
         config_src = '/etc/ceph/%s.conf' % (args.cluster)
         config_src = os.path.abspath(args.legacy_dir + config_src)
         config_dst = os.path.join(data_dir_dst, 'config')
-        copy_file(config_src, config_dst, uid=uid, gid=gid)
+        copy_files([config_src], config_dst, uid=uid, gid=gid)
 
         # logs
         logger.info('Moving logs...')
@@ -1845,8 +1820,9 @@ def command_adopt():
                         (args.cluster, daemon_type, daemon_id))
         log_dir_src = os.path.abspath(args.legacy_dir + log_dir_src)
         log_dir_dst = make_log_dir(fsid, uid=uid, gid=gid)
-        for log_file in iglob(log_dir_src):
-            move_file(log_file, log_dir_dst, uid=uid, gid=gid)
+        move_files(glob(log_dir_src),
+                   log_dir_dst,
+                   uid=uid, gid=gid)
 
         logger.info('Creating new units...')
         c = get_container(fsid, daemon_type, daemon_id)
@@ -1863,7 +1839,6 @@ def command_adopt():
 def command_rm_daemon():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
-
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise Error('must pass --force to proceed: '
                       'this command may destroy precious data!')
@@ -1876,7 +1851,6 @@ def command_rm_daemon():
          verbose_on_failure=False)
     data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
     call_throws(['rm', '-rf', data_dir])
-    # TODO - remove the unit file
 
 ##################################
 
@@ -1934,29 +1908,7 @@ def command_rm_cluster():
     call_throws(['rm', '-f', args.logrotate_dir + '/ceph-%s' % args.fsid])
 
 
-class CustomValidation(argparse.Action):
-
-    def _check_name(self, values):
-
-        try:
-            (daemon_type, daemon_id) = values.split('.', 1)
-        except ValueError:
-            raise argparse.ArgumentError(self,
-                                         "must be of the format <type>.<id>. For example, osd.1 or prometheus.myhost.com")
-        
-        daemons = Ceph.daemons.copy()
-        daemons.extend(Monitoring.components.keys())
-        
-        if daemon_type not in daemons:
-            raise argparse.ArgumentError(self, 
-                                         "name must declare the type of daemon e.g. "
-                                         "{}".format(', '.join(daemons)))
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        if self.dest == "name":
-            self._check_name(values)
-            setattr(namespace, self.dest, values)
-
+##################################
 
 def check_time_sync():
     units = ['chronyd.service', 'systemd-timesyncd.service', 'ntpd.service']
@@ -1987,6 +1939,32 @@ def command_check_host():
 
     logger.info('Host looks OK')
 
+
+##################################
+
+
+class CustomValidation(argparse.Action):
+
+    def _check_name(self, values):
+
+        try:
+            (daemon_type, daemon_id) = values.split('.', 1)
+        except ValueError:
+            raise argparse.ArgumentError(self,
+                                         "must be of the format <type>.<id>. For example, osd.1 or prometheus.myhost.com")
+        
+        daemons = Ceph.daemons.copy()
+        daemons.extend(Monitoring.components.keys())
+        
+        if daemon_type not in daemons:
+            raise argparse.ArgumentError(self, 
+                                         "name must declare the type of daemon e.g. "
+                                         "{}".format(', '.join(daemons)))
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if self.dest == "name":
+            self._check_name(values)
+            setattr(namespace, self.dest, values)
 
 ##################################
 
@@ -2029,6 +2007,10 @@ def _get_parser():
     parser_version = subparsers.add_parser(
         'version', help='get ceph version from container')
     parser_version.set_defaults(func=command_version)
+
+    parser_pull = subparsers.add_parser(
+        'pull', help='pull latest image version')
+    parser_pull.set_defaults(func=command_pull)
 
     parser_ls = subparsers.add_parser(
         'ls', help='list daemon instances on this host')
@@ -2257,12 +2239,12 @@ def _get_parser():
         help='allow overwrite of existing --output-* config/keyring/ssh files')
 
     parser_deploy = subparsers.add_parser(
-    'deploy', help='deploy a daemon')
+        'deploy', help='deploy a daemon')
     parser_deploy.set_defaults(func=command_deploy)
     parser_deploy.add_argument(
         '--name',
-        action=CustomValidation,
         required=True,
+        action=CustomValidation,
         help='daemon name (type.id)')
     parser_deploy.add_argument(
         '--fsid',
@@ -2302,6 +2284,10 @@ def _get_parser():
         '--skip-firewalld',
         action='store_true',
         help='Do not configure firewalld')
+
+    parser_check_host = subparsers.add_parser(
+        'check-host', help='check host configuration')
+    parser_check_host.set_defaults(func=command_check_host)
 
     return parser
 
