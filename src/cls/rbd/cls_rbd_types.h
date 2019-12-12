@@ -907,6 +907,7 @@ struct MigrationSpec {
   uint64_t overlap = 0;
   bool flatten = false;
   bool mirroring = false;
+  MirrorImageMode mirror_image_mode = MIRROR_IMAGE_MODE_JOURNAL;
   MigrationState state = MIGRATION_STATE_ERROR;
   std::string state_description;
 
@@ -916,12 +917,13 @@ struct MigrationSpec {
                 const std::string& pool_namespace,
                 const std::string &image_name, const std::string &image_id,
                 const std::map<uint64_t, uint64_t> &snap_seqs, uint64_t overlap,
-                bool mirroring, bool flatten, MigrationState state,
-                const std::string &state_description)
+                bool mirroring, MirrorImageMode mirror_image_mode, bool flatten,
+                MigrationState state, const std::string &state_description)
     : header_type(header_type), pool_id(pool_id),
       pool_namespace(pool_namespace), image_name(image_name),
       image_id(image_id), snap_seqs(snap_seqs), overlap(overlap),
-      flatten(flatten), mirroring(mirroring), state(state),
+      flatten(flatten), mirroring(mirroring),
+      mirror_image_mode(mirror_image_mode), state(state),
       state_description(state_description) {
   }
 
@@ -936,8 +938,8 @@ struct MigrationSpec {
       pool_namespace == ms.pool_namespace && image_name == ms.image_name &&
       image_id == ms.image_id && snap_seqs == ms.snap_seqs &&
       overlap == ms.overlap && flatten == ms.flatten &&
-      mirroring == ms.mirroring && state == ms.state &&
-      state_description == ms.state_description;
+      mirroring == ms.mirroring && mirror_image_mode == ms.mirror_image_mode &&
+      state == ms.state && state_description == ms.state_description;
   }
 };
 
