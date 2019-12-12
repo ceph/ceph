@@ -1,0 +1,7 @@
+# allow cephadm user to sudo cephadm
+cephadm ALL=NOPASSWD: /usr/bin/cephadm --image * ls
+cephadm ALL=NOPASSWD: /usr/bin/cephadm --image * unit *
+cephadm ALL=NOPASSWD: /usr/bin/cephadm --image * shell *
+cephadm ALL=NOPASSWD: /usr/bin/cephadm --image * deploy *
+cephadm ALL=NOPASSWD: /usr/bin/cephadm --image * ceph-volume *
+cephadm ALL=NOPASSWD: /usr/bin/cephadm --image * rm-daemon *

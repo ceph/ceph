@@ -27,7 +27,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             'type': 'str',
             'default': None,
             'desc': 'Orchestrator backend',
-            'enum_allowed': ['ssh', 'rook', 'ansible', 'deepsea',
+            'enum_allowed': ['cephadm', 'rook', 'ansible', 'deepsea',
                              'test_orchestrator'],
             'runtime': True,
         },
