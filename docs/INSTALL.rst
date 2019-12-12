@@ -70,3 +70,16 @@ and should work with teuthology. But if you want to bump up the versions of them
 please use the following command to update this file ::
 
   pip-compile -qo- | sed '/^-e / d' > requirements.txt
+
+Please upgrade pip-tool using following command ::
+
+  pip install pip-tools --upgrade
+
+if the command above fails like::
+
+  Traceback (most recent call last):
+  File "/home/kchai/teuthology/virtualenv/bin/pip-compile", line 5, in <module>
+    from piptools.scripts.compile import cli
+  File "/home/kchai/teuthology/virtualenv/local/lib/python2.7/site-packages/piptools/scripts/compile.py", line 11, in <module>
+    from pip.req import InstallRequirement, parse_requirements
+  ImportError: No module named req
