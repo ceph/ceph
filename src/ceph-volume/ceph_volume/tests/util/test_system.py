@@ -206,8 +206,9 @@ class TestWhich(object):
         assert system.which('exedir') == 'exedir'
 
     def test_executable_exists_as_file(self, monkeypatch):
-        monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
-        monkeypatch.setattr(system.os.path, 'exists', lambda x: True)
+        monkeypatch.setattr(system.os, 'getenv', lambda x, y: '')
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: x != 'ceph')
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: x != 'ceph')
         assert system.which('ceph') == '/usr/local/bin/ceph'
 
     def test_warnings_when_executable_isnt_matched(self, monkeypatch, capsys):
@@ -215,9 +216,7 @@ class TestWhich(object):
         monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
         system.which('exedir')
         cap = capsys.readouterr()
-        assert 'Absolute path not found for executable: exedir' in cap.err
-        assert 'Ensure $PATH environment variable contains common executable locations' in cap.err
-
+        assert 'Executable exedir not in PATH' in cap.err
 
 @pytest.fixture
 def stub_which(monkeypatch):
