@@ -12,7 +12,6 @@
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/CreateRequest.h"
-#include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/object_map/CreateRequest.h"
 
@@ -119,7 +118,10 @@ void EnableFeaturesRequest<I>::send_get_mirror_mode() {
   CephContext *cct = image_ctx.cct;
 
   if ((m_features & RBD_FEATURE_JOURNALING) == 0) {
-    send_get_mirror_image();
+    Context *ctx = create_context_callback<
+      EnableFeaturesRequest<I>,
+      &EnableFeaturesRequest<I>::handle_get_mirror_mode>(this);
+    ctx->complete(-ENOENT);
     return;
   }
 
@@ -143,9 +145,10 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
 
+  cls::rbd::MirrorMode mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   if (*result == 0) {
     auto it = m_out_bl.cbegin();
-    *result = cls_client::mirror_mode_get_finish(&it, &m_mirror_mode);
+    *result = cls_client::mirror_mode_get_finish(&it, &mirror_mode);
   } else if (*result == -ENOENT) {
     *result = 0;
   }
@@ -156,67 +159,7 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
     return handle_finish(*result);
   }
 
-  if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
-    m_enable_mirroring = true;
-  }
-
-  send_get_mirror_image();
-  return nullptr;
-}
-
-template <typename I>
-void EnableFeaturesRequest<I>::send_get_mirror_image() {
-  I &image_ctx = this->m_image_ctx;
-  CephContext *cct = image_ctx.cct;
-
-  if (m_mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
-    Context *ctx = create_context_callback<
-      EnableFeaturesRequest<I>,
-      &EnableFeaturesRequest<I>::handle_get_mirror_image>(this);
-    ctx->complete(-ENOENT);
-    return;
-  }
-
-  ldout(cct, 20) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, image_ctx.id);
-
-  using klass = EnableFeaturesRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
-  m_out_bl.clear();
-  int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-Context *EnableFeaturesRequest<I>::handle_get_mirror_image(int *result) {
-  I &image_ctx = this->m_image_ctx;
-  CephContext *cct = image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  cls::rbd::MirrorImage mirror_image;
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::mirror_image_get_finish(&it, &mirror_image);
-  } else if (*result == -ENOENT) {
-    *result = 0;
-  }
-
-  if (*result < 0) {
-    lderr(cct) << "failed to retrieve mirror image info: "
-               << cpp_strerror(*result) << dendl;
-    return handle_finish(*result);
-  }
-
-  if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    lderr(cct) << "cannot enable journaling: image snapshot mirroring enabled"
-               << dendl;
-    *result = -EINVAL;
-    return handle_finish(*result);
-  }
+  m_enable_mirroring = (mirror_mode == cls::rbd::MIRROR_MODE_POOL);
 
   bool create_journal = false;
   do {
@@ -477,8 +420,8 @@ void EnableFeaturesRequest<I>::send_enable_mirror_image() {
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_enable_mirror_image>(this);
 
-  mirror::EnableRequest<I> *req =
-    mirror::EnableRequest<I>::create(&image_ctx, ctx);
+  mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
+    &image_ctx, RBD_MIRROR_IMAGE_MODE_JOURNAL, ctx);
   req->send();
 }
 

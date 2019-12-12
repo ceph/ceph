@@ -526,9 +526,11 @@ void CloneRequest<I>::enable_mirror() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_enable_mirror>(this);
 
+  // TODO: in future rbd-mirror will want to enable mirroring
+  // not only in journal mode.
   mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
-    m_imctx->md_ctx, m_id, m_non_primary_global_image_id,
-    m_imctx->op_work_queue, ctx);
+    m_imctx->md_ctx, m_id, RBD_MIRROR_IMAGE_MODE_JOURNAL,
+    m_non_primary_global_image_id, m_imctx->op_work_queue, ctx);
   req->send();
 }
 

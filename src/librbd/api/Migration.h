@@ -47,6 +47,7 @@ private:
   ImageOptions &m_image_options;
   bool m_flatten;
   bool m_mirroring;
+  cls::rbd::MirrorImageMode m_mirror_image_mode;
   ProgressContext *m_prog_ctx;
 
   cls::rbd::MigrationSpec m_src_migration_spec;
@@ -55,6 +56,7 @@ private:
   Migration(ImageCtxT *image_ctx, librados::IoCtx& dest_io_ctx,
             const std::string &dest_image_name, const std::string &dst_image_id,
             ImageOptions& opts, bool flatten, bool mirroring,
+            cls::rbd::MirrorImageMode mirror_image_mode,
             cls::rbd::MigrationState state, const std::string &state_desc,
             ProgressContext *prog_ctx);
 
@@ -68,8 +70,10 @@ private:
 
   int list_src_snaps(std::vector<librbd::snap_info_t> *snaps);
   int validate_src_snaps();
-  int disable_mirroring(ImageCtxT *image_ctx, bool *was_enabled);
-  int enable_mirroring(ImageCtxT *image_ctx, bool was_enabled);
+  int disable_mirroring(ImageCtxT *image_ctx, bool *was_enabled,
+                        cls::rbd::MirrorImageMode *mirror_image_mode);
+  int enable_mirroring(ImageCtxT *image_ctx, bool was_enabled,
+                       cls::rbd::MirrorImageMode mirror_image_mode);
   int set_migration();
   int unlink_src_image();
   int relink_src_image();

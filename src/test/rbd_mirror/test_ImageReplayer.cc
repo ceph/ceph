@@ -464,7 +464,8 @@ TEST_F(TestImageReplayer, BootstrapMirrorDisabling)
                                                RBD_MIRROR_MODE_IMAGE));
   librbd::ImageCtx *ictx;
   open_remote_image(&ictx);
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(ictx, false));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
+              ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
   cls::rbd::MirrorImage mirror_image;
   ASSERT_EQ(0, librbd::cls_client::mirror_image_get(&m_remote_ioctx, ictx->id,
                                                     &mirror_image));

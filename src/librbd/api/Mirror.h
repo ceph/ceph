@@ -69,7 +69,8 @@ struct Mirror {
                                     size_t max,
                                     std::map<std::string, std::string> *ids);
 
-  static int image_enable(ImageCtxT *ictx, bool relax_same_pool_parent_check);
+  static int image_enable(ImageCtxT *ictx, mirror_image_mode_t mode,
+                          bool relax_same_pool_parent_check);
   static int image_disable(ImageCtxT *ictx, bool force);
   static int image_promote(ImageCtxT *ictx, bool force);
   static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);

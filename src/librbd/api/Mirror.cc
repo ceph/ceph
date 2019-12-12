@@ -351,9 +351,12 @@ struct C_ImageGetGlobalStatus : public C_ImageGetInfo {
 } // anonymous namespace
 
 template <typename I>
-int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
+int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
+                            bool relax_same_pool_parent_check) {
   CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "ictx=" << ictx << dendl;
+  ldout(cct, 20) << "ictx=" << ictx << " mode=" << mode
+                 << " relax_same_pool_parent_check="
+                 << relax_same_pool_parent_check <<  dendl;
 
   int r = ictx->state->refresh_if_required();
   if (r < 0) {
@@ -392,8 +395,21 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
     }
   }
 
+  if (mode == RBD_MIRROR_IMAGE_MODE_JOURNAL &&
+      !ictx->test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t features = RBD_FEATURE_JOURNALING;
+    if (!ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+      features |= RBD_FEATURE_EXCLUSIVE_LOCK;
+    }
+    r = ictx->operations->update_features(features, true);
+    if (r < 0) {
+      lderr(cct) << "cannot enable journaling: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
   C_SaferCond ctx;
-  auto req = mirror::EnableRequest<ImageCtx>::create(ictx, &ctx);
+  auto req = mirror::EnableRequest<ImageCtx>::create(ictx, mode, &ctx);
   req->send();
 
   r = ctx.wait();
@@ -528,6 +544,14 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
       lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
       rollback = true;
       return r;
+    }
+
+    if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+      r = ictx->operations->update_features(RBD_FEATURE_JOURNALING, false);
+      if (r < 0) {
+        lderr(cct) << "cannot disable journaling: " << cpp_strerror(r) << dendl;
+        // not fatal
+      }
     }
   }
 
@@ -903,7 +927,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
           return r;
         }
 
-        r = image_enable(img_ctx, true);
+        r = image_enable(img_ctx, RBD_MIRROR_IMAGE_MODE_JOURNAL, true);
         int close_r = img_ctx->state->close();
         if (r < 0) {
           lderr(cct) << "error enabling mirroring for image "
