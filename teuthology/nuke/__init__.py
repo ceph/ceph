@@ -296,7 +296,7 @@ def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
         ret = target
     else:
         if should_unlock:
-            unlock_one(ctx, target.keys()[0], ctx.owner)
+            unlock_one(ctx, list(target.keys())[0], ctx.owner)
     return ret
 
 

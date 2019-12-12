@@ -682,7 +682,7 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
     starttime = time.time()
     while need_install:
         teuthology.reconnect(ctx, timeout)
-        for client in need_install.keys():
+        for client in list(need_install.keys()):
             if 'distro' in str(need_install[client]):
                  distro = True
             log.info('Checking client {client} for new kernel version...'.format(client=client))

@@ -68,7 +68,7 @@ def check_packages(ctx, config):
     If there are missing packages, fail the job.
     """
     for task in ctx.config['tasks']:
-        if task.keys()[0] == 'buildpackages':
+        if list(task.keys())[0] == 'buildpackages':
             log.info("Checking packages skipped because "
                      "the task buildpackages was found.")
             return
@@ -227,7 +227,7 @@ def buildpackages_prep(ctx, config):
             return BUILDPACKAGES_OK
     elif buildpackages_index is not None and install_index is None:
         ctx.config['tasks'].pop(buildpackages_index)
-        all_tasks = [x.keys()[0] for x in ctx.config['tasks']]
+        all_tasks = [list(x.keys())[0] for x in ctx.config['tasks']]
         log.info('buildpackages removed because no install task found in ' +
                  str(all_tasks))
         return BUILDPACKAGES_REMOVED
