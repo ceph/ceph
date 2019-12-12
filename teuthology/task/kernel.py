@@ -909,7 +909,7 @@ def grub2_kernel_select_generic(remote, newversion, ostype):
     entry_num = 0
     if '\nmenuitem ' not in grub2conf:
         # okay, do the newer (el8) grub2 thing
-        grub2conf = remote.sh('sudo /bin/ls /boot/loader/entries')
+        grub2conf = remote.sh('sudo /bin/ls /boot/loader/entries || true')
         entry = None
         for line in grub2conf.split('\n'):
             if line.endswith('.conf') and newversion in line:
@@ -923,7 +923,10 @@ def grub2_kernel_select_generic(remote, newversion, ostype):
                     break
                 entry_num += 1
         entry = str(entry_num)
-    remote.run(args=['sudo', grubset, entry])
+    if entry is None:
+        log.warning('Unable to update grub2 order')
+    else:
+        remote.run(args=['sudo', grubset, entry])
 
 
 def generate_legacy_grub_entry(remote, newversion):
