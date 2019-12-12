@@ -237,7 +237,7 @@ commands, refer to `Virsh Command Reference`_.
 #. Define the secret. ::
 
 	sudo virsh secret-define --file secret.xml
-	<uuid of secret is output here>
+	{uuid of secret}
 
 #. Get the ``client.libvirt`` key and save the key string to a file. ::
 
@@ -258,7 +258,7 @@ commands, refer to `Virsh Command Reference`_.
 	...
 	</source>
 	<auth username='libvirt'>
-		<secret type='ceph' uuid='9ec59067-fdbc-a6c0-03ff-df165c0587b8'/>
+		<secret type='ceph' uuid='{uuid of secret}'/>
 	</auth>
 	<target ... 
 
