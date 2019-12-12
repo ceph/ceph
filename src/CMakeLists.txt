@@ -509,7 +509,7 @@ endif()
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(python-common)
-add_subdirectory(ceph-daemon)
+add_subdirectory(cephadm)
 
 # Monitor
 add_subdirectory(mon)

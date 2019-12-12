@@ -33,13 +33,13 @@ DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
 
 log = logging.getLogger(__name__)
 
-# this is for ceph-daemon clusters
+# this is for cephadm clusters
 def shell(ctx, cluster_name, remote, args, **kwargs):
     testdir = teuthology.get_testdir(ctx)
     return remote.run(
         args=[
             'sudo',
-            ctx.ceph_daemon,
+            ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
             'shell',
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
@@ -1223,14 +1223,14 @@ class CephManager:
     """
 
     def __init__(self, controller, ctx=None, config=None, logger=None,
-                 cluster='ceph', ceph_daemon=False):
+                 cluster='ceph', cephadm=False):
         self.lock = threading.RLock()
         self.ctx = ctx
         self.config = config
         self.controller = controller
         self.next_pool_id = 0
         self.cluster = cluster
-        self.ceph_daemon = ceph_daemon
+        self.cephadm = cephadm
         if (logger):
             self.log = lambda x: logger.info(x)
         else:
@@ -1255,7 +1255,7 @@ class CephManager:
         """
         Start ceph on a raw cluster.  Return count
         """
-        if self.ceph_daemon:
+        if self.cephadm:
             proc = shell(self.ctx, self.cluster, self.controller,
                          args=['ceph'] + list(args),
                          stdout=StringIO())
@@ -1283,7 +1283,7 @@ class CephManager:
         """
         Start ceph on a cluster.  Return success or failure information.
         """
-        if self.ceph_daemon:
+        if self.cephadm:
             proc = shell(self.ctx, self.cluster, self.controller,
                          args=['ceph'] + list(args),
                          check_status=False)

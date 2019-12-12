@@ -167,16 +167,16 @@ Description: debugging symbols for ceph-base
  .
  This package contains the debugging symbols for ceph-base.
 
-Package: ceph-daemon
+Package: cephadm
 Architecture: linux-any
 Depends: docker.io,
 	 ${python:Depends},
-Description: ceph-daemon utility to bootstrap ceph daemons with systemd and containers
+Description: cephadm utility to bootstrap ceph daemons with systemd and containers
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- The ceph-daemon utility is used to bootstrap a Ceph cluster and to manage
+ The cephadm utility is used to bootstrap a Ceph cluster and to manage
  ceph daemons deployed with systemd and containers.
 
 Package: ceph-mds
@@ -227,7 +227,7 @@ Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-cloud,
             ceph-mgr-rook,
             ceph-mgr-k8sevents,
-            ceph-mgr-ssh
+            ceph-mgr-cephadm
 Suggests: python-influxdb
 Replaces: ceph (<< 0.93-417),
 Breaks: ceph (<< 0.93-417),
@@ -326,20 +326,20 @@ Description: kubernetes events plugin for ceph-mgr
  ceph related events to the kubernetes events API, and track all events
  that occur within the rook-ceph namespace.
 
-Package: ceph-mgr-ssh
+Package: ceph-mgr-cephadm
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-	 ceph-daemon,
+	 cephadm,
 	 python-six,
          ${misc:Depends},
          ${python:Depends},
          openssh-client
-Description: ssh orchestrator plugin for ceph-mgr
+Description: cephadm orchestrator plugin for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains the SSH plugin for ceph-mgr's orchestration
+ This package contains the CEPHADM plugin for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to perform orchestration functions
  over a standard SSH connection.
 
@@ -1249,7 +1249,7 @@ Description: Python 2 utility libraries for Ceph
  block and file system storage.
  .
  This package contains data structures, classes and functions used by Ceph.
- It also contains utilities used for the SSH orchestrator.
+ It also contains utilities used for the cephadm orchestrator.
 
 Package: python3-ceph-common
 Architecture: all
@@ -1262,7 +1262,7 @@ Description: Python 3 utility libraries for Ceph
  block and file system storage.
  .
  This package contains data structures, classes and functions used by Ceph.
- It also contains utilities used for the SSH orchestrator.
+ It also contains utilities used for the cephadm orchestrator.
 
 Package: libcephfs-java
 Section: java

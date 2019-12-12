@@ -437,7 +437,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("mon_host"),
 
     Option("container_image", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_description("container image (used by ssh orchestrator)")
+    .set_description("container image (used by cephadm orchestrator)")
     .set_flag(Option::FLAG_STARTUP)
     .set_default("ceph/daemon-base:latest-master-devel"),
 
@@ -5111,10 +5111,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("ceph_daemon_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/usr/sbin/ceph-daemon")
+    Option("cephadm_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/usr/sbin/cephadm")
     .add_service("mgr")
-    .set_description("Path to ceph-daemon utility"),
+    .set_description("Path to cephadm utility"),
 
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_DATADIR "/mgr")

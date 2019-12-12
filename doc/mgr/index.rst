@@ -41,9 +41,9 @@ sensible.
     Telemetry module <telemetry>
     Iostat module <iostat>
     Crash module <crash>
+    Insights module <insights>
     Orchestrator CLI module <orchestrator_cli>
+    Cephadm orchestrator <cephadm>
     Rook module <rook>
     DeepSea module <deepsea>
-    Insights module <insights>
     Ansible module <ansible>
-    SSH orchestrator <ssh>

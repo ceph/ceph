@@ -12,7 +12,7 @@ tasks:
 - install:
     branch: nautilus
     exclude_packages:
-      - ceph-daemon
+      - cephadm
 - install.upgrade:
     mon.a:
     mon.b:

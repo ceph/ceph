@@ -1,3 +1,0 @@
-overrides:
-  ceph2:
-    ceph_daemon_mode: root

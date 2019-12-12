@@ -400,11 +400,11 @@ Recommends:    chrony
 %description base
 Base is the package that includes all the files shared amongst ceph servers
 
-%package -n ceph-daemon
-Summary:        Ceph-daemon utility to bootstrap Ceph clusters
+%package -n cephadm
+Summary:        cephadm utility to bootstrap Ceph clusters
 Requires:       podman
-%description -n ceph-daemon
-Ceph-daemon utility to bootstrap a Ceph cluster and manage ceph daemons
+%description -n cephadm
+cephadm utility to bootstrap a Ceph cluster and manage ceph daemons
 deployed with systemd and podman.
 
 %package -n ceph-common
@@ -486,7 +486,7 @@ Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
-Recommends:	ceph-mgr-ssh = %{_epoch_prefix}%{version}-%{release}
+Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{_python_buildid}-influxdb
 %endif
 %if 0%{?rhel} == 7
@@ -596,24 +596,24 @@ Requires:       python%{_python_buildid}-PyYAML
 ceph-mgr-k8sevents is a ceph-mgr plugin that sends every ceph-events
 to kubernetes' events API
 
-%package mgr-ssh
-Summary:        Ceph Manager plugin for SSH-based orchestration
+%package mgr-cephadm
+Summary:        Ceph Manager plugin for cephadm-based orchestration
 BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{_python_buildid}-remoto
-Requires:       ceph-daemon = %{_epoch_prefix}%{version}-%{release}
+Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires:       openssh
 %endif
 %if 0%{?rhel} || 0%{?fedora}
 Requires:       openssh-clients
 %endif
-%description mgr-ssh
-ceph-mgr-ssh is a ceph-mgr module for orchestration functions using
-direct SSH connections for management operations.
+%description mgr-cephadm
+ceph-mgr-cephadm is a ceph-mgr module for orchestration functions using
+the integrated cephadm deployment tool management operations.
 
 %package fuse
 Summary:	Ceph fuse-based client
@@ -1040,7 +1040,7 @@ Group:		Development/Libraries/Python
 %{?python_provide:%python_provide python-ceph-common}
 %description -n python-ceph-common
 This package contains data structures, classes and functions used by Ceph.
-It also contains utilities used for the SSH orchestrator.
+It also contains utilities used for the cephadm orchestrator.
 %endif
 
 %package -n python%{python3_pkgversion}-ceph-common
@@ -1051,7 +1051,7 @@ Group:		Development/Libraries/Python
 %{?python_provide:%python_provide python%{python3_pkgversion}-ceph-common}
 %description -n python%{python3_pkgversion}-ceph-common
 This package contains data structures, classes and functions used by Ceph.
-It also contains utilities used for the SSH orchestrator.
+It also contains utilities used for the cephadm orchestrator.
 
 %if 0%{with cephfs_shell}
 %package -n cephfs-shell
@@ -1349,7 +1349,7 @@ chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
 install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 
-install -m 0755 src/ceph-daemon/ceph-daemon %{buildroot}%{_sbindir}/ceph-daemon
+install -m 0755 src/cephadm/cephadm %{buildroot}%{_sbindir}/cephadm
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
@@ -1362,7 +1362,7 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 
 # sudoers.d
 install -m 0600 -D sudoers.d/ceph-osd-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-osd-smartctl
-install -m 0600 -D sudoers.d/cephdaemon %{buildroot}%{_sysconfdir}/sudoers.d/cephdaemon
+install -m 0600 -D sudoers.d/cephadm %{buildroot}%{_sysconfdir}/sudoers.d/cephadm
 
 %if 0%{?rhel} >= 8
 pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
@@ -1510,31 +1510,31 @@ if [ $1 -ge 1 ] ; then
   fi
 fi
 
-%pre daemon
+%pre -n cephadm
 # create user
-if ! getent passwd | grep -q '^cephdaemon:'; then
-   useradd -r -s /bin/bash -c "Ceph-daemon user for mgr/ssh" -m cephdaemon
+if ! getent passwd | grep -q '^cephadm:'; then
+   useradd -r -s /bin/bash -c "cephadm user for mgr/cephadm" -m cephadm
 fi
 # set up (initially empty) .ssh/authorized_keys file
-if ! test -d /home/cephdaemon/.ssh; then
-   mkdir /home/cephdaemon/.ssh
-   chown --reference /home/cephdaemon /home/cephdaemon/.ssh
-   chmod 0700 /home/cephdaemon/.ssh
+if ! test -d /home/cephadm/.ssh; then
+   mkdir /home/cephadm/.ssh
+   chown --reference /home/cephadm /home/cephadm/.ssh
+   chmod 0700 /home/cephadm/.ssh
 fi
-if ! test -e /home/cephdaemon/.ssh/authorized_keys; then
-   touch /home/cephdaemon/.ssh/authorized_keys
-   chown --reference /home/cephdaemon /home/cephdaemon/.ssh/authorized_keys
-   chmod 0600 /home/cephdaemon/.ssh/authorized_keys
+if ! test -e /home/cephadm/.ssh/authorized_keys; then
+   touch /home/cephadm/.ssh/authorized_keys
+   chown --reference /home/cephadm /home/cephadm/.ssh/authorized_keys
+   chmod 0600 /home/cephadm/.ssh/authorized_keys
 fi
 exit 0
 
-%postun daemon
-userdel -r cephdaemon || true
+%postun -n cephadm
+userdel -r cephadm || true
 exit 0
 
-%files daemon
-%{_sbindir}/ceph-daemon
-%{_sysconfdir}/sudoers.d/cephdaemon
+%files -n cephadm
+%{_sbindir}/cephadm
+%{_sysconfdir}/sudoers.d/cephadm
 
 %files common
 %dir %{_docdir}/ceph
@@ -1819,15 +1819,15 @@ if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
 
-%files mgr-ssh
-%{_datadir}/ceph/mgr/ssh
+%files mgr-cephadm
+%{_datadir}/ceph/mgr/cephadm
 
-%post mgr-ssh
+%post mgr-cephadm
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
 
-%postun mgr-ssh
+%postun mgr-cephadm
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
