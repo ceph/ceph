@@ -175,6 +175,19 @@ class tmp_mount(object):
             encryption.dmcrypt_close(self.device)
 
 
+def unmount_tmpfs(path):
+    """
+    Removes the mount at the given path iff the path is a tmpfs mount point.
+    Otherwise no action is taken.
+    """
+    _out, _err, rc = process.call(['findmnt', '-t', 'tmpfs', '-M', path])
+    if rc != 0:
+        logger.info('{} does not appear to be a tmpfs mount'.format(path))
+    else:
+        logger.info('Unmounting tmpfs path at {}'.format( path))
+        unmount(path)
+
+
 def unmount(path):
     """
     Removes mounts at the given path
