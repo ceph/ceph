@@ -6,11 +6,9 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/Operations.h"
-#include "librbd/api/Mirror.h"
 #include "librbd/internal.h"
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/Types.h"
@@ -96,7 +94,9 @@ public:
   static EnableRequest *s_instance;
   Context *on_finish = nullptr;
 
-  static EnableRequest *create(MockOperationImageCtx *image_ctx, Context *on_finish) {
+  static EnableRequest *create(MockOperationImageCtx *image_ctx,
+                               mirror_image_mode_t mirror_image_mode,
+                               Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -485,7 +485,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, SetFlagsError) {
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
 }
 
-TEST_F(TestMockOperationEnableFeaturesRequest, PoolMirroring) {
+TEST_F(TestMockOperationEnableFeaturesRequest, Mirroring) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
   MirrorModeEnabler mirror_mode_enabler(m_ioctx, cls::rbd::MIRROR_MODE_POOL);
@@ -533,48 +533,6 @@ TEST_F(TestMockOperationEnableFeaturesRequest, PoolMirroring) {
   ASSERT_EQ(0, cond_ctx.wait());
 }
 
-TEST_F(TestMockOperationEnableFeaturesRequest, ImageMirroring) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ensure_features_disabled(ictx, RBD_FEATURE_JOURNALING);
-
-  MirrorModeEnabler mirror_mode_enabler(m_ioctx, cls::rbd::MIRROR_MODE_IMAGE);
-
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(ictx, false)); // snapshot mode
-
-  uint64_t features;
-  ASSERT_EQ(0, librbd::get_features(ictx, &features));
-
-  MockOperationImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock mock_exclusive_lock;
-  MockJournal mock_journal;
-  MockObjectMap mock_object_map;
-  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
-                      mock_object_map);
-
-  expect_verify_lock_ownership(mock_image_ctx);
-
-  MockCreateJournalRequest mock_create_journal_request;
-  MockEnableMirrorRequest mock_enable_mirror_request;
-
-  ::testing::InSequence seq;
-  expect_prepare_lock(mock_image_ctx);
-  expect_block_writes(mock_image_ctx);
-  expect_unblock_writes(mock_image_ctx);
-  expect_handle_prepare_lock_complete(mock_image_ctx);
-
-  C_SaferCond cond_ctx;
-  MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
-    mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING);
-  {
-    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
-    req->send();
-  }
-  ASSERT_EQ(-EINVAL, cond_ctx.wait());
-}
-
 TEST_F(TestMockOperationEnableFeaturesRequest, JournalingError) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
@@ -598,6 +556,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, JournalingError) {
   expect_verify_lock_ownership(mock_image_ctx);
 
   MockCreateJournalRequest mock_create_journal_request;
+  MockEnableMirrorRequest mock_enable_mirror_request;
 
   ::testing::InSequence seq;
   expect_prepare_lock(mock_image_ctx);

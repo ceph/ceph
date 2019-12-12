@@ -142,7 +142,7 @@ public:
       librbd::Image image;
       librbd::RBD rbd;
       rbd.open(ioctx, image, name.c_str());
-      image.mirror_image_enable();
+      image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL);
 
       librbd::mirror_image_info_t mirror_image_info;
       ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image_info,
@@ -189,7 +189,7 @@ public:
       librbd::Image image;
       librbd::RBD rbd;
       rbd.open(cioctx, image, name.c_str());
-      image.mirror_image_enable();
+      image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL);
 
       librbd::mirror_image_info_t mirror_image_info;
       ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image_info,

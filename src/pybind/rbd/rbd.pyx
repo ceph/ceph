@@ -582,7 +582,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_flush(rbd_image_t image)
     int rbd_invalidate_cache(rbd_image_t image)
 
-    int rbd_mirror_image_enable(rbd_image_t image)
+    int rbd_mirror_image_enable2(rbd_image_t image,
+                                 rbd_mirror_image_mode_t mode)
     int rbd_mirror_image_disable(rbd_image_t image, bint force)
     int rbd_mirror_image_promote(rbd_image_t image, bint force)
     int rbd_mirror_image_demote(rbd_image_t image)
@@ -4509,12 +4510,13 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, 'error unlocking image')
 
-    def mirror_image_enable(self):
+    def mirror_image_enable(self, mode=RBD_MIRROR_IMAGE_MODE_JOURNAL):
         """
         Enable mirroring for the image.
         """
+        cdef rbd_mirror_image_mode_t c_mode = mode
         with nogil:
-            ret = rbd_mirror_image_enable(self.image)
+            ret = rbd_mirror_image_enable2(self.image, c_mode)
         if ret < 0:
             raise make_ex(ret, 'error enabling mirroring for image %s' % self.name)
 

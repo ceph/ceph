@@ -110,7 +110,7 @@ public:
 
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
 
-    ASSERT_EQ(expected_r, image.mirror_image_enable());
+    ASSERT_EQ(expected_r, image.mirror_image_enable2(mirror_image_mode));
 
     librbd::mirror_image_info_t mirror_image;
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
@@ -248,7 +248,7 @@ public:
     ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
 
     if (enable_mirroring) {
-      ASSERT_EQ(0, image.mirror_image_enable());
+      ASSERT_EQ(0, image.mirror_image_enable2(mirror_image_mode));
     }
 
     ASSERT_EQ(expected_r, image.update_features(features, enable));
@@ -332,7 +332,7 @@ public:
     ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
 
     if (enable_mirroring) {
-      ASSERT_EQ(0, image.mirror_image_enable());
+      ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL));
     }
 
     if (demote) {
@@ -358,7 +358,7 @@ public:
     ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
 
     if (enable_mirroring) {
-      ASSERT_EQ(0, image.mirror_image_enable());
+      ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL));
     }
 
     std::string image_id;
@@ -487,7 +487,7 @@ TEST_F(TestMirroring, DisableImageMirrorWithPeer) {
 
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
-  ASSERT_EQ(0, image.mirror_image_enable());
+  ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL));
 
   setup_mirror_peer(m_ioctx, image);
 
@@ -641,13 +641,13 @@ TEST_F(TestMirroring, EnableJournaling_In_MirrorModeImage) {
                       RBD_MIRROR_MODE_IMAGE, RBD_MIRROR_IMAGE_DISABLED);
 }
 
-TEST_F(TestMirroring, EnableJournaling_In_MirrorModeImage_MirroringEnabled) {
+TEST_F(TestMirroring, EnableJournaling_In_MirrorModeImage_SnapshotMirroringEnabled) {
   uint64_t init_features = 0;
   init_features |= RBD_FEATURE_OBJECT_MAP;
   init_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
   uint64_t features = RBD_FEATURE_JOURNALING;
   check_mirroring_on_update_features(init_features, true, true, features,
-                      -EINVAL, RBD_MIRROR_MODE_IMAGE, RBD_MIRROR_IMAGE_ENABLED,
+                      0, RBD_MIRROR_MODE_IMAGE, RBD_MIRROR_IMAGE_ENABLED,
                       RBD_MIRROR_IMAGE_MODE_SNAPSHOT);
 }
 
@@ -889,7 +889,8 @@ TEST_F(TestMirroring, AioPromoteDemote) {
 
     images.emplace_back();
     ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
-    ASSERT_EQ(0, images.back().mirror_image_enable());
+    ASSERT_EQ(0, images.back().mirror_image_enable2(
+                RBD_MIRROR_IMAGE_MODE_JOURNAL));
   }
 
   // demote all images
@@ -1108,7 +1109,6 @@ TEST_F(TestMirroring, Snapshot)
 
   uint64_t features;
   ASSERT_TRUE(get_features(&features));
-  features &= ~RBD_FEATURE_JOURNALING;
   int order = 20;
   ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
                              &order));
@@ -1124,7 +1124,7 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(-EINVAL, image.mirror_image_create_snapshot(&snap_id));
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
   ASSERT_EQ(-EINVAL, image.mirror_image_create_snapshot(&snap_id));
-  ASSERT_EQ(0, image.mirror_image_enable());
+  ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   librbd::mirror_image_mode_t mode;
   ASSERT_EQ(0, image.mirror_image_get_mode(&mode));
   ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode);
@@ -1186,13 +1186,12 @@ TEST_F(TestMirroring, SnapshotRemoveOnDisable)
 
   uint64_t features;
   ASSERT_TRUE(get_features(&features));
-  features &= ~RBD_FEATURE_JOURNALING;
   int order = 20;
   ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
                              &order));
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
-  ASSERT_EQ(0, image.mirror_image_enable());
+  ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   uint64_t snap_id;
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
 
@@ -1238,7 +1237,7 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
                              &order));
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
-  ASSERT_EQ(0, image.mirror_image_enable());
+  ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   uint64_t snap_id;
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   librbd::snap_mirror_primary_namespace_t mirror_snap;
@@ -1299,7 +1298,6 @@ TEST_F(TestMirroring, SnapshotImageState)
 
   uint64_t features;
   ASSERT_TRUE(get_features(&features));
-  features &= ~RBD_FEATURE_JOURNALING;
   int order = 20;
   ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
                              &order));
@@ -1409,14 +1407,13 @@ TEST_F(TestMirroring, SnapshotPromoteDemote)
 
   uint64_t features;
   ASSERT_TRUE(get_features(&features));
-  features &= ~RBD_FEATURE_JOURNALING;
   int order = 20;
   ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
                              &order));
 
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
-  ASSERT_EQ(0, image.mirror_image_enable());
+  ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   librbd::mirror_image_mode_t mode;
   ASSERT_EQ(0, image.mirror_image_get_mode(&mode));
   ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode);

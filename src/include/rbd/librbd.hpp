@@ -728,7 +728,8 @@ public:
   int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
 
   // RBD image mirroring support functions
-  int mirror_image_enable();
+  int mirror_image_enable() CEPH_RBD_DEPRECATED;
+  int mirror_image_enable2(mirror_image_mode_t mode);
   int mirror_image_disable(bool force);
   int mirror_image_promote(bool force);
   int mirror_image_demote();

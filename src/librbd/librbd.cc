@@ -2785,8 +2785,12 @@ namespace librbd {
   }
 
   int Image::mirror_image_enable() {
+    return mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL);
+  }
+
+  int Image::mirror_image_enable2(mirror_image_mode_t mode) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::api::Mirror<>::image_enable(ictx, false);
+    return librbd::api::Mirror<>::image_enable(ictx, mode, false);
   }
 
   int Image::mirror_image_disable(bool force) {
@@ -6153,8 +6157,14 @@ extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t 
 
 extern "C" int rbd_mirror_image_enable(rbd_image_t image)
 {
+  return rbd_mirror_image_enable2(image, RBD_MIRROR_IMAGE_MODE_JOURNAL);
+}
+
+extern "C" int rbd_mirror_image_enable2(rbd_image_t image,
+                                        rbd_mirror_image_mode_t mode)
+{
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::api::Mirror<>::image_enable(ictx, false);
+  return librbd::api::Mirror<>::image_enable(ictx, mode, false);
 }
 
 extern "C" int rbd_mirror_image_disable(rbd_image_t image, bool force)
