@@ -127,66 +127,6 @@
             </div>
           </div>
 
-          <!-- Crush ruleset selection -->
-          <div class="form-group row"
-               *ngIf="form.getValue('poolType') && current.rules.length > 0">
-            <label class="col-form-label col-sm-3"
-                   for="crushRule"
-                   i18n>Crush ruleset</label>
-            <div class="col-sm-9">
-              <div class="input-group">
-                <select class="form-control custom-select"
-                        id="crushRule"
-                        formControlName="crushRule"
-                        name="crushSet">
-                  <option [ngValue]="null"
-                          i18n>-- Select a crush rule --</option>
-                  <option *ngFor="let rule of current.rules"
-                          [ngValue]="rule">
-                    {{ rule.rule_name }}
-                  </option>
-                </select>
-                <span class="input-group-append">
-                  <button class="btn btn-light"
-                          [ngClass]="{'active': data.crushInfo}"
-                          id="crush-info-button"
-                          type="button"
-                          (click)="data.crushInfo = !data.crushInfo">
-                    <i [ngClass]="[icons.questionCircle]"
-                       aria-hidden="true"></i>
-                  </button>
-                </span>
-              </div>
-              <span class="form-text text-muted"
-                    id="crush-info-block"
-                    *ngIf="data.crushInfo && form.getValue('crushRule')">
-                <tabset>
-                  <tab i18n-heading
-                       heading="Crush rule"
-                       class="crush-rule-info">
-                    <cd-table-key-value [renderObjects]="true"
-                                        [data]="form.getValue('crushRule')"
-                                        [autoReload]="false">
-                    </cd-table-key-value>
-                  </tab>
-                  <tab i18n-heading
-                       heading="Crush steps"
-                       class="crush-rule-steps">
-                    <ol>
-                      <li *ngFor="let step of form.get('crushRule').value.steps">
-                        {{ describeCrushStep(step) }}
-                      </li>
-                    </ol>
-                  </tab>
-                </tabset>
-              </span>
-              <span class="invalid-feedback"
-                    *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')"
-                    i18n>The rule can't be used in the current cluster as it has
-                to few OSDs to meet the minimum required OSD by this rule.</span>
-            </div>
-          </div>
-
           <!-- Replica Size -->
           <div class="form-group row"
                *ngIf="form.getValue('poolType') === 'replicated'">
@@ -216,6 +156,48 @@
                 {{ getMinSize() }} to {{ getMaxSize() }} is valid.</span>
             </div>
           </div>
+
+          <!-- Flags -->
+          <div class="form-group row"
+               *ngIf="info.is_all_bluestore && form.getValue('poolType') === 'erasure'">
+            <label i18n
+                   class="col-form-label col-sm-3">Flags</label>
+            <div class="col-sm-9">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="ec-overwrites"
+                       formControlName="ecOverwrites">
+                <label class="custom-control-label"
+                       for="ec-overwrites"
+                       i18n>EC Overwrites</label>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <!-- Applications -->
+        <div class="form-group row">
+          <label i18n
+                 class="col-sm-3 col-form-label"
+                 for="applications">Applications</label>
+          <div class="col-sm-9">
+            <cd-select-badges id="applications"
+                              [customBadges]="true"
+                              [customBadgeValidators]="data.applications.validators"
+                              [messages]="data.applications.messages"
+                              [data]="data.applications.selected"
+                              [options]="data.applications.available"
+                              [selectionLimit]="4"
+                              (selection)="appSelection()">
+            </cd-select-badges>
+          </div>
+        </div>
+
+        <!-- CRUSH -->
+        <div *ngIf="form.getValue('poolType')">
+
+          <legend i18n>CRUSH</legend>
 
           <!-- Erasure Profile select -->
           <div class="form-group row"
@@ -279,41 +261,74 @@
             </div>
           </div>
 
-          <!-- Flags -->
-          <div class="form-group row"
-               *ngIf="info.is_all_bluestore && form.getValue('poolType') === 'erasure'">
-            <label i18n
-                   class="col-form-label col-sm-3">Flags</label>
+          <!-- Crush ruleset selection -->
+          <div class="form-group row">
+            <label class="col-form-label col-sm-3"
+                   for="crushRule"
+                   i18n>Crush ruleset</label>
             <div class="col-sm-9">
-              <div class="custom-control custom-checkbox">
-                <input type="checkbox"
-                       class="custom-control-input"
-                       id="ec-overwrites"
-                       formControlName="ecOverwrites">
-                <label class="custom-control-label"
-                       for="ec-overwrites"
-                       i18n>EC Overwrites</label>
+              <ng-template #noRules>
+                <span class="form-text text-muted">
+                  <span i18n>There are no rules.</span>&nbsp;
+                  <span *ngIf="form.getValue('poolType') === 'erasure'"
+                        i18n>A new crush ruleset will be implicitly created.</span>
+                </span>
+              </ng-template>
+              <div *ngIf="current.rules.length > 0; else noRules">
+                <div class="input-group">
+                  <select class="form-control custom-select"
+                          id="crushRule"
+                          formControlName="crushRule"
+                          name="crushSet">
+                    <option [ngValue]="null"
+                            i18n>-- Select a crush rule --</option>
+                    <option *ngFor="let rule of current.rules"
+                            [ngValue]="rule">
+                      {{ rule.rule_name }}
+                    </option>
+                  </select>
+                  <span class="input-group-append">
+                    <button class="btn btn-light"
+                            [ngClass]="{'active': data.crushInfo}"
+                            id="crush-info-button"
+                            type="button"
+                            (click)="data.crushInfo = !data.crushInfo">
+                      <i [ngClass]="[icons.questionCircle]"
+                         aria-hidden="true"></i>
+                    </button>
+                  </span>
+                </div>
+                <span class="form-text text-muted"
+                      id="crush-info-block"
+                      *ngIf="data.crushInfo && form.getValue('crushRule')">
+                  <tabset>
+                    <tab i18n-heading
+                         heading="Crush rule"
+                         class="crush-rule-info">
+                      <cd-table-key-value [renderObjects]="true"
+                                          [data]="form.getValue('crushRule')"
+                                          [autoReload]="false">
+                      </cd-table-key-value>
+                    </tab>
+                    <tab i18n-heading
+                         heading="Crush steps"
+                         class="crush-rule-steps">
+                      <ol>
+                        <li *ngFor="let step of form.get('crushRule').value.steps">
+                          {{ describeCrushStep(step) }}
+                        </li>
+                      </ol>
+                    </tab>
+                  </tabset>
+                </span>
+                <span class="invalid-feedback"
+                      *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')"
+                      i18n>The rule can't be used in the current cluster as it has
+                  too few OSDs to meet the minimum required OSD by this rule.</span>
               </div>
             </div>
           </div>
 
-        </div>
-        <!-- Applications -->
-        <div class="form-group row">
-          <label i18n
-                 class="col-sm-3 col-form-label"
-                 for="applications">Applications</label>
-          <div class="col-sm-9">
-            <cd-select-badges id="applications"
-                              [customBadges]="true"
-                              [customBadgeValidators]="data.applications.validators"
-                              [messages]="data.applications.messages"
-                              [data]="data.applications.selected"
-                              [options]="data.applications.available"
-                              [selectionLimit]="4"
-                              (selection)="appSelection()">
-            </cd-select-badges>
-          </div>
         </div>
 
         <!-- Compression -->
