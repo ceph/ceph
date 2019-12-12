@@ -12,8 +12,6 @@ from re import search as re_search
 from time import sleep
 from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from tasks.cephfs.fuse_mount import FuseMount
-from teuthology.exceptions import CommandFailedError
 from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
@@ -608,8 +606,8 @@ class TestDU(TestCephFSShell):
             path_prefix='')
 
         args = ['du', '/']
-        for path in path_to_files:
-            args.append(path)
+        for p in path_to_files:
+            args.append(p)
         du_output = self.get_cephfs_shell_cmd_output(args)
 
         for expected_output in expected_patterns_in_output:

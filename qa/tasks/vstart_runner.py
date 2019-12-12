@@ -41,7 +41,6 @@ import shutil
 import re
 import os
 import time
-import json
 import sys
 import errno
 from unittest import suite, loader
@@ -623,9 +622,9 @@ class LocalKernelMount(KernelMount):
         except Exception as e:
             self.client_remote.run(args=[
                 'sudo',
-                run.Raw('PATH=/usr/sbin:$PATH'),
+                Raw('PATH=/usr/sbin:$PATH'),
                 'lsof',
-                run.Raw(';'),
+                Raw(';'),
                 'ps', 'auxf',
             ], timeout=(15*60), omit_sudo=False)
             raise e
@@ -1215,7 +1214,7 @@ def scan_tests(modules):
     max_required_mgr = 0
     require_memstore = False
 
-    for suite, case in enumerate_methods(overall_suite):
+    for suite_, case in enumerate_methods(overall_suite):
         max_required_mds = max(max_required_mds,
                                getattr(case, "MDSS_REQUIRED", 0))
         max_required_clients = max(max_required_clients,
@@ -1292,7 +1291,6 @@ def exec_test():
     opt_teardown_cluster = False
     global opt_log_ps_output
     opt_log_ps_output = False
-    opt_clear_old_log = False
     use_kernel_client = False
 
     args = sys.argv[1:]
@@ -1312,7 +1310,6 @@ def exec_test():
         elif f == '--log-ps-output':
             opt_log_ps_output = True
         elif f == '--clear-old-log':
-            opt_clear_old_log = True
             clear_old_log()
         elif f == "--kclient":
             use_kernel_client = True

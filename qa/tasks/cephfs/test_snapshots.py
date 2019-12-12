@@ -1,8 +1,6 @@
 import sys
 import logging
 import signal
-import time
-import errno
 from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -527,7 +525,7 @@ class TestSnapshots(CephFSTestCase):
         self.fs.rank_asok(['config', 'set', 'mds_max_snaps_per_dir', repr(new_limit)])
         try:
             self.create_snap_dir(sname)
-        except CommandFailedError as e:
+        except CommandFailedError:
             # after reducing limit we expect the new snapshot creation to fail
             pass
         self.delete_dir_and_snaps("accounts", new_limit + 1)

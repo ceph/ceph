@@ -291,7 +291,7 @@ class TestVolumes(CephFSTestCase):
         nsize = usedsize/2
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
-        except CommandFailedError as ce:
+        except CommandFailedError:
             raise RuntimeError("expected the 'fs subvolume resize' command to succeed")
 
         # verify the quota

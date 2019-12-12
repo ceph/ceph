@@ -764,7 +764,7 @@ class RbdTest(DashboardTestCase):
         id = self.create_image_in_trash('rbd', 'test_rbd')
         self.assertStatus(200)
 
-        img = self.get_image('rbd', None, 'test_rbd')
+        self.get_image('rbd', None, 'test_rbd')
         self.assertStatus(404)
 
         time.sleep(1)

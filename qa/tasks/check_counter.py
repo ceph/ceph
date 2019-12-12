@@ -4,7 +4,6 @@ import json
 
 from teuthology.task import Task
 from teuthology import misc
-import ceph_manager
 
 log = logging.getLogger(__name__)
 

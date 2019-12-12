@@ -7,7 +7,6 @@ import logging
 
 from teuthology import misc as teuthology
 from cephfs.fuse_mount import FuseMount
-from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 

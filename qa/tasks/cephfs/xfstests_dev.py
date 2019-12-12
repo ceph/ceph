@@ -118,7 +118,7 @@ class XFSTestsDev(CephFSTestCase):
         else:
             raise RuntimeError('expected a yum based or a apt based system')
 
-        proc = self.mount_a.client_remote.run(args=args, omit_sudo=False)
+        self.mount_a.client_remote.run(args=args, omit_sudo=False)
 
     def create_reqd_users(self):
         self.mount_a.client_remote.run(args=['sudo', 'useradd', 'fsgqa'],

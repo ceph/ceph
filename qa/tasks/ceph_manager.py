@@ -679,7 +679,7 @@ class OSDThrasher(Thrasher):
         Decrease the size of the pool
         """
         pool = self.ceph_manager.get_pool()
-        orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
+        _ = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Shrinking pool %s" % (pool,))
         if self.ceph_manager.contract_pool(
                 pool,
@@ -906,7 +906,7 @@ class OSDThrasher(Thrasher):
         Random action selector.
         """
         chance_down = self.config.get('chance_down', 0.4)
-        chance_test_min_size = self.config.get('chance_test_min_size', 0)
+        _ = self.config.get('chance_test_min_size', 0)
         chance_test_backfill_full = \
             self.config.get('chance_test_backfill_full', 0)
         if isinstance(chance_down, int):
@@ -1653,7 +1653,7 @@ class CephManager:
         while True:
             proc = self.admin_socket(service_type, service_id,
                                      args, check_status=False, stdout=stdout)
-            if proc.exitstatus is 0:
+            if proc.exitstatus == 0:
                 return proc
             else:
                 tries += 1

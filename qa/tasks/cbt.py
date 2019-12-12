@@ -3,7 +3,6 @@ import os
 import yaml
 
 from teuthology import misc
-from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology.task import Task
 

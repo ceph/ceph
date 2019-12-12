@@ -13,9 +13,7 @@ from gevent import sleep
 from gevent.greenlet import Greenlet
 from gevent.event import Event
 
-from teuthology import misc
 from teuthology.exceptions import CommandFailedError
-from teuthology.task import Task
 from teuthology.orchestra import run
 from tasks.thrasher import Thrasher
 

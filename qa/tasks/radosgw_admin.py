@@ -10,7 +10,6 @@ Rgw admin testing against a running instance
 #	python qa/tasks/radosgw_admin.py [USER] HOSTNAME
 #
 
-import copy
 import json
 import logging
 import time
@@ -24,11 +23,9 @@ from cStringIO import StringIO
 import boto.exception
 import boto.s3.connection
 import boto.s3.acl
-from boto.utils import RequestHook
 
 import httplib2
 
-import util.rgw as rgw_utils
 
 from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
@@ -291,7 +288,6 @@ def task(ctx, config):
     display_name2='Fud'
     display_name3='Bar'
     email='foo@foo.com'
-    email2='bar@bar.com'
     access_key='9te6NH5mcdcq0Tc5i8i1'
     secret_key='Ny4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXu'
     access_key2='p5YnriCv1nAtykxBrupQ'
@@ -1052,8 +1048,6 @@ def task(ctx, config):
     # TESTCASE 'zonegroup-info', 'zonegroup', 'get', 'get zonegroup info', 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
 
-import sys
-from tasks.radosgw_admin import task
 from teuthology.config import config
 from teuthology.orchestra import cluster, remote
 import argparse;

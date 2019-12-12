@@ -9,7 +9,6 @@ from cStringIO import StringIO
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
-from teuthology.orchestra.connection import split_user
 from teuthology.packaging import install_package
 from teuthology.packaging import remove_package
 from teuthology.exceptions import ConfigError
@@ -209,7 +208,6 @@ def run_keystone(ctx, config):
 
         # start the public endpoint
         client_public_with_id = 'keystone.public' + '.' + client_id
-        client_public_with_cluster = cluster_name + '.' + client_public_with_id
 
         public_host, public_port = ctx.keystone.public_endpoints[client]
         run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-public',

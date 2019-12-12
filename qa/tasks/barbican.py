@@ -4,14 +4,12 @@ Deploy and configure Barbican for Teuthology
 import argparse
 import contextlib
 import logging
-import string
 import httplib
 from urlparse import urlparse
 import json
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology import safepath
 from teuthology.orchestra import run
 from teuthology.exceptions import ConfigError
 
@@ -201,7 +199,6 @@ def run_barbican(ctx, config):
 
         # start the public endpoint
         client_public_with_id = 'barbican.public' + '.' + client_id
-        client_public_with_cluster = cluster_name + '.' + client_public_with_id
 
         run_cmd = ['cd', get_barbican_dir(ctx), run.Raw('&&'),
                    '.', '.barbicanenv/bin/activate', run.Raw('&&'),
@@ -248,8 +245,6 @@ def create_secrets(ctx, config):
 
     keystone_role = cconfig.get('use-keystone-role', None)
     keystone_host, keystone_port = ctx.keystone.public_endpoints[keystone_role]
-    keystone_url = 'http://{host}:{port}/v2.0'.format(host=keystone_host,
-                                                      port=keystone_port)
     barbican_host, barbican_port = ctx.barbican.endpoints[cclient]
     barbican_url = 'http://{host}:{port}'.format(host=barbican_host,
                                                  port=barbican_port)
@@ -482,7 +477,6 @@ def task(ctx, config):
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
-    clients = config.keys()
 
     overrides = ctx.config.get('overrides', {})
     # merge each client section, not the top level.
