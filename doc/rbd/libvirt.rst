@@ -207,7 +207,7 @@ commands, refer to `Virsh Command Reference`_.
 		<source protocol='rbd' name='libvirt-pool/new-libvirt-image'>
 			<host name='{monitor-host}' port='6789'/>
 		</source>
-		<target dev='vda' bus='virtio'/>
+		<target dev='vdb' bus='virtio'/>
 	</disk>
 
    Replace ``{monitor-host}`` with the name of your host, and replace the 
@@ -292,11 +292,9 @@ following procedures.
 
 	sudo virsh qemu-monitor-command --hmp {vm-domain-name} 'info block'
 
-#. Check to see if the device from ``<target dev='hdb' bus='ide'/>`` appears
-   under ``/dev`` or under ``proc/partitions``. :: 
+#. Check to see if the device from ``<target dev='vdb' bus='virtio'/>`` exists::
    
-	ls dev
-	cat proc/partitions
+       virsh domblklist {vm-domain-name} --details
 
 If everything looks okay, you may begin using the Ceph block device 
 within your VM.
