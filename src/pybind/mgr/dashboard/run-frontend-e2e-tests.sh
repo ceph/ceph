@@ -69,6 +69,9 @@ if [ "$BASE_URL" == "" ]; then
 fi
 
 export BASE_URL
+echo "BASE_URL: ${BASE_URL}"
+
+ping -c 1 ceph-builders
 
 cd $DASH_DIR/frontend
 jq .[].target=\"$BASE_URL\" proxy.conf.json.sample > proxy.conf.json
