@@ -114,9 +114,9 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
 {
   PyObject *pool_list;
   BasePyOSDMapIncremental *incobj;
-  double max_deviation = 0;
+  int max_deviation = 0;
   int max_iterations = 0;
-  if (!PyArg_ParseTuple(args, "OdiO:calc_pg_upmaps",
+  if (!PyArg_ParseTuple(args, "OiiO:calc_pg_upmaps",
 			&incobj, &max_deviation,
 			&max_iterations, &pool_list)) {
     return nullptr;
@@ -147,11 +147,13 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
 	   << " max_iterations " << max_iterations
 	   << " pools " << pools
 	   << dendl;
+  PyThreadState *tstate = PyEval_SaveThread();
   int r = self->osdmap->calc_pg_upmaps(g_ceph_context,
 				 max_deviation,
 				 max_iterations,
 				 pools,
 				 incobj->inc);
+  PyEval_RestoreThread(tstate);
   dout(10) << __func__ << " r = " << r << dendl;
   return PyInt_FromLong(r);
 }
