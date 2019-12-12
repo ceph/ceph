@@ -126,8 +126,8 @@ SSO_COMMANDS = [
                'name=idp_metadata,type=CephString '
                'name=idp_username_attribute,type=CephString,req=false '
                'name=idp_entity_id,type=CephString,req=false '
-               'name=sp_x_509_cert,type=CephString,req=false '
-               'name=sp_private_key,type=CephString,req=false',
+               'name=sp_x_509_cert,type=CephFilepath,req=false '
+               'name=sp_private_key,type=CephFilepath,req=false',
         'desc': 'Setup SAML2 Single Sign-On',
         'perm': 'w'
     }
@@ -188,15 +188,19 @@ def handle_sso_command(cmd):
         if not sp_x_509_cert_path and sp_private_key_path:
             return -errno.EINVAL, '', 'Missing parameter `sp_x_509_cert`.'
         has_sp_cert = sp_x_509_cert_path != "" and sp_private_key_path != ""
-        try:
-            with open(sp_x_509_cert_path, 'r') as f:
-                sp_x_509_cert = f.read()
-        except FileNotFoundError:
+        if has_sp_cert:
+            try:
+                with open(sp_x_509_cert_path, 'r') as f:
+                    sp_x_509_cert = f.read()
+            except FileNotFoundError:
+                return -errno.EINVAL, '', '`{}` not found.'.format(sp_x_509_cert_path)
+            try:
+                with open(sp_private_key_path, 'r') as f:
+                    sp_private_key = f.read()
+            except FileNotFoundError:
+                return -errno.EINVAL, '', '`{}` not found.'.format(sp_private_key_path)
+        else:
             sp_x_509_cert = ''
-        try:
-            with open(sp_private_key_path, 'r') as f:
-                sp_private_key = f.read()
-        except FileNotFoundError:
             sp_private_key = ''
 
         if os.path.isfile(idp_metadata):
