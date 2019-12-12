@@ -1492,7 +1492,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         if not host:
             raise OrchestratorError('no hosts defined')
         self.log.debug('using host %s' % host)
-        out, code = self._run_cephadm(
+        out, err, code = self._run_cephadm(
             host, None, 'pull', [],
             image=image_name,
             no_fsid=True)
