@@ -720,8 +720,8 @@ class interval_set {
    * Move contents of m into another Map. Use that instead of
    * encoding interval_set into bufferlist then decoding it back into Map.
    */
-  void move_into(Map& other) {
-    other = std::move(m);
+  Map detach() && {
+    return std::move(m);
   }
 
 private:
