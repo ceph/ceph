@@ -1111,7 +1111,7 @@ def main():
     if parsed_args.output_file:
         try:
             if parsed_args.output_file == '-':
-                outf = sys.stdout
+                outf = raw_stdout
             else:
                 outf = open(parsed_args.output_file, 'wb')
         except Exception as e:

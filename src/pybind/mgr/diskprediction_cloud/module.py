@@ -189,7 +189,7 @@ class Module(MgrModule):
 
     def _show_prediction_config(self, cmd):
         self.show_module_config()
-        return 0, json.dumps(self.config, indent=4), ''
+        return 0, json.dumps(self.config, indent=4, sort_keys=True), ''
 
     def _set_ssl_target_name(self, cmd):
         str_ssl_target = cmd.get('ssl_target_name', '')
