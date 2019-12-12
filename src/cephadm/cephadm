@@ -720,7 +720,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
 
-def extract_uid_gid(img='', file_path='/etc/ceph'):
+def extract_uid_gid(img='', file_path='/var/lib/ceph'):
     # type: (str, str) -> Tuple[int, int]
 
     if not img:
