@@ -742,18 +742,18 @@ public:
     void seek(uint64_t ofs);
 
     void operator++();
-    bool operator==(const obj_iterator& rhs) {
+    bool operator==(const obj_iterator& rhs) const {
       return (ofs == rhs.ofs);
     }
-    bool operator!=(const obj_iterator& rhs) {
+    bool operator!=(const obj_iterator& rhs) const {
       return (ofs != rhs.ofs);
     }
-    const rgw_obj_select& get_location() {
+    const rgw_obj_select& get_location() const {
       return location;
     }
 
     /* start of current stripe */
-    uint64_t get_stripe_ofs() {
+    uint64_t get_stripe_ofs() const {
       if (manifest->explicit_objs) {
         return explicit_iter->first;
       }
@@ -771,7 +771,7 @@ public:
     }
 
     /* current stripe size */
-    uint64_t get_stripe_size() {
+    uint64_t get_stripe_size() const {
       if (manifest->explicit_objs) {
         return explicit_iter->second.size;
       }
@@ -779,7 +779,7 @@ public:
     }
 
     /* offset where data starts within current stripe */
-    uint64_t location_ofs() {
+    uint64_t location_ofs() const {
       if (manifest->explicit_objs) {
         return explicit_iter->second.loc_ofs;
       }

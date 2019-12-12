@@ -1056,9 +1056,11 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
     // tail bucket, if it exists
     bool first_insert = false;
 
-    if (0 == manifest.get_max_head_size()) {
-      // in multipart, the head object contains no data and just has
-      // the manifest
+    // in multipart, the head object contains no data and just has the
+    // manifest AND empty objects have no manifest, but they're
+    // realized as empty rados objects
+    if (0 == manifest.get_max_head_size() ||
+	manifest.obj_begin() == manifest.obj_end()) {
       obj_oids.insert(oid);
       first_insert = true;
     }
