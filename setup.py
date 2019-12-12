@@ -51,21 +51,15 @@ setup(
     install_requires=['gevent',
                       'PyYAML',
                       'argparse >= 1.2.1',
-                      'boto >= 2.0b4',
                       'configobj',
                       'six >= 1.9', # python-openstackclient won't work properly with less
                       'pexpect',
-                      'nose', # for qa/tasks/rgw_multisite_tests.py',
                       'docopt',
                       'psutil >= 2.1.0',
                       'configparser',
                       'ansible>=2.0',
                       'prettytable',
                       'manhole',
-                      # For bucket notification testing in multisite
-                      'xmltodict',
-                      'boto3',
-                      'cryptography >= 2.7',  # For RGW bucket MFA Delete TOTP.
                       ],
     extras_require = {
         'coverage': [ 'mysqlclient == 1.4.2'],
@@ -93,9 +87,15 @@ setup(
             'requests != 2.13.0',
         ],
         'test': [
-            'tox',
+            'boto >= 2.0b4',       # for qa/tasks/radosgw_*.py
+            'cryptography >= 2.7',  # for qa/tasks/mgr/dashboard/test_rgw.py
+            'nose', # for qa/tasks/rgw_multisite_tests.py',
             'pip-tools',
             'pytest',           # for tox.ini
+            'tox',
+            # For bucket notification testing in multisite
+            'xmltodict',
+            'boto3',
         ]
     },
 
