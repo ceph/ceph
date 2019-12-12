@@ -60,7 +60,7 @@ TEST(ReshardWait, stop_block)
 #ifdef HAVE_BOOST_CONTEXT
 TEST(ReshardWait, wait_yield)
 {
-  constexpr ceph::timespan wait_duration = 10ms;
+  constexpr ceph::timespan wait_duration = 50ms;
   RGWReshardWait waiter(wait_duration);
 
   boost::asio::io_context context;
@@ -82,7 +82,7 @@ TEST(ReshardWait, wait_yield)
 
 TEST(ReshardWait, stop_yield)
 {
-  constexpr ceph::timespan short_duration = 10ms;
+  constexpr ceph::timespan short_duration = 50ms;
   constexpr ceph::timespan long_duration = 10s;
 
   RGWReshardWait long_waiter(long_duration);
@@ -113,7 +113,7 @@ TEST(ReshardWait, stop_yield)
 
 TEST(ReshardWait, stop_multiple)
 {
-  constexpr ceph::timespan short_duration = 10ms;
+  constexpr ceph::timespan short_duration = 50ms;
   constexpr ceph::timespan long_duration = 10s;
 
   RGWReshardWait long_waiter(long_duration);
