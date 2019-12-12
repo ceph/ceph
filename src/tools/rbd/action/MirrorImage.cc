@@ -73,6 +73,13 @@ void get_arguments(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
+void get_arguments_enable(po::options_description *positional,
+                          po::options_description *options) {
+  at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  positional->add_options()
+    ("mode", "mirror image mode (journal or snapshot) [default: journal]");
+}
+
 void get_arguments_disable(po::options_description *positional,
                            po::options_description *options) {
   options->add_options()
@@ -104,7 +111,21 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
     return r;
   }
 
-  r = enable ? image.mirror_image_enable() : image.mirror_image_disable(force);
+  if (enable) {
+    librbd::mirror_image_mode_t mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+    std::string mode_arg = utils::get_positional_argument(vm, arg_index++);
+    if (mode_arg == "journal") {
+      mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+    } else if (mode_arg == "snapshot") {
+      mode = RBD_MIRROR_IMAGE_MODE_SNAPSHOT;
+    } else if (!mode_arg.empty()) {
+      std::cerr << "rbd: invalid mode name: " << mode_arg << std::endl;
+      return -EINVAL;
+    }
+    r = image.mirror_image_enable2(mode);
+  } else {
+    r = image.mirror_image_disable(force);
+  }
   if (r < 0) {
     return r;
   }
@@ -529,7 +550,7 @@ int execute_snapshot(const po::variables_map &vm,
 Shell::Action action_enable(
   {"mirror", "image", "enable"}, {},
   "Enable RBD mirroring for an image.", "",
-  &get_arguments, &execute_enable);
+  &get_arguments_enable, &execute_enable);
 Shell::Action action_disable(
   {"mirror", "image", "disable"}, {},
   "Disable RBD mirroring for an image.", "",
