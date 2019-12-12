@@ -74,7 +74,7 @@ else
 fi
 
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
-mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
+mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=Debug -DWITH_TESTS=ON -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
 make rocksdb_env_librados_test -j8
 
 echo "Copy ceph.conf"
