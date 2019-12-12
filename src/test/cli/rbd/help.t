@@ -1543,13 +1543,15 @@
   rbd help mirror image enable
   usage: rbd mirror image enable [--pool <pool>] [--namespace <namespace>] 
                                  [--image <image>] 
-                                 <image-spec> 
+                                 <image-spec> <mode> 
   
   Enable RBD mirroring for an image.
   
   Positional arguments
     <image-spec>         image specification
                          (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <mode>               mirror image mode (journal or snapshot) [default:
+                         journal]
   
   Optional arguments
     -p [ --pool ] arg    pool name
