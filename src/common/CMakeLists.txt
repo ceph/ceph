@@ -98,8 +98,7 @@ set(common_srcs
   url_escape.cc
   utf8.c
   util.cc
-  version.cc
-  xattr.c)
+  version.cc)
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/version.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
