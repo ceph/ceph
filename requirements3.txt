@@ -62,7 +62,7 @@ oslo.serialization==2.18.0  # via python-keystoneclient, python-neutronclient, p
 oslo.utils==3.25.0        # via osc-lib, oslo.serialization, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient
 paramiko==2.4.2
 pbr==2.0.0                # via cliff, debtcollector, keystoneauth1, openstacksdk, osc-lib, oslo.i18n, oslo.serialization, oslo.utils, positional, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, requestsexceptions, stevedore
-pexpect==4.2.1
+pexpect==4.7.0
 pip-tools==4.3.0
 pluggy==0.7.1             # via pytest, tox
 positional==1.1.1         # via keystoneauth1, python-keystoneclient
