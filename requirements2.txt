@@ -8,7 +8,6 @@ ansible==2.8.2
 apache-libcloud==2.6.0
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0
-asn1crypto==0.22.0        # via cryptography
 atomicwrites==1.1.5       # via pytest
 attrs==18.1.0             # via pytest
 babel==2.4.0              # via osc-lib, oslo.i18n, python-cinderclient, python-glanceclient, python-neutronclient, python-novaclient, python-openstackclient
@@ -27,7 +26,7 @@ cmd2==0.7.0               # via cliff
 configobj==5.0.6
 configparser==3.5.0
 contextlib2==0.5.4        # via raven
-cryptography==2.7         # via ansible, paramiko, pyopenssl
+cryptography==2.8         # via ansible, paramiko, pyopenssl
 debtcollector==1.13.0     # via oslo.config, oslo.utils, python-keystoneclient, python-neutronclient
 deprecation==1.0          # via openstacksdk
 docopt==0.6.2
