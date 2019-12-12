@@ -195,14 +195,14 @@ def read_config(fn):
     if fn:
         with open(fn, 'r') as f:
             raw_conf = f.read()
-        nice_conf = re.sub('\n(\s)+', '\n', raw_conf)
+        nice_conf = re.sub(r'\n(\s)+', r'\n', raw_conf)
         s_io = StringIO(nice_conf)
         if sys.version_info >= (3, 2):
             cp.read_file(s_io)
         else:
             cp.readfp(s_io)
 
-     return cp
+    return cp
 
 def pathify(p):
     # type: (str) -> str
