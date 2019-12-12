@@ -96,7 +96,6 @@ $SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
 which docker && ( $CEPHADM --docker version | grep 'ceph version' )
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
-$CEPHADM shell -- ceph -v | grep 'ceph version'
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
 
 ## bootstrap
@@ -188,7 +187,7 @@ $SUDO losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
 $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
-    $CEPHADM shell --config $CONFIG --keyring $KEYRING -- \
+    $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
             ceph orchestrator osd create \
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
@@ -229,7 +228,7 @@ $CEPHADM unit --fsid $FSID --name mon.a -- enable
 $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
 
 ## shell
-$CEPHADM shell -- true
+$CEPHADM shell --fsid $FSID -- true
 $CEPHADM shell --fsid $FSID -- test -d /var/log/ceph
 
 ## enter
