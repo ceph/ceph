@@ -32,15 +32,7 @@ You can invoke cephadm in two ways:
 """
 
 import argparse
-try:
-    from ConfigParser import ConfigParser   # py2
-except ImportError:
-    from configparser import ConfigParser   # py3
 import fcntl
-try:
-    from StringIO import StringIO           # py2
-except ImportError:
-    from io import StringIO                 # py3
 import json
 import logging
 import os
@@ -64,6 +56,15 @@ from distutils.spawn import find_executable
 from functools import wraps
 from glob import glob
 
+if sys.version_info >= (3, 0):
+    from io import StringIO
+else:
+    from StringIO import StringIO
+
+if sys.version_info >= (3, 2):
+    from configparser import ConfigParser
+else:
+    from ConfigParser import SafeConfigParser
 
 container_path = None
 
@@ -186,12 +187,21 @@ def read_config(fn):
     # bend over backwards here because py2's ConfigParser doesn't like
     # whitespace before config option names (e.g., '\n foo = bar\n').
     # Yeesh!
-    cp = ConfigParser()
+    if sys.version_info >= (3, 2):
+        cp = ConfigParser()
+    else:
+        cp = SafeConfigParser()
+
     if fn:
         with open(fn, 'r') as f:
             raw_conf = f.read()
-        nice_conf = re.sub('\n(\s)+', '\n', raw_conf)
-        cp.readfp(StringIO(nice_conf))
+        nice_conf = re.sub(r'\n(\s)+', r'\n', raw_conf)
+        s_io = StringIO(nice_conf)
+        if sys.version_info >= (3, 2):
+            cp.read_file(s_io)
+        else:
+            cp.readfp(s_io)
+
     return cp
 
 def pathify(p):
