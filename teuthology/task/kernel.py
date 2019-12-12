@@ -184,7 +184,8 @@ def need_to_install(ctx, role, version):
         stdout=uname_fp,
         )
     cur_version = uname_fp.getvalue().rstrip('\n')
-    log.debug('current kernel version is {ver}'.format(ver=cur_version))
+    log.debug('current kernel version is {ver} vs {want}'.format(ver=cur_version,
+                                                                 want=version))
 
     if '.' in str(version):
         # version is utsrelease, yay
@@ -871,7 +872,7 @@ def update_grub_rpm(remote, newversion):
     grub='grub2'
     # Check if grub2 is isntalled
     try:
-        remote.run(args=['sudo', 'rpm', '-qi', 'grub2'])
+        remote.run(args=['sudo', 'rpm', '-qi', 'grub2-tools'])
     except Exception:
         grub = 'legacy'
     log.info('Updating Grub Version: {grub}'.format(grub=grub))
@@ -906,12 +907,26 @@ def grub2_kernel_select_generic(remote, newversion, ostype):
     remote.run(args=['sudo', mkconfig, '-o', grubconfig, ])
     grub2conf = teuthology.get_file(remote, grubconfig, True)
     entry_num = 0
-    for line in grub2conf.split('\n'):
-        if line.startswith('menuentry'):
-            if newversion in line:
+    if '\nmenuitem ' not in grub2conf:
+        # okay, do the newer (el8) grub2 thing
+        grub2conf = remote.sh('sudo /bin/ls /boot/loader/entries || true')
+        entry = None
+        for line in grub2conf.split('\n'):
+            if line.endswith('.conf') and newversion in line:
+                entry = line[:-5]  # drop .conf suffix
                 break
-            entry_num += 1
-    remote.run(args=['sudo', grubset, str(entry_num), ])
+    else:
+        # do old menuitem counting thing
+        for line in grub2conf.split('\n'):
+            if line.startswith('menuentry '):
+                if newversion in line:
+                    break
+                entry_num += 1
+        entry = str(entry_num)
+    if entry is None:
+        log.warning('Unable to update grub2 order')
+    else:
+        remote.run(args=['sudo', grubset, entry])
 
 
 def generate_legacy_grub_entry(remote, newversion):
@@ -1105,15 +1120,6 @@ def get_sha1_from_pkg_name(path):
     return sha1
 
 
-def remove_old_kernels(ctx):
-    for remote in ctx.cluster.remotes.keys():
-        package_type = remote.os.package_type
-        if package_type == 'rpm':
-            log.info("Removing old kernels from %s", remote)
-            args = ['sudo', 'package-cleanup', '-y', '--oldkernels']
-            remote.run(args=args)
-
-
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
@@ -1217,8 +1223,6 @@ def task(ctx, config):
     need_install = {}  # sha1 to dl, or path to rpm or deb
     need_version = {}  # utsrelease or sha1
     kdb = {}
-
-    remove_old_kernels(ctx)
 
     for role, role_config in config.items():
         # gather information about this remote
