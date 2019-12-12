@@ -4,14 +4,14 @@ from teuthology.orchestra.daemon.state import DaemonState
 
 log = logging.getLogger(__name__)
 
-class CephDaemonUnit(DaemonState):
+class CephadmUnit(DaemonState):
     def __init__(self, remote, role, id_, *command_args,
                  **command_kwargs):
-        super(CephDaemonUnit, self).__init__(
+        super(CephadmUnit, self).__init__(
             remote, role, id_, *command_args, **command_kwargs)
         self._set_commands()
         self.log = command_kwargs.get('logger', log)
-        self.use_ceph_daemon = command_kwargs.get('use_ceph_daemon')
+        self.use_cephadm = command_kwargs.get('use_cephadm')
         self.is_started = command_kwargs.get('started', False)
         if self.is_started:
             self._start_logger()
@@ -36,7 +36,7 @@ class CephDaemonUnit(DaemonState):
     def _start_logger(self):
         name = '%s.%s' % (self.type_, self.id_)
         self.remote_logger = self.remote.run(
-            args=['sudo', self.use_ceph_daemon, 'logs',
+            args=['sudo', self.use_cephadm, 'logs',
                   '-f',
                   '--fsid', self.fsid,
                   '--name', name],
