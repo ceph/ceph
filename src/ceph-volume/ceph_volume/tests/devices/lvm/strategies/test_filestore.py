@@ -165,8 +165,9 @@ class TestMixedType(object):
         # when get_api_vgs() gets called, it will return this one VG
         stub_vgs([
             dict(
-                vg_free='7g', vg_name='fast', lv_name='foo',
-                lv_path='/dev/vg/foo', lv_tags="ceph.type=data"
+                vg_name='fast', lv_name='foo',
+                lv_path='/dev/vg/foo', lv_tags="ceph.type=data",
+                vg_extent_size=1024*1024*1024, vg_free_count=7
             )
         ])
 
