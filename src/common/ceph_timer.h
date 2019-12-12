@@ -20,6 +20,7 @@
 #include <boost/intrusive/set.hpp>
 
 #include "common/detail/construct_suspended.h"
+#include "common/Thread.h"
 
 namespace ceph {
   namespace timer_detail {
@@ -146,7 +147,7 @@ namespace ceph {
       timer() {
 	lock_guard l(lock);
 	suspended = false;
-	thread = std::thread(&timer::timer_thread, this);
+	thread = make_named_thread("ceph::timer", &timer::timer_thread, this);
       }
 
       // Create a suspended timer, jobs will be executed in order when
@@ -186,7 +187,7 @@ namespace ceph {
 
 	suspended = false;
 	ceph_assert(!thread.joinable());
-	thread = std::thread(&timer::timer_thread, this);
+	thread = make_named_thread("ceph::timer", &timer::timer_thread, this);
       }
 
       // Schedule an event in the relative future
