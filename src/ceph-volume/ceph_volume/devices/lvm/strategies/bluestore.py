@@ -81,7 +81,7 @@ class SingleType(Strategy):
                 osd['data']['size'] = extents['sizes']
                 osd['data']['parts'] = extents['parts']
                 osd['data']['percentage'] = 100 / self.osds_per_device
-                osd['data']['human_readable_size'] = str(disk.Size(b=extents['sizes']))
+                osd['data']['human_readable_size'] = str(disk.Size(gb=extents['sizes']))
                 osds.append(osd)
 
         self.computed['changed'] = len(osds) > 0
@@ -103,7 +103,8 @@ class SingleType(Strategy):
 
         # create the lvs from the vgs captured in the beginning
         for create in osd_vgs.values():
-            lvs = lvm.create_lvs(create['vg'], parts=create['parts'], name_prefix='osd-data')
+            block_uuid = system.generate_uuid()
+            lvs = lvm.create_lvs('osd-data', block_uuid, vg=create['vg'], parts=create['parts'])
             vg_name = create['vg'].name
             for lv in lvs:
                 command = ['--bluestore', '--data']
@@ -357,7 +358,7 @@ class MixedType(MixedStrategy):
             data_lv_extents = data_vg.sizing(parts=self.osds_per_device)['extents']
             data_uuid = system.generate_uuid()
             data_lv = lvm.create_lv(
-                'osd-block', data_uuid, vg=data_vg.name, extents=data_lv_extents)
+                'osd-block', data_uuid, vg=data_vg, extents=data_lv_extents)
             command = [
                 '--bluestore',
                 '--data', "%s/%s" % (data_lv.vg_name, data_lv.name),
@@ -365,13 +366,13 @@ class MixedType(MixedStrategy):
             if 'block.db' in osd:
                 db_uuid = system.generate_uuid()
                 db_lv = lvm.create_lv(
-                    'osd-block-db', db_uuid, vg=db_vg.name, extents=db_lv_extents)
+                    'osd-block-db', db_uuid, vg=db_vg, extents=db_lv_extents)
                 command.extend([ '--block.db',
                                 '{}/{}'.format(db_lv.vg_name, db_lv.name)])
             if 'block.wal' in osd:
                 wal_uuid = system.generate_uuid()
                 wal_lv = lvm.create_lv(
-                    'osd-block-wal', wal_uuid, vg=wal_vg.name, extents=wal_lv_extents)
+                    'osd-block-wal', wal_uuid, vg=wal_vg, extents=wal_lv_extents)
                 command.extend(
                     ['--block.wal',
                      '{}/{}'.format(wal_lv.vg_name, wal_lv.name)
