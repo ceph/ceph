@@ -264,7 +264,7 @@ int ReplicatedBackend::objects_readv_sync(
   interval_set<uint64_t> im(m);
   auto r = store->readv(ch, ghobject_t(hoid), im, *bl, op_flags);
   if (r >= 0) {
-    im.move_into(m);
+    m = std::move(im).detach();
   }
   return r;
 }
