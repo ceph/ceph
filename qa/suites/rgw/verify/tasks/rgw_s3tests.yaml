@@ -6,7 +6,7 @@ tasks:
 - ceph:
 - rgw:
     client.0:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024]
 - s3tests:
     client.0:
       force-branch: ceph-luminous
