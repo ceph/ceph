@@ -115,7 +115,7 @@ class PgAutoscaler(MgrModule):
         ps, root_map, pool_root = self._get_pool_status(osdmap, pools)
 
         if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
-            return 0, json.dumps(ps, indent=2), ''
+            return 0, json.dumps(ps, indent=4, sort_keys=True), ''
         else:
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',

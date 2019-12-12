@@ -1258,7 +1258,7 @@ class TaskHandler:
                                  task.refs[TASK_REF_POOL_NAMESPACE]):
                     result.append(task.to_dict())
 
-        return 0, json.dumps(result), ""
+        return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
     def handle_command(self, inbuf, prefix, cmd):
         with self.lock:

@@ -425,7 +425,7 @@ class Module(MgrModule):
                 ))
 
                 self.log.debug(
-                    "old_up_acting: {0}".format(json.dumps(old_up_acting, indent=2)))
+                    "old_up_acting: {0}".format(json.dumps(old_up_acting, indent=4, sort_keys=True)))
 
                 # Has this OSD been assigned a new location?
                 # (it might not be if there is no suitable place to move
@@ -437,7 +437,8 @@ class Module(MgrModule):
 
                 self.log.debug(
                     "new_up_acting: {0}".format(json.dumps(new_up_acting,
-                                                           indent=2)))
+                                                           indent=4,
+                                                           sort_keys=True)))
 
                 if was_on_out_or_in_osd and is_relocated:
                     # This PG is now in motion, track its progress
@@ -702,6 +703,6 @@ class Module(MgrModule):
             # that never finishes)
             return self._handle_clear()
         elif cmd['prefix'] == "progress json":
-            return 0, json.dumps(self._json(), indent=2), ""
+            return 0, json.dumps(self._json(), indent=4, sort_keys=True), ""
         else:
             raise NotImplementedError(cmd['prefix'])
