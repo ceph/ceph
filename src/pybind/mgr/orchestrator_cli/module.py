@@ -213,7 +213,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         'name=host,type=CephString '
         'name=label,type=CephString',
         'Add a host label')
-    def _host_label_add(self, host, label):
+    def _host_label_rm(self, host, label):
         completion = self.remove_host_label(host, label)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -384,8 +384,7 @@ Usage:
     def _rbd_mirror_add(self, num=None, hosts=None):
         spec = orchestrator.StatelessServiceSpec(
             None,
-            placement=orchestrator.PlacementSpec(nodes=hosts),
-            count=num or 1)
+            placement=orchestrator.PlacementSpec(nodes=hosts, count=num))
         completion = self.add_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -393,14 +392,14 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator rbd-mirror update',
-        "name=num,type=CephInt,req=true "
+        "name=num,type=CephInt,req=false "
+        "name=label,type=CephString,req=false "
         "name=hosts,type=CephString,n=N,req=false",
         'Update the number of rbd-mirror instances')
-    def _rbd_mirror_update(self, num, hosts=None):
+    def _rbd_mirror_update(self, num, label=None, hosts=[]):
         spec = orchestrator.StatelessServiceSpec(
             None,
-            placement=orchestrator.PlacementSpec(nodes=hosts),
-            count=num or 1)
+            placement=orchestrator.PlacementSpec(nodes=hosts, count=num, label=label))
         completion = self.update_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -425,8 +424,7 @@ Usage:
     def _mds_add(self, fs_name, num=None, hosts=None):
         spec = orchestrator.StatelessServiceSpec(
             fs_name,
-            placement=orchestrator.PlacementSpec(nodes=hosts),
-            count=num or 1)
+            placement=orchestrator.PlacementSpec(nodes=hosts, count=num))
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -435,14 +433,18 @@ Usage:
     @orchestrator._cli_write_command(
         'orchestrator mds update',
         "name=fs_name,type=CephString "
-        "name=num,type=CephInt,req=true "
-        "name=hosts,type=CephString,n=N,req=false",
+        "name=num,type=CephInt,req=false "
+        "name=label,type=CephString,req=false",
+        "name=hosts,type=CephString,n=N,req=false "
         'Update the number of MDS instances for the given fs_name')
-    def _mds_update(self, fs_name, num, hosts=None):
+    def _mds_update(self, fs_name, num=None, label=None, hosts=[]):
+        placement = orchestrator.PlacementSpec(label=label, count=num, nodes=hosts)
+        placement.validate()
+
         spec = orchestrator.StatelessServiceSpec(
             fs_name,
-            placement=orchestrator.PlacementSpec(nodes=hosts),
-            count=num or 1)
+            placement=placement)
+
         completion = self.update_mds(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -481,8 +483,7 @@ Usage:
         rgw_spec = orchestrator.RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
-            placement=orchestrator.PlacementSpec(nodes=hosts),
-            count=num or 1)
+            placement=orchestrator.PlacementSpec(nodes=hosts, count=num))
 
         completion = self.add_rgw(rgw_spec)
         self._orchestrator_wait([completion])
@@ -491,17 +492,17 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator rgw update',
-        'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        "name=num,type=CephInt,req=False "
-        "name=hosts,type=CephString,n=N,req=false",
+        'name=realm_name,type=CephString '
+        'name=num,type=CephInt,req=false '
+        'name=label,type=CephString,req=false '
+        'name=hosts,type=CephString,n=N,req=false',
         'Update the number of RGW instances for the given zone')
-    def _rgw_update(self, realm_name, zone_name, num, hosts=None):
+    def _rgw_update(self, zone_name, realm_name, num=None, label=None, hosts=[]):
         spec = orchestrator.RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
-            placement=orchestrator.PlacementSpec(nodes=hosts),
-            count=num or 1)
+            placement=orchestrator.PlacementSpec(nodes=hosts, label=label, count=num))
         completion = self.update_rgw(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -580,50 +581,42 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator mgr update',
-        "name=num,type=CephInt,req=true "
-        "name=hosts,type=CephString,n=N,req=false",
+        "name=num,type=CephInt,req=false "
+        "name=hosts,type=CephString,n=N,req=false "
+        "name=label,type=CephString,n=N,req=false",
         'Update the number of manager instances')
-    def _update_mgrs(self, num, hosts=None):
-        hosts = hosts if hosts is not None else []
+    def _update_mgrs(self, num=None, hosts=[], label=None):
 
-        if num <= 0:
-            return HandleCommandResult(-errno.EINVAL,
-                                       stderr="Invalid number of mgrs: require {} > 0".format(num))
+        placement = orchestrator.PlacementSpec(label=label, count=num, nodes=hosts)
+        placement.validate()
 
-        if hosts:
-            try:
-                hosts = [orchestrator.parse_host_specs(host_spec, require_network=False)
-                         for host_spec in hosts]
-            except Exception as e:
-                msg = "Failed to parse host list: '{}': {}".format(hosts, e)
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+        spec = orchestrator.StatefulServiceSpec(placement=placement)
 
-        completion = self.update_mgrs(num, hosts)
+        completion = self.update_mgrs(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
         'orchestrator mon update',
-        "name=num,type=CephInt,req=true "
-        "name=hosts,type=CephString,n=N,req=false",
+        "name=num,type=CephInt,req=false "
+        "name=hosts,type=CephString,n=N,req=false "
+        "name=label,type=CephString,n=N,req=false",
         'Update the number of monitor instances')
-    def _update_mons(self, num, hosts=None):
-        hosts = hosts if hosts is not None else []
+    def _update_mons(self, num=None, hosts=[], label=None):
 
-        if num <= 0:
-            return HandleCommandResult(-errno.EINVAL,
-                                       stderr="Invalid number of mons: require {} > 0".format(num))
+        placement = orchestrator.PlacementSpec(label=label, count=num, nodes=hosts)
+        if not hosts and not label:
+            # Improve Error message. Point to parse_host_spec examples
+            raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
+            # TODO: Scaling without a HostSpec doesn't work right now.
+            # we need network autodetection for that.
+            # placement = orchestrator.PlacementSpec(count=num)
+        placement.validate()
 
-        if hosts:
-            try:
-                hosts = [orchestrator.parse_host_specs(host_spec)
-                         for host_spec in hosts]
-            except Exception as e:
-                msg = "Failed to parse host list: '{}': {}".format(hosts, e)
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+        spec = orchestrator.StatefulServiceSpec(placement=placement)
 
-        completion = self.update_mons(num, hosts)
+        completion = self.update_mons(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
