@@ -931,14 +931,26 @@ int CrushWrapper::verify_upmap(CephContext *cct,
                << dendl;
     return -ENOENT;
   }
+  int root_bucket = 0;
+  int cursor = 0;
+  std::map<int, int> type_stack;
   for (unsigned step = 0; step < rule->len; ++step) {
     auto curstep = &rule->steps[step];
     ldout(cct, 10) << __func__ << " step " << step << dendl;
     switch (curstep->op) {
+    case CRUSH_RULE_TAKE:
+      {
+        root_bucket = curstep->arg1;
+      }
+      break;
     case CRUSH_RULE_CHOOSELEAF_FIRSTN:
     case CRUSH_RULE_CHOOSELEAF_INDEP:
       {
+        int numrep = curstep->arg1;
         int type = curstep->arg2;
+        if (numrep <= 0)
+          numrep += pool_size;
+        type_stack.emplace(type, numrep);
         if (type == 0) // osd
           break;
         map<int, set<int>> osds_by_parent; // parent_of_desired_type -> osds
@@ -968,10 +980,11 @@ int CrushWrapper::verify_upmap(CephContext *cct,
       {
         int numrep = curstep->arg1;
         int type = curstep->arg2;
-        if (type == 0) // osd
-          break;
         if (numrep <= 0)
           numrep += pool_size;
+        type_stack.emplace(type, numrep);
+        if (type == 0) // osd
+          break;
         set<int> parents_of_type;
         for (auto osd : up) {
           auto parent = get_parent_of_type(osd, type, rule_id);
@@ -992,6 +1005,26 @@ int CrushWrapper::verify_upmap(CephContext *cct,
       }
       break;
 
+    case CRUSH_RULE_EMIT:
+      {
+        if (root_bucket < 0) {
+          int num_osds = 1;
+          for (auto &item : type_stack) {
+            num_osds *= item.second;
+          }
+          // validate the osd's in subtree
+          for (int c = 0; cursor < (int)up.size() && c < num_osds; ++cursor, ++c) {
+            int osd = up[cursor];
+            if (!subtree_contains(root_bucket, osd)) {
+              lderr(cct) << __func__ << " osd " << osd << " not in bucket " << root_bucket << dendl;
+              return -EINVAL;
+            }
+          }
+        }
+        type_stack.clear();
+        root_bucket = 0;
+      }
+      break;
     default:
       // ignore
       break;
