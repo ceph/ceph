@@ -92,10 +92,12 @@ setup(
             'nose', # for qa/tasks/rgw_multisite_tests.py',
             'pip-tools',
             'pytest',           # for tox.ini
+            'requests',         # for qa/tasks/mgr/dashboard/helper.py
             'tox',
             # For bucket notification testing in multisite
             'xmltodict',
             'boto3',
+            'PyJWT',            # for qa/tasks/mgr/dashboard/test_auth.py
         ]
     },
 
