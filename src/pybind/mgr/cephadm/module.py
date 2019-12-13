@@ -379,7 +379,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         if ssh_config is not None or ssh_config_fname is None:
             if not ssh_config:
                 ssh_config = DEFAULT_SSH_CONFIG
-            f = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-conf-')
+            f = tempfile.NamedTemporaryFile(prefix='cephadm-conf-')
             os.fchmod(f.fileno(), 0o600)
             f.write(ssh_config.encode('utf-8'))
             f.flush()  # make visible to other processes
@@ -397,7 +397,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         self.ssh_pub = ssh_pub
         self.ssh_key = ssh_key
         if ssh_key and ssh_pub:
-            tkey = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-identity-')
+            tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
             tkey.write(ssh_key.encode('utf-8'))
             os.fchmod(tkey.fileno(), 0o600)
             tkey.flush()  # make visible to other processes
