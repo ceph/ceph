@@ -100,7 +100,7 @@ public:
   bool is_running() { std::lock_guard l{m_lock}; return is_running_(); }
   bool is_replaying() { std::lock_guard l{m_lock}; return is_replaying_(); }
 
-  std::string get_name() { std::lock_guard l{m_lock}; return m_name; };
+  std::string get_name() { std::lock_guard l{m_lock}; return m_image_spec; };
   void set_state_description(int r, const std::string &desc);
 
   // TODO temporary until policy handles release of image replayers
@@ -298,7 +298,7 @@ private:
 
   std::string m_local_image_id;
   std::string m_local_image_name;
-  std::string m_name;
+  std::string m_image_spec;
 
   mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
@@ -445,8 +445,6 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
-
-  std::string admin_socket_hook_name(const std::string &image_name) const;
 };
 
 } // namespace mirror
