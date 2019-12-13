@@ -1127,6 +1127,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._update_mons(spec)
 
     def _update_mons(self, spec):
+        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster monitors.
         """
@@ -1138,30 +1139,30 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         if spec.count < num_mons:
             raise NotImplementedError("Removing monitors is not supported.")
 
-        self.log.debug("Trying to update monitors on: {}".format(spec.placement.nodes))
+        self.log.debug("Trying to update monitors on: {}".format(spec.placement.hosts))
         # check that all the hosts are registered
-        [self._require_hosts(host.hostname) for host in spec.placement.nodes]
+        [self._require_hosts(host.hostname) for host in spec.placement.hosts]
 
         # current support requires a network to be specified
-        for host, network, _ in spec.placement.nodes:
+        for host, network, _ in spec.placement.hosts:
             if not network:
                 raise RuntimeError("Host '{}' is missing a network spec".format(host))
 
         def update_mons_with_daemons(daemons):
-            for _, _, name in spec.placement.nodes:
+            for _, _, name in spec.placement.hosts:
                 if name and len([d for d in daemons if d.service_instance == name]):
                     raise RuntimeError('name %s alrady exists', name)
 
             # explicit placement: enough hosts provided?
             num_new_mons = spec.count - num_mons
-            if len(spec.placement.nodes) < num_new_mons:
+            if len(spec.placement.hosts) < num_new_mons:
                 raise RuntimeError("Error: {} hosts provided, expected {}".format(
-                    len(spec.placement.nodes), num_new_mons))
+                    len(spec.placement.hosts), num_new_mons))
             self.log.info("creating {} monitors on hosts: '{}'".format(
-                num_new_mons, ",".join(map(lambda h: ":".join(h), spec.placement.nodes))))
+                num_new_mons, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
             # TODO: we may want to chain the creation of the monitors so they join
             # the quorum one at a time.
-            return self._create_mon(spec.placement.nodes)
+            return self._create_mon(spec.placement.hosts)
         return self._get_services('mon').then(update_mons_with_daemons)
 
     @async_map_completion
@@ -1183,6 +1184,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._create_daemon('mgr', name, host, keyring)
 
     def update_mgrs(self, spec):
+        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
@@ -1190,13 +1192,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._get_services('mgr').then(lambda daemons: self._update_mgrs(spec, daemons))
 
     def _update_mgrs(self, spec, daemons):
+        # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
         num_mgrs = len(daemons)
         if spec.count == num_mgrs:
             return orchestrator.Completion(value="The requested number of managers exist.")
 
-        self.log.debug("Trying to update managers on: {}".format(spec.placement.nodes))
+        self.log.debug("Trying to update managers on: {}".format(spec.placement.hosts))
         # check that all the hosts are registered
-        [self._require_hosts(host.hostname) for host in spec.placement.nodes]
+        [self._require_hosts(host.hostname) for host in spec.placement.hosts]
 
         if spec.count < num_mgrs:
             num_to_remove = num_mgrs - spec.count
@@ -1230,39 +1233,39 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         else:
             # we assume explicit placement by which there are the same number of
             # hosts specified as the size of increase in number of daemons.
-            num_new_mgrs = spec.placement.count - num_mgrs
-            if len(spec.placement.nodes) < num_new_mgrs:
+            num_new_mgrs = spec.count - num_mgrs
+            if len(spec.placement.hosts) < num_new_mgrs:
                 raise RuntimeError(
                     "Error: {} hosts provided, expected {}".format(
-                        len(spec.placement.nodes), num_new_mgrs))
+                        len(spec.placement.hosts), num_new_mgrs))
 
-            for host_spec in spec.placement.nodes:
+            for host_spec in spec.placement.hosts:
                 if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
-            for host_spec in spec.placement.nodes:
+            for host_spec in spec.placement.hosts:
                 if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
             self.log.info("creating {} managers on hosts: '{}'".format(
-                num_new_mgrs, ",".join([_spec.hostname for _spec in spec.placement.nodes])))
+                num_new_mgrs, ",".join([_spec.hostname for _spec in spec.placement.hosts])))
 
             args = []
-            for host_spec in spec.placement.nodes:
+            for host_spec in spec.placement.hosts:
                 name = host_spec.name or self.get_unique_name(daemons)
                 host = host_spec.hostname
                 args.append((host, name))
         return self._create_mgr(args)
 
     def add_mds(self, spec):
-        if not spec.placement.nodes or len(spec.placement.nodes) < spec.placement.count:
+        if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:
             raise RuntimeError("must specify at least %d hosts" % spec.placement.count)
         return self._get_services('mds').then(lambda ds: self._add_mds(ds, spec))
 
     def _add_mds(self, daemons, spec):
         args = []
         num_added = 0
-        for host, _, name in spec.placement.nodes:
+        for host, _, name in spec.placement.hosts:
             if num_added >= spec.count:
                 break
             mds_id = self.get_unique_name(daemons, spec.name, name)
@@ -1309,7 +1312,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._get_services('mds').then(_remove_mds)
 
     def add_rgw(self, spec):
-        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
+        if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mon_command({
@@ -1328,7 +1331,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         def _add_rgw(daemons):
             args = []
             num_added = 0
-            for host, _, name in spec.placement.nodes:
+            for host, _, name in spec.placement.hosts:
                 if num_added >= spec.count:
                     break
                 rgw_id = self.get_unique_name(daemons, spec.name, name)
@@ -1375,14 +1378,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._update_service('rgw', self.add_rgw, spec)
 
     def add_rbd_mirror(self, spec):
-        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
+        if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
-        self.log.debug('nodes %s' % spec.placement.nodes)
+        self.log.debug('nodes %s' % spec.placement.hosts)
 
         def _add_rbd_mirror(daemons):
             args = []
             num_added = 0
-            for host, _, name in spec.placement.nodes:
+            for host, _, name in spec.placement.hosts:
                 if num_added >= spec.count:
                     break
                 daemon_id = self.get_unique_name(daemons, None, name)
@@ -1530,7 +1533,7 @@ class NodeAssignment(object):
                  service_type=None,  # type: Optional[str]
                  ):
         assert spec and get_hosts_func and service_type
-        self.spec = spec
+        self.spec = spec  # type: orchestrator.StatefulServiceSpec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
         self.service_type = service_type
@@ -1556,7 +1559,7 @@ class NodeAssignment(object):
             logger.info("Found labels. Assinging nodes that match the label")
             candidates = [HostSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
             logger.info('Assigning nodes to spec: {}'.format(candidates))
-            self.spec.placement.set_nodes(candidates)
+            self.spec.placement.set_hosts(candidates)
 
     def assign_nodes(self):
         # type: () -> None
@@ -1565,7 +1568,7 @@ class NodeAssignment(object):
         """
         # If no imperative or declarative host assignments, use the scheduler to pick from the
         # host pool (assuming `count` is set)
-        if not self.spec.placement.label and not self.spec.placement.nodes and self.spec.placement.count:
+        if not self.spec.placement.label and not self.spec.placement.hosts and self.spec.placement.count:
             logger.info("Found num spec. Looking for labeled nodes.")
             # TODO: actually query for labels (self.service_type)
             candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()],
@@ -1577,7 +1580,7 @@ class NodeAssignment(object):
                                format(self.spec.placement.count))
             else:
                 logger.info('Assigning nodes to spec: {}'.format(candidates))
-                self.spec.placement.set_nodes(candidates)
+                self.spec.placement.set_hosts(candidates)
                 return None
 
             candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()], count=self.spec.placement.count)
@@ -1587,6 +1590,6 @@ class NodeAssignment(object):
                                                   format(self.spec.placement.count, len(candidates)))
 
             logger.info('Assigning nodes to spec: {}'.format(candidates))
-            self.spec.placement.set_nodes(candidates)
+            self.spec.placement.set_hosts(candidates)
             return None
 

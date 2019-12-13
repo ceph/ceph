@@ -487,7 +487,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
 
         # Add the hosts to the inventory in the right group
-        hosts = spec.hosts
+        hosts = spec.placement.hosts
         if not hosts:
             raise orchestrator.OrchestratorError("No hosts provided. "
                 "At least one destination host is needed to install the RGW "
