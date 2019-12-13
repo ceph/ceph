@@ -246,6 +246,8 @@ def maybe_resolve(issue, backports, dry_run):
     global delay_seconds
     global redmine
     global status2status_id
+    if not backports:
+        return None
     pending_backport_status_id = status2status_id["Pending Backport"]
     resolved_status_id = status2status_id["Resolved"]
     rejected_status_id = status2status_id["Rejected"]
