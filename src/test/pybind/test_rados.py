@@ -534,7 +534,7 @@ class TestIoctx(object):
 
     def test_execute_op(self):
         with WriteOpCtx() as write_op:
-            write_op.execute("hello", "record_hello", "ebs")
+            write_op.execute("hello", "record_hello", b"ebs")
             self.ioctx.operate_write_op(write_op, "object")
         eq(self.ioctx.read('object'), b"Hello, ebs!")
 
