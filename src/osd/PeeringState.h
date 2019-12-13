@@ -1770,6 +1770,7 @@ public:
     const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,
     eversion_t roll_forward_to,
+    eversion_t min_last_complete_ondisk,
     ObjectStore::Transaction &t,
     bool transaction_applied,
     bool async);

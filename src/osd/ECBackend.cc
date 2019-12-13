@@ -960,6 +960,7 @@ void ECBackend::handle_sub_write(
     op.updated_hit_set_history,
     op.trim_to,
     op.roll_forward_to,
+    op.roll_forward_to,
     !op.backfill_or_async_recovery,
     localt,
     async);
