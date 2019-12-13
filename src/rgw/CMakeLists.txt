@@ -191,7 +191,7 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  find_package(RDKafka REQUIRED)
+  find_package(RDKafka 0.9.2 REQUIRED)
 endif()
 
 target_link_libraries(rgw_a
