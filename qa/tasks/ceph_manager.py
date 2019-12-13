@@ -1,7 +1,6 @@
 """
 ceph manager -- Thrasher and CephManager objects
 """
-from cStringIO import StringIO
 from functools import wraps
 import contextlib
 import random
@@ -14,6 +13,8 @@ import logging
 import threading
 import traceback
 import os
+
+from io import BytesIO
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from util.rados import cmd_erasure_code_profile
@@ -34,7 +35,7 @@ log = logging.getLogger(__name__)
 
 
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
-    conf_fp = StringIO()
+    conf_fp = BytesIO()
     ctx.ceph[cluster].conf.write(conf_fp)
     conf_fp.seek(0)
     writes = ctx.cluster.run(
@@ -187,8 +188,8 @@ class Thrasher:
         allremotes = list(set(allremotes))
         for remote in allremotes:
             proc = remote.run(args=['type', cmd], wait=True,
-                              check_status=False, stdout=StringIO(),
-                              stderr=StringIO())
+                              check_status=False, stdout=BytesIO(),
+                              stderr=BytesIO())
             if proc.exitstatus != 0:
                 return False;
         return True;
@@ -243,8 +244,8 @@ class Thrasher:
             with safe_while(sleep=15, tries=40, action="type ceph-objectstore-tool") as proceed:
                 while proceed():
                     proc = exp_remote.run(args=['type', 'ceph-objectstore-tool'], 
-                               wait=True, check_status=False, stdout=StringIO(),
-                               stderr=StringIO())
+                               wait=True, check_status=False, stdout=BytesIO(),
+                               stderr=BytesIO())
                     if proc.exitstatus == 0:
                         break
                     log.debug("ceph-objectstore-tool binary not present, trying again")
@@ -255,10 +256,10 @@ class Thrasher:
                 while proceed():
                     proc = exp_remote.run(args=cmd, wait=True,
                                           check_status=False,
-                                          stdout=StringIO(), stderr=StringIO())
+                                          stdout=BytesIO(), stderr=BytesIO())
                     if proc.exitstatus == 0:
                         break
-                    elif proc.exitstatus == 1 and proc.stderr == "OSD has the store locked":
+                    elif proc.exitstatus == 1 and proc.stderr == b"OSD has the store locked":
                         continue
                     else:
                         raise Exception("ceph-objectstore-tool: "
@@ -298,12 +299,12 @@ class Thrasher:
                 # If pg isn't already on this osd, then we will move it there
                 cmd = (prefix + "--op list-pgs").format(id=imp_osd)
                 proc = imp_remote.run(args=cmd, wait=True,
-                                      check_status=False, stdout=StringIO())
+                                      check_status=False, stdout=BytesIO())
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
                                     format(ret=proc.exitstatus))
-                pgs = proc.stdout.getvalue().split('\n')[:-1]
+                pgs = six.ensure_str(proc.stdout.getvalue()).split('\n')[:-1]
                 if pg not in pgs:
                     self.log("Moving pg {pg} from osd.{fosd} to osd.{tosd}".
                              format(pg=pg, fosd=exp_osd, tosd=imp_osd))
@@ -322,9 +323,9 @@ class Thrasher:
             cmd = (prefix + "--op import --file {file}")
             cmd = cmd.format(id=imp_osd, file=exp_path)
             proc = imp_remote.run(args=cmd, wait=True, check_status=False,
-                                  stderr=StringIO())
+                                  stderr=BytesIO())
             if proc.exitstatus == 1:
-                bogosity = "The OSD you are using is older than the exported PG"
+                bogosity = b"The OSD you are using is older than the exported PG"
                 if bogosity in proc.stderr.getvalue():
                     self.log("OSD older than exported PG"
                              "...ignored")
@@ -355,14 +356,14 @@ class Thrasher:
                 cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
                        "--filestore-split-multiple 1' sudo -E "
                        + no_sudo_prefix + "--op apply-layout-settings --pool " + pool).format(id=osd)
-                proc = remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
+                proc = remote.run(args=cmd, wait=True, check_status=False,
+                                  stderr=BytesIO())
                 output = proc.stderr.getvalue()
-                if 'Couldn\'t find pool' in output:
+                if b'Couldn\'t find pool' in output:
                     continue
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool apply-layout-settings"
                                     " failed with {status}".format(status=proc.exitstatus))
-
 
     def blackhole_kill_osd(self, osd=None):
         """
@@ -1074,7 +1075,7 @@ class ObjectStoreTool:
 
     def run(self, options, args, stdin=None, stdout=None):
         if stdout is None:
-            stdout = StringIO()
+            stdout = BytesIO()
         self.manager.kill_osd(self.osd)
         cmd = self.build_cmd(options, args, stdin)
         self.manager.log(cmd)
@@ -1082,11 +1083,12 @@ class ObjectStoreTool:
             proc = self.remote.run(args=['bash', '-e', '-x', '-c', cmd],
                                    check_status=False,
                                    stdout=stdout,
-                                   stderr=StringIO())
+                                   stderr=BytesIO())
             proc.wait()
             if proc.exitstatus != 0:
                 self.manager.log("failed with " + str(proc.exitstatus))
-                error = proc.stdout.getvalue() + " " + proc.stderr.getvalue()
+                error = six.ensure_str(proc.stdout.getvalue())  + " " + \
+                        six.ensure_str(proc.stderr.getvalue())
                 raise Exception(error)
         finally:
             if self.do_revive:
@@ -1153,9 +1155,9 @@ class CephManager:
         ceph_args.extend(args)
         proc = self.controller.run(
             args=ceph_args,
-            stdout=StringIO(),
+            stdout=BytesIO(),
             )
-        return proc.stdout.getvalue()
+        return six.ensure_str(proc.stdout.getvalue())
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
@@ -1181,7 +1183,7 @@ class CephManager:
 
     def run_ceph_w(self, watch_channel=None):
         """
-        Execute "ceph -w" in the background with stdout connected to a StringIO,
+        Execute "ceph -w" in the background with stdout connected to a BytesIO,
         and return the RemoteProcess.
 
         :param watch_channel: Specifies the channel to be watched. This can be
@@ -1198,7 +1200,7 @@ class CephManager:
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        return self.controller.run(args=args, wait=False, stdout=StringIO(), stdin=run.PIPE)
+        return self.controller.run(args=args, wait=False, stdout=BytesIO(), stdin=run.PIPE)
 
     def flush_pg_stats(self, osds, no_wait=None, wait_for_mon=300):
         """
@@ -1334,7 +1336,7 @@ class CephManager:
 
     def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0, stdout=None):
         if stdout is None:
-            stdout = StringIO()
+            stdout = BytesIO()
         return self.admin_socket('osd', osd_id, command, check_status, timeout, stdout)
 
     def find_remote(self, service_type, service_id):
@@ -1358,7 +1360,7 @@ class CephManager:
                         to the admin socket
         """
         if stdout is None:
-            stdout = StringIO()
+            stdout = BytesIO()
         testdir = teuthology.get_testdir(self.ctx)
         remote = self.find_remote(service_type, service_id)
         args = [
@@ -1474,7 +1476,7 @@ class CephManager:
         five seconds and try again.
         """
         if stdout is None:
-            stdout = StringIO()
+            stdout = BytesIO()
         tries = 0
         while True:
             proc = self.admin_socket(service_type, service_id,
