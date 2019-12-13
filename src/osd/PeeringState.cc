@@ -2334,9 +2334,9 @@ void PeeringState::activate(
 
   auto &missing = pg_log.get_missing();
 
+  min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   if (is_primary()) {
     last_update_ondisk = info.last_update;
-    min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
   last_update_applied = info.last_update;
   last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
@@ -3773,6 +3773,7 @@ void PeeringState::append_log(
   const vector<pg_log_entry_t>& logv,
   eversion_t trim_to,
   eversion_t roll_forward_to,
+  eversion_t mlcod,
   ObjectStore::Transaction &t,
   bool transaction_applied,
   bool async)
@@ -3836,6 +3837,9 @@ void PeeringState::append_log(
   // update the local pg, pg log
   dirty_info = true;
   write_if_dirty(t);
+
+  if (!is_primary())
+    min_last_complete_ondisk = mlcod;
 }
 
 void PeeringState::recover_got(
@@ -6052,6 +6056,8 @@ void PeeringState::ReplicaActive::exit()
   pl->cancel_remote_recovery_reservation();
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_replicaactive_latency, dur);
+
+  ps->min_last_complete_ondisk = eversion_t();
 }
 
 /*-------Stray---*/
@@ -7004,9 +7010,7 @@ ostream &operator<<(ostream &out, const PeeringState &ps) {
   if (ps.last_complete_ondisk != ps.info.last_complete)
     out << " lcod " << ps.last_complete_ondisk;
 
-  if (ps.is_primary()) {
-    out << " mlcod " << ps.min_last_complete_ondisk;
-  }
+  out << " mlcod " << ps.min_last_complete_ondisk;
 
   out << " " << pg_state_string(ps.get_state());
   if (ps.should_send_notify())
