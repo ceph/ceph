@@ -6,7 +6,7 @@ add_subdirectory(ansible)
 
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(mgr ${CMAKE_CURRENT_SOURCE_DIR})
+  add_tox_test(mgr ${CMAKE_CURRENT_SOURCE_DIR} TOX_ENVS mypy)
 endif()
 
 # Location needs to match default setting for mgr_module_path, currently:
