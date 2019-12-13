@@ -29,6 +29,7 @@
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/journal/ReplayStatusFormatter.h"
 
@@ -273,7 +274,8 @@ ImageReplayer<I>::ImageReplayer(
   // name.  When the image name becomes known on start the asok commands will be
   // re-registered using "remote_pool_name/remote_image_name" name.
 
-  m_name = admin_socket_hook_name(global_image_id);
+  m_image_spec = image_replayer::util::compute_image_spec(
+    local_io_ctx, global_image_id);
   register_admin_socket_hook();
 }
 
@@ -974,7 +976,7 @@ void ImageReplayer<I>::print_status(Formatter *f)
   std::lock_guard l{m_lock};
 
   f->open_object_section("image_replayer");
-  f->dump_string("name", m_name);
+  f->dump_string("name", m_image_spec);
   f->dump_string("state", to_string(m_state));
   f->close_section();
 }
@@ -1734,16 +1736,18 @@ void ImageReplayer<I>::register_admin_socket_hook() {
 
     ceph_assert(m_perf_counters == nullptr);
 
-    dout(15) << "registered asok hook: " << m_name << dendl;
-    asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
-                                                    this);
+    dout(15) << "registered asok hook: " << m_image_spec << dendl;
+    asok_hook = new ImageReplayerAdminSocketHook<I>(
+      g_ceph_context, m_image_spec, this);
     int r = asok_hook->register_commands();
     if (r == 0) {
       m_asok_hook = asok_hook;
 
       CephContext *cct = static_cast<CephContext *>(m_local_io_ctx.cct());
-      auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_image_perf_stats_prio");
-      PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_image_" + m_name,
+      auto prio = cct->_conf.get_val<int64_t>(
+        "rbd_mirror_image_perf_stats_prio");
+      PerfCountersBuilder plb(g_ceph_context,
+                              "rbd_mirror_image_" + m_image_spec,
                               l_rbd_mirror_first, l_rbd_mirror_last);
       plb.add_u64_counter(l_rbd_mirror_replay, "replay", "Replays", "r", prio);
       plb.add_u64_counter(l_rbd_mirror_replay_bytes, "replay_bytes",
@@ -1783,25 +1787,15 @@ void ImageReplayer<I>::reregister_admin_socket_hook() {
   {
     std::lock_guard locker{m_lock};
 
-    auto name = admin_socket_hook_name(m_local_image_name);
-    if (m_asok_hook != nullptr && m_name == name) {
+    auto image_spec = image_replayer::util::compute_image_spec(
+      m_local_io_ctx, m_local_image_name);
+    if (m_asok_hook != nullptr && m_image_spec == image_spec) {
       return;
     }
-    m_name = name;
+    m_image_spec = image_spec;
   }
   unregister_admin_socket_hook();
   register_admin_socket_hook();
-}
-
-template <typename I>
-std::string ImageReplayer<I>::admin_socket_hook_name(
-    const std::string &image_name) const {
-  std::string name = m_local_io_ctx.get_namespace();
-  if (!name.empty()) {
-    name += "/";
-  }
-
-  return m_local_io_ctx.get_pool_name() + "/" + name + image_name;
 }
 
 template <typename I>
