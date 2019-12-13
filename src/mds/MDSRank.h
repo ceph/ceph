@@ -121,7 +121,6 @@ class MonClient;
 class MgrClient;
 class Finisher;
 class ScrubStack;
-class C_MDS_Send_Command_Reply;
 class C_ExecAndReply;
 
 /**
@@ -631,8 +630,12 @@ public:
   void init();
   void tick();
   void shutdown();
-  int handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
-			  Formatter *f, std::ostream& ss);
+  void handle_asok_command(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist &inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
   void handle_mds_map(const cref_t<MMDSMap> &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
@@ -640,17 +643,9 @@ public:
   const char** get_tracked_conf_keys() const override final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
-  bool handle_command(
-    const cmdmap_t &cmdmap,
-    const cref_t<MCommand> &m,
-    int *r,
-    std::stringstream *ds,
-    std::stringstream *ss,
-    Context **run_later,
-    bool *need_reply);
-
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
-  void evict_clients(const SessionFilter &filter, const cref_t<MCommand> &m);
+  void evict_clients(const SessionFilter &filter,
+		     std::function<void(int,const std::string&,bufferlist&)> on_finish);
 
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(const cref_t<Message> &m);

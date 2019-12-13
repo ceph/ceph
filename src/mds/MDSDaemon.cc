@@ -107,41 +107,94 @@ class MDSSocketHook : public AdminSocketHook {
   MDSDaemon *mds;
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
-  int call(std::string_view command, const cmdmap_t& cmdmap,
-	   Formatter *f,
-	   std::ostream& ss,
-	   bufferlist& out) override {
-    stringstream outss;
-    int r = mds->asok_command(command, cmdmap, f, outss);
-    out.append(outss);
-    return r;
+  int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out) override {
+    ceph_abort("shoudl go to call_async");
+  }
+  void call_async(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist& inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
+    mds->asok_command(command, cmdmap, f, inbl, on_finish);
   }
 };
 
-int MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
-			    Formatter *f, std::ostream& ss)
+void MDSDaemon::asok_command(
+  std::string_view command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  const bufferlist& inbl,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
-  dout(1) << "asok_command: " << command << " (starting...)" << dendl;
+  dout(1) << "asok_command: " << command << " " << cmdmap
+	  << " (starting...)" << dendl;
 
   int r = -ENOSYS;
+  bufferlist outbl;
+  stringstream ss;
   if (command == "status") {
     dump_status(f);
     r = 0;
+  } else if (command == "exit") {
+    outbl.append("Exiting...\n");
+    r = 0;
+    std::thread t([this](){
+		    // Wait a little to improve chances of caller getting
+		    // our response before seeing us disappear from mdsmap
+		    sleep(1);
+		    suicide();
+		  });
+  } else if (command == "respawn") {
+    outbl.append("Respawning...\n");
+    r = 0;
+    std::thread t([this](){
+		    // Wait a little to improve chances of caller getting
+		    // our response before seeing us disappear from mdsmap
+		    sleep(1);
+		    respawn();
+		  });
+  } else if (command == "heap") {
+    if (!ceph_using_tcmalloc()) {
+      ss << "not using tcmalloc";
+      r = -EOPNOTSUPP;
+    } else {
+      string heapcmd;
+      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
+      vector<string> heapcmd_vec;
+      get_str_vec(heapcmd, heapcmd_vec);
+      string value;
+      if (cmd_getval(cct, cmdmap, "value", value)) {
+	heapcmd_vec.push_back(value);
+      }
+      ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+    }
+  } else if (command == "cpu_profiler") {
+    string arg;
+    cmd_getval(cct, cmdmap, "arg", arg);
+    vector<string> argvec;
+    get_str_vec(arg, argvec);
+    cpu_profiler_handle_command(argvec, ss);
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
       f->dump_string("error", "mds_not_active");
     } else {
       try {
-	r = mds_rank->handle_asok_command(command, cmdmap, f, ss);
+	mds_rank->handle_asok_command(command, cmdmap, f, inbl, on_finish);
+	return;
       } catch (const bad_cmd_get& e) {
 	ss << e.what();
 	r = -EINVAL;
       }
     }
   }
-  dout(1) << "asok_command: " << command << " (complete)" << dendl;
-  return r;
+  on_finish(r, ss.str(), outbl);
 }
 
 void MDSDaemon::dump_status(Formatter *f)
@@ -206,9 +259,33 @@ void MDSDaemon::set_up_admin_socket()
   ceph_assert(r == 0);
   r = admin_socket->register_command("scrub_path name=path,type=CephString "
 				     "name=scrubops,type=CephChoices,"
-				     "strings=force|recursive|repair,n=N,req=false",
+				     "strings=force|recursive|repair,n=N,req=false "
+				     "name=tag,type=CephString,req=false",
                                      asok_hook,
                                      "scrub an inode and output results");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub start "
+				     "name=path,type=CephString "
+				     "name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false "
+				     "name=tag,type=CephString,req=false",
+				     asok_hook,
+				     "scrub and inode and output results");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub abort",
+                                     asok_hook,
+                                     "Abort in progress scrub operations(s)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub pause",
+                                     asok_hook,
+                                     "Pause in progress scrub operations(s)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub resume",
+                                     asok_hook,
+                                     "Resume paused scrub operations(s)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub status",
+                                     asok_hook,
+                                     "Status of scrub operations(s)");
   ceph_assert(r == 0);
   r = admin_socket->register_command("tag path name=path,type=CephString"
                                      " name=tag,type=CephString",
@@ -229,6 +306,11 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("cache drop "
+				     "name=timeout,type=CephInt,range=0,req=false",
+				     asok_hook,
+				     "trim cache and optionally request client to release all caps and flush the journal");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("cache status",
                                      asok_hook,
                                      "show cache status");
@@ -247,19 +329,52 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump snapshots");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session evict name=client_id,type=CephString",
+  r = admin_socket->register_command("session ls name=filters,type=CephString,n=N,req=false",
 				     asok_hook,
-				     "Evict a CephFS client");
+				     "List client sessions based on a filter");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("client ls name=filters,type=CephString,n=N,req=false",
+				     asok_hook,
+				     "List client sessions based on a filter");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("session evict name=filters,type=CephString,n=N,req=false",
+				     asok_hook,
+				     "Evict client session(s) based on a filter");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("client evict name=filters,type=CephString,n=N,req=false",
+				     asok_hook,
+				     "Evict client session(s) based on a filter");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("session kill name=client_id,type=CephString",
+				     asok_hook,
+				     "Evict a client session by id");
   ceph_assert(r == 0);
   r = admin_socket->register_command("session ls",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session config name=client_id,type=CephInt,req=true "
+  r = admin_socket->register_command("session config "
+				     "name=client_id,type=CephInt,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
+  assert(r == 0);
+  r = admin_socket->register_command("client config "
+				     "name=client_id,type=CephInt,req=true "
+				     "name=option,type=CephString,req=true "
+				     "name=value,type=CephString,req=false ",
+				     asok_hook,
+				     "Config a CephFS client session");
+  assert(r == 0);
+  r = admin_socket->register_command("damage ls",
+				     asok_hook,
+				     "List detected metadata damage");
+  assert(r == 0);
+  r = admin_socket->register_command("damage rm "
+				     "name=damage_id,type=CephInt",
+				     asok_hook,
+				     "Remove a damage table entry");
   assert(r == 0);
   r = admin_socket->register_command("osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
@@ -303,6 +418,27 @@ void MDSDaemon::set_up_admin_socket()
                                      "name=number,type=CephInt,req=true",
 				     asok_hook,
 				     "dump inode by inode number");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("exit",
+				     asok_hook,
+				     "Terminate this MDS");
+  r = admin_socket->register_command("respawn",
+				     asok_hook,
+				     "Respawn this MDS");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "heap " \
+    "name=heapcmd,type=CephChoices,strings="				\
+    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
+    "name=value,type=CephString,req=false",
+    asok_hook,
+    "show heap usage info (available only if compiled with tcmalloc)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "cpu_profiler " \
+    "name=arg,type=CephChoices,strings=status|flush",
+    asok_hook,
+    "run cpu profiling on daemon");
   ceph_assert(r == 0);
 }
 
@@ -441,13 +577,18 @@ void MDSDaemon::tick()
   }
 }
 
-void MDSDaemon::send_command_reply(const cref_t<MCommand> &m, MDSRank *mds_rank,
-				   int r, bufferlist outbl,
-				   std::string_view outs)
+void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 {
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<Session *>(priv.get());
   ceph_assert(session != NULL);
+
+  int r = 0;
+  cmdmap_t cmdmap;
+  std::stringstream ss;
+  std::string outs;
+  bufferlist outbl;
+
   // If someone is using a closed session for sending commands (e.g.
   // the ceph CLI) then we should feel free to clean up this connection
   // as soon as we've sent them a response.
@@ -464,26 +605,6 @@ void MDSDaemon::send_command_reply(const cref_t<MCommand> &m, MDSRank *mds_rank,
   }
   priv.reset();
 
-  auto reply = make_message<MCommandReply>(r, outs);
-  reply->set_tid(m->get_tid());
-  reply->set_data(outbl);
-  m->get_connection()->send_message2(reply);
-}
-
-void MDSDaemon::handle_command(const cref_t<MCommand> &m)
-{
-  auto priv = m->get_connection()->get_priv();
-  auto session = static_cast<Session *>(priv.get());
-  ceph_assert(session != NULL);
-
-  int r = 0;
-  cmdmap_t cmdmap;
-  std::stringstream ss;
-  std::string outs;
-  bufferlist outbl;
-  Context *run_after = NULL;
-  bool need_reply = true;
-
   if (!session->auth_caps.allow_all()) {
     dout(1) << __func__
       << ": received command from client without `tell` capability: "
@@ -499,242 +620,22 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
     r = -EINVAL;
     outs = ss.str();
   } else {
-    try {
-      r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
-    } catch (const bad_cmd_get& e) {
-      outs = e.what();
-      r = -EINVAL;
-    }
-  }
-  priv.reset();
-
-  if (need_reply) {
-    send_command_reply(m, mds_rank, r, outbl, outs);
+    cct->get_admin_socket()->queue_tell_command(m);
+    return;
   }
 
-  if (run_after) {
-    run_after->complete(0);
-  }
+  auto reply = make_message<MCommandReply>(r, outs);
+  reply->set_tid(m->get_tid());
+  reply->set_data(outbl);
+  m->get_connection()->send_message2(reply);
 }
 
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
-    MDSCommand("injectargs name=injected_args,type=CephString,n=N", "inject configuration arguments into running MDS"),
-    MDSCommand("config set name=key,type=CephString name=value,type=CephString", "Set a configuration option at runtime (not persistent)"),
-    MDSCommand("config unset name=key,type=CephString", "Unset a configuration option at runtime (not persistent)"),
-    MDSCommand("exit", "Terminate this MDS"),
-    MDSCommand("respawn", "Restart this MDS"),
-    MDSCommand("session kill name=session_id,type=CephInt", "End a client session"),
-    MDSCommand("cpu_profiler name=arg,type=CephChoices,strings=status|flush", "run cpu profiling on daemon"),
-    MDSCommand("session ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
-    MDSCommand("client ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
-    MDSCommand("session evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
-    MDSCommand("client evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
-    MDSCommand("session config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
-	"Config a client session"),
-    MDSCommand("client config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
-	"Config a client session"),
-    MDSCommand("damage ls", "List detected metadata damage"),
-    MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
-    MDSCommand("version", "report version of MDS"),
-    MDSCommand("heap "
-        "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats",
-        "show heap usage info (available only if compiled with tcmalloc)"),
-    MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
-    MDSCommand("scrub start name=path,type=CephString name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false name=tag,type=CephString,req=false",
-               "scrub an inode and output results"),
-    MDSCommand("scrub abort", "Abort in progress scrub operation(s)"),
-    MDSCommand("scrub pause", "Pause in progress scrub operation(s)"),
-    MDSCommand("scrub resume", "Resume paused scrub operation(s)"),
-    MDSCommand("scrub status", "Status of scrub operation"),
   };
   return commands;
 };
-
-int MDSDaemon::_handle_command(
-    const cmdmap_t &cmdmap,
-    const cref_t<MCommand> &m,
-    bufferlist *outbl,
-    std::string *outs,
-    Context **run_later,
-    bool *need_reply)
-{
-  ceph_assert(outbl != NULL);
-  ceph_assert(outs != NULL);
-
-  class SuicideLater : public Context
-  {
-    MDSDaemon *mds;
-
-    public:
-    explicit SuicideLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) override {
-      // Wait a little to improve chances of caller getting
-      // our response before seeing us disappear from mdsmap
-      sleep(1);
-
-      mds->suicide();
-    }
-  };
-
-
-  class RespawnLater : public Context
-  {
-    MDSDaemon *mds;
-
-    public:
-
-    explicit RespawnLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) override {
-      // Wait a little to improve chances of caller getting
-      // our response before seeing us disappear from mdsmap
-      sleep(1);
-
-      mds->respawn();
-    }
-  };
-
-  std::stringstream ds;
-  std::stringstream ss;
-  std::string prefix;
-  std::string format;
-  std::unique_ptr<Formatter> f(Formatter::create(format));
-  cmd_getval(cct, cmdmap, "prefix", prefix);
-
-  int r = 0;
-
-  if (prefix == "get_command_descriptions") {
-    int cmdnum = 0;
-    std::unique_ptr<JSONFormatter> f(std::make_unique<JSONFormatter>());
-    f->open_object_section("command_descriptions");
-    for (auto& c : get_commands()) {
-      ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f.get(), m->get_connection()->get_features(),
-                           secname.str(), c.cmdstring, c.helpstring,
-			   c.module, "*", 0);
-      cmdnum++;
-    }
-    f->close_section();	// command_descriptions
-
-    f->flush(ds);
-    goto out; 
-  }
-
-  cmd_getval(cct, cmdmap, "format", format);
-  if (prefix == "version") {
-    if (f) {
-      f->open_object_section("version");
-      f->dump_string("version", pretty_version_to_str());
-      f->close_section();
-      f->flush(ds);
-    } else {
-      ds << pretty_version_to_str();
-    }
-  } else if (prefix == "injectargs") {
-    vector<string> argsvec;
-    cmd_getval(cct, cmdmap, "injected_args", argsvec);
-
-    if (argsvec.empty()) {
-      r = -EINVAL;
-      ss << "ignoring empty injectargs";
-      goto out;
-    }
-    string args = argsvec.front();
-    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
-      args += " " + *a;
-    r = cct->_conf.injectargs(args, &ss);
-  } else if (prefix == "config set") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    std::string val;
-    cmd_getval(cct, cmdmap, "value", val);
-    r = cct->_conf.set_val(key, val, &ss);
-    if (r == 0) {
-      cct->_conf.apply_changes(nullptr);
-    }
-  } else if (prefix == "config unset") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    r = cct->_conf.rm_val(key);
-    if (r == 0) {
-      cct->_conf.apply_changes(nullptr);
-    }
-    if (r == -ENOENT) {
-      r = 0; // idempotent
-    }
-  } else if (prefix == "exit") {
-    // We will send response before executing
-    ss << "Exiting...";
-    *run_later = new SuicideLater(this);
-  } else if (prefix == "respawn") {
-    // We will send response before executing
-    ss << "Respawning...";
-    *run_later = new RespawnLater(this);
-  } else if (prefix == "session kill") {
-    if (mds_rank == NULL) {
-      r = -EINVAL;
-      ss << "MDS not active";
-      goto out;
-    }
-    // FIXME harmonize `session kill` with admin socket session evict
-    int64_t session_id = 0;
-    bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
-    ceph_assert(got);
-    bool killed = mds_rank->evict_client(session_id, false,
-                                         g_conf()->mds_session_blacklist_on_evict,
-                                         ss);
-    if (!killed)
-      r = -ENOENT;
-  } else if (prefix == "heap") {
-    if (!ceph_using_tcmalloc()) {
-      r = -EOPNOTSUPP;
-      ss << "could not issue heap profiler command -- not using tcmalloc!";
-    } else {
-      string heapcmd;
-      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
-      vector<string> heapcmd_vec;
-      get_str_vec(heapcmd, heapcmd_vec);
-      string value;
-      if (cmd_getval(cct, cmdmap, "value", value))
-	 heapcmd_vec.push_back(value);
-      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
-    }
-  } else if (prefix == "cpu_profiler") {
-    string arg;
-    cmd_getval(cct, cmdmap, "arg", arg);
-    vector<string> argvec;
-    get_str_vec(arg, argvec);
-    cpu_profiler_handle_command(argvec, ds);
-  } else {
-    // Give MDSRank a shot at the command
-    if (!mds_rank) {
-      ss << "MDS not active";
-      r = -EINVAL;
-    }
-    else {
-      bool handled;
-      try {
-        handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
-                                           run_later, need_reply);
-	if (!handled) {
-	  // MDSDaemon doesn't know this command
-	  ss << "unrecognized command! " << prefix;
-	  r = -EINVAL;
-	}
-      } catch (const bad_cmd_get& e) {
-	ss << e.what();
-	r = -EINVAL;
-      }
-    }
-  }
-
-out:
-  *outs = ss.str();
-  outbl->append(ds);
-  return r;
-}
 
 void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 {

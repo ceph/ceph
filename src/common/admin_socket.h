@@ -117,8 +117,8 @@ public:
     std::ostream& errss,
     bufferlist *outbl);
 
-  void queue_tell_command(ref_t<MCommand> m);
-  void queue_tell_command(ref_t<MMonCommand> m); // for compat
+  void queue_tell_command(cref_t<MCommand> m);
+  void queue_tell_command(cref_t<MMonCommand> m); // for compat
 
 private:
 
@@ -149,8 +149,8 @@ private:
   std::unique_ptr<AdminSocketHook> getdescs_hook;
 
   std::mutex tell_lock;
-  std::list<ref_t<MCommand>> tell_queue;
-  std::list<ref_t<MMonCommand>> tell_legacy_queue;
+  std::list<cref_t<MCommand>> tell_queue;
+  std::list<cref_t<MMonCommand>> tell_legacy_queue;
 
   struct hook_info {
     AdminSocketHook* hook;

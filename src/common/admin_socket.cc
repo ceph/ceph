@@ -388,8 +388,8 @@ void AdminSocket::do_accept()
 void AdminSocket::do_tell_queue()
 {
   ldout(m_cct,10) << __func__ << dendl;
-  std::list<ref_t<MCommand>> q;
-  std::list<ref_t<MMonCommand>> lq;
+  std::list<cref_t<MCommand>> q;
+  std::list<cref_t<MMonCommand>> lq;
   {
     std::lock_guard l(tell_lock);
     q.swap(tell_queue);
@@ -527,14 +527,14 @@ void AdminSocket::execute_command(
   in_hook_cond.notify_all();
 }
 
-void AdminSocket::queue_tell_command(ref_t<MCommand> m)
+void AdminSocket::queue_tell_command(cref_t<MCommand> m)
 {
   ldout(m_cct,10) << __func__ << " " << *m << dendl;
   std::lock_guard l(tell_lock);
   tell_queue.push_back(std::move(m));
   wakeup();
 }
-void AdminSocket::queue_tell_command(ref_t<MMonCommand> m)
+void AdminSocket::queue_tell_command(cref_t<MMonCommand> m)
 {
   ldout(m_cct,10) << __func__ << " " << *m << dendl;
   std::lock_guard l(tell_lock);
