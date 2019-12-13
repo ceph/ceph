@@ -151,7 +151,7 @@ struct Replayer<I>::LocalJournalListener
 template <typename I>
 Replayer<I>::Replayer(
     I** local_image_ctx, Journaler* remote_journaler,
-    std::string local_mirror_uuid, std::string remote_mirror_uuid,
+    const std::string& local_mirror_uuid, const std::string& remote_mirror_uuid,
     ReplayerListener* replayer_listener, Threads<I>* threads)
   : m_local_image_ctx(local_image_ctx),
     m_remote_journaler(remote_journaler),
@@ -162,11 +162,22 @@ Replayer<I>::Replayer(
     m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
       "rbd::mirror::image_replayer::journal::Replayer", this))) {
   dout(10) << dendl;
+
+  {
+    std::unique_lock locker{m_lock};
+    register_perf_counters();
+  }
 }
 
 template <typename I>
 Replayer<I>::~Replayer() {
   dout(10) << dendl;
+
+  {
+    std::unique_lock locker{m_lock};
+    unregister_perf_counters();
+  }
+
   ceph_assert(m_remote_listener == nullptr);
   ceph_assert(m_local_journal_listener == nullptr);
   ceph_assert(m_local_journal_replay == nullptr);
@@ -1070,6 +1081,8 @@ void Replayer<I>::handle_process_entry_ready(int r) {
   }
 
   if (update_status) {
+    unregister_perf_counters();
+    register_perf_counters();
     notify_status_updated();
   }
 
@@ -1194,6 +1207,40 @@ int Replayer<I>::validate_remote_client_state(
   }
 
   return 0;
+}
+
+template <typename I>
+void Replayer<I>::register_perf_counters() {
+  dout(5) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(m_perf_counters == nullptr);
+
+  auto cct = static_cast<CephContext *>((*m_local_image_ctx)->cct);
+  auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_image_perf_stats_prio");
+  PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_image_" + m_image_spec,
+                          l_rbd_mirror_first, l_rbd_mirror_last);
+  plb.add_u64_counter(l_rbd_mirror_replay, "replay", "Replays", "r", prio);
+  plb.add_u64_counter(l_rbd_mirror_replay_bytes, "replay_bytes",
+                      "Replayed data", "rb", prio, unit_t(UNIT_BYTES));
+  plb.add_time_avg(l_rbd_mirror_replay_latency, "replay_latency",
+                   "Replay latency", "rl", prio);
+  m_perf_counters = plb.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(m_perf_counters);
+}
+
+template <typename I>
+void Replayer<I>::unregister_perf_counters() {
+  dout(5) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  PerfCounters *perf_counters = nullptr;
+  std::swap(perf_counters, m_perf_counters);
+
+  if (perf_counters != nullptr) {
+    g_ceph_context->get_perfcounters_collection()->remove(perf_counters);
+    delete perf_counters;
+  }
 }
 
 } // namespace journal

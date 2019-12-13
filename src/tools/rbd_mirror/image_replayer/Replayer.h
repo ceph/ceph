@@ -15,6 +15,8 @@ namespace image_replayer {
 struct Replayer {
   virtual ~Replayer() {}
 
+  virtual void destroy() = 0;
+
   virtual void init(Context* on_finish) = 0;
   virtual void shut_down(Context* on_finish) = 0;
 
