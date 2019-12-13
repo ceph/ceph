@@ -938,11 +938,7 @@ class CephFSShell(Cmd):
         """
         Rename a file or Move a file from source path to the destination
         """
-        try:
-            cephfs.rename(args.src_path, args.dest_path)
-        except libcephfs.Error as e:
-            perror(e)
-            self.exit_code = e.get_error_code()
+        cephfs.rename(args.src_path, args.dest_path)
 
     def complete_cd(self, text, line, begidx, endidx):
         """
@@ -959,13 +955,9 @@ class CephFSShell(Cmd):
         """
         Change working directory
         """
-        try:
-            cephfs.chdir(args.path)
-            self.working_dir = cephfs.getcwd().decode('utf-8')
-            self.set_prompt()
-        except libcephfs.Error as e:
-            perror(e)
-            self.exit_code = e.get_error_code()
+        cephfs.chdir(args.path)
+        self.working_dir = cephfs.getcwd().decode('utf-8')
+        self.set_prompt()
 
     def do_cwd(self, arglist):
         """
