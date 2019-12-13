@@ -44,11 +44,26 @@ class Replayer : public image_replayer::Replayer {
 public:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
 
+  static Replayer* create(ImageCtxT** local_image_ctx,
+                          Journaler* remote_journaler,
+                          const std::string& local_mirror_uuid,
+                          const std::string& remote_mirror_uuid,
+                          ReplayerListener* replayer_listener,
+                          Threads<ImageCtxT>* threads) {
+    return new Replayer(local_image_ctx, remote_journaler, local_mirror_uuid,
+                        remote_mirror_uuid, replayer_listener, threads);
+  }
+
   Replayer(
       ImageCtxT** local_image_ctx, Journaler* remote_journaler,
-      std::string m_local_mirror_uuid, std::string m_remote_mirror_uuid,
+      const std::string& local_mirror_uuid,
+      const std::string& remote_mirror_uuid,
       ReplayerListener* replayer_listener, Threads<ImageCtxT>* threads);
   ~Replayer();
+
+  void destroy() override {
+    delete this;
+  }
 
   void init(Context* on_finish) override;
   void shut_down(Context* on_finish) override;
@@ -292,6 +307,9 @@ private:
       const cls::journal::Client& remote_client,
       librbd::journal::MirrorPeerClientMeta* remote_client_meta,
       bool* resync_requested, std::string* error);
+
+  void register_perf_counters();
+  void unregister_perf_counters();
 
 };
 
