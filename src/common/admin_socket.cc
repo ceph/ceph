@@ -256,7 +256,12 @@ void AdminSocket::entry() noexcept
     if (fds[1].revents & POLLIN) {
       // read off one byte
       char buf;
-      ::read(m_wakeup_rd_fd, &buf, 1);
+      auto s = ::read(m_wakeup_rd_fd, &buf, 1);
+      if (s == -1) {
+        int e = errno;
+        ldout(m_cct, 5) << "AdminSocket: (ignoring) read(2) error: '"
+		        << cpp_strerror(e) << dendl;
+      }
       do_tell_queue();
     }
     if (m_shutdown) {
