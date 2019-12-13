@@ -34,7 +34,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-HostSpec = namedtuple('HostSpec', ['hostname', 'network', 'name'])
+class HostSpec(namedtuple('HostSpec', ['hostname', 'network', 'name'])):
+    def __str__(self):
+        res = ''
+        res += self.hostname
+        if self.network:
+            res += ':' + self.network
+        if self.name:
+            res += '=' + self.name
+        return res
 
 
 def parse_host_specs(host, require_network=True):

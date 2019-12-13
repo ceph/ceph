@@ -510,7 +510,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         InventoryGroup("rgws", self.ar_client).update(hosts)
 
         # Limit playbook execution to certain hosts
-        limited = ",".join(hosts)
+        limited = ",".join(str(host) for host in hosts)
 
         # Add the settings for this service
         extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
