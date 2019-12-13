@@ -497,10 +497,11 @@ int execute_status(const po::variables_map &vm,
         }
 
         first_site = false;
-        std::cout << snap.id << " " << snap.name << " ("
+        std::cout << "    " << snap.id << " " << snap.name << " ("
                   << (info.demoted ? "demoted " : "") << "peer_uuids:["
                   << info.mirror_peer_uuids << "])";
       }
+      std::cout << std::endl;
     }
   }
 
