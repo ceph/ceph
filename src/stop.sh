@@ -38,6 +38,36 @@ do_killall() {
     $SUDO killall -u $MYNAME $1
 }
 
+do_umountall() {
+    #VSTART_IP_PORTS is of the format as below
+    #"[v[num]:IP:PORT/0,v[num]:IP:PORT/0][v[num]:IP:PORT/0,v[num]:IP:PORT/0]..."
+    VSTART_IP_PORTS=$(bin/ceph mon metadata 2>/dev/null | jq -j '.[].addrs')
+
+    #SRC_MNT_ARRAY is of the format as below
+    #SRC_MNT_ARRAY[0] = IP:PORT,IP:PORT,IP:PORT:/
+    #SRC_MNT_ARRAY[1] = MNT_POINT1
+    #SRC_MNT_ARRAY[2] = IP:PORT:/ #Could be mounted using single mon IP
+    #SRC_MNT_ARRAY[3] = MNT_POINT2
+    #...
+    SRC_MNT_ARRAY=($(findmnt -t ceph -n --raw --output=source,target))
+    LEN_SRC_MNT_ARRAY=${#SRC_MNT_ARRAY[@]}
+
+    for (( i=0; i<${LEN_SRC_MNT_ARRAY}; i=$((i+2)) ))
+    do
+      # The first IP:PORT among the list is checked against vstart monitor IP:PORTS
+      IP_PORT1=$(echo ${SRC_MNT_ARRAY[$i]} | awk -F ':/' '{print $1}' | awk -F ',' '{print $1}')
+      if [[ "$VSTART_IP_PORTS" == *"$IP_PORT1"* ]]
+      then
+        CEPH_MNT=${SRC_MNT_ARRAY[$((i+1))]}
+        [ -n "$CEPH_MNT" ] && sudo umount -f $CEPH_MNT
+      fi
+    done
+
+    #Get fuse mounts of the cluster
+    CEPH_FUSE_MNTS=$(bin/ceph tell mds.* client ls 2>/dev/null| grep mount_point | tr -d '",' | awk '{print $2}')
+    [ -n "$CEPH_FUSE_MNTS" ] && sudo umount -f $CEPH_FUSE_MNTS
+}
+
 usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [--crimson]\n"
 
 stop_all=1
@@ -84,6 +114,9 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $stop_all -eq 1 ]; then
+    #Umount mounted filesystems from vstart cluster
+    do_umountall
+
     if "${CEPH_BIN}"/rbd device list -c $conf_fn >/dev/null 2>&1; then
         "${CEPH_BIN}"/rbd device list -c $conf_fn | tail -n +2 |
         while read DEV; do
