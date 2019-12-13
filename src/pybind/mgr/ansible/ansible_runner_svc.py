@@ -8,7 +8,7 @@ from functools import wraps
 import collections
 import logging
 try:
-    from typing import Optional
+    from typing import Optional, Dict, Any, List, Set
 except ImportError:
     pass # just for type checking
 
@@ -159,7 +159,7 @@ class PlayBookExecution(object):
             logger.exception("Error getting playbook <%s> result", self.playbook)
 
         if not response:
-            result_events = {}
+            result_events = {}  # type: Dict[str, Any]
         else:
             events = json.loads(response.text)["data"]["events"]
 
@@ -346,7 +346,7 @@ class Client(object):
             if response.status_code != 200:
                 raise AnsibleRunnerServiceError("Error when trying to "\
                                                 "create group:{}".format(group))
-            hosts_in_group = []
+            hosts_in_group = []  # type: List[str]
         else:
             hosts_in_group = json.loads(response.text)["data"]["members"]
 
@@ -419,7 +419,7 @@ class InventoryGroup(collections.MutableSet):
         : returns    : Nothing
         """
 
-        self.elements = set()
+        self.elements = set()  # type: Set[Any]
 
         self.group_name = group_name
         self.url_group = URL_MANAGE_GROUP.format(group_name=self.group_name)
@@ -521,4 +521,4 @@ class InventoryGroup(collections.MutableSet):
                                             "create group:{}".format(
                                                 self.group_name))
         self.created = True
-        self.elements = {}
+        self.elements = set()
