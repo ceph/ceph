@@ -85,7 +85,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_mon_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test:0.0.0.0=a'], count=1)
+            ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             c = cephadm_module.update_mons(StatefulServiceSpec(placement=ps))
             assert self._wait(cephadm_module, c) == ["(Re)deployed mon.a on host 'test'"]
 
@@ -95,7 +95,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_mgr_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test:0.0.0.0=a'], count=1)
+            ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             c = cephadm_module.update_mgrs(StatefulServiceSpec(placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed mgr." in out
@@ -117,7 +117,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_mds(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test'], count=1)
+            ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_mds(StatelessServiceSpec('name', placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed mds.name." in out
@@ -129,7 +129,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_rgw(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test'], count=1)
+            ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed rgw.realm.zone." in out
@@ -160,7 +160,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_rbd_mirror(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(nodes=['test'], count=1)
+            ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rbd_mirror(StatelessServiceSpec(name='name', placement=ps))
             [out] = self._wait(cephadm_module, c)
             assert "(Re)deployed rbd-mirror." in out
