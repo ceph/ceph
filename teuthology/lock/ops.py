@@ -125,7 +125,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                         log.error('Unable to create virtual machine: %s',
                                   machine)
                         unlock_one(ctx, machine, user)
-                    ok_machs = do_update_keys(ok_machs.keys())[1]
+                    ok_machs = do_update_keys(list(ok_machs.keys()))[1]
                 update_nodes(ok_machs)
                 return ok_machs
             elif machine_type in reimage_types:
