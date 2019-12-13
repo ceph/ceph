@@ -1,8 +1,10 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
+import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -41,7 +43,14 @@ describe('OsdDevicesSelectionModalComponent', () => {
   };
 
   configureTestBed({
-    imports: [FormsModule, SharedModule, ReactiveFormsModule, RouterTestingModule],
+    imports: [
+      FormsModule,
+      HttpClientTestingModule,
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
     providers: [BsModalRef, i18nProviders],
     declarations: [OsdDevicesSelectionModalComponent, InventoryDevicesComponent]
   });

@@ -13,20 +13,25 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class OrchestratorService {
-  statusURL = 'api/orchestrator/status';
-  inventoryURL = 'api/orchestrator/inventory';
-  serviceURL = 'api/orchestrator/service';
-  osdURL = 'api/orchestrator/osd';
+  private url = 'api/orchestrator';
 
   constructor(private http: HttpClient) {}
 
   status() {
-    return this.http.get(this.statusURL);
+    return this.http.get(`${this.url}/status`);
+  }
+
+  identifyDevice(hostname: string, device: string, duration: number) {
+    return this.http.post(`${this.url}/identify_device`, {
+      hostname,
+      device,
+      duration
+    });
   }
 
   inventoryList(hostname?: string): Observable<InventoryNode[]> {
     const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get<InventoryNode[]>(this.inventoryURL, options);
+    return this.http.get<InventoryNode[]>(`${this.url}/inventory`, options);
   }
 
   inventoryDeviceList(hostname?: string): Observable<InventoryDevice[]> {
@@ -46,13 +51,13 @@ export class OrchestratorService {
 
   serviceList(hostname?: string) {
     const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get(this.serviceURL, options);
+    return this.http.get(`${this.url}/service`, options);
   }
 
   osdCreate(driveGroup: {}) {
     const request = {
       drive_group: driveGroup
     };
-    return this.http.post(this.osdURL, request, { observe: 'response' });
+    return this.http.post(`${this.url}/osd`, request, { observe: 'response' });
   }
 }
