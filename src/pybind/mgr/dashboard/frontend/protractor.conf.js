@@ -21,7 +21,8 @@ const config = {
     browserName: 'chrome',
     chromeOptions: {
       args: ['--no-sandbox', '--headless', '--window-size=1920x1080']
-    }
+    },
+    acceptInsecureCerts : true
   },
   directConnect: true,
   baseUrl: process.env.BASE_URL || 'http://localhost:4200/',
