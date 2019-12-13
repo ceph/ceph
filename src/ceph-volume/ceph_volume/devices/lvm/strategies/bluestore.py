@@ -355,7 +355,7 @@ class MixedType(MixedStrategy):
         for osd in self.computed['osds']:
             data_path = osd['data']['path']
             data_vg = data_vgs[data_path]
-            data_lv_extents = data_vg.sizing(parts=1)['extents']
+            data_lv_extents = data_vg.sizing(parts=self.osds_per_device)['extents']
             data_uuid = system.generate_uuid()
             data_lv = lvm.create_lv(
                 'osd-block', data_uuid, vg=data_vg.name, extents=data_lv_extents)
