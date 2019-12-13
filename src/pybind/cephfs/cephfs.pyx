@@ -187,6 +187,10 @@ class Error(Exception):
         return 1
 
 
+class LibCephFSStateError(Error):
+    pass
+
+
 class OSError(Error):
     def __init__(self, errno, strerror):
         super(OSError, self).__init__(errno, strerror)
@@ -229,10 +233,6 @@ class InvalidValue(OSError):
 
 
 class OperationNotSupported(OSError):
-    pass
-
-
-class LibCephFSStateError(Error):
     pass
 
 
