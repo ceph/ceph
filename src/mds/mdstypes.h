@@ -1104,6 +1104,7 @@ public:
   feature_bitset_t& operator-=(const feature_bitset_t& other);
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator &p);
+  void dump(Formatter *f) const;
   void print(ostream& out) const;
 private:
   vector<block_type> _vec;
