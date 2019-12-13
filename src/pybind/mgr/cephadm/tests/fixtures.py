@@ -18,7 +18,7 @@ def set_store(self, k, v):
 
 
 def get_store(self, k):
-    return self._store[k]
+    return self._store.get(k, None)
 
 
 def get_store_prefix(self, prefix):
@@ -46,6 +46,7 @@ def cephadm_module():
             'ssh_identity_key': '',
             'ssh_identity_pub': '',
             'inventory': {},
+            'upgrade_state': None,
         }
         m.__init__('cephadm', 0, 0)
         yield m
