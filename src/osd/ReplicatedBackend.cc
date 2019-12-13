@@ -1103,7 +1103,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     log,
     m->updated_hit_set_history,
     m->pg_trim_to,
-    m->pg_roll_forward_to,
+    m->version, /* Replicated PGs don't have rollback info */
     update_snaps,
     rm->localt,
     async);
