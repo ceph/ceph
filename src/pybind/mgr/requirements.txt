@@ -3,3 +3,4 @@ mock; python_version <= '3.3'
 ipaddress; python_version < '3.3'
 ../../python-common
 kubernetes
+requests-mock

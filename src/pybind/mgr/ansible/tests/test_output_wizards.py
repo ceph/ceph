@@ -1,7 +1,7 @@
 """ Test output wizards
 """
 import unittest
-import mock
+from tests import mock
 
 from ..ansible_runner_svc import EVENT_DATA_URL
 from ..output_wizards import ProcessHostsList, ProcessPlaybookResult, \
