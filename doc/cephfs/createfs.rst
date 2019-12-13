@@ -8,11 +8,19 @@ Creating pools
 A Ceph filesystem requires at least two RADOS pools, one for data and one for metadata.
 When configuring these pools, you might consider:
 
-- Using a higher replication level for the metadata pool, as any data
-  loss in this pool can render the whole filesystem inaccessible.
-- Using lower-latency storage such as SSDs for the metadata pool, as this
-  will directly affect the observed latency of filesystem operations
-  on clients.
+- Using a higher replication level for the metadata pool, as any data loss in
+  this pool can render the whole filesystem inaccessible.
+- Using lower-latency storage such as SSDs for the metadata pool, as this will
+  directly affect the observed latency of filesystem operations on clients.
+- The data pool used to create the file system is the "default" data pool and
+  the location for storing all inode backtrace information, used for hard link
+  management and disaster recovery. For this reason, all inodes created in
+  CephFS have at least one object in the default data pool. If erasure-coded
+  pools are planned for the file system, it is usually better to use a
+  replicated pool for the default data pool to improve small-object write and
+  read performance for updating backtraces. Separately, another erasure-coded
+  data pool can be added (see also :ref:`ecpool`) that can be used on an entire
+  hierarchy of directories and files (see also :ref:`file-layouts`).
 
 Refer to :doc:`/rados/operations/pools` to learn more about managing pools.  For
 example, to create two pools with default settings for use with a filesystem, you
@@ -22,6 +30,11 @@ might run the following commands:
 
     $ ceph osd pool create cephfs_data <pg_num>
     $ ceph osd pool create cephfs_metadata <pg_num>
+
+Generally, the metadata pool will have at most a few gigabytes of data. For
+this reason, a smaller PG count is usually recommended. 64 or 128 is commonly
+used in practice for large clusters.
+
 
 Creating a filesystem
 =====================
