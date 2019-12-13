@@ -1,5 +1,8 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+
+import { ToastrModule } from 'ngx-toastr';
 
 import {
   configureTestBed,
@@ -46,7 +49,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   };
 
   configureTestBed({
-    imports: [FormsModule, SharedModule],
+    imports: [FormsModule, HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
     providers: [i18nProviders],
     declarations: [OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });

@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -17,7 +18,13 @@ describe('InventoryComponent', () => {
   let orchService: OrchestratorService;
 
   configureTestBed({
-    imports: [FormsModule, SharedModule, HttpClientTestingModule, RouterTestingModule],
+    imports: [
+      FormsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
     providers: [i18nProviders],
     declarations: [InventoryComponent, InventoryDevicesComponent]
   });
