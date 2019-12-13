@@ -23,7 +23,7 @@ class TestLs(object):
         m_safe_load_all.return_value = [{"failure_reason": "reasons"}]
         ls.ls("some/archive/div", True)
 
-    @patch("__builtin__.open")
+    @patch("teuthology.ls.open")
     @patch("teuthology.ls.get_jobs")
     def test_ls_ioerror(self, m_get_jobs, m_open):
         m_get_jobs.return_value = ["1", "2"]
@@ -31,7 +31,7 @@ class TestLs(object):
         with pytest.raises(IOError):
             ls.ls("some/archive/dir", True)
 
-    @patch("__builtin__.open")
+    @patch("teuthology.ls.open")
     @patch("os.popen")
     @patch("os.path.isdir")
     @patch("os.path.isfile")
@@ -40,6 +40,9 @@ class TestLs(object):
         m_isdir.return_value = True
         m_popen.return_value = Mock()
         cmdline = Mock()
-        cmdline.find.return_value = True
-        m_open.return_value = cmdline
+        cmdline.find = Mock(return_value=0)
+        m1 = Mock()
+        m2 = Mock()
+        m2.read = Mock(return_value=cmdline)
+        m_open.side_effect = [m1, m2]
         ls.print_debug_info("the_job", "job/dir", "some/archive/dir")

@@ -298,7 +298,7 @@ class TestMergeConfigs(object):
 
     @patch("os.path.exists")
     @patch("yaml.safe_load")
-    @patch("__builtin__.open")
+    @patch("teuthology.misc.open")
     def test_merge_configs(self, m_open, m_safe_load, m_exists):
         """ Only tests with one yaml file being passed, mainly just to test
             the loop logic.  The actual merge will be tested in subsequent
