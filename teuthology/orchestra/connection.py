@@ -30,9 +30,9 @@ def create_key(keytype, key):
     Create an ssh-rsa or ssh-dss key.
     """
     if keytype == 'ssh-rsa':
-        return paramiko.rsakey.RSAKey(data=base64.decodestring(key))
+        return paramiko.rsakey.RSAKey(data=base64.decodestring(key.encode()))
     elif keytype == 'ssh-dss':
-        return paramiko.dsskey.DSSKey(data=base64.decodestring(key))
+        return paramiko.dsskey.DSSKey(data=base64.decodestring(key.encode()))
     else:
         raise ValueError('keytype must be ssh-rsa or ssh-dss (DSA)')
 
