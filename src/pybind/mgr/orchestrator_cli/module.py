@@ -393,8 +393,8 @@ Usage:
     @orchestrator._cli_write_command(
         'orchestrator rbd-mirror update',
         "name=num,type=CephInt,req=false "
-        "name=label,type=CephString,req=false "
-        "name=hosts,type=CephString,n=N,req=false",
+        "name=hosts,type=CephString,n=N,req=false "
+        "name=label,type=CephString,req=false",
         'Update the number of rbd-mirror instances')
     def _rbd_mirror_update(self, num, label=None, hosts=[]):
         spec = orchestrator.StatelessServiceSpec(
@@ -434,8 +434,8 @@ Usage:
         'orchestrator mds update',
         "name=fs_name,type=CephString "
         "name=num,type=CephInt,req=false "
-        "name=label,type=CephString,req=false",
         "name=hosts,type=CephString,n=N,req=false "
+        "name=label,type=CephString,req=false",
         'Update the number of MDS instances for the given fs_name')
     def _mds_update(self, fs_name, num=None, label=None, hosts=[]):
         placement = orchestrator.PlacementSpec(label=label, count=num, nodes=hosts)
@@ -495,8 +495,8 @@ Usage:
         'name=zone_name,type=CephString '
         'name=realm_name,type=CephString '
         'name=num,type=CephInt,req=false '
-        'name=label,type=CephString,req=false '
-        'name=hosts,type=CephString,n=N,req=false',
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
         'Update the number of RGW instances for the given zone')
     def _rgw_update(self, zone_name, realm_name, num=None, label=None, hosts=[]):
         spec = orchestrator.RGWSpec(
@@ -583,7 +583,7 @@ Usage:
         'orchestrator mgr update',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false "
-        "name=label,type=CephString,n=N,req=false",
+        "name=label,type=CephString,req=false",
         'Update the number of manager instances')
     def _update_mgrs(self, num=None, hosts=[], label=None):
 
@@ -601,7 +601,7 @@ Usage:
         'orchestrator mon update',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false "
-        "name=label,type=CephString,n=N,req=false",
+        "name=label,type=CephString,req=false",
         'Update the number of monitor instances')
     def _update_mons(self, num=None, hosts=[], label=None):
 
