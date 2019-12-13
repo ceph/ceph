@@ -183,7 +183,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
 
 
 class Error(Exception):
-    pass
+    def get_error_code(self):
+        return 1
 
 
 class OSError(Error):
@@ -194,6 +195,9 @@ class OSError(Error):
 
     def __str__(self):
         return '{} [Errno {}]'.format(self.strerror, self.errno)
+
+    def get_error_code(self):
+        return self.errno
 
 
 class PermissionError(OSError):
