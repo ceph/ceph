@@ -93,8 +93,12 @@ class MDSDaemon : public Dispatcher {
   void set_up_admin_socket();
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
-  int asok_command(std::string_view command, const cmdmap_t& cmdmap,
-		   Formatter *f, ostream& ss);
+  void asok_command(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist &inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
 
   void dump_status(Formatter *f);
 
@@ -116,15 +120,6 @@ class MDSDaemon : public Dispatcher {
 
   bool handle_core_message(const cref_t<Message> &m);
   
-  static void send_command_reply(const cref_t<MCommand> &m, MDSRank* mds_rank, int r,
-				 bufferlist outbl, std::string_view outs);
-  int _handle_command(
-      const cmdmap_t &cmdmap,
-      const cref_t<MCommand> &m,
-      bufferlist *outbl,
-      std::string *outs,
-      Context **run_later,
-      bool *need_reply);
   void handle_command(const cref_t<MCommand> &m);
   void handle_mds_map(const cref_t<MMDSMap> &m);
 
