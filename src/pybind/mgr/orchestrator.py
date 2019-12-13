@@ -1219,8 +1219,8 @@ class StatelessServiceSpec(object):
 
 
 class NFSServiceSpec(StatelessServiceSpec):
-    def __init__(self, name, pool=None, namespace=None, count=1, placement=None):
-        super(NFSServiceSpec, self).__init__(name, placement, count)
+    def __init__(self, name, pool=None, namespace=None, placement=None):
+        super(NFSServiceSpec, self).__init__(name, placement)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
