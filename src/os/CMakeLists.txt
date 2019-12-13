@@ -13,6 +13,7 @@ set(libos_srcs
   filestore/IndexManager.cc
   filestore/LFNIndex.cc
   filestore/WBThrottle.cc
+  filestore/os_xattr.c
   memstore/MemStore.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
