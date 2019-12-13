@@ -1,7 +1,7 @@
 import contextlib
 import logging
 
-from cStringIO import StringIO
+from io import BytesIO
 
 from teuthology import misc
 from teuthology.job_status import set_status
@@ -41,7 +41,7 @@ def syslog(ctx, config):
         '*.*;kern.none -{misc_log};RSYSLOG_FileFormat'.format(
             misc_log=misc_log),
     ]
-    conf_fp = StringIO('\n'.join(conf_lines))
+    conf_fp = BytesIO('\n'.join(conf_lines).encode())
     try:
         for rem in ctx.cluster.remotes.keys():
             log_context = 'system_u:object_r:var_log_t:s0'
@@ -95,8 +95,8 @@ def syslog(ctx, config):
         log.info('Checking logs for errors...')
         for rem in ctx.cluster.remotes.keys():
             log.debug('Checking %s', rem.name)
-            r = rem.run(
-                args=[
+            stdout = rem.sh(
+                [
                     'egrep', '--binary-files=text',
                     '\\bBUG\\b|\\bINFO\\b|\\bDEADLOCK\\b',
                     run.Raw('{adir}/syslog/*.log'.format(adir=archive_dir)),
@@ -142,9 +142,7 @@ def syslog(ctx, config):
                     run.Raw('|'),
                     'head', '-n', '1',
                 ],
-                stdout=StringIO(),
             )
-            stdout = r.stdout.getvalue()
             if stdout != '':
                 log.error('Error in syslog on %s: %s', rem.name, stdout)
                 set_status(ctx.summary, 'fail')
