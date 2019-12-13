@@ -1496,24 +1496,30 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             host, None, 'pull', [],
             image=image_name,
             no_fsid=True)
-        return out[0]
+        (image_id, ceph_version) = out[0].split(',', 1)
+        self.log.debug('image %s -> id %s version %s' %
+                       (image_name, image_id, ceph_version))
+        return image_id, ceph_version
 
     def upgrade_check(self, image, version):
         if version:
-            target = self.container_image_base + ':v' + version
+            target_name = self.container_image_base + ':v' + version
         elif image:
-            target = image
+            target_name = image
         else:
             raise OrchestratorError('must specify either image or version')
-        return self._get_services().then(lambda daemons: self._upgrade_check(target, daemons))
+        return self._get_services().then(
+            lambda daemons: self._upgrade_check(target_name, daemons))
 
-    def _upgrade_check(self, target, services):
+    def _upgrade_check(self, target_name, services):
         # get service state
-        target_id = self._get_container_image_id(target)
-        self.log.debug('Target image %s id %s' % (target, target_id))
+        target_id, target_version = self._get_container_image_id(target_name)
+        self.log.debug('Target image %s id %s version %s' % (
+            target_name, target_id, target_version))
         r = {
-            'target_image_name': target,
-            'target_image_id': target_id,
+            'target_name': target_name,
+            'target_id': target_id,
+            'target_version': target_version,
             'needs_update': dict(),
             'up_to_date': list(),
         }
@@ -1524,8 +1530,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                 r['needs_update'][s.name()] = {
                     'current_name': s.container_image_name,
                     'current_id': s.container_image_id,
+                    'current_version': s.version,
                 }
-        return trivial_result(json.dumps(r, indent=4, sort_keys=True))
+        return json.dumps(r, indent=4, sort_keys=True)
 
 
 class BaseScheduler(object):
