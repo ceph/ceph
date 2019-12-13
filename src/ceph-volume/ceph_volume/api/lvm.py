@@ -998,6 +998,12 @@ class Volume(object):
         )
         self.tags[key] = value
 
+    def deactivate(self):
+        """
+        Deactivate the LV by calling lvchange -an
+        """
+        process.call(['lvchange', '-an', self.lv_path])
+
 
 class Volumes(list):
     """
@@ -1246,6 +1252,15 @@ def get_lv_by_name(name):
     stdout, stderr, returncode = process.call(
         ['lvs', '--noheadings', '-o', LV_FIELDS, '-S',
          'lv_name={}'.format(name)],
+        verbose_on_failure=False
+    )
+    lvs = _output_parser(stdout, LV_FIELDS)
+    return [Volume(**lv) for lv in lvs]
+
+def get_lvs_by_tag(lv_tag):
+    stdout, stderr, returncode = process.call(
+        ['lvs', '--noheadings', '--separator=";"', '-a', '-o', LV_FIELDS, '-S',
+         'lv_tags={{{}}}'.format(lv_tag)],
         verbose_on_failure=False
     )
     lvs = _output_parser(stdout, LV_FIELDS)
