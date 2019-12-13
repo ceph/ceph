@@ -6,7 +6,7 @@ tasks:
 - ceph:
 - rgw:
     client.0:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024]
 - swift:
     client.0:
       rgw_server: client.0
