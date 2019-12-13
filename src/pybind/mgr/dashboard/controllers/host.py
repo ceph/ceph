@@ -4,6 +4,7 @@ import copy
 
 from mgr_util import merge_dicts
 from . import ApiController, RESTController, Task
+from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -66,15 +67,17 @@ class Host(RESTController):
         from_orchestrator = 'orchestrator' in _sources
         return get_hosts(from_ceph, from_orchestrator)
 
-    @host_task('add', {'hostname': '{hostname}'})
+    @raise_if_no_orchestrator
     @handle_orchestrator_error('host')
+    @host_task('add', {'hostname': '{hostname}'})
     def create(self, hostname):
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, True)
         orch_client.hosts.add(hostname)
 
-    @host_task('remove', {'hostname': '{hostname}'})
+    @raise_if_no_orchestrator
     @handle_orchestrator_error('host')
+    @host_task('remove', {'hostname': '{hostname}'})
     def delete(self, hostname):
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, False)
@@ -87,10 +90,6 @@ class Host(RESTController):
         :param add: True for adding host operation, False for removing host
         :raise DashboardException
         """
-        if not orch_client.available():
-            raise DashboardException(code='orchestrator_status_unavailable',
-                                     msg='Orchestrator is unavailable',
-                                     component='orchestrator')
         host = orch_client.hosts.get(hostname)
         if add_host and host:
             raise DashboardException(
