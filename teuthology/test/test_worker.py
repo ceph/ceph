@@ -1,6 +1,5 @@
 import beanstalkc
 import os
-import subprocess
 
 from mock import patch, Mock, MagicMock
 from datetime import datetime, timedelta
@@ -168,7 +167,7 @@ class TestWorker(object):
             "job_id": "1",
             "worker_log": "worker_log",
             "archive_path": "archive/path",
-            "teuthology_branch": "argonaut"
+            "teuthology_branch": "jewel"
         }
         process = Mock()
         process.poll.return_value = "not None"
@@ -177,13 +176,6 @@ class TestWorker(object):
         m_popen.return_value = m_proc
         worker.run_with_watchdog(process, config)
         m_symlink_log.assert_called_with(config["worker_log"], config["archive_path"])
-        expected_cmd = "teuthology-report -v -D -r the_name -j 1"
-        m_popen.assert_called_with(
-            expected_cmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
-        )
 
     @patch("os.path.isdir")
     @patch("teuthology.worker.fetch_teuthology")
