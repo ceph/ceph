@@ -1425,33 +1425,6 @@ bool DaemonServer::_handle_command(
 	    safe_to_destroy.insert(osd);
 	    continue;  // clearly safe to destroy
 	  }
-          set<int64_t> pools;
-          osdmap.get_pool_ids_by_osd(g_ceph_context, osd, &pools);
-          if (pools.empty()) {
-            // osd does not belong to any pools yet
-            safe_to_destroy.insert(osd);
-            continue;
-          }
-          if (osdmap.is_down(osd) && osdmap.is_out(osd)) {
-            // if osd is down&out and all relevant pools are active+clean,
-            // then should be safe to destroy
-            bool all_osd_pools_active_clean = true;
-            for (auto &ps: pg_map.pg_stat) {
-              auto& pg = ps.first;
-              auto state = ps.second.state;
-              if (!pools.count(pg.pool()))
-                continue;
-              if ((state & (PG_STATE_ACTIVE | PG_STATE_CLEAN)) !=
-                           (PG_STATE_ACTIVE | PG_STATE_CLEAN)) {
-                all_osd_pools_active_clean = false;
-                break;
-              }
-            }
-            if (all_osd_pools_active_clean) {
-              safe_to_destroy.insert(osd);
-              continue;
-            }
-          }
 	  auto q = pg_map.num_pg_by_osd.find(osd);
 	  if (q != pg_map.num_pg_by_osd.end()) {
 	    if (q->second.acting > 0 || q->second.up_not_acting > 0) {
