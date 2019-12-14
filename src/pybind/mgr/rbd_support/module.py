@@ -10,12 +10,46 @@ import traceback
 from mgr_module import MgrModule
 
 from .common import NotAuthorizedError
+from .mirror_snapshot_schedule import MirrorSnapshotScheduleHandler
 from .perf import PerfHandler
 from .task import TaskHandler
 
 
 class Module(MgrModule):
     COMMANDS = [
+        {
+            "cmd": "rbd mirror snapshot schedule add "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Add rbd mirror snapshot schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd mirror snapshot schedule remove "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString,req=false "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Remove rbd mirror snapshot schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd mirror snapshot schedule list "
+                   "name=level_spec,type=CephString ",
+            "desc": "List rbd mirror snapshot schedule",
+            "perm": "r"
+        },
+        {
+            "cmd": "rbd mirror snapshot schedule dump",
+            "desc": "List rbd mirror snapshot schedule",
+            "perm": "r"
+        },
+        {
+            "cmd": "rbd mirror snapshot schedule status "
+                   "name=level_spec,type=CephString,req=false ",
+            "desc": "Show rbd mirror snapshot schedule status",
+            "perm": "r"
+        },
         {
             "cmd": "rbd perf image stats "
                    "name=pool_spec,type=CephString,req=false "
@@ -85,13 +119,17 @@ class Module(MgrModule):
             "perm": "r"
         }
     ]
-    MODULE_OPTIONS = []
+    MODULE_OPTIONS = [
+        {'name': 'mirror_snapshot_schedule'},
+    ]
 
+    mirror_snapshot_schedule = None
     perf = None
     task = None
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
+        self.mirror_snapshot_schedule = MirrorSnapshotScheduleHandler(self)
         self.perf = PerfHandler(self)
         self.task = TaskHandler(self)
 
@@ -99,7 +137,10 @@ class Module(MgrModule):
         prefix = cmd['prefix']
         try:
             try:
-                if prefix.startswith('rbd perf '):
+                if prefix.startswith('rbd mirror snapshot schedule '):
+                    return self.mirror_snapshot_schedule.handle_command(
+                        inbuf, prefix[29:], cmd)
+                elif prefix.startswith('rbd perf '):
                     return self.perf.handle_command(inbuf, prefix[9:], cmd)
                 elif prefix.startswith('rbd task '):
                     return self.task.handle_command(inbuf, prefix[9:], cmd)
