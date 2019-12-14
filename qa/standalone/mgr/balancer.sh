@@ -195,17 +195,20 @@ function TEST_balancer2() {
     sleep 30
     ceph osd df
 
-    # FINAL_PER_OSD2 should distribute evenly
+    # We should be with plue or minus 1 of FINAL_PER_OSD2
+    # This is because here each pool is balanced independently
+    MIN=$(expr $FINAL_PER_OSD2 - 1)
+    MAX=$(expr $FINAL_PER_OSD2 + 1)
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[0].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[1].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[2].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[3].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[4].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
 
     teardown $dir || return 1
 }
