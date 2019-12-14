@@ -196,7 +196,6 @@ done
 # WRITE ME
 
 ## adopt
-if false; then
 for tarball in $TEST_TARS; do
     TMP_TAR_DIR=`mktemp -d -p $TMPDIR`
     $SUDO tar xzvf $tarball -C $TMP_TAR_DIR
@@ -216,7 +215,6 @@ for tarball in $TEST_TARS; do
     $CEPHADM rm-cluster --fsid $FSID_LEGACY --force
     $SUDO rm -rf $TMP_TAR_DIR
 done
-fi
 
 ## unit
 $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
