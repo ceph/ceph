@@ -92,7 +92,7 @@ Options
 
 .. option:: --upmap-deviation <max-deviation>
 
-   max deviation from target [default: 1]
+   max deviation from target [default: 5]
 
 .. option:: --upmap-pool <poolname>
 
