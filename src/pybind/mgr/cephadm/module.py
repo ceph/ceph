@@ -808,6 +808,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             return trivial_result(["Reload is a no-op"])
 
         def _proc_daemons(daemons):
+            if service_name is None and service_id is None:
+                raise ValueError('service_name or service_id required')
             args = []
             for d in daemons:
                 args.append((d.service_type, d.service_instance,
@@ -858,7 +860,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                 error_ok=True)
             self.service_cache.invalidate(host)
             self.log.debug('_service_action code %s out %s' % (code, out))
-        return trivial_result("{} {} from host '{}'".format(action, name, host))
+        return "{} {} from host '{}'".format(action, name, host)
 
     def get_inventory(self, node_filter=None, refresh=False):
         """
