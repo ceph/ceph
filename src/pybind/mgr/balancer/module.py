@@ -300,7 +300,7 @@ class Module(MgrModule):
         {
             'name': 'upmap_max_deviation',
             'type': 'int',
-            'default': 1,
+            'default': 5,
             'min': 1,
             'desc': 'deviation below which no optimization is attempted',
             'long_desc': 'If the number of PGs are within this count then no optimization is attempted',
