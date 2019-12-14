@@ -2,5 +2,5 @@ overrides:
   rgw:
     ec-data-pool: true
   s3tests:
-    force-branch: ceph-master
+    force-branch: ceph-master-py3
     slow_backend: true
