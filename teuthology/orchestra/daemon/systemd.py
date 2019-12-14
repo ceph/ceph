@@ -1,6 +1,5 @@
 import logging
 import re
-from cStringIO import StringIO
 
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
@@ -59,32 +58,28 @@ class SystemDState(DaemonState):
         :raises:  CommandFailedError, if the process was run with
                   check_status=True
         """
-        proc = self.remote.run(
-            args=self.show_cmd + ' | grep -i state',
-            stdout=StringIO(),
-        )
+        output = self.remote.sh(self.show_cmd + ' | grep -i state')
 
         def parse_line(line):
             key, value = line.strip().split('=', 1)
             return {key.strip(): value.strip()}
         show_dict = dict()
-        for line in proc.stdout.readlines():
+        for line in output.split('\n'):
             show_dict.update(parse_line(line))
         active_state = show_dict['ActiveState']
         sub_state = show_dict['SubState']
         if active_state == 'active':
             return None
         self.log.info("State is: %s/%s", active_state, sub_state)
-        proc = self.remote.run(
+        out = self.remote.sh(
             # This will match a line like:
             #    Main PID: 13394 (code=exited, status=1/FAILURE)
             # Or (this is wrapped):
             #    Apr 26 21:29:33 ovh083 systemd[1]: ceph-osd@1.service:
             #    Main process exited, code=exited, status=1/FAILURE
-            args=self.status_cmd + " | grep 'Main.*code=exited'",
-            stdout=StringIO(),
+            self.status_cmd + " | grep 'Main.*code=exited'",
         )
-        line = proc.stdout.readlines()[-1]
+        line = out.split('\n')[-1]
         exit_code = int(re.match('.*status=(\d+).*', line).groups()[0])
         if exit_code:
             self.remote.run(
@@ -110,8 +105,7 @@ class SystemDState(DaemonState):
                 'grep', run.Raw('|'),
                 'awk',
                 run.Raw("{'print $2'}")]
-        proc = self.remote.run(args=args, stdout=StringIO())
-        pid_string = proc.stdout.getvalue().strip()
+        pid_string = self.remote.sh(args).strip()
         if not pid_string.isdigit():
             return None
         return int(pid_string)
