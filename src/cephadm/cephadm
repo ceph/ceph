@@ -1800,8 +1800,7 @@ def command_check_host():
 
     # check for configured+running chronyd or ntp
     if not check_time_sync():
-        raise RuntimeError('No time synchronization is active (checked all of %s)' %
-                           units)
+        raise RuntimeError('No time synchronization is active')
 
     logger.info('Host looks OK')
 
