@@ -605,7 +605,7 @@ def cluster(ctx, config):
             log.info('fs option selected, checking for scratch devs')
             log.info('found devs: %s' % (str(devs),))
             devs_id_map = teuthology.get_wwn_id_map(remote, devs)
-            iddevs = devs_id_map.values()
+            iddevs = list(devs_id_map.values())
             roles_to_devs = assign_devs(
                 teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), iddevs
             )
