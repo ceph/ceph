@@ -54,7 +54,7 @@ void usage()
   cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
   cout << "   --upmap-max <max-count> set max upmap entries to calculate [default: 10]" << std::endl;
   cout << "   --upmap-deviation <max-deviation>" << std::endl;
-  cout << "                           max deviation from target [default: 1]" << std::endl;
+  cout << "                           max deviation from target [default: 5]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
   cout << "   --upmap-save            write modified OSDMap with upmap changes" << std::endl;
   cout << "   --upmap-active          Act like an active balancer, keep applying changes until balanced" << std::endl;
@@ -145,7 +145,7 @@ int main(int argc, const char **argv)
   bool health = false;
   std::string upmap_file = "-";
   int upmap_max = 10;
-  int upmap_deviation = 1;
+  int upmap_deviation = 5;
   bool upmap_active = false;
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;

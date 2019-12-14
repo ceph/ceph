@@ -141,6 +141,7 @@ function TEST_balancer2() {
     done
 
     ceph osd set-require-min-compat-client luminous
+    ceph config set mgr mgr/balancer/upmap_max_deviation 1
     ceph balancer mode upmap || return 1
     ceph balancer on || return 1
     ceph config set mgr mgr/balancer/sleep_interval 5
