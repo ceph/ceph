@@ -28,6 +28,11 @@ extern std::string _decode_model_enc(const std::string& in);  // helper, exporte
 // get $vendor_$model_$serial style device id
 extern std::string get_device_id(const std::string& devname,
 				 std::string *err=0);
+
+// get /dev/disk/by-path/... style device id that is stable for a disk slot across reboots etc
+extern std::string get_device_path(const std::string& devname,
+				   std::string *err=0);
+
 // populate daemon metadata map with device info
 extern void get_device_metadata(
   const std::set<std::string>& devnames,
