@@ -7,7 +7,7 @@ import logging
 import random
 import time
 
-import ceph_manager
+import tasks.ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

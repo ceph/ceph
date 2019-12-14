@@ -19,14 +19,14 @@ import six
 import socket
 
 from paramiko import SSHException
-from ceph_manager import CephManager, write_conf
+from tasks.ceph_manager import CephManager, write_conf
 from tarfile import ReadError
 from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
 from teuthology.orchestra import run
-import ceph_client as cclient
+import tasks.ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
 
