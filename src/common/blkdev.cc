@@ -1229,3 +1229,26 @@ int block_device_run_nvme(const char *device, const char *vendor, int timeout,
 }
 
 #endif
+
+
+void get_device_metadata(
+  const std::set<std::string>& devnames,
+  std::map<std::string,std::string> *pm,
+  std::map<std::string,std::string> *errs)
+{
+  (*pm)["devices"] = stringify(devnames);
+  string &devids = (*pm)["device_ids"];
+  string &devpaths = (*pm)["device_paths"];
+  for (auto& dev : devnames) {
+    string err;
+    string id = get_device_id(dev, &err);
+    if (id.size()) {
+      if (!devids.empty()) {
+	devids += ",";
+      }
+      devids += dev + "=" + id;
+    } else {
+      (*errs)[dev] = " no unique device id for "s + dev + ": " + err;
+    }
+  }
+}
