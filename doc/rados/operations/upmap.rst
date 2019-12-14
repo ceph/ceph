@@ -58,7 +58,7 @@ Upmap entries are updated with an offline optimizer built into ``osdmaptool``.
    If it cannot find any additional changes to make it will stop early
    (i.e., when the pool distribution is perfect).
 
-   The ``max-deviation`` value defaults to `1`.  If an OSD PG count
+   The ``max-deviation`` value defaults to `5`.  If an OSD PG count
    varies from the computed target number by less than or equal
    to this amount it will be considered perfect.
 
