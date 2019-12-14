@@ -749,7 +749,7 @@ def get_file(remote, path, sudo=False, dest_dir='/tmp'):
     Remote.get_file() instead.
     """
     local_path = remote.get_file(path, sudo=sudo, dest_dir=dest_dir)
-    with open(local_path) as file_obj:
+    with open(local_path, 'rb') as file_obj:
         file_data = file_obj.read()
     os.remove(local_path)
     return file_data
