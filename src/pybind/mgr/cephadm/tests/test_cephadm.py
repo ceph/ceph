@@ -38,13 +38,25 @@ class TestCephadm(object):
     def _wait(self, m, c):
         # type: (CephadmOrchestrator, Completion) -> Any
         m.process([c])
-        m.process([c])
 
-        for _ in range(30):
-            if c.is_finished:
-                raise_if_exception(c)
-                return c.result
-            time.sleep(0.1)
+        try:
+            import pydevd  # if in debugger
+            while True:    # don't timeout
+                if c.is_finished:
+                    raise_if_exception(c)
+                    return c.result
+                time.sleep(0.1)
+        except ImportError:  # not in debugger
+            for i in range(30):
+                if i % 10 == 0:
+                    m.process([c])
+                if c.is_finished:
+                    raise_if_exception(c)
+                    return c.result
+                time.sleep(0.1)
+        assert False, "timeout" + str(c._state)
+
+        m.process([c])
         assert False, "timeout" + str(c._state)
 
     @contextmanager
@@ -78,6 +90,33 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.get_inventory()
             assert self._wait(cephadm_module, c) == [InventoryNode('test')]
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
+        json.dumps([
+            dict(
+                name='rgw.myrgw.foobar',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                version='version',
+                state='running',
+            )
+        ])
+    ))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    def test_service_action(self, _send_command, _get_connection, cephadm_module):
+        cephadm_module._cluster_fsid = "fsid"
+        cephadm_module.service_cache_timeout = 10
+        with self._with_host(cephadm_module, 'test'):
+            c = cephadm_module.service_action('redeploy', 'rgw', service_id='myrgw.foobar')
+            assert self._wait(cephadm_module, c) == ["(Re)deployed rgw.myrgw.foobar on host 'test'"]
+
+            for what in ('start', 'stop', 'restart'):
+                c = cephadm_module.service_action(what, 'rgw', service_id='myrgw.foobar')
+                assert self._wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
