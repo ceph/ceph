@@ -419,10 +419,10 @@ def get_legacy_config_fsid(cluster, legacy_dir=None):
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)
 
-    config = read_config(config_file)
-
-    if config.has_section('global') and config.has_option('global', 'fsid'):
-        return config.get('global', 'fsid')
+    if os.path.exists(config_file):
+        config = read_config(config_file)
+        if config.has_section('global') and config.has_option('global', 'fsid'):
+            return config.get('global', 'fsid')
     return None
 
 def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id, legacy_dir=None):
@@ -599,8 +599,9 @@ def extract_uid_gid():
     return (int(uid), int(gid))
 
 def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
-                  config, keyring):
-    # type: (str, str, Union[int, str], CephContainer, int, int, Optional[str], Optional[str]) -> None
+                  config, keyring,
+                  osd_fsid=None):
+    # type: (str, str, Union[int, str], CephContainer, int, int, Optional[str], Optional[str], Optional[str]) -> None
     if daemon_type == 'mon' and not os.path.exists(
             get_data_dir(fsid, 'mon', daemon_id)):
         assert config
@@ -644,32 +645,53 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
             uid, gid,
             config, keyring)
 
-    if daemon_type == 'osd' and args.osd_fsid:
-        pc = CephContainer(
-            image=args.image,
-            entrypoint='/usr/sbin/ceph-volume',
-            args=[
-                'lvm', 'activate',
-                str(daemon_id), args.osd_fsid,
-                '--no-systemd'
-            ],
-            container_args=['--privileged'],
-            volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
-            cname='ceph-%s-activate-%s.%s' % (fsid, daemon_type, daemon_id),
-        )
-        pc.run()
-
-    deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c)
+    deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
+                        osd_fsid=osd_fsid)
     update_firewalld(daemon_type)
 
 def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
-                        enable=True, start=True):
-    # type: (str, int, int, str, Union[int, str], CephContainer, bool, bool) -> None
+                        enable=True, start=True,
+                        osd_fsid=None):
+    # type: (str, int, int, str, Union[int, str], CephContainer, bool, bool, Optional[str]) -> None
     # cmd
     data_dir = get_data_dir(fsid, daemon_type, daemon_id)
-    with open(data_dir + '/cmd', 'w') as f:
-        f.write('#!/bin/sh\n' + ' '.join(c.run_cmd()) + '\n')
-        os.fchmod(f.fileno(), 0o700)
+    with open(data_dir + '/unit.run', 'w') as f:
+        if daemon_type == 'osd':
+            # osds have a pre-start step
+            assert osd_fsid
+            prestart = CephContainer(
+                image=args.image,
+                entrypoint='/usr/sbin/ceph-volume',
+                args=[
+                    'lvm', 'activate',
+                    str(daemon_id), osd_fsid,
+                    '--no-systemd'
+                ],
+                container_args=['--privileged'],
+                volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+                cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
+            )
+            f.write(' '.join(prestart.run_cmd()) + '\n')
+        f.write(' '.join(c.run_cmd()) + '\n')
+        os.fchmod(f.fileno(), 0o600)
+    with open(data_dir + '/unit.poststop', 'w') as f:
+        if daemon_type == 'osd':
+            assert osd_fsid
+            poststop = CephContainer(
+                image=args.image,
+                entrypoint='/usr/sbin/ceph-volume',
+                args=[
+                    'lvm', 'deactivate',
+                    str(daemon_id), osd_fsid,
+                    '--no-systemd'
+                ],
+                container_args=['--privileged'],
+                volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+                cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
+                                                    daemon_id),
+            )
+            f.write(' '.join(poststop.run_cmd()) + '\n')
+        os.fchmod(f.fileno(), 0o600)
 
     # systemd
     install_base_units(fsid)
@@ -881,8 +903,9 @@ LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
 ExecStartPre=-{container_path} rm ceph-{fsid}-%i
 ExecStartPre=-{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}
-ExecStart=/bin/bash {data_dir}/{fsid}/%i/cmd
+ExecStart=/bin/bash {data_dir}/{fsid}/%i/unit.run
 ExecStop=-{container_path} rm -f ceph-{fsid}-%i
+ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 Restart=on-failure
 RestartSec=10s
 TimeoutStartSec=120
@@ -1349,7 +1372,8 @@ def command_deploy():
     (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
-                  config, keyring)
+                  config, keyring,
+                  osd_fsid=args.osd_fsid)
     if crash_keyring:
         deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
@@ -1611,6 +1635,19 @@ def command_adopt():
         if not fsid:
             raise Error('could not detect legacy fsid; set fsid in ceph.conf')
 
+        data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
+                        (daemon_type, args.cluster, daemon_id))
+        data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
+
+        osd_fsid = None
+        if daemon_type == 'osd':
+            path = os.path.join(data_dir_src, 'fsid')
+            try:
+                with open(path, 'r') as f:
+                    osd_fsid = f.read().strip()
+            except IOError:
+                raise Error('unable to read OSD fsid from %s' % path)
+
         # NOTE: implicit assumption here that the units correspond to the
         # cluster we are adopting based on the /etc/{defaults,sysconfig}/ceph
         # CLUSTER field.
@@ -1626,9 +1663,6 @@ def command_adopt():
 
         # data
         logger.info('Moving data...')
-        data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
-                        (daemon_type, args.cluster, daemon_id))
-        data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
         data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
                                      uid=uid, gid=gid)
         move_files(glob(os.path.join(data_dir_src, '*')),
@@ -1659,7 +1693,8 @@ def command_adopt():
         c = get_container(fsid, daemon_type, daemon_id)
         deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                             enable=True,  # unconditionally enable the new unit
-                            start=(state == 'running'))
+                            start=(state == 'running'),
+                            osd_fsid=osd_fsid)
         update_firewalld(daemon_type)
 
     else:
@@ -1765,8 +1800,7 @@ def command_check_host():
 
     # check for configured+running chronyd or ntp
     if not check_time_sync():
-        raise RuntimeError('No time synchronization is active (checked all of %s)' %
-                           units)
+        raise RuntimeError('No time synchronization is active')
 
     logger.info('Host looks OK')
 
