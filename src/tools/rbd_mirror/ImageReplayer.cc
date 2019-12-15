@@ -1740,8 +1740,8 @@ void ImageReplayer<I>::register_admin_socket_hook() {
       m_asok_hook = asok_hook;
 
       CephContext *cct = static_cast<CephContext *>(m_local_io_ctx.cct());
-      auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_perf_stats_prio");
-      PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_" + m_name,
+      auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_image_perf_stats_prio");
+      PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_image_" + m_name,
                               l_rbd_mirror_first, l_rbd_mirror_last);
       plb.add_u64_counter(l_rbd_mirror_replay, "replay", "Replays", "r", prio);
       plb.add_u64_counter(l_rbd_mirror_replay_bytes, "replay_bytes",
