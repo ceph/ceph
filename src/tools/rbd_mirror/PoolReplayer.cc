@@ -609,13 +609,13 @@ void PoolReplayer<I>::update_namespace_replayers() {
     auto on_init = new LambdaContext(
         [this, namespace_replayer, name, &mirroring_namespaces,
          ctx=gather_ctx->new_sub()](int r) {
+          std::lock_guard locker{m_lock};
           if (r < 0) {
             derr << "failed to initialize namespace replayer for namespace "
                  << name << ": " << cpp_strerror(r) << dendl;
             delete namespace_replayer;
             mirroring_namespaces.erase(name);
           } else {
-            std::lock_guard locker{m_lock};
             m_namespace_replayers[name] = namespace_replayer;
             m_service_daemon->add_namespace(m_local_pool_id, name);
           }
