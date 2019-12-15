@@ -207,7 +207,7 @@ commands, refer to `Virsh Command Reference`_.
 		<source protocol='rbd' name='libvirt-pool/new-libvirt-image'>
 			<host name='{monitor-host}' port='6789'/>
 		</source>
-		<target dev='vda' bus='virtio'/>
+		<target dev='vdb' bus='virtio'/>
 	</disk>
 
    Replace ``{monitor-host}`` with the name of your host, and replace the 
@@ -237,7 +237,7 @@ commands, refer to `Virsh Command Reference`_.
 #. Define the secret. ::
 
 	sudo virsh secret-define --file secret.xml
-	<uuid of secret is output here>
+	{uuid of secret}
 
 #. Get the ``client.libvirt`` key and save the key string to a file. ::
 
@@ -258,7 +258,7 @@ commands, refer to `Virsh Command Reference`_.
 	...
 	</source>
 	<auth username='libvirt'>
-		<secret type='ceph' uuid='9ec59067-fdbc-a6c0-03ff-df165c0587b8'/>
+		<secret type='ceph' uuid='{uuid of secret}'/>
 	</auth>
 	<target ... 
 
@@ -292,11 +292,9 @@ following procedures.
 
 	sudo virsh qemu-monitor-command --hmp {vm-domain-name} 'info block'
 
-#. Check to see if the device from ``<target dev='hdb' bus='ide'/>`` appears
-   under ``/dev`` or under ``proc/partitions``. :: 
+#. Check to see if the device from ``<target dev='vdb' bus='virtio'/>`` exists::
    
-	ls dev
-	cat proc/partitions
+       virsh domblklist {vm-domain-name} --details
 
 If everything looks okay, you may begin using the Ceph block device 
 within your VM.
