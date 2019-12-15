@@ -1985,11 +1985,11 @@ bool DaemonServer::_handle_command(
       auto now = ceph_clock_now();
       daemon_state.with_devices([&tbl, now](const DeviceState& dev) {
 	  string h;
-	  for (auto& i : dev.devnames) {
+	  for (auto& i : dev.attachments) {
 	    if (h.size()) {
 	      h += " ";
 	    }
-	    h += i.first + ":" + i.second;
+	    h += std::get<0>(i) + ":" + std::get<1>(i);
 	  }
 	  string d;
 	  for (auto& i : dev.daemons) {
@@ -2037,11 +2037,11 @@ bool DaemonServer::_handle_command(
 	    daemon_state.with_device(
 	      i.first, [&tbl, now] (const DeviceState& dev) {
 		string h;
-		for (auto& i : dev.devnames) {
+		for (auto& i : dev.attachments) {
 		  if (h.size()) {
 		    h += " ";
 		  }
-		  h += i.first + ":" + i.second;
+		  h += std::get<0>(i) + ":" + std::get<1>(i);
 		}
 		tbl << dev.devid
 		    << h
@@ -2083,12 +2083,12 @@ bool DaemonServer::_handle_command(
 	daemon_state.with_device(
 	  devid, [&tbl, &host, now] (const DeviceState& dev) {
 	    string n;
-	    for (auto& j : dev.devnames) {
-	      if (j.first == host) {
+	    for (auto& j : dev.attachments) {
+	      if (std::get<0>(j) == host) {
 		if (n.size()) {
 		  n += " ";
 		}
-		n += j.second;
+		n += std::get<1>(j);
 	      }
 	    }
 	    string d;
