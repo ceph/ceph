@@ -475,6 +475,33 @@ def call_throws(command, **kwargs):
 
 ##################################
 
+def is_available(what, func, retry_max=5):
+    # type (str, func, Optional[int]) -> func
+    """
+    Wait for a service to become available
+
+    :param what: the name of the service
+    :param func: the callable object that determines availability
+    :param retry_max: max number of retry invocations of func
+    """
+    @wraps(func)
+    def func_wrapper(*args, **kwargs):
+        logger.info('Waiting for %s...' % (what))
+        retry_num = 1
+        while True:
+            if func(*args, **kwargs):
+                break
+            elif retry_num > retry_max:
+                raise Error('%s not available after %s tries'
+                        % (what, retry_max))
+
+            logger.info('%s not available, waiting (%s/%s)...'
+                    % (what, retry_num, retry_max))
+
+            retry_num += 1
+            time.sleep(1)
+    return func_wrapper
+
 def read_config(fn):
     # type: (Optional[str]) -> ConfigParser
     # bend over backwards here because py2's ConfigParser doesn't like
@@ -1615,8 +1642,8 @@ def command_bootstrap():
     tmp_config = write_tmp(config, uid, gid)
 
     # a CLI helper to reduce our typing
-    def cli(cmd, extra_mounts={}):
-        # type: (List[str], Dict[str, str]) -> str
+    def cli(cmd, extra_mounts={}, timeout=DEFAULT_TIMEOUT):
+        # type: (List[str], Dict[str, str], Optional[int]) -> str
         mounts = {
             log_dir: '/var/log/ceph:z',
             tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
@@ -1624,31 +1651,30 @@ def command_bootstrap():
         }
         for k, v in extra_mounts.items():
             mounts[k] = v
+        timeout = timeout or args.timeout
         return CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=cmd,
             volume_mounts=mounts,
-        ).run()
+        ).run(timeout=timeout)
 
     logger.info('Waiting for mon to start...')
-    while True:
-        c = CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=[
-                'status'],
-            volume_mounts={
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        )
-        out, err, ret = call(c.run_cmd(), c.entrypoint)
-        if ret == 0:
-            break
-        logger.info('mon is still not available yet, waiting...')
-        time.sleep(1)
+    c = CephContainer(
+        image=args.image,
+        entrypoint='/usr/bin/ceph',
+        args=[
+            'status'],
+        volume_mounts={
+            mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+            tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+            tmp_config.name: '/etc/ceph/ceph.conf:z',
+        },
+    )
+    def is_mon_available():
+        out, err, ret = call(c.run_cmd(), desc=c.entrypoint, timeout=30)
+        return ret == 0
+    is_available('mon', is_mon_available)()
 
     # assimilate and minimize config
     if not args.no_minimize_config:
@@ -1699,13 +1725,11 @@ def command_bootstrap():
     logger.info('Wrote config to %s' % args.output_config)
 
     logger.info('Waiting for mgr to start...')
-    while True:
-        out = cli(['status', '-f', 'json-pretty'])
+    def is_mgr_available():
+        out = cli(['status', '-f', 'json-pretty'], timeout=30)
         j = json.loads(out)
-        if j.get('mgrmap', {}).get('available', False):
-            break
-        logger.info('mgr is still not available yet, waiting...')
-        time.sleep(1)
+        return j.get('mgrmap', {}).get('available', False)
+    is_available('mgr', is_mgr_available)()
 
     # ssh
     if not args.skip_ssh:
@@ -1747,16 +1771,16 @@ def command_bootstrap():
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
-        logger.info('Waiting for the module to be available...')
-        # FIXME: potential for an endless loop?
-        while True:
-            c_out = cli(['-h'])
-            if 'dashboard' in c_out:
-                break
-            logger.info('Dashboard not yet available, waiting...')
-            time.sleep(1)
+
+        logger.info('Waiting for the dashboard to start...')
+        def is_dashboard_available():
+            out = cli(['-h'], timeout=30)
+            return 'dashboard' in out
+        is_available('Dashboard', is_dashboard_available)()
+
         logger.info('Generating a dashboard self-signed certificate...')
         cli(['dashboard', 'create-self-signed-cert'])
+
         logger.info('Creating initial admin user...')
         password = args.initial_dashboard_password or generate_password()
         cli(['dashboard', 'ac-user-create',
@@ -1766,6 +1790,7 @@ def command_bootstrap():
         logger.info('Fetching dashboard port number...')
         out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
         port = int(out)
+
         logger.info('Ceph Dashboard is now available at:\n\n'
                     '\t     URL: https://%s:%s/\n'
                     '\t    User: %s\n'
