@@ -859,20 +859,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
     @async_map_completion
     def _service_action(self, service_type, service_id, host, action):
         if action == 'redeploy':
-            # recreate the systemd unit and then restart
-            if service_type == 'mon':
-                # get mon. key
-                ret, keyring, err = self.mon_command({
-                    'prefix': 'auth get',
-                    'entity': 'mon.',
-                })
-            else:
-                ret, keyring, err = self.mon_command({
-                    'prefix': 'auth get',
-                    'entity': '%s.%s' % (service_type, service_id),
-                })
+            # stop, recreate the container+unit, then restart
             return self._create_daemon(service_type, service_id, host,
-                                       keyring)
+                                       None)
+        elif action == 'reconfig':
+            return self._create_daemon(service_type, service_id, host,
+                                       None, reconfig=True)
 
         actions = {
             'start': ['reset-failed', 'start'],
@@ -1053,7 +1045,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._remove_daemon(args)
 
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
-                       extra_args=[], extra_config=None):
+                       extra_args=[], extra_config=None,
+                       reconfig=False):
         name = '%s.%s' % (daemon_type, daemon_id)
 
         # generate config
@@ -1063,6 +1056,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         if extra_config:
             config += extra_config
 
+        # crash_keyring
         ret, crash_keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.crash.%s' % host,
@@ -1076,6 +1070,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             'crash_keyring': crash_keyring,
         })
 
+        if reconfig:
+            extra_args.append('--reconfig')
+
         out, err, code = self._run_cephadm(
             host, name, 'deploy',
             [
@@ -1085,7 +1082,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             stdin=j)
         self.log.debug('create_daemon code %s out %s' % (code, out))
         self.service_cache.invalidate(host)
-        return "(Re)deployed {} on host '{}'".format(name, host)
+        return "{} {} on host '{}'".format(
+            'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
     def _remove_daemon(self, name, host):
