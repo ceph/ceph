@@ -8,7 +8,7 @@ from teuthology.misc import deep_merge
 from teuthology.orchestra.run import CommandFailedError
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
-from cephfs.kernel_mount import KernelMount
+from tasks.cephfs.kernel_mount import KernelMount
 
 log = logging.getLogger(__name__)
 
