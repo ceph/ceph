@@ -5,7 +5,7 @@ import * as _ from 'lodash';
 import { Observable } from 'rxjs';
 
 import { cdEncode } from '../decorators/cd-encode';
-import { CephfsDir } from '../models/cephfs-directory-models';
+import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { ApiModule } from './api.module';
 
 @cdEncode
@@ -55,13 +55,22 @@ export class CephfsService {
     if (!_.isUndefined(name)) {
       params = params.append('name', name);
     }
-    return this.http.post(`${this.baseURL}/${id}/mk_snapshot`, null, { params: params });
+    return this.http.post(`${this.baseURL}/${id}/mk_snapshot`, null, { params });
   }
 
   rmSnapshot(id, path, name) {
     let params = new HttpParams();
     params = params.append('path', path);
     params = params.append('name', name);
-    return this.http.post(`${this.baseURL}/${id}/rm_snapshot`, null, { params: params });
+    return this.http.post(`${this.baseURL}/${id}/rm_snapshot`, null, { params });
+  }
+
+  updateQuota(id, path, quotas: CephfsQuotas) {
+    let params = new HttpParams();
+    params = params.append('path', path);
+    return this.http.post(`${this.baseURL}/${id}/set_quotas`, quotas, {
+      observe: 'response',
+      params
+    });
   }
 }

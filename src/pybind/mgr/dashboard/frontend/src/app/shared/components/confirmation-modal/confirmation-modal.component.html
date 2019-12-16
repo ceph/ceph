@@ -7,6 +7,9 @@
           novalidate>
       <div class="modal-body">
         <ng-container *ngTemplateOutlet="bodyTpl; context: bodyContext"></ng-container>
+        <p *ngIf="description">
+          {{description}}
+        </p>
       </div>
       <div class="modal-footer">
         <div class="button-group text-right">

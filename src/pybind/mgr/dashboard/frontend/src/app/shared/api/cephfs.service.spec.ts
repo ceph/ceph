@@ -78,4 +78,21 @@ describe('CephfsService', () => {
     const req = httpTesting.expectOne('api/cephfs/1/rm_snapshot?path=%252Fsome%252Fpath&name=snap');
     expect(req.request.method).toBe('POST');
   });
+
+  it('should call updateQuota', () => {
+    service.updateQuota(1, '/some/path', { max_bytes: 1024 }).subscribe();
+    let req = httpTesting.expectOne('api/cephfs/1/set_quotas?path=%252Fsome%252Fpath');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ max_bytes: 1024 });
+
+    service.updateQuota(1, '/some/path', { max_files: 10 }).subscribe();
+    req = httpTesting.expectOne('api/cephfs/1/set_quotas?path=%252Fsome%252Fpath');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ max_files: 10 });
+
+    service.updateQuota(1, '/some/path', { max_bytes: 1024, max_files: 10 }).subscribe();
+    req = httpTesting.expectOne('api/cephfs/1/set_quotas?path=%252Fsome%252Fpath');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ max_bytes: 1024, max_files: 10 });
+  });
 });

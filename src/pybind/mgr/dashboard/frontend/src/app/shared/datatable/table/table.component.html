@@ -3,6 +3,12 @@
                 i18n>Failed to load data.</cd-alert-panel>
 
 <div class="dataTables_wrapper">
+  <div *ngIf="onlyActionHeader"
+       class="dataTables_header clearfix">
+    <div class="cd-datatable-actions">
+      <ng-content select=".only-table-actions"></ng-content>
+    </div>
+  </div>
   <div class="dataTables_header clearfix"
        *ngIf="toolHeader">
     <!-- actions -->
