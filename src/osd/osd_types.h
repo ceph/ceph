@@ -3887,7 +3887,7 @@ private:
   bool new_object;
   bool clean_omap;
   interval_set<uint64_t> clean_offsets;
-  static std::atomic<int32_t> max_num_intervals;
+  static std::atomic<uint32_t> max_num_intervals;
 
   /**
    * trim the number of intervals if clean_offsets.num_intervals()
@@ -3909,7 +3909,7 @@ public:
   bool operator==(const ObjectCleanRegions &orc) const {
     return new_object == orc.new_object && clean_omap == orc.clean_omap && clean_offsets == orc.clean_offsets;
   }
-  static void set_max_num_intervals(int32_t num);
+  static void set_max_num_intervals(uint32_t num);
   void merge(const ObjectCleanRegions &other);
   void mark_data_region_dirty(uint64_t offset, uint64_t len);
   void mark_omap_dirty();
