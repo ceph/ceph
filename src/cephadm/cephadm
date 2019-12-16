@@ -75,7 +75,7 @@ class Error(Exception):
 
 
 class Ceph(object):
-    daemons = ['mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror']
+    daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror')
 
 
 class Monitoring(object):
@@ -1497,7 +1497,7 @@ def command_deploy():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
 
-    supported_daemons = Ceph.daemons.copy()
+    supported_daemons = list(Ceph.daemons)
     supported_daemons.extend(Monitoring.components)
 
     if daemon_type not in supported_daemons:
@@ -1991,14 +1991,13 @@ def command_check_host():
 class CustomValidation(argparse.Action):
 
     def _check_name(self, values):
-
         try:
             (daemon_type, daemon_id) = values.split('.', 1)
         except ValueError:
             raise argparse.ArgumentError(self,
                                          "must be of the format <type>.<id>. For example, osd.1 or prometheus.myhost.com")
 
-        daemons = Ceph.daemons.copy()
+        daemons = list(Ceph.daemons)
         daemons.extend(Monitoring.components.keys())
 
         if daemon_type not in daemons:

@@ -1,7 +1,10 @@
+import argparse
 import mock
 import os
 import sys
 import unittest
+
+import pytest
 
 if sys.version_info >= (3, 3):
     from importlib.machinery import SourceFileLoader
@@ -24,3 +27,10 @@ class TestCephDaemon(unittest.TestCase):
         p = cd._get_parser()
         args = p.parse_args(['version'])
         assert args.image == 'bar'
+
+    def test_CustomValidation(self):
+        p = cd._get_parser()
+        assert p.parse_args(['deploy', '--name', 'mon.a', '--fsid', 'fsid'])
+
+        with pytest.raises(SystemExit):
+            p.parse_args(['deploy', '--name', 'wrong', '--fsid', 'fsid'])
