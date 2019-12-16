@@ -3117,6 +3117,7 @@ TEST_F(TestClsRbd, migration)
 
   cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
                                          "name", "ns", "id", {}, 0, false,
+                                         cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
                                          false,
                                          cls::rbd::MIGRATION_STATE_PREPARING,
                                          "123");
@@ -3187,6 +3188,7 @@ TEST_F(TestClsRbd, migration_v1)
 
   cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
                                          "name", "ns", "id", {}, 0, false,
+                                         cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
                                          false,
                                          cls::rbd::MIGRATION_STATE_PREPARING,
                                          "123");

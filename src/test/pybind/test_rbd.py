@@ -2052,15 +2052,13 @@ class TestMirroring(object):
             self.rbd.remove(ioctx, image_name + str(i))
 
     def test_mirror_image_create_snapshot(self):
-        if self.image.features() & RBD_FEATURE_JOURNALING != 0:
-            self.image.update_features(RBD_FEATURE_JOURNALING, False)
-
         assert_raises(InvalidArgument, self.image.mirror_image_create_snapshot)
 
         peer1_uuid = self.rbd.mirror_peer_add(ioctx, "cluster1", "client")
         peer2_uuid = self.rbd.mirror_peer_add(ioctx, "cluster2", "client")
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
-        self.image.mirror_image_enable()
+        self.image.mirror_image_disable(False)
+        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
         mode = self.image.mirror_image_get_mode()
         eq(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode)
 

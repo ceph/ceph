@@ -160,6 +160,7 @@ struct EnableRequest<MockTestImageCtx> {
   static EnableRequest* s_instance;
   static EnableRequest* create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
+                               mirror_image_mode_t mode,
                                const std::string &non_primary_global_image_id,
                                MockContextWQ *op_work_queue,
                                Context *on_finish) {

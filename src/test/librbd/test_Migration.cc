@@ -636,7 +636,8 @@ TEST_F(TestMigration, MirroringSamePool)
 
   ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
 
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(m_ictx, false));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
+              m_ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
   librbd::mirror_image_info_t info;
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
@@ -653,7 +654,8 @@ TEST_F(TestMigration, MirroringAbort)
 
   ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
 
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(m_ictx, false));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
+              m_ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
   librbd::mirror_image_info_t info;
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
@@ -675,7 +677,8 @@ TEST_F(TestMigration, MirroringOtherPoolDisabled)
 
   ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
 
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(m_ictx, false));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
+              m_ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
   librbd::mirror_image_info_t info;
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
@@ -694,7 +697,8 @@ TEST_F(TestMigration, MirroringOtherPoolEnabled)
   ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(_other_pool_ioctx,
                                                RBD_MIRROR_MODE_IMAGE));
 
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(m_ictx, false));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
+              m_ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
   librbd::mirror_image_info_t info;
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
