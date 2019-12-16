@@ -3556,7 +3556,8 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
       CDentry* dn = mdr->dn[0].back();
       auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
       if (em.second) {
-        em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr, mdcache);
+	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr, mdcache);
+	mdr->pin(dn);
       } else {
 	dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);

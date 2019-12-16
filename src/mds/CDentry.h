@@ -123,6 +123,10 @@ public:
     linkage.remote_d_type = dt;
   }
 
+  ~CDentry() override {
+    ceph_assert(batch_ops.empty());
+  }
+
   std::string_view pin_name(int p) const override {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
