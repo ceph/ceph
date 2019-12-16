@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd_mirror/image_replayer/Utils.h"
+#include "include/rados/librados.hpp"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "cls/journal/cls_journal_types.h"
@@ -17,6 +18,16 @@ namespace rbd {
 namespace mirror {
 namespace image_replayer {
 namespace util {
+
+std::string compute_image_spec(librados::IoCtx& io_ctx,
+                               const std::string& image_name) {
+  std::string name = io_ctx.get_namespace();
+  if (!name.empty()) {
+    name += "/";
+  }
+
+  return io_ctx.get_pool_name() + "/" + name + image_name;
+}
 
 bool decode_client_meta(const cls::journal::Client& client,
                         librbd::journal::MirrorPeerClientMeta* client_meta) {
