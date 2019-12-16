@@ -1126,6 +1126,7 @@ class CephContainer:
         return [
             str(container_path),
             'run',
+            '--rm',
             '--net=host',
         ] + self.container_args + envs + vols + [
             '--entrypoint', cmd[0],
