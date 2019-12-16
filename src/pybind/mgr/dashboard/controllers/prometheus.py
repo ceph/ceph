@@ -13,7 +13,9 @@ from ..exceptions import DashboardException
 
 @Controller('/api/prometheus_receiver', secure=False)
 class PrometheusReceiver(BaseController):
-    ''' The receiver is needed in order to receive alert notifications (reports) '''
+    """
+    The receiver is needed in order to receive alert notifications (reports)
+    """
     notifications = []
 
     @Endpoint('POST', path='/')
