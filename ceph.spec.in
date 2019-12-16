@@ -405,11 +405,11 @@ Recommends:    chrony
 Base is the package that includes all the files shared amongst ceph servers
 
 %package -n cephadm
-Summary:        cephadm utility to bootstrap Ceph clusters
+Summary:        Utility to bootstrap Ceph clusters
 Requires:       podman
 %description -n cephadm
-cephadm utility to bootstrap a Ceph cluster and manage ceph daemons
-deployed with systemd and podman.
+Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed 
+with systemd and podman.
 
 %package -n ceph-common
 Summary:	Ceph Common
