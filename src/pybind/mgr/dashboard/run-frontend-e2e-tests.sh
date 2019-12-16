@@ -18,10 +18,7 @@ while getopts 'd:r:' flag; do
   case "${flag}" in
     d) DEVICE=$OPTARG;;
     r) REMOTE='true'
-       # jq is expecting a string literal, otherwise it will fail on the url ':'.
-       # We need to ensure that jq gets a json string for assignment; we achieve
-       # that by introducing literal double quotes (i.e., '"').
-       BASE_URL='"'$OPTARG'"';;
+       BASE_URL=$OPTARG;;
   esac
 done
 
@@ -73,7 +70,7 @@ export BASE_URL
 cd $DASH_DIR/frontend
 jq .[].target=\"$BASE_URL\" proxy.conf.json.sample > proxy.conf.json
 
-. ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
+[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
 
 if [ "$DEVICE" == "chrome" ]; then
     npm run e2e:ci || stop 1
