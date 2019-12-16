@@ -23,9 +23,11 @@ using util::create_rados_callback;
 template <typename I>
 EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
                                 const std::string &image_id,
+                                mirror_image_mode_t mode,
                                 const std::string &non_primary_global_image_id,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_io_ctx(io_ctx), m_image_id(image_id),
+    m_mode(static_cast<cls::rbd::MirrorImageMode>(mode)),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish),
     m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())) {
@@ -62,7 +64,10 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   }
 
   if (*result == 0) {
-    if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    if (m_mirror_image.mode != m_mode) {
+      lderr(m_cct) << "invalid current image mirror mode" << dendl;
+      *result = -EINVAL;
+    } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
       ldout(m_cct, 10) << this << " " << __func__
                        << ": mirroring is already enabled" << dendl;
     } else {
@@ -79,6 +84,7 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   }
 
   *result = 0;
+  m_mirror_image.mode = m_mode;
   if (m_non_primary_global_image_id.empty()) {
     uuid_d uuid_gen;
     uuid_gen.generate_random();
@@ -86,49 +92,6 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   } else {
     m_mirror_image.global_image_id = m_non_primary_global_image_id;
   }
-
-  send_get_features();
-  return nullptr;
-}
-
-template <typename I>
-void EnableRequest<I>::send_get_features() {
-  ldout(m_cct, 10) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::get_features_start(&op, true);
-
-  using klass = EnableRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_get_features>(this);
-  m_out_bl.clear();
-  int r = m_io_ctx.aio_operate(util::header_name(m_image_id), comp, &op,
-                               &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-Context *EnableRequest<I>::handle_get_features(int *result) {
-  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  uint64_t features, incompatible_features;
-  if (*result == 0) {
-    auto iter = m_out_bl.cbegin();
-    *result = cls_client::get_features_finish(&iter, &features,
-                                              &incompatible_features);
-  }
-
-  if (*result != 0) {
-    lderr(m_cct) << "failed to retrieve image features: "
-                 << cpp_strerror(*result) << dendl;
-    return m_on_finish;
-  }
-
-  // TODO: be explicit about the image mirror mode
-
-  m_mirror_image.mode = (features & RBD_FEATURE_JOURNALING) != 0 ?
-    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL : cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT;
   m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
 
   send_get_tag_owner();
