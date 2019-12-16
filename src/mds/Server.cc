@@ -3542,7 +3542,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 
   mdr->getattr_caps = mask;
 
-  if (!mdr->is_batch_head && mdr->is_batch_op()) {
+  if (mdr->snapid == CEPH_NOSNAP && !mdr->is_batch_head && mdr->is_batch_op()) {
     if (!is_lookup) {
       auto em = ref->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
       if (em.second) {
@@ -3564,8 +3564,8 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 	return;
       }
     }
+    mdr->is_batch_head = true;
   }
-  mdr->is_batch_head = true;
 
   /*
    * if client currently holds the EXCL cap on a field, do not rdlock
