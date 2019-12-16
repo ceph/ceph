@@ -41,6 +41,9 @@ class TestModuleSelftest(MgrTestCase):
         self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "self-test", "run")
 
+    def test_telemetry(self):
+        self._selftest_plugin("telemetry")
+
     def test_selftest_command_spam(self):
         # Use the selftest module to stress the mgr daemon
         self._load_module("selftest")

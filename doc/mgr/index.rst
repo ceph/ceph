@@ -34,4 +34,5 @@ sensible.
     Zabbix plugin <zabbix>
     Prometheus plugin <prometheus>
     Influx plugin <influx>
+    Telemetry plugin <telemetry>
 

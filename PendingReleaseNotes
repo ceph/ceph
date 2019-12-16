@@ -5,6 +5,44 @@
   python3.6 as the native python3. see the `announcement <https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/>_`
   for more details on the background of this change.
 
+* We now have telemetry support via a ceph-mgr module. The telemetry module is
+  absolutely on an opt-in basis, and is meant to collect generic cluster
+  information and push it to a central endpoint. By default, we're pushing it
+  to a project endpoint at https://telemetry.ceph.com/report, but this is
+  customizable using by setting the 'url' config option with::
+
+    ceph telemetry config-set url '<your url>'
+
+  You will have to opt-in on sharing your information with::
+
+    ceph telemetry on
+
+  You can view exactly what information will be reported first with::
+
+    ceph telemetry show
+
+  Should you opt-in, your information will be licensed under the
+  Community Data License Agreement - Sharing - Version 1.0, which you can
+  read at https://cdla.io/sharing-1-0/
+
+  The telemetry module reports information about CephFS file systems,
+  including:
+
+    - how many MDS daemons (in total and per file system)
+    - which features are (or have been) enabled
+    - how many data pools
+    - approximate file system age (year + month of creation)
+    - how much metadata is being cached per file system
+
+  As well as:
+
+    - whether IPv4 or IPv6 addresses are used for the monitors
+    - whether RADOS cache tiering is enabled (and which mode)
+    - whether pools are replicated or erasure coded, and
+      which erasure code profile plugin and parameters are in use
+    - how many RGW daemons, zones, and zonegroups are present; which RGW frontends are in use
+    - aggregate stats about the CRUSH map, like which algorithms are used, how big buckets are, how many rules are defined, and what tunables are in use
+
 12.2.12
 -------
 * In 12.2.9 and earlier releases, keyring caps were not checked for validity,
