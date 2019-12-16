@@ -1073,16 +1073,15 @@ def main():
     client0 = remote.Remote(user + host)
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,
-     [ 'ceph.client.rgw.%s' % (host),  ]),])
-
+        [ 'ceph.client.rgw.%s' % (host),  ]),])
     ctx.rgw = argparse.Namespace()
     endpoints = {}
     endpoints['ceph.client.rgw.%s' % host] = (host, 80)
     ctx.rgw.role_endpoints = endpoints
     ctx.rgw.realm = None
     ctx.rgw.regions = {'region0': { 'api name': 'api1',
-	    'is master': True, 'master zone': 'r0z0',
-	    'zones': ['r0z0', 'r0z1'] }}
+        'is master': True, 'master zone': 'r0z0',
+        'zones': ['r0z0', 'r0z1'] }}
     ctx.rgw.config = {'ceph.client.rgw.%s' % host: {'system user': {'name': '%s-system-user' % host}}}
     task(config, None)
     exit()
