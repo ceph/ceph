@@ -1078,9 +1078,12 @@ void ImageReplayer<I>::handle_replayer_notification() {
   }
 
   if (!m_replayer->is_replaying()) {
-    dout(10) << "replay interrupted" << dendl;
-    on_stop_journal_replay(m_replayer->get_error_code(),
-                           m_replayer->get_error_description());
+    auto error_code = m_replayer->get_error_code();
+    auto error_description = m_replayer->get_error_description();
+    dout(10) << "replay interrupted: "
+             << "r=" << error_code << ", "
+             << "error=" << error_description << dendl;
+    on_stop_journal_replay(error_code, error_description);
     return;
   }
 
