@@ -418,20 +418,18 @@ def ceph_mons(ctx, config):
                             break
 
         # refresh ceph.conf files for all mons + first mgr
-        """
         for remote, roles in ctx.cluster.remotes.items():
             for mon in [r for r in roles
                         if teuthology.is_type('mon', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mon)
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orchestrator', 'service', 'redeploy',
+                    'ceph', 'orchestrator', 'service-instance', 'reconfig',
                     'mon', id_,
                 ])
         _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
-            'ceph', 'orchestrator', 'service', 'redeploy',
+            'ceph', 'orchestrator', 'service-instance', 'reconfig',
             'mgr', ctx.ceph[cluster_name].first_mgr,
         ])
-        """
 
         yield
 
