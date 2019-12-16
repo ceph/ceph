@@ -26,6 +26,7 @@ tasks:
     - default.rgw.log
 - s3readwrite:
     client.0:
+      force-branch: ceph-luminous
       rgw_server: client.0
       readwrite:
         bucket: rwtest
