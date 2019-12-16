@@ -965,10 +965,10 @@ TEST_F(TestMockImageReplayer, ReplayerInterrupted) {
     .WillOnce(Return(false));
   EXPECT_CALL(mock_journal_replayer, is_replaying())
     .WillOnce(Return(false));
-  EXPECT_CALL(mock_journal_replayer, get_error_description())
-    .WillOnce(Return("INVALID"));
   EXPECT_CALL(mock_journal_replayer, get_error_code())
     .WillOnce(Return(-EINVAL));
+  EXPECT_CALL(mock_journal_replayer, get_error_description())
+    .WillOnce(Return("INVALID"));
   expect_shut_down(mock_journal_replayer, 0);
   expect_mirror_image_status_exists(false);
   mock_journal_replayer.replayer_listener->handle_notification();
