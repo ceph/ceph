@@ -881,6 +881,12 @@ n     *
       err = -EINVAL;
       goto reply;
     }
+    if (pending_map.strategy != MonMap::DISALLOW &&
+	pending_map.strategy != MonMap::CONNECTIVITY) {
+      ss << "You cannot disallow monitors in your current election mode";
+      err = -EINVAL;
+      goto reply;
+    }
     if (!pending_map.contains(name)) {
       ss << "mon." << name << " does not exist";
       err = -ENOENT;
@@ -902,6 +908,12 @@ n     *
   } else if (prefix == "mon rm disallowed_leader") {
     string name;
     if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (pending_map.strategy != MonMap::DISALLOW &&
+	pending_map.strategy != MonMap::CONNECTIVITY) {
+      ss << "You cannot disallow monitors in your current election mode";
       err = -EINVAL;
       goto reply;
     }
