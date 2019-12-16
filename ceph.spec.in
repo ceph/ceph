@@ -405,11 +405,11 @@ Recommends:    chrony
 Base is the package that includes all the files shared amongst ceph servers
 
 %package -n cephadm
-Summary:        cephadm utility to bootstrap Ceph clusters
+Summary:        Utility to bootstrap Ceph clusters
 Requires:       podman
 %description -n cephadm
-cephadm utility to bootstrap a Ceph cluster and manage ceph daemons
-deployed with systemd and podman.
+Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed 
+with systemd and podman.
 
 %package -n ceph-common
 Summary:	Ceph Common
@@ -1354,6 +1354,12 @@ install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
 install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 
 install -m 0755 src/cephadm/cephadm %{buildroot}%{_sbindir}/cephadm
+mkdir -p %{buildroot}%{_sharedstatedir}/cephadm
+chmod 0700 %{buildroot}%{_sharedstatedir}/cephadm
+mkdir -p %{buildroot}%{_sharedstatedir}/cephadm/.ssh
+chmod 0700 %{buildroot}%{_sharedstatedir}/cephadm/.ssh
+touch %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
+chmod 0600 %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
@@ -1515,30 +1521,22 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %pre -n cephadm
-# create user
-if ! getent passwd | grep -q '^cephadm:'; then
-   useradd -r -s /bin/bash -c "cephadm user for mgr/cephadm" -m cephadm
-fi
-# set up (initially empty) .ssh/authorized_keys file
-if ! test -d /home/cephadm/.ssh; then
-   mkdir /home/cephadm/.ssh
-   chown --reference /home/cephadm /home/cephadm/.ssh
-   chmod 0700 /home/cephadm/.ssh
-fi
-if ! test -e /home/cephadm/.ssh/authorized_keys; then
-   touch /home/cephadm/.ssh/authorized_keys
-   chown --reference /home/cephadm /home/cephadm/.ssh/authorized_keys
-   chmod 0600 /home/cephadm/.ssh/authorized_keys
-fi
+getent group cephadm >/dev/null || groupadd -r cephadm
+getent passwd cephadm >/dev/null || useradd -r -g cephadm -s /bin/bash -c "cephadm user for mgr/cephadm" -d %{_sharedstatedir}/cephadm cephadm
 exit 0
 
+%if ! 0%{?suse_version}
 %postun -n cephadm
 userdel -r cephadm || true
 exit 0
+%endif
 
 %files -n cephadm
 %{_sbindir}/cephadm
 %{_sysconfdir}/sudoers.d/cephadm
+%attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm
+%attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm/.ssh
+%attr(0600,cephadm,cephadm) %{_sharedstatedir}/cephadm/.ssh/authorized_keys
 
 %files common
 %dir %{_docdir}/ceph
