@@ -82,4 +82,4 @@ class Device(object):
         # type: () -> str
         if self.sys_api is None or 'rotational' not in self.sys_api:
             return "unknown"
-        return 'hdd' if self.sys_api["rotational"] == "1" else 'ssd/nvme'
+        return 'hdd' if self.sys_api["rotational"] == "1" else 'ssd'
