@@ -250,17 +250,21 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             for host in completion.result: # type: orchestrator.InventoryNode
                 out.append('Host {}:'.format(host.name))
                 table = PrettyTable(
-                    ['Path', 'Type', 'Size', 'Available', 'Ceph Device ID', 'Reject Reasons'],
+                    ['PATH', 'TYPE', 'SIZE', 'DEVICE', 'AVAIL',
+                     'REJECT REASONS'],
                     border=False)
-                table._align['Path'] = 'l'
+                table.align = 'l'
+                table._align['SIZE'] = 'r'
+                table.left_padding_width = 0
+                table.right_padding_width = 1
                 for d in host.devices.devices:  # type: Device
                     table.add_row(
                         (
                             d.path,
                             d.human_readable_type,
                             format_bytes(d.sys_api.get('size', 0), 5, colored=False),
-                            d.available,
                             d.device_id,
+                            d.available,
                             ', '.join(d.rejected_reasons)
                         )
                     )
