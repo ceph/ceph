@@ -1711,18 +1711,6 @@ def command_deploy():
 
     if daemon_type in Ceph.daemons:
         (config, keyring, crash_keyring) = get_config_and_both_keyrings()
-        if daemon_type == 'mon':
-            if args.mon_ip:
-                config += '[mon.%s]\n\tpublic_addr = %s\n' % (daemon_id, args.mon_ip)
-            elif args.mon_addrv:
-                config += '[mon.%s]\n\tpublic_addrv = %s\n' % (daemon_id,
-                                                            args.mon_addrv)
-            elif args.mon_network:
-                config += '[mon.%s]\n\tpublic_network = %s\n' % (daemon_id,
-                                                                args.mon_network)
-            else:
-                raise Error('must specify --mon-ip or --mon-network')
-
         (uid, gid) = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
@@ -2542,15 +2530,6 @@ def _get_parser():
     parser_deploy.add_argument(
         '--config-and-keyrings',
         help='JSON file with config and keyrings for the daemon and crash agent')
-    parser_deploy.add_argument(
-        '--mon-ip',
-        help='mon IP')
-    parser_deploy.add_argument(
-        '--mon-addrv',
-        help='mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])')
-    parser_deploy.add_argument(
-        '--mon-network',
-        help='mon network (CIDR)')
     parser_deploy.add_argument(
         '--osd-fsid',
         help='OSD uuid, if creating an OSD container')
