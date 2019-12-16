@@ -4,8 +4,8 @@
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
-#include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/image_replayer/journal/EventPreprocessor.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
 
@@ -32,17 +32,17 @@ struct TypeTraits<librbd::MockTestImageCtx> {
 } // namespace librbd
 
 // template definitions
-#include "tools/rbd_mirror/image_replayer/EventPreprocessor.cc"
-template class rbd::mirror::image_replayer::EventPreprocessor<librbd::MockTestImageCtx>;
+#include "tools/rbd_mirror/image_replayer/journal/EventPreprocessor.cc"
 
 namespace rbd {
 namespace mirror {
 namespace image_replayer {
+namespace journal {
 
 using testing::_;
 using testing::WithArg;
 
-class TestMockImageReplayerEventPreprocessor : public TestMockFixture {
+class TestMockImageReplayerJournalEventPreprocessor : public TestMockFixture {
 public:
   typedef EventPreprocessor<librbd::MockTestImageCtx> MockEventPreprocessor;
 
@@ -59,7 +59,7 @@ public:
       .WillOnce(CompleteContext(r));
   }
 
-  void expect_update_client(journal::MockJournaler &mock_journaler, int r) {
+  void expect_update_client(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, update_client(_, _))
       .WillOnce(WithArg<1>(CompleteContext(r)));
   }
@@ -69,7 +69,7 @@ public:
 
 };
 
-TEST_F(TestMockImageReplayerEventPreprocessor, IsNotRequired) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, IsNotRequired) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -83,7 +83,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, IsNotRequired) {
   ASSERT_FALSE(event_preprocessor.is_required(event_entry));
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, IsRequiredSnapMapPrune) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, IsRequiredSnapMapPrune) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -98,7 +98,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, IsRequiredSnapMapPrune) {
   ASSERT_TRUE(event_preprocessor.is_required(event_entry));
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, IsRequiredSnapRename) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, IsRequiredSnapRename) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -112,7 +112,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, IsRequiredSnapRename) {
   ASSERT_TRUE(event_preprocessor.is_required(event_entry));
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapMapPrune) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, PreprocessSnapMapPrune) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -137,7 +137,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapMapPrune) {
   ASSERT_EQ(expected_snap_seqs, m_client_meta.snap_seqs);
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRename) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, PreprocessSnapRename) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -167,7 +167,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRename) {
   ASSERT_EQ(6U, event->snap_id);
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRenameMissing) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, PreprocessSnapRenameMissing) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -190,7 +190,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRenameMissing) {
   ASSERT_EQ(CEPH_NOSNAP, event->snap_id);
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRenameKnown) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, PreprocessSnapRenameKnown) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -219,7 +219,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRenameKnown) {
   ASSERT_EQ(6U, event->snap_id);
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessRefreshError) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, PreprocessRefreshError) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -237,7 +237,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessRefreshError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessClientUpdateError) {
+TEST_F(TestMockImageReplayerJournalEventPreprocessor, PreprocessClientUpdateError) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   ::journal::MockJournaler mock_remote_journaler;
 
@@ -260,6 +260,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessClientUpdateError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
+} // namespace journal
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd

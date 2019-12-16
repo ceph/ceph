@@ -668,9 +668,9 @@ TEST_F(TestImageReplayer, Resync)
   flush(ictx);
   close_image(ictx);
 
-  C_SaferCond ctx;
-  m_replayer->resync_image(&ctx);
-  ASSERT_EQ(0, ctx.wait());
+  open_local_image(&ictx);
+  librbd::Journal<>::request_resync(ictx);
+  close_image(ictx);
 
   wait_for_stopped();
 
