@@ -908,7 +908,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                 'local-disk-%s-led-%s' % (
                     ident_fault,
                     'on' if on else 'off'),
-                '--path', '/dev/' + dev,
+                '--path', dev,
             ]
             out, err, code = self._run_cephadm(
                 host, 'osd', 'shell', ['--'] + cmd,
