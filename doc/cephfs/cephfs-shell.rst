@@ -6,6 +6,12 @@ CephFS Shell
 CephFS Shell provides shell-like commands that directly interact with the
 :term:`Ceph File System`.
 
+This tool can be used in interactive mode as well as in non-interactive mode.
+In former mode, cephfs-shell opens a shell session and after the given comamd is
+finished, it prints the prompt string and waits indefinitely. In latter mode,
+cephfs-shell issues a command and exits right after the command's execution is
+complete.
+
 Behaviour of CephFS Shell can be tweaked using cephfs-shell.conf. CephFS Shell
 looks for it by default at the path provided in environment variable
 `CEPHFS_SHELL_CONF` and then in user's home directory
@@ -13,7 +19,8 @@ looks for it by default at the path provided in environment variable
 
 Usage :
 
-    cephfs-shell [-options] -- [command, command,...]
+    cephfs-shell [options] [command]
+    cephfs-shell [options] -- [command, command,...]
 
 Options :
     -c, --config FILE     Path to cephfs-shell.conf
