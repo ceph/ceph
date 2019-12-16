@@ -1409,22 +1409,16 @@ def setup_cephfs(config_file):
     """
     Mounting a cephfs
     """
-    from cephfs import ObjectNotFound
-    from cephfs import Error
-
     global cephfs
     try:
         cephfs = libcephfs.LibCephFS(conffile=config_file)
         cephfs.mount()
-    except ObjectNotFound as e:
+    except libcephfs.ObjectNotFound as e:
         print('couldn\'t find ceph configuration not found')
         sys.exit(1)
-    except Error as e:
+    except libcephfs.Error as e:
         print(e)
         sys.exit(1)
-    else:
-        del ObjectNotFound
-        del Error
 
 def get_bool_vals_for_boolopts(val):
     if val.lower() in ['true', 'yes']:
@@ -1452,7 +1446,7 @@ def read_ceph_conf(shell, config_file):
         shell.prompt = get_bool_vals_for_boolopts(cephfs.conf_get('prompt'))
         shell.quiet = get_bool_vals_for_boolopts(cephfs.conf_get('quiet'))
         shell.timing = get_bool_vals_for_boolopts(cephfs.conf_get('timing'))
-    except (OSError, cephfs.Error) as e:
+    except (OSError, libcephfs.Error) as e:
         perror(e)
 
 if __name__ == '__main__':
