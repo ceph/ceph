@@ -1621,7 +1621,7 @@ def command_bootstrap():
     if not args.skip_ssh:
         logger.info('Enabling cephadm module...')
         cli(['mgr', 'module', 'enable', 'cephadm'])
-        logger.info('Setting orchestrator backend to ssh...')
+        logger.info('Setting orchestrator backend to cephadm...')
         cli(['orchestrator', 'set', 'backend', 'cephadm'])
 
         logger.info('Generating ssh key...')
