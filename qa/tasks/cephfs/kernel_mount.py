@@ -1,4 +1,3 @@
-from StringIO import StringIO
 import json
 import logging
 import time
@@ -214,10 +213,10 @@ class KernelMount(CephFSMount):
             print(json.dumps(get_id_to_dir()))
             """)
 
-        p = self.client_remote.run(args=[
+        output = self.client_remote.sh([
             'sudo', 'python3', '-c', pyscript
-        ], stdout=StringIO(), timeout=(5*60))
-        client_id_to_dir = json.loads(p.stdout.getvalue())
+        ], timeout=(5*60))
+        client_id_to_dir = json.loads(output)
 
         try:
             return client_id_to_dir[self.client_id]
@@ -236,10 +235,10 @@ class KernelMount(CephFSMount):
             print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
-        p = self.client_remote.run(args=[
+        output = self.client_remote.sh([
             'sudo', 'python3', '-c', pyscript
-        ], stdout=StringIO(), timeout=(5*60))
-        return p.stdout.getvalue()
+        ], timeout=(5*60))
+        return output
 
     def get_global_id(self):
         """
