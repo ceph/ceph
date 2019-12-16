@@ -1,4 +1,3 @@
-from StringIO import StringIO
 import json
 import logging
 import time
@@ -233,10 +232,10 @@ class KernelMount(CephFSMount):
             print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
-        p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO(), timeout=(5*60))
-        return p.stdout.getvalue()
+        output = self.client_remote.sh([
+            'sudo', 'python3', '-c', pyscript
+        ], timeout=(5*60))
+        return output
 
     def get_global_id(self):
         """
