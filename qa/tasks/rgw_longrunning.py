@@ -156,13 +156,13 @@ def task(ctx, config):
                                                    DIR[config.get('test_version', 'v2')]['config'])])
     clients[0].run(args=['cat', config_file])
     # os.remove(local_file)
-    clients[0].run(args=['virtualenv', 'venv'])
+    clients[0].run(args=['python3', '-m', 'venv', 'venv'])
     clients[0].run(
         args=[
             'source',
             'venv/bin/activate',
             run.Raw(';'),
-            run.Raw('pip install boto boto3 names PyYaml ConfigParser'),
+            run.Raw('pip3 install boto boto3 names PyYaml ConfigParser'),
             run.Raw(';'),
             'deactivate'])
     time.sleep(60)
@@ -172,7 +172,7 @@ def task(ctx, config):
     time.sleep(60)
     clients[0].run(
         args=[run.Raw(
-            'sudo venv/bin/python2.7 %s -c %s ' % (script, config_file))])
+            'sudo venv/bin/python3 %s -c %s ' % (script, config_file))])
     try:
         yield
     finally:

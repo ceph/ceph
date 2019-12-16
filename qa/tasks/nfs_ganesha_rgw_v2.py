@@ -104,14 +104,14 @@ def task(ctx, config):
 
     rgw[0].run(args=['cd', 'nfs_ganesha_rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', '%s' % branch])
 
-    rgw[0].run(args=['virtualenv', 'venv'])
+    rgw[0].run(args=['python3', '-m', 'venv', 'venv'])
 
     rgw[0].run(
         args=[
             'source',
             'venv/bin/activate',
             run.Raw(';'),
-            run.Raw('pip install --upgrade setuptools'),
+            run.Raw('pip3 install --upgrade setuptools'),
             run.Raw(';'),
             'deactivate'])
 
@@ -120,7 +120,7 @@ def task(ctx, config):
             'source',
             'venv/bin/activate',
             run.Raw(';'),
-            run.Raw('pip install boto boto3 names PyYaml psutil ConfigParser'),
+            run.Raw('pip3 install boto boto3 names PyYaml psutil ConfigParser'),
             run.Raw(';'),
             'deactivate'])
 
@@ -156,7 +156,7 @@ def task(ctx, config):
 
     rgw[0].run(
         args=[run.Raw(
-            'sudo venv/bin/python2.7 nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/%s '
+            'sudo venv/bin/python3 nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/%s '
             '-r nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/config/rgw_user.yaml '
             '-c nfs_ganesha_rgw/ceph-qe-scripts/rgw/v2/tests/nfs_ganesha/config/%s ' % (script_name, test_name))])
 
