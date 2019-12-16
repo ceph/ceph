@@ -6,8 +6,8 @@ import pipes
 import os
 import re
 
-from util import get_remote_for_role
-from util.workunit import get_refspec_after_overrides
+from tasks.util import get_remote_for_role
+from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
