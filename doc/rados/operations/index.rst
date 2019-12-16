@@ -60,6 +60,7 @@ with new hardware.
 
 	add-or-rm-osds
 	add-or-rm-mons
+	change-mon-elections
 	devices
 	bluestore-migration
 	Command Reference <control>
