@@ -10,6 +10,7 @@ LOG_DIR_MODE=0o770
 DATA_DIR_MODE=0o700
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1=r'[ceph: \u@\h \W]\$ '
+DEFAULT_TIMEOUT=None # in seconds
 
 """
 You can invoke cephadm in two ways:
@@ -352,7 +353,12 @@ class FileLock(object):
 ##################################
 # Popen wrappers, lifted from ceph-volume
 
-def call(command, desc=None, verbose=False, **kwargs):
+def call(command,
+         desc=None,
+         verbose=False,
+         verbose_on_failure=True,
+         timeout=DEFAULT_TIMEOUT,
+         **kwargs):
     """
     Wrap subprocess.Popen to
 
@@ -364,10 +370,11 @@ def call(command, desc=None, verbose=False, **kwargs):
 
     :param verbose_on_failure: On a non-zero exit status, it will forcefully set
                                logging ON for the terminal
+    :param timeout: timeout in seconds
     """
     if not desc:
         desc = command[0]
-    verbose_on_failure = kwargs.pop('verbose_on_failure', True)
+    timeout = timeout or args.timeout
 
     logger.debug("Running command: %s" % ' '.join(command))
     process = subprocess.Popen(
@@ -389,7 +396,15 @@ def call(command, desc=None, verbose=False, **kwargs):
     stop = False
     out_buffer = ''   # partial line (no newline yet)
     err_buffer = ''   # partial line (no newline yet)
+    start_time = time.time()
+    end_time = None
+    if timeout:
+        end_time = start_time + timeout
     while not stop:
+        if end_time and (time.time() >= end_time):
+            logger.info(desc + ':timeout after %s seconds' % timeout)
+            stop = True
+            process.kill()
         if reads and process.poll() is not None:
             # we want to stop, but first read off anything remaining
             # on stdout/stderr
@@ -397,7 +412,7 @@ def call(command, desc=None, verbose=False, **kwargs):
         else:
             reads, _, _ = select.select(
                 [process.stdout.fileno(), process.stderr.fileno()],
-                [], []
+                [], [], timeout
             )
         for fd in reads:
             try:
@@ -1390,12 +1405,12 @@ class CephContainer:
             self.cname,
         ] + cmd
 
-    def run(self):
-        # type: () -> str
+    def run(self, timeout=DEFAULT_TIMEOUT):
+        # type: (Optional[int]) -> str
         logger.debug(self.run_cmd())
-        out, _, _ = call_throws(self.run_cmd(), desc=self.entrypoint)
+        out, _, _ = call_throws(
+                self.run_cmd(), desc=self.entrypoint, timeout=timeout)
         return out
-
 
 ##################################
 
@@ -2346,6 +2361,12 @@ def _get_parser():
         '--verbose', '-v',
         action='store_true',
         help='Show debug-level log messages')
+    parser.add_argument(
+        '--timeout',
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help='timeout in seconds')
+
     subparsers = parser.add_subparsers(help='sub-command')
 
     parser_version = subparsers.add_parser(
