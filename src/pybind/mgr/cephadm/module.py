@@ -1053,13 +1053,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._remove_daemon(args)
 
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
-                       extra_args=[]):
+                       extra_args=[], extra_config=None):
         name = '%s.%s' % (daemon_type, daemon_id)
 
         # generate config
         ret, config, err = self.mon_command({
             "prefix": "config generate-minimal-conf",
         })
+        if extra_config:
+            config += extra_config
 
         ret, crash_keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
@@ -1129,17 +1131,18 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         })
 
         # infer whether this is a CIDR network, addrvec, or plain IP
+        extra_config = '[mon.%s]\n' % name
         if '/' in network:
-            extra_args = ['--mon-network', network]
+            extra_config += 'public network = %s\n' % network
         elif network.startswith('[v') and network.endswith(']'):
-            extra_args = ['--mon-addrv', network]
+            extra_config += 'public addrv = %s\n' % network
         elif ':' not in network:
-            extra_args = ['--mon-ip', network]
+            extra_config += 'public addr = %s\n' % network
         else:
             raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
 
         return self._create_daemon('mon', name or host, host, keyring,
-                                   extra_args=extra_args)
+                                   extra_config=extra_config)
 
     def update_mons(self, spec):
         # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
