@@ -528,10 +528,18 @@ Usage:
         'orchestrator nfs add',
         "name=svc_arg,type=CephString "
         "name=pool,type=CephString "
-        "name=namespace,type=CephString,req=false",
+        "name=namespace,type=CephString,req=false "
+        'name=num,type=CephInt,req=false '
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
         'Create an NFS service')
-    def _nfs_add(self, svc_arg, pool, namespace=None):
-        spec = orchestrator.NFSServiceSpec(svc_arg, pool=pool, namespace=namespace)
+    def _nfs_add(self, svc_arg, pool, namespace=None, num=None, label=None, hosts=[]):
+        spec = orchestrator.NFSServiceSpec(
+            svc_arg,
+            pool=pool,
+            namespace=namespace,
+            placement=orchestrator.PlacementSpec(label=label, hosts=hosts, count=num),
+        )
         spec.validate_add()
         completion = self.add_nfs(spec)
         self._orchestrator_wait([completion])
@@ -541,10 +549,16 @@ Usage:
     @orchestrator._cli_write_command(
         'orchestrator nfs update',
         "name=svc_id,type=CephString "
-        "name=num,type=CephInt",
+        'name=num,type=CephInt,req=false '
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
         'Scale an NFS service')
-    def _nfs_update(self, svc_id, num):
-        spec = orchestrator.NFSServiceSpec(svc_id, count=num)
+    def _nfs_update(self, svc_id, num=None, label=None, hosts=[]):
+        # type: (str, Optional[int], Optional[str], List[str]) -> HandleCommandResult
+        spec = orchestrator.NFSServiceSpec(
+            svc_id,
+            placement=orchestrator.PlacementSpec(label=label, hosts=hosts, count=num),
+        )
         completion = self.update_nfs(spec)
         self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
