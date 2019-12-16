@@ -2922,9 +2922,12 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("osd_recover_clone_overlap_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    // Only use clone_overlap for recovery if there are fewer than
+    // osd_recover_clone_overlap_limit entries in the overlap set
+    Option("osd_recover_clone_overlap_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("")
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("osd_debug_feed_pullee", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(-1)
