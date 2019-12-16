@@ -1437,30 +1437,22 @@ def get_bool_vals_for_boolopts(val):
 def read_ceph_conf(shell, config_file):
     try:
         shell.debug = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('debug_shell').strip('\n'))
+            conf_get('debug_shell'))
         shell.allow_ansi = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('allow_ansi').strip('\n'))
-        shell.echo = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('echo').strip('\n'))
+            conf_get('allow_ansi'))
+        shell.echo = get_bool_vals_for_boolopts(cephfs.conf_get('echo'))
         shell.continuation_prompt = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('continuation_prompt').strip('\n'))
-        shell.colors = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('colors').strip('\n'))
-        shell.editor = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('editor').strip('\n'))
+            conf_get('continuation_prompt'))
+        shell.colors = get_bool_vals_for_boolopts(cephfs.conf_get('colors'))
+        shell.editor = get_bool_vals_for_boolopts(cephfs.conf_get('editor'))
         shell.feedback_to_output = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('feedback_to_output').strip('\n'))
+            conf_get('feedback_to_output'))
         shell.max_completion_items = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('max_completion_items').strip('\n'))
-        shell.prompt = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('prompt').strip('\n'))
-        shell.quiet = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('quiet').strip('\n'))
-        shell.timing = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('timing').strip('\n'))
-    except OSError as e:
-        perror(e)
-    except cephfs.Error as e:
+            conf_get('max_completion_items'))
+        shell.prompt = get_bool_vals_for_boolopts(cephfs.conf_get('prompt'))
+        shell.quiet = get_bool_vals_for_boolopts(cephfs.conf_get('quiet'))
+        shell.timing = get_bool_vals_for_boolopts(cephfs.conf_get('timing'))
+    except (OSError, cephfs.Error) as e:
         perror(e)
 
 if __name__ == '__main__':
