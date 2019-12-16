@@ -5,6 +5,7 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ButtonsModule } from 'ngx-bootstrap/buttons';
+import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -32,7 +33,8 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     SharedModule,
     TabsModule.forRoot(),
     RouterModule,
-    NgBootstrapFormValidationModule
+    NgBootstrapFormValidationModule,
+    BsDatepickerModule.forRoot()
   ],
   declarations: [
     LoginComponent,

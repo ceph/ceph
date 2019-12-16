@@ -44,7 +44,8 @@ class AuthTest(DashboardTestCase):
             'token': JLeaf(str),
             'username': JLeaf(str),
             'permissions': JObj(sub_elems={}, allow_unknown=True),
-            'sso': JLeaf(bool)
+            'sso': JLeaf(bool),
+            'pwdExpirationDate': JLeaf(int, none=True)
         }, allow_unknown=False))
         self._validate_jwt_token(data['token'], "admin", data['permissions'])
 
