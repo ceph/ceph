@@ -224,7 +224,9 @@ class CephFS(object):
         :param max_files: The file limit.
         :type max_files: int | None
         """
-        self.cfs.setxattr(path, 'ceph.quota.max_bytes',
-                          str(max_bytes if max_bytes else 0).encode(), 0)
-        self.cfs.setxattr(path, 'ceph.quota.max_files',
-                          str(max_files if max_files else 0).encode(), 0)
+        if max_bytes is not None:
+            self.cfs.setxattr(path, 'ceph.quota.max_bytes',
+                              str(max_bytes).encode(), 0)
+        if max_files is not None:
+            self.cfs.setxattr(path, 'ceph.quota.max_files',
+                              str(max_files).encode(), 0)
