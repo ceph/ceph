@@ -13,6 +13,7 @@ from time import sleep
 from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.misc import sudo_write_file
+from teuthology.orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -684,8 +685,11 @@ class TestQuota(TestCephFSShell):
         mount_output = self.get_cephfs_shell_cmd_output('mkdir ' + self.dir_name)
         log.info("cephfs-shell mount output:\n{}".format(mount_output))
 
-    def validate(self, input_val):
-        quota_output = self.get_cephfs_shell_cmd_output('quota set --max_bytes '+input_val[0]+' --max_files '+input_val[1]+ ' '+ self.dir_name)
+    def set_and_get_quota_vals(self, input_val):
+        quota_output = self.run_cephfs_shell_cmd('quota set --max_bytes '
+                                                 + input_val[0] + ' --max_files '
+                                                 + input_val[1] + ' '
+                                                 + self.dir_name)
         log.info("cephfs-shell quota set output:\n{}".format(quota_output))
 
         quota_output = self.get_cephfs_shell_cmd_output('quota get '+ self.dir_name)
@@ -697,17 +701,17 @@ class TestQuota(TestCephFSShell):
     def test_set(self):
         self.create_dir()
         set_values = ('6', '2')
-        self.assertTupleEqual(self.validate(set_values), set_values)
+        self.assertTupleEqual(self.set_and_get_quota_vals(set_values), set_values)
 
     def test_replace_values(self):
         self.test_set()
         set_values = ('20', '4')
-        self.assertTupleEqual(self.validate(set_values), set_values)
+        self.assertTupleEqual(self.set_and_get_quota_vals(set_values), set_values)
 
     def test_set_invalid_dir(self):
         set_values = ('5', '5')
         try:
-            self.assertTupleEqual(self.validate(set_values), set_values)
+            self.assertTupleEqual(self.set_and_get_quota_vals(set_values), set_values)
             raise Exception("Something went wrong!! Values set for non existing directory")
         except IndexError:
             # Test should pass as values cannot be set for non existing directory
@@ -717,7 +721,7 @@ class TestQuota(TestCephFSShell):
         self.create_dir()
         set_values = ('-6', '-5')
         try:
-            self.assertTupleEqual(self.validate(set_values), set_values)
+            self.assertTupleEqual(self.set_and_get_quota_vals(set_values), set_values)
             raise Exception("Something went wrong!! Invalid values set")
         except IndexError:
             # Test should pass as invalid values cannot be set
@@ -727,12 +731,16 @@ class TestQuota(TestCephFSShell):
         self.test_set()
         dir_abspath = path.join(self.mount_a.mountpoint, self.dir_name)
         self.mount_a.run_shell('touch '+dir_abspath+'/file1')
+        file2 = path.join(dir_abspath, "file2")
         try:
-            self.mount_a.run_shell('touch '+dir_abspath+'/file2')
+            self.mount_a.run_shell('touch '+file2)
             raise Exception("Something went wrong!! File creation should have failed")
         except CommandFailedError:
             # Test should pass as file quota set to 2
-            pass
+            # Additional condition to confirm file creation failure
+            if not path.exists(file2):
+                return 0
+            raise
 
     def test_exceed_write_limit(self):
         self.test_set()
@@ -740,12 +748,21 @@ class TestQuota(TestCephFSShell):
         filename = 'test_file'
         file_abspath = path.join(dir_abspath, filename)
         try:
+            # Write should fail as bytes quota is set to 6
             sudo_write_file(self.mount_a.client_remote, file_abspath,
                     'Disk raise Exception')
             raise Exception("Write should have failed")
         except CommandFailedError:
-            # Test should pass as bytes quota set to 6
-            pass
+            # Test should pass only when write command fails
+            path_exists = path.exists(file_abspath)
+            if not path_exists:
+                # Testing with teuthology: No file is created.
+                return 0
+            elif path_exists and not path.getsize(file_abspath):
+                # Testing on Fedora 30: When write fails, empty file gets created.
+                return 0
+            else:
+                raise
 
 #    def test_ls(self):
 #        """
