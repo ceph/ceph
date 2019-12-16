@@ -944,7 +944,7 @@ def reconnect(ctx, timeout, remotes=None):
     if remotes:
         need_reconnect = remotes
     else:
-        need_reconnect = ctx.cluster.remotes.keys()
+        need_reconnect = list(ctx.cluster.remotes.keys())
 
     while need_reconnect:
         for remote in need_reconnect:

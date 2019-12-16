@@ -2,10 +2,9 @@ import logging
 import os
 import subprocess
 
-from cStringIO import StringIO
-
 from teuthology.parallel import parallel
 from teuthology.task import ansible
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +13,7 @@ def vm_setup(ctx, config):
     """
     Look for virtual machines and handle their initialization
     """
-    all_tasks = [x.keys()[0] for x in ctx.config['tasks']]
+    all_tasks = [list(x.keys())[0] for x in ctx.config['tasks']]
     need_ansible = False
     if 'kernel' in all_tasks and 'ansible.cephlab' not in all_tasks:
         need_ansible = True
@@ -24,9 +23,9 @@ def vm_setup(ctx, config):
         for rem in ctx.cluster.remotes.keys():
             if rem.is_vm:
                 ansible_hosts.add(rem.shortname)
-                r = rem.run(args=['test', '-e', '/ceph-qa-ready'],
-                            stdout=StringIO(), check_status=False)
-                if r.returncode != 0:
+                try:
+                    rem.sh('test -e /ceph-qa-ready')
+                except CommandFailedError:
                     p1 = subprocess.Popen(['cat', editinfo],
                                           stdout=subprocess.PIPE)
                     p2 = subprocess.Popen(

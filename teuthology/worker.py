@@ -254,7 +254,7 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     arg.append('--')
 
     with tempfile.NamedTemporaryFile(prefix='teuthology-worker.',
-                                     suffix='.tmp',) as tmp:
+                                     suffix='.tmp', mode='w+t') as tmp:
         yaml.safe_dump(data=job_config, stream=tmp)
         tmp.flush()
         arg.append(tmp.name)

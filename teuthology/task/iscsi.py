@@ -5,7 +5,6 @@ import logging
 import contextlib
 import socket
 
-from cStringIO import StringIO
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.task.common_fs_utils import generic_mkfs
@@ -66,8 +65,7 @@ def file_io_test(rem, file_from, lnkpath):
         'bs=1024',
         'conv=fsync',
     ])
-    proc = rem.run(args=['mktemp'], stdout=StringIO(),)
-    tfile2 = proc.stdout.getvalue().strip()
+    tfile2 = rem.sh('mktemp').strip()
     rem.run(
         args=[
         'sudo',
@@ -78,17 +76,15 @@ def file_io_test(rem, file_from, lnkpath):
         run.Raw('>'),
         tfile2,
     ])
-    proc = rem.run(
-        args=[
+    size = rem.sh(
+        [
             'ls',
             '-l',
             file_from,
             run.Raw('|'),
             'awk',
             '{print $5}', ],
-        stdout=StringIO(),
-        )
-    size = proc.stdout.getvalue().strip()
+        ).strip()
     rem.run(
         args=[
             'cmp',
@@ -112,8 +108,7 @@ def general_io_test(ctx, rem, image_name):
     ])
     test_phrase = 'The time has come the walrus said to speak of many things.'
     lnkpath = tgt_devname_get(ctx, image_name)
-    proc = rem.run(args=['mktemp'], stdout=StringIO(),)
-    tfile1 = proc.stdout.getvalue().strip()
+    tfile1 = rem.sh('mktemp').strip()
     rem.run(
         args=[
             'echo',

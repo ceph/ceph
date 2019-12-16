@@ -1,6 +1,6 @@
 import yaml
 import json
-import fake_archive
+from teuthology.test import fake_archive
 from teuthology import report
 
 
