@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import contextlib
 import logging
-from cStringIO import StringIO
+from io import BytesIO
 import textwrap
 from configparser import ConfigParser
 
@@ -142,7 +142,7 @@ def distribute_ceph_keys(devstack_node, ceph_node):
     log.info("Copying Ceph keys to DevStack node...")
 
     def copy_key(from_remote, key_name, to_remote, dest_path, owner):
-        key_stringio = StringIO()
+        key_stringio = BytesIO()
         from_remote.run(
             args=['sudo', 'ceph', 'auth', 'get-or-create', key_name],
             stdout=key_stringio)
@@ -174,14 +174,8 @@ def distribute_ceph_keys(devstack_node, ceph_node):
 def set_libvirt_secret(devstack_node, ceph_node):
     log.info("Setting libvirt secret...")
 
-    cinder_key_stringio = StringIO()
-    ceph_node.run(args=['sudo', 'ceph', 'auth', 'get-key', 'client.cinder'],
-                  stdout=cinder_key_stringio)
-    cinder_key = cinder_key_stringio.getvalue().strip()
-
-    uuid_stringio = StringIO()
-    devstack_node.run(args=['uuidgen'], stdout=uuid_stringio)
-    uuid = uuid_stringio.getvalue().strip()
+    cinder_key = ceph_node.sh('sudo ceph auth get-key client.cinder').strip()
+    uuid = devstack_node.sh('uuidgen').strip()
 
     secret_path = '/tmp/secret.xml'
     secret_template = textwrap.dedent("""
