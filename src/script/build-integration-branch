@@ -4,7 +4,8 @@
 Builds integration branches. Something similar to 
   $ git checkout -b branch-name
   $ for b in $(get-branches-from-github) ; do
-  $   git pull b
+  >   git pull b
+  > done
 
 Requires `~/.github_token`.
 
@@ -39,14 +40,15 @@ repo = "ceph/ceph"
 try:
   from docopt import docopt
   arguments = docopt(__doc__.format(postfix=postfix))
-  print(arguments)
   label = arguments['<label>']
-  branch = label if arguments['--no-date'] else label + prefix
+  branch = label
+  if not arguments['--no-date']:
+      branch += postfix
 except ImportError:
   # Fallback without docopt.
   label = sys.argv[1]
   assert len(sys.argv) == 2
-  branch = label + prefix
+  branch = label + postfix
 
 
 with open(os.environ['HOME'] + '/.github_token', 'r') as myfile:
