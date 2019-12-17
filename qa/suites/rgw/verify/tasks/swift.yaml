@@ -1,3 +1,6 @@
+# py2 for swift until we move to py3
+os_type: ubuntu
+
 tasks:
 - swift:
     client.0:
