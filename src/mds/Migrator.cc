@@ -2483,9 +2483,8 @@ void Migrator::handle_export_prep(const cref_t<MExportDirPrep> &m, bool did_assi
   map<inodeno_t, fragset_t> import_bound_fragset;
   for (const auto &bound : m->get_bounds()) {
     dout(10) << " bound " << bound << dendl;
-    import_bound_fragset[bound.ino].insert(bound.frag);
+    import_bound_fragset[bound.ino].insert_raw(bound.frag);
   }
-
   // assimilate contents?
   if (!did_assim) {
     dout(7) << "doing assim on " << *dir << dendl;
@@ -2515,6 +2514,7 @@ void Migrator::handle_export_prep(const cref_t<MExportDirPrep> &m, bool did_assi
     for (map<inodeno_t,fragset_t>::iterator p = import_bound_fragset.begin();
 	 p != import_bound_fragset.end();
 	 ++p) {
+      p->second.simplify();
       CInode *in = cache->get_inode(p->first);
       ceph_assert(in);
       in->get_stickydirs();
