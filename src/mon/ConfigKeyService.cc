@@ -237,18 +237,6 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       goto out;
     }
 
-    std::string mgr_prefix = "mgr/";
-    if (key.size() >= mgr_prefix.size() &&
-        key.substr(0, mgr_prefix.size()) == mgr_prefix) {
-      // In <= mimic, we used config-key for mgr module configuration,
-      // and we bring values forward in an upgrade, but subsequent
-      // `set` operations will not be picked up.  Warn user about this.
-      ss << "WARNING: it looks like you might be trying to set a ceph-mgr "
-            "module configuration key.  Since Ceph 13.0.0 (Mimic), mgr module "
-            "configuration is done with `config set`, and new values "
-            "set using `config-key set` will be ignored.\n";
-    }
-
     ss << "set " << key;
 
     // we'll reply to the message once the proposal has been handled
