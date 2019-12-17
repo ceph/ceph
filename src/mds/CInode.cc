@@ -702,42 +702,43 @@ std::pair<bool, std::vector<CDir*>> CInode::get_dirfrags_under(frag_t fg)
   std::pair<bool, std::vector<CDir*>> result;
   auto& all = result.first;
   auto& dirs = result.second;
-
-  {
-    frag_vec_t leaves;
-    dirfragtree.get_leaves_under(fg, leaves);
-    for (const auto &leaf : leaves) {
-      if (auto it = dirfrags.find(leaf); it != dirfrags.end()) {
-        dirs.push_back(it->second);
-      } else {
-        all = false;
-      }
-    }
-  }
-
-  if (all)
+  all = false;
+  
+  if (auto it = dirfrags.find(fg); it != dirfrags.end()){
+    all = true;
+    dirs.push_back(it->second);
     return result;
-
-  fragtree_t tmpdft;
-  tmpdft.force_to_leaf(g_ceph_context, fg);
-  for (auto &p : dirfrags) {
-    tmpdft.force_to_leaf(g_ceph_context, p.first);
-    if (fg.contains(p.first) && !dirfragtree.is_leaf(p.first))
-      dirs.push_back(p.second);
   }
+  
+  int total = 0;
+  for(auto &[_fg, _dir] : dirfrags){
+    // frag_t.bits() can indicate the depth of the partition in the directory tree
+    // e.g. 
+    // 01*  : bit = 2, on the second floor
+    // *
+    // 0*      1*
+    // 00* 01* 10* 11*     -- > level 2, bit = 2
+    // so fragA.bits > fragB.bits means fragA is deeper than fragB
 
-  all = true;
-  {
-    frag_vec_t leaves;
-    tmpdft.get_leaves_under(fg, leaves);
-    for (const auto& leaf : leaves) {
-      if (!dirfrags.count(leaf)) {
-        all = false;
-        break;
+    if (fg.bits() >= _fg.bits()) {
+      if (_fg.contains(fg)) {
+	all = true;
+	return result;
+      }
+    } else {
+      if (fg.contains(_fg)) {
+	dirs.push_back(_dir);
+	// we can calculate how many sub slices a slice can be divided into
+	// frag_t(*) can be divided into two frags belonging to the first layer(0* 1*)
+	//           or 2^2 frags belonging to the second layer(00* 01* 10* 11*)
+	//           or (1 << (24 - frag_t(*).bits)) frags belonging to the 24th level
+	total += 1 << (24 - _fg.bits());
       }
     }
   }
 
+  // we convert all the frags into the frags of 24th layer to calculate whether all the frags are included in the memory cache
+  all = ((1<<(24-fg.bits())) == total);
   return result;
 }
 
