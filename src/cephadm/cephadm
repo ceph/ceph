@@ -977,10 +977,18 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
             fsid, daemon_type, daemon_id,
             uid, gid,
             config, keyring)
+
     if not reconfig:
         deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                             osd_fsid=osd_fsid)
+
     update_firewalld(daemon_type)
+
+    if reconfig and daemon_type not in Ceph.daemons:
+        # ceph daemons do not need a restart; others (presumably) do to pick
+        # up the new config
+        call_throws(['systemctl', 'restart',
+                     get_unit_name(fsid, daemon_type, daemon_id)])
 
 def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                         enable=True, start=True,
