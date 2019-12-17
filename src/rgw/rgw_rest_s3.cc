@@ -58,6 +58,7 @@
 #include "rgw_rest_sts.h"
 #include "rgw_rest_iam.h"
 #include "rgw_sts.h"
+#include "rgw_rest_s3control.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -5281,6 +5282,10 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
+        case RGW_OP_PUT_ACCOUNT_PUBLIC_ACCESS_BLOCK:
+        case RGW_OP_GET_ACCOUNT_PUBLIC_ACCESS_BLOCK:
+        case RGW_OP_DELETE_ACCOUNT_PUBLIC_ACCESS_BLOCK:
+
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;

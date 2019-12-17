@@ -29,6 +29,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_sts.h"
+#include "rgw_rest_s3control.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -382,12 +383,17 @@ int radosgw_Main(int argc, const char **argv)
   const bool sts_enabled = apis_map.count("sts") > 0;
   const bool iam_enabled = apis_map.count("iam") > 0;
   const bool pubsub_enabled = apis_map.count("pubsub") > 0;
+  const bool s3control_enabled = apis_map.count("s3control") > 0;
   // Swift API entrypoint could placed in the root instead of S3
   const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
       rest.register_default_mgr(set_logging(rest_filter(store->getRados(), RGW_REST_S3,
                                                         new RGWRESTMgr_S3(s3website_enabled, sts_enabled, iam_enabled, pubsub_enabled))));
+      if (s3control_enabled) {
+      	rest.register_resource("v20180820", new RGWRESTMgr_S3Control);
+      }
+
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
            << "Swift API placed in the root of hierarchy" << dendl;

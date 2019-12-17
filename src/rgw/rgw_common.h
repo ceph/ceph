@@ -1,4 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
@@ -543,6 +544,10 @@ enum RGWOpType {
   RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK,
   RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK,
   RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK,
+  RGW_OP_PUT_ACCOUNT_PUBLIC_ACCESS_BLOCK,
+  RGW_OP_GET_ACCOUNT_PUBLIC_ACCESS_BLOCK,
+  RGW_OP_DELETE_ACCOUNT_PUBLIC_ACCESS_BLOCK,
+
 };
 
 class RGWAccessControlPolicy;
