@@ -509,10 +509,15 @@ def create_simple_monmap(ctx, remote, conf, mons,
     assert addresses, "There are no monitors in config!"
     log.debug('Ceph mon addresses: %s', addresses)
 
+    try:
+        log.debug('writing out conf {c}'.format(c=conf))
+    except:
+        log.debug('my conf logging attempt failed')
     testdir = teuthology.get_testdir(ctx)
     tmp_conf_path = '{tdir}/ceph.tmp.conf'.format(tdir=testdir)
     conf_fp = StringIO()
     conf.write(conf_fp)
+    conf_fp.seek(0)
     teuthology.write_file(remote, tmp_conf_path, conf_fp)
     args = [
         'adjust-ulimits',
