@@ -364,7 +364,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
     )
 
     workunits_file = '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)
-    workunits = sorted(misc.get_file(remote, workunits_file).split('\0'))
+    workunits = sorted(six.ensure_str(misc.get_file(remote, workunits_file)).split('\0'))
     assert workunits
 
     try:
