@@ -41,7 +41,7 @@ do_killall() {
 do_umountall() {
     #VSTART_IP_PORTS is of the format as below
     #"[v[num]:IP:PORT/0,v[num]:IP:PORT/0][v[num]:IP:PORT/0,v[num]:IP:PORT/0]..."
-    VSTART_IP_PORTS=$(bin/ceph mon metadata 2>/dev/null | jq -j '.[].addrs')
+    VSTART_IP_PORTS=$("${CEPH_BIN}"/ceph -c $conf_fn mon metadata 2>/dev/null | jq -j '.[].addrs')
 
     #SRC_MNT_ARRAY is of the format as below
     #SRC_MNT_ARRAY[0] = IP:PORT,IP:PORT,IP:PORT:/
@@ -64,7 +64,7 @@ do_umountall() {
     done
 
     #Get fuse mounts of the cluster
-    CEPH_FUSE_MNTS=$(bin/ceph tell mds.* client ls 2>/dev/null| grep mount_point | tr -d '",' | awk '{print $2}')
+    CEPH_FUSE_MNTS=$("${CEPH_BIN}"/ceph -c $conf_fn tell mds.* client ls 2>/dev/null | grep mount_point | tr -d '",' | awk '{print $2}')
     [ -n "$CEPH_FUSE_MNTS" ] && sudo umount -f $CEPH_FUSE_MNTS
 }
 
