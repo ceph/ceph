@@ -763,6 +763,7 @@ CEPH_RBD_API int rbd_deep_copy_with_progress(rbd_image_t image,
 CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
                                int *max_snaps);
 CEPH_RBD_API void rbd_snap_list_end(rbd_snap_info_t *snaps);
+CEPH_RBD_API int rbd_snap_exists(rbd_image_t image, const char *snapname, bool *exists);
 CEPH_RBD_API int rbd_snap_create(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove2(rbd_image_t image, const char *snap_name,

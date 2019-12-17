@@ -502,6 +502,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_unprotect(rbd_image_t image, const char *snap_name)
     int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
                               int *is_protected)
+    int rbd_snap_exists(rbd_image_t image, const char *snapname, bint *exists)
     int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
     int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
     int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, timespec *timestamp)
@@ -3904,6 +3905,24 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error checking if snapshot %s@%s is protected' % (self.name, name))
         return is_protected == 1
+
+    def snap_exists(self, name):
+        """
+        Find out whether a snapshot is exists.
+
+        :param name: the snapshot to check
+        :type name: str
+        :returns: bool - whether the snapshot is exists
+        """
+        name = cstr(name, 'name')
+        cdef:
+            char *_name = name
+            bint _exists = False
+        with nogil:
+            ret = rbd_snap_exists(self.image, _name, &_exists)
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot exists for %s' % self.name)
+        return bool(_exists != 0)
 
     def get_snap_limit(self):
         """
