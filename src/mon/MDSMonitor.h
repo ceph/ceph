@@ -49,6 +49,13 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   bool prepare_update(MonOpRequestRef op) override;
   bool should_propose(double& delay) override;
 
+  bool should_print_status() const {
+    auto& fs = get_fsmap();
+    auto fs_count = fs.filesystem_count();
+    auto standby_count = fs.get_num_standby();
+    return fs_count > 0 || standby_count > 0;
+  }
+
   void on_active() override;
   void on_restart() override;
 
