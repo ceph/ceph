@@ -31,6 +31,8 @@ illustrates how ``libvirt`` and QEMU use Ceph block devices via ``librbd``.
             |                       QEMU                        |
             +---------------------------------------------------+
             |                      librbd                       |
+            +---------------------------------------------------+
+            |                     librados                      |
             +------------------------+-+------------------------+
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
@@ -107,10 +109,11 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
 
    The ``client.libvirt`` section name should match the cephx user you created
-   above. If SELinux or AppArmor is enabled, note that this could prevent the
-   client process (qemu via libvirt) from writing the logs or admin socket to
-   the destination locations (``/var/log/ceph`` or ``/var/run/ceph``).
-
+   above.
+   If SELinux or AppArmor is enabled, note that this could prevent the client
+   process (qemu via libvirt) from doing some operations, such as writing logs
+   or operate the images or admin socket to the destination locations (``/var/
+   log/ceph`` or ``/var/run/ceph``).
 
 
 Preparing the VM Manager
