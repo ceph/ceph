@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
 
+"""
+Builds integration branches. Something similar to 
+  $ git checkout -b branch-name
+  $ for b in $(get-branches-from-github) ; do
+  $   git pull b
+
+Requires `~/.github_token`.
+
+
+Usage:
+  build-integration-branch <label> [--no-date]
+  build-integration-branch -h | --help
+
+Options:
+  -h --help   Show this screen.
+  --no-date   Don't add `{postfix}` to the branch name.
+"""
+
 from __future__ import print_function
 
 import json
@@ -13,8 +31,23 @@ try:
 except:
     from urlparse import urljoin
 
-label = sys.argv[1]
+TIME_FORMAT = '%Y-%m-%d-%H%M'
+postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
+
 repo = "ceph/ceph"
+
+try:
+  from docopt import docopt
+  arguments = docopt(__doc__.format(postfix=postfix))
+  print(arguments)
+  label = arguments['<label>']
+  branch = label if arguments['--no-date'] else label + prefix
+except ImportError:
+  # Fallback without docopt.
+  label = sys.argv[1]
+  assert len(sys.argv) == 2
+  branch = label + prefix
+
 
 with open(os.environ['HOME'] + '/.github_token', 'r') as myfile:
     token = myfile.readline().strip()
@@ -47,9 +80,6 @@ for issue in j:
     prtext.append(pr['html_url'] + ' - ' + pr['title'])
 print("--- queried %s prs" % len(prs))
 
-# name branch
-TIME_FORMAT = '%Y-%m-%d-%H%M'
-branch = label + "-" + time.strftime(TIME_FORMAT, time.localtime())
 print("branch %s" % branch)
 
 # assemble
