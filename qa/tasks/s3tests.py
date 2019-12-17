@@ -293,7 +293,8 @@ def run_tests(ctx, config):
         if client_config.get('calling-format') != 'ordinary':
             attrs += ['!fails_with_subdomain']
         args += [
-            '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
+            '{tdir}/s3-tests/virtualenv/bin/python'.format(tdir=testdir),
+            '-m', 'nose',
             '-w',
             '{tdir}/s3-tests'.format(tdir=testdir),
             '-v',

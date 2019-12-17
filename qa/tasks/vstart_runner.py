@@ -80,7 +80,7 @@ def respawn_in_path(lib_path, python_paths):
     else:
         lib_path_var = "LD_LIBRARY_PATH"
 
-    py_binary = os.environ.get("PYTHON", "python")
+    py_binary = os.environ.get("PYTHON", "python3")
 
     if lib_path_var in os.environ:
         if lib_path not in os.environ[lib_path_var]:
