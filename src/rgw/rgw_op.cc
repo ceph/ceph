@@ -50,6 +50,7 @@
 #include "rgw_perf_counters.h"
 #include "rgw_notify.h"
 #include "rgw_notify_event_type.h"
+#include "rgw_opa.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -7709,6 +7710,11 @@ void RGWPutBucketPolicy::execute()
 	op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							      &s->bucket_info.objv_tracker,
 							      s->yield);
+    
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    rgw_send_policy_to_opa(&this, s);
+  }
+
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -7785,6 +7791,11 @@ void RGWDeleteBucketPolicy::execute()
       op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							    &s->bucket_info.objv_tracker,
 							    s->yield);
+      
+      if (s->cct->_conf->rgw_use_opa_authz) {
+        rgw_send_policy_to_opa(&this, s);
+      }
+
       return op_ret;
     });
 }
