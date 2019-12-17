@@ -623,16 +623,16 @@ TEST_P(KVTest, RocksDB_estimate_size) {
     bufferlist v1;
     v1.append(string(1000, '1'));
     for (int i = 0; i < 100; i++)
-      t->set("A", to_string(rand()%100000), v1);
+      t->set("A", to_string(i%10)+to_string(1000 * test + i), v1);
     db->submit_transaction_sync(t);
     db->compact();
 
     int64_t size_a = db->estimate_prefix_size("A","");
-    ASSERT_GT(size_a, (test + 1) * 1000 * 100 * 0.5);
-    ASSERT_LT(size_a, (test + 1) * 1000 * 100 * 1.5);
+    ASSERT_GT(size_a, (test + 1) * 1000 * 100 * 0.8);
+    ASSERT_LT(size_a, (test + 1) * 1000 * 100 * 1.2);
     int64_t size_a1 = db->estimate_prefix_size("A","1");
-    ASSERT_GT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 0.5);
-    ASSERT_LT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 1.5);
+    ASSERT_GT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 0.8);
+    ASSERT_LT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 1.2);
     int64_t size_b = db->estimate_prefix_size("B","");
     ASSERT_EQ(size_b, 0);
   }
@@ -656,16 +656,16 @@ TEST_P(KVTest, RocksDB_estimate_size_column_family) {
     bufferlist v1;
     v1.append(string(1000, '1'));
     for (int i = 0; i < 100; i++)
-      t->set("cf1", to_string(rand()%100000), v1);
+      t->set("cf1", to_string(i%10) + to_string(1000 * test + i), v1);
     db->submit_transaction_sync(t);
     db->compact();
 
     int64_t size_a = db->estimate_prefix_size("cf1","");
-    ASSERT_GT(size_a, (test + 1) * 1000 * 100 * 0.5);
-    ASSERT_LT(size_a, (test + 1) * 1000 * 100 * 1.5);
+    ASSERT_GT(size_a, (test + 1) * 1000 * 100 * 0.8);
+    ASSERT_LT(size_a, (test + 1) * 1000 * 100 * 1.2);
     int64_t size_a1 = db->estimate_prefix_size("cf1","1");
-    ASSERT_GT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 0.5);
-    ASSERT_LT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 1.5);
+    ASSERT_GT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 0.8);
+    ASSERT_LT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 1.2);
     int64_t size_b = db->estimate_prefix_size("B","");
     ASSERT_EQ(size_b, 0);
   }
