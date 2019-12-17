@@ -1958,7 +1958,11 @@ def command_rm_cluster():
 ##################################
 
 def check_time_sync():
-    units = ['chronyd.service', 'systemd-timesyncd.service', 'ntpd.service']
+    units = [
+        'chronyd.service', 'systemd-timesyncd.service',
+        'ntpd.service', # el7 (at least)
+        'ntp.service',  # 18.04 (at least)
+    ]
     for u in units:
         (enabled, state) = check_unit(u)
         if enabled and state == 'running':
