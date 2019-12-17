@@ -196,7 +196,7 @@ class UserTest(DashboardTestCase):
         })
         self.assertStatus(400)
         self.assertError('password_policy_validation_failed', 'user',
-                         'Password cannot be the same as the previous one.')
+                         'Password must not be the same as the previous one.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_username(self):
@@ -208,7 +208,7 @@ class UserTest(DashboardTestCase):
         })
         self.assertStatus(400)
         self.assertError('password_policy_validation_failed', 'user',
-                         'Password cannot contain username.')
+                         'Password must not contain username.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_forbidden_words(self):
@@ -220,7 +220,7 @@ class UserTest(DashboardTestCase):
         })
         self.assertStatus(400)
         self.assertError('password_policy_validation_failed', 'user',
-                         'Password cannot contain keywords.')
+                         'Password must not contain keywords.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_sequential_characters(self):
@@ -232,7 +232,7 @@ class UserTest(DashboardTestCase):
         })
         self.assertStatus(400)
         self.assertError('password_policy_validation_failed', 'user',
-                         'Password cannot contain sequential characters.')
+                         'Password must not contain sequential characters.')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_repetetive_characters(self):
@@ -244,7 +244,7 @@ class UserTest(DashboardTestCase):
         })
         self.assertStatus(400)
         self.assertError('password_policy_validation_failed', 'user',
-                         'Password cannot contain repetitive characters.')
+                         'Password must not contain repetitive characters.')
         self._reset_login_to_admin('test1')
 
     def test_change_password(self):
@@ -400,65 +400,79 @@ class UserTest(DashboardTestCase):
             'credits': JLeaf(int),
             'valuation': JLeaf(str)
         }))
-        self.assertTrue(data['valid'])
-        self.assertEqual(data['credits'], 11)
-        self.assertEqual(data['valuation'], 'Weak')
+        self.assertJsonBody({
+            'valid': True,
+            'credits': 11,
+            'valuation': 'Weak'
+        })
 
     def test_validate_password_ok(self):
-        data = self._post('/api/user/validate_password', {
+        self._post('/api/user/validate_password', {
             'password': 'mypassword1!@'
         })
         self.assertStatus(200)
-        self.assertTrue(data['valid'])
-        self.assertEqual(data['credits'], 17)
-        self.assertEqual(data['valuation'], 'OK')
+        self.assertJsonBody({
+            'valid': True,
+            'credits': 17,
+            'valuation': 'OK'
+        })
 
     def test_validate_password_strong(self):
-        data = self._post('/api/user/validate_password', {
+        self._post('/api/user/validate_password', {
             'password': 'testpassword0047!@'
         })
         self.assertStatus(200)
-        self.assertTrue(data['valid'])
-        self.assertEqual(data['credits'], 22)
-        self.assertEqual(data['valuation'], 'Strong')
+        self.assertJsonBody({
+            'valid': True,
+            'credits': 22,
+            'valuation': 'Strong'
+        })
 
     def test_validate_password_very_strong(self):
-        data = self._post('/api/user/validate_password', {
+        self._post('/api/user/validate_password', {
             'password': 'testpassword#!$!@$'
         })
         self.assertStatus(200)
-        self.assertTrue(data['valid'])
-        self.assertEqual(data['credits'], 30)
-        self.assertEqual(data['valuation'], 'Very strong')
+        self.assertJsonBody({
+            'valid': True,
+            'credits': 30,
+            'valuation': 'Very strong'
+        })
 
     def test_validate_password_fail(self):
-        data = self._post('/api/user/validate_password', {
+        self._post('/api/user/validate_password', {
             'password': 'foo'
         })
         self.assertStatus(200)
-        self.assertFalse(data['valid'])
-        self.assertEqual(data['credits'], 0)
-        self.assertEqual(data['valuation'], 'Password is too weak.')
+        self.assertJsonBody({
+            'valid': False,
+            'credits': 0,
+            'valuation': 'Password is too weak.'
+        })
 
     def test_validate_password_fail_name(self):
-        data = self._post('/api/user/validate_password', {
+        self._post('/api/user/validate_password', {
             'password': 'x1zhugo_10',
             'username': 'hugo'
         })
         self.assertStatus(200)
-        self.assertFalse(data['valid'])
-        self.assertEqual(data['credits'], 0)
-        self.assertEqual(data['valuation'], 'Password cannot contain username.')
+        self.assertJsonBody({
+            'valid': False,
+            'credits': 0,
+            'valuation': 'Password must not contain username.'
+        })
 
     def test_validate_password_fail_oldpwd(self):
-        data = self._post('/api/user/validate_password', {
+        self._post('/api/user/validate_password', {
             'password': 'x1zt-st10',
             'old_password': 'x1zt-st10'
         })
         self.assertStatus(200)
-        self.assertFalse(data['valid'])
-        self.assertEqual(data['credits'], 0)
-        self.assertEqual(data['valuation'], 'Password cannot be the same as the previous one.')
+        self.assertJsonBody({
+            'valid': False,
+            'credits': 0,
+            'valuation': 'Password must not be the same as the previous one.'
+        })
 
     @DashboardTestCase.RunAs('test', 'test', [{'user': ['read', 'delete']}])
     def test_validate_password_invalid_permissions(self):
@@ -466,4 +480,4 @@ class UserTest(DashboardTestCase):
             'password': 'foo'
         })
         self.assertStatus(403)
-        self.assertError(code='invalid_credentials', component='auth')
+        self.assertError(detail='You don\'t have permissions to access that resource')
