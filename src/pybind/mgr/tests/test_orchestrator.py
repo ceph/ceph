@@ -27,6 +27,7 @@ from orchestrator import parse_host_specs
 def test_parse_host_specs(test_input, expected, require_network):
     ret = parse_host_specs(test_input, require_network=require_network)
     assert ret == expected
+    assert str(ret) == test_input
 
 @pytest.mark.parametrize("test_input",
                          # wrong subnet

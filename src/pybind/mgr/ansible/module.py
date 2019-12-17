@@ -12,7 +12,7 @@ import errno
 import tempfile
 
 try:
-    from typing import List, Optional, Callable
+    from typing import List, Optional, Callable, Any
 except ImportError:
     pass # just for type checking
 
@@ -144,6 +144,7 @@ def playbook_operation(client,  # type: Client
 
             # Clean hosts if operation is succesful
             if status == ExecutionStatusCode.SUCCESS:
+                assert clean_hosts_on_success is not None
                 clean_inventory(client, clean_hosts_on_success)
 
             return processed_result
@@ -208,7 +209,7 @@ def ars_change(client, operations, output_wizard=None):
 
 
 def ars_read(client, url, get_operation=True, payload=None, output_wizard=None):
-    # type: (Client, str, bool, Optional[str], Optional[OutputWizard]) -> orchestrator.Completion[str]
+    # type: (Client, str, bool, Optional[str], Optional[OutputWizard]) -> orchestrator.Completion
     """
     Execute the Ansible Runner Service operation
 
@@ -241,7 +242,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         self.all_completions = []
 
-        self.ar_client = None  # type: Client
+        self._ar_client = None  # type: Optional[Client]
 
         # TLS certificate and key file names used to connect with the external
         # Ansible Runner Service
@@ -253,6 +254,11 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         self.all_progress_references = list()  # type: List[orchestrator.ProgressReference]
 
+    @property
+    def ar_client(self):
+        # type: () -> Client
+        assert self._ar_client is not None
+        return self._ar_client
 
     def available(self):
         """ Check if Ansible Runner service is working
@@ -261,7 +267,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         msg = ""
         try:
 
-            if self.ar_client:
+            if self._ar_client:
                 available = self.ar_client.is_operative()
                 if not available:
                     msg = "No response from Ansible Runner Service"
@@ -300,7 +306,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
             self.verify_config()
 
             # Ansible runner service client
-            self.ar_client = Client(
+            self._ar_client = Client(
                 server_url=self.get_module_option('server_location', ''),
                 verify_server=self.get_module_option('verify_server', True),
                 ca_bundle=self.get_module_option('ca_bundle', ''),
@@ -440,7 +446,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         :returns : orchestrator.Completion
         """
 
-        host_groups = []
+        host_groups = []  # type: List[Any]
 
         try:
             # Get the list of groups where the host is included
@@ -481,7 +487,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
 
         # Add the hosts to the inventory in the right group
-        hosts = spec.hosts
+        hosts = spec.placement.hosts
         if not hosts:
             raise orchestrator.OrchestratorError("No hosts provided. "
                 "At least one destination host is needed to install the RGW "
@@ -510,7 +516,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         InventoryGroup("rgws", self.ar_client).update(hosts)
 
         # Limit playbook execution to certain hosts
-        limited = ",".join(hosts)
+        limited = ",".join(str(host) for host in hosts)
 
         # Add the settings for this service
         extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}

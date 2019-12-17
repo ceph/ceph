@@ -34,7 +34,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-HostSpec = namedtuple('HostSpec', ['hostname', 'network', 'name'])
+class HostSpec(namedtuple('HostSpec', ['hostname', 'network', 'name'])):
+    def __str__(self):
+        res = ''
+        res += self.hostname
+        if self.network:
+            res += ':' + self.network
+        if self.name:
+            res += '=' + self.name
+        return res
 
 
 def parse_host_specs(host, require_network=True):
@@ -1042,22 +1050,23 @@ class PlacementSpec(object):
     """
     For APIs that need to specify a node subset
     """
-    def __init__(self, label=None, nodes=None, count=None):
+    def __init__(self, label=None, hosts=None, count=None):
         # type: (Optional[str], Optional[List], Optional[int]) -> None
         self.label = label
-        if nodes:
-            if all([isinstance(node, HostSpec) for node in nodes]):
-                self.nodes = nodes
+        if hosts:
+            if all([isinstance(host, HostSpec) for host in hosts]):
+                self.hosts = hosts  # type: List[HostSpec]
             else:
-                self.nodes = [parse_host_specs(x, require_network=False) for x in nodes if x]
+                self.hosts = [parse_host_specs(x, require_network=False) for x in hosts if x]
         else:
-            self.nodes = []
+            self.hosts = []
+
         self.count = count  # type: Optional[int]
 
-    def set_nodes(self, nodes):
-        # To backpopulate the .nodes attribute when using labels or count
+    def set_hosts(self, hosts):
+        # To backpopulate the .hosts attribute when using labels or count
         # in the orchestrator backend.
-        self.nodes = nodes
+        self.hosts = hosts
 
     @classmethod
     def from_dict(cls, data):
@@ -1066,7 +1075,7 @@ class PlacementSpec(object):
         return _cls
 
     def validate(self):
-        if self.nodes and self.label:
+        if self.hosts and self.label:
             # TODO: a less generic Exception
             raise Exception('Node and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
@@ -1185,9 +1194,15 @@ class StatefulServiceSpec(object):
     """
     # TODO: create base class for Stateless/Stateful service specs and propertly inherit
     def __init__(self, name=None, placement=None):
-        self.placement = PlacementSpec() if placement is None else placement
+        # type: (Optional[str], Optional[PlacementSpec]) -> None
+        self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
         self.name = name
-        self.count = self.placement.count if self.placement is not None else 1  # for backwards-compatibility
+
+        # for backwards-compatibility
+        if self.placement is not None and self.placement.count is not None:
+            self.count = self.placement.count
+        else:
+            self.count = 1
 
 
 class StatelessServiceSpec(object):
@@ -1203,12 +1218,12 @@ class StatelessServiceSpec(object):
     # start the services.
 
     def __init__(self, name, placement=None):
-        self.placement = PlacementSpec() if placement is None else placement
+        self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         #: Give this set of statelss services a name: typically it would
         #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
         #: within one ceph cluster.
-        self.name = name
+        self.name = name  # type: str
 
         #: Count of service instances
         self.count = self.placement.count if self.placement is not None else 1  # for backwards-compatibility
@@ -1265,7 +1280,7 @@ class RGWSpec(StatelessServiceSpec):
 
         #: List of hosts where RGWs should run. Not for Rook.
         if hosts:
-            self.placement.hosts = hosts
+            self.placement = PlacementSpec(hosts=hosts)
 
         #: is multisite
         self.rgw_multisite = rgw_multisite

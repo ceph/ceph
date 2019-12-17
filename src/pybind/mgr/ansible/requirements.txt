@@ -1,5 +1,0 @@
-tox==2.9.1
-pytest
-mock
-requests-mock
--e ../../../python-common
