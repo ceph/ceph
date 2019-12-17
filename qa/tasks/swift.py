@@ -151,7 +151,8 @@ def run_tests(ctx, config):
     for client, client_config in config.items():
         args = [
                 'SWIFT_TEST_CONFIG_FILE={tdir}/archive/testswift.{client}.conf'.format(tdir=testdir, client=client),
-                '{tdir}/swift/virtualenv/bin/nosetests'.format(tdir=testdir),
+                '{tdir}/swift/virtualenv/bin/python'.format(tdir=testdir),
+                '-m', 'nose',
                 '-w',
                 '{tdir}/swift/test/functional'.format(tdir=testdir),
                 '-v',

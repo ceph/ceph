@@ -10,5 +10,5 @@ tasks:
               'dump', 'indent']
         rpm: ['bison', 'flex', 'elfutils-libelf-devel', 'openssl-devel',
               # for xfstests-dev
-              'libaio-dev']
+              'libaio-devel']
   - ceph:
