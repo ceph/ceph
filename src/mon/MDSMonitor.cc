@@ -1503,29 +1503,33 @@ int MDSMonitor::filesystem_command(
 
 void MDSMonitor::check_subs()
 {
-  std::list<std::string> types;
-
   // Subscriptions may be to "mdsmap" (MDS and legacy clients),
   // "mdsmap.<namespace>", or to "fsmap" for the full state of all
   // filesystems.  Build a list of all the types we service
   // subscriptions for.
-  types.push_back("fsmap");
-  types.push_back("fsmap.user");
-  types.push_back("mdsmap");
+
+  std::vector<std::string> types = {
+    "fsmap",
+    "fsmap.user",
+    "mdsmap",
+  };
+
   for (const auto &p : get_fsmap().filesystems) {
     const auto &fscid = p.first;
-    std::ostringstream oss;
-    oss << "mdsmap." << fscid;
-    types.push_back(oss.str());
+    CachedStackStringStream cos;
+    *cos << "mdsmap." << fscid;
+    types.push_back(std::string(cos->strv()));
   }
 
   for (const auto &type : types) {
-    if (mon->session_map.subs.count(type) == 0)
+    auto& subs = mon->session_map.subs;
+    auto subs_it = subs.find(type);
+    if (subs_it == subs.end())
       continue;
-    xlist<Subscription*>::iterator p = mon->session_map.subs[type]->begin();
-    while (!p.end()) {
-      Subscription *sub = *p;
-      ++p;
+    auto sub_it = subs_it->second->begin();
+    while (!sub_it.end()) {
+      auto sub = *sub_it;
+      ++sub_it; // N.B. check_sub may remove sub!
       check_sub(sub);
     }
   }
