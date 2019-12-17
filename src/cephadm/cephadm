@@ -1530,7 +1530,10 @@ def command_pull():
         '--format', '{{.Id}}',
         args.image])
     ver = CephContainer(args.image, 'ceph', ['--version']).run()
-    print(out.strip() + ',' + ver)
+    print(json.dumps({
+        'ceph_version': ver,
+        'image_id': out.strip(),
+        }, indent=4, sort_keys=True))
 
 
 ##################################

@@ -1528,7 +1528,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             host, None, 'pull', [],
             image=image_name,
             no_fsid=True)
-        (image_id, ceph_version) = out[0].split(',', 1)
+        j = json.loads('\n'.join(out))
+        image_id = j.get('image_id')
+        ceph_version = j.get('ceph_version')
         self.log.debug('image %s -> id %s version %s' %
                        (image_name, image_id, ceph_version))
         return image_id, ceph_version
