@@ -3009,8 +3009,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	mgrmon()->get_map().print_summary(nullptr, &ss);
 	ss << "\n";
       }
-      if (mdsmon()->get_fsmap().filesystem_count() > 0) {
-	ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
+      if (mdsmon()->should_print_status()) {
+        ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
       }
       ss << "    osd: " << spacing;
       osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
