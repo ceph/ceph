@@ -262,7 +262,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                             host_.name,
                             d.path,
                             d.human_readable_type,
-                            format_bytes(d.sys_api.get('size', 0), 5, colored=False),
+                            format_bytes(d.sys_api.get('size', 0), 5),
                             d.device_id,
                             d.available,
                             ', '.join(d.rejected_reasons)
