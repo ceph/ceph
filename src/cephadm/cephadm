@@ -1788,6 +1788,13 @@ def list_daemons(detail=True, legacy_dir=None):
                             verbose_on_failure=False)
                         if not code:
                             (container_id, image_name, image_id) = out.strip().split(',')
+                            # docker adds the sha256: prefix, but AFAICS both
+                            # docker (18.09.7 in bionic at least) and podman
+                            # both always use sha256, so leave off the prefix
+                            # for consistency.
+                            prefix = 'sha256:'
+                            if image_name.startswith(prefix):
+                                image_name = image_name[len(prefix):]
                             out, err, code = call(
                                 [container_path, 'exec', container_id,
                                  'ceph', '-v'])
