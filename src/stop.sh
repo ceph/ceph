@@ -114,8 +114,10 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $stop_all -eq 1 ]; then
-    #Umount mounted filesystems from vstart cluster
-    do_umountall
+    if "${CEPH_BIN}"/ceph -s --connect-timeout 1 -c $conf_fn >/dev/null 2>&1; then
+        # Umount mounted filesystems from vstart cluster
+        do_umountall
+    fi
 
     if "${CEPH_BIN}"/rbd device list -c $conf_fn >/dev/null 2>&1; then
         "${CEPH_BIN}"/rbd device list -c $conf_fn | tail -n +2 |
