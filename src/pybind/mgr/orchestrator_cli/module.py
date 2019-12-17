@@ -247,24 +247,28 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         else:
             out = []
 
+            table = PrettyTable(
+                ['HOST', 'PATH', 'TYPE', 'SIZE', 'DEVICE', 'AVAIL',
+                 'REJECT REASONS'],
+                border=False)
+            table.align = 'l'
+            table._align['SIZE'] = 'r'
+            table.left_padding_width = 0
+            table.right_padding_width = 1
             for host in completion.result: # type: orchestrator.InventoryNode
-                out.append('Host {}:'.format(host.name))
-                table = PrettyTable(
-                    ['Path', 'Type', 'Size', 'Available', 'Ceph Device ID', 'Reject Reasons'],
-                    border=False)
-                table._align['Path'] = 'l'
                 for d in host.devices.devices:  # type: Device
                     table.add_row(
                         (
+                            host.name,
                             d.path,
                             d.human_readable_type,
                             format_bytes(d.sys_api.get('size', 0), 5, colored=False),
-                            d.available,
                             d.device_id,
+                            d.available,
                             ', '.join(d.rejected_reasons)
                         )
                     )
-                out.append(table.get_string())
+            out.append(table.get_string())
             return HandleCommandResult(stdout='\n'.join(out))
 
     @orchestrator._cli_read_command(
