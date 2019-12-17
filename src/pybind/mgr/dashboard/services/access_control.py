@@ -123,15 +123,15 @@ class PasswordPolicy(object):
         if self.check_password_characters() < 10 or not self.check_password_length():
             raise PasswordPolicyException('Password is too weak.')
         if self.check_is_old_password():
-            raise PasswordPolicyException('Password cannot be the same as the previous one.')
+            raise PasswordPolicyException('Password must not be the same as the previous one.')
         if self.check_if_contains_username():
-            raise PasswordPolicyException('Password cannot contain username.')
+            raise PasswordPolicyException('Password must not contain username.')
         if self.check_if_contains_forbidden_words():
-            raise PasswordPolicyException('Password cannot contain keywords.')
+            raise PasswordPolicyException('Password must not contain keywords.')
         if self.check_if_repetetive_characters():
-            raise PasswordPolicyException('Password cannot contain repetitive characters.')
+            raise PasswordPolicyException('Password must not contain repetitive characters.')
         if self.check_if_sequential_characters():
-            raise PasswordPolicyException('Password cannot contain sequential characters.')
+            raise PasswordPolicyException('Password must not contain sequential characters.')
 
 
 class Role(object):
