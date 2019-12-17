@@ -907,7 +907,7 @@ def grub2_kernel_select_generic(remote, newversion, ostype):
     remote.run(args=['sudo', mkconfig, '-o', grubconfig, ])
     grub2conf = teuthology.get_file(remote, grubconfig, True)
     entry_num = 0
-    if '\nmenuitem ' not in grub2conf:
+    if '\nmenuentry ' not in grub2conf:
         # okay, do the newer (el8) grub2 thing
         grub2conf = remote.sh('sudo /bin/ls /boot/loader/entries || true')
         entry = None
