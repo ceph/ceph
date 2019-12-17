@@ -1,0 +1,25 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - missing required features
+tasks:
+- exec:
+    mon.a:
+      - ceph fs dump --format=json-pretty
+      - ceph fs volume ls
+      - ceph fs subvolume ls cephfs
+- workunit:
+   clients:
+     client.0:
+     - fs/upgrade/volume_client
+   env:
+     ACTION: verify
+   cleanup: false
+- workunit:
+   clients:
+     client.1:
+     - fs/upgrade/volume_client
+   env:
+     ACTION: verify
+   cleanup: false
+- print: "**** fs/volume_client verify"
