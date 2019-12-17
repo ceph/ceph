@@ -13,6 +13,7 @@ import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { SharedModule } from '../../shared/shared.module';
 import { BlockModule } from '../block/block.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
+import { CrushRulesetFormComponent } from './crush-ruleset-form/crush-ruleset-form.component';
 import { ErasureCodeProfileFormComponent } from './erasure-code-profile-form/erasure-code-profile-form.component';
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
@@ -36,10 +37,11 @@ import { PoolListComponent } from './pool-list/pool-list.component';
   declarations: [
     PoolListComponent,
     PoolFormComponent,
+    CrushRulesetFormComponent,
     ErasureCodeProfileFormComponent,
     PoolDetailsComponent
   ],
-  entryComponents: [ErasureCodeProfileFormComponent]
+  entryComponents: [CrushRulesetFormComponent, ErasureCodeProfileFormComponent]
 })
 export class PoolModule {}
 

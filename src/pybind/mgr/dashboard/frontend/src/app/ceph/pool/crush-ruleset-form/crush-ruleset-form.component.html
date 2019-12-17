@@ -1,0 +1,109 @@
+<div class="modal-header">
+  <h4 i18n="form title|Example: Create Pool@@formTitle"
+      class="modal-title float-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+
+  <button type="button"
+          class="close float-right"
+          aria-label="Close"
+          (click)="bsModalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+
+<form #frm="ngForm"
+      [formGroup]="form"
+      novalidate>
+  <div class="modal-body">
+
+    <div class="form-group row">
+      <label for="name"
+             class="col-form-label col-sm-3">
+        <ng-container i18n>Name</ng-container>
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input type="text"
+               id="name"
+               name="name"
+               class="form-control"
+               placeholder="Name..."
+               formControlName="name"
+               autofocus>
+        <span class="invalid-feedback"
+              *ngIf="form.showError('name', frm, 'required')"
+              i18n>This field is required.</span>
+        <span class="invalid-feedback"
+              *ngIf="form.showError('name', frm, 'uniqueName')"
+              i18n>The chosen crush ruleset name is already in use.</span>
+      </div>
+    </div>
+
+    <div class="form-group row">
+      <label for="root"
+             class="col-form-label col-sm-3">
+        <ng-container i18n>Root</ng-container>
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input type="text"
+               id="root"
+               name="root"
+               class="form-control"
+               placeholder="Root..."
+               formControlName="root"
+               autofocus>
+        <span class="invalid-feedback"
+              *ngIf="form.showError('root', frm, 'required')"
+              i18n>This field is required.</span>
+      </div>
+    </div>
+
+    <div class="form-group row">
+      <label for="failureDomainType"
+             class="col-form-label col-sm-3">
+        <ng-container i18n>Failure Domain Type</ng-container>
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input type="text"
+               id="failureDomainType"
+               name="failureDomainType"
+               class="form-control"
+               placeholder="Failure Domain Type..."
+               formControlName="failureDomainType"
+               autofocus>
+        <span class="invalid-feedback"
+              *ngIf="form.showError('failureDomainType', frm, 'required')"
+              i18n>This field is required.</span>
+      </div>
+    </div>
+
+    <div class="form-group row">
+      <label for="deviceClass"
+             class="col-form-label col-sm-3">
+        <ng-container i18n>Device class</ng-container>
+      </label>
+      <div class="col-sm-9">
+        <select class="form-control custom-select"
+                id="deviceClass"
+                name="deviceClass"
+                formControlName="deviceClass">
+          <option ngValue=""
+                  i18n>any</option>
+          <option *ngFor="let deviceClass of devices"
+                  [ngValue]="deviceClass">
+            {{ deviceClass }}
+          </option>
+        </select>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="modal-footer">
+    <cd-submit-button (submitAction)="onSubmit()"
+                      i18n="form action button|Example: Create Pool@@formActionButton"
+                      [form]="frm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+    <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+  </div>
+</form>

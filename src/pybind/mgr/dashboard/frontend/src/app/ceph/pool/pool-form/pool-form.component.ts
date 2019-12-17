@@ -33,6 +33,7 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
 import { ErasureCodeProfileFormComponent } from '../erasure-code-profile-form/erasure-code-profile-form.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
+import { CrushRulesetFormComponent } from '../crush-ruleset-form/crush-ruleset-form.component';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -517,6 +518,12 @@ export class PoolFormComponent implements OnInit {
     this.bsModalService.show(ErasureCodeProfileFormComponent);
   }
 
+  addCrushRuleset() {
+    // TODO
+    // this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
+    this.bsModalService.show(CrushRulesetFormComponent);
+  }
+
   private reloadECPs() {
     this.ecpService.list().subscribe((profiles: ErasureCodeProfile[]) => this.initEcp(profiles));
     this.modalSubscription.unsubscribe();
@@ -540,6 +547,10 @@ export class PoolFormComponent implements OnInit {
           })
       }
     });
+  }
+
+  deleteCrushRuleset() {
+    // TODO
   }
 
   submit() {

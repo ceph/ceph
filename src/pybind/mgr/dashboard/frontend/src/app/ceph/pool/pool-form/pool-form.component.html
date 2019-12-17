@@ -296,6 +296,20 @@
                       <i [ngClass]="[icons.questionCircle]"
                          aria-hidden="true"></i>
                     </button>
+                    <button class="btn btn-light"
+                            type="button"
+                            [disabled]="editing"
+                            (click)="addCrushRuleset()">
+                      <i [ngClass]="[icons.add]"
+                         aria-hidden="true"></i>
+                    </button>
+                    <button class="btn btn-light"
+                            type="button"
+                            (click)="deleteCrushRuleset()"
+                            [disabled]="editing || ecProfiles.length < 1">
+                      <i [ngClass]="[icons.trash]"
+                         aria-hidden="true"></i>
+                    </button>
                   </span>
                 </div>
                 <span class="form-text text-muted"
