@@ -150,6 +150,25 @@ class TestCephadm(object):
             c = cephadm_module.create_osds(dg)
             assert self._wait(cephadm_module, c) == "Created osd(s) on host 'test'"
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
+        json.dumps([
+            dict(
+                name='osd.0',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                version='version',
+                state='running',
+            )
+        ])
+    ))
+    def test_remove_osds(self, cephadm_module):
+        cephadm_module._cluster_fsid = "fsid"
+        with self._with_host(cephadm_module, 'test'):
+            c = cephadm_module.remove_osds(['0'])
+            out = self._wait(cephadm_module, c)
+            assert out == ["Removed osd.0 from host 'test'"]
+
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
@@ -213,3 +232,4 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.blink_device_light('ident', True, [('test', '')])
             assert self._wait(cephadm_module, c) == ['Set ident light for test: on']
+
