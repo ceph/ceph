@@ -64,18 +64,13 @@ Adding an MDS
 
 #. Create an mds data point ``/var/lib/ceph/mds/ceph-${id}``. The daemon only uses this directory to store its keyring.
 
-#. Edit ``ceph.conf`` and add MDS section. ::
-
-	[mds.${id}]
-	host = {hostname}
-
 #. Create the authentication key, if you use CephX. ::
 
 	$ sudo ceph auth get-or-create mds.${id} mon 'profile mds' mgr 'profile mds' mds 'allow *' osd 'allow *' > /var/lib/ceph/mds/ceph-${id}/keyring
 
 #. Start the service. ::
 
-	$ sudo systemctl start mds.${id}
+	$ sudo systemctl start ceph-mds@${id}
 
 #. The status of the cluster should show: ::
 
@@ -95,7 +90,7 @@ the following method.
 
 #. Stop the MDS to be removed. ::
 
-	$ sudo systemctl stop mds.${id}
+	$ sudo systemctl stop ceph-mds@${id}
 
    The MDS will automatically notify the Ceph monitors that it is going down.
    This enables the monitors to perform instantaneous failover to an available
