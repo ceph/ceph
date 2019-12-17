@@ -1,3 +1,6 @@
+# ragweed uses nosetests, so stick to py2 for now
+os_type: ubuntu
+
 tasks:
 - install:
 - ceph:
