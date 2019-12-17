@@ -748,7 +748,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         data = json.loads(''.join(out))
         self.log.error('refreshed host %s services: %s' % (host, data))
         self.service_cache[host] = orchestrator.OutdatableData(data)
-        return data
+        return host, data
 
     def _get_services(self,
                       service_type=None,
@@ -758,23 +758,22 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                       refresh=False):
         hosts = []
         wait_for_args = []
-        in_cache = []
+        services = {}
         keys = None
         if node_name is not None:
             keys = [node_name]
         for host, host_info in self.service_cache.items_filtered(keys):
             hosts.append(host)
             if host_info.outdated(self.service_cache_timeout) or refresh:
-                self.log.info("refresing stale services for '{}'".format(host))
+                self.log.info("refreshing stale services for '{}'".format(host))
                 wait_for_args.append((host,))
             else:
                 self.log.debug('have recent services for %s: %s' % (
                     host, host_info.data))
-                in_cache.append(host_info.data)
+                services[host] = host_info.data
 
         def _get_services_result(results):
-            services = {}
-            for host, data in zip(hosts, results + in_cache):
+            for host, data in results:
                 services[host] = data
 
             result = []
@@ -786,7 +785,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                     if d['fsid'] != self._cluster_fsid:
                         self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
                         continue
-                    self.log.debug('including %s' % d)
+                    self.log.debug('including %s %s' % (host, d))
                     sd = orchestrator.ServiceDescription()
                     sd.service_type = d['name'].split('.')[0]
                     if service_type and service_type != sd.service_type:
