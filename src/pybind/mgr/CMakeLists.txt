@@ -2,7 +2,6 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
   add_subdirectory(dashboard)
 endif()
 add_subdirectory(insights)
-add_subdirectory(ansible)
 
 if(WITH_TESTS)
   include(AddCephTest)

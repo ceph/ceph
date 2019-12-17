@@ -1,7 +1,8 @@
 import logging
 import unittest
-import mock
+from tests import mock
 import json
+import os
 
 import requests_mock
 
@@ -20,7 +21,7 @@ PB_NAME = "test_playbook"
 PB_UUID = "1733c3ac"
 
 # Playbook execution data file
-PB_EVENTS_FILE = "./tests/pb_execution_events.data"
+PB_EVENTS_FILE = os.path.dirname( __file__) + "/pb_execution_events.data"
 
 # create console handler and set level to info
 logger = logging.getLogger()
