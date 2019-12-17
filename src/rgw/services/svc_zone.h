@@ -77,6 +77,7 @@ public:
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
   bool get_redirect_zone_endpoint(string *endpoint);
+  bool sync_module_supports_writes() const;
 
   RGWRESTConn *get_master_conn() {
     return rest_master_conn;
