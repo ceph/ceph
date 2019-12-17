@@ -1176,3 +1176,44 @@ class TestVolumes(CephFSTestCase):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+    def test_subvolume_upgrade(self):
+        """
+        poor man's upgrade test -- rather than going through a full upgrade cycle,
+        emulate subvolumes by going through the wormhole and verify if they are
+        accessible.
+        """
+        subvolume1, subvolume2 = self._generate_random_subvolume_name(2)
+        group = self._generate_random_group_name()
+
+        # emulate a old-fashioned subvolume -- one in the default group and
+        # the other in a custom group
+        createpath1 = os.path.join(".", "volumes", "_nogroup", subvolume1)
+        self.mount_a.run_shell(['mkdir', '-p', createpath1])
+
+        # create group
+        createpath2 = os.path.join(".", "volumes", group, subvolume2)
+        self.mount_a.run_shell(['mkdir', '-p', createpath2])
+
+        # this would auto-upgrade on access without anyone noticing
+        subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume1)
+        self.assertNotEqual(subvolpath1, None)
+        subvolpath1 = subvolpath1.rstrip() # remove "/" prefix and any trailing newline
+
+        subvolpath2 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume2, group)
+        self.assertNotEqual(subvolpath2, None)
+        subvolpath2 = subvolpath2.rstrip() # remove "/" prefix and any trailing newline
+
+        # and... the subvolume path returned should be what we created behind the scene
+        self.assertEqual(createpath1[1:], subvolpath1)
+        self.assertEqual(createpath2[1:], subvolpath2)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume1)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume2, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
