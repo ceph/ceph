@@ -1142,11 +1142,12 @@ void MDCache::get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir
   // sort by ino
   map<inodeno_t, fragset_t> byino;
   for (auto& frag : dfs) {
-    byino[frag.ino].insert(frag.frag);
+    byino[frag.ino].insert_raw(frag.frag);
   }
   dout(10) << " by ino: " << byino << dendl;
 
   for (map<inodeno_t,fragset_t>::iterator p = byino.begin(); p != byino.end(); ++p) {
+    p->second.simplify();
     CInode *diri = get_inode(p->first);
     if (!diri)
       continue;
@@ -1203,13 +1204,13 @@ void MDCache::map_dirfrag_set(const list<dirfrag_t>& dfs, set<CDir*>& result)
   // group by inode
   map<inodeno_t, fragset_t> ino_fragset;
   for (const auto &df : dfs) {
-    ino_fragset[df.ino].insert(df.frag);
+    ino_fragset[df.ino].insert_raw(df.frag);
   }
-
   // get frags
   for (map<inodeno_t, fragset_t>::iterator p = ino_fragset.begin();
        p != ino_fragset.end();
        ++p) {
+    p->second.simplify();
     CInode *in = get_inode(p->first);
     if (!in)
       continue;
