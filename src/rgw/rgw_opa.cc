@@ -119,11 +119,11 @@ int rgw_send_policy_to_opa(RGWOp *& op,
   jf.dump_string("params", s->info.request_params.c_str());
   jf.dump_string("request_uri_aws4", s->info.request_uri_aws4.c_str());
   jf.dump_string("object_name", s->object.name.c_str());
-  jf.dump_string("object_acl", s->object_acl);
+  jf.dump_object("object_acl", s->object_acl);
   jf.dump_object("user_info", *s->user);
-  jf.dump_string("user_acl", s->user_acl);
+  jf.dump_object("user_acl", s->user_acl);
   jf.dump_object("bucket_info", s->bucket_info);
-  jf.dump_string("bucket_acl", s->bucket_acl);
+  jf.dump_object("bucket_acl", s->bucket_acl);
   jf.close_section();
   jf.close_section();
 
