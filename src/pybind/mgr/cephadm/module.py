@@ -568,7 +568,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                                            error_ok=True, no_fsid=True)
         if code:
             return 1, '', err
-        return 0, 'host ok', err
+        return 0, '%s ok' % host, err
 
     def _get_connection(self, host):
         """
