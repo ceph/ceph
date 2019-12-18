@@ -23,8 +23,6 @@ from mgr_module import MgrModule
 import orchestrator
 from orchestrator import OrchestratorError, HostSpec, OrchestratorValidationError
 
-from . import remotes
-
 try:
     import remoto
     import remoto.process
@@ -592,8 +590,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             n,
             logger=self.log.getChild(n),
             ssh_options=self._ssh_options)
-
-        conn.import_module(remotes)
 
         return conn
 
