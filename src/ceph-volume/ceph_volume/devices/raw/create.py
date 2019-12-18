@@ -35,7 +35,9 @@ class Create(object):
             # back.
             a = Activate([])
             a.args = self.args
-            a.activate([args.data])
+            a.activate([args.data],
+                       tmpfs=not args.no_tmpfs,
+                       systemd=not args.no_systemd)
         except Exception:
             logger.exception('raw activate was unable to complete, while creating the OSD')
             logger.info('will rollback OSD ID creation')
