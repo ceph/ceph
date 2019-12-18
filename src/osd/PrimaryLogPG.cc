@@ -11266,14 +11266,19 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
     if (pmissing)
       *pmissing = soid;
     put_snapset_context(ssc);
-    if (is_degraded_or_backfilling_object(soid)) {
-      dout(20) << __func__ << " clone is degraded or backfilling " << soid << dendl;
-      return -EAGAIN;
-    } else if (is_degraded_on_async_recovery_target(soid)) {
-      dout(20) << __func__ << " clone is recovering " << soid << dendl;
-      return -EAGAIN;
+    if (is_primary()) {
+      if (is_degraded_or_backfilling_object(soid)) {
+	dout(20) << __func__ << " clone is degraded or backfilling " << soid << dendl;
+	return -EAGAIN;
+      } else if (is_degraded_on_async_recovery_target(soid)) {
+	dout(20) << __func__ << " clone is recovering " << soid << dendl;
+	return -EAGAIN;
+      } else {
+	dout(20) << __func__ << " missing clone " << soid << dendl;
+	return -ENOENT;
+      }
     } else {
-      dout(20) << __func__ << " missing clone " << soid << dendl;
+      dout(20) << __func__ << " replica missing clone" << soid << dendl;
       return -ENOENT;
     }
   }
