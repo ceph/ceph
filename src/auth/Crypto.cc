@@ -41,12 +41,39 @@
 
 #include <unistd.h>
 
-CryptoRandom::CryptoRandom() : fd(0) {}
-CryptoRandom::~CryptoRandom() = default;
+static bool getentropy_works()
+{
+  char buf;
+  auto ret = TEMP_FAILURE_RETRY(::getentropy(&buf, sizeof(buf)));
+  if (ret == 0) {
+    return true;
+  } else if (errno == ENOSYS || errno == EPERM) {
+    return false;
+  } else {
+    throw std::system_error(errno, std::system_category());
+  }
+}
+
+CryptoRandom::CryptoRandom() : fd(getentropy_works() ? -1 : open_urandom())
+{}
+
+CryptoRandom::~CryptoRandom()
+{
+  if (fd >= 0) {
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+  }
+}
 
 void CryptoRandom::get_bytes(char *buf, int len)
 {
-  auto ret = TEMP_FAILURE_RETRY(::getentropy(buf, len));
+  ssize_t ret = 0;
+  if (unlikely(fd >= 0)) {
+    ret = safe_read_exact(fd, buf, len);
+  } else {
+    // getentropy() reads up to 256 bytes
+    assert(len <= 256);
+    ret = TEMP_FAILURE_RETRY(::getentropy(buf, len));
+  }
   if (ret < 0) {
     throw std::system_error(errno, std::system_category());
   }
@@ -56,7 +83,7 @@ void CryptoRandom::get_bytes(char *buf, int len)
 
 // open /dev/urandom once on construction and reuse the fd for all reads
 CryptoRandom::CryptoRandom()
-  : fd(TEMP_FAILURE_RETRY(::open("/dev/urandom", O_CLOEXEC|O_RDONLY)))
+  : fd{open_urandom()}
 {
   if (fd < 0) {
     throw std::system_error(errno, std::system_category());
@@ -78,6 +105,14 @@ void CryptoRandom::get_bytes(char *buf, int len)
 
 #endif
 
+int CryptoRandom::open_urandom()
+{
+  int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_CLOEXEC|O_RDONLY));
+  if (fd < 0) {
+    throw std::system_error(errno, std::system_category());
+  }
+  return fd;
+}
 
 // ---------------------------------------------------
 // fallback implementation of the bufferlist-free
