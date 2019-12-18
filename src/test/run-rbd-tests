@@ -11,10 +11,7 @@ else
     CYTHON_MODULES_DIR=$CEPH_SRC/build
 fi
 
-export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind"
-for x in $CYTHON_MODULES_DIR/lib* ; do
-    PYTHONPATH="${PYTHONPATH}:${x}"
-done
+export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind:$CYTHON_MODULES_DIR/lib.3"
 
 recreate_pool() {
     POOL_NAME=$1

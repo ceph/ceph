@@ -35,23 +35,6 @@ get_cmake_variable() {
 
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
 
-get_build_py_version() {
-    CURR_DIR=`pwd`
-    LOCAL_BUILD_DIR="$CURR_DIR/../../../../$BUILD_DIR"
-    cd "$LOCAL_BUILD_DIR"
-
-    CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
-    if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
-        CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
-    else
-        if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
-            CEPH_PY_VERSION_MAJOR=2
-        else
-            CEPH_PY_VERSION_MAJOR=3
-        fi
-    fi
-}
-
 setup_teuthology() {
     TEMP_DIR=`mktemp -d`
     cd $TEMP_DIR
@@ -116,7 +99,7 @@ run_teuthology_tests() {
 
     export PATH=$LOCAL_BUILD_DIR/bin:$PATH
     source $TEMP_DIR/venv/bin/activate # Run after setting PATH as it does the last PATH export.
-    export LD_LIBRARY_PATH=$LOCAL_BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$LOCAL_BUILD_DIR/lib
+    export LD_LIBRARY_PATH=$LOCAL_BUILD_DIR/lib/cython_modules/lib.3/:$LOCAL_BUILD_DIR/lib
     local source_dir=$(dirname "$LOCAL_BUILD_DIR")
     local pybind_dir=$source_dir/src/pybind
     local python_common_dir=$source_dir/src/python-common
@@ -125,7 +108,7 @@ run_teuthology_tests() {
         export PYBIND=$LOCAL_BUILD_DIR/src/pybind
         pybind_dir=$PYBIND
     fi
-    export PYTHONPATH=$source_dir/qa:$LOCAL_BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
+    export PYTHONPATH=$source_dir/qa:$LOCAL_BUILD_DIR/lib/cython_modules/lib.3/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
     export RGW=${RGW:-1}
 
     export COVERAGE_ENABLED=true
@@ -157,7 +140,6 @@ cleanup_teuthology() {
     unset CURR_DIR
     unset LOCAL_BUILD_DIR
     unset COVERAGE_PATH
-    unset get_build_py_version
     unset setup_teuthology
     unset setup_coverage
     unset on_tests_error
@@ -165,7 +147,6 @@ cleanup_teuthology() {
     unset cleanup_teuthology
 }
 
-get_build_py_version
 setup_teuthology
 setup_coverage
 run_teuthology_tests --create-cluster-only
