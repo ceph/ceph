@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_MIRROR_SNAPSHOT_CREATE_PRIMARY_REQUEST_H
 
 #include "include/buffer.h"
+#include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 
 #include <string>
@@ -30,10 +31,7 @@ public:
   }
 
   CreatePrimaryRequest(ImageCtxT *image_ctx, bool demoted, bool force,
-                       uint64_t *snap_id, Context *on_finish)
-    : m_image_ctx(image_ctx), m_demoted(demoted), m_force(force),
-      m_snap_id(snap_id), m_on_finish(on_finish) {
-  }
+                       uint64_t *snap_id, Context *on_finish);
 
   void send();
 
@@ -70,6 +68,7 @@ private:
   uint64_t *m_snap_id;
   Context *m_on_finish;
 
+  librados::IoCtx m_default_ns_ctx;
   std::set<std::string> m_mirror_peer_uuids;
   std::string m_snap_name;
 
