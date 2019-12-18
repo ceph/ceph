@@ -11,6 +11,8 @@ Synopsis
 
 | **osdmaptool** *mapfilename* [--print] [--createsimple *numosd*
   [--pgbits *bitsperosd* ] ] [--clobber]
+| **osdmaptool** *mapfilename* [--import-crush *crushmap*]
+| **osdmaptool** *mapfilename* [--export-crush *crushmap*]
 
 
 Description
@@ -58,6 +60,18 @@ Options
    will print out the summary of all placement groups and the mappings
    from them to the mapped OSDs.
 
+.. option:: --mark-out
+
+   mark an osd as out (but do not persist)
+
+.. option:: --health
+
+   dump health checks
+
+.. option:: --with-default-pool
+
+   include default pool when creating map
+
 
 Example
 =======
@@ -70,19 +84,19 @@ To view the result::
 
         osdmaptool --print osdmap
 
-To view the mappings of placement groups for pool 0::
+To view the mappings of placement groups for pool 1::
 
-        osdmaptool --test-map-pgs-dump rbd --pool 0
+        osdmaptool osdmap --test-map-pgs-dump --pool 1
 
         pool 0 pg_num 8
-        0.0     [0,2,1] 0
-        0.1     [2,0,1] 2
-        0.2     [0,1,2] 0
-        0.3     [2,0,1] 2
-        0.4     [0,2,1] 0
-        0.5     [0,2,1] 0
-        0.6     [0,1,2] 0
-        0.7     [1,0,2] 1
+        1.0     [0,2,1] 0
+        1.1     [2,0,1] 2
+        1.2     [0,1,2] 0
+        1.3     [2,0,1] 2
+        1.4     [0,2,1] 0
+        1.5     [0,2,1] 0
+        1.6     [0,1,2] 0
+        1.7     [1,0,2] 1
         #osd    count   first   primary c wt    wt
         osd.0   8       5       5       1       1
         osd.1   8       1       1       1       1
@@ -97,7 +111,7 @@ To view the mappings of placement groups for pool 0::
         size 3  8
 
 In which,
- #. pool 0 has 8 placement groups. And two tables follow:
+ #. pool 1 has 8 placement groups. And two tables follow:
  #. A table for placement groups. Each row presents a placement group. With columns of:
 
     * placement group id,
