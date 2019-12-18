@@ -204,29 +204,55 @@ TEST(IndIntruHeap, regular_ptr) {
   EXPECT_FALSE(heap.empty());
 
   EXPECT_EQ(-12, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(-7, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(-5, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(1, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(2, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(12, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(99, heap.top().data);
+  {
+    auto i = &heap.top();
+    EXPECT_FALSE(heap.empty());
+    heap.pop();
+    delete i;
+  }
 
-  delete &heap.top();
-
-  EXPECT_FALSE(heap.empty());
-  heap.pop();
   EXPECT_TRUE(heap.empty());
 }
 
