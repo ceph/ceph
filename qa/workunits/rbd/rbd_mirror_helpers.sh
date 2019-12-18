@@ -101,10 +101,7 @@ if [ -e CMakeCache.txt ]; then
 
     # needed for ceph CLI under cmake
     export LD_LIBRARY_PATH=${CEPH_ROOT}/lib:${LD_LIBRARY_PATH}
-    export PYTHONPATH=${PYTHONPATH}:${CEPH_SRC}/pybind
-    for x in ${CEPH_ROOT}/lib/cython_modules/lib* ; do
-        export PYTHONPATH="${PYTHONPATH}:${x}"
-    done
+    export PYTHONPATH=${PYTHONPATH}:${CEPH_SRC}/pybind:${CEPH_ROOT}/lib/cython_modules/lib.3
 fi
 
 # These vars facilitate running this script in an environment with

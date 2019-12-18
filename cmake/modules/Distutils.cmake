@@ -69,7 +69,7 @@ function(distutils_add_cython_module target name src)
   if(NOT result EQUAL 0)
     message(FATAL_ERROR "Unable to tell python extension's suffix: ${error}")
   endif()
-  set(output_dir "${CYTHON_MODULE_DIR}/lib.${Python${python_version}_VERSION_MAJOR}")
+  set(output_dir "${CYTHON_MODULE_DIR}/lib.3")
   set(setup_py ${CMAKE_CURRENT_SOURCE_DIR}/setup.py)
   add_custom_command(
     OUTPUT ${output_dir}/${name}${ext_suffix}
@@ -120,7 +120,7 @@ function(distutils_install_cython_module name)
        COMMAND
            ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --verbose --build-base ${CYTHON_MODULE_DIR}
-           --build-platlib ${CYTHON_MODULE_DIR}/lib.${Python${python_version}_VERSION_MAJOR}
+           --build-platlib ${CYTHON_MODULE_DIR}/lib.3
            build_ext --cython-c-in-temp --build-temp ${CMAKE_CURRENT_BINARY_DIR} --cython-include-dirs ${PROJECT_SOURCE_DIR}/src/pybind/rados
            install \${options} --single-version-externally-managed --record /dev/null
            egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}
