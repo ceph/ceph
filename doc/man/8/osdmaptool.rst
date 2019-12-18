@@ -15,6 +15,10 @@ Synopsis
   [--pgbits *bitsperosd* ] ] [--clobber]
 | **osdmaptool** *mapfilename* [--import-crush *crushmap*]
 | **osdmaptool** *mapfilename* [--export-crush *crushmap*]
+| **osdmaptool** *mapfilename* [--upmap *file*] [--upmap-max *max-optimizations*]
+  [--upmap-deviation *max-deviation*] [--upmap-pool *poolname*]
+  [--upmap-save *file*] [--upmap-save *newosdmap*]
+| **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap-save *newosdmap*]
 
 
 Description
@@ -132,6 +136,30 @@ Options
 .. option:: --with-default-pool
 
    include default pool when creating map
+
+.. option:: --upmap-cleanup <file>
+
+   clean up pg_upmap[_items] entries, writing commands to <file> [default: - for stdout]
+
+.. option:: --upmap <file>
+
+   calculate pg upmap entries to balance pg layout writing commands to <file> [default: - for stdout]
+
+.. option:: --upmap-max <max-optimizations>
+
+   set max upmap entries to calculate [default: 10]
+
+.. option:: --upmap-deviation <max-deviation>
+
+   max deviation from target [default: 1]
+
+.. option:: --upmap-pool <poolname>
+
+   restrict upmap balancing to 1 pool or the option can be repeated for multiple pools
+
+.. option:: --upmap-save
+
+   write modified OSDMap with upmap changes
 
 
 Example
