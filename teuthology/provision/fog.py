@@ -155,10 +155,8 @@ class FOG(object):
         obj = resp.json()
         if not obj['count']:
             raise RuntimeError(
-                "Could not find an image for %s %s",
-                self.os_type,
-                self.os_version,
-            )
+                "Could not find an image for %s %s" %
+                (self.os_type, self.os_version))
         return obj['images'][0]
 
     def set_image(self, host_id):

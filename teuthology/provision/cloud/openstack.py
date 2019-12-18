@@ -333,10 +333,8 @@ class OpenStackProvisioner(base.Provisioner):
                 break
         if not matches:
             raise RuntimeError(
-                "Could not find an image for %s %s",
-                self.os_type,
-                self.os_version,
-            )
+                "Could not find an image for %s %s" %
+                (self.os_type, self.os_version))
         return matches[0]
 
     @property
