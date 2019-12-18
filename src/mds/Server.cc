@@ -1261,7 +1261,6 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   if (!session->is_open()) {
     dout(0) << " ignoring msg from not-open session" << *m << dendl;
     auto reply = MClientSession::create(CEPH_SESSION_CLOSE);
-    reply->metadata["error_string"] = "session is not open";
     mds->send_message(reply, m->get_connection());
     return;
   }
