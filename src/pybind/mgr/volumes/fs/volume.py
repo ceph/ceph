@@ -1,15 +1,14 @@
 import json
 import errno
 import logging
-from threading import Event
 
-import cephfs
+from mgr_util import CephfsClient
 
 from .fs_util import listdir
 
-from .operations.volume import ConnectionPool, open_volume, create_volume, \
-    delete_volume, list_volumes, get_pool_names
 from .operations.group import open_group, create_group, remove_group, open_group_unique
+from .operations.volume import create_volume, \
+    delete_volume, list_volumes, open_volume, get_pool_names
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
 
@@ -30,6 +29,7 @@ def octal_str_to_decimal_int(mode):
     except ValueError:
         raise VolumeException(-errno.EINVAL, "Invalid mode '{0}'".format(mode))
 
+
 def name_to_json(names):
     """
     convert the list of names to json
@@ -39,13 +39,12 @@ def name_to_json(names):
         namedict.append({'name': names[i].decode('utf-8')})
     return json.dumps(namedict, indent=4, sort_keys=True)
 
-class VolumeClient(object):
+
+class VolumeClient(CephfsClient):
     def __init__(self, mgr):
-        self.mgr = mgr
-        self.stopping = Event()
+        super().__init__(mgr)
         # volume specification
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
-        self.connection_pool = ConnectionPool(self.mgr)
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         # on startup, queue purge job for available volumes to kickstart
@@ -62,6 +61,7 @@ class VolumeClient(object):
         return self.stopping.is_set()
 
     def shutdown(self):
+        # Overrides CephfsClient.shutdown()
         log.info("shutting down")
         # first, note that we're shutting down
         self.stopping.set()
