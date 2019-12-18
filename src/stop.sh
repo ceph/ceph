@@ -33,7 +33,11 @@ MYUID=$(id -u)
 MYNAME=$(id -nu)
 
 do_killall() {
-    pg=`pgrep -u $MYUID -f ceph-run.*$1`
+    local pname="ceph-run.*$1"
+    if [ $1 == "ganesha.nfsd" ]; then
+	    pname=$1
+    fi
+    pg=`pgrep -u $MYUID -f $pname`
     [ -n "$pg" ] && kill $pg
     $SUDO killall -u $MYNAME $1
 }
@@ -68,7 +72,7 @@ do_umountall() {
     [ -n "$CEPH_FUSE_MNTS" ] && sudo umount -f $CEPH_FUSE_MNTS
 }
 
-usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [--crimson]\n"
+usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [ganesha] [--crimson]\n"
 
 stop_all=1
 stop_mon=0
@@ -76,6 +80,7 @@ stop_mds=0
 stop_osd=0
 stop_mgr=0
 stop_rgw=0
+stop_ganesha=0
 ceph_osd=ceph-osd
 
 while [ $# -ge 1 ]; do
@@ -101,6 +106,10 @@ while [ $# -ge 1 ]; do
             ;;
         rgw | ceph-rgw )
             stop_rgw=1
+            stop_all=0
+            ;;
+        ganesha | ganesha.nfsd )
+            stop_ganesha=1
             stop_all=0
             ;;
         --crimson)
@@ -136,7 +145,7 @@ if [ $stop_all -eq 1 ]; then
         fi
     fi
 
-    for p in ceph-mon ceph-mds $ceph_osd ceph-mgr radosgw lt-radosgw apache2 ; do
+    for p in ceph-mon ceph-mds $ceph_osd ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd ; do
         for try in 0 1 1 1 1 ; do
             if ! pkill -u $MYUID $p ; then
                 break
@@ -155,5 +164,6 @@ else
     [ $stop_mds -eq 1 ] && do_killall ceph-mds
     [ $stop_osd -eq 1 ] && do_killall $ceph_osd
     [ $stop_mgr -eq 1 ] && do_killall ceph-mgr
+    [ $stop_ganesha -eq 1 ] && do_killall ganesha.nfsd
     [ $stop_rgw -eq 1 ] && do_killall radosgw lt-radosgw apache2
 fi
