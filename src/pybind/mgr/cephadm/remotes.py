@@ -4,6 +4,24 @@ import errno
 import tempfile
 import shutil
 
+PYTHONS = ['python3', 'python2', 'python']
+PATH = [
+    '/usr/bin',
+    '/usr/local/bin',
+    '/bin',
+    '/usr/sbin',
+    '/usr/local/sbin',
+    '/sbin',
+]
+
+def choose_python():
+    for e in PYTHONS:
+        for b in PATH:
+            p = os.path.join(b, e)
+            if os.path.exists(p):
+                return p
+    return None
+
 def safe_makedirs(path, uid=-1, gid=-1):
     """ create path recursively if it doesn't exist """
     try:
