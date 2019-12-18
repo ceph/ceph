@@ -2020,7 +2020,7 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, Filesystem& fs)
     // as standby-replay daemons. Don't do this when the cluster is degraded
     // as a standby-replay daemon may try to read a journal being migrated.
     for (;;) {
-      auto standby_gid = fsmap.get_available_standby();
+      auto standby_gid = fsmap.get_available_standby(fs.fscid);
       if (standby_gid == MDS_GID_NONE) break;
       dout(20) << "standby available mds." << standby_gid << dendl;
       bool changed = false;
