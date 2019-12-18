@@ -70,7 +70,9 @@ class Activate(object):
         self.args = None
 
     @decorators.needs_root
-    def activate(self, devices=None, only_osd_id=None, only_osd_fsid=None):
+    def activate(self, devices, tmpfs, systemd,
+                 only_osd_id=None,
+                 only_osd_fsid=None):
         """
         :param args: The parsed arguments coming from the CLI
         """
@@ -89,8 +91,8 @@ class Activate(object):
             logger.info('Activating osd.%s uuid %s cluster %s' % (
                     osd_id, meta['osd_uuid'], meta['ceph_fsid']))
             activate_bluestore(meta,
-                               tmpfs=not self.args.no_tmpfs,
-                               systemd=not self.args.no_systemd)
+                               tmpfs=tmpfs,
+                               systemd=systemd)
 
     def main(self):
         sub_command_help = dedent("""
@@ -148,4 +150,8 @@ class Activate(object):
         if not args.no_systemd:
             terminal.error('systemd support not yet implemented')
             raise SystemExit(1)
-        self.activate(args.device, args.osd_id, args.osd_fsid, not args.no_tmpfs)
+        self.activate(args.device,
+                      tmpfs=not args.no_tmpfs,
+                      systemd=not self.args.no_systemd,
+                      only_osd_id=args.osd_id,
+                      only_osd_fsid=args.osd_fsid)
