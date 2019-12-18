@@ -26,6 +26,16 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
+CreatePrimaryRequest<I>::CreatePrimaryRequest(I *image_ctx, bool demoted,
+                                              bool force, uint64_t *snap_id,
+                                              Context *on_finish)
+  : m_image_ctx(image_ctx), m_demoted(demoted), m_force(force),
+    m_snap_id(snap_id), m_on_finish(on_finish) {
+  m_default_ns_ctx.dup(m_image_ctx->md_ctx);
+  m_default_ns_ctx.set_namespace("");
+}
+
+template <typename I>
 void CreatePrimaryRequest<I>::send() {
   refresh_image();
 }
@@ -126,7 +136,7 @@ void CreatePrimaryRequest<I>::get_mirror_peers() {
   librados::AioCompletion *comp = create_rados_callback<
     CreatePrimaryRequest<I>, &CreatePrimaryRequest<I>::handle_get_mirror_peers>(this);
   m_out_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
+  int r = m_default_ns_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   ceph_assert(r == 0);
   comp->release();
 }
