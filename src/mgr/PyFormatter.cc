@@ -57,7 +57,7 @@ void PyFormatter::dump_float(const char *name, double d)
 
 void PyFormatter::dump_string(const char *name, std::string_view s)
 {
-  dump_pyobject(name, PyString_FromString(s.data()));
+  dump_pyobject(name, PyUnicode_FromString(s.data()));
 }
 
 void PyFormatter::dump_bool(const char *name, bool b)
@@ -90,7 +90,7 @@ void PyFormatter::dump_format_va(const char *name, const char *ns, bool quoted, 
   char buf[LARGE_SIZE];
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
 
-  dump_pyobject(name, PyString_FromString(buf));
+  dump_pyobject(name, PyUnicode_FromString(buf));
 }
 
 /**
@@ -102,7 +102,7 @@ void PyFormatter::dump_pyobject(const char *name, PyObject *p)
     PyList_Append(cursor, p);
     Py_DECREF(p);
   } else if (PyDict_Check(cursor)) {
-    PyObject *key = PyString_FromString(name);
+    PyObject *key = PyUnicode_FromString(name);
     PyDict_SetItem(cursor, key, p);
     Py_DECREF(key);
     Py_DECREF(p);
@@ -118,7 +118,7 @@ void PyFormatter::finish_pending_streams()
     cursor = i->cursor;
     dump_pyobject(
         i->name.c_str(),
-        PyString_FromString(i->stream.str().c_str()));
+        PyUnicode_FromString(i->stream.str().c_str()));
     cursor = tmp_cur;
   }
 

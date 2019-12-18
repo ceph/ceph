@@ -15,7 +15,7 @@
 #define CEPH_MGR_H_
 
 // Python.h comes first because otherwise it clobbers ceph's assert
-#include "PythonCompat.h"
+#include <Python.h>
 
 #include "mds/FSMap.h"
 #include "messages/MFSMap.h"

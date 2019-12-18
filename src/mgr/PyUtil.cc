@@ -1,8 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <Python.h>
+
 #include "PyUtil.h"
-#include "PythonCompat.h"
 
 PyObject *get_python_typed_option_value(
   Option::type_t type,
@@ -12,12 +13,12 @@ PyObject *get_python_typed_option_value(
   case Option::TYPE_INT:
   case Option::TYPE_UINT:
   case Option::TYPE_SIZE:
-    return PyInt_FromString((char *)value.c_str(), nullptr, 0);
+    return PyLong_FromString((char *)value.c_str(), nullptr, 0);
   case Option::TYPE_SECS:
   case Option::TYPE_FLOAT:
     {
-      PyObject *s = PyString_FromString(value.c_str());
-      PyObject *f = PyFloat_FromString(s, nullptr);
+      PyObject *s = PyUnicode_FromString(value.c_str());
+      PyObject *f = PyFloat_FromString(s);
       Py_DECREF(s);
       return f;
     }
@@ -36,5 +37,5 @@ PyObject *get_python_typed_option_value(
   case Option::TYPE_UUID:
     break;
   }
-  return PyString_FromString(value.c_str());
+  return PyUnicode_FromString(value.c_str());
 }
