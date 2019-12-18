@@ -25,24 +25,9 @@ class MDSRank;
 class LogSegment;
 
 class SnapClient : public MDSTableClient {
-  version_t cached_version;
-  snapid_t cached_last_created, cached_last_destroyed;
-  map<snapid_t, SnapInfo> cached_snaps;
-  map<version_t, SnapInfo> cached_pending_update;
-  map<version_t, pair<snapid_t,snapid_t> > cached_pending_destroy;
-
-  set<version_t> committing_tids;
-
-  map<version_t, MDSContext::vec > waiting_for_version;
-
-  uint64_t sync_reqid;
-  bool synced;
-
 public:
   explicit SnapClient(MDSRank *m) :
-    MDSTableClient(m, TABLE_SNAP),
-    cached_version(0), cached_last_created(0), cached_last_destroyed(0),
-    sync_reqid(0), synced(false) {}
+    MDSTableClient(m, TABLE_SNAP) {}
 
   void resend_queries() override;
   void handle_query_result(const cref_t<MMDSTableRequest> &m) override;
@@ -109,6 +94,19 @@ public:
   void get_snap_infos(map<snapid_t, const SnapInfo*>& infomap, const set<snapid_t>& snaps) const;
 
   int dump_cache(Formatter *f) const;
-};
 
+private:
+  version_t cached_version = 0;
+  snapid_t cached_last_created = 0, cached_last_destroyed = 0;
+  map<snapid_t, SnapInfo> cached_snaps;
+  map<version_t, SnapInfo> cached_pending_update;
+  map<version_t, pair<snapid_t,snapid_t> > cached_pending_destroy;
+
+  set<version_t> committing_tids;
+
+  map<version_t, MDSContext::vec > waiting_for_version;
+
+  uint64_t sync_reqid = 0;
+  bool synced = false;
+};
 #endif
