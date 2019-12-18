@@ -84,7 +84,8 @@ class Monitoring(object):
     """Define the configs for the monitoring containers"""
 
     port_map = {
-        "prometheus": 9095  # Avoid default 9090, due to conflict with cockpit UI
+        "prometheus": 9095,  # Avoid default 9090, due to conflict with cockpit UI
+        "node-exporter": 9100
     }
 
     components = {
@@ -102,6 +103,16 @@ class Monitoring(object):
             "config-json": [
                 "prometheus.yml"
             ]
+        },
+        "node-exporter": {
+            "image": {
+                "image": "prom/node-exporter",
+                "cpus": "1",
+                "memory": "1GB",
+                "args": [
+                    "--no-collector.timex"
+                ]
+            }
         }
     }
 
@@ -755,7 +766,7 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
     if daemon_type in Monitoring.components.keys():
 
         received_config = get_parm(args.config_json)
-        required_config = Monitoring.components[daemon_type].get('config-json', list())
+        required_config = Monitoring.components[daemon_type].get('config-json', list())  # type: ignore
         if required_config:
             if not received_config or not all(c in received_config.keys() for c in required_config):
                 raise Error("{} deployment requires config-json which must "
@@ -906,6 +917,10 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
         if daemon_type == 'prometheus':
             mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
             mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
+        elif daemon_type == 'node-exporter':
+            mounts['/proc'] = '/host/proc:ro'
+            mounts['/sys'] = '/host/sys:ro'
+            mounts['/'] = '/rootfs:ro'
 
     return mounts
 
@@ -1104,8 +1119,8 @@ def update_firewalld(daemon_type):
         fw_ports.append(8080)  # dashboard
         fw_ports.append(8443)  # dashboard
         fw_ports.append(9283)  # mgr/prometheus exporter
-    elif daemon_type == 'prometheus':
-        fw_ports.append(Monitoring.port_map['prometheus'])  # prometheus server
+    elif daemon_type in Monitoring.port_map.keys():
+        fw_ports.append(Monitoring.port_map[daemon_type])  # prometheus etc
 
     for svc in fw_services:
         out, err, ret = call([cmd, '--permanent', '--query-service', svc])
@@ -1781,8 +1796,9 @@ def command_deploy():
 
         if crash_keyring and not args.reconfig:
             deploy_crash(args.fsid, uid, gid, config, crash_keyring)
-    else:
-        # monitoring daemon - prometheus, grafana, alertmanager
+
+    elif daemon_type in Monitoring.components:
+        # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         monitoring_args = []  # type: List[str]
 
         # Default Checks
@@ -1797,23 +1813,27 @@ def command_deploy():
                 raise Error("config-json parameter is needed when deploying prometheus service")
 
             uid, gid = extract_uid_gid(file_path='/etc/prometheus')
-            # Monitoring metadata is nested dicts, so asking mypy to ignore
-            p = Monitoring.components['prometheus']  # type: ignore
-            metadata = p.get('image', dict())  # type: ignore
-            monitoring_args = [
-                '--user',
-                str(uid),
-                '--cpus',
-                metadata.get('cpus', '2'),  # type: ignore
-                '--memory',
-                metadata.get('memory', '4GB')  # type: ignore
-            ]
-        else:
-            raise Error("{} not implemented in command_deploy function".format(daemon_type))
+        elif daemon_type == 'node-exporter':
+            uid, gid = 65534, 65534
+
+        # Monitoring metadata is nested dicts, so asking mypy to ignore
+        p = Monitoring.components[daemon_type]  # type: ignore
+        metadata = p.get('image', dict())  # type: ignore
+        monitoring_args = [
+            '--user',
+            str(uid),
+            '--cpus',
+            metadata.get('cpus', '2'),  # type: ignore
+            '--memory',
+            metadata.get('memory', '4GB')  # type: ignore
+        ]
+
 
         c = get_container(args.fsid, daemon_type, daemon_id, container_args=monitoring_args)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=args.reconfig)
+    else:
+        raise Error("{} not implemented in command_deploy function".format(daemon_type))
 
 ##################################
 
