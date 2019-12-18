@@ -37,25 +37,34 @@ if ! [ -x "$CEPHADM" ]; then
 fi
 
 # respawn ourselves with a shebang
-PYTHONS="python3 python2"  # which pythons we test
 if [ -z "$PYTHON_KLUDGE" ]; then
-   TMPBINDIR=$(mktemp -d)
-   trap "rm -rf $TMPBINDIR" EXIT
-   ORIG_CEPHADM="$CEPHADM"
-   CEPHADM="$TMPBINDIR/cephadm"
-   for p in $PYTHONS; do
-       echo "=== re-running with $p ==="
-       ln -s `which $p` $TMPBINDIR/python
-       echo "#!$TMPBINDIR/python" > $CEPHADM
-       cat $ORIG_CEPHADM >> $CEPHADM
-       chmod 700 $CEPHADM
-       $TMPBINDIR/python --version
-       PYTHON_KLUDGE=1 CEPHADM=$CEPHADM $0
-       rm $TMPBINDIR/python
-   done
-   rm -rf $TMPBINDIR
-   echo "PASS with all of: $PYTHONS"
-   exit 0
+    # see which pythons we should test with
+    PYTHONS=""
+    which python3 && PYTHONS="$PYTHONS python3"
+    which python2 && PYTHONS="$PYTHONS python2"
+    echo "PYTHONS $PYTHONS"
+    if [ -z $PYTHONS ]; then
+	echo "No PYTHONS found!"
+	exit 1
+    fi
+
+    TMPBINDIR=$(mktemp -d)
+    trap "rm -rf $TMPBINDIR" EXIT
+    ORIG_CEPHADM="$CEPHADM"
+    CEPHADM="$TMPBINDIR/cephadm"
+    for p in $PYTHONS; do
+	echo "=== re-running with $p ==="
+	ln -s `which $p` $TMPBINDIR/python
+	echo "#!$TMPBINDIR/python" > $CEPHADM
+	cat $ORIG_CEPHADM >> $CEPHADM
+	chmod 700 $CEPHADM
+	$TMPBINDIR/python --version
+	PYTHON_KLUDGE=1 CEPHADM=$CEPHADM $0
+	rm $TMPBINDIR/python
+    done
+    rm -rf $TMPBINDIR
+    echo "PASS with all of: $PYTHONS"
+    exit 0
 fi
 
 # add image to args
