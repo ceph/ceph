@@ -242,6 +242,8 @@ $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
 ## shell
 $CEPHADM shell --fsid $FSID -- true
 $CEPHADM shell --fsid $FSID -- test -d /var/log/ceph
+expect_false $CEPHADM --timeout 1 shell --fsid $FSID -- sleep 10
+$CEPHADM --timeout 10 shell --fsid $FSID -- sleep 1
 
 ## enter
 expect_false $CEPHADM enter
@@ -250,6 +252,14 @@ $CEPHADM enter --fsid $FSID --name mgr.x -- test -d /var/lib/ceph/mgr/ceph-x
 $CEPHADM enter --fsid $FSID --name mon.a -- pidof ceph-mon
 expect_false $CEPHADM enter --fsid $FSID --name mgr.x -- pidof ceph-mon
 $CEPHADM enter --fsid $FSID --name mgr.x -- pidof ceph-mgr
+expect_false $CEPHADM --timeout 1 enter --fsid $FSID --name mon.a -- sleep 10
+$CEPHADM --timeout 10 enter --fsid $FSID --name mon.a -- sleep 1
+
+## logs
+expect_false $CEPHADM logs
+expect_false $CEPHADM logs --fsid $FSID --name mon.z
+$CEPHADM logs --fsid $FSID --name mon.a
+expect_false $CEPHADM --timeout 1 logs --fsid $FSID --name mon.a -f
 
 ## ceph-volume
 $CEPHADM ceph-volume --fsid $FSID -- inventory --format=json \
