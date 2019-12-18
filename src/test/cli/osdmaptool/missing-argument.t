@@ -23,4 +23,5 @@
                              max deviation from target [default: 1]
      --upmap-pool <poolname> restrict upmap balancing to 1 or more pools
      --upmap-save            write modified OSDMap with upmap changes
+     --upmap-active          Act like an active balancer, keep applying changes until balanced
   [1]
