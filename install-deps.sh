@@ -526,5 +526,5 @@ if $for_make_check; then
     done
     rm -rf $top_srcdir/install-deps-python3
     rm -rf $XDG_CACHE_HOME
-    git --version || (echo "Dashboard uses git to pull dependencies." ; false)
+    type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
