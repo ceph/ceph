@@ -148,7 +148,7 @@ public:
    */
   std::map<mds_gid_t, MDSMap::mds_info_t> get_mds_info() const;
 
-  mds_gid_t get_available_standby() const;
+  mds_gid_t get_available_standby(fs_cluster_id_t fscid) const;
 
   /**
    * Resolve daemon name to GID

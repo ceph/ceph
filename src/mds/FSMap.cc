@@ -775,13 +775,19 @@ std::map<mds_gid_t, MDSMap::mds_info_t> FSMap::get_mds_info() const
   return result;
 }
 
-mds_gid_t FSMap::get_available_standby() const
+mds_gid_t FSMap::get_available_standby(fs_cluster_id_t fscid) const
 {
   for (const auto& [gid, info] : standby_daemons) {
     ceph_assert(info.rank == MDS_RANK_NONE);
     ceph_assert(info.state == MDSMap::STATE_STANDBY);
 
     if (info.laggy() || info.is_frozen()) {
+      continue;
+    }
+
+    auto p = standby_daemon_fscid.find(gid);
+    if (p != standby_daemon_fscid.end() &&
+	p->second != fscid) {
       continue;
     }
 
@@ -838,7 +844,7 @@ mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name) co
     }
   }
 
-  return get_available_standby();
+  return get_available_standby(role.fscid);
 }
 
 void FSMap::sanity() const
