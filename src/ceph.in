@@ -523,7 +523,7 @@ def ceph_conf(parsed_args, field, name):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
     outdata, errdata = p.communicate()
-    if len(errdata):
+    if p.returncode != 0:
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
 
