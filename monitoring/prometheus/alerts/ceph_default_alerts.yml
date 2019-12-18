@@ -207,9 +207,7 @@ groups:
   - name: pools
     rules:
       - alert: pool full
-        expr: |
-          ceph_pool_stored / ceph_pool_max_avail
-          * on(pool_id) group_right ceph_pool_metadata * 100 > 90
+        expr: ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail) * on(pool_id) group_right ceph_pool_metadata > 0.9
         labels:
           severity: critical
           type: ceph_default
