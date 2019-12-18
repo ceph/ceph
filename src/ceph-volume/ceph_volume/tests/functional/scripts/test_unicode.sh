@@ -7,7 +7,7 @@
 mktemp=$(which mktemp)
 cat=$(which cat)
 grep=$(which grep)
-PYTHON_EXECUTABLE=`which python`
+PYTHON_EXECUTABLE=`which python3`
 STDERR_FILE=$($mktemp)
 INVALID="→"
 
