@@ -570,17 +570,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             return 1, '', err
         return 0, 'host ok', err
 
-    @orchestrator._cli_write_command(
-        'cephadm prepare-host',
-        'name=host,type=CephString',
-        'Try to prepare a host for remote management')
-    def _prepare_host(self, host):
-        out, err, code = self._run_cephadm(host, '', 'prepare-host', [],
-                                           error_ok=True, no_fsid=True)
-        if code:
-            return 1, '', err
-        return 0, 'host ok', err
-
     def _get_connection(self, host):
         """
         Setup a connection for running commands on remote host.
