@@ -58,6 +58,7 @@ import uuid
 from distutils.spawn import find_executable
 from functools import wraps
 from glob import glob
+from threading import Thread
 
 if sys.version_info >= (3, 0):
     from io import StringIO
@@ -72,6 +73,9 @@ else:
 container_path = None
 
 class Error(Exception):
+    pass
+
+class TimeoutExpired(Error):
     pass
 
 ##################################
@@ -467,11 +471,51 @@ def call(command,
 
     return out, err, returncode
 
+
 def call_throws(command, **kwargs):
     out, err, ret = call(command, **kwargs)
     if ret:
         raise RuntimeError('Failed command: %s' % ' '.join(command))
     return out, err, ret
+
+
+def call_timeout(command, timeout):
+    #type (List[str], int) -> int
+
+    logger.debug('Running command (timeout=%s): %s'
+            % (timeout, ' '.join(command)))
+
+    def raise_timeout(command, timeout):
+        msg = 'Command \'%s\' timed out after %s seconds' % (command, timeout)
+        logger.debug(msg)
+        raise TimeoutExpired(msg)
+
+    def call_timeout_py2(command, timeout):
+        #type (List[str], int) -> int
+        proc = subprocess.Popen(command)
+        thread = Thread(target=proc.wait)
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
+            proc.kill()
+            thread.join()
+            raise_timeout(command, timeout)
+        return proc.returncode
+
+    def call_timeout_py3(command, timeout):
+        #type (List[str], int) -> int
+        try:
+            return subprocess.call(command, timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            raise_timeout(command, timeout)
+
+    ret = 1
+    if sys.version_info >= (3, 3):
+        ret = call_timeout_py3(command, timeout)
+    else:
+        # py2 subprocess has no timeout arg
+        ret = call_timeout_py2(command, timeout)
+    return ret
 
 ##################################
 
@@ -1882,8 +1926,7 @@ def command_run():
     (daemon_type, daemon_id) = args.name.split('.', 1)
     c = get_container(args.fsid, daemon_type, daemon_id)
     command = c.run_cmd()
-    logger.debug("Running command: %s" % ' '.join(command))
-    return subprocess.call(command)
+    return call_timeout(command, args.timeout)
 
 ##################################
 
@@ -1916,6 +1959,7 @@ def command_shell():
             '-e', 'LANG=C',
             '-e', "PS1=%s" % CUSTOM_PS1,
         ]
+
     c = CephContainer(
         image=args.image,
         entrypoint='doesnotmatter',
@@ -1923,8 +1967,8 @@ def command_shell():
         container_args=container_args,
         volume_mounts=mounts)
     command = c.shell_cmd(command)
-    logger.debug("Running command: %s" % ' '.join(command))
-    return subprocess.call(command)
+
+    return call_timeout(command, args.timeout)
 
 ##################################
 
@@ -1947,8 +1991,7 @@ def command_enter():
     c = get_container(args.fsid, daemon_type, daemon_id,
                       container_args=container_args)
     command = c.exec_cmd(command)
-    logger.debug("Running command: %s" % ' '.join(command))
-    return subprocess.call(command)
+    return call_timeout(command, args.timeout)
 
 ##################################
 
@@ -2007,7 +2050,7 @@ def command_unit():
 
 @infer_fsid
 def command_logs():
-    # type: () -> None
+    # type: () -> int
     if not args.fsid:
         raise Error('must pass --fsid to specify cluster')
     cmd = [str(container_path), 'logs'] # type: List[str]
@@ -2019,8 +2062,7 @@ def command_logs():
 
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
-    logger.debug("Running command: %s" % ' '.join(cmd))
-    subprocess.call(cmd) # type: ignore
+    return call_timeout(cmd, args.timeout)
 
 ##################################
 
