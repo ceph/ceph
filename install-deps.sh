@@ -488,7 +488,7 @@ function activate_virtualenv() {
 function preload_wheels_for_tox() {
     local ini=$1
     shift
-    pushd .
+    pushd . > /dev/null
     cd $(dirname $ini)
     local require_files=$(ls *requirements*.txt 2>/dev/null) || true
     local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
@@ -507,7 +507,7 @@ function preload_wheels_for_tox() {
         mv $wip_wheelhouse wheelhouse
         md5sum $require_files $constraint_files > $md5
     fi
-    popd
+    popd > /dev/null
 }
 
 # use pip cache if possible but do not store it outside of the source
