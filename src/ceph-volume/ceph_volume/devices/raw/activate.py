@@ -98,7 +98,7 @@ class Activate(object):
         device label (normally the first block of the device).
 
             ceph-volume raw activate --device /dev/sdb
-            ceph-volume raw activate --osd-id 1 --osd-uuid f0327efd-c28e-40bb-9199-f2e61e54c12a
+            ceph-volume raw activate --osd-id 1 --osd-fsid f0327efd-c28e-40bb-9199-f2e61e54c12a
 
         The device(s) associated with the OSD needs to have been prepared
         previously, so that all needed tags and metadata exist.
@@ -114,7 +114,7 @@ class Activate(object):
             help='The ID of the OSD, usually an integer, like 0'
         )
         parser.add_argument(
-            '--osd-uuid',
+            '--osd-fsid',
             help='The UUID of the OSD'
         )
         parser.add_argument(
@@ -142,8 +142,8 @@ class Activate(object):
             return
         args = parser.parse_args(self.argv)
         self.args = args
-        if not args.device and not args.activate_all and not (args.osd_id and args.osd_uuid):
-            terminal.error('must specify one of --device, --activate-all, or --osd-id and --osd-uuid')
+        if not args.device and not args.activate_all and not (args.osd_id and args.osd_fsid):
+            terminal.error('must specify one of --device, --activate-all, or --osd-id and --osd-fsid')
             raise SystemExit(1)
         if not args.no_systemd:
             terminal.error('systemd support not yet implemented')

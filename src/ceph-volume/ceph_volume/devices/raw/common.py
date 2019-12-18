@@ -31,7 +31,7 @@ def create_parser(prog, description):
         help='Reuse an existing OSD id',
     )
     parser.add_argument(
-        '--osd-uuid',
+        '--osd-fsid',
         help='Reuse an existing OSD UUID',
     )
     parser.add_argument(
