@@ -1381,6 +1381,9 @@ def command_bootstrap():
     mgr_id = args.mgr_id or generate_service_id()
     logging.info('Cluster fsid: %s' % fsid)
 
+    l = FileLock(fsid)
+    l.acquire()
+
     # config
     cp = read_config(args.config)
     if args.mon_ip:
@@ -1691,6 +1694,9 @@ def command_bootstrap():
 def command_deploy():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
+
+    l = FileLock(args.fsid)
+    l.acquire()
 
     supported_daemons = list(Ceph.daemons)
     supported_daemons.extend(Monitoring.components)
@@ -2008,6 +2014,7 @@ def list_daemons(detail=True, legacy_dir=None):
 
 def command_adopt():
     # type: () -> None
+
     (daemon_type, daemon_id) = args.name.split('.', 1)
     (uid, gid) = extract_uid_gid()
     if args.style == 'legacy':
@@ -2017,6 +2024,9 @@ def command_adopt():
                                       legacy_dir=args.legacy_dir)
         if not fsid:
             raise Error('could not detect legacy fsid; set fsid in ceph.conf')
+
+        l = FileLock(fsid)
+        l.acquire()
 
         data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
                         (daemon_type, args.cluster, daemon_id))
@@ -2087,6 +2097,10 @@ def command_adopt():
 
 def command_rm_daemon():
     # type: () -> None
+
+    l = FileLock(args.fsid)
+    l.acquire()
+
     (daemon_type, daemon_id) = args.name.split('.', 1)
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise Error('must pass --force to proceed: '
@@ -2108,6 +2122,9 @@ def command_rm_cluster():
     if not args.force:
         raise Error('must pass --force to proceed: '
                       'this command may destroy precious data!')
+
+    l = FileLock(args.fsid)
+    l.acquire()
 
     # stop + disable individual daemon units
     for d in list_daemons(detail=False):
