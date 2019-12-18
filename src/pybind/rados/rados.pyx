@@ -296,6 +296,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num)
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
+    void rados_write_op_omap_rm_range2(rados_write_op_t write_op, const char *key_begin, size_t key_begin_len, const char *key_end, size_t key_end_len)
     void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
 
     void rados_write_op_create(rados_write_op_t write_op, int exclusive, const char *category)
@@ -3888,6 +3889,31 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             rados_write_op_omap_clear(_write_op.write_op)
+
+    @requires(('write_op', WriteOp), ('key_begin', str_type), ('key_end', str_type))
+    def remove_omap_range2(self,write_op, key_begin, key_end):
+        """
+        Remove key/value pairs from an object whose keys are in the range
+        [key_begin, key_end)
+
+        :para write_op: write operation object
+        :type write_op: WriteOp
+        :param key_begin: the lower bound of the key range to remove
+        :type key_begin: str
+        :param key_end: the upper bound of the key range to remove
+        :type key_end: str
+        """
+        key_begin = cstr(key_begin, 'key_begin')
+        key_end = cstr(key_end, 'key_end')
+        cdef:
+            WriteOp _write_op = write_op
+            char* _key_begin = key_begin
+            size_t key_begin_len = len(key_begin)
+            char* _key_end = key_end
+            size_t key_end_len = len(key_end)
+        with nogil:
+            rados_write_op_omap_rm_range2(_write_op.write_op, _key_begin, key_begin_len,
+                                           _key_end, key_end_len)
 
     @requires(('key', str_type), ('name', str_type), ('cookie', str_type), ('desc', str_type),
               ('duration', opt(int)), ('flags', int))
