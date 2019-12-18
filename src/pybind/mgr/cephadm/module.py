@@ -268,13 +268,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         },
         {
             'name': 'inventory_cache_timeout',
-            'type': 'seconds',
+            'type': 'secs',
             'default': 10 * 60,
             'desc': 'seconds to cache device inventory',
         },
         {
             'name': 'service_cache_timeout',
-            'type': 'seconds',
+            'type': 'secs',
             'default': 60,
             'desc': 'seconds to cache service (daemon) inventory',
         },
