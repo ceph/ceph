@@ -38,7 +38,7 @@ if(WITH_GTEST_PARALLEL)
     add_dependencies(tests gtest-parallel_ext)
     find_package(Python REQUIRED)
     set(GTEST_PARALLEL_COMMAND
-      ${Python_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+      ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
   endif()
 endif()
 
@@ -62,12 +62,7 @@ function(add_tox_test name)
   else()
     set(tox_path ${CMAKE_CURRENT_SOURCE_DIR})
   endif()
-  if(WITH_PYTHON2)
-    list(APPEND tox_envs py27)
-  endif()
-  if(WITH_PYTHON3)
-    list(APPEND tox_envs py3)
-  endif()
+  list(APPEND tox_envs py3)
   if(DEFINED TOXTEST_TOX_ENVS)
     list(APPEND tox_envs ${TOXTEST_TOX_ENVS})
   endif()
@@ -75,7 +70,7 @@ function(add_tox_test name)
   find_package(Python REQUIRED)
   add_custom_command(
     OUTPUT ${venv_path}/bin/activate
-    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python_EXECUTABLE}" ${venv_path}
+    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python3_EXECUTABLE}" ${venv_path}
     WORKING_DIRECTORY ${tox_path}
     COMMENT "preparing venv for ${name}")
   add_custom_target(${name}-venv
