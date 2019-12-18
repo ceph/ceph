@@ -17,7 +17,7 @@ Synopsis
 | **osdmaptool** *mapfilename* [--export-crush *crushmap*]
 | **osdmaptool** *mapfilename* [--upmap *file*] [--upmap-max *max-optimizations*]
   [--upmap-deviation *max-deviation*] [--upmap-pool *poolname*]
-  [--upmap-save *file*] [--upmap-save *newosdmap*]
+  [--upmap-save *file*] [--upmap-save *newosdmap*] [--upmap-active]
 | **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap-save *newosdmap*]
 
 
@@ -27,6 +27,8 @@ Description
 **osdmaptool** is a utility that lets you create, view, and manipulate
 OSD cluster maps from the Ceph distributed storage system. Notably, it
 lets you extract the embedded CRUSH map or import a new CRUSH map.
+It can also simulate the upmap balancer mode so you can get a sense of
+what is needed to balance your PGs.
 
 
 Options
@@ -161,6 +163,10 @@ Options
 
    write modified OSDMap with upmap changes
 
+.. option:: --upmap-active
+
+   Act like an active balancer, keep applying changes until balanced
+
 
 Example
 =======
@@ -243,6 +249,56 @@ placement group distribution, whose standard deviation is 1.41421::
         size 10
         size 20
         size 364
+
+   To simulate the active balancer in upmap mode::
+
+        osdmaptool --upmap upmaps.out --upmap-active --upmap-deviation 6 --upmap-max 11 osdmap
+
+   osdmaptool: osdmap file 'osdmap'
+   writing upmap command output to: upmaps.out
+   checking for upmap cleanups
+   upmap, max-count 11, max deviation 6
+   pools movies photos metadata data
+   prepared 11/11 changes
+   Time elapsed 0.00310404 secs
+   pools movies photos metadata data
+   prepared 11/11 changes
+   Time elapsed 0.00283402 secs
+   pools data metadata movies photos
+   prepared 11/11 changes
+   Time elapsed 0.003122 secs
+   pools photos metadata data movies
+   prepared 11/11 changes
+   Time elapsed 0.00324372 secs
+   pools movies metadata data photos
+   prepared 1/11 changes
+   Time elapsed 0.00222609 secs
+   pools data movies photos metadata
+   prepared 0/11 changes
+   Time elapsed 0.00209916 secs
+   Unable to find further optimization, or distribution is already perfect
+   osd.0 pgs 41
+   osd.1 pgs 42
+   osd.2 pgs 42
+   osd.3 pgs 41
+   osd.4 pgs 46
+   osd.5 pgs 39
+   osd.6 pgs 39
+   osd.7 pgs 43
+   osd.8 pgs 41
+   osd.9 pgs 46
+   osd.10 pgs 46
+   osd.11 pgs 46
+   osd.12 pgs 46
+   osd.13 pgs 41
+   osd.14 pgs 40
+   osd.15 pgs 40
+   osd.16 pgs 39
+   osd.17 pgs 46
+   osd.18 pgs 46
+   osd.19 pgs 39
+   osd.20 pgs 42
+   Total time elapsed 0.0167765 secs, 5 rounds
 
 
 Availability

@@ -43,6 +43,7 @@ Upmap entries are updated with an offline optimizer built into ``osdmaptool``.
 
      osdmaptool om --upmap out.txt [--upmap-pool <pool>]
               [--upmap-max <max-optimizations>] [--upmap-deviation <max-deviation>]
+              [--upmap-active]
 
    It is highly recommended that optimization be done for each pool
    individually, or for sets of similarly-utilized pools.  You can
@@ -60,6 +61,12 @@ Upmap entries are updated with an offline optimizer built into ``osdmaptool``.
    The ``max-deviation`` value defaults to `1`.  If an OSD PG count
    varies from the computed target number by less than or equal
    to this amount it will be considered perfect.
+
+   The ``--upmap-active`` option simulates the behavior of the active
+   balancer in upmap mode.  It keeps cycling until the OSDs are balanced
+   and reports how many rounds and how long each round is taking.  The
+   elapsed time for rounds indicates the CPU load ceph-mgr will be
+   consuming when it tries to compute the next optimization plan.
 
 #. Apply the changes::
 

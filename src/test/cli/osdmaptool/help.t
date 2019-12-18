@@ -28,6 +28,7 @@
                              max deviation from target [default: 1]
      --upmap-pool <poolname> restrict upmap balancing to 1 or more pools
      --upmap-save            write modified OSDMap with upmap changes
+     --upmap-active          Act like an active balancer, keep applying changes until balanced
      --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported
      --tree                  displays a tree of the map
      --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds
