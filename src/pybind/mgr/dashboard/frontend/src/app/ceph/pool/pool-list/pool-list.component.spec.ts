@@ -17,6 +17,7 @@ import { ConfigurationService } from '../../../shared/api/configuration.service'
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -75,9 +76,14 @@ describe('PoolListComponent', () => {
   });
 
   describe('monAllowPoolDelete', () => {
+    let configOptRead: boolean;
     let configurationService: ConfigurationService;
 
     beforeEach(() => {
+      configOptRead = true;
+      spyOn(TestBed.get(AuthStorageService), 'getPermissions').and.callFake(() => ({
+        configOpt: { read: configOptRead }
+      }));
       configurationService = TestBed.get(ConfigurationService);
     });
 
@@ -118,6 +124,13 @@ describe('PoolListComponent', () => {
         name: 'mon_allow_pool_delete'
       };
       spyOn(configurationService, 'get').and.returnValue(of(configOption));
+      fixture = TestBed.createComponent(PoolListComponent);
+      component = fixture.componentInstance;
+      expect(component.monAllowPoolDelete).toBe(false);
+    });
+
+    it('should set value correctly w/o config-opt read privileges', () => {
+      configOptRead = false;
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
       expect(component.monAllowPoolDelete).toBe(false);
