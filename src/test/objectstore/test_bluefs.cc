@@ -166,6 +166,40 @@ TEST(BlueFS, write_read) {
   fs.umount();
 }
 
+TEST(BlueFS, write_read_intermixed) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  {
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.mkdir("dir"));
+    ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+    h->append("foo", 3);
+    h->append("bar", 3);
+    h->append("baz", 3);
+
+    BlueFS::FileReader *r;
+    ASSERT_EQ(0, fs.open_for_read("dir", "file", &r));
+
+    fs.flush(h);
+
+    bufferlist bl;
+    BlueFS::FileReaderBuffer buf(4096);
+    ASSERT_EQ(9, fs.read(r, &buf, 0, 1024, &bl, NULL));
+    ASSERT_EQ(0, strncmp("foobarbaz", bl.c_str(), 9));
+    delete r;
+
+    fs.close_writer(h);
+  }
+  fs.umount();
+}
+
 TEST(BlueFS, small_appends) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};

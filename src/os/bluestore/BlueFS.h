@@ -125,6 +125,10 @@ public:
 
     void* vselector_hint = nullptr;
 
+    ceph::shared_mutex lock {
+      ceph::make_shared_mutex(std::string(), false, false, false)
+    };
+
   private:
     FRIEND_MAKE_REF(File);
     File()

@@ -1868,6 +1868,8 @@ int BlueFS::_read(
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
       s_lock.unlock();
       std::unique_lock u_lock(h->lock);
+      //We will scan through fnode.extents, and use fnode.size. Must protect against writers.
+      std::shared_lock fnode_lock(h->file->lock);
       if (off < buf->bl_off || off >= buf->get_buf_end()) {
         // if precondition hasn't changed during locking upgrade.
         buf->bl.clear();
@@ -2529,7 +2531,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " 0x" << offset << "~" << length << std::dec
 	   << " to " << h->file->fnode << dendl;
   ceph_assert(!h->file->deleted);
-  ceph_assert(h->file->num_readers.load() == 0);
 
   h->buffer_appender.flush();
 
@@ -2548,6 +2549,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
              << std::hex << offset << "~" << length << std::dec
              << dendl;
   }
+  //We will possibly redecorate fnode.extents, and surely modify fnode.size. Must lock to not confuse readers.
+  std::unique_lock fnode_lock(h->file->lock);
+
   ceph_assert(offset <= h->file->fnode.size);
 
   uint64_t allocated = h->file->fnode.get_allocated();
@@ -2701,10 +2705,13 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     uint64_t x_len = std::min(p->length - x_off, length);
     bufferlist t;
     t.substr_of(bl, bloff, x_len);
-    if (cct->_conf->bluefs_sync_write) {
-      bdev[p->bdev]->write(p->offset + x_off, t, buffered, h->write_hint);
-    } else {
+#ifdef HAVE_LIBAIO
+    if (!cct->_conf->bluefs_sync_write) {
       bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered, h->write_hint);
+    } else
+#endif
+    {
+      bdev[p->bdev]->write(p->offset + x_off, t, buffered, h->write_hint);
     }
     h->dirty_devs[p->bdev] = true;
     if (p->bdev == BDEV_SLOW) {
@@ -2725,6 +2732,12 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     }
   }
   vselector->add_usage(h->file->vselector_hint, h->file->fnode);
+#ifdef HAVE_LIBAIO
+  if (h->file->num_readers.load() > 0) {
+    dout(10) << __func__ << " readers exists. waiting for aio." << dendl;
+    wait_for_aio(h);
+  }
+#endif
   dout(20) << __func__ << " h " << h << " pos now 0x"
            << std::hex << h->pos << std::dec << dendl;
   return 0;
@@ -2764,7 +2777,8 @@ int BlueFS::_flush(FileWriter *h, bool force)
   uint64_t length = h->buffer.length();
   uint64_t offset = h->pos;
   if (!force &&
-      length < cct->_conf->bluefs_min_flush_size) {
+      length < cct->_conf->bluefs_min_flush_size &&
+      h->file->num_readers.load() == 0) {
     dout(10) << __func__ << " " << h << " ignoring, length " << length
 	     << " < min_flush_size " << cct->_conf->bluefs_min_flush_size
 	     << dendl;
