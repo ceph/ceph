@@ -110,13 +110,15 @@ export CEPH_DEV=1
 [ -z "$CEPH_NUM_MGR" ] && CEPH_NUM_MGR="$MGR"
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS="$FS"
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW="$RGW"
+[ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM="$GANESHA"
 
 # if none of the CEPH_NUM_* number is specified, kill the existing
 # cluster.
 if [ -z "$CEPH_NUM_MON" -a \
      -z "$CEPH_NUM_OSD" -a \
      -z "$CEPH_NUM_MDS" -a \
-     -z "$CEPH_NUM_MGR" ]; then
+     -z "$CEPH_NUM_MGR" -a \
+     -z "$GANESHA_DAEMON_NUM" ]; then
     kill_all=1
 else
     kill_all=0
@@ -129,6 +131,7 @@ fi
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS=1
 [ -z "$CEPH_MAX_MDS" ] && CEPH_MAX_MDS=1
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=0
+[ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM=0
 
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
 [ -z "$CEPH_DEV_DIR" ] && CEPH_DEV_DIR="$CEPH_DIR/dev"
@@ -196,7 +199,7 @@ inc_osd_num=0
 
 msgr="21"
 
-usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 $0 -n -d\n"
+usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 GANESHA=1 $0 -n -d\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
@@ -473,6 +476,8 @@ if [ "$overwrite_conf" -eq 0 ]; then
         CEPH_NUM_MGR="$MGR"
     RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
+    GANESHA=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_ganesha 2>/dev/null` && \
+        GANESHA_DAEMON_NUM="$GANESHA"
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
@@ -596,6 +601,7 @@ prepare_conf() {
         num mds = $CEPH_NUM_MDS
         num mgr = $CEPH_NUM_MGR
         num rgw = $CEPH_NUM_RGW
+        num ganesha = $GANESHA_DAEMON_NUM
 
 [global]
         fsid = $(uuidgen)
@@ -1074,6 +1080,100 @@ EOF
 
 }
 
+# Ganesha Daemons requires nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rados-grace
+# (version 2.7.6-2 and above) packages installed. On Fedora>=30 these packages
+# can be installed directly with 'dnf'. For CentOS>=8 the packages need to be
+# downloaded first from  https://download.nfs-ganesha.org/2.7/2.7.6/CentOS/ and
+# then install it. Similarly for Ubuntu 16.04 follow the instructions on
+# https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.7
+
+start_ganesha() {
+    GANESHA_PORT=$(($CEPH_PORT + 4000))
+    local ganesha=0
+
+    for name in a b c d e f g h i j k l m n o p
+    do
+        [ $ganesha -eq $GANESHA_DAEMON_NUM ] && break
+
+        port=$(($GANESHA_PORT + ganesha))
+        ganesha=$(($ganesha + 1))
+        ganesha_dir="$CEPH_DEV_DIR/ganesha.$name"
+
+        echo "Starting ganesha.$name on port: $port"
+
+        prun rm -rf $ganesha_dir
+        prun mkdir -p $ganesha_dir
+
+        echo "NFS_CORE_PARAM {
+        Enable_NLM = false;
+        Enable_RQUOTA = false;
+        Protocols = 4;
+        NFS_Port = $port;
+}
+
+CACHEINODE {
+        Dir_Chunk = 0;
+        NParts = 1;
+        Cache_Size = 1;
+}
+
+NFSv4 {
+        RecoveryBackend = 'rados_cluster';
+        Minor_Versions = 1, 2;
+}
+
+EXPORT {
+	Export_Id = 100;
+	Transports = TCP;
+	Path = /;
+	Pseudo = /ceph/;
+	Protocols = 4;
+	Access_Type = RW;
+	Attr_Expiration_Time = 0;
+	Squash = None;
+	FSAL {
+	    Name = CEPH;
+	}
+}
+
+CEPH {
+	Ceph_Conf = $conf_fn;
+}
+
+RADOS_KV {
+	Ceph_Conf = $conf_fn;
+	pool = 'nfs-ganesha';
+	namespace = 'ganesha';
+	UserId = 'admin';
+	nodeid = $name;
+}" > "$ganesha_dir/ganesha.conf"
+
+
+	wconf <<EOF
+[ganesha.$name]
+        host = $HOSTNAME
+        ip = $IP
+        port = $port
+        ganesha data = $ganesha_dir
+        pid file = $ganesha_dir/ganesha.pid
+EOF
+
+        if !($CEPH_BIN/rados lspools | grep "nfs-ganesha"); then
+            prun ceph_adm osd pool create nfs-ganesha
+            prun ceph_adm osd pool application enable nfs-ganesha nfs
+        fi
+
+        prun ganesha-rados-grace -p nfs-ganesha -n ganesha add $name
+        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
+
+        prun /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
+
+        # Wait few seconds for grace period to be removed
+        sleep 2
+        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
+done
+}
+
 if [ "$debug" -eq 0 ]; then
     CMONDEBUG='
         debug mon = 10
@@ -1275,6 +1375,11 @@ if [ "$ec" -eq 1 ]; then
 osd erasure-code-profile set ec-profile m=2 k=2
 osd pool create ec erasure ec-profile
 EOF
+fi
+
+# Ganesha Daemons
+if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
+    start_ganesha
 fi
 
 do_cache() {
