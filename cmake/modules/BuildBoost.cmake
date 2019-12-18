@@ -109,15 +109,15 @@ function(do_build_boost version)
     " : ${CMAKE_CXX_COMPILER}"
     " ;\n")
   if(with_python_version)
-    find_package(Python ${with_python_version} QUIET REQUIRED
+    find_package(Python3 ${with_python_version} QUIET REQUIRED
       COMPONENTS Development)
-    string(REPLACE ";" " " python_includes "${Python_INCLUDE_DIRS}")
+    string(REPLACE ";" " " python3_includes "${Python3_INCLUDE_DIRS}")
     file(APPEND ${user_config}
       "using python"
       " : ${with_python_version}"
-      " : ${Python_EXECUTABLE}"
-      " : ${python_includes}"
-      " : ${Python_LIBRARIES}"
+      " : ${Python3_EXECUTABLE}"
+      " : ${python3_includes}"
+      " : ${Python3_LIBRARIES}"
       " ;\n")
   endif()
   list(APPEND b2 --user-config=${user_config})

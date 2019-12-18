@@ -418,23 +418,26 @@ endif (WITH_RADOSGW)
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
 
-#option for Mgr
+# Please specify 3.[0-7] if you want to build with a certain version of python3.
+set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
+if(NOT WITH_PYTHON3)
+  message(FATAL_ERROR "WITH_PYTHON3 should always be enabled")
+elseif(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
+  set(WITH_PYTHON3 "3")
+  message(NOTICE "Please specify a Python3 version instead of a BOOLEAN")
+elseif(NOT WITH_PYTHON3 STREQUAL "3")
+  set(find_python3_exact "EXACT")
+endif()
+find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
+  COMPONENTS Interpreter Development)
+unset(find_python3_exact)
+
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
-  # Please specify 3 or 3.[0-7] if you want to build with python3 support.
-  # FindPython thinks they belong to different families.
-  set(MGR_PYTHON_VERSION "2.7" CACHE
-    STRING "required version of python runtime for running mgr plugins. ")
-  if(NOT MGR_PYTHON_VERSION MATCHES "^[23]$")
-    set(find_python_exact "EXACT")
-  endif()
-  find_package(Python ${MGR_PYTHON_VERSION} ${find_python_exact} REQUIRED
-    COMPONENTS Interpreter Development)
-  unset(find_python_exact)
-  set(MGR_PYTHON_EXECUTABLE ${Python_EXECUTABLE})
-  set(MGR_PYTHON_LIBRARIES ${Python_LIBRARIES})
-  set(MGR_PYTHON_VERSION_MAJOR ${Python_VERSION_MAJOR})
-  set(MGR_PYTHON_VERSION_MINOR ${Python_VERSION_MINOR})
+  set(MGR_PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+  set(MGR_PYTHON_LIBRARIES ${Python3_LIBRARIES})
+  set(MGR_PYTHON_VERSION_MAJOR ${Python3_VERSION_MAJOR})
+  set(MGR_PYTHON_VERSION_MINOR ${Python3_VERSION_MINOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 

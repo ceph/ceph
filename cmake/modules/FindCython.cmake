@@ -4,7 +4,7 @@
 
 # Try to run Cython, to make sure it works:
 execute_process(
-  COMMAND ${Python${PYTHON_VERSION}_EXECUTABLE} -m cython --version
+  COMMAND ${Python3_EXECUTABLE} -m cython --version
   RESULT_VARIABLE cython_result
   ERROR_VARIABLE cython_output)
 if(cython_result EQUAL 0)
