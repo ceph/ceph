@@ -248,7 +248,7 @@ class Activate(object):
         elif osd_fsid and not osd_id:
             lvs.filter(lv_tags={'ceph.osd_fsid': osd_fsid})
         if not lvs:
-            raise RuntimeError('could not find osd.%s with fsid %s' % (osd_id, osd_fsid))
+            raise RuntimeError('could not find osd.%s with osd_fsid %s' % (osd_id, osd_fsid))
         # This argument is only available when passed in directly or via
         # systemd, not when ``create`` is being used
         if getattr(args, 'auto_detect_objectstore', False):
