@@ -1,7 +1,0 @@
-# swift uses nosetests; pin to py2 for now
-os_type: ubuntu
-
-tasks:
-- swift:
-    client.0:
-      rgw_server: client.0
