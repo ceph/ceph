@@ -43,6 +43,7 @@ NamespaceReplayer<I>::NamespaceReplayer(
     Throttler<I> *image_sync_throttler, Throttler<I> *image_deletion_throttler,
     ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler) :
+  m_namespace_name(name),
   m_local_mirror_uuid(local_mirror_uuid),
   m_remote_mirror_uuid(remote_mirror_uuid),
   m_local_site_name(local_site_name),
@@ -297,6 +298,11 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!m_remote_status_updater);
 
+  std::string local_site_name;
+  if (m_namespace_name.empty()) {
+    local_site_name = m_local_site_name;
+  }
+
   librados::Rados rados(m_local_io_ctx);
   std::string local_fsid;
   int r = rados.cluster_fsid(&local_fsid);
@@ -308,7 +314,7 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   }
 
   m_remote_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_remote_io_ctx, m_threads, m_local_site_name, local_fsid));
+    m_remote_io_ctx, m_threads, local_site_name, local_fsid));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_remote_status_updater>(this);
