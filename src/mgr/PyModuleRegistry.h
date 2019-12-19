@@ -23,7 +23,7 @@
 #include <memory>
 
 #include "common/LogClient.h"
-
+#include "common/WorkQueue.h"
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
@@ -101,7 +101,7 @@ public:
                 const std::map<std::string, std::string> &kv_store,
                 MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
                 Objecter &objecter_, Client &client_, Finisher &f,
-                DaemonServer &server);
+                DaemonServer &server, ThreadPool &tp);
   void standby_start(MonClient &mc, Finisher &f);
 
   bool is_standby_running() const

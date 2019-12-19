@@ -6,6 +6,7 @@
 #include "osd/OSDMap.h"
 #include "common/errno.h"
 #include "common/version.h"
+#include "common/WorkQueue.h"
 #include "include/stringify.h"
 
 #include "PyOSDMap.h"
@@ -19,6 +20,7 @@
 typedef struct {
   PyObject_HEAD
   OSDMap *osdmap;
+  ThreadPool *tp;
 } BasePyOSDMap;
 
 typedef struct {
@@ -189,19 +191,24 @@ static int
 BasePyOSDMap_init(BasePyOSDMap *self, PyObject *args, PyObject *kwds)
 {
     PyObject *osdmap_capsule = nullptr;
-    static const char *kwlist[] = {"osdmap_capsule", NULL};
+    PyObject *tp_capsule = nullptr;
+    static const char *kwlist[] = {"osdmap_capsule", "tp_capsule", NULL};
 
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OT",
                                       const_cast<char**>(kwlist),
-                                      &osdmap_capsule)) {
+                                      &osdmap_capsule,
+                                      &tp_capsule)) {
       ceph_abort();
       return -1;
     }
     ceph_assert(PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type));
 
     self->osdmap = (OSDMap*)PyCapsule_GetPointer(
-        osdmap_capsule, nullptr);
+      osdmap_capsule, nullptr);
     ceph_assert(self->osdmap);
+    self->tp = (ThreadPool*)PyCapsule_GetPointer(
+      tp_capsule, nullptr);
+    ceph_assert(self->tp);
 
     return 0;
 }

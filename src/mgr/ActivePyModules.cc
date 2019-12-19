@@ -43,12 +43,12 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           MonClient &mc, LogChannelRef clog_,
           LogChannelRef audit_clog_, Objecter &objecter_,
           Client &client_, Finisher &f, DaemonServer &server,
-          PyModuleRegistry &pmr)
+          PyModuleRegistry &pmr, ThreadPool &tp)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
     client(client_), finisher(f),
     cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
-    server(server), py_module_registry(pmr)
+    server(server), py_module_registry(pmr), tp(tp)
 {
   store_cache = std::move(store_data);
   cmd_finisher.start();
@@ -845,7 +845,8 @@ PyObject *ActivePyModules::get_context()
 PyObject *construct_with_capsule(
     const std::string &module_name,
     const std::string &clsname,
-    void *wrapped)
+    void *wrapped,
+    void *wrapped2)
 {
   // Look up the OSDMap type which we will construct
   PyObject *module = PyImport_ImportModule(module_name.c_str());
@@ -869,6 +870,13 @@ PyObject *construct_with_capsule(
 
   // Construct the python OSDMap
   auto pArgs = PyTuple_Pack(1, wrapped_capsule);
+  decltype(wrapped_capsule) wrapped_capsule2;
+  if (wrapped2) {
+    Py_DECREF(pArgs);
+    wrapped_capsule2 = PyCapsule_New(wrapped2, nullptr, nullptr);
+    assert(wrapped_capsule2);
+    pArgs = PyTuple_Pack(2, wrapped_capsule, wrapped_capsule2);
+  }
   auto wrapper_instance = PyObject_CallObject(wrapper_type, pArgs);
   if (wrapper_instance == nullptr) {
     derr << "Failed to construct python OSDMap:" << dendl;
@@ -877,6 +885,9 @@ PyObject *construct_with_capsule(
   ceph_assert(wrapper_instance != nullptr);
   Py_DECREF(pArgs);
   Py_DECREF(wrapped_capsule);
+  if (wrapped2) {
+    Py_DECREF(wrapped_capsule2);
+  }
 
   Py_DECREF(wrapper_type);
   Py_DECREF(module);
@@ -897,7 +908,8 @@ PyObject *ActivePyModules::get_osdmap()
   }
   PyEval_RestoreThread(tstate);
 
-  return construct_with_capsule("mgr_module", "OSDMap", (void*)newmap);
+  return construct_with_capsule("mgr_module", "OSDMap",
+                                (void*)newmap, (void*)&tp);
 }
 
 void ActivePyModules::set_health_checks(const std::string& module_name,

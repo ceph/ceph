@@ -57,6 +57,7 @@ protected:
   ClusterState cluster_state;
 
   DaemonServer server;
+  ThreadPool cpu_tp;
 
   LogChannelRef clog;
   LogChannelRef audit_clog;

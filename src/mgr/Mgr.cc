@@ -52,6 +52,8 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   cluster_state(monc, nullptr, mgrmap),
   server(monc, finisher, daemon_state, cluster_state, *py_module_registry,
          clog_, audit_clog_),
+  cpu_tp(g_ceph_context, "Mgr::cpu_tp", "cpu_tp",
+    g_ceph_context->_conf.get_val<int64_t>("mon_cpu_threads")),
   clog(clog_),
   audit_clog(audit_clog_),
   initialized(false),
@@ -314,11 +316,13 @@ void Mgr::init()
   py_module_registry->upgrade_config(monc, kv_store);
   lock.lock();
 
+  // make sure tp is ready for use before we activate modules
+  cpu_tp.start();
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
   py_module_registry->active_start(daemon_state, cluster_state,
       kv_store, *monc, clog, audit_clog, *objecter, *client,
-      finisher, server);
+      finisher, server, cpu_tp);
 
   cluster_state.final_init();
 
@@ -439,6 +443,7 @@ void Mgr::shutdown()
   // to touch references to the things we're about to tear down
   finisher.wait_for_empty();
   finisher.stop();
+  cpu_tp.stop();
 }
 
 void Mgr::handle_osd_map()

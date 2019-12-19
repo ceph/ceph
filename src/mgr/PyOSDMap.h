@@ -14,5 +14,6 @@ extern PyTypeObject BasePyCRUSHType;
 PyObject *construct_with_capsule(
     const std::string &module,
     const std::string &clsname,
-    void *wrapped);
+    void *wrapped,
+    void *wrapped2 = nullptr);
 

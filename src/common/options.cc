@@ -1374,7 +1374,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .add_service("mon")
+    .add_service({"mon", "mgr"})
     .set_description("worker threads for CPU intensive background work"),
 
     Option("mon_osd_mapping_pgs_per_chunk", Option::TYPE_INT, Option::LEVEL_DEV)

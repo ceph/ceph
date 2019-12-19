@@ -23,6 +23,7 @@
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/LogClient.h"
+#include "common/WorkQueue.h"
 #include "mon/MgrMap.h"
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
@@ -54,6 +55,7 @@ public:
 private:
   DaemonServer &server;
   PyModuleRegistry &py_module_registry;
+  ThreadPool &tp;
 
   map<std::string,ProgressEvent> progress_events;
 
@@ -63,8 +65,9 @@ public:
   ActivePyModules(PyModuleConfig &module_config,
             std::map<std::string, std::string> store_data,
             DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
-            Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
+            LogChannelRef clog_, LogChannelRef audit_clog_,
+            Objecter &objecter_, Client &client_, Finisher &f,
+            DaemonServer &server, PyModuleRegistry &pmr, ThreadPool &tp);
 
   ~ActivePyModules();
 

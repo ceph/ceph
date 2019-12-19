@@ -177,7 +177,7 @@ void PyModuleRegistry::active_start(
             const std::map<std::string, std::string> &kv_store,
             MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
             Objecter &objecter_, Client &client_, Finisher &f,
-            DaemonServer &server)
+            DaemonServer &server,  ThreadPool &tp)
 {
   std::lock_guard locker(lock);
 
@@ -197,7 +197,7 @@ void PyModuleRegistry::active_start(
   active_modules.reset(new ActivePyModules(
               module_config, kv_store, ds, cs, mc,
               clog_, audit_clog_, objecter_, client_, f, server,
-              *this));
+              *this, tp));
 
   for (const auto &i : modules) {
     // Anything we're skipping because of !can_run will be flagged
