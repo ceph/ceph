@@ -1039,46 +1039,36 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
                        extra_args=[]):
-        conn = self._get_connection(host)
-        try:
-            name = '%s.%s' % (daemon_type, daemon_id)
+        name = '%s.%s' % (daemon_type, daemon_id)
 
-            # generate config
-            ret, config, err = self.mon_command({
-                "prefix": "config generate-minimal-conf",
-            })
+        # generate config
+        ret, config, err = self.mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
 
-            ret, crash_keyring, err = self.mon_command({
-                'prefix': 'auth get-or-create',
-                'entity': 'client.crash.%s' % host,
-                'caps': ['mon', 'profile crash',
-                         'mgr', 'profile crash'],
-            })
+        ret, crash_keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.crash.%s' % host,
+            'caps': ['mon', 'profile crash',
+                     'mgr', 'profile crash'],
+        })
 
-            j = json.dumps({
-                'config': config,
-                'keyring': keyring,
-                'crash_keyring': crash_keyring,
-            })
+        j = json.dumps({
+            'config': config,
+            'keyring': keyring,
+            'crash_keyring': crash_keyring,
+        })
 
-            out, err, code = self._run_cephadm(
-                host, name, 'deploy',
-                [
-                    '--name', name,
-                    '--config-and-keyrings', '-',
-                ] + extra_args,
-                stdin=j)
-            self.log.debug('create_daemon code %s out %s' % (code, out))
-            self.service_cache.invalidate(host)
-            return "(Re)deployed {} on host '{}'".format(name, host)
-
-        except Exception as e:
-            self.log.error("create_daemon({}): error: {}".format(host, e))
-            raise
-
-        finally:
-            self.log.info("create_daemon({}): finished".format(host))
-            conn.exit()
+        out, err, code = self._run_cephadm(
+            host, name, 'deploy',
+            [
+                '--name', name,
+                '--config-and-keyrings', '-',
+            ] + extra_args,
+            stdin=j)
+        self.log.debug('create_daemon code %s out %s' % (code, out))
+        self.service_cache.invalidate(host)
+        return "(Re)deployed {} on host '{}'".format(name, host)
 
     @async_map_completion
     def _remove_daemon(self, name, host):
