@@ -209,7 +209,7 @@ class KernelMount(CephFSMount):
             """)
 
         p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
+            'sudo', 'python3', '-c', pyscript
         ], stdout=StringIO(), timeout=(5*60))
         client_id_to_dir = json.loads(p.stdout.getvalue())
 
@@ -231,7 +231,7 @@ class KernelMount(CephFSMount):
             """).format(debug_dir=debug_dir, filename=filename)
 
         p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
+            'sudo', 'python3', '-c', pyscript
         ], stdout=StringIO(), timeout=(5*60))
         return p.stdout.getvalue()
 
