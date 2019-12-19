@@ -70,8 +70,9 @@ class CommandResult(object):
         self.ev.set()
 
     def wait(self):
+        # type: () -> HandleCommandResult
         self.ev.wait()
-        return self.r, self.outb, self.outs
+        return HandleCommandResult(self.r, self.outb, self.outs)
 
 
 class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout', 'stderr'])):
@@ -988,6 +989,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_get_daemon_status(svc_type, svc_id)
 
     def mon_command(self, cmd_dict):
+        # type: (dict) -> HandleCommandResult
         """
         Helper for modules that do simple, synchronous mon command
         execution.

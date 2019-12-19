@@ -1,6 +1,7 @@
 import json
 import errno
 import logging
+import time
 from functools import wraps
 
 import string
@@ -238,12 +239,8 @@ def with_services(service_type=None,
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             def on_complete(services):
-                if kwargs:
-                    kwargs['services'] = services
-                    return func(self, *args, **kwargs)
-                else:
-                    args_ = args + (services,)
-                    return func(self, *args_, **kwargs)
+                kwargs['services'] = services
+                return func(self, *args, **kwargs)
             return self._get_services(service_type=service_type,
                                       service_name=service_name,
                                       service_id=service_id,
@@ -1037,8 +1034,65 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self.get_hosts().then(lambda hosts: self._create_osd(hosts, drive_group))
 
     @with_services('osd')
-    def remove_osds(self, osd_ids, services):
-        # type: (List[str], List[orchestrator.ServiceDescription]) -> AsyncCompletion
+    def remove_osds(self, osd_ids, destroy=False, services=[]):
+        # type: (List[str], bool, List[orchestrator.ServiceDescription]) -> AsyncCompletion
+
+        def ok_to_destroy():
+            return self.mon_command({
+                'prefx': 'osd safe-to-destroy',
+                'ids': osd_ids,
+            })
+        if destroy:
+            ret = ok_to_destroy()
+            if ret.retval:
+                raise OrchestratorValidationError('osd_ids not safe to destroy: {} {}'.format(osd_ids, ret.stderr))
+            for osd_id in osd_ids:
+                ret = self.mon_command({
+                    'prefx': 'osd destroy',
+                    'id': osd_id,
+                    'yes_i_really_mean_it': True
+                })
+                if ret.retval:
+                    raise ValueError(
+                        'osd destroy failed: {} {}'.format(osd_id, ret.stderr))
+        else:
+            for osd_id in osd_ids:
+                ret = self.mon_command({
+                    'prefx': 'osd crush reweight',
+                    'name': osd_id,
+                    'weight': 0.0
+                })
+                if ret.retval:
+                    raise ValueError(
+                        'osd crush reweight failed: {} {}'.format(osd_id, ret.stderr))
+            ret = self.mon_command({
+                'prefx': 'osd out',
+                'ids': osd_ids,
+            })
+            if ret.retval:
+                raise ValueError(
+                    'osd crush reweight failed: {} {}'.format(osd_ids, ret.stderr))
+            while True:
+                ret = ok_to_destroy()
+                if not ret.retval:
+                    break
+                if ret.retval != -errno.EAGAIN:
+                    raise ValueError(
+                        'ok-to-destroy failed: {} {}'.format(osd_ids, ret.stderr))
+
+                logger.info('waiting for {} to be ok-to-destroy: {}'.format(osd_ids, ret.stdout))
+                time.sleep(10)  # TODO: this might take a day. move this to serve()
+
+                for osd_id in osd_ids:
+                    ret = self.mon_command({
+                        'prefix': 'osd purge',
+                        'id': osd_id,
+                        'yes_i_really_mean_it': True
+                    })
+                    if ret.retval:
+                        raise ValueError(
+                            'osd purge failed: {} {}'.format(osd_ids, ret.stderr))
+
         args = [(d.name(), d.nodename) for d in services if
                 d.service_instance in osd_ids]
 

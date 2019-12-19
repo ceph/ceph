@@ -3,6 +3,7 @@ import time
 from contextlib import contextmanager
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from mgr_module import HandleCommandResult
 
 try:
     from typing import Any
@@ -31,7 +32,7 @@ def _run_cephadm(ret):
     return foo
 
 def mon_command(*args, **kwargs):
-    return 0, '', ''
+    return HandleCommandResult(0, '', '')
 
 
 class TestCephadm(object):
@@ -162,7 +163,9 @@ class TestCephadm(object):
             )
         ])
     ))
-    def test_remove_osds(self, cephadm_module):
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    def test_remove_osds(self, send_command_, cephadm_module):
         cephadm_module._cluster_fsid = "fsid"
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.remove_osds(['0'])
