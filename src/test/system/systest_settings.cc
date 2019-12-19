@@ -33,7 +33,14 @@ inst()
 bool SysTestSettings::
 use_threads() const
 {
+  #ifdef _WIN32
+  // We can't use multiple processes on Windows for the time being.
+  // We'd need a mechanism for spawning those procecesses and also handle
+  // the inter-process communication.
+  return true;
+  #else
   return m_use_threads;
+  #endif
 }
 
 std::string SysTestSettings::
