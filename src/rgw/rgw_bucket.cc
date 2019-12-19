@@ -276,13 +276,13 @@ void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_use
       return;
     }
 
-    map<string, rgw::sal::RGWBucket*>& buckets = user_buckets.get_buckets();
-    for (map<string, rgw::sal::RGWBucket*>::iterator i = buckets.begin();
+    map<string, std::unique_ptr<rgw::sal::RGWBucket>>& buckets = user_buckets.get_buckets();
+    for (auto i = buckets.begin();
          i != buckets.end();
          ++i) {
       marker = i->first;
 
-      rgw::sal::RGWBucket* bucket = i->second;
+      auto& bucket = i->second;
 
       RGWBucketInfo bucket_info;
       real_time mtime;
@@ -1511,10 +1511,10 @@ int RGWBucketAdminOp::limit_check(rgw::sal::RGWRadosStore *store,
       if (ret < 0)
         return ret;
 
-      map<string, rgw::sal::RGWBucket*>& m_buckets = buckets.get_buckets();
+      map<string, std::unique_ptr<rgw::sal::RGWBucket>>& m_buckets = buckets.get_buckets();
 
       for (const auto& iter : m_buckets) {
-	auto bucket = iter.second;
+	auto& bucket = iter.second;
 	uint32_t num_shards = 1;
 	uint64_t num_objects = 0;
 
@@ -1618,7 +1618,6 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store,
     constexpr bool no_need_stats = false; // set need_stats to false
 
     do {
-      buckets.clear();
       ret = user.list_buckets(marker, empty_end_marker, max_entries,
 			      no_need_stats, buckets);
       if (ret < 0) {
@@ -1626,7 +1625,7 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store,
       }
 
       const std::string* marker_cursor = nullptr;
-      map<string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
+      map<string, std::unique_ptr<rgw::sal::RGWBucket>>& m = buckets.get_buckets();
 
       for (const auto& i : m) {
         const std::string& obj_name = i.first;

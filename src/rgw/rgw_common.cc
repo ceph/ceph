@@ -1017,7 +1017,7 @@ struct perm_state_from_req_state : public perm_state_base {
   perm_state_from_req_state(req_state * const _s) : perm_state_base(_s->cct,
                                                                     _s->env,
                                                                     _s->auth.identity.get(),
-                                                                    _s->bucket_info,
+                                                                    _s->bucket->get_info(),
                                                                     _s->perm_mask,
                                                                     _s->defer_to_bucket_acls,
                                                                     _s->bucket_access_conf),
@@ -1258,7 +1258,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 
   return verify_bucket_permission(dpp, 
                                   &ps,
-                                  s->bucket,
+                                  s->bucket->get_bi(),
                                   s->user_acl.get(),
                                   s->bucket_acl.get(),
                                   s->iam_policy,
@@ -1272,14 +1272,14 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 int verify_bucket_owner_or_policy(struct req_state* const s,
 				  const uint64_t op)
 {
-  auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket));
+  auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket->get_bi()));
   if (usr_policy_res == Effect::Deny) {
     return -EACCES;
   }
 
   auto e = eval_or_pass(s->iam_policy,
 			s->env, *s->auth.identity,
-			op, ARN(s->bucket));
+			op, ARN(s->bucket->get_bi()));
   if (e == Effect::Deny) {
     return -EACCES;
   }
@@ -1483,7 +1483,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s
 
   return verify_object_permission(dpp,
                                   &ps,
-                                  rgw_obj(s->bucket, s->object),
+                                  rgw_obj(s->bucket->get_bi(), s->object->get_key()),
                                   s->user_acl.get(),
                                   s->bucket_acl.get(),
                                   s->object_acl.get(),

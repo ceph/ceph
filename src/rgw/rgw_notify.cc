@@ -15,8 +15,7 @@ namespace rgw::notify {
 
 // populate record from request
 void populate_record_from_request(const req_state *s, 
-        const rgw_obj_key& key,
-        uint64_t size,
+        const rgw::sal::RGWObject* obj,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
@@ -29,17 +28,17 @@ void populate_record_from_request(const req_state *s,
   // configurationId is filled from notification configuration
   record.bucket_name = s->bucket_name;
   record.bucket_ownerIdentity = s->bucket_owner.get_id().id;
-  record.bucket_arn = to_string(rgw::ARN(s->bucket));
-  record.object_key = key.name;
-  record.object_size = size;
+  record.bucket_arn = to_string(rgw::ARN(s->bucket->get_bi()));
+  record.object_key = obj->get_name();
+  record.object_size = obj->get_obj_size();
   record.object_etag = etag;
-  record.object_versionId = key.instance;
+  record.object_versionId = obj->get_instance();
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
           std::back_inserter(record.object_sequencer));
   set_event_id(record.id, etag, ts);
-  record.bucket_id = s->bucket.bucket_id;
+  record.bucket_id = s->bucket->get_bucket_id();
   // pass meta data
   record.x_meta_map = s->info.x_meta_map;
   // pass tags
@@ -51,7 +50,7 @@ bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, EventType 
   if (!::match(filter.events, event)) { 
     return false;
   }
-  if (!::match(filter.s3_filter.key_filter, s->object.name)) {
+  if (!::match(filter.s3_filter.key_filter, s->object->get_name())) {
     return false;
   }
   if (!::match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
@@ -64,14 +63,13 @@ bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, EventType 
 }
 
 int publish(const req_state* s, 
-        const rgw_obj_key& key,
-        uint64_t size,
+        rgw::sal::RGWObject* obj,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
         rgw::sal::RGWRadosStore* store) {
     RGWUserPubSub ps_user(store, s->user->get_id());
-    RGWUserPubSub::Bucket ps_bucket(&ps_user, s->bucket);
+    RGWUserPubSub::Bucket ps_bucket(&ps_user, s->bucket->get_bi());
     rgw_pubsub_bucket_topics bucket_topics;
     auto rc = ps_bucket.get_topics(&bucket_topics);
     if (rc < 0) {
@@ -79,7 +77,7 @@ int publish(const req_state* s,
         return rc;
     }
     rgw_pubsub_s3_record record;
-    populate_record_from_request(s, key, size, mtime, etag, event_type, record);
+    populate_record_from_request(s, obj, mtime, etag, event_type, record);
     bool event_handled = false;
     bool event_should_be_handled = false;
     for (const auto& bucket_topic : bucket_topics.topics) {
@@ -94,7 +92,7 @@ int publish(const req_state* s,
         record.opaque_data = topic_cfg.opaque_data;
         ldout(s->cct, 20) << "notification: '" << topic_filter.s3_id << 
             "' on topic: '" << topic_cfg.dest.arn_topic << 
-            "' and bucket: '" << s->bucket.name << 
+            "' and bucket: '" << s->bucket->get_name() <<
             "' (unique topic: '" << topic_cfg.name <<
             "') apply to event of type: '" << to_string(event_type) << "'" << dendl;
         try {
