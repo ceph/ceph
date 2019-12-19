@@ -509,7 +509,7 @@ add_dependencies(tests
   ceph_test_objectstore
   ceph_erasure_code_non_regression
   ceph_erasure_code
-  cython${PY_BINDING_INFIX}_modules)
+  cython_modules)
 if (WITH_CEPHFS)
   add_dependencies(tests ceph-mds)
 endif()

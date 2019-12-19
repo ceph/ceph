@@ -11,10 +11,7 @@ else
     CYTHON_MODULES_DIR=$CEPH_SRC/build
 fi
 
-export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind"
-for x in $CYTHON_MODULES_DIR/lib* ; do
-    PYTHONPATH="${PYTHONPATH}:${x}"
-done
+export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind:$CYTHON_MODULES_DIR/lib.3"
 
 recreate_pool() {
     POOL_NAME=$1
@@ -44,7 +41,7 @@ run_generic_tests() {
 
 run_api_tests() {
     # skip many_snaps since it takes several minutes
-    nosetests -v test_rbd -e '.*many_snaps'
+    python3 -m nose -v test_rbd -e '.*many_snaps'
     # ceph_test_librbd creates its own pools
     ceph_test_librbd
 }
