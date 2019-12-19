@@ -232,7 +232,7 @@ class FullnessTestCase(CephFSTestCase):
             print("writing some data through which we expect to succeed")
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
-            bytes += os.write(f, 'a' * 512 * 1024)
+            bytes += os.write(f, b'a' * 512 * 1024)
             os.fsync(f)
             print("fsync'ed data successfully, will now attempt to fill fs")
 
@@ -243,7 +243,7 @@ class FullnessTestCase(CephFSTestCase):
             full = False
 
             for n in range(0, int({fill_mb} * 0.9)):
-                bytes += os.write(f, 'x' * 1024 * 1024)
+                bytes += os.write(f, b'x' * 1024 * 1024)
                 print("wrote {{0}} bytes via buffered write, may repeat".format(bytes))
             print("done writing {{0}} bytes".format(bytes))
 
@@ -257,7 +257,7 @@ class FullnessTestCase(CephFSTestCase):
             print("starting buffered write")
             try:
                 for n in range(0, int({fill_mb} * 0.2)):
-                    bytes += os.write(f, 'x' * 1024 * 1024)
+                    bytes += os.write(f, b'x' * 1024 * 1024)
                     print("sleeping a bit as we've exceeded 90% of our expected full ratio")
                     time.sleep({full_wait})
             except OSError:
@@ -303,7 +303,7 @@ class FullnessTestCase(CephFSTestCase):
             print("writing some data through which we expect to succeed")
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
-            bytes += os.write(f, 'a' * 4096)
+            bytes += os.write(f, b'a' * 4096)
             os.fsync(f)
             print("fsync'ed data successfully, will now attempt to fill fs")
 
@@ -315,7 +315,7 @@ class FullnessTestCase(CephFSTestCase):
 
             for n in range(0, int({fill_mb} * 1.1)):
                 try:
-                    bytes += os.write(f, 'x' * 1024 * 1024)
+                    bytes += os.write(f, b'x' * 1024 * 1024)
                     print("wrote bytes via buffered write, moving on to fsync")
                 except OSError as e:
                     print("Unexpected error %s from write() instead of fsync()" % e)

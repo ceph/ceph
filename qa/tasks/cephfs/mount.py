@@ -356,10 +356,10 @@ class CephFSMount(object):
             import os
             import time
 
-            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0644)
+            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0o644)
             try:
                 while True:
-                    os.write(fd, 'content')
+                    os.write(fd, b'content')
                     time.sleep(1)
                     if not {loop}:
                         break
