@@ -260,6 +260,7 @@ private:
                            const std::string &instance_id,
                            Context* on_finish);
 
+  std::string m_namespace_name;
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
   std::string m_local_mirror_uuid;
