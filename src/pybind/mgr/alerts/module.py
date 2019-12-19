@@ -29,6 +29,7 @@ class Alerts(MgrModule):
         # smtp
         {
             'name': 'smtp_host',
+            'default': '',
             'desc': 'SMTP server',
             'runtime': True,
         },
@@ -155,6 +156,8 @@ class Alerts(MgrModule):
             if r:
                 for code, alert in r.items():
                     checks[code] = alert
+        else:
+            self.log.warn('Alert is not sent because smtp_host is not configured')
         self.set_health_checks(checks)
 
     def serve(self):
