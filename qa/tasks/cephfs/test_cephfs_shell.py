@@ -456,10 +456,12 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_hardlinks(self):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
-        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+        sudo_write_file(self.mount_a.client_remote, regfile_abspath,
+                        'somedata')
         hlinkname = 'some_hardlink'
         hlink_abspath = path.join(self.mount_a.mountpoint, hlinkname)
-        self.mount_a.run_shell(['ln', regfile_abspath, hlink_abspath])
+        self.mount_a.run_shell(['sudo', 'ln', regfile_abspath,
+                                hlink_abspath], omit_sudo=False)
 
         size = humansize(self.mount_a.stat(hlink_abspath)['st_size'])
         expected_output = r'{}{}{}'.format(size, " +", hlinkname)
@@ -510,8 +512,8 @@ class TestDU(TestCephFSShell):
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
                    expected_output, du_output)
 
-    # NOTE: tests using these are pretty slow since to this methods sleeps for 15
-    # seconds.
+    # NOTE: tests using these are pretty slow since to this methods sleeps for
+    # 15 seconds
     def _setup_files(self, return_path_to_files=False, path_prefix='./'):
         dirname = 'dir1'
         regfilename = 'regfile'
