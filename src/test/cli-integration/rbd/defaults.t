@@ -1,7 +1,7 @@
 Plain create with various options specified via usual cli arguments
 ===================================================================
   $ rbd create -s 1 test
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -13,7 +13,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 --object-size 1M test
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -25,7 +25,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1G --object-size 4K test
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -37,7 +37,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --image-format 2
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -54,7 +54,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1G test --image-format 2
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -71,7 +71,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --image-format 2 --object-size 1M
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -88,7 +88,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --image-format 2 --stripe-unit 1048576 --stripe-count 8
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -107,7 +107,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --image-format 2 --stripe-unit 1048576B --stripe-count 8
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -126,7 +126,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1G test --image-format 2 --stripe-unit 4K --stripe-count 8
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -145,7 +145,7 @@ Plain create with various options specified via usual cli arguments
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1G test --image-format 2 --stripe-unit 1M --stripe-count 8
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -167,7 +167,7 @@ Plain create with various options specified via usual cli arguments
 Format 2 Usual arguments with custom rbd_default_* params
 =========================================================
   $ rbd create -s 1 test --image-format 2 --stripe-unit 1048576 --stripe-count 8 --rbd-default-order 21
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -186,7 +186,7 @@ Format 2 Usual arguments with custom rbd_default_* params
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --image-format 2 --stripe-unit 1048576 --stripe-count 8 --object-size 8M --rbd-default-order 20
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -205,7 +205,7 @@ Format 2 Usual arguments with custom rbd_default_* params
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --image-format 2 --rbd-default-stripe-unit 1048576 --rbd-default-stripe-count 8
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -227,7 +227,7 @@ Format 2 Usual arguments with custom rbd_default_* params
 Format 1 Usual arguments with custom rbd_default_* params
 =========================================================
   $ rbd create -s 1 test --rbd-default-order 20
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -239,7 +239,7 @@ Format 1 Usual arguments with custom rbd_default_* params
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --rbd-default-format 2
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -256,7 +256,7 @@ Format 1 Usual arguments with custom rbd_default_* params
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --rbd-default-format 2 --rbd-default-order 20
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -273,7 +273,7 @@ Format 1 Usual arguments with custom rbd_default_* params
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --rbd-default-format 2 --rbd-default-order 20 --rbd-default-features 1
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -290,7 +290,7 @@ Format 1 Usual arguments with custom rbd_default_* params
   }
   $ rbd rm test --no-progress
   $ rbd create -s 1 test --rbd-default-format 2 --stripe-unit 1048576 --stripe-count 8
-  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd info test --format json | python3 -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
