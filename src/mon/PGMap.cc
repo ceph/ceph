@@ -2363,6 +2363,23 @@ void PGMap::dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map,
   }
 }
 
+// Get crush parentage for an osd (skip root)
+set<std::string> PGMap::osd_parentage(const OSDMap& osdmap, int id) const
+{
+  set<std::string> reporters_by_subtree;
+  auto reporter_subtree_level = g_conf().get_val<string>("mon_osd_reporter_subtree_level");
+
+  auto loc = osdmap.crush->get_full_location(id);
+  for (auto& [parent_bucket_type, parent_id] : loc) {
+    // Should we show the root?  Might not be too informative like "default"
+    if (parent_bucket_type != "root" &&
+        parent_bucket_type != reporter_subtree_level) {
+      reporters_by_subtree.insert(parent_id);
+    }
+  }
+  return reporters_by_subtree;
+}
+
 void PGMap::get_health_checks(
   CephContext *cct,
   const OSDMap& osdmap,
@@ -2833,9 +2850,11 @@ void PGMap::get_health_checks(
         break;
       }
       max_detail--;
-      ss << "Slow heartbeat ping on back interface from osd." << sback.from
+      ss << "Slow OSD heartbeats on back from osd." << sback.from
+	 << " [" << osd_parentage(osdmap, sback.from) << "]"
          << (osdmap.is_down(sback.from) ? " (down)" : "")
 	 << " to osd." << sback.to
+	 << " [" << osd_parentage(osdmap, sback.to) << "]"
          << (osdmap.is_down(sback.to) ? " (down)" : "")
 	 << " " << fixed_u_to_string(sback.pingtime, 3) << " msec"
 	 << (sback.improving ? " possibly improving" : "");
@@ -2850,9 +2869,12 @@ void PGMap::get_health_checks(
         break;
       }
       max_detail--;
-      ss << "Slow heartbeat ping on front interface from osd." << sfront.from
+      // Get crush parentage for each osd
+      ss << "Slow OSD heartbeats on front from osd." << sfront.from
+	 << " [" << osd_parentage(osdmap, sfront.from) << "]"
          << (osdmap.is_down(sfront.from) ? " (down)" : "")
          << " to osd." << sfront.to
+	 << " [" << osd_parentage(osdmap, sfront.to) << "]"
          << (osdmap.is_down(sfront.to) ? " (down)" : "")
 	 << " " << fixed_u_to_string(sfront.pingtime, 3) << " msec"
 	 << (sfront.improving ? " possibly improving" : "");
@@ -2860,16 +2882,16 @@ void PGMap::get_health_checks(
     }
     if (detail_back.size() != 0) {
       ostringstream ss;
-      ss << "Long heartbeat ping times on back interface seen, longest is "
-	 << fixed_u_to_string(back_sorted.rbegin()->pingtime, 3) << " msec";
+      ss << "Slow OSD heartbeats on back (longest "
+	 << fixed_u_to_string(back_sorted.rbegin()->pingtime, 3) << "ms)";
       auto& d = checks->add("OSD_SLOW_PING_TIME_BACK", HEALTH_WARN, ss.str(),
 		      back_sorted.size());
       d.detail.swap(detail_back);
     }
     if (detail_front.size() != 0) {
       ostringstream ss;
-      ss << "Long heartbeat ping times on front interface seen, longest is "
-	 << fixed_u_to_string(front_sorted.rbegin()->pingtime, 3) << " msec";
+      ss << "Slow OSD heartbeats on front (longest "
+	 << fixed_u_to_string(front_sorted.rbegin()->pingtime, 3) << "ms)";
       auto& d = checks->add("OSD_SLOW_PING_TIME_FRONT", HEALTH_WARN, ss.str(),
 		      front_sorted.size());
       d.detail.swap(detail_front);
