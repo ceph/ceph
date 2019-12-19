@@ -119,8 +119,10 @@ if [[ -n $DEV_BUILD ]]; then
   echo "Dev build enabled."
   echo "Git versioning will be disabled."
   ENABLE_GIT_VERSION="OFF"
+  WITH_CEPH_DEBUG_MUTEX="ON"
 else
   ENABLE_GIT_VERSION="ON"
+  WITH_CEPH_DEBUG_MUTEX="OFF"
 fi
 
 # As opposed to Linux, Windows shared libraries can't have unresolved
@@ -132,11 +134,11 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D WITH_GSSAPI=OFF -D WITH_FUSE=OFF -D WITH_XFS=OFF \
       -D WITH_BLUESTORE=OFF -D WITH_LEVELDB=OFF \
       -D WITH_LTTNG=OFF -D WITH_BABELTRACE=OFF \
-      -D WITH_SYSTEM_BOOST=ON -D WITH_MGR=OFF \
+      -D WITH_SYSTEM_BOOST=ON -D WITH_MGR=OFF -D WITH_KVS=OFF \
       -D WITH_LIBCEPHFS=OFF -D WITH_KRBD=OFF -D WITH_RADOSGW=OFF \
-      -D ENABLE_SHARED=OFF -D WITH_RBD=ON -D BUILD_GMOCK=OFF \
+      -D ENABLE_SHARED=OFF -D WITH_RBD=ON -D BUILD_GMOCK=ON \
       -D WITH_CEPHFS=OFF -D WITH_MANPAGE=OFF \
-      -D WITH_MGR_DASHBOARD_FRONTEND=OFF -D WITH_SYSTEMD=OFF -D WITH_TESTS=OFF \
+      -D WITH_MGR_DASHBOARD_FRONTEND=OFF -D WITH_SYSTEMD=OFF -D WITH_TESTS=ON \
       -D LZ4_INCLUDE_DIR=$lz4Include -D LZ4_LIBRARY=$lz4Lib \
       -D Backtrace_INCLUDE_DIR="$backtraceDir/include" \
       -D Backtrace_LIBRARY="$backtraceDir/lib/libbacktrace.a" \
@@ -144,6 +146,7 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D ALLOCATOR="$ALLOCATOR" -D CMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE \
       -D WNBD_INCLUDE_DIRS="$wnbdSrcDir/include" \
       -D WNBD_LIBRARIES="$wnbdLibDir/libwnbd.a" \
+      -D WITH_CEPH_DEBUG_MUTEX=$WITH_CEPH_DEBUG_MUTEX \
       -G "$generatorUsed" \
       $CEPH_DIR  2>&1 | tee "${BUILD_DIR}/cmake.log"
 fi # [[ -z $SKIP_CMAKE ]]
@@ -160,6 +163,7 @@ if [[ -z $SKIP_BUILD ]]; then
     make_targets["src/tools/rbd"]="all"
     make_targets["src/tools/rbd_wnbd"]="all"
     make_targets["src/compressor"]="all"
+    make_targets["src/test"]="all"
 
     for target_subdir in "${!make_targets[@]}"; do
       echo "Building $target_subdir: ${make_targets[$target_subdir]}" | tee -a "${BUILD_DIR}/build.log"
