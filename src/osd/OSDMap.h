@@ -34,6 +34,7 @@
 #include "include/btree_map.h"
 #include "include/types.h"
 #include "common/ceph_releases.h"
+#include "common/WorkQueue.h"
 #include "osd_types.h"
 
 //#include "include/ceph_features.h"
@@ -1417,7 +1418,8 @@ public:
     uint32_t max_deviation, ///< max deviation from target (value >= 1)
     int max_iterations,  ///< max iterations to run
     const std::set<int64_t>& pools,        ///< [optional] restrict to pool
-    Incremental *pending_inc
+    Incremental *pending_inc,
+    ThreadPool* tp = nullptr
     );
 
   int get_osds_by_bucket_name(const std::string &name, std::set<int> *osds) const;

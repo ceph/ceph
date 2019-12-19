@@ -154,7 +154,8 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
 				 max_deviation,
 				 max_iterations,
 				 pools,
-				 incobj->inc);
+				 incobj->inc,
+                                 self->tp);
   PyEval_RestoreThread(tstate);
   dout(10) << __func__ << " r = " << r << dendl;
   return PyLong_FromLong(r);

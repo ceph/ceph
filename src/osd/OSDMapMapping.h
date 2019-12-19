@@ -330,9 +330,10 @@ public:
   std::unique_ptr<MappingJob> start_update(
     const OSDMap& map,
     ParallelPGMapper& mapper,
-    unsigned pgs_per_item) {
+    unsigned pgs_per_item,
+    const set<int64_t>* pools = nullptr) {
     std::unique_ptr<MappingJob> job(new MappingJob(&map, this));
-    mapper.queue(job.get(), pgs_per_item, {});
+    mapper.queue(job.get(), pgs_per_item, {}, pools);
     return job;
   }
 

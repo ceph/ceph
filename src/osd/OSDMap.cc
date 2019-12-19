@@ -35,6 +35,7 @@
 #include "crush/CrushTreeDumper.h"
 #include "common/Clock.h"
 #include "mon/PGMap.h"
+#include "mon/OSDMonitor.h"
 
 using std::list;
 using std::make_pair;
@@ -4528,7 +4529,8 @@ int OSDMap::calc_pg_upmaps(
   uint32_t max_deviation,
   int max,
   const set<int64_t>& only_pools,
-  OSDMap::Incremental *pending_inc)
+  OSDMap::Incremental *pending_inc,
+  ThreadPool* tp)
 {
   ldout(cct, 10) << __func__ << " pools " << only_pools << dendl;
   OSDMap tmp;
@@ -4541,13 +4543,34 @@ int OSDMap::calc_pg_upmaps(
   int total_pgs = 0;
   float osd_weight_total = 0;
   map<int,float> osd_weight;
+  int64_t pg_num = 0;
+  for (auto& i : pools) {
+    if (!only_pools.empty() && !only_pools.count(i.first))
+      continue;
+    pg_num += i.second.get_pg_num();
+  }
+  auto pgs_per_chunk = cct->_conf.get_val<int64_t>(
+    "mon_osd_mapping_pgs_per_chunk");
+  OSDMapMapping mapping; // pg <-> osd mappings
+  bool prime_pg_mapping = false;
+  // parallel CRUSH calculation if necessary
+  if (pg_num > pgs_per_chunk && tp) {
+    prime_pg_mapping = true;
+    ParallelPGMapper mapper(cct, tp);
+    auto mapping_job = mapping.start_update(tmp, mapper, pgs_per_chunk,
+      only_pools.empty() ? nullptr : &only_pools);
+    mapping_job->wait();
+  }
   for (auto& i : pools) {
     if (!only_pools.empty() && !only_pools.count(i.first))
       continue;
     for (unsigned ps = 0; ps < i.second.get_pg_num(); ++ps) {
       pg_t pg(ps, i.first);
       vector<int> up;
-      tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+      if (prime_pg_mapping)
+        mapping.get(pg, &up, nullptr, nullptr, nullptr);
+      else
+        tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
       ldout(cct, 20) << __func__ << " " << pg << " up " << up << dendl;
       for (auto osd : up) {
         if (osd != CRUSH_ITEM_NONE)
