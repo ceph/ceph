@@ -21,7 +21,7 @@ class Alerts(MgrModule):
     MODULE_OPTIONS = [
         {
             'name': 'interval',
-            'type': 'seconds',
+            'type': 'secs',
             'default': 60,
             'desc': 'How frequently to reexamine health status',
             'runtime': True,
