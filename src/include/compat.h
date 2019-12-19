@@ -200,6 +200,7 @@ extern "C" {
 
 int pipe_cloexec(int pipefd[2], int flags);
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
+unsigned get_page_size();
 
 #ifdef __cplusplus
 }
@@ -220,6 +221,10 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 
 #define WIN32_ERROR 0
 #undef ERROR
+
+#ifndef uint
+typedef unsigned int uint;
+#endif
 
 typedef _sigset_t sigset_t;
 
@@ -262,6 +267,10 @@ struct iovec {
 #define ENODATA 120
 #endif
 
+#ifndef EDQUOT
+#define EDQUOT ENOSPC
+#endif
+
 #define ESHUTDOWN ECONNABORTED
 #define ESTALE 256
 #define EREMOTEIO 257
@@ -280,6 +289,7 @@ ssize_t pread(int fd, void *buf, size_t count, off_t offset);
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
 
 long int lrand48(void);
+int random();
 
 int pipe(int pipefd[2]);
 
@@ -290,8 +300,14 @@ char *strptime(const char *s, const char *format, struct tm *tm);
 int chown(const char *path, uid_t owner, gid_t group);
 int fchown(int fd, uid_t owner, gid_t group);
 int lchown(const char *path, uid_t owner, gid_t group);
+int setenv(const char *name, const char *value, int overwrite);
+#define unsetenv(name) _putenv_s(name, "")
 
 int win_socketpair(int socks[2]);
+
+#ifdef __MINGW32__
+extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
+#endif
 
 #ifdef __cplusplus
 }
