@@ -10,7 +10,7 @@ RBDRW=$RELPATH/rbdrw.py
 rbd create $IMAGE --size 10 --image-format 2 --image-shared || exit 1
 
 # rbdrw loops doing I/O to $IMAGE after locking with lockid $LOCKID
-python $RBDRW $IMAGE $LOCKID &
+python3 $RBDRW $IMAGE $LOCKID &
 iochild=$!
 
 # give client time to lock and start reading/writing
