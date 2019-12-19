@@ -557,17 +557,17 @@ int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key)
   return 0;
 }
 
-void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
+void RGWRESTStreamS3PutObj::send_init(rgw::sal::RGWObject* obj)
 {
   string resource_str;
   string resource;
   string new_url = url;
 
   if (host_style == VirtualStyle) {
-    resource_str = obj.get_oid();
-    new_url = obj.bucket.name + "."  + new_url;
+    resource_str = obj->get_oid();
+    new_url = obj->get_bucket()->get_name() + "."  + new_url;
   } else {
-    resource_str = obj.bucket.name + "/" + obj.get_oid();
+    resource_str = obj->get_bucket()->get_name() + "/" + obj->get_oid();
   }
 
   //do not encode slash in object key name
@@ -617,7 +617,7 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, bool send)
   return 0;
 }
 
-int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
+int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
 {
   send_init(obj);
   return send_ready(key, attrs, send);

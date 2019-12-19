@@ -185,7 +185,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  rgw::sal::RGWRadosUser user;
+  rgw::sal::RGWRadosUser user(store);
 
   struct req_state rstate(g_ceph_context, &rgw_env, &user, req->id);
   struct req_state *s = &rstate;

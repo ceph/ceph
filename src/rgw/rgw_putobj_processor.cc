@@ -126,7 +126,7 @@ RadosWriter::~RadosWriter()
   std::optional<rgw_raw_obj> raw_head;
   if (!head_obj.empty()) {
     raw_head.emplace();
-    store->getRados()->obj_to_raw(bucket_info.placement_rule, head_obj, &*raw_head);
+    store->getRados()->obj_to_raw(bucket->get_placement_rule(), head_obj, &*raw_head);
   }
 
   /**
@@ -156,7 +156,7 @@ RadosWriter::~RadosWriter()
 
   if (need_to_remove_head) {
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = store->getRados()->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
+    int r = store->getRados()->delete_obj(obj_ctx, bucket->get_info(), head_obj, 0, 0);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
@@ -208,7 +208,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t alignment;
   rgw_pool head_pool;
 
-  if (!store->getRados()->get_obj_data_pool(bucket_info.placement_rule, head_obj, &head_pool)) {
+  if (!store->getRados()->get_obj_data_pool(bucket->get_placement_rule(), head_obj, &head_pool)) {
     return -EIO;
   }
 
@@ -219,7 +219,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
 
   bool same_pool = true;
 
-  if (bucket_info.placement_rule != tail_placement_rule) {
+  if (bucket->get_placement_rule() != tail_placement_rule) {
     rgw_pool tail_pool;
     if (!store->getRados()->get_obj_data_pool(tail_placement_rule, head_obj, &tail_pool)) {
       return -EIO;
@@ -250,7 +250,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   manifest.set_trivial_rule(head_max_size, stripe_size);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
-                                bucket_info.placement_rule,
+                                bucket->get_placement_rule(),
                                 &tail_placement_rule,
                                 head_obj.bucket, head_obj);
   if (r < 0) {
@@ -295,10 +295,10 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   obj_ctx.set_atomic(head_obj);
 
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store->getRados(), bucket->get_info(), obj_ctx, head_obj);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
-  op_target.set_versioning_disabled(!bucket_info.versioning_enabled());
+  op_target.set_versioning_disabled(!bucket->versioning_enabled());
 
   RGWRados::Object::Write obj_op(&op_target);
 
@@ -377,7 +377,7 @@ int MultipartObjectProcessor::prepare_head()
   manifest.set_multipart_part_rule(stripe_size, part_num);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
-                                bucket_info.placement_rule,
+                                bucket->get_placement_rule(),
                                 &tail_placement_rule,
                                 target_obj.bucket, target_obj);
   if (r < 0) {
@@ -429,7 +429,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store->getRados(), bucket->get_info(), obj_ctx, head_obj);
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write obj_op(&op_target);
 
@@ -473,12 +473,12 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   encode(info, bl);
 
   rgw_obj meta_obj;
-  meta_obj.init_ns(bucket_info.bucket, mp.get_meta(), RGW_OBJ_NS_MULTIPART);
+  meta_obj.init_ns(bucket->get_bi(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
   meta_obj.set_in_extra_data(true);
 
   rgw_raw_obj raw_meta_obj;
 
-  store->getRados()->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
+  store->getRados()->obj_to_raw(bucket->get_placement_rule(), meta_obj, &raw_meta_obj);
 
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_meta_obj);
@@ -513,7 +513,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::D
 int AppendObjectProcessor::prepare(optional_yield y)
 {
   RGWObjState *astate;
-  int r = store->getRados()->get_obj_state(&obj_ctx, bucket_info, head_obj, &astate, y);
+  int r = store->getRados()->get_obj_state(&obj_ctx, bucket->get_info(), head_obj, &astate, y);
   if (r < 0) {
     return r;
   }
@@ -571,7 +571,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
   }
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
 
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, &tail_placement_rule, head_obj.bucket, head_obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket->get_placement_rule(), &tail_placement_rule, head_obj.bucket, head_obj);
   if (r < 0) {
     return r;
   }
@@ -614,7 +614,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     return r;
   }
   obj_ctx.set_atomic(head_obj);
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store->getRados(), bucket->get_info(), obj_ctx, head_obj);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write obj_op(&op_target);

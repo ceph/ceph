@@ -1342,28 +1342,19 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   return 0;
 }
 
-int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
+int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info, rgw::sal::RGWObject* obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
-  map<string, bufferlist> attrs;
-  uint64_t obj_size;
-
   RGWObjectCtx obj_ctx(store);
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  read_op.params.attrs = &attrs;
-  read_op.params.obj_size = &obj_size;
-
-  int ret = read_op.prepare(null_yield);
+  int ret = obj->get_obj_attrs(&obj_ctx, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   map<string, bufferlist>::iterator iter;
-  iter = attrs.find(RGW_ATTR_MANIFEST);
-  if (iter == attrs.end()) {
-    *need_rewrite = (obj_size >= min_stripe_size);
+  iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
+  if (iter == obj->get_attrs().attrs.end()) {
+    *need_rewrite = (obj->get_obj_size() >= min_stripe_size);
     return 0;
   }
 
@@ -6710,17 +6701,18 @@ next:
       return -ret;
     }
 
-    rgw_obj obj(bucket, object);
-    obj.key.set_instance(object_version);
+    rgw::sal::RGWRadosBucket rbucket(store, bucket);
+    rgw::sal::RGWRadosObject obj(store, object, &rbucket);
+    obj.set_instance(object_version);
     bool need_rewrite = true;
     if (min_rewrite_stripe_size > 0) {
-      ret = check_min_obj_stripe_size(store, bucket_info, obj, min_rewrite_stripe_size, &need_rewrite);
+      ret = check_min_obj_stripe_size(store, bucket_info, &obj, min_rewrite_stripe_size, &need_rewrite);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
       }
     }
     if (need_rewrite) {
-      ret = store->getRados()->rewrite_obj(bucket_info, obj, dpp(), null_yield);
+      ret = store->getRados()->rewrite_obj(bucket_info, &obj, dpp(), null_yield);
       if (ret < 0) {
         cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6838,11 +6830,12 @@ next:
             (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
           formatter->dump_string("status", "Skipped");
         } else {
-          rgw_obj obj(bucket, key);
+	  rgw::sal::RGWRadosBucket rbucket(store, bucket);
+	  rgw::sal::RGWRadosObject obj(store, key, &rbucket);
 
           bool need_rewrite = true;
           if (min_rewrite_stripe_size > 0) {
-            r = check_min_obj_stripe_size(store, bucket_info, obj, min_rewrite_stripe_size, &need_rewrite);
+            r = check_min_obj_stripe_size(store, bucket_info, &obj, min_rewrite_stripe_size, &need_rewrite);
             if (r < 0) {
               ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
             }
@@ -6850,7 +6843,7 @@ next:
           if (!need_rewrite) {
             formatter->dump_string("status", "Skipped");
           } else {
-            r = store->getRados()->rewrite_obj(bucket_info, obj, dpp(), null_yield);
+            r = store->getRados()->rewrite_obj(bucket_info, &obj, dpp(), null_yield);
             if (r == 0) {
               formatter->dump_string("status", "Success");
             } else {

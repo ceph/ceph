@@ -384,7 +384,7 @@ protected:
     return false;
   }
 
-  static int init_from_header(struct req_state* s,
+  static int init_from_header(rgw::sal::RGWRadosStore* store, struct req_state* s,
                               const std::string& frontend_prefix);
 public:
   explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
@@ -500,7 +500,8 @@ public:
   RGWRESTMgr_SWIFT() = default;
   ~RGWRESTMgr_SWIFT() override = default;
 
-  RGWHandler_REST *get_handler(struct req_state *s,
+  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
@@ -571,7 +572,8 @@ public:
   RGWRESTMgr_SWIFT_CrossDomain() = default;
   ~RGWRESTMgr_SWIFT_CrossDomain() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state* const s,
+  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
@@ -627,7 +629,8 @@ public:
   RGWRESTMgr_SWIFT_HealthCheck() = default;
   ~RGWRESTMgr_SWIFT_HealthCheck() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state* const s,
+  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
@@ -673,7 +676,8 @@ public:
   RGWRESTMgr_SWIFT_Info() = default;
   ~RGWRESTMgr_SWIFT_Info() override = default;
 
-  RGWHandler_REST *get_handler(struct req_state* s,
+  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
