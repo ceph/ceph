@@ -36,7 +36,7 @@ if(WITH_GTEST_PARALLEL)
       BUILD_COMMAND ""
       INSTALL_COMMAND "")
     add_dependencies(tests gtest-parallel_ext)
-    find_package(Python REQUIRED)
+    find_package(Python3 QUIET REQUIRED)
     set(GTEST_PARALLEL_COMMAND
       ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
   endif()
@@ -67,7 +67,7 @@ function(add_tox_test name)
     list(APPEND tox_envs ${TOXTEST_TOX_ENVS})
   endif()
   string(REPLACE ";" "," tox_envs "${tox_envs}")
-  find_package(Python REQUIRED)
+  find_package(Python3 QUIET REQUIRED)
   add_custom_command(
     OUTPUT ${venv_path}/bin/activate
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python3_EXECUTABLE}" ${venv_path}
