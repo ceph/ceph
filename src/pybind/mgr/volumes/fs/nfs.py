@@ -138,6 +138,12 @@ class GaneshaConf(object):
         for daemon_id, conf_blocks in daemon_map.items():
             self._write_raw_config(conf_blocks, "conf-{}".format(daemon_id))
 
+    def _delete_export(self, export_id):
+        self._persist_daemon_configuration()
+        with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
+            ioctx.remove_object("export-{}".format(export_id))
 
     def _save_export(self, export):
         self.fill_keys(export)
@@ -152,9 +158,26 @@ class GaneshaConf(object):
         self._save_export(export)
         return ex_id
 
+    def remove_export(self, export_id):
+        if export_id not in self.exports:
+            return None
+        export = self.exports[export_id]
+        del self.exports[export_id]
+        self._delete_export(export_id)
+        return export
+
+    def has_export(self, export_id):
+        return export_id in self.exports
+
     def list_daemons(self):
         return [daemon_id for daemon_id in self.daemons_conf_blocks]
 
+    def reload_daemons(self, daemons):
+        with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
+            for daemon_id in daemons:
+                ioctx.notify("conf-{}".format(daemon_id))
 
 def create_instance(orch):
     return GaneshaConf("a", "nfs-ganesha", "ganesha", orch)
@@ -176,6 +199,14 @@ def create_export(ganesha_conf):
         })
 
     log.info("Export ID is {}".format(ex_id))
+    return 0, "", ""
+
+def delete_export(ganesha_conf, ex_id):
+    if not ganesha_conf.has_export(ex_id):
+        return 0, "No exports available",""
+    log.info("Export detected for id:{}".format(ex_id))
+    export = ganesha_conf.remove_export(ex_id)
+    ganesha_conf.reload_daemons(export.daemons)
     return 0, "", ""
 
 def check_fsal_valid(fs_map):
