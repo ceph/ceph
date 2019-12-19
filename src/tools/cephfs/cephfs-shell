@@ -1452,6 +1452,7 @@ def read_ceph_conf(shell, config_file):
         shell.timing = get_bool_vals_for_boolopts(cephfs.conf_get('timing'))
     except (OSError, libcephfs.Error) as e:
         perror(e)
+        shell.exit_code = 1
 
 if __name__ == '__main__':
     config_file = ''
@@ -1485,5 +1486,9 @@ if __name__ == '__main__':
 
     setup_cephfs(config_file)
     shell = CephFSShell()
+    shell.exit_code = 0
     read_ceph_conf(shell, config_file)
-    sys.exit(shell.cmdloop())
+
+    shell.exit_code = shell.cmdloop()
+
+    sys.exit(shell.exit_code)
