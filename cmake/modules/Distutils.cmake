@@ -15,12 +15,7 @@ function(distutils_install_module name)
     add_custom_target(${name}-clone ALL
       DEPENDS ${py_clone})
   endif()
-  cmake_parse_arguments(DU "" "INSTALL_SCRIPT;PYTHON_VERSION" "" ${ARGN})
-  if(DU_PYTHON_VERSION)
-    set(python_version ${DU_PYTHON_VERSION})
-  else()
-    set(python_version 3)
-  endif()
+  cmake_parse_arguments(DU "" "INSTALL_SCRIPT" "" ${ARGN})
   install(CODE "
     set(options --prefix=${CMAKE_INSTALL_PREFIX})
     if(DEFINED ENV{DESTDIR})
@@ -35,12 +30,12 @@ function(distutils_install_module name)
       endif()
     endif()
     execute_process(
-    COMMAND ${Python${python_version}_EXECUTABLE}
+    COMMAND ${Python3_EXECUTABLE}
         setup.py install \${options}
     WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\")")
 endfunction(distutils_install_module)
 
-function(distutils_add_cython_module target name src python_version)
+function(distutils_add_cython_module target name src)
   get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
   # When using ccache, CMAKE_C_COMPILER is ccache executable absolute path
@@ -64,12 +59,8 @@ function(distutils_add_cython_module target name src python_version)
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
 
-  if(${Python${python_version}_VERSION_MAJOR} STREQUAL "2")
-    set(suffix_var "SO")
-  else()
-    set(suffix_var "EXT_SUFFIX")
-  endif()
-  execute_process(COMMAND "${Python${python_version}_EXECUTABLE}" -c
+  set(suffix_var "EXT_SUFFIX")
+  execute_process(COMMAND "${Python3_EXECUTABLE}" -c
     "from distutils import sysconfig; print(sysconfig.get_config_var('${suffix_var}'))"
     RESULT_VARIABLE result
     OUTPUT_VARIABLE ext_suffix
@@ -78,7 +69,7 @@ function(distutils_add_cython_module target name src python_version)
   if(NOT result EQUAL 0)
     message(FATAL_ERROR "Unable to tell python extension's suffix: ${error}")
   endif()
-  set(output_dir "${CYTHON_MODULE_DIR}/lib.${Python${python_version}_VERSION_MAJOR}")
+  set(output_dir "${CYTHON_MODULE_DIR}/lib.3")
   set(setup_py ${CMAKE_CURRENT_SOURCE_DIR}/setup.py)
   add_custom_command(
     OUTPUT ${output_dir}/${name}${ext_suffix}
@@ -91,7 +82,7 @@ function(distutils_add_cython_module target name src python_version)
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-    ${Python${python_version}_EXECUTABLE} ${setup_py}
+    ${Python3_EXECUTABLE} ${setup_py}
     build --verbose --build-base ${CYTHON_MODULE_DIR}
     --build-platlib ${output_dir}
     MAIN_DEPENDENCY ${src}
@@ -101,7 +92,7 @@ function(distutils_add_cython_module target name src python_version)
     DEPENDS ${output_dir}/${name}${ext_suffix})
 endfunction(distutils_add_cython_module)
 
-function(distutils_install_cython_module name python_version)
+function(distutils_install_cython_module name)
   get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
   set(PY_CC "${compiler_launcher} ${CMAKE_C_COMPILER}")
@@ -127,9 +118,9 @@ function(distutils_install_cython_module name python_version)
     endif()
     execute_process(
        COMMAND
-           ${Python${python_version}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
+           ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --verbose --build-base ${CYTHON_MODULE_DIR}
-           --build-platlib ${CYTHON_MODULE_DIR}/lib.${Python${python_version}_VERSION_MAJOR}
+           --build-platlib ${CYTHON_MODULE_DIR}/lib.3
            build_ext --cython-c-in-temp --build-temp ${CMAKE_CURRENT_BINARY_DIR} --cython-include-dirs ${PROJECT_SOURCE_DIR}/src/pybind/rados
            install \${options} --single-version-externally-managed --record /dev/null
            egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}

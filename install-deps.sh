@@ -424,10 +424,6 @@ else
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
-        if [ -e /usr/bin/python2 ] ; then
-            # see https://tracker.ceph.com/issues/23981
-            $SUDO $zypp_install python2-virtualenv python2-devel || exit 1
-        fi
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
@@ -466,19 +462,18 @@ function populate_wheelhouse() {
 
 function activate_virtualenv() {
     local top_srcdir=$1
-    local interpreter=$2
-    local env_dir=$top_srcdir/install-deps-$interpreter
+    local env_dir=$top_srcdir/install-deps-python3
 
     if ! test -d $env_dir ; then
         # Make a temporary virtualenv to get a fresh version of virtualenv
         # because CentOS 7 has a buggy old version (v1.10.1)
         # https://github.com/pypa/virtualenv/issues/463
-        virtualenv ${env_dir}_tmp
+        virtualenv --python=python3 ${env_dir}_tmp
         # install setuptools before upgrading virtualenv, as the latter needs
         # a recent setuptools for setup commands like `extras_require`.
         ${env_dir}_tmp/bin/pip install --upgrade setuptools
         ${env_dir}_tmp/bin/pip install --upgrade virtualenv
-        ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
+        ${env_dir}_tmp/bin/virtualenv --python python3 $env_dir
         rm -rf ${env_dir}_tmp
 
         . $env_dir/bin/activate
@@ -493,7 +488,7 @@ function activate_virtualenv() {
 function preload_wheels_for_tox() {
     local ini=$1
     shift
-    pushd .
+    pushd . > /dev/null
     cd $(dirname $ini)
     local require_files=$(ls *requirements*.txt 2>/dev/null) || true
     local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
@@ -506,15 +501,13 @@ function preload_wheels_for_tox() {
         fi
     fi
     if test "$require" && ! test -d wheelhouse ; then
-        for interpreter in python2.7 python3 ; do
-            type $interpreter > /dev/null 2>&1 || continue
-            activate_virtualenv $top_srcdir $interpreter || exit 1
-            populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
-        done
+        type python3 > /dev/null 2>&1 || continue
+        activate_virtualenv $top_srcdir || exit 1
+        populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
         mv $wip_wheelhouse wheelhouse
         md5sum $require_files $constraint_files > $md5
     fi
-    popd
+    popd > /dev/null
 }
 
 # use pip cache if possible but do not store it outside of the source
@@ -531,9 +524,7 @@ if $for_make_check; then
     find . -name tox.ini | while read ini ; do
         preload_wheels_for_tox $ini
     done
-    for interpreter in python2.7 python3 ; do
-        rm -rf $top_srcdir/install-deps-$interpreter
-    done
+    rm -rf $top_srcdir/install-deps-python3
     rm -rf $XDG_CACHE_HOME
-    git --version || (echo "Dashboard uses git to pull dependencies." ; false)
+    type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi

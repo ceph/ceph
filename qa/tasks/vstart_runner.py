@@ -15,7 +15,7 @@ Simple usage (assuming teuthology and ceph checked out in ~/git):
 Alternative usage:
 
     # Alternatively, if you use different paths, specify them as follows:
-    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph/qa:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph/qa/tasks/vstart_runner.py
+    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph/qa:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.3 python ~/git/ceph/qa/tasks/vstart_runner.py
 
     # If you wish to drop to a python shell on failures, use --interactive:
     python ~/git/ceph/qa/tasks/vstart_runner.py --interactive
@@ -100,7 +100,7 @@ if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
     # A list of candidate paths for each package we need
     guesses = [
         ["~/git/teuthology", "~/scm/teuthology", "~/teuthology"],
-        ["lib/cython_modules/lib.2"],
+        ["lib/cython_modules/lib.3"],
         ["../src/pybind"],
     ]
 

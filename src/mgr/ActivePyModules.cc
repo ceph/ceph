@@ -183,7 +183,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       osd_map.crush->encode(rdata, CEPH_FEATURES_SUPPORTED_DEFAULT);
     });
     std::string crush_text = rdata.to_str();
-    return PyString_FromString(crush_text.c_str());
+    return PyUnicode_FromString(crush_text.c_str());
   } else if (what.substr(0, 7) == "osd_map") {
     cluster_state.with_osdmap([&f, &what, &tstate](const OSDMap &osd_map){
       PyEval_RestoreThread(tstate);
