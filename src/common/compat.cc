@@ -23,6 +23,8 @@
 #include <thread>
 #ifndef _WIN32
 #include <sys/mount.h>
+#else
+#include <stdlib.h>
 #endif
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -279,6 +281,10 @@ long int lrand48(void) {
   return val;
 }
 
+int random() {
+  return rand();
+}
+
 int fsync(int fd) {
   HANDLE handle = (HANDLE*)_get_osfhandle(fd);
   if (handle == INVALID_HANDLE_VALUE)
@@ -455,6 +461,25 @@ int win_socketpair(int socks[2])
     closesocket(socks[1]);
     errno = e;
     return SOCKET_ERROR;
+}
+
+unsigned get_page_size() {
+  SYSTEM_INFO system_info;
+  GetSystemInfo(&system_info);
+  return system_info.dwPageSize;
+}
+
+int setenv(const char *name, const char *value, int overwrite) {
+  if (!overwrite && getenv(name)) {
+    return 0;
+  }
+  return _putenv_s(name, value);
+}
+
+#else
+
+unsigned get_page_size() {
+  return sysconf(_SC_PAGESIZE);
 }
 
 #endif /* _WIN32 */
