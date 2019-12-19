@@ -22,7 +22,7 @@ create_pool_op() {
   ID=$1
   POOL=$2
 
-  cat << EOF | CEPH_ARGS="-k $KEYRING" python
+  cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
 cluster = rados.Rados(conffile="", rados_id="${ID}")
@@ -35,7 +35,7 @@ delete_pool_op() {
   ID=$1
   POOL=$2
 
-  cat << EOF | CEPH_ARGS="-k $KEYRING" python
+  cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
 cluster = rados.Rados(conffile="", rados_id="${ID}")
@@ -49,7 +49,7 @@ create_pool_snap_op() {
   POOL=$2
   SNAP=$3
 
-  cat << EOF | CEPH_ARGS="-k $KEYRING" python
+  cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
 cluster = rados.Rados(conffile="", rados_id="${ID}")
@@ -65,7 +65,7 @@ remove_pool_snap_op() {
   POOL=$2
   SNAP=$3
 
-  cat << EOF | CEPH_ARGS="-k $KEYRING" python
+  cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
 cluster = rados.Rados(conffile="", rados_id="${ID}")
