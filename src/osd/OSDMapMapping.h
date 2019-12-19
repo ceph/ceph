@@ -158,7 +158,8 @@ public:
   void queue(
     Job *job,
     unsigned pgs_per_item,
-    const vector<pg_t>& input_pgs);
+    const vector<pg_t>& input_pgs,
+    const set<int64_t>* pools = nullptr);
 
   void drain() {
     wq.drain();

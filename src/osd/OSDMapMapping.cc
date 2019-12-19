@@ -162,7 +162,8 @@ void ParallelPGMapper::WQ::_process(Item *i, ThreadPool::TPHandle &h)
 void ParallelPGMapper::queue(
   Job *job,
   unsigned pgs_per_item,
-  const vector<pg_t>& input_pgs)
+  const vector<pg_t>& input_pgs,
+  const set<int64_t>* pools)
 {
   bool any = false;
   if (!input_pgs.empty()) {
@@ -192,6 +193,8 @@ void ParallelPGMapper::queue(
   }
   // no input pgs, load all from map
   for (auto& p : job->osdmap->get_pools()) {
+    if (pools && !pools->count(p.first))
+      continue;
     for (unsigned ps = 0; ps < p.second.get_pg_num(); ps += pgs_per_item) {
       unsigned ps_end = std::min(ps + pgs_per_item, p.second.get_pg_num());
       job->start_one();
