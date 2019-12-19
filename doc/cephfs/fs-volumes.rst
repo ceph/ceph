@@ -79,9 +79,8 @@ Remove a subvolume group using::
 
     $ ceph fs subvolumegroup rm <vol_name> <group_name> [--force]
 
-The removal of a subvolume group fails if it is not empty, e.g., has subvolumes
-or snapshots, or is non-existent. Using the '--force' flag allows the command
-to succeed even if the subvolume group is non-existent.
+The removal of a subvolume group fails if it is not empty or non-existent.
+'--force' flag allows the non-existent subvolume group remove command to succeed.
 
 
 Fetch the absolute path of a subvolume group using::
@@ -138,8 +137,7 @@ First, it move the subvolume to a trash folder, and then asynchronously purges
 its contents.
 
 The removal of a subvolume fails if it has snapshots, or is non-existent.
-Using the '--force' flag allows the command to succeed even if the subvolume is
-non-existent.
+'--force' flag allows the non-existent subvolume remove command to succeed.
 
 Resize a subvolume using::
 
