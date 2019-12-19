@@ -213,7 +213,7 @@ macro(build_boost version)
     endif()
     add_dependencies(Boost::${c} Boost)
     if(c MATCHES "^python")
-      set(c "python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}")
+      set(c "python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
     endif()
     if(Boost_USE_STATIC_LIBS)
       set(Boost_${upper_c}_LIBRARY
