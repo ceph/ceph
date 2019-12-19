@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- mode:python -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #

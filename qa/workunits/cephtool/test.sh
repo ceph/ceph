@@ -798,7 +798,7 @@ function wait_mds_active()
 function get_mds_gids()
 {
     fs_name=$1
-    ceph fs get $fs_name --format=json | python -c "import json; import sys; print ' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['mdsmap']['info'].values()])"
+    ceph fs get $fs_name --format=json | python3 -c "import json; import sys; print(' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['mdsmap']['info'].values()]))"
 }
 
 function fail_all_mds()
@@ -819,7 +819,7 @@ function fail_all_mds()
 
 function remove_all_fs()
 {
-  existing_fs=$(ceph fs ls --format=json | python -c "import json; import sys; print ' '.join([fs['name'] for fs in json.load(sys.stdin)])")
+  existing_fs=$(ceph fs ls --format=json | python3 -c "import json; import sys; print(' '.join([fs['name'] for fs in json.load(sys.stdin)]))")
   for fs_name in $existing_fs ; do
       echo "Removing fs ${fs_name}..."
       fail_all_mds $fs_name

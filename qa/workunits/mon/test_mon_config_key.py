@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # test_mon_config_key - Test 'ceph config-key' interface
 #
