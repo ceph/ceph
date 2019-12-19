@@ -55,13 +55,6 @@ class TestCephFSShell(CephFSTestCase):
         return mount_x.client_remote.run(args=args, stdout=stdout,
                                          stderr=stderr, stdin=stdin)
 
-    def get_cephfs_shell_cmd_error(self, cmd, mount_x=None,
-                                   shell_conf_path=None, opts=None,
-                                   stderr=None, stdin=None):
-        return ensure_str(self.run_cephfs_shell_cmd(
-            cmd=cmd, mount_x=mount_x, shell_conf_path=shell_conf_path,
-            opts=opts, stderr=stderr, stdin=stdin).stderr.getvalue().strip())
-
     def get_cephfs_shell_cmd_output(self, cmd, mount_x=None,
                                     shell_conf_path=None, opts=None,
                                     stdout=None, stdin=None):
@@ -69,12 +62,12 @@ class TestCephFSShell(CephFSTestCase):
             cmd=cmd, mount_x=mount_x, shell_conf_path=shell_conf_path,
             opts=opts, stdout=stdout, stdin=stdin).stdout.getvalue().strip())
 
-    def get_cephfs_shell_script_output(self, script, mount_x=None,
-                                       shell_conf_path=None, opts=None,
-                                       stdout=None, stdin=None):
-        return ensure_str(self.run_cephfs_shell_script(
-            script=script, mount_x=mount_x, shell_conf_path=shell_conf_path,
-            opts=opts, stdout=stdout, stdin=stdin).stdout.getvalue().strip())
+    def get_cephfs_shell_cmd_error(self, cmd, mount_x=None,
+                                   shell_conf_path=None, opts=None,
+                                   stderr=None, stdin=None):
+        return ensure_str(self.run_cephfs_shell_cmd(
+            cmd=cmd, mount_x=mount_x, shell_conf_path=shell_conf_path,
+            opts=opts, stderr=stderr, stdin=stdin).stderr.getvalue().strip())
 
     def run_cephfs_shell_script(self, script, mount_x=None,
                                 shell_conf_path=None, opts=None, stdout=None,
@@ -97,6 +90,13 @@ class TestCephFSShell(CephFSTestCase):
         log.info('Running script \"' + scriptpath + '\"')
         return mount_x.client_remote.run(args=args, stdout=stdout,
                                          stderr=stderr, stdin=stdin)
+
+    def get_cephfs_shell_script_output(self, script, mount_x=None,
+                                       shell_conf_path=None, opts=None,
+                                       stdout=None, stdin=None):
+        return ensure_str(self.run_cephfs_shell_script(
+            script=script, mount_x=mount_x, shell_conf_path=shell_conf_path,
+            opts=opts, stdout=stdout, stdin=stdin).stdout.getvalue().strip())
 
 
 class TestMkdir(TestCephFSShell):
