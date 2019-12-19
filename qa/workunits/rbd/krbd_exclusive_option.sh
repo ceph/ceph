@@ -24,10 +24,10 @@ function assert_locked() {
 
     local actual
     actual="$(rados -p rbd --format=json lock info rbd_header.$IMAGE_ID rbd_lock |
-        python3 -m json.tool)"
+        python3 -m json.tool --sort-keys)"
 
     local expected
-    expected="$(cat <<EOF | python3 -m json.tool
+    expected="$(cat <<EOF | python3 -m json.tool --sort-keys
 {
     "lockers": [
         {
