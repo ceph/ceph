@@ -16,6 +16,8 @@
 #include <iostream>
 #include <memory>
 #include <set>
+#include <algorithm>
+#include <random>
 
 #include "gtest/gtest.h"
 
@@ -30,8 +32,12 @@ struct Elem {
 
   explicit Elem(int _data) : data(_data) { }
 
-  bool operator==(const Elem& other) {
+  bool operator==(const Elem& other) const {
     return data == other.data;
+  }
+
+  bool operator<(const Elem& other) const {
+    return data < other.data;
   }
 
   friend std::ostream& operator<<(std::ostream& out, const Elem& d) {
@@ -204,29 +210,55 @@ TEST(IndIntruHeap, regular_ptr) {
   EXPECT_FALSE(heap.empty());
 
   EXPECT_EQ(-12, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(-7, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(-5, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(1, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(2, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(12, heap.top().data);
-  delete &heap.top();
-  heap.pop();
+  {
+    auto i = &heap.top();
+    heap.pop();
+    delete i;
+  }
+
   EXPECT_EQ(99, heap.top().data);
+  {
+    auto i = &heap.top();
+    EXPECT_FALSE(heap.empty());
+    heap.pop();
+    delete i;
+  }
 
-  delete &heap.top();
-
-  EXPECT_FALSE(heap.empty());
-  heap.pop();
   EXPECT_TRUE(heap.empty());
 }
 
@@ -612,6 +644,58 @@ TEST(IndIntruHeap, remove_careful) {
   ++i;
   EXPECT_EQ(100, i->data) <<
     "this needs to be 100 or there's a mistake in implementation";
+}
+
+
+TEST(IndIntruHeap, remove_greatest) {
+  // See bug #43376 -- removing the greatest element causes an oob
+  // vector reference
+
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			2> heap;
+
+  const int num = 4096;
+  std::vector<int> toinsert;
+  toinsert.reserve(num);
+  std::vector<int> toremove;
+  toremove.reserve(num - (num/4));
+  std::vector<int> tocheck;
+  tocheck.reserve(num/4);
+  for (int i = 0; i < num; ++i) {
+    toinsert.push_back(i);
+    if (i < (num/2)) {
+      tocheck.push_back(i);
+    } else {
+      toremove.push_back(i);
+    }
+  }
+
+  std::default_random_engine generator(0);
+  std::shuffle(
+    toinsert.begin(),
+    toinsert.end(),
+    generator);
+
+  for (auto i: toinsert) {
+    heap.push(std::make_shared<Elem>(i));
+  }
+
+  for (auto i: toremove) {
+    auto k = heap.find(Elem(i));
+    EXPECT_NE(heap.end(), k) <<
+    "we should have found an element with the value 300, which we'll remove";
+    heap.remove(k);
+  }
+
+  for (auto i: tocheck) {
+    EXPECT_FALSE(heap.empty());
+    EXPECT_EQ(Elem(i), heap.top());
+    heap.pop();
+  }
+  EXPECT_TRUE(heap.empty());
 }
 
 
