@@ -177,7 +177,7 @@ def test_progress():
     mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', 0.0, [('origin', 'orchestrator')])
 
     c.finalize()
-    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', 0.5, [('origin', 'orchestrator')])
+    mgr.remote.assert_called_with('progress', 'complete', c.progress_reference.progress_id)
 
     c.progress_reference.update()
     mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', progress_val, [('origin', 'orchestrator')])
