@@ -1471,7 +1471,8 @@ def command_bootstrap():
         password = args.initial_dashboard_password or generate_password()
         cli(['dashboard', 'ac-user-create',
              args.initial_dashboard_user, password,
-             'administrator'])
+             'administrator',
+             '--force-password'])
         logger.info('Fetching dashboard port number...')
         out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
         port = int(out)
