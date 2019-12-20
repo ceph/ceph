@@ -13,7 +13,7 @@ else:
     import imp
     cd = imp.load_source('cephadm', 'cephadm')
 
-class TestCephDaemon(unittest.TestCase):
+class TestCephAdm(unittest.TestCase):
     def test_is_fsid(self):
         self.assertFalse(cd.is_fsid('no-uuid'))
 
