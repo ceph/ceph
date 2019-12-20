@@ -158,5 +158,7 @@ export class HostsComponent implements OnInit {
     if (!this.orchestratorAvailable) {
       return this.i18n('Host operation is disabled because orchestrator is unavailable');
     }
+
+    return undefined;
   }
 }

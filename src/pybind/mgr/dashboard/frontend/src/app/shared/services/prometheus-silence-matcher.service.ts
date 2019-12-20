@@ -34,7 +34,7 @@ export class PrometheusSilenceMatcherService {
     rules: PrometheusRule[]
   ): AlertmanagerSilenceMatcherMatch {
     if (matchers.some((matcher) => matcher.isRegex)) {
-      return;
+      return undefined;
     }
     matchers.forEach((matcher) => {
       rules = this.getMatchedRules(matcher, rules);

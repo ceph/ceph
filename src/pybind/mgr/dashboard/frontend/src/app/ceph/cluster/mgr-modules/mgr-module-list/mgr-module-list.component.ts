@@ -139,6 +139,8 @@ export class MgrModuleListComponent {
         return this.i18n('This Manager module is always on.');
       }
     }
+
+    return undefined;
   }
 
   /**

@@ -8,9 +8,9 @@ export class FilterPipe implements PipeTransform {
     return value.filter((row) => {
       let result = true;
 
-      args.forEach((filter) => {
+      args.forEach((filter): boolean | void => {
         if (!filter.value) {
-          return;
+          return undefined;
         }
 
         result = result && filter.applyFilter(row, filter.value);

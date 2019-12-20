@@ -158,5 +158,7 @@ export class RbdNamespaceListComponent implements OnInit {
         return this.i18n('Namespace contains images');
       }
     }
+
+    return undefined;
   }
 }
