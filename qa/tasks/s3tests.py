@@ -116,6 +116,7 @@ def create_users(ctx, config):
                     '--access-key', s3tests_conf[section]['access_key'],
                     '--secret', s3tests_conf[section]['secret_key'],
                     '--email', s3tests_conf[section]['email'],
+                    '--caps', 'user-policy=*',
                     '--cluster', cluster_name,
                 ],
             )
