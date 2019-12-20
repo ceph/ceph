@@ -37,7 +37,8 @@ Notify::Notify(
   uint64_t notify_id,
   uint64_t version,
   OSDService *osd)
-  : client(client), client_gid(client_gid),
+  : client(client),
+    client_gid(client_gid),
     complete(false),
     discarded(false),
     timed_out(false),
@@ -47,7 +48,7 @@ Notify::Notify(
     notify_id(notify_id),
     version(version),
     osd(osd),
-    cb(NULL) {}
+    cb(nullptr) {}
 
 NotifyRef Notify::makeNotifyRef(
   ConnectionRef client,
