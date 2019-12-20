@@ -20,9 +20,7 @@
 class Context;
 class ContextWQ;
 class SafeTimer;
-namespace journal { class Journaler; }
 namespace librbd { class ImageCtx; }
-namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 
 namespace rbd {
 namespace mirror {
@@ -105,20 +103,18 @@ private:
    *    |                                               *   *
    *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *
    *    |         |       ^                             *   *
+   *    |         |       .                             *   *
    *    |         v       . (image DNE)                 *   *
    *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *   *
    *              |                                     *   *
-   *              v (skip if not needed)                *   *
-   *           UPDATE_CLIENT_STATE                      *   *
    *              |                                     *   *
-   *              v (skip if not needed)                *   *
-   *           GET_REMOTE_TAG_CLASS * * * * *           *   *
+   *              v                                     *   *
+   *           PREPARE_REPLAY * * * * * * * *           *   *
    *              |                         *           *   *
-   *              v (skip if not needed)    *           *   *
-   *           GET_REMOTE_TAGS  * * * * * * *           *   *
    *              |                         *           *   *
    *              v (skip if not needed)    v           *   *
-   *           IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *   *
+   *           IMAGE_SYNC * * * * > CLOSE_LOCAL_IMAGE   *   *
+   *              |                         |           *   *
    *              |                         |           *   *
    *              \-----------------\ /-----/           *   *
    *                                 |                  *   *
@@ -154,20 +150,14 @@ private:
   mutable ceph::mutex m_lock;
   bool m_canceled = false;
 
-  Tags m_remote_tags;
-  cls::journal::Client m_client;
-  uint64_t m_remote_tag_class = 0;
   ImageCtxT *m_remote_image_ctx = nullptr;
   cls::rbd::MirrorImage m_mirror_image;
   librbd::mirror::PromotionState m_promotion_state =
     librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   int m_ret_val = 0;
+
+  bool m_syncing = false;
   ImageSync<ImageCtxT> *m_image_sync = nullptr;
-
-  uint64_t m_local_tag_tid = 0;
-  librbd::journal::TagData m_local_tag_data;
-
-  bufferlist m_out_bl;
 
   void open_remote_image();
   void handle_open_remote_image(int r);
@@ -181,14 +171,8 @@ private:
   void create_local_image();
   void handle_create_local_image(int r);
 
-  void update_client_state();
-  void handle_update_client_state(int r);
-
-  void get_remote_tag_class();
-  void handle_get_remote_tag_class(int r);
-
-  void get_remote_tags();
-  void handle_get_remote_tags(int r);
+  void prepare_replay();
+  void handle_prepare_replay(int r);
 
   void image_sync();
   void handle_image_sync(int r);
