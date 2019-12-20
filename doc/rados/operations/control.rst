@@ -105,7 +105,7 @@ file. ::
 
 	ceph osd getcrushmap -o file
 
-The foregoing functionally equivalent to ::
+The foregoing is functionally equivalent to ::
 
 	ceph osd getmap -o /tmp/osdmap
 	osdmaptool /tmp/osdmap --export-crush file
