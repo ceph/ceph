@@ -318,7 +318,7 @@ class Module(MgrModule):
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
-            'PG Total Count',
+            'PG Total Count per Pool',
             ('pool_id',)
         )
 
@@ -358,7 +358,7 @@ class Module(MgrModule):
             metrics[path] = Metric(
                 'gauge',
                 path,
-                'PG {}'.format(state),
+                'PG {} per pool'.format(state),
                 ('pool_id',)
             )
         for state in DF_CLUSTER:
