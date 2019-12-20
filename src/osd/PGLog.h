@@ -329,6 +329,16 @@ public:
       return false;
     }
 
+    bool has_write_since(const hobject_t &oid, const eversion_t &bound) const {
+      for (auto i = log.rbegin(); i != log.rend(); ++i) {
+	if (i->version <= bound)
+	  return false;
+	if (i->soid.get_head() == oid.get_head())
+	  return true;
+      }
+      return false;
+    }
+
     /// get a (bounded) list of recent reqids for the given object
     void get_object_reqids(const hobject_t& oid, unsigned max,
 			   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *pls,
