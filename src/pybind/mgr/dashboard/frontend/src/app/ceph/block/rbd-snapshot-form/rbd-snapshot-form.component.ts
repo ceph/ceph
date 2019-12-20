@@ -1,10 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subject } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -23,6 +25,8 @@ export class RbdSnapshotFormComponent implements OnInit {
   snapshotForm: CdFormGroup;
 
   editing = false;
+  action: string;
+  resource: string;
 
   public onSubmit: Subject<string>;
 
@@ -30,8 +34,12 @@ export class RbdSnapshotFormComponent implements OnInit {
     public modalRef: BsModalRef,
     private rbdService: RbdService,
     private taskManagerService: TaskManagerService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n,
+    private actionLabels: ActionLabelsI18n
   ) {
+    this.action = this.actionLabels.CREATE;
+    this.resource = this.i18n('RBD Snapshot');
     this.createForm();
   }
 
@@ -59,6 +67,7 @@ export class RbdSnapshotFormComponent implements OnInit {
    */
   setEditing(editing: boolean = true) {
     this.editing = editing;
+    this.action = this.editing ? this.actionLabels.RENAME : this.actionLabels.CREATE;
   }
 
   editAction() {
