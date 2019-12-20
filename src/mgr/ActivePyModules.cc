@@ -306,7 +306,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     cluster_state.with_pgmap(
         [&f, &tstate](const PGMap &pg_map) {
       PyEval_RestoreThread(tstate);
-      pg_map.dump_osd_stats(&f);
+      pg_map.dump_osd_stats(&f, false);
     });
     return f.get();
   } else if (what == "health" || what == "mon_status") {

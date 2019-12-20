@@ -1739,7 +1739,7 @@ void PGMap::dump_pool_stats(Formatter *f) const
   f->close_section();
 }
 
-void PGMap::dump_osd_stats(Formatter *f) const
+void PGMap::dump_osd_stats(ceph::Formatter *f, bool with_net) const
 {
   f->open_array_section("osd_stats");
   for (auto q = osd_stat.begin();
@@ -1747,7 +1747,7 @@ void PGMap::dump_osd_stats(Formatter *f) const
        ++q) {
     f->open_object_section("osd_stat");
     f->dump_int("osd", q->first);
-    q->second.dump(f);
+    q->second.dump(f, with_net);
     f->close_section();
   }
   f->close_section();
