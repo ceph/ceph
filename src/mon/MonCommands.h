@@ -190,7 +190,7 @@ COMMAND("auth rm "
  */
 COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage",
 	     "mon", "rw",
-             FLAG(NOFORWARD)|FLAG(DEPRECATED))
+             FLAG(NOFORWARD))
 COMMAND_WITH_FLAG("scrub", "scrub the monitor stores",
              "mon", "rw",
              FLAG(OBSOLETE))
