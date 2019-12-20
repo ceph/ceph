@@ -114,6 +114,7 @@
  *  POLL      - command is intended to be called periodically by the
  *              client (see iostat)
  *  HIDDEN    - command is hidden (no reported by help etc)
+ *  TELL      - tell/asok command. it's an alias of (NOFORWARD | HIDDEN)
  *
  * A command should always be first considered DEPRECATED before being
  * considered OBSOLETE, giving due consideration to users and conforming
@@ -190,7 +191,7 @@ COMMAND("auth rm "
  */
 COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage",
 	     "mon", "rw",
-             FLAG(NOFORWARD))
+             FLAG(TELL))
 COMMAND_WITH_FLAG("scrub", "scrub the monitor stores",
              "mon", "rw",
              FLAG(OBSOLETE))
@@ -243,7 +244,7 @@ COMMAND("tell "
 	"name=args,type=CephString,n=N",
 	"send a command to a specific daemon", "mon", "rw")
 COMMAND_WITH_FLAG("version", "show mon daemon version", "mon", "r",
-                  FLAG(NOFORWARD))
+                  FLAG(TELL))
 
 COMMAND("node ls "
 	"name=type,type=CephChoices,strings=all|osd|mon|mds|mgr,req=false",
@@ -1238,45 +1239,57 @@ COMMAND("config generate-minimal-conf",
 // that shunts these off to the asok machinery.
 
 COMMAND_WITH_FLAG("injectargs "
-	     "name=injected_args,type=CephString,n=N",
-	     "inject config arguments into monitor", "mon", "rw",
-		  FLAG(NOFORWARD)|FLAG(HIDDEN))
+	    "name=injected_args,type=CephString,n=N",
+	    "inject config arguments into monitor", "mon", "rw",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("smart name=devid,type=CephString,req=false",
-                 "Query health metrics for underlying device",
-		  "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
-COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
-		  FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "Query health metrics for underlying device",
+	    "mon", "rw",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("mon_status",
+	    "report status of monitors",
+	    "mon", "r",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("heap "
             "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats "
             "name=value,type=CephString,req=false",
             "show heap usage info (available only if compiled with tcmalloc)",
-		  "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+	    "mon", "rw",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("sync_force "
             "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
             "force sync of and clear monitor store",
-            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "rw",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("add_bootstrap_peer_hint "
             "name=addr,type=CephIPAddr",
             "add peer address as potential bootstrap "
             "peer for cluster bringup",
-            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "rw",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("add_bootstrap_peer_hintv "
             "name=addrv,type=CephString",
             "add peer address vector as potential bootstrap "
             "peer for cluster bringup",
-            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "rw",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("quorum enter ",
             "force monitor back into quorum",
-            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "rw",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("quorum exit",
             "force monitor out of the quorum",
-            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "rw",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("ops",
             "show the ops currently in flight",
-            "mon", "r", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "r",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("sessions",
             "list existing sessions",
-            "mon", "r", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "r",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_ops",
             "dump_historic_ops",
-            "mon", "r", FLAG(NOFORWARD)|FLAG(HIDDEN))
+            "mon", "r",
+            FLAG(TELL))
