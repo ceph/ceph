@@ -96,10 +96,7 @@ private:
    * <start>
    *    |
    *    v
-   * GET_REMOTE_TAG_CLASS * * * * * * * * * * * * * * * * * *
-   *    |                                                   * (error)
-   *    v                                                   *
-   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * *
+   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * * (error)
    *    |                                                   *
    *    |/--------------------------------------------------*---\
    *    v                                                   *   |
@@ -125,6 +122,9 @@ private:
    *    |         |             \-----------------------*---*---/
    *    |         |                                     *   *
    *    |         v (skip if not needed)                *   *
+   *    |      GET_REMOTE_TAG_CLASS * * * * *           *   *
+   *    |         |                         *           *   *
+   *    |         v (skip if not needed)    *           *   *
    *    |      GET_REMOTE_TAGS  * * * * * * *           *   *
    *    |         |                         *           *   *
    *    |         v (skip if not needed)    v           *   *
@@ -182,9 +182,6 @@ private:
 
   bufferlist m_out_bl;
 
-  void get_remote_tag_class();
-  void handle_get_remote_tag_class(int r);
-
   void open_remote_image();
   void handle_open_remote_image(int r);
 
@@ -208,6 +205,9 @@ private:
 
   void update_client_image();
   void handle_update_client_image(int r);
+
+  void get_remote_tag_class();
+  void handle_get_remote_tag_class(int r);
 
   void get_remote_tags();
   void handle_get_remote_tags(int r);

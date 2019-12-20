@@ -85,7 +85,7 @@ template <typename I>
 void BootstrapRequest<I>::send() {
   *m_do_resync = false;
 
-  get_remote_tag_class();
+  open_remote_image();
 }
 
 template <typename I>
@@ -98,53 +98,6 @@ void BootstrapRequest<I>::cancel() {
   if (m_image_sync != nullptr) {
     m_image_sync->cancel();
   }
-}
-
-template <typename I>
-void BootstrapRequest<I>::get_remote_tag_class() {
-  dout(15) << dendl;
-
-  update_progress("GET_REMOTE_TAG_CLASS");
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_tag_class>(
-      this);
-  m_journaler->get_client(librbd::Journal<>::IMAGE_CLIENT_ID, &m_client, ctx);
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_get_remote_tag_class(int r) {
-  dout(15) << "r=" << r << dendl;
-
-  if (r < 0) {
-    derr << "failed to retrieve remote client: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  librbd::journal::ClientData client_data;
-  auto it = m_client.data.cbegin();
-  try {
-    decode(client_data, it);
-  } catch (const buffer::error &err) {
-    derr << "failed to decode remote client meta data: " << err.what()
-         << dendl;
-    finish(-EBADMSG);
-    return;
-  }
-
-  librbd::journal::ImageClientMeta *client_meta =
-    boost::get<librbd::journal::ImageClientMeta>(&client_data.client_meta);
-  if (client_meta == nullptr) {
-    derr << "unknown remote client registration" << dendl;
-    finish(-EINVAL);
-    return;
-  }
-
-  m_remote_tag_class = client_meta->tag_class;
-  dout(10) << "remote tag class=" << m_remote_tag_class << dendl;
-
-  open_remote_image();
 }
 
 template <typename I>
@@ -378,7 +331,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     return;
   }
 
-  get_remote_tags();
+  get_remote_tag_class();
 }
 
 template <typename I>
@@ -534,7 +487,7 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
 }
 
 template <typename I>
-void BootstrapRequest<I>::get_remote_tags() {
+void BootstrapRequest<I>::get_remote_tag_class() {
   if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
     // optimization -- no need to compare remote tags if we just created
     // the image locally or sync was interrupted
@@ -542,6 +495,56 @@ void BootstrapRequest<I>::get_remote_tags() {
     return;
   }
 
+  dout(15) << dendl;
+
+  update_progress("GET_REMOTE_TAG_CLASS");
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_tag_class>(
+      this);
+  m_journaler->get_client(librbd::Journal<>::IMAGE_CLIENT_ID, &m_client, ctx);
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_get_remote_tag_class(int r) {
+  dout(15) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to retrieve remote client: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    close_local_image();
+    return;
+  }
+
+  librbd::journal::ClientData client_data;
+  auto it = m_client.data.cbegin();
+  try {
+    decode(client_data, it);
+  } catch (const buffer::error &err) {
+    derr << "failed to decode remote client meta data: " << err.what()
+         << dendl;
+    m_ret_val = -EBADMSG;
+    close_local_image();
+    return;
+  }
+
+  librbd::journal::ImageClientMeta *client_meta =
+    boost::get<librbd::journal::ImageClientMeta>(&client_data.client_meta);
+  if (client_meta == nullptr) {
+    derr << "unknown remote client registration" << dendl;
+    m_ret_val = -EINVAL;
+    close_local_image();
+    return;
+  }
+
+  m_remote_tag_class = client_meta->tag_class;
+  dout(10) << "remote tag class=" << m_remote_tag_class << dendl;
+
+  get_remote_tags();
+}
+
+template <typename I>
+void BootstrapRequest<I>::get_remote_tags() {
   dout(15) << dendl;
   update_progress("GET_REMOTE_TAGS");
 
