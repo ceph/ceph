@@ -1890,12 +1890,22 @@ void Monitor::handle_probe(MonOpRequestRef op)
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
-    derr << __func__ << " require release " << (int)m->mon_release << " > "
-	 << (int)ceph_release()
-	 << ", or missing features (have " << CEPH_FEATURES_ALL
-	 << ", required " << m->required_features
-	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL) << ")"
-	 << dendl;
+    uint64_t missing = m->required_features & ~CEPH_FEATURES_ALL;
+    if (missing) {
+      derr << __func__
+	   << " missing features (have " << CEPH_FEATURES_ALL
+	   << ", required " << m->required_features
+	   << ", missing " << missing << ")" << dendl;
+    } else if (m->mon_release > ceph_release()) {
+      derr << __func__
+	   << " require release " << (int)m->mon_release << " > "
+	   << (int)ceph_release() << dendl;
+    } else {
+      derr << __func__
+	   << " missing features (unknown) - you may need to upgrade or "
+	   << " reach out to a developer." << dendl;
+    }
+    exit(EACCES);
     break;
   }
 }
