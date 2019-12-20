@@ -852,8 +852,7 @@ int Monitor::preinit()
   l.unlock();
   // register tell/asock commands
   for (const auto& command : local_mon_commands) {
-    // all asock commands are noforward, vice versa
-    if (!command.is_noforward()) {
+    if (!command.is_tell()) {
       continue;
     }
     const auto prefix = cmddesc_get_prefix(command.cmdstring);
