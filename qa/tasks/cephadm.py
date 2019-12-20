@@ -88,24 +88,42 @@ def download_cephadm(ctx, config, ref):
         ref = config.get('cephadm_branch', ref)
         git_url = teuth_config.get_ceph_git_url()
         log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
-        ctx.cluster.run(
-            args=[
-                'git', 'archive',
-                '--remote=' + git_url,
-                ref,
-                'src/cephadm/cephadm',
-                run.Raw('|'),
-                'tar', '-xO', 'src/cephadm/cephadm',
-                run.Raw('>'),
-                ctx.cephadm,
-                run.Raw('&&'),
-                'test', '-s',
-                ctx.cephadm,
-                run.Raw('&&'),
-                'chmod', '+x',
-                ctx.cephadm,
-            ],
-        )
+        if git_url.startswith('https://github.com/'):
+            # git archive doesn't like https:// URLs, which we use with github.
+            rest = git_url.split('https://github.com/', 1)[1]
+            ctx.cluster.run(
+                args=[
+                    'curl', '--silent',
+                    'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
+                    run.Raw('>'),
+                    ctx.cephadm,
+                    run.Raw('&&'),
+                    'test', '-s',
+                    ctx.cephadm,
+                    run.Raw('&&'),
+                    'chmod', '+x',
+                    ctx.cephadm,
+                ],
+            )
+        else:
+            ctx.cluster.run(
+                args=[
+                    'git', 'archive',
+                    '--remote=' + git_url,
+                    ref,
+                    'src/cephadm/cephadm',
+                    run.Raw('|'),
+                    'tar', '-xO', 'src/cephadm/cephadm',
+                    run.Raw('>'),
+                    ctx.cephadm,
+                    run.Raw('&&'),
+                    'test', '-s',
+                    ctx.cephadm,
+                    run.Raw('&&'),
+                    'chmod', '+x',
+                    ctx.cephadm,
+                ],
+            )
 
     try:
         yield
