@@ -152,12 +152,6 @@ TEST(util, test_random)
     type_check_ok(min, max);
   }
  
-  // min > max should not explode:
-  {
-    float min = 1.0, max = 0.0;
-    type_check_ok(min, max);
-  }
-
   // When combining types, everything should convert to the largest type:
   {
     // Check with integral types:
