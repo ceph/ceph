@@ -139,8 +139,6 @@ class AsyncCompletion(orchestrator.Completion):
                         self.fail(e)
 
             assert CephadmOrchestrator.instance
-            #if self.update_progress:
-            #    self.progress_reference.progress = 0.0
             if self.many:
                 if not value:
                     logger.info('calling map_async without values')
@@ -1220,17 +1218,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return self._create_daemon('mgr', name, host, keyring)
 
-    def update_mgrs(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
+    @with_services('mgr')
+    def update_mgrs(self, spec, services):
+        # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
-        return self._get_services('mgr').then(lambda daemons: self._update_mgrs(spec, daemons))
 
-    def _update_mgrs(self, spec, daemons):
-        # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
-        num_mgrs = len(daemons)
+        num_mgrs = len(services)
         if spec.count == num_mgrs:
             return orchestrator.Completion(value="The requested number of managers exist.")
 
@@ -1250,7 +1246,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             for standby in mgr_map.get('standbys', []):
                 connected.append(standby.get('name', ''))
             to_remove_damons = []
-            for d in daemons:
+            for d in services:
                 if d.service_instance not in connected:
                     to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance),
                                              d.nodename))
@@ -1260,12 +1256,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             # otherwise, remove *any* mgr
             if num_to_remove > 0:
-                for d in daemons:
+                for d in services:
                     to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance), d.nodename))
                     num_to_remove -= 1
                     if num_to_remove == 0:
                         break
-            return self._remove_daemon(to_remove_damons)
+            c = self._remove_daemon(to_remove_damons)
+            c.add_progress('Removing MGRs', self)
+            c.update_progress = True
+            return c
 
         else:
             # we assume explicit placement by which there are the same number of
@@ -1277,11 +1276,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                         len(spec.placement.hosts), num_new_mgrs))
 
             for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
+                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
             for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
+                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
             self.log.info("creating {} managers on hosts: '{}'".format(
@@ -1289,10 +1288,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             args = []
             for host_spec in spec.placement.hosts:
-                name = host_spec.name or self.get_unique_name(daemons)
+                name = host_spec.name or self.get_unique_name(services)
                 host = host_spec.hostname
                 args.append((host, name))
-        return self._create_mgr(args)
+            c = self._create_mgr(args)
+            c.add_progress('Creating MGRs', self)
+            c.update_progress = True
+            return c
 
     def add_mds(self, spec):
         if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:
