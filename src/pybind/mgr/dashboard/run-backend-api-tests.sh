@@ -34,6 +34,8 @@ get_cmake_variable() {
 }
 
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
+CURR_DIR=`pwd`
+LOCAL_BUILD_DIR="$CURR_DIR/../../../../$BUILD_DIR"
 
 setup_teuthology() {
     TEMP_DIR=`mktemp -d`
