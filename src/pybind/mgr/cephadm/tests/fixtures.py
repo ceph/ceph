@@ -1,8 +1,12 @@
-from contextlib import contextmanager
-
+import time
+try:
+    from typing import Any
+except ImportError:
+    pass
 import pytest
 
 from cephadm import CephadmOrchestrator
+from orchestrator import raise_if_exception, Completion
 from tests import mock
 
 
@@ -30,6 +34,7 @@ def get_ceph_option(_, key):
 def cephadm_module():
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
             mock.patch("cephadm.module.CephadmOrchestrator._configure_logging", lambda *args: None),\
+            mock.patch("cephadm.module.CephadmOrchestrator.remote"),\
             mock.patch("cephadm.module.CephadmOrchestrator.set_store", set_store),\
             mock.patch("cephadm.module.CephadmOrchestrator.get_store", get_store),\
             mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix", get_store_prefix):
@@ -44,3 +49,25 @@ def cephadm_module():
         }
         m.__init__('cephadm', 0, 0)
         yield m
+
+
+def wait(m, c):
+    # type: (CephadmOrchestrator, Completion) -> Any
+    m.process([c])
+
+    try:
+        import pydevd  # if in debugger
+        while True:    # don't timeout
+            if c.is_finished:
+                raise_if_exception(c)
+                return c.result
+            time.sleep(0.1)
+    except ImportError:  # not in debugger
+        for i in range(30):
+            if i % 10 == 0:
+                m.process([c])
+            if c.is_finished:
+                raise_if_exception(c)
+                return c.result
+            time.sleep(0.1)
+    assert False, "timeout" + str(c._state)

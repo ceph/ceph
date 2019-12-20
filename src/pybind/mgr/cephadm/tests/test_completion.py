@@ -10,29 +10,18 @@ except ImportError:
 import pytest
 
 
-from orchestrator import raise_if_exception, Completion
-from .fixtures import cephadm_module
-from ..module import trivial_completion, async_completion, async_map_completion, CephadmOrchestrator
+from tests import mock
+from .fixtures import cephadm_module, wait
+from ..module import trivial_completion, async_completion, async_map_completion
 
 
 class TestCompletion(object):
-    def _wait(self, m, c):
-        # type: (CephadmOrchestrator, Completion) -> Any
-        m.process([c])
-        m.process([c])
-
-        for _ in range(30):
-            if c.is_finished:
-                raise_if_exception(c)
-                return c.result
-            time.sleep(0.1)
-        assert False, "timeout" + str(c._state)
 
     def test_trivial(self, cephadm_module):
         @trivial_completion
         def run(x):
             return x+1
-        assert self._wait(cephadm_module, run(1)) == 2
+        assert wait(cephadm_module, run(1)) == 2
 
     @pytest.mark.parametrize("input", [
         ((1, ), ),
@@ -45,7 +34,7 @@ class TestCompletion(object):
         def run(*args):
             return str(args)
 
-        assert self._wait(cephadm_module, run(*input)) == str(input)
+        assert wait(cephadm_module, run(*input)) == str(input)
 
     @pytest.mark.parametrize("input,expected", [
         ([], []),
@@ -61,7 +50,7 @@ class TestCompletion(object):
             return str(args)
 
         c = run(input)
-        self._wait(cephadm_module, c)
+        wait(cephadm_module, c)
         assert c.result == expected
 
     def test_async_self(self, cephadm_module):
@@ -74,7 +63,7 @@ class TestCompletion(object):
                 assert self.attr == 1
                 return x + 1
 
-        assert self._wait(cephadm_module, Run().run(1)) == 2
+        assert wait(cephadm_module, Run().run(1)) == 2
 
     @pytest.mark.parametrize("input,expected", [
         ([], []),
@@ -95,7 +84,7 @@ class TestCompletion(object):
                 return str(args)
 
         c = Run().run(input)
-        self._wait(cephadm_module, c)
+        wait(cephadm_module, c)
         assert c.result == expected
 
     def test_then1(self, cephadm_module):
@@ -103,7 +92,7 @@ class TestCompletion(object):
         def run(x):
             return x+1
 
-        assert self._wait(cephadm_module, run([1,2]).then(str)) == '[2, 3]'
+        assert wait(cephadm_module, run([1,2]).then(str)) == '[2, 3]'
 
     def test_then2(self, cephadm_module):
         @async_map_completion
@@ -117,7 +106,7 @@ class TestCompletion(object):
 
         c = run([1,2]).then(async_str)
 
-        self._wait(cephadm_module, c)
+        wait(cephadm_module, c)
         assert c.result == '[2, 3]'
 
     def test_then3(self, cephadm_module):
@@ -131,7 +120,7 @@ class TestCompletion(object):
 
         c = run([1,2]).then(async_str)
 
-        self._wait(cephadm_module, c)
+        wait(cephadm_module, c)
         assert c.result == '[2, 3]'
 
     def test_then4(self, cephadm_module):
@@ -145,7 +134,7 @@ class TestCompletion(object):
 
         c = run([1,2]).then(async_str)
 
-        self._wait(cephadm_module, c)
+        wait(cephadm_module, c)
         assert c.result == '[2, 3]hello'
 
     @pytest.mark.skip(reason="see limitation of async_map_completion")
@@ -157,7 +146,7 @@ class TestCompletion(object):
 
         c = run([1,2])
 
-        self._wait(cephadm_module, c)
+        wait(cephadm_module, c)
         assert c.result == "['2', '3']"
 
     def test_raise(self, cephadm_module):
@@ -166,4 +155,24 @@ class TestCompletion(object):
             raise ZeroDivisionError()
 
         with pytest.raises(ZeroDivisionError):
-            self._wait(cephadm_module, run(1))
+            wait(cephadm_module, run(1))
+
+    def test_progress(self, cephadm_module):
+        @async_map_completion
+        def run(*args):
+            return str(args)
+
+        c = run(list(range(2)))
+        c.update_progress = True
+        c.add_progress(
+            mgr=cephadm_module,
+            message="my progress"
+        )
+        wait(cephadm_module, c)
+        assert c.result == [str((x,)) for x in range(2)]
+        assert cephadm_module.remote.mock_calls == [
+            mock.call('progress', 'update', mock.ANY, 'my progress', float(i) / 2, [('origin', 'orchestrator')])
+            for i in range(2+1)] + [
+            mock.call('progress', 'update', mock.ANY, 'my progress', 1.0, [('origin', 'orchestrator')]),
+            mock.call('progress', 'complete', mock.ANY),
+        ]

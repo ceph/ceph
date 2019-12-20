@@ -86,12 +86,14 @@ class AsyncCompletion(orchestrator.Completion):
                  on_complete=None,  # type: Optional[Callable]
                  name=None,  # type: Optional[str]
                  many=False, # type: bool
+                 update_progress=False,  # type: bool
                  ):
 
         assert CephadmOrchestrator.instance is not None
         self.many = many
+        self.update_progress = update_progress
         if name is None and on_complete is not None:
-            name = on_complete.__name__
+            name = getattr(on_complete, '__name__', None)
         super(AsyncCompletion, self).__init__(_first_promise, value, on_complete, name)
 
     @property
@@ -109,6 +111,9 @@ class AsyncCompletion(orchestrator.Completion):
 
         def callback(result):
             try:
+                if self.update_progress:
+                    assert self.progress_reference
+                    self.progress_reference.progress = 1.0
                 self._on_complete_ = None
                 self._finalize(result)
             except Exception as e:
@@ -117,35 +122,42 @@ class AsyncCompletion(orchestrator.Completion):
         def error_callback(e):
             self.fail(e)
 
-        if six.PY3:
-            _callback = self._on_complete_
-        else:
-            def _callback(*args, **kwargs):
-                # Py2 only: _worker_pool doesn't call error_callback
-                try:
-                    return self._on_complete_(*args, **kwargs)
-                except Exception as e:
-                    self.fail(e)
-
         def run(value):
+            def do_work(*args, **kwargs):
+                assert self._on_complete_ is not None
+                try:
+                    res = self._on_complete_(*args, **kwargs)
+                    if self.update_progress and self.many:
+                        assert self.progress_reference
+                        self.progress_reference.progress += 1.0 / len(value)
+                    return res
+                except Exception as e:
+                    if six.PY3:
+                        raise
+                    else:
+                        # Py2 only: _worker_pool doesn't call error_callback
+                        self.fail(e)
+
             assert CephadmOrchestrator.instance
+            #if self.update_progress:
+            #    self.progress_reference.progress = 0.0
             if self.many:
                 if not value:
                     logger.info('calling map_async without values')
                     callback([])
                 if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.map_async(_callback, value,
+                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
                                                                     callback=callback,
                                                                     error_callback=error_callback)
                 else:
-                    CephadmOrchestrator.instance._worker_pool.map_async(_callback, value,
+                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
                                                                     callback=callback)
             else:
                 if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
+                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
                                                                       callback=callback, error_callback=error_callback)
                 else:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
+                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
                                                                       callback=callback)
             return self.ASYNC_RESULT
 
