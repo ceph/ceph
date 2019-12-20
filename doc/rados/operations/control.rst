@@ -68,7 +68,7 @@ execute the following::
 	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
 
-``--format`` may be ``plain`` (default) or ``json``
+``--format`` may be ``plain`` (default), ``json``, ``json-pretty``, ``xml``, or ``xml-pretty``.
 
 ``--threshold`` defines how many seconds "stuck" is (default: 300)
 
