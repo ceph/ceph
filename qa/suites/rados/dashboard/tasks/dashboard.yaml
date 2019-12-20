@@ -21,6 +21,7 @@ tasks:
         - \(OSD_DOWN\)
         - \(OSD_HOST_DOWN\)
         - \(POOL_APP_NOT_ENABLED\)
+        - \(OSDMAP_FLAGS\)
         - pauserd,pausewr flag\(s\) set
         - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
         - evicting unresponsive client .+

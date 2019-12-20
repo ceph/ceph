@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Loop writing/reading the first 4k of image argv[1] in pool rbd,
 after acquiring exclusive lock named argv[2].  When an exception
