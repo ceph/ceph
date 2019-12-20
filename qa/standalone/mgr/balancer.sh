@@ -67,9 +67,9 @@ function TEST_balancer() {
     ceph balancer pool add $TEST_POOL1 || return 1
     ceph balancer pool add $TEST_POOL2 || return 1
     ceph balancer pool ls || return 1
-    eval POOL=$(ceph balancer pool ls | jq '.[0]')
+    eval POOL=$(ceph balancer pool ls | jq 'sort | .[0]')
     test "$POOL" = "$TEST_POOL1" || return 1
-    eval POOL=$(ceph balancer pool ls | jq '.[1]')
+    eval POOL=$(ceph balancer pool ls | jq 'sort | .[1]')
     test "$POOL" = "$TEST_POOL2" || return 1
     ceph balancer pool rm $TEST_POOL1 || return 1
     ceph balancer pool rm $TEST_POOL2 || return 1
