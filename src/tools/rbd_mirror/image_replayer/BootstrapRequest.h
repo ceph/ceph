@@ -54,7 +54,7 @@ public:
         const std::string &global_image_id,
         const std::string &local_mirror_uuid,
         const std::string &remote_mirror_uuid,
-        Journaler *journaler,
+        Journaler *remote_journaler,
         cls::journal::ClientState *client_state,
         MirrorPeerClientMeta *client_meta,
         Context *on_finish,
@@ -64,9 +64,9 @@ public:
                                 instance_watcher, local_image_ctx,
                                 local_image_id, remote_image_id,
                                 global_image_id, local_mirror_uuid,
-                                remote_mirror_uuid, journaler, client_state,
-                                client_meta, on_finish, do_resync,
-                                progress_ctx);
+                                remote_mirror_uuid, remote_journaler,
+                                client_state, client_meta, on_finish,
+                                do_resync, progress_ctx);
   }
 
   BootstrapRequest(Threads<ImageCtxT>* threads,
@@ -78,7 +78,8 @@ public:
                    const std::string &remote_image_id,
                    const std::string &global_image_id,
                    const std::string &local_mirror_uuid,
-                   const std::string &remote_mirror_uuid, Journaler *journaler,
+                   const std::string &remote_mirror_uuid,
+                   Journaler *remote_journaler,
                    cls::journal::ClientState *client_state,
                    MirrorPeerClientMeta *client_meta, Context *on_finish,
                    bool *do_resync, ProgressContext *progress_ctx = nullptr);
@@ -98,28 +99,14 @@ private:
    *    v
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * * (error)
    *    |                                                   *
-   *    |/--------------------------------------------------*---\
-   *    v                                                   *   |
-   * GET_REMOTE_MIRROR_INFO * * * * * * * * * * * * * * *   *   |
-   *    |                                               *   *   |
-   *    | (remote image primary, no local image id)     *   *   |
-   *    \----> UPDATE_CLIENT_IMAGE  * * * * * * * * * * *   *   |
-   *    |         |   ^                                 *   *   |
-   *    |         |   * (duplicate image id)            *   *   |
-   *    |         v   *                                 *   *   |
-   *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *   |
-   *    |         |                                     *   *   |
-   *    |         v                                     *   *   |
-   *    | (remote image primary)                        *   *   |
-   *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *   *   |
-   *              |   .                                 *   *   |
-   *              |   . (image doesn't exist)           *   *   |
-   *              |   . . > UNREGISTER_CLIENT * * * * * *   *   |
-   *              |             |                       *   *   |
-   *              |             v                       *   *   |
-   *              |         REGISTER_CLIENT * * * * * * *   *   |
-   *              |             |                       *   *   |
-   *              |             \-----------------------*---*---/
+   *    v                                                   *
+   * GET_REMOTE_MIRROR_INFO * * * * * * * * * * * * * * *   *
+   *    |                                               *   *
+   *    |                                               *   *
+   *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *
+   *    |         |       ^                             *   *
+   *    |         v       . (image DNE)                 *   *
+   *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *   *
    *              |                                     *   *
    *              v (skip if not needed)                *   *
    *           UPDATE_CLIENT_STATE                      *   *
@@ -158,7 +145,7 @@ private:
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
   std::string m_remote_mirror_uuid;
-  Journaler *m_journaler;
+  Journaler *m_remote_journaler;
   cls::journal::ClientState *m_client_state;
   MirrorPeerClientMeta *m_client_meta;
   ProgressContext *m_progress_ctx;
@@ -191,17 +178,8 @@ private:
   void open_local_image();
   void handle_open_local_image(int r);
 
-  void unregister_client();
-  void handle_unregister_client(int r);
-
-  void register_client();
-  void handle_register_client(int r);
-
   void create_local_image();
   void handle_create_local_image(int r);
-
-  void update_client_image();
-  void handle_update_client_image(int r);
 
   void update_client_state();
   void handle_update_client_state(int r);
