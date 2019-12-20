@@ -18,6 +18,11 @@ import { FinishedTask } from '../models/finished-task';
 import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
 
+export class CdHttpErrorResponse extends HttpErrorResponse {
+  preventDefault: Function;
+  ignoreStatusCode: Function;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -30,7 +35,7 @@ export class ApiInterceptorService implements HttpInterceptor {
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     return next.handle(request).pipe(
-      catchError((resp) => {
+      catchError((resp: CdHttpErrorResponse) => {
         if (resp instanceof HttpErrorResponse) {
           let timeoutId: number;
           switch (resp.status) {
@@ -67,7 +72,7 @@ export class ApiInterceptorService implements HttpInterceptor {
            * preventDefault method defined). If called, it will prevent a
            * notification to be shown.
            */
-          resp['preventDefault'] = () => {
+          resp.preventDefault = () => {
             this.notificationService.cancel(timeoutId);
           };
 
@@ -75,7 +80,7 @@ export class ApiInterceptorService implements HttpInterceptor {
            * If called, it will prevent a notification for the specific status code.
            * @param {number} status The status code to be ignored.
            */
-          resp['ignoreStatusCode'] = function(status: number) {
+          resp.ignoreStatusCode = function(status: number) {
             if (this.status === status) {
               this.preventDefault();
             }

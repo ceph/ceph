@@ -12,9 +12,9 @@ import * as _ from 'lodash';
 export function cdEncode(...args: any[]): any {
   switch (args.length) {
     case 1:
-      return encodeClass.apply(this, args);
+      return encodeClass.apply(undefined, args);
     case 3:
-      return encodeMethod.apply(this, args);
+      return encodeMethod.apply(undefined, args);
     default:
       throw new Error();
   }
