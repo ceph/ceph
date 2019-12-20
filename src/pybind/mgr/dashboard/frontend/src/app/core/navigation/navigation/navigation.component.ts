@@ -71,6 +71,8 @@ export class NavigationComponent implements OnInit {
         return { color: '#f0ad4e' };
       }
     }
+
+    return undefined;
   }
 
   toggleSubMenu(menu: string) {

@@ -37,7 +37,7 @@ export class TimeDiffService {
   calculateDate(date: Date, duration: string, reverse?: boolean): Date {
     const time = +date;
     if (_.isNaN(time)) {
-      return;
+      return undefined;
     }
     const diff = this.getDurationMs(duration) * (reverse ? -1 : 1);
     return new Date(time + diff);

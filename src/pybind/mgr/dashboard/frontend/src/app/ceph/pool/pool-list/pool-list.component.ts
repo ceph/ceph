@@ -291,5 +291,7 @@ export class PoolListComponent implements OnInit {
         'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
       );
     }
+
+    return undefined;
   }
 }

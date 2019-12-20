@@ -88,7 +88,7 @@ export class TaskListService implements OnDestroy {
 
   private getTaskAction(tasks: ExecutingTask[]): string {
     if (tasks.length === 0) {
-      return;
+      return undefined;
     }
     return tasks
       .map((task) => {

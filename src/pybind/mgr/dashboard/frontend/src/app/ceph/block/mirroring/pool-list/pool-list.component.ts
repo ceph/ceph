@@ -164,6 +164,8 @@ export class PoolListComponent implements OnInit, OnDestroy {
     if (pool && pool['peer_uuids']) {
       return pool['peer_uuids'][0];
     }
+
+    return undefined;
   }
 
   updateSelection(selection: CdTableSelection) {

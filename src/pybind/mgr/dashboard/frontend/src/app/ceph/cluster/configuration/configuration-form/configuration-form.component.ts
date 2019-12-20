@@ -81,6 +81,8 @@ export class ConfigurationFormComponent implements OnInit {
 
       return typeValidators.validators;
     }
+
+    return undefined;
   }
 
   getStep(type: string, value: number): number | undefined {

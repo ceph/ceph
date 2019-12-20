@@ -197,7 +197,7 @@ export abstract class PageHelper {
   async clearInput(elem: ElementFinder) {
     const types = ['text', 'number'];
     if ((await elem.getTagName()) === 'input' && types.includes(await elem.getAttribute('type'))) {
-      await elem.sendKeys(
+      return await elem.sendKeys(
         protractor.Key.chord(protractor.Key.CONTROL, 'a'),
         protractor.Key.BACK_SPACE
       );

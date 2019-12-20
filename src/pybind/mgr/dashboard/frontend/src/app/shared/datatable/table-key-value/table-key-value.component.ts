@@ -112,7 +112,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   private makePairs(data: any): KeyValueItem[] {
     let result: KeyValueItem[] = [];
     if (!data) {
-      return; // Wait for data
+      return undefined; // Wait for data
     } else if (_.isArray(data)) {
       result = this.makePairsFromArray(data);
     } else if (_.isObject(data)) {

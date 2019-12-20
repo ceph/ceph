@@ -165,6 +165,8 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     if (first && _.isUndefined(first['info'])) {
       return this.i18n('Unavailable gateway(s)');
     }
+
+    return undefined;
   }
 
   getDeleteDisableDesc(): string | undefined {
@@ -178,6 +180,8 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     if (first && first['info'] && first['info']['num_sessions']) {
       return this.i18n('Target has active sessions');
     }
+
+    return undefined;
   }
 
   prepareResponse(resp: any): any[] {
