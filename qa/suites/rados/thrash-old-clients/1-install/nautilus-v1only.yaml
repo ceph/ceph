@@ -13,7 +13,3 @@ tasks:
     branch: nautilus
     exclude_packages:
       - cephadm
-- install.upgrade:
-    mon.a:
-    mon.b:
-    mon.c:

@@ -28,7 +28,3 @@ tasks:
       - libcephfs-dev
       - libradospp-devel
     extra_packages: ['librados2']
-- install.upgrade:
-    mon.a:
-    mon.b:
-    mon.c:
