@@ -539,7 +539,10 @@ class Filesystem(MDSCluster):
                     'osd', 'pool', 'create',
                     data_pool_name, pgs_per_fs_pool.__str__())
             self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                             self.name, self.metadata_pool_name, data_pool_name)
+                                             self.name,
+                                             self.metadata_pool_name,
+                                             data_pool_name,
+                                             "--force")
         self.check_pool_application(self.metadata_pool_name)
         self.check_pool_application(data_pool_name)
         # Turn off spurious standby count warnings from modifying max_mds in tests.
