@@ -317,7 +317,8 @@ class Module(MgrModule):
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
-            'PG Total Count'
+            'PG Total Count',
+            ('pool_id',)
         )
 
         metrics['scrape_duration_seconds'] = Metric(
@@ -507,13 +508,11 @@ class Module(MgrModule):
             self.metrics['mgr_module_can_run'].set(_can_run, (mod_name,))
 
     def get_pg_status(self):
-        # Set total count of PGs, first
-        pg_status = self.get('pg_status')
-        self.metrics['pg_total'].set(pg_status['num_pgs'])
 
         pg_summary = self.get('pg_summary')
 
         for pool in pg_summary['by_pool']:
+            total = 0
             for state_name, count in pg_summary['by_pool'][pool].items():
                 reported_states = {}
 
@@ -535,6 +534,8 @@ class Module(MgrModule):
                         except KeyError:
                             self.log.warn(
                                 "skipping pg in unknown state {}".format(state))
+                total = total + count
+            self.metrics['pg_total'].set(total,(pool,))
 
     def get_osd_stats(self):
         osd_stats = self.get('osd_stats')
