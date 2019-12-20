@@ -459,6 +459,7 @@ public:
     const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
+    const eversion_t &min_last_complete_ondisk,
     bool transaction_applied,
     ObjectStore::Transaction &t,
     bool async = false) override {
@@ -473,9 +474,17 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
+    if (!is_primary() && !is_ec_pg()) {
+      replica_clear_repop_obc(logv, t);
+    }
     recovery_state.append_log(
-      logv, trim_to, roll_forward_to, t, transaction_applied, async);
+      logv, trim_to, roll_forward_to, min_last_complete_ondisk,
+      t, transaction_applied, async);
   }
+
+  void replica_clear_repop_obc(
+    const vector<pg_log_entry_t> &logv,
+    ObjectStore::Transaction &t);
 
   void op_applied(const eversion_t &applied_version) override;
 

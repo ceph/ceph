@@ -3449,6 +3449,19 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
+  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+      !is_primary() &&
+      m->get_map_epoch() < info.history.same_interval_since) {
+    // Note: the Objecter will resend on interval change without the primary
+    // changing if it actually sent to a replica.  If the primary hasn't
+    // changed since the send epoch, we got it, and we're primary, it won't
+    // have resent even if the interval did change as it sent it to the primary
+    // (us).
+    return true;
+  }
+
+
   if (m->get_connection()->has_feature(CEPH_FEATURE_RESEND_ON_SPLIT)) {
     // >= luminous client
     if (m->get_connection()->has_feature(CEPH_FEATURE_SERVER_NAUTILUS)) {
