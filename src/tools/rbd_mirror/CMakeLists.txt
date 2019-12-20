@@ -41,6 +41,7 @@ set(rbd_mirror_internal
   image_replayer/PrepareLocalImageRequest.cc
   image_replayer/PrepareRemoteImageRequest.cc
   image_replayer/Utils.cc
+  image_replayer/journal/CreateLocalImageRequest.cc
   image_replayer/journal/EventPreprocessor.cc
   image_replayer/journal/Replayer.cc
   image_replayer/journal/ReplayStatusFormatter.cc
