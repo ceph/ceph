@@ -48,13 +48,18 @@ setup(
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Filesystems',
     ],
-    install_requires=['gevent',
+    install_requires=['apache-libcloud',
+                      'gevent',
                       'PyYAML',
                       'argparse >= 1.2.1',
                       'configobj',
                       'six >= 1.9', # python-openstackclient won't work properly with less
                       'pexpect',
                       'docopt',
+                      'netaddr',  # teuthology/misc.py
+                      # only used by orchestra, but we monkey-patch it in
+                      # teuthology/__init__.py
+                      'paramiko',
                       'psutil >= 2.1.0',
                       'configparser',
                       'ansible>=2.0',
@@ -64,13 +69,11 @@ setup(
     extras_require = {
         'coverage': [ 'mysqlclient == 1.4.2'],
         'orchestra': [
-            'apache-libcloud',
             # For apache-libcloud when using python < 2.7.9
             'backports.ssl_match_hostname',
             'beanstalkc3 >= 0.4.0',
             'httplib2',
             'ndg-httpsclient',  # for requests, urllib3
-            'paramiko',
             'pyasn1',           # for requests, urllib3
             'pyopenssl>=0.13',  # for requests, urllib3
             'python-dateutil',
