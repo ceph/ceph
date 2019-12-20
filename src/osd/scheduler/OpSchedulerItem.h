@@ -244,7 +244,9 @@ public:
   }
 
   op_scheduler_class get_scheduler_class() const final {
-    if (maybe_get_mosd_op()) {
+    auto type = op->get_req()->get_type();
+    if (type == CEPH_MSG_OSD_OP ||
+	type == CEPH_MSG_OSD_BACKOFF) {
       return op_scheduler_class::client;
     } else {
       return op_scheduler_class::immediate;
