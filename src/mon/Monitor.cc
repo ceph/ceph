@@ -418,7 +418,7 @@ int Monitor::do_admin_command(
       cmd_vec.push_back(val);
     }
     ceph_heap_profiler_handle_command(cmd_vec, out);
-  } else if (command == "compact" || command == "mon compact") {
+  } else if (command == "compact") {
     dout(1) << "triggering manual compaction" << dendl;
     auto start = ceph::coarse_mono_clock::now();
     store->compact_async();
@@ -3398,10 +3398,8 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   if (module == "mon" &&
       /* Let the Monitor class handle the following commands:
-       *  'mon compact'
        *  'mon scrub'
        */
-      prefix != "mon compact" &&
       prefix != "mon scrub" &&
       prefix != "mon metadata" &&
       prefix != "mon versions" &&

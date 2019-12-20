@@ -251,10 +251,6 @@ COMMAND("node ls "
 /*
  * Monitor-specific commands under module 'mon'
  */
-COMMAND_WITH_FLAG("mon compact",
-    "cause compaction of monitor's leveldb/rocksdb storage",
-    "mon", "rw",
-    FLAG(NOFORWARD))
 COMMAND_WITH_FLAG("mon scrub",
     "scrub the monitor stores",
     "mon", "rw",
