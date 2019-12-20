@@ -790,11 +790,7 @@ def task(ctx, config):
             # hmm, fall back to branch?
             branch = config.get('branch', 'master')
             ref = branch
-            # FIXME when ceph-ci builds all branches
-            if branch in ['master', 'nautilus']:
-                ctx.ceph[cluster_name].image = 'ceph/daemon-base:latest-%s-devel' % branch
-            else:
-                ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % branch
+            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % branch
     log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
     # uuid
