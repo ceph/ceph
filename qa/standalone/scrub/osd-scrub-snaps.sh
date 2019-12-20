@@ -224,19 +224,19 @@ function TEST_scrub_snaps() {
     # The injected snapshot errors with a single copy pool doesn't
     # see object errors because all the issues are detected by
     # comparing copies.
-    jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | python3 -c "$sortkeys" > $dir/checkcsjson
 {
     "epoch": 17,
     "inconsistents": []
 }
 EOF
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
 
     rados list-inconsistent-snapset $pgid > $dir/json || return 1
 
-    jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -615,7 +615,7 @@ EOF
 }
 EOF
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -779,7 +779,7 @@ function _scrub_snaps_multi() {
     if [ $which = "replica" ];
     then
         scruberrors="20"
-        jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
+        jq "$jqfilter" << EOF | python3 -c "$sortkeys" > $dir/checkcsjson
 {
     "epoch": 23,
     "inconsistents": []
@@ -788,7 +788,7 @@ EOF
 
 else
         scruberrors="30"
-        jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
+        jq "$jqfilter" << EOF | python3 -c "$sortkeys" > $dir/checkcsjson
 {
     "epoch": 23,
     "inconsistents": [
@@ -1042,7 +1042,7 @@ else
 EOF
 fi
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
