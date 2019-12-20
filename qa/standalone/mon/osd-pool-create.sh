@@ -204,7 +204,7 @@ function TEST_utf8_cli() {
     ceph osd lspools 2>&1 | \
         grep "黄" || return 1
     ceph -f json-pretty osd dump | \
-        python -c "import json; import sys; json.load(sys.stdin)" || return 1
+        python3 -c "import json; import sys; json.load(sys.stdin)" || return 1
     ceph osd pool delete 黄 黄 --yes-i-really-really-mean-it
 }
 
