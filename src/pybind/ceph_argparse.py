@@ -21,6 +21,7 @@ import socket
 import stat
 import sys
 import threading
+import time
 import uuid
 
 # Flags are from MonCommand.h
@@ -1332,6 +1333,13 @@ def run_in_thread(func, *args, **kwargs):
     # strictly guaranteed is that *some* thread that has the signal
     # unblocked will receive it).  But there doesn't seem to be
     # any interface to create a thread with SIGINT blocked.
+
+    # Apparently the thread my not have fully exited after join returns,
+    # so implement a try-loop with backoff before claiming to timeout.
+    for i in range(0,100):
+        if not t.is_alive():
+           break
+        time.sleep(float(i) / 100)
     if t.is_alive():
         raise Exception("timed out")
     elif t.exception:
