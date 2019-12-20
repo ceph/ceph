@@ -498,7 +498,7 @@ public:
   bool m_do_resync;
 };
 
-TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
+TEST_F(TestMockImageReplayerBootstrapRequest, LocalDemotedRemoteSyncingState) {
   create_local_image();
 
   InSequence seq;
@@ -515,10 +515,21 @@ TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
   expect_get_remote_mirror_info(mock_get_mirror_info_request,
                                 {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
                                  cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_NON_PRIMARY, 0);
+                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
 
-  // switch the state to replaying
+  // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  mock_local_image_ctx.journal = &mock_journal;
+  MockOpenLocalImageRequest mock_open_local_image_request;
+  expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
+                          mock_local_image_ctx.id, &mock_local_image_ctx, 0);
+  expect_is_resync_requested(mock_journal, false, 0);
+
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                                             "remote mirror uuid", true, 4, 1});
+
+  // update client state
   librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta{
     mock_local_image_ctx.id};
   mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
@@ -526,6 +537,40 @@ TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
   client_data.client_meta = mirror_peer_client_meta;
   ::journal::MockJournaler mock_journaler;
   expect_journaler_update_client(mock_journaler, client_data, 0);
+
+  // lookup remote image tag class
+  client_data = {librbd::journal::ImageClientMeta{123}};
+  cls::journal::Client client;
+  encode(client_data, client.data);
+  expect_journaler_get_client(mock_journaler,
+                              librbd::Journal<>::IMAGE_CLIENT_ID,
+                              client, 0);
+
+  // remote demotion / promotion event
+  Tags tags = {
+    {2, 123, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              true, 1, 99})},
+    {3, 123, encode_tag_data({librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                              librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              true, 2, 1})},
+    {4, 123, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                              true, 3, 1})},
+    {5, 123, encode_tag_data({librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                              librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              true, 4, 1})},
+    {6, 123, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                              true, 5, 1})},
+    {7, 123, encode_tag_data({librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                              librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              true, 6, 1})},
+    {8, 123, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
+                              librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                              true, 7, 1})}
+  };
+  expect_journaler_get_tags(mock_journaler, 123, tags, 0);
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
@@ -541,7 +586,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
     "local mirror uuid", "remote mirror uuid", &client_state,
     &mirror_peer_client_meta, &ctx);
   request->send();
-  ASSERT_EQ(-EREMOTEIO, ctx.wait());
+  ASSERT_EQ(0, ctx.wait());
 }
 
 TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteNotTagOwner) {

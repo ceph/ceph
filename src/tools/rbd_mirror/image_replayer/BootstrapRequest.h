@@ -112,31 +112,31 @@ private:
    *    |         v                                     *   *   |
    *    | (remote image primary)                        *   *   |
    *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *   *   |
-   *    |         |   .                                 *   *   |
-   *    |         |   . (image doesn't exist)           *   *   |
-   *    |         |   . . > UNREGISTER_CLIENT * * * * * *   *   |
-   *    |         |             |                       *   *   |
-   *    |         |             v                       *   *   |
-   *    |         |         REGISTER_CLIENT * * * * * * *   *   |
-   *    |         |             |                       *   *   |
-   *    |         |             \-----------------------*---*---/
-   *    |         |                                     *   *
-   *    |         v (skip if not needed)                *   *
-   *    |      GET_REMOTE_TAG_CLASS * * * * *           *   *
-   *    |         |                         *           *   *
-   *    |         v (skip if not needed)    *           *   *
-   *    |      GET_REMOTE_TAGS  * * * * * * *           *   *
-   *    |         |                         *           *   *
-   *    |         v (skip if not needed)    v           *   *
-   *    |      IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *   *
-   *    |         |                         |           *   *
-   *    |         \-----------------\ /-----/           *   *
-   *    |                            |                  *   *
-   *    |                            |                  *   *
-   *    | (skip if not needed)       |                  *   *
-   *    \----> UPDATE_CLIENT_STATE  *|* * * * * * * * * *   *
-   *                |                |                  *   *
-   *    /-----------/----------------/                  *   *
+   *              |   .                                 *   *   |
+   *              |   . (image doesn't exist)           *   *   |
+   *              |   . . > UNREGISTER_CLIENT * * * * * *   *   |
+   *              |             |                       *   *   |
+   *              |             v                       *   *   |
+   *              |         REGISTER_CLIENT * * * * * * *   *   |
+   *              |             |                       *   *   |
+   *              |             \-----------------------*---*---/
+   *              |                                     *   *
+   *              v (skip if not needed)                *   *
+   *           UPDATE_CLIENT_STATE                      *   *
+   *              |                                     *   *
+   *              v (skip if not needed)                *   *
+   *           GET_REMOTE_TAG_CLASS * * * * *           *   *
+   *              |                         *           *   *
+   *              v (skip if not needed)    *           *   *
+   *           GET_REMOTE_TAGS  * * * * * * *           *   *
+   *              |                         *           *   *
+   *              v (skip if not needed)    v           *   *
+   *           IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *   *
+   *              |                         |           *   *
+   *              \-----------------\ /-----/           *   *
+   *                                 |                  *   *
+   *                                 |                  *   *
+   *    /----------------------------/                  *   *
    *    |                                               *   *
    *    v                                               *   *
    * CLOSE_REMOTE_IMAGE < * * * * * * * * * * * * * * * *   *
@@ -188,9 +188,6 @@ private:
   void get_remote_mirror_info();
   void handle_get_remote_mirror_info(int r);
 
-  void update_client_state();
-  void handle_update_client_state(int r);
-
   void open_local_image();
   void handle_open_local_image(int r);
 
@@ -205,6 +202,9 @@ private:
 
   void update_client_image();
   void handle_update_client_image(int r);
+
+  void update_client_state();
+  void handle_update_client_state(int r);
 
   void get_remote_tag_class();
   void handle_get_remote_tag_class(int r);

@@ -175,23 +175,14 @@ void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
     return;
   }
 
-  if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY) {
-    if (m_local_image_id.empty()) {
-      // no local image and remote isn't primary -- don't sync it
-      dout(5) << "remote image is not primary -- not syncing"
-              << dendl;
-      m_ret_val = -EREMOTEIO;
-      close_remote_image();
-      return;
-    } else if (m_client_meta->state !=
-                 librbd::journal::MIRROR_PEER_STATE_REPLAYING) {
-      // ensure we attempt to re-sync to remote if it's re-promoted
-      dout(5) << "remote image is not primary -- sync interrupted"
-              << dendl;
-      m_ret_val = -EREMOTEIO;
-      update_client_state();
-      return;
-    }
+  if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
+      m_local_image_id.empty()) {
+    // no local image and remote isn't primary -- don't sync it
+    dout(5) << "remote image is not primary -- not syncing"
+            << dendl;
+    m_ret_val = -EREMOTEIO;
+    close_remote_image();
+    return;
   }
 
   if (!m_client_meta->image_id.empty()) {
@@ -207,36 +198,6 @@ void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
   }
 
   open_local_image();
-}
-
-template <typename I>
-void BootstrapRequest<I>::update_client_state() {
-  dout(15) << dendl;
-  update_progress("UPDATE_CLIENT_STATE");
-
-  librbd::journal::MirrorPeerClientMeta client_meta(*m_client_meta);
-  client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
-
-  librbd::journal::ClientData client_data(client_meta);
-  bufferlist data_bl;
-  encode(client_data, data_bl);
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client_state>(
-      this);
-  m_journaler->update_client(data_bl, ctx);
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_update_client_state(int r) {
-  dout(15) << "r=" << r << dendl;
-  if (r < 0) {
-    derr << "failed to update client: " << cpp_strerror(r) << dendl;
-  } else {
-    m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
-  }
-
-  close_remote_image();
 }
 
 template <typename I>
@@ -331,6 +292,47 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     return;
   }
 
+  update_client_state();
+}
+
+template <typename I>
+void BootstrapRequest<I>::update_client_state() {
+  if (m_client_meta->state != librbd::journal::MIRROR_PEER_STATE_SYNCING ||
+      m_local_tag_data.mirror_uuid == m_remote_mirror_uuid) {
+    get_remote_tag_class();
+    return;
+  }
+
+  // our local image is not primary, is flagged as syncing on the remote side,
+  // but is no longer tied to the remote -- this implies we were forced
+  // promoted and then demoted at some point
+  dout(15) << dendl;
+  update_progress("UPDATE_CLIENT_STATE");
+
+  librbd::journal::MirrorPeerClientMeta client_meta(*m_client_meta);
+  client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+
+  librbd::journal::ClientData client_data(client_meta);
+  bufferlist data_bl;
+  encode(client_data, data_bl);
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client_state>(
+      this);
+  m_journaler->update_client(data_bl, ctx);
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_update_client_state(int r) {
+  dout(15) << "r=" << r << dendl;
+  if (r < 0) {
+    derr << "failed to update client: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    close_local_image();
+    return;
+  }
+
+  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
   get_remote_tag_class();
 }
 
