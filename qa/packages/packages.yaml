@@ -38,7 +38,9 @@ ceph:
   - ceph-radosgw
   - ceph-test
   - ceph
+  - ceph-base
   - cephadm
+  - ceph-immutable-object-cache
   - ceph-mgr
   - ceph-mgr-dashboard
   - ceph-mgr-diskprediction-cloud
@@ -46,6 +48,7 @@ ceph:
   - ceph-mgr-rook
   - ceph-mgr-cephadm
   - ceph-fuse
+  - librados-devel
   - libcephfs2
   - libcephfs-devel
   - librados2
@@ -55,4 +58,27 @@ ceph:
   - python3-cephfs
   - python3-rbd
   - rbd-fuse
-  - ceph-debuginfo
+  - rbd-mirror
+  - rbd-nbd
+  - ceph-base-debuginfo
+  - ceph-common-debuginfo
+  - ceph-immutable-object-cache-debuginfo
+  - ceph-radosgw-debuginfo
+  - ceph-test-debuginfo
+  - ceph-base-debuginfo
+  - ceph-mgr-debuginfo
+  - ceph-mds-debuginfo
+  - ceph-mon-debuginfo
+  - ceph-osd-debuginfo
+  - ceph-fuse-debuginfo
+  - librados-devel-debuginfo
+  - libcephfs2-debuginfo
+  - librados2-debuginfo
+  - librbd1-debuginfo
+  - python3-cephfs-debuginfo
+  - python3-rados-debuginfo
+  - python3-rbd-debuginfo
+  - python3-rgw-debuginfo
+  - rbd-fuse-debuginfo
+  - rbd-mirror-debuginfo
+  - rbd-nbd-debuginfo

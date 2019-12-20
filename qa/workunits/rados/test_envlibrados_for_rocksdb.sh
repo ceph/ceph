@@ -31,6 +31,8 @@ case $(distro_id) in
         esac
 		;;
 	centos|fedora|rhel)
+	        # el8 needs PowerTools for snappy-devel
+	        test -x /usr/bin/dnf && sudo dnf config-manager --set-enabled PowerTools || true
 		install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64
         if [ $(distro_id) = "fedora" ]; then
             install cmake
