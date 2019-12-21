@@ -20,6 +20,8 @@
 class Context;
 class ContextWQ;
 class SafeTimer;
+
+namespace journal { class CacheManagerHandler; }
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
@@ -42,45 +44,44 @@ public:
   typedef rbd::mirror::ProgressContext ProgressContext;
 
   static BootstrapRequest* create(
-        Threads<ImageCtxT>* threads,
-        librados::IoCtx &local_io_ctx,
-        librados::IoCtx &remote_io_ctx,
-        InstanceWatcher<ImageCtxT> *instance_watcher,
-        ImageCtxT **local_image_ctx,
-        const std::string &local_image_id,
-        const std::string &remote_image_id,
-        const std::string &global_image_id,
-        const std::string &local_mirror_uuid,
-        const std::string &remote_mirror_uuid,
-        Journaler *remote_journaler,
-        cls::journal::ClientState *client_state,
-        MirrorPeerClientMeta *client_meta,
-        Context *on_finish,
-        bool *do_resync,
-        ProgressContext *progress_ctx = nullptr) {
-    return new BootstrapRequest(threads, local_io_ctx, remote_io_ctx,
-                                instance_watcher, local_image_ctx,
-                                local_image_id, remote_image_id,
-                                global_image_id, local_mirror_uuid,
-                                remote_mirror_uuid, remote_journaler,
-                                client_state, client_meta, on_finish,
-                                do_resync, progress_ctx);
+      Threads<ImageCtxT>* threads,
+      librados::IoCtx& local_io_ctx,
+      librados::IoCtx& remote_io_ctx,
+      InstanceWatcher<ImageCtxT>* instance_watcher,
+      const std::string& remote_image_id,
+      const std::string& global_image_id,
+      const std::string& local_mirror_uuid,
+      ::journal::CacheManagerHandler* cache_manager_handler,
+      ProgressContext* progress_ctx,
+      ImageCtxT** local_image_ctx,
+      std::string* local_image_id,
+      std::string* remote_mirror_uuid,
+      Journaler** remote_journaler,
+      bool* do_resync,
+      Context* on_finish) {
+    return new BootstrapRequest(
+      threads, local_io_ctx, remote_io_ctx, instance_watcher, remote_image_id,
+      global_image_id, local_mirror_uuid,  cache_manager_handler, progress_ctx,
+      local_image_ctx, local_image_id, remote_mirror_uuid, remote_journaler,
+      do_resync, on_finish);
   }
 
-  BootstrapRequest(Threads<ImageCtxT>* threads,
-                   librados::IoCtx &local_io_ctx,
-                   librados::IoCtx &remote_io_ctx,
-                   InstanceWatcher<ImageCtxT> *instance_watcher,
-                   ImageCtxT **local_image_ctx,
-                   const std::string &local_image_id,
-                   const std::string &remote_image_id,
-                   const std::string &global_image_id,
-                   const std::string &local_mirror_uuid,
-                   const std::string &remote_mirror_uuid,
-                   Journaler *remote_journaler,
-                   cls::journal::ClientState *client_state,
-                   MirrorPeerClientMeta *client_meta, Context *on_finish,
-                   bool *do_resync, ProgressContext *progress_ctx = nullptr);
+  BootstrapRequest(
+      Threads<ImageCtxT>* threads,
+      librados::IoCtx& local_io_ctx,
+      librados::IoCtx& remote_io_ctx,
+      InstanceWatcher<ImageCtxT>* instance_watcher,
+      const std::string& remote_image_id,
+      const std::string& global_image_id,
+      const std::string& local_mirror_uuid,
+      ::journal::CacheManagerHandler* cache_manager_handler,
+      ProgressContext* progress_ctx,
+      ImageCtxT** local_image_ctx,
+      std::string* local_image_id,
+      std::string* remote_mirror_uuid,
+      Journaler** remote_journaler,
+      bool* do_resync,
+      Context* on_finish);
   ~BootstrapRequest() override;
 
   bool is_syncing() const;
@@ -88,14 +89,22 @@ public:
   void send() override;
   void cancel() override;
 
+  std::string get_local_image_name() const;
+
 private:
   /**
    * @verbatim
    *
    * <start>
    *    |
-   *    v
-   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * * (error)
+   *    v                                           (error)
+   * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
+   * PREPARE_REMOTE_IMAGE * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
+   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                                   *
    * GET_REMOTE_MIRROR_INFO * * * * * * * * * * * * * * *   *
@@ -135,16 +144,15 @@ private:
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
-  ImageCtxT **m_local_image_ctx;
-  std::string m_local_image_id;
   std::string m_remote_image_id;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
-  std::string m_remote_mirror_uuid;
-  Journaler *m_remote_journaler;
-  cls::journal::ClientState *m_client_state;
-  MirrorPeerClientMeta *m_client_meta;
+  ::journal::CacheManagerHandler *m_cache_manager_handler;
   ProgressContext *m_progress_ctx;
+  ImageCtxT **m_local_image_ctx;
+  std::string* m_local_image_id;
+  std::string* m_remote_mirror_uuid;
+  Journaler** m_remote_journaler;
   bool *m_do_resync;
 
   mutable ceph::mutex m_lock;
@@ -156,8 +164,22 @@ private:
     librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   int m_ret_val = 0;
 
+  std::string m_local_image_name;
+  std::string m_local_image_tag_owner;
+  std::string m_prepare_local_image_name;
+
+  cls::journal::ClientState m_client_state =
+    cls::journal::CLIENT_STATE_DISCONNECTED;
+  librbd::journal::MirrorPeerClientMeta m_client_meta;
+
   bool m_syncing = false;
   ImageSync<ImageCtxT> *m_image_sync = nullptr;
+
+  void prepare_local_image();
+  void handle_prepare_local_image(int r);
+
+  void prepare_remote_image();
+  void handle_prepare_remote_image(int r);
 
   void open_remote_image();
   void handle_open_remote_image(int r);
