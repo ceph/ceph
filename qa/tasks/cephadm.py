@@ -137,7 +137,57 @@ def ceph_log(ctx, config):
     try:
         yield
 
+    except Exception:
+        # we need to know this below
+        ctx.summary['success'] = False
+        raise
+
     finally:
+        log.info('Checking cluster log for badness...')
+        def first_in_ceph_log(pattern, excludes):
+            """
+            Find the first occurrence of the pattern specified in the Ceph log,
+            Returns None if none found.
+
+            :param pattern: Pattern scanned for.
+            :param excludes: Patterns to ignore.
+            :return: First line of text (or None if not found)
+            """
+            args = [
+                'sudo',
+                'egrep', pattern,
+                '/var/log/ceph/{fsid}/ceph.log'.format(
+                    fsid=fsid),
+            ]
+            for exclude in excludes:
+                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+            args.extend([
+                run.Raw('|'), 'head', '-n', '1',
+            ])
+            r = ctx.ceph[cluster_name].bootstrap_remote.run(
+                stdout=StringIO(),
+                args=args,
+            )
+            stdout = r.stdout.getvalue()
+            if stdout != '':
+                return stdout
+            return None
+
+        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
+                             config['log-whitelist']) is not None:
+            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+            ctx.summary['success'] = False
+            # use the most severe problem as the failure reason
+            if 'failure_reason' not in ctx.summary:
+                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
+                    match = first_in_ceph_log(pattern, config['log-whitelist'])
+                    if match is not None:
+                        ctx.summary['failure_reason'] = \
+                            '"{match}" in cluster log'.format(
+                                match=match.rstrip('\n'),
+                            )
+                        break
+
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             # and logs
