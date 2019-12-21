@@ -199,7 +199,7 @@ public:
   void maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 			  vector<pair<CDir*, size_t> >& results);
 
-  void get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov);
+  bool export_try_grab_locks(CDir *dir, MutationRef& mut);
   void get_export_client_set(CDir *dir, std::set<client_t> &client_set);
   void get_export_client_set(CInode *in, std::set<client_t> &client_set);
 

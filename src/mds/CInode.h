@@ -197,7 +197,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   friend class MDCache;
   friend class StrayManager;
   friend class CDir;
-  friend class CInodeExport;
+  friend ostream& operator<<(ostream&, const CInode&);
 
   class scrub_stamp_info_t {
   public:
@@ -513,7 +513,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool has_snap_data(snapid_t s);
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
-  bool has_dirfrags() { return !dirfrags.empty(); }
+  size_t get_num_dirfrags() const { return dirfrags.size(); }
   CDir* get_dirfrag(frag_t fg) {
     auto pi = dirfrags.find(fg);
     if (pi != dirfrags.end()) {
@@ -893,6 +893,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     parent = projected_parent.front();
     projected_parent.pop_front();
   }
+  bool is_parent_projected() const {
+    return !projected_parent.empty();
+  }
 
   void maybe_export_pin(bool update=false);
   void set_export_pin(mds_rank_t rank);
@@ -953,8 +956,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // also update RecoveryQueue::RecoveryQueue() if you change this
   elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
   elist<CInode*>::item& item_recover_queue_front = item_dirty_dirfrag_nest;
-
-  int auth_pin_freeze_allowance = 0;
 
   inode_load_vec_t pop;
   elist<CInode*>::item item_pop_lru;
@@ -1066,6 +1067,11 @@ protected:
   // -- waiting --
   mempool::mds_co::compact_map<frag_t, MDSContext::vec > waiting_on_dir;
 
+
+  // -- freezing inode --
+  int auth_pin_freeze_allowance = 0;
+  elist<CInode*>::item item_freezing_inode;
+  void maybe_finish_freeze_inode();
 private:
 
   friend class ValidationContinuation;

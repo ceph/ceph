@@ -51,14 +51,13 @@ public:
 
   void nudge_log(SimpleLock *lock);
 
-  void include_snap_rdlocks(CInode *in, MutationImpl::LockOpVec& lov);
-  void include_snap_rdlocks_wlayout(CInode *in, MutationImpl::LockOpVec& lov,
-				    file_layout_t **layout);
-
   bool acquire_locks(MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
-		     bool auth_pin_nonblock=false);
+		     bool auth_pin_nonblocking=false);
+
+  bool try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
+			      int n=0, bool want_layout=false);
 
   void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);
@@ -67,6 +66,15 @@ public:
   void drop_non_rdlocks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void drop_rdlocks_for_early_reply(MutationImpl *mut);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
+
+  int get_cap_bit_for_lock_cache(int op);
+  void create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout=nullptr);
+  bool find_and_attach_lock_cache(MDRequestRef& mdr, CInode *diri);
+  void invalidate_lock_caches(CDir *dir);
+  void invalidate_lock_caches(SimpleLock *lock);
+  void invalidate_lock_cache(MDLockCache *lock_cache);
+  void eval_lock_caches(Capability *cap);
+  void put_lock_cache(MDLockCache* lock_cache);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, MDSContext::vec *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
@@ -86,11 +94,11 @@ public:
   void try_eval(SimpleLock *lock, bool *pneed_issue);
 
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
-  bool rdlock_try(SimpleLock *lock, client_t client, MDSContext *c);
+  bool rdlock_try(SimpleLock *lock, client_t client);
   bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
   void rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
-  bool can_rdlock_set(MutationImpl::LockOpVec& lov);
-  void rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
+  bool rdlock_try_set(MutationImpl::LockOpVec& lov, MDRequestRef& mdr);
+  bool rdlock_try_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
   bool wrlock_try(SimpleLock *lock, MutationRef& mut);
@@ -106,6 +114,7 @@ public:
 
   void xlock_export(const MutationImpl::lock_iterator& it, MutationImpl *mut);
   void xlock_import(SimpleLock *lock);
+  void xlock_downgrade(SimpleLock *lock, MutationImpl *mut);
 
   void try_simple_eval(SimpleLock *lock);
   bool simple_rdlock_try(SimpleLock *lock, MDSContext *con);
@@ -176,7 +185,7 @@ public:
   // -- client leases --
   void handle_client_lease(const cref_t<MClientLease> &m);
 
-  void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, Session *session);
+  void issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask, utime_t now, bufferlist &bl);
   void revoke_client_leases(SimpleLock *lock);
   static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 

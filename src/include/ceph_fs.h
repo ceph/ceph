@@ -318,19 +318,21 @@ extern const char *ceph_mds_state_name(int s);
  *  - they also define the lock ordering by the MDS
  *  - a few of these are internal to the mds
  */
-#define CEPH_LOCK_DVERSION    1
-#define CEPH_LOCK_DN          2
-#define CEPH_LOCK_IVERSION    16    /* mds internal */
-#define CEPH_LOCK_ISNAP       32
-#define CEPH_LOCK_IFILE       64
-#define CEPH_LOCK_IAUTH       128
-#define CEPH_LOCK_ILINK       256
-#define CEPH_LOCK_IDFT        512   /* dir frag tree */
-#define CEPH_LOCK_INEST       1024  /* mds internal */
-#define CEPH_LOCK_IXATTR      2048
-#define CEPH_LOCK_IFLOCK      4096  /* advisory file locks */
-#define CEPH_LOCK_INO         8192  /* immutable inode bits; not a lock */
-#define CEPH_LOCK_IPOLICY     16384 /* policy lock on dirs. MDS internal */
+#define CEPH_LOCK_DN          (1 << 0)
+#define CEPH_LOCK_DVERSION    (1 << 1)
+#define CEPH_LOCK_ISNAP       (1 << 4)  /* snapshot lock. MDS internal */
+#define CEPH_LOCK_IPOLICY     (1 << 5)  /* policy lock on dirs. MDS internal */
+#define CEPH_LOCK_IFILE       (1 << 6)
+#define CEPH_LOCK_INEST       (1 << 7)  /* mds internal */
+#define CEPH_LOCK_IDFT        (1 << 8)  /* dir frag tree */
+#define CEPH_LOCK_IAUTH       (1 << 9)
+#define CEPH_LOCK_ILINK       (1 << 10)
+#define CEPH_LOCK_IXATTR      (1 << 11)
+#define CEPH_LOCK_IFLOCK      (1 << 12)  /* advisory file locks */
+#define CEPH_LOCK_IVERSION    (1 << 13)  /* mds internal */
+
+#define CEPH_LOCK_IFIRST      CEPH_LOCK_ISNAP
+
 
 /* client_session ops */
 enum {
@@ -691,6 +693,9 @@ struct ceph_mds_reply_lease {
 	__le32 seq;
 } __attribute__ ((packed));
 
+#define CEPH_LEASE_VALID	(1 | 2) /* old and new bit values */
+#define CEPH_LEASE_PRIMARY_LINK	4	/* primary linkage */
+
 struct ceph_mds_reply_dirfrag {
 	__le32 frag;            /* fragment */
 	__le32 auth;            /* auth mds, if this is a delegation point */
@@ -761,7 +766,7 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_LINK_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SLINK)
 #define CEPH_CAP_XATTR_SHARED (CEPH_CAP_GSHARED  << CEPH_CAP_SXATTR)
 #define CEPH_CAP_XATTR_EXCL    (CEPH_CAP_GEXCL     << CEPH_CAP_SXATTR)
-#define CEPH_CAP_FILE(x)    (x << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE(x)       ((x) << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_SHARED   (CEPH_CAP_GSHARED   << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_CACHE    (CEPH_CAP_GCACHE    << CEPH_CAP_SFILE)
@@ -815,6 +820,13 @@ int ceph_flags_to_mode(int flags);
 
 #define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE | CEPH_LOCK_IAUTH | CEPH_LOCK_ILINK | \
 			CEPH_LOCK_IXATTR)
+
+/* cap masks async dir operations */
+#define CEPH_CAP_DIR_CREATE    CEPH_CAP_FILE_CACHE
+#define CEPH_CAP_DIR_UNLINK    CEPH_CAP_FILE_RD
+#define CEPH_CAP_ANY_DIR_OPS   (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD | \
+				CEPH_CAP_FILE_WREXTEND | CEPH_CAP_FILE_LAZYIO)
+
 
 int ceph_caps_for_mode(int mode);
 

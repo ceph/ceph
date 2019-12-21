@@ -31,13 +31,13 @@
 #include "messages/MClientReply.h"
 
 class LogSegment;
-class Capability;
 class CInode;
 class CDir;
 class CDentry;
 class Session;
 class ScatterLock;
 struct sr_t;
+struct MDLockCache;
 
 struct MutationImpl : public TrackedOp {
   metareqid_t reqid;
@@ -98,19 +98,8 @@ public:
       wrlock_target = MDS_RANK_NONE;
     }
     bool is_state_pin() const { return !!(flags & STATE_PIN); }
-
     bool operator<(const LockOp& r) const {
-      if ((lock->type->type <= CEPH_LOCK_DN) && (r.lock->type->type > CEPH_LOCK_DN))
-	return true;
-      if ((lock->type->type > CEPH_LOCK_DN) == (r.lock->type->type > CEPH_LOCK_DN)) {
-	auto lp = lock->get_parent();
-	auto rp = r.lock->get_parent();
-	// then sort by object
-	if (lp == rp)
-	  return (lock->type->type < r.lock->type->type);
-	return lp->is_lt(rp);
-      }
-      return false;
+      return lock < r.lock;
     }
   };
 
@@ -119,11 +108,17 @@ public:
       emplace_back(lock, LockOp::RDLOCK);
     }
     void erase_rdlock(SimpleLock *lock);
-    void add_xlock(SimpleLock *lock) {
-      emplace_back(lock, LockOp::XLOCK);
+    void add_xlock(SimpleLock *lock, int idx=-1) {
+      if (idx >= 0)
+	emplace(cbegin() + idx, lock, LockOp::XLOCK);
+      else
+	emplace_back(lock, LockOp::XLOCK);
     }
-    void add_wrlock(SimpleLock *lock) {
-      emplace_back(lock, LockOp::WRLOCK);
+    void add_wrlock(SimpleLock *lock, int idx=-1) {
+      if (idx >= 0)
+	emplace(cbegin() + idx, lock, LockOp::WRLOCK);
+      else
+	emplace_back(lock, LockOp::WRLOCK);
     }
     void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
       ceph_assert(rank != MDS_RANK_NONE);
@@ -138,27 +133,37 @@ public:
       reserve(32);
     }
   };
-  typedef set<LockOp> lock_set;
-  typedef lock_set::iterator lock_iterator;
+  using lock_set = set<LockOp>;
+  using lock_iterator = lock_set::iterator;
   lock_set locks;  // full ordering
 
-  bool is_rdlocked(SimpleLock *lock) const {
-    auto it = locks.find(lock);
-    return it != locks.end() && it->is_rdlock();
+  MDLockCache* lock_cache = nullptr;
+  bool lock_cache_disabled = false;
+
+  void disable_lock_cache() {
+    lock_cache_disabled = true;
   }
+
+  lock_iterator emplace_lock(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) {
+    last_locked = l;
+    return locks.emplace(l, f, t).first;
+  }
+
+  bool is_rdlocked(SimpleLock *lock) const;
+  bool is_wrlocked(SimpleLock *lock) const;
   bool is_xlocked(SimpleLock *lock) const {
     auto it = locks.find(lock);
     return it != locks.end() && it->is_xlock();
-  }
-  bool is_wrlocked(SimpleLock *lock) const {
-    auto it = locks.find(lock);
-    return it != locks.end() && it->is_wrlock();
   }
   bool is_remote_wrlocked(SimpleLock *lock) const {
     auto it = locks.find(lock);
     return it != locks.end() && it->is_remote_wrlock();
   }
+  bool is_last_locked(SimpleLock *lock) const {
+    return lock == last_locked;
+  }
 
+  SimpleLock *last_locked = nullptr;
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
   SimpleLock *locking = nullptr;
@@ -166,7 +171,14 @@ public:
 
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
-  bool done_locking = false;
+  enum {
+    SNAP_LOCKED		= 1,
+    SNAP2_LOCKED	= 2,
+    PATH_LOCKED		= 4,
+    ALL_LOCKED		= 8,
+  };
+  int locking_state = 0;
+
   bool committing = false;
   bool aborted = false;
   bool killed = false;
@@ -187,7 +199,8 @@ public:
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
   ~MutationImpl() override {
-    ceph_assert(locking == NULL);
+    ceph_assert(!locking);
+    ceph_assert(!lock_cache);
     ceph_assert(num_pins == 0);
     ceph_assert(num_auth_pins == 0);
   }
@@ -217,8 +230,8 @@ public:
   }
 
   // pin items in cache
-  void pin(MDSCacheObject *o);
-  void unpin(MDSCacheObject *o);
+  void pin(MDSCacheObject *object);
+  void unpin(MDSCacheObject *object);
   void set_stickydirs(CInode *in);
   void put_stickydirs();
   void drop_pins();
@@ -274,10 +287,15 @@ struct MDRequestImpl : public MutationImpl {
   // -- i am a client (master) request
   cref_t<MClientRequest> client_request; // client request (if any)
 
+  // tree and depth info of path1 and path2
+  inodeno_t dir_root[2] = {0, 0};
+  int dir_depth[2] = {-1, -1};
+  file_layout_t dir_layout;
+
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
-  CDentry *straydn;
   CInode *in[2];
+  CDentry *straydn;
   snapid_t snapid;
 
   CInode *tracei;
@@ -429,6 +447,7 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
   bool is_batch_op();
+  int compare_paths();
 
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
@@ -470,5 +489,50 @@ struct MDSlaveUpdate {
   }
 };
 
+struct MDLockCacheItem {
+  MDLockCache *parent = nullptr;
+  elist<MDLockCacheItem*>::item item_lock;
+};
+
+struct MDLockCache : public MutationImpl {
+  CInode *diri;
+  Capability *client_cap;
+  int opcode;
+  file_layout_t dir_layout;
+
+  elist<MDLockCache*>::item item_cap_lock_cache;
+
+  using LockItem = MDLockCacheItem;
+  // link myself to locked locks
+  std::unique_ptr<LockItem[]> items_lock;
+
+  struct DirItem {
+    MDLockCache *parent = nullptr;
+    elist<DirItem*>::item item_dir;
+  };
+  // link myself to auth-pinned dirfrags
+  std::unique_ptr<DirItem[]> items_dir;
+  std::vector<CDir*> auth_pinned_dirfrags;
+
+  int ref = 1;
+  bool invalidating = false;
+
+  MDLockCache(Capability *cap, int op) :
+    MutationImpl(), diri(cap->get_inode()), client_cap(cap), opcode(op) {
+    client_cap->lock_caches.push_back(&item_cap_lock_cache);
+  }
+
+  CInode *get_dir_inode() { return diri; }
+  void set_dir_layout(file_layout_t& layout) {
+    dir_layout = layout;
+  }
+  const file_layout_t& get_dir_layout() const {
+    return dir_layout;
+  }
+
+  void attach_locks();
+  void attach_dirfrags(std::vector<CDir*>&& dfv);
+  void detach_all();
+};
 
 #endif

@@ -98,12 +98,14 @@ public:
   __s16 op;
   mutable __u16 flags; /* XXX HACK for mark_interrupted */
 
-  static constexpr unsigned FLAG_NONBLOCK       =	1<<0;
-  static constexpr unsigned FLAG_WOULDBLOCK     =	1<<1;
-  static constexpr unsigned FLAG_NOTJOURNALED   =	1<<2;
-  static constexpr unsigned FLAG_EROFS          =	1<<3;
-  static constexpr unsigned FLAG_ABORT          =	1<<4;
-  static constexpr unsigned FLAG_INTERRUPTED    =	1<<5;
+  static constexpr unsigned FLAG_NONBLOCKING	= 1<<0;
+  static constexpr unsigned FLAG_WOULDBLOCK	= 1<<1;
+  static constexpr unsigned FLAG_NOTJOURNALED	= 1<<2;
+  static constexpr unsigned FLAG_EROFS		= 1<<3;
+  static constexpr unsigned FLAG_ABORT		= 1<<4;
+  static constexpr unsigned FLAG_INTERRUPTED	= 1<<5;
+  static constexpr unsigned FLAG_NOTIFYBLOCKING	= 1<<6;
+  static constexpr unsigned FLAG_REQBLOCKED	= 1<<7;
 
   // for locking
   __u16 lock_type;  // lock object type
@@ -140,8 +142,8 @@ public:
 
   const vector<MDSCacheObjectInfo>& get_authpins() const { return authpins; }
   vector<MDSCacheObjectInfo>& get_authpins() { return authpins; }
-  void mark_nonblock() { flags |= FLAG_NONBLOCK; }
-  bool is_nonblock() const { return (flags & FLAG_NONBLOCK); }
+  void mark_nonblocking() { flags |= FLAG_NONBLOCKING; }
+  bool is_nonblocking() const { return (flags & FLAG_NONBLOCKING); }
   void mark_error_wouldblock() { flags |= FLAG_WOULDBLOCK; }
   bool is_error_wouldblock() const { return (flags & FLAG_WOULDBLOCK); }
   void mark_not_journaled() { flags |= FLAG_NOTJOURNALED; }
@@ -152,6 +154,11 @@ public:
   void mark_abort() { flags |= FLAG_ABORT; }
   bool is_interrupted() const { return (flags & FLAG_INTERRUPTED); }
   void mark_interrupted() const { flags |= FLAG_INTERRUPTED; }
+  bool should_notify_blocking() const { return (flags & FLAG_NOTIFYBLOCKING); }
+  void mark_notify_blocking() { flags |= FLAG_NOTIFYBLOCKING; }
+  void clear_notify_blocking() const { flags &= ~FLAG_NOTIFYBLOCKING; }
+  bool is_req_blocked() const { return (flags & FLAG_REQBLOCKED); }
+  void mark_req_blocked() { flags |= FLAG_REQBLOCKED; }
 
   void set_lock_type(int t) { lock_type = t; }
   const bufferlist& get_lock_data() const { return inode_export; }
