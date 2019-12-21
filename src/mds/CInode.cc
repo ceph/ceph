@@ -1588,6 +1588,7 @@ void CInode::decode_store(bufferlist::const_iterator& bl)
 SimpleLock* CInode::get_lock(int type)
 {
   switch (type) {
+    case CEPH_LOCK_IVERSION: return &versionlock;
     case CEPH_LOCK_IFILE: return &filelock;
     case CEPH_LOCK_IAUTH: return &authlock;
     case CEPH_LOCK_ILINK: return &linklock;
@@ -2681,25 +2682,64 @@ void CInode::take_waiting(uint64_t mask, MDSContext::vec& ls)
   MDSCacheObject::take_waiting(mask, ls);
 }
 
+void CInode::maybe_finish_freeze_inode()
+{
+  CDir *dir = get_parent_dir();
+  if (auth_pins > auth_pin_freeze_allowance || dir->frozen_inode_suppressed)
+    return;
+
+  dout(10) << "maybe_finish_freeze_inode - frozen" << dendl;
+  ceph_assert(auth_pins == auth_pin_freeze_allowance);
+  get(PIN_FROZEN);
+  put(PIN_FREEZING);
+  state_clear(STATE_FREEZING);
+  state_set(STATE_FROZEN);
+
+  item_freezing_inode.remove_myself();
+  dir->num_frozen_inodes++;
+
+  finish_waiting(WAIT_FROZEN);
+}
+
 bool CInode::freeze_inode(int auth_pin_allowance)
 {
+  CDir *dir = get_parent_dir();
+  ceph_assert(dir);
+
   ceph_assert(auth_pin_allowance > 0);  // otherwise we need to adjust parent's nested_auth_pins
   ceph_assert(auth_pins >= auth_pin_allowance);
-  if (auth_pins > auth_pin_allowance) {
-    dout(10) << "freeze_inode - waiting for auth_pins to drop to " << auth_pin_allowance << dendl;
-    auth_pin_freeze_allowance = auth_pin_allowance;
-    get(PIN_FREEZING);
-    state_set(STATE_FREEZING);
-    return false;
+  if (auth_pins == auth_pin_allowance && !dir->frozen_inode_suppressed) {
+    dout(10) << "freeze_inode - frozen" << dendl;
+    if (!state_test(STATE_FROZEN)) {
+      get(PIN_FROZEN);
+      state_set(STATE_FROZEN);
+      dir->num_frozen_inodes++;
+    }
+    return true;
   }
 
-  dout(10) << "freeze_inode - frozen" << dendl;
-  ceph_assert(auth_pins == auth_pin_allowance);
-  if (!state_test(STATE_FROZEN)) {
-    get(PIN_FROZEN);
-    state_set(STATE_FROZEN);
+  dout(10) << "freeze_inode - waiting for auth_pins to drop to " << auth_pin_allowance << dendl;
+  auth_pin_freeze_allowance = auth_pin_allowance;
+  dir->freezing_inodes.push_back(&item_freezing_inode);
+
+  get(PIN_FREEZING);
+  state_set(STATE_FREEZING);
+
+  if (!dir->lock_caches_with_auth_pins.empty())
+    mdcache->mds->locker->invalidate_lock_caches(dir);
+
+  const static int lock_types[] = {
+    CEPH_LOCK_IVERSION, CEPH_LOCK_IFILE, CEPH_LOCK_IAUTH, CEPH_LOCK_ILINK, CEPH_LOCK_IDFT,
+    CEPH_LOCK_IXATTR, CEPH_LOCK_ISNAP, CEPH_LOCK_INEST, CEPH_LOCK_IFLOCK, CEPH_LOCK_IPOLICY, 0
+  };
+  for (int i = 0; lock_types[i]; ++i) {
+    auto lock = get_lock(lock_types[i]);
+    if (lock->is_cached())
+      mdcache->mds->locker->invalidate_lock_caches(lock);
   }
-  return true;
+  // invalidate_lock_caches() may decrease dir->frozen_inode_suppressed
+  // and finish freezing the inode
+  return state_test(STATE_FROZEN);
 }
 
 void CInode::unfreeze_inode(MDSContext::vec& finished) 
@@ -2708,9 +2748,11 @@ void CInode::unfreeze_inode(MDSContext::vec& finished)
   if (state_test(STATE_FREEZING)) {
     state_clear(STATE_FREEZING);
     put(PIN_FREEZING);
+    item_freezing_inode.remove_myself();
   } else if (state_test(STATE_FROZEN)) {
     state_clear(STATE_FROZEN);
     put(PIN_FROZEN);
+    get_parent_dir()->num_frozen_inodes--;
   } else 
     ceph_abort();
   take_waiting(WAIT_UNFREEZE, finished);
@@ -2727,12 +2769,14 @@ void CInode::freeze_auth_pin()
 {
   ceph_assert(state_test(CInode::STATE_FROZEN));
   state_set(CInode::STATE_FROZENAUTHPIN);
+  get_parent_dir()->num_frozen_inodes++;
 }
 
 void CInode::unfreeze_auth_pin()
 {
   ceph_assert(state_test(CInode::STATE_FROZENAUTHPIN));
   state_clear(CInode::STATE_FROZENAUTHPIN);
+  get_parent_dir()->num_frozen_inodes--;
   if (!state_test(STATE_FREEZING|STATE_FROZEN)) {
     MDSContext::vec finished;
     take_waiting(WAIT_UNFREEZE, finished);
@@ -2809,15 +2853,8 @@ void CInode::auth_unpin(void *by)
   if (parent)
     parent->adjust_nested_auth_pins(-1, by);
 
-  if (is_freezing_inode() &&
-      auth_pins == auth_pin_freeze_allowance) {
-    dout(10) << "auth_unpin freezing!" << dendl;
-    get(PIN_FROZEN);
-    put(PIN_FREEZING);
-    state_clear(STATE_FREEZING);
-    state_set(STATE_FROZEN);
-    finish_waiting(WAIT_FROZEN);
-  }  
+  if (is_freezing_inode())
+    maybe_finish_freeze_inode();
 }
 
 // authority
@@ -3407,7 +3444,11 @@ int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
     allowed = get_caps_allowed_by_type(CAP_ANY);
   }
 
-  if (!is_dir()) {
+  if (is_dir()) {
+    allowed &= ~CEPH_CAP_ANY_DIR_OPS;
+    if (cap && (allowed & CEPH_CAP_FILE_EXCL))
+      allowed |= cap->get_lock_cache_allowed();
+  } else {
     if (file_i->inline_data.version == CEPH_INLINE_NONE &&
 	file_i->layout.pool_ns.empty()) {
       // noop

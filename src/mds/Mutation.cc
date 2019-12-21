@@ -82,6 +82,24 @@ void MutationImpl::finish_locking(SimpleLock *lock)
   locking_target_mds = -1;
 }
 
+bool MutationImpl::is_rdlocked(SimpleLock *lock) const {
+  auto it = locks.find(lock);
+  if (it != locks.end() && it->is_rdlock())
+    return true;
+  if (lock_cache)
+    return static_cast<const MutationImpl*>(lock_cache)->is_rdlocked(lock);
+  return false;
+}
+
+bool MutationImpl::is_wrlocked(SimpleLock *lock) const {
+  auto it = locks.find(lock);
+  if (it != locks.end() && it->is_wrlock())
+    return true;
+  if (lock_cache)
+    return static_cast<const MutationImpl*>(lock_cache)->is_wrlocked(lock);
+  return false;
+}
+
 void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
 {
   for (int i = size() - 1; i >= 0; --i) {
@@ -94,7 +112,21 @@ void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
 }
 void MutationImpl::LockOpVec::sort_and_merge()
 {
-  std::sort(begin(), end());
+  // sort locks on the same object
+  auto cmp = [](const LockOp &l, const LockOp &r) {
+    ceph_assert(l.lock->get_parent() == r.lock->get_parent());
+    return l.lock->type->type < r.lock->type->type;
+  };
+  for (auto i = begin(), j = i; ; ++i) {
+    if (i == end()) {
+      std::sort(j, i, cmp);
+      break;
+    }
+    if (j->lock->get_parent() != i->lock->get_parent()) {
+      std::sort(j, i, cmp);
+      j = i;
+    }
+  }
   // merge ops on the same lock
   for (auto i = end() - 1; i > begin(); ) {
     auto j = i;
@@ -118,7 +150,7 @@ void MutationImpl::LockOpVec::sort_and_merge()
     if (j->is_xlock()) {
       // xlock overwrites other types
       ceph_assert(!j->is_remote_wrlock());
-      j->flags = MutationImpl::LockOp::XLOCK;
+      j->flags = LockOp::XLOCK;
     }
     erase(j + 1, i + 1);
     i = j - 1;
@@ -399,6 +431,19 @@ bool MDRequestImpl::is_batch_op()
      client_request->get_filepath().depth() == 0);
 }
 
+int MDRequestImpl::compare_paths()
+{
+  if (dir_root[0] < dir_root[1])
+    return -1;
+  if (dir_root[0] > dir_root[1])
+    return 1;
+  if (dir_depth[0] < dir_depth[1])
+    return -1;
+  if (dir_depth[0] > dir_depth[1])
+    return 1;
+  return 0;
+}
+
 cref_t<MClientRequest> MDRequestImpl::release_client_request()
 {
   msg_lock.lock();
@@ -507,4 +552,54 @@ void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
     // FIXME
     stream << "rejoin:" << reqid;
   }
+}
+
+void MDLockCache::attach_locks()
+{
+  ceph_assert(!items_lock);
+  items_lock.reset(new LockItem[locks.size()]);
+  int i = 0;
+  for (auto& p : locks) {
+    items_lock[i].parent = this;
+    p.lock->add_cache(items_lock[i]);
+    ++i;
+  }
+}
+
+void MDLockCache::attach_dirfrags(std::vector<CDir*>&& dfv)
+{
+  std::sort(dfv.begin(), dfv.end());
+  auto last = std::unique(dfv.begin(), dfv.end());
+  dfv.erase(last, dfv.end());
+  auth_pinned_dirfrags = std::move(dfv);
+
+  ceph_assert(!items_dir);
+  items_dir.reset(new DirItem[auth_pinned_dirfrags.size()]);
+  int i = 0;
+  for (auto dir : auth_pinned_dirfrags) {
+    items_dir[i].parent = this;
+    dir->lock_caches_with_auth_pins.push_back(&items_dir[i].item_dir);
+    ++i;
+  }
+}
+
+void MDLockCache::detach_all()
+{
+  ceph_assert(items_lock);
+  int i = 0;
+  for (auto& p : locks) {
+    auto& item = items_lock[i];
+    p.lock->remove_cache(item);
+    ++i;
+  }
+  items_lock.reset();
+
+  ceph_assert(items_dir);
+  i = 0;
+  for (auto dir : auth_pinned_dirfrags) {
+    (void)dir;
+    items_dir[i].item_dir.remove_myself();
+    ++i;
+  }
+  items_dir.reset();
 }

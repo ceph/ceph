@@ -737,37 +737,42 @@ public:
 };
 
 
-void Migrator::get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov)
+bool Migrator::export_try_grab_locks(CDir *dir, MutationRef& mut)
 {
-  // path
-  vector<CDentry*> trace;
-  cache->make_trace(trace, dir->inode);
+  CInode *diri = dir->get_inode();
+
+  if (!diri->filelock.can_wrlock(diri->get_loner()) ||
+      !diri->nestlock.can_wrlock(diri->get_loner()))
+    return false;
+
+  MutationImpl::LockOpVec lov;
 
   set<CDir*> wouldbe_bounds;
+  set<CInode*> bound_inodes;
   cache->get_wouldbe_subtree_bounds(dir, wouldbe_bounds);
+  for (auto& bound : wouldbe_bounds)
+    bound_inodes.insert(bound->get_inode());
+  for (auto& in : bound_inodes)
+    lov.add_rdlock(&in->dirfragtreelock);
 
-  lov.reserve(trace.size() + wouldbe_bounds.size() + 8);
+  lov.add_rdlock(&diri->dirfragtreelock);
 
-  for (auto& dn : trace)
-    lov.add_rdlock(&dn->lock);
+  CInode* in = diri;
+  while (true) {
+    lov.add_rdlock(&in->snaplock);
+    CDentry* pdn = in->get_projected_parent_dn();
+    if (!pdn)
+      break;
+    in = pdn->get_dir()->get_inode();
+  }
 
-  // prevent scatter gather race
-  lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
+  if (!mds->locker->rdlock_try_set(lov, mut))
+    return false;
 
-  // bound dftlocks:
-  // NOTE: We need to take an rdlock on bounding dirfrags during
-  //  migration for a rather irritating reason: when we export the
-  //  bound inode, we need to send scatterlock state for the dirfrags
-  //  as well, so that the new auth also gets the correct info.  If we
-  //  race with a refragment, this info is useless, as we can't
-  //  redivvy it up.  And it's needed for the scatterlocks to work
-  //  properly: when the auth is in a sync/lock state it keeps each
-  //  dirfrag's portion in the local (auth OR replica) dirfrag.
-  for (auto& dir : wouldbe_bounds)
-    lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
+  mds->locker->wrlock_force(&diri->filelock, mut);
+  mds->locker->wrlock_force(&diri->nestlock, mut);
 
-  // above code may add duplicated locks
-  lov.sort_and_merge();
+  return true;
 }
 
 
@@ -1038,8 +1043,13 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   }
   ceph_assert(it->second.state == EXPORT_LOCKING);
 
-  mds_rank_t dest = it->second.peer;
+  if (mdr->more()->slave_error || dir->is_frozen() || dir->is_freezing()) {
+    dout(7) << "wouldblock|freezing|frozen, canceling export" << dendl;
+    export_try_cancel(dir);
+    return;
+  }
 
+  mds_rank_t dest = it->second.peer;
   if (!mds->is_export_target(dest)) {
     dout(7) << "dest is not yet an export target" << dendl;
     if (count > 3) {
@@ -1061,33 +1071,55 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     return;
   }
 
-  if (mdr->aborted || dir->is_frozen() || dir->is_freezing()) {
-    dout(7) << "wouldblock|freezing|frozen, canceling export" << dendl;
-    export_try_cancel(dir);
-    return;
-  }
-
   // locks?
-  MutationImpl::LockOpVec lov;
-  get_export_lock_set(dir, lov);
-  // If auth MDS of the subtree root inode is neither the exporter MDS
-  // nor the importer MDS and it gathers subtree root's fragstat/neststat
-  // while the subtree is exporting. It's possible that the exporter MDS
-  // and the importer MDS both are auth MDS of the subtree root or both
-  // are not auth MDS of the subtree root at the time they receive the
-  // lock messages. So the auth MDS of the subtree root inode may get no
-  // or duplicated fragstat/neststat for the subtree root dirfrag.
-  lov.lock_scatter_gather(&dir->get_inode()->filelock);
-  lov.lock_scatter_gather(&dir->get_inode()->nestlock);
-  if (dir->get_inode()->is_auth()) {
-    dir->get_inode()->filelock.set_scatter_wanted();
-    dir->get_inode()->nestlock.set_scatter_wanted();
-  }
+  if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+    MutationImpl::LockOpVec lov;
+    // If auth MDS of the subtree root inode is neither the exporter MDS
+    // nor the importer MDS and it gathers subtree root's fragstat/neststat
+    // while the subtree is exporting. It's possible that the exporter MDS
+    // and the importer MDS both are auth MDS of the subtree root or both
+    // are not auth MDS of the subtree root at the time they receive the
+    // lock messages. So the auth MDS of the subtree root inode may get no
+    // or duplicated fragstat/neststat for the subtree root dirfrag.
+    lov.lock_scatter_gather(&dir->get_inode()->filelock);
+    lov.lock_scatter_gather(&dir->get_inode()->nestlock);
+    if (dir->get_inode()->is_auth()) {
+      dir->get_inode()->filelock.set_scatter_wanted();
+      dir->get_inode()->nestlock.set_scatter_wanted();
+    }
+    lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
 
-  if (!mds->locker->acquire_locks(mdr, lov, NULL, true)) {
-    if (mdr->aborted)
-      export_try_cancel(dir);
-    return;
+    if (!mds->locker->acquire_locks(mdr, lov, nullptr, true)) {
+      if (mdr->aborted)
+	export_try_cancel(dir);
+      return;
+    }
+
+    lov.clear();
+    // bound dftlocks:
+    // NOTE: We need to take an rdlock on bounding dirfrags during
+    //  migration for a rather irritating reason: when we export the
+    //  bound inode, we need to send scatterlock state for the dirfrags
+    //  as well, so that the new auth also gets the correct info.  If we
+    //  race with a refragment, this info is useless, as we can't
+    //  redivvy it up.  And it's needed for the scatterlocks to work
+    //  properly: when the auth is in a sync/lock state it keeps each
+    //  dirfrag's portion in the local (auth OR replica) dirfrag.
+    set<CDir*> wouldbe_bounds;
+    set<CInode*> bound_inodes;
+    cache->get_wouldbe_subtree_bounds(dir, wouldbe_bounds);
+    for (auto& bound : wouldbe_bounds)
+      bound_inodes.insert(bound->get_inode());
+    for (auto& in : bound_inodes)
+      lov.add_rdlock(&in->dirfragtreelock);
+
+    if (!mds->locker->rdlock_try_set(lov, mdr))
+      return;
+
+    if (!mds->locker->try_rdlock_snap_layout(dir->get_inode(), mdr))
+      return;
+
+    mdr->locking_state |= MutationImpl::ALL_LOCKED;
   }
 
   ceph_assert(g_conf()->mds_kill_export_at != 1);
@@ -1315,28 +1347,20 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   ceph_assert(it->second.state == EXPORT_FREEZING);
   ceph_assert(dir->is_frozen_tree_root());
 
-  CInode *diri = dir->get_inode();
+  it->second.mut = new MutationImpl();
 
   // ok, try to grab all my locks.
-  MutationImpl::LockOpVec lov;
-  get_export_lock_set(dir, lov);
+  CInode *diri = dir->get_inode();
   if ((diri->is_auth() && diri->is_frozen()) ||
-      !mds->locker->can_rdlock_set(lov) ||
-      // for pinning scatter gather. loner has a higher chance to get wrlock
-      !diri->filelock.can_wrlock(diri->get_loner()) ||
-      !diri->nestlock.can_wrlock(diri->get_loner())) {
+      !export_try_grab_locks(dir, it->second.mut)) {
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
 	    << *dir << dendl;
     export_try_cancel(dir);
     return;
   }
 
-  it->second.mut = new MutationImpl();
   if (diri->is_auth())
     it->second.mut->auth_pin(diri);
-  mds->locker->rdlock_take_set(lov, it->second.mut);
-  mds->locker->wrlock_force(&diri->filelock, it->second.mut);
-  mds->locker->wrlock_force(&diri->nestlock, it->second.mut);
 
   cache->show_subtrees();
 
@@ -2302,7 +2326,9 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
     MDRequestRef null_ref;
-    int r = cache->path_traverse(null_ref, cf, fpath, MDS_TRAVERSE_DISCOVER, &trace);
+    int r = cache->path_traverse(null_ref, cf, fpath,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED,
+				 &trace);
     if (r > 0) return;
     if (r < 0) {
       dout(7) << "handle_export_discover failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
@@ -3159,6 +3185,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
 				   list<ScatterLock*>& updated_scatterlocks)
 { 
+  CInode *in;
+  bool added = false;
   DECODE_START(1, blp); 
   dout(15) << __func__ << " on " << *dn << dendl;
 
@@ -3167,8 +3195,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   decode(ino, blp);
   decode(last, blp);
 
-  bool added = false;
-  CInode *in = cache->get_inode(ino, last);
+  in = cache->get_inode(ino, last);
   if (!in) {
     in = new CInode(mds->mdcache, true, 1, last);
     added = true;
@@ -3179,6 +3206,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 
   // caps
   decode_import_inode_caps(in, true, blp, peer_exports);
+
+  DECODE_FINISH(blp);
 
   // link before state  -- or not!  -sage
   if (dn->get_linkage()->get_inode() != in) {
@@ -3222,7 +3251,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
       in->snaplock.get_state() != LOCK_SYNC)
       mds->locker->try_eval(&in->snaplock, NULL);
 
-  DECODE_FINISH(blp);
+  if (in->policylock.is_stable() &&
+      in->policylock.get_state() != LOCK_SYNC)
+      mds->locker->try_eval(&in->policylock, NULL);
 }
 
 void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,

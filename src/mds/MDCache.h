@@ -112,9 +112,16 @@ enum {
 
 // flags for path_traverse();
 static const int MDS_TRAVERSE_DISCOVER		= (1 << 0);
-static const int MDS_TRAVERSE_LAST_XLOCKED	= (1 << 1);
+static const int MDS_TRAVERSE_PATH_LOCKED	= (1 << 1);
 static const int MDS_TRAVERSE_WANT_DENTRY	= (1 << 2);
 static const int MDS_TRAVERSE_WANT_AUTH		= (1 << 3);
+static const int MDS_TRAVERSE_RDLOCK_SNAP	= (1 << 4);
+static const int MDS_TRAVERSE_RDLOCK_SNAP2	= (1 << 5);
+static const int MDS_TRAVERSE_WANT_DIRLAYOUT	= (1 << 6);
+static const int MDS_TRAVERSE_RDLOCK_PATH	= (1 << 7);
+static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
+static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
+static const int MDS_TRAVERSE_CHECK_LOCKCACHE	= (1 << 10);
 
 
 // flags for predirty_journal_parents()
@@ -149,7 +156,7 @@ class MDCache {
     filepath want_path;
     CInode *basei = nullptr;
     bool want_base_dir = false;
-    bool want_xlocked = false;
+    bool path_locked = false;
   };
 
   // [reconnect/rejoin caps]
@@ -167,6 +174,7 @@ class MDCache {
     inodeno_t ino;
     ceph_tid_t tid = 0;
     MDSContext *fin = nullptr;
+    bool path_locked = false;
     mds_rank_t hint = MDS_RANK_NONE;
     mds_rank_t checking = MDS_RANK_NONE;
     set<mds_rank_t> checked;
@@ -263,9 +271,9 @@ class MDCache {
   void discover_dir_frag(CInode *base, frag_t approx_fg, MDSContext *onfinish,
 			 mds_rank_t from=MDS_RANK_NONE);
   void discover_path(CInode *base, snapid_t snap, filepath want_path, MDSContext *onfinish,
-		     bool want_xlocked=false, mds_rank_t from=MDS_RANK_NONE);
+		     bool path_locked=false, mds_rank_t from=MDS_RANK_NONE);
   void discover_path(CDir *base, snapid_t snap, filepath want_path, MDSContext *onfinish,
-		     bool want_xlocked=false);
+		     bool path_locked=false);
   void kick_discovers(mds_rank_t who);  // after a failure.
 
   // adjust subtree auth specification
@@ -768,7 +776,7 @@ class MDCache {
    * MDS_TRAVERSE_DISCOVER: Instead of forwarding request, path_traverse()
    * attempts to look up the path from a different MDS (and bring them into
    * its cache as replicas).
-   * MDS_TRAVERSE_LAST_XLOCKED: path_traverse() will procceed when xlocked tail
+   * MDS_TRAVERSE_PATH_LOCKED: path_traverse() will procceed when xlocked
    * dentry is encountered.
    * MDS_TRAVERSE_WANT_DENTRY: Caller wants tail dentry. Add a null dentry if
    * tail dentry does not exist. return 0 even tail dentry is null.
@@ -812,7 +820,8 @@ class MDCache {
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,
 		bool want_replica=true, bool want_xlocked=false);
 
-  void find_ino_peers(inodeno_t ino, MDSContext *c, mds_rank_t hint=MDS_RANK_NONE);
+  void find_ino_peers(inodeno_t ino, MDSContext *c,
+		      mds_rank_t hint=MDS_RANK_NONE, bool path_locked=false);
   void _do_find_ino_peer(find_ino_peer_info_t& fip);
   void handle_find_ino(const cref_t<MMDSFindIno> &m);
   void handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m);

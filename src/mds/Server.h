@@ -193,9 +193,7 @@ public:
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
-  void set_trace_dist(Session *session, const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
-		      snapid_t snapid,
-		      int num_dentries_wanted,
+  void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      MDRequestRef& mdr);
 
 
@@ -215,14 +213,12 @@ public:
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
-  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
-			      bool want_auth, bool no_want_auth=false,
-			      file_layout_t **layout=nullptr,
-			      bool no_lookup=false);
-  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
-				    MutationImpl::LockOpVec& lov,
-				    bool okexist, bool alwaysxlock,
-				    file_layout_t **layout=nullptr);
+  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
+			      bool no_want_auth=false);
+  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
+				    bool okexist=false, bool want_layout=false);
+  std::pair<CDentry*, CDentry*>
+	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
@@ -237,6 +233,9 @@ public:
   void handle_client_file_setlock(MDRequestRef& mdr);
   void handle_client_file_readlock(MDRequestRef& mdr);
 
+  bool xlock_policylock(MDRequestRef& mdr, CInode *in,
+			bool want_layout=false, bool xlock_snaplock=false);
+  CInode* try_get_auth_inode(MDRequestRef& mdr, inodeno_t ino);
   void handle_client_setattr(MDRequestRef& mdr);
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
@@ -249,12 +248,8 @@ public:
                           string name,
                           string value,
                           file_layout_t *layout);
-  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			 file_layout_t *dir_layout,
-			 MutationImpl::LockOpVec& lov);
-  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
-			    file_layout_t *dir_layout,
-			    MutationImpl::LockOpVec& lov);
+  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 
