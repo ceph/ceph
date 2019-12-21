@@ -30,4 +30,12 @@ tasks:
       - ceph-immutable-object-cache
       - ceph-base
       - librados-devel
-    extra_packages: ['librados2']
+      - python3-rados
+      - python3-rgw
+      - python3-rbd
+      - python3-cephfs
+    extra_packages:
+      - librados2
+      - python-rados
+      - python-rbd
+      - python-cephfs
