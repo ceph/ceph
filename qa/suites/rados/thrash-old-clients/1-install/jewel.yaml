@@ -22,4 +22,7 @@ tasks:
       - libcephfs2
       - libcephfs-devel
       - libcephfs-dev
+      - ceph-immutable-object-cache
+      - ceph-base
+      - librados-devel
     extra_packages: ['librados2']

@@ -13,3 +13,6 @@ tasks:
     branch: nautilus
     exclude_packages:
       - cephadm
+      - ceph-mgr-cephadm
+      - ceph-immutable-object-cache
+      
