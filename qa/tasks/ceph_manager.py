@@ -1530,6 +1530,18 @@ class CephManager:
         """
         if stdout is None:
             stdout = StringIO()
+
+        if self.cephadm:
+            return shell(
+                self.ctx, self.cluster, self.controller,
+                args=[
+                    'ceph', 'daemon', '%s.%s' % (service_type, service_id),
+                ] + command,
+                stdout=stdout,
+                wait=True,
+                check_status=check_status,
+            )
+
         testdir = teuthology.get_testdir(self.ctx)
         remote = self.find_remote(service_type, service_id)
         args = [
