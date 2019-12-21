@@ -13,6 +13,7 @@
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "journal/Journaler.h"
+#include "journal/Settings.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -23,6 +24,8 @@
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/journal/CreateLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/journal/PrepareReplayRequest.h"
 
@@ -42,33 +45,37 @@ using librbd::util::unique_lock_name;
 
 template <typename I>
 BootstrapRequest<I>::BootstrapRequest(
-        Threads<I>* threads,
-        librados::IoCtx &local_io_ctx,
-        librados::IoCtx &remote_io_ctx,
-        InstanceWatcher<I> *instance_watcher,
-        I **local_image_ctx,
-        const std::string &local_image_id,
-        const std::string &remote_image_id,
-        const std::string &global_image_id,
-        const std::string &local_mirror_uuid,
-        const std::string &remote_mirror_uuid,
-        Journaler *remote_journaler,
-        cls::journal::ClientState *client_state,
-        MirrorPeerClientMeta *client_meta,
-        Context *on_finish,
-        bool *do_resync,
-        rbd::mirror::ProgressContext *progress_ctx)
+    Threads<I>* threads,
+    librados::IoCtx& local_io_ctx,
+    librados::IoCtx& remote_io_ctx,
+    InstanceWatcher<I>* instance_watcher,
+    const std::string& remote_image_id,
+    const std::string& global_image_id,
+    const std::string& local_mirror_uuid,
+    ::journal::CacheManagerHandler* cache_manager_handler,
+    ProgressContext* progress_ctx,
+    I** local_image_ctx,
+    std::string* local_image_id,
+    std::string* remote_mirror_uuid,
+    Journaler** remote_journaler,
+    bool* do_resync,
+    Context* on_finish)
   : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
 		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
-    m_threads(threads), m_local_io_ctx(local_io_ctx),
-    m_remote_io_ctx(remote_io_ctx), m_instance_watcher(instance_watcher),
-    m_local_image_ctx(local_image_ctx), m_local_image_id(local_image_id),
-    m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
+    m_threads(threads),
+    m_local_io_ctx(local_io_ctx),
+    m_remote_io_ctx(remote_io_ctx),
+    m_instance_watcher(instance_watcher),
+    m_remote_image_id(remote_image_id),
+    m_global_image_id(global_image_id),
     m_local_mirror_uuid(local_mirror_uuid),
+    m_cache_manager_handler(cache_manager_handler),
+    m_progress_ctx(progress_ctx),
+    m_local_image_ctx(local_image_ctx),
+    m_local_image_id(local_image_id),
     m_remote_mirror_uuid(remote_mirror_uuid),
     m_remote_journaler(remote_journaler),
-    m_client_state(client_state), m_client_meta(client_meta),
-    m_progress_ctx(progress_ctx), m_do_resync(do_resync),
+    m_do_resync(do_resync),
     m_lock(ceph::make_mutex(unique_lock_name("BootstrapRequest::m_lock",
                                              this))) {
   dout(10) << dendl;
@@ -89,7 +96,7 @@ template <typename I>
 void BootstrapRequest<I>::send() {
   *m_do_resync = false;
 
-  open_remote_image();
+  prepare_local_image();
 }
 
 template <typename I>
@@ -102,6 +109,112 @@ void BootstrapRequest<I>::cancel() {
   if (m_image_sync != nullptr) {
     m_image_sync->cancel();
   }
+}
+
+template <typename I>
+std::string BootstrapRequest<I>::get_local_image_name() const {
+  std::unique_lock locker{m_lock};
+  return m_local_image_name;
+}
+
+template <typename I>
+void BootstrapRequest<I>::prepare_local_image() {
+  dout(10) << dendl;
+  update_progress("PREPARE_LOCAL_IMAGE");
+
+  *m_local_image_id = "";
+  m_local_image_name = m_global_image_id;
+  auto ctx = create_context_callback<
+    BootstrapRequest, &BootstrapRequest<I>::handle_prepare_local_image>(this);
+  auto req = image_replayer::PrepareLocalImageRequest<I>::create(
+    m_local_io_ctx, m_global_image_id, m_local_image_id,
+    &m_prepare_local_image_name, &m_local_image_tag_owner,
+    m_threads->work_queue, ctx);
+  req->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_prepare_local_image(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    dout(10) << "local image does not exist" << dendl;
+  } else if (r < 0) {
+    derr << "error preparing local image for replay" << cpp_strerror(r)
+         << dendl;
+    finish(r);
+    return;
+  }
+
+  // image replayer will detect the name change (if any) at next
+  // status update
+  {
+    std::unique_lock locker{m_lock};
+    m_local_image_name = m_prepare_local_image_name;
+  }
+
+  prepare_remote_image();
+}
+
+template <typename I>
+void BootstrapRequest<I>::prepare_remote_image() {
+  dout(10) << dendl;
+  update_progress("PREPARE_REMOTE_IMAGE");
+
+  auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
+  ::journal::Settings journal_settings;
+  journal_settings.commit_interval = cct->_conf.get_val<double>(
+    "rbd_mirror_journal_commit_age");
+
+  ceph_assert(*m_remote_journaler == nullptr);
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest, &BootstrapRequest<I>::handle_prepare_remote_image>(this);
+  auto req = image_replayer::PrepareRemoteImageRequest<I>::create(
+    m_threads, m_remote_io_ctx, m_global_image_id, m_local_mirror_uuid,
+    *m_local_image_id, journal_settings, m_cache_manager_handler,
+    m_remote_mirror_uuid, &m_remote_image_id, m_remote_journaler,
+    &m_client_state, &m_client_meta, ctx);
+  req->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  ceph_assert(r < 0 ? *m_remote_journaler == nullptr :
+                      *m_remote_journaler != nullptr);
+  if (r < 0 && !m_local_image_id->empty() &&
+      m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    // local image is primary -- fall-through
+  } else if (r == -ENOENT) {
+    dout(10) << "remote image does not exist" << dendl;
+
+    // TODO need to support multiple remote images
+    if (m_remote_image_id.empty() && !m_local_image_id->empty() &&
+        m_local_image_tag_owner == *m_remote_mirror_uuid) {
+      // local image exists and is non-primary and linked to the missing
+      // remote image
+      finish(-ENOLINK);
+    } else {
+      dout(10) << "remote image does not exist" << dendl;
+      finish(-ENOENT);
+    }
+    return;
+  } else if (r < 0) {
+    derr << "error retrieving remote image id" << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (!m_local_image_id->empty() &&
+      m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    dout(5) << "local image is primary" << dendl;
+    finish(-ENOMSG);
+    return;
+  }
+
+  open_remote_image();
 }
 
 template <typename I>
@@ -180,7 +293,7 @@ void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
   }
 
   if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
-      m_local_image_id.empty()) {
+      m_local_image_id->empty()) {
     // no local image and remote isn't primary -- don't sync it
     dout(5) << "remote image is not primary -- not syncing"
             << dendl;
@@ -189,13 +302,13 @@ void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
     return;
   }
 
-  if (!m_client_meta->image_id.empty()) {
+  if (!m_client_meta.image_id.empty()) {
     // have an image id -- use that to open the image since a deletion (resync)
     // will leave the old image id registered in the peer
-    m_local_image_id = m_client_meta->image_id;
+    *m_local_image_id = m_client_meta.image_id;
   }
 
-  if (m_local_image_id.empty()) {
+  if (m_local_image_id->empty()) {
     create_local_image();
     return;
   }
@@ -205,7 +318,7 @@ void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::open_local_image() {
-  dout(15) << "local_image_id=" << m_local_image_id << dendl;
+  dout(15) << "local_image_id=" << *m_local_image_id << dendl;
 
   update_progress("OPEN_LOCAL_IMAGE");
 
@@ -213,7 +326,7 @@ void BootstrapRequest<I>::open_local_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_local_image>(
       this);
   OpenLocalImageRequest<I> *request = OpenLocalImageRequest<I>::create(
-    m_local_io_ctx, m_local_image_ctx, m_local_image_id, m_threads->work_queue,
+    m_local_io_ctx, m_local_image_ctx, *m_local_image_id, m_threads->work_queue,
     ctx);
   request->send();
 }
@@ -254,8 +367,8 @@ void BootstrapRequest<I>::prepare_replay() {
     BootstrapRequest<I>,
     &BootstrapRequest<I>::handle_prepare_replay>(this);
   auto request = journal::PrepareReplayRequest<I>::create(
-    *m_local_image_ctx, m_remote_journaler, m_promotion_state,
-    m_local_mirror_uuid, m_remote_mirror_uuid, m_client_meta,
+    *m_local_image_ctx, *m_remote_journaler, m_promotion_state,
+    m_local_mirror_uuid, *m_remote_mirror_uuid, &m_client_meta,
     m_progress_ctx, m_do_resync, &m_syncing, ctx);
   request->send();
 }
@@ -275,7 +388,7 @@ void BootstrapRequest<I>::handle_prepare_replay(int r) {
     dout(10) << "local image resync requested" << dendl;
     close_remote_image();
     return;
-  } else if (*m_client_state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+  } else if (m_client_state == cls::journal::CLIENT_STATE_DISCONNECTED) {
     dout(10) << "client flagged disconnected -- skipping bootstrap" << dendl;
     // The caller is expected to detect disconnect initializing remote journal.
     m_ret_val = 0;
@@ -300,9 +413,9 @@ void BootstrapRequest<I>::create_local_image() {
     BootstrapRequest<I>,
     &BootstrapRequest<I>::handle_create_local_image>(this);
   auto request = journal::CreateLocalImageRequest<I>::create(
-    m_threads, m_local_io_ctx, m_remote_image_ctx, m_remote_journaler,
-    m_global_image_id, m_remote_mirror_uuid, m_client_meta, m_progress_ctx,
-    &m_local_image_id, ctx);
+    m_threads, m_local_io_ctx, m_remote_image_ctx, *m_remote_journaler,
+    m_global_image_id, *m_remote_mirror_uuid, &m_client_meta, m_progress_ctx,
+    m_local_image_id, ctx);
   request->send();
 }
 
@@ -321,7 +434,7 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
     return;
   }
 
-  *m_client_state = cls::journal::CLIENT_STATE_CONNECTED;
+  m_client_state = cls::journal::CLIENT_STATE_CONNECTED;
 
   open_local_image();
 }
@@ -345,8 +458,8 @@ void BootstrapRequest<I>::image_sync() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
   m_image_sync = ImageSync<I>::create(
     *m_local_image_ctx, m_remote_image_ctx, m_threads->timer,
-    &m_threads->timer_lock, m_local_mirror_uuid, m_remote_journaler,
-    m_client_meta, m_threads->work_queue, m_instance_watcher, ctx,
+    &m_threads->timer_lock, m_local_mirror_uuid, *m_remote_journaler,
+    &m_client_meta, m_threads->work_queue, m_instance_watcher, ctx,
     m_progress_ctx);
   m_image_sync->get();
   locker.unlock();

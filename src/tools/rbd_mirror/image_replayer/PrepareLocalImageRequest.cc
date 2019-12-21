@@ -29,13 +29,13 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void PrepareLocalImageRequest<I>::send() {
-  dout(20) << dendl;
+  dout(10) << dendl;
   get_local_image_id();
 }
 
 template <typename I>
 void PrepareLocalImageRequest<I>::get_local_image_id() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = create_context_callback<
     PrepareLocalImageRequest<I>,
@@ -47,7 +47,7 @@ void PrepareLocalImageRequest<I>::get_local_image_id() {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_local_image_id(int r) {
-  dout(20) << "r=" << r << ", "
+  dout(10) << "r=" << r << ", "
            << "local_image_id=" << *m_local_image_id << dendl;
 
   if (r < 0) {
@@ -60,7 +60,7 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_id(int r) {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::get_local_image_name() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   librados::ObjectReadOperation op;
   librbd::cls_client::dir_get_name_start(&op, *m_local_image_id);
@@ -76,7 +76,7 @@ void PrepareLocalImageRequest<I>::get_local_image_name() {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r == 0) {
     auto it = m_out_bl.cbegin();
@@ -96,7 +96,7 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::get_mirror_state() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_get_start(&op, *m_local_image_id);
@@ -112,7 +112,7 @@ void PrepareLocalImageRequest<I>::get_mirror_state() {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
-  dout(20) << ": r=" << r << dendl;
+  dout(10) << ": r=" << r << dendl;
 
   cls::rbd::MirrorImage mirror_image;
   if (r == 0) {
@@ -141,7 +141,7 @@ void PrepareLocalImageRequest<I>::get_tag_owner() {
     typename std::remove_pointer<decltype(std::declval<I>().journal)>
     ::type>::type;
 
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = create_context_callback<
     PrepareLocalImageRequest<I>,
@@ -152,7 +152,7 @@ void PrepareLocalImageRequest<I>::get_tag_owner() {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_tag_owner(int r) {
-  dout(20) << "r=" << r << ", "
+  dout(10) << "r=" << r << ", "
            << "tag_owner=" << *m_tag_owner << dendl;
 
   if (r < 0) {
@@ -167,7 +167,7 @@ void PrepareLocalImageRequest<I>::handle_get_tag_owner(int r) {
 
 template <typename I>
 void PrepareLocalImageRequest<I>::finish(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;
