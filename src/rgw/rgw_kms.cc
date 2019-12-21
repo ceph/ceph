@@ -25,10 +25,11 @@ using namespace rgw;
  * empty, the URL is not changed.
  */
 static void concat_url(std::string &url, std::string path) {
+  bool url_has_slash = !url.empty() && url.back() == '/';
   if (!path.empty()) {
-    if (url.back() == '/' && path.front() == '/') {
+    if (url_has_slash && path.front() == '/') {
       url.pop_back();
-    } else if (url.back() != '/' && path.front() != '/') {
+    } else if (!url_has_slash && path.front() != '/') {
       url.push_back('/');
     }
     url.append(path);
