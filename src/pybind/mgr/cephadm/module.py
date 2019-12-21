@@ -568,18 +568,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                                            error_ok=True, no_fsid=True)
         if code:
             return 1, '', err
-        return 0, 'host ok', err
-
-    @orchestrator._cli_write_command(
-        'cephadm prepare-host',
-        'name=host,type=CephString',
-        'Try to prepare a host for remote management')
-    def _prepare_host(self, host):
-        out, err, code = self._run_cephadm(host, '', 'prepare-host', [],
-                                           error_ok=True, no_fsid=True)
-        if code:
-            return 1, '', err
-        return 0, 'host ok', err
+        return 0, '%s ok' % host, err
 
     def _get_connection(self, host):
         """
@@ -593,9 +582,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             logger=self.log.getChild(n),
             ssh_options=self._ssh_options)
 
-        conn.import_module(remotes)
+        r = conn.import_module(remotes)
 
-        return conn
+        return conn, r
 
     def _executable_path(self, conn, executable):
         """
@@ -621,7 +610,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         Run cephadm on the remote host with the given command + args
         """
-        conn = self._get_connection(host)
+        conn, connr = self._get_connection(host)
 
         try:
             if not image:
@@ -643,22 +632,36 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             final_args += args
 
             if self.mode == 'root':
-                self.log.debug('args: %s' % final_args)
+                self.log.debug('args: %s' % (' '.join(final_args)))
                 self.log.debug('stdin: %s' % stdin)
                 script = 'injected_argv = ' + json.dumps(final_args) + '\n'
                 if stdin:
                     script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
                 script += self._cephadm
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['/usr/bin/python', '-u'],
-                    stdin=script.encode('utf-8'))
+                python = connr.choose_python()
+                if not python:
+                    raise RuntimeError(
+                        'unable to find python on %s (tried %s in %s)' % (
+                            host, remotes.PYTHONS, remotes.PATH))
+                try:
+                    out, err, code = remoto.process.check(
+                        conn,
+                        [python, '-u'],
+                        stdin=script.encode('utf-8'))
+                except RuntimeError as e:
+                    if error_ok:
+                        return '', str(e), 1
+                    raise
             elif self.mode == 'cephadm-package':
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['sudo', '/usr/bin/cephadm'] + final_args,
-                    stdin=stdin)
-            self.log.debug('exit code %s out %s err %s' % (code, out, err))
+                try:
+                    out, err, code = remoto.process.check(
+                        conn,
+                        ['sudo', '/usr/bin/cephadm'] + final_args,
+                        stdin=stdin)
+                except RuntimeError as e:
+                    if error_ok:
+                        return '', str(e), 1
+                    raise
             if code and not error_ok:
                 raise RuntimeError(
                     'cephadm exited with an error code: %d, stderr:%s' % (
@@ -1053,46 +1056,36 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
                        extra_args=[]):
-        conn = self._get_connection(host)
-        try:
-            name = '%s.%s' % (daemon_type, daemon_id)
+        name = '%s.%s' % (daemon_type, daemon_id)
 
-            # generate config
-            ret, config, err = self.mon_command({
-                "prefix": "config generate-minimal-conf",
-            })
+        # generate config
+        ret, config, err = self.mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
 
-            ret, crash_keyring, err = self.mon_command({
-                'prefix': 'auth get-or-create',
-                'entity': 'client.crash.%s' % host,
-                'caps': ['mon', 'profile crash',
-                         'mgr', 'profile crash'],
-            })
+        ret, crash_keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.crash.%s' % host,
+            'caps': ['mon', 'profile crash',
+                     'mgr', 'profile crash'],
+        })
 
-            j = json.dumps({
-                'config': config,
-                'keyring': keyring,
-                'crash_keyring': crash_keyring,
-            })
+        j = json.dumps({
+            'config': config,
+            'keyring': keyring,
+            'crash_keyring': crash_keyring,
+        })
 
-            out, err, code = self._run_cephadm(
-                host, name, 'deploy',
-                [
-                    '--name', name,
-                    '--config-and-keyrings', '-',
-                ] + extra_args,
-                stdin=j)
-            self.log.debug('create_daemon code %s out %s' % (code, out))
-            self.service_cache.invalidate(host)
-            return "(Re)deployed {} on host '{}'".format(name, host)
-
-        except Exception as e:
-            self.log.error("create_daemon({}): error: {}".format(host, e))
-            raise
-
-        finally:
-            self.log.info("create_daemon({}): finished".format(host))
-            conn.exit()
+        out, err, code = self._run_cephadm(
+            host, name, 'deploy',
+            [
+                '--name', name,
+                '--config-and-keyrings', '-',
+            ] + extra_args,
+            stdin=j)
+        self.log.debug('create_daemon code %s out %s' % (code, out))
+        self.service_cache.invalidate(host)
+        return "(Re)deployed {} on host '{}'".format(name, host)
 
     @async_map_completion
     def _remove_daemon(self, name, host):
