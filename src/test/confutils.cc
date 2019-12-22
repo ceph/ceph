@@ -231,6 +231,8 @@ const char illegal_conf4[] = "\
         keyring = osd_keyring          ; osd's keyring\n\
 ";
 
+#if BOOST_VERSION < 107200
+// Boost::spirit > 1.72 asserts on chars that are not < 0x7f
 // unicode config file
 const char unicode_config_1[] = "\
 [global]\n\
@@ -238,6 +240,7 @@ const char unicode_config_1[] = "\
         pid file =           foo-bar\n\
 [osd0]\n\
 ";
+#endif
 
 const char override_config_1[] = "\
 [global]\n\
@@ -363,12 +366,14 @@ TEST(ConfUtils, ReadFiles2) {
   ASSERT_EQ(cf1.read("global", "pid file", val), 0);
   ASSERT_EQ(val, "spork");
 
+#if BOOST_VERSION < 107200
   std::string unicode_config_1f(next_tempfile(unicode_config_1));
   ConfFile cf2;
   ASSERT_EQ(cf2.parse_file(unicode_config_1f.c_str(), &err), 0);
   ASSERT_EQ(err.tellp(), 0U);
   ASSERT_EQ(cf2.read("global", "log file", val), 0);
   ASSERT_EQ(val, "\x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae");
+#endif
 }
 
 TEST(ConfUtils, IllegalFiles) {
