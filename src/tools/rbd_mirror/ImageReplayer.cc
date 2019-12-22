@@ -961,26 +961,27 @@ template <typename I>
 void ImageReplayer<I>::handle_replayer_notification() {
   dout(10) << dendl;
 
-  // detect a rename of the local image
-  std::string local_image_name;
-  {
-    std::shared_lock image_locker{m_local_image_ctx->image_lock};
-    local_image_name = m_local_image_ctx->name;
+  std::unique_lock locker{m_lock};
+  if (m_state != STATE_REPLAYING) {
+    // might be attempting to shut down
+    return;
   }
 
   {
-    std::unique_lock locker{m_lock};
-    ceph_assert(m_state == STATE_REPLAYING);
-    ceph_assert(m_replayer != nullptr);
-
-    if (m_local_image_name != local_image_name) {
+    // detect a rename of the local image
+    ceph_assert(m_local_image_ctx != nullptr);
+    std::shared_lock image_locker{m_local_image_ctx->image_lock};
+    if (m_local_image_name != m_local_image_ctx->name) {
       // will re-register with new name after next status update
       dout(10) << "image renamed" << dendl;
-      m_local_image_name = local_image_name;
+      m_local_image_name = m_local_image_ctx->name;
     }
   }
 
   // replayer cannot be shut down while notification is in-flight
+  ceph_assert(m_replayer != nullptr);
+  locker.unlock();
+
   if (m_replayer->is_resync_requested()) {
     dout(10) << "resync requested" << dendl;
     m_resync_requested = true;
