@@ -814,6 +814,9 @@ def task(ctx, config):
     cluster_name = config['cluster']
     ctx.ceph[cluster_name] = argparse.Namespace()
 
+    ctx.ceph[cluster_name].thrashers = []
+    # fixme: setup watchdog, ala ceph.py
+
     # cephadm mode?
     if 'cephadm_mode' not in config:
         config['cephadm_mode'] = 'root'
