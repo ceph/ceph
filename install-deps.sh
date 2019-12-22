@@ -124,36 +124,6 @@ ENDOFKEY
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
 }
 
-function ensure_decent_cmake_on_ubuntu {
-    local new=$1
-    if command -v cmake > /dev/null; then
-        local old=$(cmake --version | grep -Po 'version \K[0-9].*')
-        if dpkg --compare-versions $old ge $new; then
-          return
-        fi
-    fi
-    install_pkg_on_ubuntu \
-	ceph-cmake \
-	d278b9d28de0f6b88f56dfe1e8bf684a41577210 \
-	xenial \
-	force \
-	cmake
-}
-
-function ensure_decent_binutils_on_ubuntu {
-    local new=$1
-    local old=$(ld --version | head -n1 | grep -Po ' \K[0-9].*')
-    if dpkg --compare-versions $old ge $new; then
-        return
-    fi
-    install_pkg_on_ubuntu \
-	binutils \
-	7fa393306ed8b93019d225548474c0540b8928f7 \
-	xenial \
-	force \
-	binutils
-}
-
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -312,15 +282,6 @@ else
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
-            *Trusty*)
-                ensure_decent_gcc_on_ubuntu 8 trusty
-                ;;
-            *Xenial*)
-                ensure_decent_gcc_on_ubuntu 8 xenial
-                ensure_decent_cmake_on_ubuntu 3.10.1
-                ensure_decent_binutils_on_ubuntu 2.28
-                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
-                ;;
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
