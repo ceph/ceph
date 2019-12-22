@@ -565,6 +565,11 @@ def make_log_dir(fsid, uid=None, gid=None):
     makedirs(log_dir, uid, gid, LOG_DIR_MODE)
     return log_dir
 
+def make_var_run(fsid, uid, gid):
+    # type: (str, int, int) -> None
+    call_throws(['install', '-d', '-m0770', '-o', str(uid), '-g', str(gid),
+                 '/var/run/ceph/%s' % fsid])
+
 def copy_files(src, dst, uid=None, gid=None):
     # type: (List[str], str, int, int) -> None
     """
@@ -1510,6 +1515,7 @@ def command_bootstrap():
         os.fchmod(f.fileno(), 0o600)
         f.write(config)
 
+    make_var_run(fsid, uid, gid)
     mon_c = get_container(fsid, 'mon', mon_id)
     deploy_daemon(fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
@@ -1720,6 +1726,7 @@ def command_deploy():
                 raise Error('must specify --mon-ip or --mon-network')
 
         (uid, gid) = extract_uid_gid()
+        make_var_run(args.fsid, uid, gid)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config, keyring,
@@ -2084,6 +2091,7 @@ def command_adopt():
                    uid=uid, gid=gid)
 
         logger.info('Creating new units...')
+        make_var_run(fsid, uid, gid)
         c = get_container(fsid, daemon_type, daemon_id)
         deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                             enable=True,  # unconditionally enable the new unit
