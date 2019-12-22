@@ -1413,7 +1413,7 @@ class InventoryNode(object):
         return self.name == other.name and self.devices == other.devices
 
 
-class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev'])):
+class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev', 'path'])):
     """
     Describes a specific device on a specific host. Used for enabling or disabling LEDs
     on devices.
