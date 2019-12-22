@@ -47,6 +47,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import errno
 try:
     from typing import Dict, List, Tuple, Optional, Union
 except ImportError:
@@ -109,15 +110,26 @@ def port_in_use(port_num):
     # type (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
 
+    def attempt_bind(address):
+        # type (str) -> None
+        try:
+            s.bind((address, port_num))
+        except (socket.error, OSError) as e:  # py2 and py3
+            if e.errno == errno.EADDRINUSE:
+                raise OSError
+            elif e.errno == errno.EADDRNOTAVAIL:
+                return
+        finally:
+            s.close()
+
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(("127.0.0.1", port_num))
-        s.close()
+        attempt_bind('0.0.0.0')
+
         s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        s.bind(("::1", port_num))
-        s.close()
+        attempt_bind('::')
+
     except OSError:
-        s.close()
         return True
     else:
         return False
