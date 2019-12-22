@@ -931,13 +931,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def blink_device_light(self, ident_fault, on, locs):
         @async_map_completion
-        def blink(host, dev):
+        def blink(host, dev, path):
             cmd = [
                 'lsmcli',
                 'local-disk-%s-led-%s' % (
                     ident_fault,
                     'on' if on else 'off'),
-                '--path', dev,
+                '--path', path or dev,
             ]
             out, err, code = self._run_cephadm(
                 host, 'osd', 'shell', ['--'] + cmd,

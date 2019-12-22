@@ -230,6 +230,6 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_blink_device_light(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.blink_device_light('ident', True, [('test', '')])
+            c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
             assert self._wait(cephadm_module, c) == ['Set ident light for test: on']
 
