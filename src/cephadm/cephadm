@@ -105,35 +105,46 @@ class Monitoring(object):
         }
     }
 
+def attempt_bind(s, address, port):
+    # type (str) -> None
+    try:
+        s.bind((address, port))
+    except (socket.error, OSError) as e:  # py2 and py3
+        if e.errno == errno.EADDRINUSE:
+            raise OSError
+        elif e.errno == errno.EADDRNOTAVAIL:
+            return
+    finally:
+        s.close()
 
 def port_in_use(port_num):
     # type (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
 
-    def attempt_bind(address):
-        # type (str) -> None
-        try:
-            s.bind((address, port_num))
-        except (socket.error, OSError) as e:  # py2 and py3
-            if e.errno == errno.EADDRINUSE:
-                raise OSError
-            elif e.errno == errno.EADDRNOTAVAIL:
-                return
-        finally:
-            s.close()
-
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        attempt_bind('0.0.0.0')
+        attempt_bind(s, '0.0.0.0', port_num)
 
         s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        attempt_bind('::')
+        attempt_bind(s, '::', port_num)
 
     except OSError:
         return True
     else:
         return False
 
+def check_ip_port(ip, port):
+    if not args.skip_ping_check:
+        logger.info('Verifying IP %s port %d is not in use...' % (ip, port))
+        if ip.startswith('[') or '::' in ip:
+            s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        else:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            attempt_bind(s, ip, port)
+        except OSError as e:
+            raise Error('Unable to bind to IP %s port %d: %s' % (ip, port,
+                                                                 str(e)))
 
 ##################################
 
@@ -1396,16 +1407,45 @@ def command_bootstrap():
     l = FileLock(fsid)
     l.acquire()
 
-    # config
-    cp = read_config(args.config)
+    # ip
+    r = re.compile(r':(\d+)$')
     if args.mon_ip:
-        addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
-        mon_ip = args.mon_ip
+        hasport = r.findall(args.mon_ip)
+        if hasport:
+            port = int(hasport[0])
+            if port == 6789:
+                addr_arg = '[v1:%s]' % args.mon_ip
+            elif port == 3300:
+                addr_arg = '[v2:%s]' % args.mon_ip
+            else:
+                logger.warning('Using msgr2 protocol for unrecognized port %d' %
+                               port)
+                addr_arg = '[v2:%s]' % args.mon_ip
+            check_ip_port(args.mon_ip[0:-(len(str(port)))-1], port)
+        else:
+            addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
+            check_ip_port(args.mon_ip, 3300)
+            check_ip_port(args.mon_ip, 6789)
     elif args.mon_addrv:
         addr_arg = args.mon_addrv
-        mon_ip = args.mon_addrv.split(':')[1]
+        if addr_arg[0] != '[' or addr_arg[-1] != ']':
+            raise Error('--mon-addrv value %s must use square backets' %
+                        addr_arg)
+        for addr in addr_arg[1:-1].split(','):
+            hasport = r.findall(addr)
+            if not hasport:
+                raise Error('--mon-addrv value %s must include port number' %
+                            addr_arg)
+            port = int(hasport[0])
+            # strip off v1: or v2: prefix
+            addr = re.sub(r'^\w+:', '', addr)
+            check_ip_port(addr[0:-(len(str(port)))-1], port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
+    logger.debug('Final addrv is %s' % addr_arg)
+
+    # config
+    cp = read_config(args.config)
     if not cp.has_section('global'):
         cp.add_section('global')
     cp.set('global', 'fsid', fsid);
@@ -1414,12 +1454,6 @@ def command_bootstrap():
     cpf = StringIO()
     cp.write(cpf)
     config = cpf.getvalue()
-
-    if not args.skip_ping_check:
-        logger.info('Verifying we can ping mon IP %s...' % mon_ip)
-        _, _, ret = call(['timeout', '5', 'ping', mon_ip, '-c', '1'], 'ping')
-        if ret:
-            raise Error('failed to ping %s' % mon_ip)
 
     if not args.skip_pull:
         logger.info('Pulling latest %s container...' % args.image)
