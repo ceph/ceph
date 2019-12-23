@@ -616,6 +616,44 @@ def ceph_mdss(ctx, config):
     yield
 
 @contextlib.contextmanager
+def ceph_clients(ctx, config):
+    cluster_name = config['cluster']
+    testdir = teuthology.get_testdir(ctx)
+
+    log.info('Setting up client nodes...')
+    clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
+    testdir = teuthology.get_testdir(ctx)
+    coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
+    for remote, roles_for_host in clients.remotes.items():
+        for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
+                                                     cluster_name):
+            name = teuthology.ceph_role(role)
+            client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
+                                                                name)
+            r = _shell(
+                ctx=ctx,
+                cluster_name=cluster_name,
+                remote=remote,
+                args=[
+                    'ceph', 'auth',
+                    'get-or-create', name,
+                    'mon', 'allow *',
+                    'osd', 'allow *',
+                    'mds', 'allow *',
+                    'mgr', 'allow *',
+                ],
+                stdout=StringIO(),
+            )
+            keyring = r.stdout.getvalue()
+            teuthology.sudo_write_file(
+                remote=remote,
+                path=client_keyring,
+                data=keyring,
+                perms='0644'
+            )
+    yield
+
+@contextlib.contextmanager
 def ceph_initial():
     try:
         yield
@@ -875,6 +913,7 @@ def task(ctx, config):
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
+            lambda: ceph_clients(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):
         ctx.managers[cluster_name] = CephManager(
