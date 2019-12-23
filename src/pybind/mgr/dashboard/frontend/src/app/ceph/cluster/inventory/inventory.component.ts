@@ -2,8 +2,6 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { Icons } from '../../../shared/enum/icons.enum';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../shared/services/summary.service';
 import { InventoryDevice } from './inventory-devices/inventory-device.model';
 
 @Component({
@@ -17,41 +15,24 @@ export class InventoryComponent implements OnChanges, OnInit {
 
   icons = Icons;
 
-  checkingOrchestrator = true;
-  orchestratorExist = false;
+  hasOrchestrator = false;
   docsUrl: string;
 
   devices: Array<InventoryDevice> = [];
 
-  constructor(
-    private cephReleaseNamePipe: CephReleaseNamePipe,
-    private orchService: OrchestratorService,
-    private summaryService: SummaryService
-  ) {}
+  constructor(private orchService: OrchestratorService) {}
 
   ngOnInit() {
-    // duplicated code with grafana
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
+    this.orchService.status().subscribe((status) => {
+      this.hasOrchestrator = status.available;
+      if (status.available) {
+        this.getInventory();
       }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
-    });
-
-    this.orchService.status().subscribe((data: { available: boolean }) => {
-      this.orchestratorExist = data.available;
-      this.checkingOrchestrator = false;
     });
   }
 
   ngOnChanges() {
-    if (this.orchestratorExist) {
+    if (this.hasOrchestrator) {
       this.devices = [];
       this.getInventory();
     }

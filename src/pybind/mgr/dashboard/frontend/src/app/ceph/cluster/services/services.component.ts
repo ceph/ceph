@@ -9,9 +9,7 @@ import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-d
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephService } from '../../../shared/models/service.interface';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
   selector: 'cd-services',
@@ -31,6 +29,7 @@ export class ServicesComponent implements OnChanges, OnInit {
 
   checkingOrchestrator = true;
   orchestratorExist = false;
+  hasOrchestrator = false;
   docsUrl: string;
 
   columns: Array<CdTableColumn> = [];
@@ -40,11 +39,9 @@ export class ServicesComponent implements OnChanges, OnInit {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
     private i18n: I18n,
     private orchService: OrchestratorService,
-    private cephServiceService: CephServiceService,
-    private summaryService: SummaryService
+    private cephServiceService: CephServiceService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -87,23 +84,8 @@ export class ServicesComponent implements OnChanges, OnInit {
       return !this.hiddenColumns.includes(col.prop);
     });
 
-    // duplicated code with grafana
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
-    });
-
-    this.orchService.status().subscribe((data: { available: boolean }) => {
-      this.orchestratorExist = data.available;
-      this.checkingOrchestrator = false;
+    this.orchService.status().subscribe((status) => {
+      this.hasOrchestrator = status.available;
     });
   }
 
