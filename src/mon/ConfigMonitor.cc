@@ -388,7 +388,17 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       if (i != mon->monmap->mon_info.begin()) {
 	conf << " ";
       }
-      conf << i->second.public_addrs;
+      if (i->second.public_addrs.size() == 1 &&
+	  i->second.public_addrs.front().is_legacy() &&
+	  i->second.public_addrs.front().get_port() == CEPH_MON_PORT_LEGACY) {
+	// if this is a legacy addr on the legacy default port, then
+	// use the legacy-compatible formatting so that old clients
+	// can use this config.  new code will see the :6789 and correctly
+	// interpret this as a v1 address.
+	conf << i->second.public_addrs.get_legacy_str();
+      } else {
+	conf << i->second.public_addrs;
+      }
     }
     conf << "\n";
     conf << config_map.global.get_minimal_conf();

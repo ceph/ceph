@@ -137,7 +137,57 @@ def ceph_log(ctx, config):
     try:
         yield
 
+    except Exception:
+        # we need to know this below
+        ctx.summary['success'] = False
+        raise
+
     finally:
+        log.info('Checking cluster log for badness...')
+        def first_in_ceph_log(pattern, excludes):
+            """
+            Find the first occurrence of the pattern specified in the Ceph log,
+            Returns None if none found.
+
+            :param pattern: Pattern scanned for.
+            :param excludes: Patterns to ignore.
+            :return: First line of text (or None if not found)
+            """
+            args = [
+                'sudo',
+                'egrep', pattern,
+                '/var/log/ceph/{fsid}/ceph.log'.format(
+                    fsid=fsid),
+            ]
+            for exclude in excludes:
+                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+            args.extend([
+                run.Raw('|'), 'head', '-n', '1',
+            ])
+            r = ctx.ceph[cluster_name].bootstrap_remote.run(
+                stdout=StringIO(),
+                args=args,
+            )
+            stdout = r.stdout.getvalue()
+            if stdout != '':
+                return stdout
+            return None
+
+        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
+                             config['log-whitelist']) is not None:
+            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+            ctx.summary['success'] = False
+            # use the most severe problem as the failure reason
+            if 'failure_reason' not in ctx.summary:
+                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
+                    match = first_in_ceph_log(pattern, config['log-whitelist'])
+                    if match is not None:
+                        ctx.summary['failure_reason'] = \
+                            '"{match}" in cluster log'.format(
+                                match=match.rstrip('\n'),
+                            )
+                        break
+
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             # and logs
@@ -147,7 +197,7 @@ def ceph_log(ctx, config):
                     args=[
                         'sudo',
                         'find',
-                        '/var/log/ceph/' + fsid,
+                        '/var/log/ceph',   # all logs, not just for the cluster
                         '-name',
                         '*.log',
                         '-print0',
@@ -176,7 +226,7 @@ def ceph_log(ctx, config):
                     os.makedirs(sub)
                 except OSError:
                     pass
-                teuthology.pull_directory(remote, '/var/log/ceph/' + fsid,
+                teuthology.pull_directory(remote, '/var/log/ceph',  # everything
                                           os.path.join(sub, 'log'))
 
 @contextlib.contextmanager
@@ -247,6 +297,7 @@ def ceph_bootstrap(ctx, config):
             path='{}/seed.{}.conf'.format(testdir, cluster_name),
             data=conf_fp.getvalue())
         log.debug('Final config:\n' + conf_fp.getvalue())
+        ctx.ceph[cluster_name].conf = seed_config
 
         # bootstrap
         log.info('Bootstrapping...')
@@ -564,6 +615,44 @@ def ceph_mdss(ctx, config):
     yield
 
 @contextlib.contextmanager
+def ceph_clients(ctx, config):
+    cluster_name = config['cluster']
+    testdir = teuthology.get_testdir(ctx)
+
+    log.info('Setting up client nodes...')
+    clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
+    testdir = teuthology.get_testdir(ctx)
+    coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
+    for remote, roles_for_host in clients.remotes.items():
+        for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
+                                                     cluster_name):
+            name = teuthology.ceph_role(role)
+            client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
+                                                                name)
+            r = _shell(
+                ctx=ctx,
+                cluster_name=cluster_name,
+                remote=remote,
+                args=[
+                    'ceph', 'auth',
+                    'get-or-create', name,
+                    'mon', 'allow *',
+                    'osd', 'allow *',
+                    'mds', 'allow *',
+                    'mgr', 'allow *',
+                ],
+                stdout=StringIO(),
+            )
+            keyring = r.stdout.getvalue()
+            teuthology.sudo_write_file(
+                remote=remote,
+                path=client_keyring,
+                data=keyring,
+                perms='0644'
+            )
+    yield
+
+@contextlib.contextmanager
 def ceph_initial():
     try:
         yield
@@ -762,6 +851,9 @@ def task(ctx, config):
     cluster_name = config['cluster']
     ctx.ceph[cluster_name] = argparse.Namespace()
 
+    ctx.ceph[cluster_name].thrashers = []
+    # fixme: setup watchdog, ala ceph.py
+
     # cephadm mode?
     if 'cephadm_mode' not in config:
         config['cephadm_mode'] = 'root'
@@ -820,6 +912,7 @@ def task(ctx, config):
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
+            lambda: ceph_clients(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):
         ctx.managers[cluster_name] = CephManager(

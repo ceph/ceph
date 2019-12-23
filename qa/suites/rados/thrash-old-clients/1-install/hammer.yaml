@@ -1,6 +1,5 @@
 overrides:
   ceph:
-    mon_bind_addrvec: false
     mon_bind_msgr2: false
     crush_tunables: hammer
     log-whitelist:
@@ -27,8 +26,17 @@ tasks:
       - libcephfs-devel
       - libcephfs-dev
       - libradospp-devel
-    extra_packages: ['librados2']
-- install.upgrade:
-    mon.a:
-    mon.b:
-    mon.c:
+      - ceph-immutable-object-cache
+      - ceph-base
+      - librados-devel
+      - python3-rados
+      - python3-rgw
+      - python3-rbd
+      - python3-cephfs
+      - rbd-mirror
+      - rbd-nbd
+    extra_packages:
+      - librados2
+      - python-rados
+      - python-rbd
+      - python-cephfs
