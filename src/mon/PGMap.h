@@ -495,6 +495,7 @@ public:
     CephContext *cct,
     const OSDMap& osdmap,
     health_check_map_t *checks) const;
+  void print_summary(ceph::Formatter *f, ostream *out) const;
 
   static void generate_test_instances(std::list<PGMap*>& o);
 };
