@@ -111,7 +111,7 @@ class TestCephadm(object):
         cephadm_module.service_cache_timeout = 10
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.service_action('redeploy', 'rgw', service_id='myrgw.foobar')
-            assert self._wait(cephadm_module, c) == ["(Re)deployed rgw.myrgw.foobar on host 'test'"]
+            assert self._wait(cephadm_module, c) == ["Deployed rgw.myrgw.foobar on host 'test'"]
 
             for what in ('start', 'stop', 'restart'):
                 c = cephadm_module.service_action(what, 'rgw', service_id='myrgw.foobar')
@@ -126,7 +126,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             c = cephadm_module.update_mons(StatefulServiceSpec(placement=ps))
-            assert self._wait(cephadm_module, c) == ["(Re)deployed mon.a on host 'test'"]
+            assert self._wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -137,7 +137,7 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             c = cephadm_module.update_mgrs(StatefulServiceSpec(placement=ps))
             [out] = self._wait(cephadm_module, c)
-            assert "(Re)deployed mgr." in out
+            assert "Deployed mgr." in out
             assert " on host 'test'" in out
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
@@ -178,7 +178,7 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_mds(StatelessServiceSpec('name', placement=ps))
             [out] = self._wait(cephadm_module, c)
-            assert "(Re)deployed mds.name." in out
+            assert "Deployed mds.name." in out
             assert " on host 'test'" in out
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
@@ -190,7 +190,7 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
             [out] = self._wait(cephadm_module, c)
-            assert "(Re)deployed rgw.realm.zone." in out
+            assert "Deployed rgw.realm.zone." in out
             assert " on host 'test'" in out
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
@@ -221,7 +221,7 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rbd_mirror(StatelessServiceSpec(name='name', placement=ps))
             [out] = self._wait(cephadm_module, c)
-            assert "(Re)deployed rbd-mirror." in out
+            assert "Deployed rbd-mirror." in out
             assert " on host 'test'" in out
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))

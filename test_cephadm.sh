@@ -43,16 +43,16 @@ $CEPHADM $A \
     --allow-overwrite
 chmod 644 k c
 
-if [ -n "$ip2" ]; then
-    # mon.b
-    $CEPHADM $A \
-    --image $image \
-    deploy --name mon.b \
-    --fsid $fsid \
-    --mon-addrv "[v2:$ip2:3300,v1:$ip2:6789]" \
-    --keyring /var/lib/ceph/$fsid/mon.a/keyring \
-    --config c
-fi
+# mon.b
+cp c c.mon
+echo "public addrv = [v2:$ip:3301,v1:$ip:6790]" >> c.mon
+$CEPHADM $A \
+	 --image $image \
+	 deploy --name mon.b \
+	 --fsid $fsid \
+	 --keyring /var/lib/ceph/$fsid/mon.a/keyring \
+	 --config c.mon
+rm c.mon
 
 # mgr.b
 bin/ceph -c c -k k auth get-or-create mgr.y \

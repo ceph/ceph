@@ -719,8 +719,9 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
-                       config=None, keyring=None):
-    # type: (str, str, Union[int, str], int, int, str, str) ->  None
+                       config=None, keyring=None,
+                       reconfig=False):
+    # type: (str, str, Union[int, str], int, int, Optional[str], Optional[str], Optional[bool]) ->  None
     data_dir = make_data_dir(fsid, daemon_type, daemon_id, uid=uid, gid=gid)
     make_log_dir(fsid, uid=uid, gid=gid)
 
@@ -941,10 +942,13 @@ def extract_uid_gid(img='', file_path='/var/lib/ceph'):
 
 def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
                   config=None, keyring=None,
-                  osd_fsid=None):
-    # type: (str, str, Union[int, str], CephContainer, int, int, Optional[str], Optional[str], Optional[str]) -> None
-    if daemon_type == 'mon' and not os.path.exists(
-            get_data_dir(fsid, 'mon', daemon_id)):
+                  osd_fsid=None,
+                  reconfig=False):
+    # type: (str, str, Union[int, str], CephContainer, int, int, Optional[str], Optional[str], Optional[str], Optional[bool]) -> None
+    data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+    if reconfig and not os.path.exists(data_dir):
+        raise Error('cannot reconfig, data path %s does not exist' % data_dir)
+    if daemon_type == 'mon' and not os.path.exists(data_dir):
         assert config
         assert keyring
         # tmp keyring file
@@ -986,9 +990,17 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
             uid, gid,
             config, keyring)
 
-    deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
-                        osd_fsid=osd_fsid)
+    if not reconfig:
+        deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
+                            osd_fsid=osd_fsid)
+
     update_firewalld(daemon_type)
+
+    if reconfig and daemon_type not in Ceph.daemons:
+        # ceph daemons do not need a restart; others (presumably) do to pick
+        # up the new config
+        call_throws(['systemctl', 'restart',
+                     get_unit_name(fsid, daemon_type, daemon_id)])
 
 def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                         enable=True, start=True,
@@ -1629,7 +1641,7 @@ def command_bootstrap():
     if not args.skip_ssh:
         logger.info('Enabling cephadm module...')
         cli(['mgr', 'module', 'enable', 'cephadm'])
-        logger.info('Setting orchestrator backend to ssh...')
+        logger.info('Setting orchestrator backend to cephadm...')
         cli(['orchestrator', 'set', 'backend', 'cephadm'])
 
         logger.info('Generating ssh key...')
@@ -1719,25 +1731,14 @@ def command_deploy():
 
     if daemon_type in Ceph.daemons:
         (config, keyring, crash_keyring) = get_config_and_both_keyrings()
-        if daemon_type == 'mon':
-            if args.mon_ip:
-                config += '[mon.%s]\n\tpublic_addr = %s\n' % (daemon_id, args.mon_ip)
-            elif args.mon_addrv:
-                config += '[mon.%s]\n\tpublic_addrv = %s\n' % (daemon_id,
-                                                            args.mon_addrv)
-            elif args.mon_network:
-                config += '[mon.%s]\n\tpublic_network = %s\n' % (daemon_id,
-                                                                args.mon_network)
-            else:
-                raise Error('must specify --mon-ip or --mon-network')
-
         (uid, gid) = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config, keyring,
-                      osd_fsid=args.osd_fsid)
+                      osd_fsid=args.osd_fsid,
+                      reconfig=args.reconfig)
 
-        if crash_keyring:
+        if crash_keyring and not args.reconfig:
             deploy_crash(args.fsid, uid, gid, config, crash_keyring)
     else:
         # monitoring daemon - prometheus, grafana, alertmanager
@@ -1770,7 +1771,8 @@ def command_deploy():
             raise Error("{} not implemented in command_deploy function".format(daemon_type))
 
         c = get_container(args.fsid, daemon_type, daemon_id, container_args=monitoring_args)
-        deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid)
+        deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
+                      reconfig=args.reconfig)
 
 ##################################
 
@@ -2549,21 +2551,16 @@ def _get_parser():
         '--config-and-keyrings',
         help='JSON file with config and keyrings for the daemon and crash agent')
     parser_deploy.add_argument(
-        '--mon-ip',
-        help='mon IP')
-    parser_deploy.add_argument(
-        '--mon-addrv',
-        help='mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])')
-    parser_deploy.add_argument(
-        '--mon-network',
-        help='mon network (CIDR)')
-    parser_deploy.add_argument(
         '--osd-fsid',
         help='OSD uuid, if creating an OSD container')
     parser_deploy.add_argument(
         '--skip-firewalld',
         action='store_true',
         help='Do not configure firewalld')
+    parser_deploy.add_argument(
+        '--reconfig',
+        action='store_true',
+        help='Reconfigure a previously deployed daemon')
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
