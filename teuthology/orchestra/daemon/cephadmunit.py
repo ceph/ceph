@@ -33,6 +33,13 @@ class CephadmUnit(DaemonState):
         self.show_cmd = self._get_systemd_cmd('show')
         self.status_cmd = self._get_systemd_cmd('status')
 
+    def kill_cmd(self, sig):
+        return ' '.join([
+            'sudo', 'docker', 'kill',
+            '-s', str(sig),
+            'ceph-%s-%s.%s' % (self.fsid, self.type_, self.id_),
+        ])
+
     def _start_logger(self):
         name = '%s.%s' % (self.type_, self.id_)
         self.remote_logger = self.remote.run(
@@ -92,7 +99,9 @@ class CephadmUnit(DaemonState):
 
         :param sig: signal to send
         """
-        raise NotImplementedError
+        if not silent:
+            self.log.info('Senging signal %d to %s...' % (sig, self.name()))
+        self.remote.sh(self.kill_cmd(sig))
 
     def start(self, timeout=300):
         """
@@ -131,10 +140,13 @@ class CephadmUnit(DaemonState):
         Wait for daemon to stop (but don't trigger the stop).  Pass up
         any exception.  Mark the daemon as not running.
         """
-        raise NotImplementedError
+        self.log.info('Waiting for %s to exit...' % self.name())
+        self._join_logger()
+        self.is_started = False
+        self.log.info('Finished waiting for %s to stop' % self.name())
 
     def wait_for_exit(self):
         """
         clear remote run command value after waiting for exit.
         """
-        raise NotImplementedError
+        self.wait()
