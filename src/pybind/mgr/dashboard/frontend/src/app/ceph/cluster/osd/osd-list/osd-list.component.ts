@@ -1,4 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
@@ -20,6 +21,7 @@ import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { DepCheckerService } from '../../../../shared/services/dep-checker.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
 import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
@@ -79,6 +81,8 @@ export class OsdListComponent implements OnInit {
     private modalService: BsModalService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
+    private router: Router,
+    private depCheckerService: DepCheckerService,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService
   ) {
@@ -88,7 +92,15 @@ export class OsdListComponent implements OnInit {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        routerLink: () => this.urlBuilder.getCreate(),
+        click: () => {
+          this.depCheckerService.checkOrchestratorOrModal(
+            this.actionLabels.CREATE,
+            this.i18n('OSD'),
+            () => {
+              this.router.navigate([this.urlBuilder.getCreate()]);
+            }
+          );
+        },
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
@@ -200,20 +212,27 @@ export class OsdListComponent implements OnInit {
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        click: () =>
-          this.showCriticalConfirmationModal(
-            this.i18n('delete'),
+        click: () => {
+          this.depCheckerService.checkOrchestratorOrModal(
+            this.actionLabels.DELETE,
             this.i18n('OSD'),
-            this.i18n('deleted'),
-            (ids: number[]) => {
-              return this.osdService.safeToDelete(JSON.stringify(ids));
-            },
-            'is_safe_to_delete',
-            (id: number) => {
-              this.selection = new CdTableSelection();
-              return this.osdService.delete(id, true);
+            () => {
+              this.showCriticalConfirmationModal(
+                this.i18n('delete'),
+                this.i18n('OSD'),
+                this.i18n('deleted'),
+                (ids: number[]) => {
+                  return this.osdService.safeToDelete(JSON.stringify(ids));
+                },
+                'is_safe_to_delete',
+                (id: number) => {
+                  this.selection = new CdTableSelection();
+                  return this.osdService.delete(id, true);
+                }
+              );
             }
-          ),
+          );
+        },
         disable: () => !this.hasOsdSelected,
         icon: Icons.destroy
       }
