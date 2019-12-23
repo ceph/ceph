@@ -1044,8 +1044,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._remove_daemon(args)
 
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
-                       extra_args=[], extra_config=None,
+                       extra_args=None, extra_config=None,
                        reconfig=False):
+        if not extra_args:
+            extra_args = []
         name = '%s.%s' % (daemon_type, daemon_id)
 
         # generate config
