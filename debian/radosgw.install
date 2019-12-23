@@ -1,4 +1,5 @@
 lib/systemd/system/ceph-radosgw*
+lib/*/libradosgw.so*
 usr/bin/radosgw
 usr/bin/radosgw-es
 usr/bin/radosgw-object-expirer
