@@ -60,7 +60,7 @@ To display the statistics for all placement groups, execute the following::
 
 	ceph pg dump [--format {format}]
 
-The valid formats are ``plain`` (default) and ``json``.
+The valid formats are ``plain`` (default), ``json`` ``json-pretty``, ``xml``, and ``xml-pretty``.
 
 To display the statistics for all placement groups stuck in a specified state, 
 execute the following:: 
@@ -110,8 +110,9 @@ The foregoing functionally equivalent to ::
 	ceph osd getmap -o /tmp/osdmap
 	osdmaptool /tmp/osdmap --export-crush file
 
-Dump the OSD map. Valid formats for ``-f`` are ``plain`` and ``json``. If no
-``--format`` option is given, the OSD map is dumped as plain text. ::
+Dump the OSD map. Valid formats for ``-f`` are ``plain``, ``json``, ``json-pretty``,
+``xml``, and ``xml-pretty``. If no ``--format`` option is given, the OSD map is 
+dumped as plain text. ::
 
 	ceph osd dump [--format {format}]
 
