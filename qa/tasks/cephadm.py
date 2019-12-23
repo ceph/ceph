@@ -297,6 +297,7 @@ def ceph_bootstrap(ctx, config):
             path='{}/seed.{}.conf'.format(testdir, cluster_name),
             data=conf_fp.getvalue())
         log.debug('Final config:\n' + conf_fp.getvalue())
+        ctx.ceph[cluster_name].conf = seed_config
 
         # bootstrap
         log.info('Bootstrapping...')
