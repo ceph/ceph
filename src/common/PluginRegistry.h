@@ -19,9 +19,9 @@
 #define CEPH_COMMON_PLUGINREGISTRY_H
 
 #include <map>
-#include "common/ceph_mutex.h"
 
-class CephContext;
+#include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 
 extern "C" {
   const char *__ceph_plugin_version();

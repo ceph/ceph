@@ -18,6 +18,7 @@
 
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
+#include "include/common_fwd.h"
 
 #include "KrbProtocol.hpp"
 
@@ -27,7 +28,6 @@
 #include <gssapi/gssapi_ext.h>
 
 
-class CephContext;
 class Keyring;
 
 

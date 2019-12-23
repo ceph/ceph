@@ -16,8 +16,7 @@
 #define CEPH_KEYRING_H
 
 #include "auth/Auth.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 class KeyRing : public KeyStore {
   std::map<EntityName, EntityAuth> keys;

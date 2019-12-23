@@ -27,6 +27,7 @@
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include "include/ceph_features.h"
+#include "include/common_fwd.h"
 #include "include/str_map.h"
 
 #include "common/code_environment.h"
@@ -5982,7 +5983,7 @@ int OSDMap::parse_osd_id_list(const vector<string>& ls, set<int> *out,
       get_all_osds(*out);
       break;
     }
-    long osd = parse_osd_id(i->c_str(), ss);
+    long osd = TOPNSPC::common::parse_osd_id(i->c_str(), ss);
     if (osd < 0) {
       *ss << "invalid osd id '" << *i << "'";
       return -EINVAL;

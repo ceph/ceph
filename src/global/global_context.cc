@@ -23,8 +23,8 @@
  */
 CephContext *g_ceph_context = NULL;
 ConfigProxy& g_conf() {
-#ifdef WITH_SEASTAR
-  return ceph::common::local_conf();
+#if defined (WITH_SEASTAR) && !defined (WITH_ALIEN)
+  return crimson::common::local_conf();
 #else
   return g_ceph_context->_conf;
 #endif

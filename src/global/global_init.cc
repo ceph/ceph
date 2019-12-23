@@ -38,7 +38,6 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
-
 static void global_init_set_globals(CephContext *cct)
 {
   g_ceph_context = cct;
@@ -402,7 +401,7 @@ global_init(const std::map<std::string,std::string> *defaults,
 
   return boost::intrusive_ptr<CephContext>{g_ceph_context, false};
 }
-
+namespace TOPNSPC::common {
 void intrusive_ptr_add_ref(CephContext* cct)
 {
   cct->get();
@@ -412,7 +411,7 @@ void intrusive_ptr_release(CephContext* cct)
 {
   cct->put();
 }
-
+}
 void global_print_banner(void)
 {
   output_ceph_version();

@@ -195,7 +195,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   string prefix;
   cmdmap_t cmdmap;
 
-  if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
     return false;
   }
 

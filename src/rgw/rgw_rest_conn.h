@@ -7,10 +7,10 @@
 #include "rgw_rest_client.h"
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
+#include "include/common_fwd.h"
 
 #include <atomic>
 
-class CephContext;
 class RGWSI_Zone;
 
 template <class T>

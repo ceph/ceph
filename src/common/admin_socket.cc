@@ -475,7 +475,7 @@ void AdminSocket::execute_command(
   stringstream errss;
   bufferlist empty;
   ldout(m_cct,10) << __func__ << " cmdvec='" << cmdvec << "'" << dendl;
-  if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
     return on_finish(-EINVAL, "invalid json", empty);
   }
@@ -483,7 +483,7 @@ void AdminSocket::execute_command(
   try {
     cmd_getval(m_cct, cmdmap, "format", format);
     cmd_getval(m_cct, cmdmap, "prefix", prefix);
-  } catch (const bad_cmd_get& e) {
+  } catch (const TOPNSPC::common::bad_cmd_get& e) {
     return on_finish(-EINVAL, "invalid json, missing format and/or prefix",
 		     empty);
   }
@@ -553,7 +553,7 @@ int AdminSocket::register_command(std::string_view cmddesc,
 {
   int ret;
   std::unique_lock l(lock);
-  string prefix = cmddesc_get_prefix(cmddesc);
+  string prefix = TOPNSPC::common::cmddesc_get_prefix(cmddesc);
   auto i = hooks.find(prefix);
   if (i != hooks.cend() &&
       i->second.desc == cmddesc) {
@@ -650,7 +650,7 @@ public:
       (void)command;
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmd_and_help_to_json(f,
+      TOPNSPC::common::dump_cmd_and_help_to_json(f,
                                 CEPH_FEATURES_ALL,
 				secname.str().c_str(),
 				info.desc,

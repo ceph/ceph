@@ -34,8 +34,7 @@
 #include <errno.h>
 #include <sstream>
 
-class CephContext;
-
+#include "include/common_fwd.h"
 /*
  * Authentication
  */

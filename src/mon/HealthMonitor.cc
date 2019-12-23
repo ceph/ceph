@@ -19,6 +19,7 @@
 
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
+#include "include/common_fwd.h"
 
 #include "mon/Monitor.h"
 #include "mon/HealthMonitor.h"
@@ -202,7 +203,7 @@ bool HealthMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
@@ -220,7 +221,7 @@ bool HealthMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "format", format);
     string prefix;
     cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
-  } catch (const bad_cmd_get& e) {
+  } catch (const TOPNSPC::common::bad_cmd_get& e) {
     mon->reply_command(op, -EINVAL, e.what(), rdata, get_last_committed());
     return true;
   }
@@ -235,7 +236,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
   bufferlist rdata;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;

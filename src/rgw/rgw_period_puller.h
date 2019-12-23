@@ -5,8 +5,8 @@
 #define CEPH_RGW_PERIOD_PULLER_H
 
 #include "rgw_period_history.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class RGWPeriod;
 
 class RGWPeriodPuller : public RGWPeriodHistory::Puller {

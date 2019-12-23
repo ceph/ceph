@@ -17,6 +17,7 @@
 
 #include "Auth.h"
 #include "include/types.h"
+#include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 // Different classes of session crypto handling
 
@@ -24,7 +25,6 @@
 #define SESSION_SYMMETRIC_AUTHENTICATE 1
 #define SESSION_SYMMETRIC_ENCRYPT 2
 
-class CephContext;
 class KeyRing;
 
 struct AuthAuthorizeHandler {

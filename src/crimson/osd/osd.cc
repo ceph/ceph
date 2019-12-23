@@ -159,7 +159,7 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
 namespace {
   entity_addrvec_t pick_addresses(int what) {
     entity_addrvec_t addrs;
-    CephContext cct;
+    crimson::common::CephContext cct;
     if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
       throw std::runtime_error("failed to pick address");
     }
@@ -350,7 +350,7 @@ seastar::future<> OSD::_add_me_to_crush()
       return std::max(.00001, double(total) / double(1ull << 40)); // TB
     }
   }();
-  const CrushLocation loc{make_unique<CephContext>().get()};
+  const crimson::crush::CrushLocation loc{make_unique<CephContext>().get()};
   logger().info("{} crush location is {}", __func__, loc);
   string cmd = fmt::format(R"({{
     "prefix": "osd crush create-or-move",

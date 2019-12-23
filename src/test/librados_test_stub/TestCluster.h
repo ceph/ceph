@@ -5,8 +5,7 @@
 #define CEPH_TEST_CLUSTER_H
 
 #include "test/librados_test_stub/TestWatchNotify.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace librados {
 

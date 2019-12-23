@@ -20,6 +20,7 @@
 #include "common/snap_types.h"
 #include "common/zipkin_trace.h"
 
+#include "include/common_fwd.h"
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
@@ -34,10 +35,8 @@
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
-class CephContext;
 class ContextWQ;
 class Finisher;
-class PerfCounters;
 class ThreadPool;
 class SafeTimer;
 

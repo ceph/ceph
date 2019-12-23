@@ -27,6 +27,7 @@
 #include "include/ceph_features.h"
 #include "include/health.h"
 #include "include/CompatSet.h"
+#include "include/common_fwd.h"
 
 #include "common/Clock.h"
 #include "common/Formatter.h"
@@ -48,7 +49,6 @@
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
-class CephContext;
 class health_check_map_t;
 
 class MDSMap {

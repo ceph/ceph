@@ -20,11 +20,11 @@
 #include "common/Formatter.h"
 #include "common/hobject.h"
 #include "include/interval_set.h"
+#include "include/common_fwd.h"
 #include "FDCache.h"
 #include "common/Thread.h"
 #include "common/ceph_context.h"
 
-class PerfCounters;
 enum {
   l_wbthrottle_first = 999090,
   l_wbthrottle_bytes_dirtied,

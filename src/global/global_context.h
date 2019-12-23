@@ -18,8 +18,7 @@
 #include <limits.h>
 
 #include "common/config_fwd.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 extern CephContext *g_ceph_context;
 ConfigProxy& g_conf();

@@ -190,7 +190,7 @@ public:
     try {
       r = cluster_state->asok_command(admin_command, cmdmap, f, outss);
       out.append(outss);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       errss << e.what();
       r = -EINVAL;
     }

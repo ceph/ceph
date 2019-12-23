@@ -666,7 +666,7 @@ void DaemonServer::_generate_command_map(
 	continue;
       }
     }
-    param_str_map[p->first] = cmd_vartype_stringify(p->second);
+    param_str_map[p->first] = TOPNSPC::common::cmd_vartype_stringify(p->second);
   }
 }
 
@@ -806,7 +806,7 @@ bool DaemonServer::handle_command(const ref_t<MCommand>& m)
     auto cmdctx = std::make_shared<CommandContext>(m);
     try {
       return _handle_command(cmdctx);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       cmdctx->reply(-EINVAL, e.what());
       return true;
     }
@@ -819,7 +819,7 @@ bool DaemonServer::handle_command(const ref_t<MMgrCommand>& m)
   auto cmdctx = std::make_shared<CommandContext>(m);
   try {
     return _handle_command(cmdctx);
-  } catch (const bad_cmd_get& e) {
+  } catch (const TOPNSPC::common::bad_cmd_get& e) {
     cmdctx->reply(-EINVAL, e.what());
     return true;
   }
@@ -861,7 +861,7 @@ bool DaemonServer::_handle_command(
   std::stringstream ss;
   int r = 0;
 
-  if (!cmdmap_from_json(cmdctx->cmd, &(cmdctx->cmdmap), ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(cmdctx->cmd, &(cmdctx->cmdmap), ss)) {
     cmdctx->reply(-EINVAL, ss);
     return true;
   }
@@ -887,7 +887,7 @@ bool DaemonServer::_handle_command(
     auto dump_cmd = [&cmdnum, &f, m](const MonCommand &mc){
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(&f, m->get_connection()->get_features(),
+      TOPNSPC::common::dump_cmddesc_to_json(&f, m->get_connection()->get_features(),
                            secname.str(), mc.cmdstring, mc.helpstring,
                            mc.module, mc.req_perms, 0);
       cmdnum++;
@@ -918,7 +918,7 @@ bool DaemonServer::_handle_command(
     // handle it (if the command exists)
     auto py_commands = py_modules.get_py_commands();
     for (const auto &pyc : py_commands) {
-      auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
+      auto pyc_prefix = TOPNSPC::common::cmddesc_get_prefix(pyc.cmdstring);
       if (pyc_prefix == prefix) {
         py_command = pyc;
         break;
@@ -1081,7 +1081,7 @@ bool DaemonServer::_handle_command(
 	    }
 	});
     } else {
-      long osd = parse_osd_id(whostr.c_str(), &ss);
+      long osd = TOPNSPC::common::parse_osd_id(whostr.c_str(), &ss);
       if (osd < 0) {
 	ss << "invalid osd '" << whostr << "'";
 	cmdctx->reply(-EINVAL, ss);

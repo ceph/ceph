@@ -471,7 +471,7 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return preprocess_command(op);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -497,7 +497,7 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return prepare_command(op);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -764,7 +764,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   stringstream ss, ds;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -1295,7 +1295,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   int err = -EINVAL;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());

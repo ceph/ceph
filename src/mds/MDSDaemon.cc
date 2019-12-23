@@ -192,7 +192,7 @@ void MDSDaemon::asok_command(
       try {
 	mds_rank->handle_asok_command(command, cmdmap, f, inbl, on_finish);
 	return;
-      } catch (const bad_cmd_get& e) {
+      } catch (const TOPNSPC::common::bad_cmd_get& e) {
 	ss << e.what();
 	r = -EINVAL;
       }
@@ -620,7 +620,7 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
     r = -EINVAL;
     ss << "no command given";
     outs = ss.str();
-  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  } else if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     r = -EINVAL;
     outs = ss.str();
   } else {

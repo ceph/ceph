@@ -16,10 +16,10 @@
 #define CEPH_TIMER_H
 
 #include <map>
+#include "include/common_fwd.h"
 #include "ceph_time.h"
 #include "ceph_mutex.h"
 
-class CephContext;
 class Context;
 class SafeTimerThread;
 

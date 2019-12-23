@@ -372,7 +372,7 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
     case MSG_MON_COMMAND:
       try {
 	return preprocess_command(op);
-      } catch (const bad_cmd_get& e) {
+      } catch (const TOPNSPC::common::bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -395,7 +395,7 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
     case MSG_MON_COMMAND:
       try {
 	return prepare_command(op);
-      } catch (const bad_cmd_get& e) {
+      } catch (const TOPNSPC::common::bad_cmd_get& e) {
 	bufferlist bl;
 	mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
 	return true;
@@ -884,7 +884,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
@@ -1024,7 +1024,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   bufferlist rdata;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;

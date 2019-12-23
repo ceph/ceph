@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/common_fwd.h"
 #include "common/cmdparse.h"
 #include "common/Formatter.h"
 #include "common/debug.h"
@@ -22,6 +23,7 @@
  * Given a cmddesc like "foo baz name=bar,type=CephString",
  * return the prefix "foo baz".
  */
+namespace TOPNSPC::common {
 std::string cmddesc_get_prefix(const std::string_view &cmddesc)
 {
   string tmp(cmddesc); // FIXME: stringstream ctor can't take string_view :(
@@ -663,4 +665,4 @@ bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
   return false;
 }
 
-
+}

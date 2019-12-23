@@ -236,7 +236,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   prenautilus_local_mon_commands = local_mon_commands;
   for (auto& i : prenautilus_local_mon_commands) {
-    std::string n = cmddesc_get_prenautilus_compat(i.cmdstring);
+    std::string n = TOPNSPC::common::cmddesc_get_prenautilus_compat(i.cmdstring);
     if (n != i.cmdstring) {
       dout(20) << " pre-nautilus cmd " << i.cmdstring << " -> " << n << dendl;
       i.cmdstring = n;
@@ -294,7 +294,7 @@ int Monitor::do_admin_command(
       continue;
     if (!args.empty())
       args += ", ";
-    args += cmd_vartype_stringify(p->second);
+    args += TOPNSPC::common::cmd_vartype_stringify(p->second);
   }
   args = "[" + args + "]";
 
@@ -3059,7 +3059,7 @@ void Monitor::_generate_command_map(cmdmap_t& cmdmap,
 	continue;
       }
     }
-    param_str_map[p->first] = cmd_vartype_stringify(p->second);
+    param_str_map[p->first] = TOPNSPC::common::cmd_vartype_stringify(p->second);
   }
 }
 
@@ -3106,7 +3106,7 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
     unsigned flags = cmd.flags;
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-    dump_cmddesc_to_json(f, features, secname.str(),
+    TOPNSPC::common::dump_cmddesc_to_json(f, features, secname.str(),
 			 cmd.cmdstring, cmd.helpstring, cmd.module,
 			 cmd.req_perms, flags);
     cmdnum++;
@@ -3157,7 +3157,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
     // see if command is whitelisted
     cmdmap_t cmdmap;
     stringstream ss;
-    if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
       reply_command(op, -EINVAL, ss.str(), 0);
     }
     map<string,string> param_str_map;
@@ -3210,7 +3210,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   int r = -EINVAL;
   rs = "unrecognized command";
 
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     r = -EINVAL;
     rs = ss.str();

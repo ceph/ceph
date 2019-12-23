@@ -190,7 +190,7 @@ Connection::create_auth(crimson::auth::method_t protocol,
                         const EntityName& name,
                         uint32_t want_keys)
 {
-  static CephContext cct;
+  static crimson::common::CephContext cct;
   std::unique_ptr<AuthClientHandler> auth;
   auth.reset(AuthClientHandler::create(&cct,
                                        protocol,

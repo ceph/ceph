@@ -56,6 +56,7 @@ static const string MDS_HEALTH_PREFIX("mds_health");
  * Specialized implementation of cmd_getval to allow us to parse
  * out strongly-typedef'd types
  */
+namespace TOPNSPC::common {
 template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
 			   const std::string& k, mds_gid_t &val)
 {
@@ -73,7 +74,7 @@ template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
 {
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
-
+}
 // my methods
 
 template <int dblV>
@@ -290,7 +291,7 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return preprocess_command(op);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -513,7 +514,7 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return prepare_command(op);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -869,7 +870,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   const auto &fsmap = get_fsmap();
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -1236,7 +1237,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   bufferlist rdata;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
@@ -1334,13 +1335,13 @@ int MDSMonitor::filesystem_command(
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
-         << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
     }
     MDSMap::DaemonState state;
     if (!cmd_getval(g_ceph_context, cmdmap, "state", state)) {
       ss << "error parsing 'state' string value '"
-         << cmd_vartype_stringify(cmdmap.at("state")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("state")) << "'";
       return -EINVAL;
     }
     if (fsmap.gid_exists(gid)) {
@@ -1371,7 +1372,7 @@ int MDSMonitor::filesystem_command(
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
-         << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
     }
     if (!fsmap.gid_exists(gid)) {
@@ -1421,7 +1422,7 @@ int MDSMonitor::filesystem_command(
     int64_t f;
     if (!cmd_getval(g_ceph_context, cmdmap, "feature", f)) {
       ss << "error parsing feature value '"
-         << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
     }
     if (fsmap.compat.compat.contains(f)) {
@@ -1437,7 +1438,7 @@ int MDSMonitor::filesystem_command(
     int64_t f;
     if (!cmd_getval(g_ceph_context, cmdmap, "feature", f)) {
       ss << "error parsing feature value '"
-         << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
     }
     if (fsmap.compat.incompat.contains(f)) {

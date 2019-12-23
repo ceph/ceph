@@ -14,12 +14,12 @@
 #ifndef STRAY_MANAGER_H
 #define STRAY_MANAGER_H
 
+#include "include/common_fwd.h"
 #include "include/elist.h"
 #include <list>
 #include "mds/PurgeQueue.h"
 
 class MDSRank;
-class PerfCounters;
 class CInode;
 class CDentry;
 

@@ -2,8 +2,7 @@
 
 #include "common/perf_counters.h"
 #include "common/ceph_mutex.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 class PerfCountersCollection
 {

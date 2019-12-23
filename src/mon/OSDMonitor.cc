@@ -2591,7 +2591,7 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return preprocess_command(op);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -2668,7 +2668,7 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return prepare_command(op);
-    } catch (const bad_cmd_get& e) {
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -5233,7 +5233,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   stringstream ss, ds;
 
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
@@ -5494,7 +5494,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     int64_t osd;
     if (!cmd_getval(cct, cmdmap, "id", osd)) {
       ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap["id"]) << "'";
       r = -EINVAL;
       goto reply;
     }
@@ -5536,10 +5536,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "osd metadata") {
     int64_t osd = -1;
-    if (cmd_vartype_stringify(cmdmap["id"]).size() &&
+    if (TOPNSPC::common::cmd_vartype_stringify(cmdmap["id"]).size() &&
         !cmd_getval(cct, cmdmap, "id", osd)) {
       ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap["id"]) << "'";
       r = -EINVAL;
       goto reply;
     }
@@ -6564,7 +6564,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     map<int, string> class_by_osd;
     for (auto& id : idvec) {
       ostringstream ts;
-      long osd = parse_osd_id(id.c_str(), &ts);
+      long osd = TOPNSPC::common::parse_osd_id(id.c_str(), &ts);
       if (osd < 0) {
         ss << "unable to parse osd id:'" << id << "'";
         r = -EINVAL;
@@ -9216,7 +9216,7 @@ bool OSDMonitor::prepare_command(MonOpRequestRef op)
   auto m = op->get_req<MMonCommand>();
   stringstream ss;
   cmdmap_t cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
@@ -9600,7 +9600,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         stop = true;
       } else {
         // try traditional single osd way
-        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        long osd = TOPNSPC::common::parse_osd_id(idvec[j].c_str(), &ss);
         if (osd < 0) {
           // ss has reason for failure
           ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
@@ -9678,7 +9678,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         stop = true;
       } else {
         // try traditional single osd way
-        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        long osd = TOPNSPC::common::parse_osd_id(idvec[j].c_str(), &ss);
         if (osd < 0) {
           // ss has reason for failure
           ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
@@ -10099,7 +10099,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double weight;
     if (!cmd_getval(cct, cmdmap, "weight", weight)) {
       ss << "unable to parse weight value '"
-         << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -10168,7 +10168,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       double weight;
       if (!cmd_getval(cct, cmdmap, "weight", weight)) {
         ss << "unable to parse weight value '"
-           << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
+           << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("weight")) << "'";
         err = -EINVAL;
         goto reply;
       }
@@ -10450,7 +10450,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
-	 << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
+	 << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -10489,7 +10489,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
-	 << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
+	 << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -10557,7 +10557,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!cmd_getval(cct, cmdmap, "value", value)) {
       err = -EINVAL;
       ss << "failed to parse integer value "
-	 << cmd_vartype_stringify(cmdmap.at("value"));
+	 << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("value"));
       goto reply;
     }
 
@@ -10907,7 +10907,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t newmax;
     if (!cmd_getval(cct, cmdmap, "newmax", newmax)) {
       ss << "unable to parse 'newmax' value '"
-         << cmd_vartype_stringify(cmdmap.at("newmax")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("newmax")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -10949,7 +10949,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double n;
     if (!cmd_getval(cct, cmdmap, "ratio", n)) {
       ss << "unable to parse 'ratio' value '"
-         << cmd_vartype_stringify(cmdmap.at("ratio")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("ratio")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -11224,7 +11224,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         stop = true;
         verbose = false; // so the output is less noisy.
       } else {
-        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        long osd = TOPNSPC::common::parse_osd_id(idvec[j].c_str(), &ss);
         if (osd < 0) {
           ss << "invalid osd id" << osd;
           err = -EINVAL;
@@ -11406,7 +11406,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         break;
       }
       std::stringstream ts;
-      if (auto osd = parse_osd_id(w.c_str(), &ts); osd >= 0) {
+      if (auto osd = TOPNSPC::common::parse_osd_id(w.c_str(), &ts); osd >= 0) {
         osds.insert(osd);
       } else if (osdmap.crush->name_exists(w)) {
         crush_nodes.insert(osdmap.crush->get_item_id(w));
@@ -11504,7 +11504,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pgidstr;
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -11566,7 +11566,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pgidstr;
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -11585,7 +11585,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t osd;
     if (!cmd_getval(cct, cmdmap, "id", osd)) {
       ss << "unable to parse 'id' value '"
-         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -11673,7 +11673,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pgidstr;
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -11748,7 +11748,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         vector<int64_t> id_vec;
         if (!cmd_getval(cct, cmdmap, "id", id_vec)) {
           ss << "unable to parse 'id' value(s) '"
-             << cmd_vartype_stringify(cmdmap.at("id")) << "'";
+             << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("id")) << "'";
           err = -EINVAL;
           goto reply;
         }
@@ -11808,7 +11808,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         vector<int64_t> id_vec;
         if (!cmd_getval(cct, cmdmap, "id", id_vec)) {
           ss << "unable to parse 'id' value(s) '"
-             << cmd_vartype_stringify(cmdmap.at("id")) << "'";
+             << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("id")) << "'";
           err = -EINVAL;
           goto reply;
         }
@@ -11890,14 +11890,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
       ss << "invalid osd id value '"
-         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse 'weight' value '"
-	 << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
+	 << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -11931,14 +11931,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
-         << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -11965,7 +11965,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = parse_reweights(cct, cmdmap, osdmap, &weights);
     if (err) {
       ss << "unable to parse 'weights' value '"
-         << cmd_vartype_stringify(cmdmap.at("weights")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("weights")) << "'";
       goto reply;
     }
     pending_inc.new_weight.insert(weights.begin(), weights.end());
@@ -11977,7 +11977,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -12036,7 +12036,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "no osd id specified";
       } else {
 	ss << "unable to parse osd id value '"
-	   << cmd_vartype_stringify(cmdmap.at("id")) << "";
+	   << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("id")) << "";
       }
       err = -EINVAL;
       goto reply;
@@ -13055,7 +13055,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t size = 0;
     if (!cmd_getval(cct, cmdmap, "size", size)) {
       ss << "unable to parse 'size' value '"
-         << cmd_vartype_stringify(cmdmap.at("size")) << "'";
+         << TOPNSPC::common::cmd_vartype_stringify(cmdmap.at("size")) << "'";
       err = -EINVAL;
       goto reply;
     }
