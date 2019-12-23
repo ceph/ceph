@@ -115,6 +115,14 @@ public:
                    SnapInfo{snap_name, ns, 0, {}, 0, 0, {}}}).second);
   }
 
+  void expect_clone_md_ctx(MockTestImageCtx &mock_image_ctx) {
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx), clone())
+      .WillOnce(Invoke([&mock_image_ctx]() {
+                         get_mock_io_ctx(mock_image_ctx.md_ctx).get();
+                         return &get_mock_io_ctx(mock_image_ctx.md_ctx);
+                       }));
+  }
+
   void expect_refresh_image(MockTestImageCtx &mock_image_ctx,
                             bool refresh_required, int r) {
     EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
@@ -216,6 +224,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, Success) {
 
   InSequence seq;
 
+  expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
@@ -244,6 +253,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, RefreshError) {
 
   InSequence seq;
 
+  expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, -EINVAL);
 
   C_SaferCond ctx;
@@ -263,6 +273,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, GetMirrorImageError) {
 
   InSequence seq;
 
+  expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, false, 0);
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
@@ -285,6 +296,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, CanNotError) {
 
   InSequence seq;
 
+  expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
@@ -309,6 +321,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, GetMirrorPeersError) {
 
   InSequence seq;
 
+  expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
@@ -336,6 +349,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, CreateSnapshotError) {
 
   InSequence seq;
 
+  expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
@@ -369,6 +383,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPeer) {
 
   InSequence seq;
 
+  expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
