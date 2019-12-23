@@ -157,6 +157,7 @@ inline namespace v15_2_0 {
    */
   ceph::unique_leakable_ptr<raw> copy(const char *c, unsigned len);
   ceph::unique_leakable_ptr<raw> create(unsigned len);
+  ceph::unique_leakable_ptr<raw> create(unsigned len, char c);
   ceph::unique_leakable_ptr<raw> create_in_mempool(unsigned len, int mempool);
   ceph::unique_leakable_ptr<raw> claim_char(unsigned len, char *buf);
   ceph::unique_leakable_ptr<raw> create_malloc(unsigned len);
