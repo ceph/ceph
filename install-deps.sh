@@ -139,7 +139,7 @@ function install_pkg_on_ubuntu {
 	missing_pkgs="$@"
     else
 	for pkg in $pkgs; do
-	    if ! dpkg -s $pkg &> /dev/null; then
+	    if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
 		missing_pkgs+=" $pkg"
 	    fi
 	done
@@ -154,7 +154,7 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     local codename=$1
-    if dpkg -s ceph-libboost1.67-dev &> /dev/null; then
+    if apt -qq list ceph-libboost1.67-dev 2>/dev/null | grep -q installed; then
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.67.*'
 	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.67.list
     fi
