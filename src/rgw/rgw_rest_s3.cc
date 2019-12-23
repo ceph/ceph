@@ -1858,10 +1858,11 @@ int RGWPutObj_ObjStore_S3::get_params()
   append = s->info.args.exists("append");
   if (append) {
     string pos_str = s->info.args.get("position");
-    if (pos_str.empty()) {
+    string err;
+    position = (uint64_t)strict_strtoll(pos_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 10) << "bad position: " << pos_str << ": " << err << dendl;
       return -EINVAL;
-    } else {
-      position = strtoull(pos_str.c_str(), NULL, 10);
     }
   }
   
