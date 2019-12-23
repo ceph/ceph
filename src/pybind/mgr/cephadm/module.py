@@ -22,6 +22,7 @@ import subprocess
 
 from ceph.deployment import inventory
 from mgr_module import MgrModule
+import mgr_util
 import orchestrator
 from orchestrator import OrchestratorError, HostSpec, OrchestratorValidationError
 
