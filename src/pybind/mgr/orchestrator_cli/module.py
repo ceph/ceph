@@ -575,10 +575,10 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator service',
-        "name=action,type=CephChoices,strings=start|stop|reload|restart|redeploy "
+        "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
         "name=svc_type,type=CephString "
         "name=svc_name,type=CephString",
-        'Start, stop or reload an entire service (i.e. all daemons)')
+        'Start, stop, restart, redeploy, or reconfig an entire service (i.e. all daemons)')
     def _service_action(self, action, svc_type, svc_name):
         completion = self.service_action(action, svc_type, service_name=svc_name)
         self._orchestrator_wait([completion])
@@ -587,10 +587,10 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator service-instance',
-        "name=action,type=CephChoices,strings=start|stop|reload|restart|redeploy "
+        "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
         "name=svc_type,type=CephString "
         "name=svc_id,type=CephString",
-        'Start, stop or reload a specific service instance')
+        'Start, stop, restart, redeploy, or reconfig a specific service instance')
     def _service_instance_action(self, action, svc_type, svc_id):
         completion = self.service_action(action, svc_type, service_id=svc_id)
         self._orchestrator_wait([completion])
