@@ -8,7 +8,7 @@ tasks:
       - image_size: 30720
       - image_size: 30720
       test: qa/workunits/rbd/run_devstack_tempest.sh
-      image_url: https://cloud-images.ubuntu.com/releases/18.04/release/ubuntu-18.04-server-cloudimg-amd64-disk1.img
+      image_url: https://cloud-images.ubuntu.com/releases/18.04/release/ubuntu-18.04-server-cloudimg-amd64.img
       cloud_config_archive:
       - type: text/cloud-config
         content: |
