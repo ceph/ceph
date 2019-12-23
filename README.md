@@ -1,6 +1,6 @@
 # Ceph - a scalable distributed storage system
 
-Please see http://ceph.com/ for current info.
+Please see http://ceph.io/ for current info.
 
 
 ## Contributing Code
