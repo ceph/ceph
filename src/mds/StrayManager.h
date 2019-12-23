@@ -81,18 +81,18 @@ public:
   void migrate_stray(CDentry *dn, mds_rank_t dest);
 
   /**
-   * Update stats to reflect a newly created stray dentry.  Needed
+   * Update stats to reflect a newly created stray dentry. Needed
    * because stats on strays live here, but creation happens
-   * in Server or MDCache.  For our purposes "creation" includes
+   * in Server or MDCache. For our purposes "creation" includes
    * loading a stray from a dirfrag and migrating a stray from
    * another MDS, in addition to creations per-se.
    */
   void notify_stray_created();
 
   /**
-   * Update stats to reflect a removed stray dentry.  Needed because
+   * Update stats to reflect a removed stray dentry. Needed because
    * stats on strays live here, but removal happens in Server or
-   * MDCache.  Also includes migration (rename) of strays from
+   * MDCache. Also includes migration (rename) of strays from
    * this MDS to another MDS.
    */
   void notify_stray_removed();
@@ -111,9 +111,9 @@ protected:
   void truncate(CDentry *dn);
 
   /**
-   * Purge a dentry from a stray directory.  This function
+   * Purge a dentry from a stray directory. This function
    * is called once eval_stray is satisfied and StrayManager
-   * throttling is also satisfied.  There is no going back
+   * throttling is also satisfied. There is no going back
    * at this stage!
    */
   void purge(CDentry *dn);
@@ -130,13 +130,15 @@ protected:
    * reflecting it's newly-zeroed length.
    */
   void _truncate_stray_logged(CDentry *dn, LogSegment *ls);
-
-  // Call this on a dentry that has been identified as
-  // eligible for purging.  It will be passed on to PurgeQueue.
+  /**
+   * Call this on a dentry that has been identified as
+   * eligible for purging. It will be passed on to PurgeQueue.
+   */
   void enqueue(CDentry *dn, bool trunc);
-
-  // Final part of enqueue() which we may have to retry
-  // after opening snap parents.
+  /**
+   * Final part of enqueue() which we may have to retry
+   * after opening snap parents.
+   */
   void _enqueue(CDentry *dn, bool trunc);
 
   /**
@@ -184,13 +186,12 @@ protected:
 
   // Stray dentries
   uint64_t num_strays_delayed;
-
-  // Entries that have entered enqueue() but not been persistently
-  // recorded by PurgeQueue yet
+  /**
+   * Entries that have entered enqueue() but not been persistently
+   * recorded by PurgeQueue yet
+   */
   uint64_t num_strays_enqueuing;
 
   PurgeQueue &purge_queue;
-
 };
-
 #endif  // STRAY_MANAGER_H
