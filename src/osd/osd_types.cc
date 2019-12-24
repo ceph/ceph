@@ -4488,9 +4488,9 @@ void ObjectModDesc::decode(ceph::buffer::list::const_iterator &_bl)
   DECODE_FINISH(_bl);
 }
 
-std::atomic<int32_t> ObjectCleanRegions::max_num_intervals = {10};
+std::atomic<uint32_t> ObjectCleanRegions::max_num_intervals = {10};
 
-void ObjectCleanRegions::set_max_num_intervals(int32_t num)
+void ObjectCleanRegions::set_max_num_intervals(uint32_t num)
 {
   max_num_intervals = num;
 }

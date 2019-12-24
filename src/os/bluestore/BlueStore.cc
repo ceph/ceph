@@ -9961,7 +9961,7 @@ int BlueStore::fiemap(
   interval_set<uint64_t> m;
   int r = _fiemap(c_, oid, offset, length, m);
   if (r >= 0) {
-    m.move_into(destmap);
+    destmap = std::move(m).detach();
   }
   return r;
 }
