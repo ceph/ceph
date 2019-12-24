@@ -3,6 +3,7 @@
 #include <ifaddrs.h>
 #include <stdlib.h>
 #include <string.h>
+#include<regex>
 #if defined(__FreeBSD__)
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -12,7 +13,6 @@
 #include "include/ipaddr.h"
 #include "msg/msg_types.h"
 #include "common/pick_address.h"
-#include<regex>
 void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
 			 struct in_addr *out) {
