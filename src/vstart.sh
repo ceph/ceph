@@ -839,6 +839,14 @@ start_osd() {
     local osds_wait
     for osd in `seq $start $end`
     do
+	local extra_seastar_args
+	if [ "$ceph_osd" == "crimson-osd" ]; then
+	    # designate a single CPU node $osd for osd.$osd
+	    extra_seastar_args="--smp 1 --cpuset $osd"
+	    if [ "$debug" -ne 0 ]; then
+		extra_seastar_args+=" --debug"
+	    fi
+	fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
 [osd.$osd]
@@ -875,7 +883,7 @@ EOF
             echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
             rm $CEPH_DEV_DIR/osd$osd/new.json
-            $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
+            $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             cat > $key_fn<<EOF
@@ -884,14 +892,6 @@ EOF
 EOF
         fi
         echo start osd.$osd
-        local extra_seastar_args
-        if [ "$ceph_osd" == "crimson-osd" ]; then
-            # designate a single CPU node $osd for osd.$osd
-            extra_seastar_args="--smp 1 --cpuset $osd"
-            if [ "$debug" -ne 0 ]; then
-              extra_seastar_args+=" --debug"
-            fi
-        fi
         local osd_pid
         run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
             $extra_seastar_args $extra_osd_args \
