@@ -658,7 +658,8 @@ class btree_node {
 
   // Inserts the value x at position i, shifting all existing values and
   // children at positions >= i to the right by 1.
-  void insert_value(int i, const value_type &x);
+  template<typename Value>
+  void insert_value(int i, Value&& x);
 
   // Removes the value at position i, shifting all existing values and children
   // at positions > i to the left by 1.
@@ -723,6 +724,9 @@ class btree_node {
   }
   void value_init(int i, const value_type &x) {
     new (&fields_.values[i]) mutable_value_type(x);
+  }
+  void value_init(int i, value_type&& x) {
+    new (&fields_.values[i]) mutable_value_type(std::move(x));
   }
   void value_destroy(int i) {
     fields_.values[i].~mutable_value_type();
@@ -1016,7 +1020,8 @@ class btree : public Params::key_compare {
   // before position in the tree. If it does, then the insertion will take
   // amortized constant time. If not, the insertion will take amortized
   // logarithmic time as if a call to insert_unique(v) were made.
-  iterator insert_unique(iterator position, const value_type &v);
+  template <typename Value>
+  iterator insert_unique(iterator position, Value&& v);
 
   // Insert a range of values into the btree.
   template <typename InputIterator>
@@ -1305,7 +1310,8 @@ class btree : public Params::key_compare {
 
   // Inserts a value into the btree immediately before iter. Requires that
   // key(v) <= iter.key() and (--iter).key() <= key(v).
-  iterator internal_insert(iterator iter, const value_type &v);
+  template<typename Value>
+  iterator internal_insert(iterator iter, Value&& v);
 
   // Returns an iterator pointing to the first value >= the value "iter" is
   // pointing at. Note that "iter" might be pointing to an invalid location as
@@ -1419,9 +1425,10 @@ class btree : public Params::key_compare {
 ////
 // btree_node methods
 template <typename P>
-inline void btree_node<P>::insert_value(int i, const value_type &x) {
+template <typename Value>
+inline void btree_node<P>::insert_value(int i, Value&& x) {
   ceph_assert(i <= count());
-  value_init(count(), x);
+  value_init(count(), std::forward<Value>(x));
   for (int j = count(); j > i; --j) {
     value_swap(j, this, j - 1);
   }
@@ -1763,8 +1770,9 @@ btree<P>::insert_unique(const key_type &key, ValuePointer value) {
 }
 
 template <typename P>
+template <typename Value>
 inline typename btree<P>::iterator
-btree<P>::insert_unique(iterator position, const value_type &v) {
+btree<P>::insert_unique(iterator position, Value&& v) {
   if (!empty()) {
     const key_type &key = params_type::key(v);
     if (position == end() || compare_keys(key, position.key())) {
@@ -1785,7 +1793,7 @@ btree<P>::insert_unique(iterator position, const value_type &v) {
       return position;
     }
   }
-  return insert_unique(v).first;
+  return insert_unique(std::forward<Value>(v)).first;
 }
 
 template <typename P> template <typename InputIterator>
@@ -2197,8 +2205,9 @@ inline IterType btree<P>::internal_last(IterType iter) {
 }
 
 template <typename P>
+template <typename Value>
 inline typename btree<P>::iterator
-btree<P>::internal_insert(iterator iter, const value_type &v) {
+btree<P>::internal_insert(iterator iter, Value&& v) {
   if (!iter.node->leaf()) {
     // We can't insert on an internal node. Instead, we'll insert after the
     // previous value which is guaranteed to be on a leaf node.
@@ -2223,7 +2232,7 @@ btree<P>::internal_insert(iterator iter, const value_type &v) {
   } else if (!root()->leaf()) {
     ++*mutable_size();
   }
-  iter.node->insert_value(iter.position, v);
+  iter.node->insert_value(iter.position, std::forward<Value>(v));
   return iter;
 }
 
