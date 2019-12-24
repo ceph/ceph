@@ -326,6 +326,9 @@ class _Promise(object):
         Sets the whole completion to be faild with this exception and end the
         evaluation.
         """
+        if self._state == self.FINISHED:
+            raise ValueError(
+                'Invalid State: called fail, but Completion is already finished: {}'.format(str(e)))
         assert self._state in (self.INITIALIZED, self.RUNNING)
         logger.exception('_Promise failed')
         self._exception = e
