@@ -155,10 +155,9 @@ struct btree_key_compare_to_tag {
 
 // A helper class that indicates if the Compare parameter is derived from
 // btree_key_compare_to_tag.
-template <typename Compare>
-struct btree_is_key_compare_to
-    : public std::is_convertible<Compare, btree_key_compare_to_tag> {
-};
+template<typename Compare>
+inline constexpr bool btree_is_key_compare_to_v =
+  std::is_convertible_v<Compare, btree_key_compare_to_tag>;
 
 // A helper class to convert a boolean comparison into a three-way
 // "compare-to" comparison that returns a negative value to indicate
@@ -241,7 +240,7 @@ template <typename Key, typename Compare>
 static bool btree_compare_keys(
     const Compare &comp, const Key &x, const Key &y) {
   typedef btree_key_comparer<Key, Compare,
-      btree_is_key_compare_to<Compare>::value> key_comparer;
+      btree_is_key_compare_to_v<Compare>> key_comparer;
   return key_comparer::bool_compare(comp, x, y);
 }
 
@@ -252,11 +251,11 @@ struct btree_common_params {
   // key_compare type. Otherwise, use btree_key_compare_to_adapter<> which will
   // fall-back to Compare if we don't have an appropriate specialization.
   using key_compare = std::conditional_t<
-    btree_is_key_compare_to<Compare>::value,
+    btree_is_key_compare_to_v<Compare>,
     Compare, btree_key_compare_to_adapter<Compare> >;
   // A type which indicates if we have a key-compare-to functor or a plain old
   // key-compare functor.
-  typedef btree_is_key_compare_to<key_compare> is_key_compare_to;
+  static constexpr bool is_key_compare_to = btree_is_key_compare_to_v<key_compare>;
 
   typedef Alloc allocator_type;
   typedef Key key_type;
@@ -429,13 +428,13 @@ class btree_node {
   // If we have a valid key-compare-to type, use linear_search_compare_to,
   // otherwise use linear_search_plain_compare.
   using linear_search_type = std::conditional_t<
-    Params::is_key_compare_to::value,
+    Params::is_key_compare_to,
     linear_search_compare_to_type,
     linear_search_plain_compare_type>;
   // If we have a valid key-compare-to type, use binary_search_compare_to,
   // otherwise use binary_search_plain_compare.
   using binary_search_type = std::conditional_t<
-    Params::is_key_compare_to::value,
+    Params::is_key_compare_to,
     binary_search_compare_to_type,
     binary_search_plain_compare_type>;
   // If the key is an integral or floating point type, use linear search which
@@ -845,12 +844,12 @@ class btree : public Params::key_compare {
   typedef typename node_type::leaf_fields leaf_fields;
   typedef typename node_type::internal_fields internal_fields;
   typedef typename node_type::root_fields root_fields;
-  typedef typename Params::is_key_compare_to is_key_compare_to;
+  static constexpr bool is_key_compare_to = Params::is_key_compare_to;
 
   friend class btree_internal_locate_plain_compare;
   friend class btree_internal_locate_compare_to;
   using internal_locate_type = std::conditional_t<
-    is_key_compare_to::value,
+    is_key_compare_to,
     btree_internal_locate_compare_to,
     btree_internal_locate_plain_compare>;
 
@@ -1372,7 +1371,7 @@ class btree : public Params::key_compare {
   // key-compare-to functor or if R is bool and small_ otherwise.
   template <typename R>
   static std::conditional_t<
-   (is_key_compare_to::value ?
+   (is_key_compare_to ?
     std::is_same_v<R, int> :
     std::is_same_v<R, bool>),
    big_, small_> key_compare_checker(R);
