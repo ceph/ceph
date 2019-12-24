@@ -165,7 +165,7 @@ create_self_managed_snapshot() {
   ID=$1
   POOL=$2
 
-  cat << EOF | CEPH_ARGS="-k $KEYRING" python
+  cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
 cluster = rados.Rados(conffile="", rados_id="${ID}")
@@ -181,7 +181,7 @@ remove_self_managed_snapshot() {
   ID=$1
   POOL=$2
 
-  cat << EOF | CEPH_ARGS="-k $KEYRING" python
+  cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
 cluster1 = rados.Rados(conffile="", rados_id="mon_write")
