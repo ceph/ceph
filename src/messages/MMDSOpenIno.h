@@ -15,19 +15,19 @@
 #ifndef CEPH_MDSOPENINO_H
 #define CEPH_MDSOPENINO_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MMDSOpenIno : public SafeMessage {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMDSOpenIno : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   inodeno_t ino;
   std::vector<inode_backpointer_t> ancestors;
 
 protected:
-  MMDSOpenIno() : SafeMessage{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSOpenIno() : MMDSOp{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSOpenIno(ceph_tid_t t, inodeno_t i, std::vector<inode_backpointer_t>* pa) :
-    SafeMessage{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION}, ino(i) {
+    MMDSOp{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION}, ino(i) {
     header.tid = t;
     if (pa)
       ancestors = *pa;
