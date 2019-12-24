@@ -6,6 +6,8 @@ import logging
 import gevent
 from teuthology import misc as teuthology
 
+import six
+
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
@@ -229,7 +231,7 @@ def task(ctx, config):
             existing_pools = config.get('pools', [])
             created_pools = []
             for role in config.get('clients', clients):
-                assert isinstance(role, basestring)
+                assert isinstance(role, six.string_types)
                 PREFIX = 'client.'
                 assert role.startswith(PREFIX)
                 id_ = role[len(PREFIX):]

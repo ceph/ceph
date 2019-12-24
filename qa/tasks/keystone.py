@@ -135,7 +135,7 @@ def setup_venv(ctx, config):
     for (client, _) in config.items():
         run_in_keystone_dir(ctx, client,
             [   'source',
-		'{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
+                '{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
                 run.Raw('&&'),
                 'tox', '-e', 'venv', '--notest'
             ])
@@ -147,7 +147,7 @@ def setup_venv(ctx, config):
     try:
         yield
     finally:
-	pass
+        pass
 
 @contextlib.contextmanager
 def configure_instance(ctx, config):

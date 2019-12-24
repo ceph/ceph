@@ -78,9 +78,9 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
-    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
+    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in range(20)))
     s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
-    s3tests_conf[section].setdefault('totp_serial', ''.join(random.choice(string.digits) for i in xrange(10)))
+    s3tests_conf[section].setdefault('totp_serial', ''.join(random.choice(string.digits) for i in range(10)))
     s3tests_conf[section].setdefault('totp_seed', base64.b32encode(os.urandom(40)))
     s3tests_conf[section].setdefault('totp_seconds', '5')
 
@@ -218,7 +218,7 @@ def configure(ctx, config):
 
         slow_backend = properties.get('slow_backend')
         if slow_backend:
-	    s3tests_conf['fixtures']['slow backend'] = slow_backend
+            s3tests_conf['fixtures']['slow backend'] = slow_backend
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
@@ -240,7 +240,7 @@ def configure(ctx, config):
     log.info('Configuring boto...')
     boto_src = os.path.join(os.path.dirname(__file__), 'boto.cfg.template')
     for client, properties in config['clients'].items():
-        with file(boto_src, 'rb') as f:
+        with open(boto_src, 'rb') as f:
             (remote,) = ctx.cluster.only(client).remotes.keys()
             conf = f.read().format(
                 idle_timeout=config.get('idle_timeout', 30)
