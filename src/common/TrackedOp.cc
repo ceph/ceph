@@ -294,7 +294,15 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
 
   const utime_t now = ceph_clock_now();
   utime_t oldest_op = now;
-  uint64_t total_ops_in_flight = 0;
+  // single representation of all inflight operations reunified
+  // from OpTracker's shards. TrackedOpRef extends the lifetime
+  // to carry the ops outside of the critical section, and thus
+  // allows to call the visitor without any lock being held.
+  // This simplifies the contract on API at the price of plenty
+  // additional moves and atomic ref-counting. This seems OK as
+  // `visit_ops_in_flight()` is definitely not intended for any
+  // hot path.
+  std::vector<TrackedOpRef> ops_in_flight;
 
   std::shared_lock l{lock};
   for (const auto sdata : sharded_in_flight_list) {
@@ -307,26 +315,29 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
         oldest_op = oldest_op_tmp;
       }
     }
-    total_ops_in_flight += sdata->ops_in_flight_sharded.size();
+    std::transform(std::begin(sdata->ops_in_flight_sharded),
+                   std::end(sdata->ops_in_flight_sharded),
+                   std::back_inserter(ops_in_flight),
+                   [] (TrackedOp& op) { return TrackedOpRef(&op); });
   }
-  if (!total_ops_in_flight)
+  if (ops_in_flight.empty())
     return false;
   *oldest_secs = now - oldest_op;
-  dout(10) << "ops_in_flight.size: " << total_ops_in_flight
+  dout(10) << "ops_in_flight.size: " << ops_in_flight.size()
            << "; oldest is " << *oldest_secs
            << " seconds old" << dendl;
 
   if (*oldest_secs < complaint_time)
     return false;
 
-  for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
-    ShardedTrackingData* sdata = sharded_in_flight_list[iter];
-    ceph_assert(NULL != sdata);
-    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
-    for (auto& op : sdata->ops_in_flight_sharded) {
-      if (!visit(op))
-	break;
-    }
+  l.unlock();
+  for (auto& op : ops_in_flight) {
+    // `lock` neither `ops_in_flight_lock_sharded` should be held when
+    // calling the visitor. Otherwise `OSD::get_health_metrics()` can
+    // dead-lock due to the `~TrackedOp()` calling `record_history_op()`
+    // or `unregister_inflight_op()`.
+    if (!visit(*op))
+      break;
   }
   return true;
 }
