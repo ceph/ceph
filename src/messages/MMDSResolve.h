@@ -15,15 +15,13 @@
 #ifndef CEPH_MMDSRESOLVE_H
 #define CEPH_MMDSRESOLVE_H
 
-#include "msg/Message.h"
-
 #include "include/types.h"
-
 #include "mds/Capability.h"
+#include "messages/MMDSOp.h"
 
-class MMDSResolve : public SafeMessage {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMDSResolve : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   std::map<dirfrag_t, std::vector<dirfrag_t>> subtrees;
@@ -96,7 +94,7 @@ public:
   std::list<table_client> table_clients;
 
 protected:
-  MMDSResolve() : SafeMessage{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
+  MMDSResolve() : MMDSOp{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
  {}
   ~MMDSResolve() override {}
 

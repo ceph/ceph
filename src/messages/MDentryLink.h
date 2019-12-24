@@ -18,12 +18,12 @@
 
 #include <string_view>
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MDentryLink : public SafeMessage {
+class MDentryLink : public MMDSOp {
 private:
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
   
   dirfrag_t subtree;
   dirfrag_t dirfrag;
@@ -40,9 +40,9 @@ private:
 
 protected:
   MDentryLink() :
-    SafeMessage(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION) { }
+    MMDSOp(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION) { }
   MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
-    SafeMessage(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION),
+    MMDSOp(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION),
     subtree(r),
     dirfrag(df),
     dn(n),

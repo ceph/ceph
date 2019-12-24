@@ -16,9 +16,9 @@
 #ifndef CEPH_MDIRUPDATE_H
 #define CEPH_MDIRUPDATE_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MDirUpdate : public SafeMessage {
+class MDirUpdate : public MMDSOp {
 public:
   mds_rank_t get_source_mds() const { return from_mds; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
@@ -58,19 +58,19 @@ public:
 
 protected:
   ~MDirUpdate() {}
-  MDirUpdate() : SafeMessage(MSG_MDS_DIRUPDATE, HEAD_VERSION, COMPAT_VERSION) {}
+  MDirUpdate() : MMDSOp(MSG_MDS_DIRUPDATE, HEAD_VERSION, COMPAT_VERSION) {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,
              int dir_rep,
              const std::set<int32_t>& dir_rep_by,
              filepath& path,
              bool discover = false) :
-    SafeMessage(MSG_MDS_DIRUPDATE, HEAD_VERSION, COMPAT_VERSION), from_mds(f), dirfrag(dirfrag),
+    MMDSOp(MSG_MDS_DIRUPDATE, HEAD_VERSION, COMPAT_VERSION), from_mds(f), dirfrag(dirfrag),
     dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
     this->discover = discover ? 5 : 0;
   }
   MDirUpdate(const MDirUpdate& m)
-  : SafeMessage{MSG_MDS_DIRUPDATE},
+  : MMDSOp{MSG_MDS_DIRUPDATE},
     from_mds(m.from_mds),
     dirfrag(m.dirfrag),
     dir_rep(m.dir_rep),
@@ -89,8 +89,8 @@ protected:
   mutable int tried_discover = 0; // XXX HACK
 
 private:
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
