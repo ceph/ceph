@@ -803,7 +803,6 @@ int main(int argc, char **argv) {
   } else if (cmd == "get") {
     unsigned v = 0;
     string outpath;
-    bool readable = false;
     string map_type;
     // visible options for this command
     po::options_description op_desc("Allowed 'get' options");
@@ -813,8 +812,7 @@ int main(int argc, char **argv) {
        "output file (default: stdout)")
       ("version,v", po::value<unsigned>(&v),
        "map version to obtain")
-      ("readable,r", po::value<bool>(&readable)->default_value(false),
-       "print the map information in human readable format")
+      ("readable,r", "print the map information in human readable format")
       ;
     // this is going to be a positional argument; we don't want to show
     // it as an option during --help, but we do want to have it captured
@@ -888,7 +886,7 @@ int main(int argc, char **argv) {
       goto done;
     }
 
-    if (readable) {
+    if (op_vm.count("readable")) {
       stringstream ss;
       bufferlist out;
       try {
