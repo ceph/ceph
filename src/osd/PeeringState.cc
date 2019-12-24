@@ -5366,7 +5366,14 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
   ps->state_clear(PG_STATE_FORCED_RECOVERY);
   pl->cancel_local_background_io_reservation();
   pl->publish_stats_to_osd();
-  // XXX: Is this needed?
+  // transit any async_recovery_targets back into acting
+  // so pg won't have to stay undersized for long
+  // as backfill might take a long time to complete..
+  if (!ps->async_recovery_targets.empty()) {
+    pg_shard_t auth_log_shard;
+    bool history_les_bound = false;
+    ps->choose_acting(auth_log_shard, true, &history_les_bound);
+  }
   return transit<WaitLocalBackfillReserved>();
 }
 
