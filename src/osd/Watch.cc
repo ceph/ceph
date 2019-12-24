@@ -192,9 +192,13 @@ void Notify::maybe_complete_notify()
     encode(missed, bl);
 
     bufferlist empty;
-    MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
-					 CEPH_WATCH_EVENT_NOTIFY_COMPLETE, empty));
-    reply->notifier_gid = client_gid;
+    auto* const reply = new MWatchNotify(
+      cookie,
+      version,
+      notify_id,
+      CEPH_WATCH_EVENT_NOTIFY_COMPLETE,
+      empty,
+      client_gid);
     reply->set_data(bl);
     if (timed_out)
       reply->return_code = -ETIMEDOUT;
@@ -473,9 +477,12 @@ void Watch::send_notify(NotifyRef notif)
 {
   dout(10) << "send_notify" << dendl;
   MWatchNotify *notify_msg = new MWatchNotify(
-    cookie, notif->version, notif->notify_id,
-    CEPH_WATCH_EVENT_NOTIFY, notif->payload);
-  notify_msg->notifier_gid = notif->client_gid;
+    cookie,
+    notif->version,
+    notif->notify_id,
+    CEPH_WATCH_EVENT_NOTIFY,
+    notif->payload,
+    notif->client_gid);
   conn->send_message(notify_msg);
 }
 
