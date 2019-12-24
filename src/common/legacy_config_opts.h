@@ -630,9 +630,6 @@ OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergen
 // decode the object, any error will be reported.
 OPTION(osd_read_ec_check_for_errors, OPT_BOOL) // return error if any ec shard has an error
 
-// Only use clone_overlap for recovery if there are fewer than
-// osd_recover_clone_overlap_limit entries in the overlap set
-OPTION(osd_recover_clone_overlap_limit, OPT_INT)
 OPTION(osd_debug_feed_pullee, OPT_INT)
 
 OPTION(osd_backfill_scan_min, OPT_INT)

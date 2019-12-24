@@ -5601,7 +5601,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     }
 
     bufferlist data_bl;
-    r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
+    r = pgbackend->objects_readv_sync(soid, std::move(m), op.flags, &data_bl);
     if (r == -EIO) {
       r = rep_repair_primary_object(soid, ctx);
     }
