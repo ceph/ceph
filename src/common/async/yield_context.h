@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <boost/range/begin.hpp>
+#include <boost/range/end.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include "acconfig.h"
