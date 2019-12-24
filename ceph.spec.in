@@ -279,20 +279,20 @@ BuildRequires:	lz4-devel >= 1.7
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
-%if 0%{?fedora} || 0%{?rhel} == 7
-BuildRequires:	python%{_python_buildid}-cherrypy
 BuildRequires:	python%{_python_buildid}-coverage
-BuildRequires:	python%{_python_buildid}-jwt
-BuildRequires:	python%{_python_buildid}-routes
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-tox
-BuildRequires:	python%{_python_buildid}-werkzeug
 BuildRequires:  xmlsec1
 %if 0%{?rhel} == 7
 BuildRequires:  pyOpenSSL%{_python_buildid}
 %else
 BuildRequires:  python%{_python_buildid}-pyOpenSSL
 %endif
+BuildRequires:	python%{_python_buildid}-jwt
+BuildRequires:	python%{_python_buildid}-werkzeug
+%if 0%{?fedora} || 0%{?rhel} == 7
+BuildRequires:	python%{_python_buildid}-cherrypy
+BuildRequires:	python%{_python_buildid}-routes
 %endif
 %endif
 %if 0%{?suse_version}
