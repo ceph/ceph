@@ -62,8 +62,6 @@ This module reads hints about search locations from variables::
    (or BOOSTROOT)
   BOOST_INCLUDEDIR       - Preferred include directory e.g. <prefix>/include
   BOOST_LIBRARYDIR       - Preferred library directory e.g. <prefix>/lib
-  BOOST_PYTHON_SUFFIX    - Preferred Python version
-
   Boost_NO_SYSTEM_PATHS  - Set to ON to disable searching in locations not
                            specified by these hint variables. Default is OFF.
   Boost_ADDITIONAL_VERSIONS
@@ -421,9 +419,6 @@ function(_boost_set_legacy_variables_from_config)
   endif()
 endfunction()
 
-# https://gitlab.kitware.com/cmake/cmake/issues/18865
-set(Boost_NO_BOOST_CMAKE ON CACHE BOOL "Disable the search for boost-cmake")
-
 #-------------------------------------------------------------------------------
 # Before we go searching, check whether a boost cmake package is available, unless
 # the user specifically asked NOT to search for one.
@@ -454,6 +449,9 @@ if (NOT Boost_NO_BOOST_CMAKE)
     # Convert component found variables to standard variables if required
     # Necessary for legacy boost-cmake and 1.70 builtin BoostConfig
     if(Boost_FIND_COMPONENTS)
+      # Ignore the meta-component "ALL", introduced by Boost 1.73
+      list(REMOVE_ITEM Boost_FIND_COMPONENTS "ALL")
+
       foreach(_comp IN LISTS Boost_FIND_COMPONENTS)
         if(DEFINED Boost_${_comp}_FOUND)
           continue()
@@ -1131,7 +1129,7 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
     set(_Boost_TIMER_DEPENDENCIES chrono system)
     set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono date_time atomic)
     set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
-  elseif(NOT Boost_VERSION_STRING VERSION_LESS 1.70.0)
+  elseif(NOT Boost_VERSION_STRING VERSION_LESS 1.70.0 AND Boost_VERSION_STRING VERSION_LESS 1.72.0)
     set(_Boost_CONTRACT_DEPENDENCIES thread chrono date_time)
     set(_Boost_COROUTINE_DEPENDENCIES context)
     set(_Boost_FIBER_DEPENDENCIES context)
@@ -1145,7 +1143,21 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
     set(_Boost_TIMER_DEPENDENCIES chrono)
     set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono date_time atomic)
     set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
-    if(NOT Boost_VERSION_STRING VERSION_LESS 1.72.0)
+  elseif(NOT Boost_VERSION_STRING VERSION_LESS 1.72.0)
+    set(_Boost_CONTRACT_DEPENDENCIES thread chrono date_time)
+    set(_Boost_COROUTINE_DEPENDENCIES context)
+    set(_Boost_FIBER_DEPENDENCIES context)
+    set(_Boost_IOSTREAMS_DEPENDENCIES regex)
+    set(_Boost_LOG_DEPENDENCIES date_time log_setup filesystem thread regex chrono atomic)
+    set(_Boost_MATH_DEPENDENCIES math_c99 math_c99f math_c99l math_tr1 math_tr1f math_tr1l chrono atomic)
+    set(_Boost_MPI_DEPENDENCIES serialization)
+    set(_Boost_MPI_PYTHON_DEPENDENCIES python${component_python_version} mpi serialization)
+    set(_Boost_NUMPY_DEPENDENCIES python${component_python_version})
+    set(_Boost_THREAD_DEPENDENCIES chrono date_time atomic)
+    set(_Boost_TIMER_DEPENDENCIES chrono)
+    set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono date_time atomic)
+    set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
+    if(NOT Boost_VERSION_STRING VERSION_LESS 1.73.0)
       message(WARNING "New Boost version may have incorrect or missing dependencies and imported targets")
     endif()
   endif()
@@ -1417,7 +1429,7 @@ else()
   # _Boost_COMPONENT_HEADERS.  See the instructions at the top of
   # _Boost_COMPONENT_DEPENDENCIES.
   set(_Boost_KNOWN_VERSIONS ${Boost_ADDITIONAL_VERSIONS}
-    "1.71.0" "1.71" "1.70.0" "1.70" "1.69.0" "1.69"
+    "1.72.0" "1.72" "1.71.0" "1.71" "1.70.0" "1.70" "1.69.0" "1.69"
     "1.68.0" "1.68" "1.67.0" "1.67" "1.66.0" "1.66" "1.65.1" "1.65.0" "1.65"
     "1.64.0" "1.64" "1.63.0" "1.63" "1.62.0" "1.62" "1.61.0" "1.61" "1.60.0" "1.60"
     "1.59.0" "1.59" "1.58.0" "1.58" "1.57.0" "1.57" "1.56.0" "1.56" "1.55.0" "1.55"
@@ -1960,10 +1972,10 @@ foreach(COMPONENT ${Boost_FIND_COMPONENTS})
   # Handle Python version suffixes
   unset(COMPONENT_PYTHON_VERSION_MAJOR)
   unset(COMPONENT_PYTHON_VERSION_MINOR)
-  if(${COMPONENT}${BOOST_PYTHON_SUFFIX} MATCHES "^(python|mpi_python|numpy)([0-9])\$")
+  if(${COMPONENT} MATCHES "^(python|mpi_python|numpy)([0-9])\$")
     set(COMPONENT_UNVERSIONED "${CMAKE_MATCH_1}")
     set(COMPONENT_PYTHON_VERSION_MAJOR "${CMAKE_MATCH_2}")
-  elseif(${COMPONENT}${BOOST_PYTHON_SUFFIX} MATCHES "^(python|mpi_python|numpy)([0-9])\\.?([0-9])\$")
+  elseif(${COMPONENT} MATCHES "^(python|mpi_python|numpy)([0-9])\\.?([0-9])\$")
     set(COMPONENT_UNVERSIONED "${CMAKE_MATCH_1}")
     set(COMPONENT_PYTHON_VERSION_MAJOR "${CMAKE_MATCH_2}")
     set(COMPONENT_PYTHON_VERSION_MINOR "${CMAKE_MATCH_3}")
@@ -2011,7 +2023,8 @@ foreach(COMPONENT ${Boost_FIND_COMPONENTS})
     endif()
   else()
     set(Boost_${UPPERCOMPONENT}_HEADER ON)
-    message(WARNING "No header defined for ${COMPONENT}; skipping header check")
+    message(WARNING "No header defined for ${COMPONENT}; skipping header check "
+                    "(note: header-only libraries have no designated component)")
   endif()
 
   #

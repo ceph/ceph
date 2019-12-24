@@ -124,36 +124,6 @@ ENDOFKEY
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
 }
 
-function ensure_decent_cmake_on_ubuntu {
-    local new=$1
-    if command -v cmake > /dev/null; then
-        local old=$(cmake --version | grep -Po 'version \K[0-9].*')
-        if dpkg --compare-versions $old ge $new; then
-          return
-        fi
-    fi
-    install_pkg_on_ubuntu \
-	ceph-cmake \
-	d278b9d28de0f6b88f56dfe1e8bf684a41577210 \
-	xenial \
-	force \
-	cmake
-}
-
-function ensure_decent_binutils_on_ubuntu {
-    local new=$1
-    local old=$(ld --version | head -n1 | grep -Po ' \K[0-9].*')
-    if dpkg --compare-versions $old ge $new; then
-        return
-    fi
-    install_pkg_on_ubuntu \
-	binutils \
-	7fa393306ed8b93019d225548474c0540b8928f7 \
-	xenial \
-	force \
-	binutils
-}
-
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -169,7 +139,7 @@ function install_pkg_on_ubuntu {
 	missing_pkgs="$@"
     else
 	for pkg in $pkgs; do
-	    if ! dpkg -s $pkg &> /dev/null; then
+	    if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
 		missing_pkgs+=" $pkg"
 	    fi
 	done
@@ -184,27 +154,34 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     local codename=$1
+    if apt -qq list ceph-libboost1.67-dev 2>/dev/null | grep -q installed; then
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.67.*'
+	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.67.list
+    fi
+    local project=libboost
+    local ver=1.72
+    local sha1=1d7c7a00cc3f37e340bae0360191a757b44ec80c
     install_pkg_on_ubuntu \
-	ceph-libboost1.67 \
-	dd38c27740c1f9a9e6719a07eef84a1369dc168b \
+	$project \
+	$sha1 \
 	$codename \
 	check \
-	ceph-libboost-atomic1.67-dev \
-	ceph-libboost-chrono1.67-dev \
-	ceph-libboost-container1.67-dev \
-	ceph-libboost-context1.67-dev \
-	ceph-libboost-coroutine1.67-dev \
-	ceph-libboost-date-time1.67-dev \
-	ceph-libboost-filesystem1.67-dev \
-	ceph-libboost-iostreams1.67-dev \
-	ceph-libboost-program-options1.67-dev \
-	ceph-libboost-python1.67-dev \
-	ceph-libboost-random1.67-dev \
-	ceph-libboost-regex1.67-dev \
-	ceph-libboost-system1.67-dev \
-	ceph-libboost-test1.67-dev \
-	ceph-libboost-thread1.67-dev \
-	ceph-libboost-timer1.67-dev
+	ceph-libboost-atomic$ver-dev \
+	ceph-libboost-chrono$ver-dev \
+	ceph-libboost-container$ver-dev \
+	ceph-libboost-context$ver-dev \
+	ceph-libboost-coroutine$ver-dev \
+	ceph-libboost-date-time$ver-dev \
+	ceph-libboost-filesystem$ver-dev \
+	ceph-libboost-iostreams$ver-dev \
+	ceph-libboost-program-options$ver-dev \
+	ceph-libboost-python$ver-dev \
+	ceph-libboost-random$ver-dev \
+	ceph-libboost-regex$ver-dev \
+	ceph-libboost-system$ver-dev \
+	ceph-libboost-test$ver-dev \
+	ceph-libboost-thread$ver-dev \
+	ceph-libboost-timer$ver-dev
 }
 
 function version_lt {
@@ -312,15 +289,6 @@ else
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
-            *Trusty*)
-                ensure_decent_gcc_on_ubuntu 8 trusty
-                ;;
-            *Xenial*)
-                ensure_decent_gcc_on_ubuntu 8 xenial
-                ensure_decent_cmake_on_ubuntu 3.10.1
-                ensure_decent_binutils_on_ubuntu 2.28
-                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
-                ;;
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
