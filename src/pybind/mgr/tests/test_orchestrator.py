@@ -229,6 +229,11 @@ def test_fail():
     c._first_promise.fail(KeyError())
     assert isinstance(c.exception, KeyError)
 
+    with pytest.raises(ValueError,
+                  match='Invalid State: called fail, but Completion is already finished: {}'.format(
+                      str(ZeroDivisionError()))):
+        c._first_promise.fail(ZeroDivisionError())
+
 
 def test_pretty_print():
     mgr = mock.MagicMock()
