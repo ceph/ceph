@@ -46,28 +46,28 @@ def task(ctx, config):
     poolprocs=dict()
     while (remaining_pools > 0):
         log.info('{n} pools remaining to create'.format(n=remaining_pools))
-	for remote, role_ in creator_remotes:
+        for remote, role_ in creator_remotes:
             poolnum = remaining_pools
             remaining_pools -= 1
             if remaining_pools < 0:
                 continue
             log.info('creating pool{num} on {role}'.format(num=poolnum, role=role_))
-	    proc = remote.run(
-	        args=[
-		    'ceph',
-		    '--name', role_,
-		    'osd', 'pool', 'create', 'pool{num}'.format(num=poolnum), '8',
-		    run.Raw('&&'),
-		    'rados',
-		    '--name', role_,
-		    '--pool', 'pool{num}'.format(num=poolnum),
-		    'bench', '0', 'write', '-t', '16', '--block-size', '1'
-		    ],
-		wait = False
-	    )
+            proc = remote.run(
+                args=[
+                    'ceph',
+                    '--name', role_,
+                    'osd', 'pool', 'create', 'pool{num}'.format(num=poolnum), '8',
+                    run.Raw('&&'),
+                    'rados',
+                    '--name', role_,
+                    '--pool', 'pool{num}'.format(num=poolnum),
+                    'bench', '0', 'write', '-t', '16', '--block-size', '1'
+                ],
+                wait = False
+            )
             log.info('waiting for pool and object creates')
-	    poolprocs[remote] = proc
-        
+            poolprocs[remote] = proc
+
         run.wait(poolprocs.itervalues())
-    
+
     log.info('created all {n} pools and wrote 16 objects to each'.format(n=poolnum))

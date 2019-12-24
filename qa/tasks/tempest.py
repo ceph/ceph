@@ -142,7 +142,7 @@ def configure_instance(ctx, config):
         to_config(cconfig, params, 'identity', cpar)
         to_config(cconfig, params, 'object-storage', cpar)
         to_config(cconfig, params, 'object-storage-feature-enabled', cpar)
-        cpar.write(file(local_conf, 'w+'))
+        cpar.write(open(local_conf, 'w+'))
 
         remote.put_file(local_conf, tetcdir + '/tempest.conf')
     yield

@@ -9,7 +9,7 @@ import time
 import sys
 
 if sys.version_info[0] == 2:
-    range = xrange
+    range = xrange # noqa
 
 elif sys.version_info[0] == 3:
     range = range

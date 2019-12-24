@@ -40,7 +40,7 @@ def download(ctx, config):
             ragweed_repo = ctx.config.get('ragweed_repo', teuth_config.ceph_git_base_url + 'ragweed.git')
             if suite_branch in s3_branches:
                 branch = cconf.get('branch', 'ceph-' + suite_branch)
-	    else:
+            else:
                 branch = cconf.get('branch', suite_branch)
         if not branch:
             raise ValueError(
@@ -100,7 +100,7 @@ def _config_user(ragweed_conf, section, user):
     ragweed_conf[section].setdefault('user_id', user)
     ragweed_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     ragweed_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
-    ragweed_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
+    ragweed_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in range(20)))
     ragweed_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
 
 
@@ -198,7 +198,7 @@ def configure(ctx, config, run_stages):
 
         ragweed_conf = config['ragweed_conf'][client]
         if properties is not None and 'slow_backend' in properties:
-	    ragweed_conf['fixtures']['slow backend'] = properties['slow_backend']
+            ragweed_conf['fixtures']['slow backend'] = properties['slow_backend']
 
         conf_fp = StringIO()
         ragweed_conf.write(conf_fp)
@@ -211,7 +211,7 @@ def configure(ctx, config, run_stages):
     log.info('Configuring boto...')
     boto_src = os.path.join(os.path.dirname(__file__), 'boto.cfg.template')
     for client, properties in config['clients'].items():
-        with file(boto_src, 'rb') as f:
+        with open(boto_src, 'rb') as f:
             (remote,) = ctx.cluster.only(client).remotes.keys()
             conf = f.read().format(
                 idle_timeout=config.get('idle_timeout', 30)

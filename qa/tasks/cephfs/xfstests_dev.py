@@ -1,3 +1,4 @@
+import six
 import logging
 from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -58,7 +59,7 @@ class XFSTestsDev(CephFSTestCase):
                 'auth', 'get-or-create', 'client.admin'))
         # TODO: remove this part when we stop supporting Python 2
         elif sys_version_info.major <= 2:
-            cp.read_string(unicode(self.fs.mon_manager.raw_cluster_cmd(
+            cp.read_string(six.text_type(self.fs.mon_manager.raw_cluster_cmd(
                 'auth', 'get-or-create', 'client.admin')))
 
         return cp['client.admin']['key']
