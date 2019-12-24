@@ -819,8 +819,11 @@ class OSDThrasher(Thrasher):
                 ))
         self.ceph_manager.set_config(the_one, **{conf_key: duration})
         if not should_be_down:
+            self.log('did set_config, should_be_down')
             return
+        self.log('did set_config, sleeping')        
         time.sleep(check_after)
+        self.log('checking osd status')        
         status = self.ceph_manager.get_osd_status()
         assert the_one in status['down']
         time.sleep(duration - check_after + 20)
@@ -1663,6 +1666,8 @@ class CephManager:
         while True:
             proc = self.admin_socket(service_type, service_id,
                                      args, check_status=False, stdout=stdout)
+            self.log('asok exitstatus = %d' % proc.exitstatus)
+            self.log('stdout= %s' % proc.stdout.getvalue())
             if proc.exitstatus == 0:
                 return proc
             else:
@@ -1711,6 +1716,7 @@ class CephManager:
         :param argdict: dictionary containing values to set.
         """
         for k, v in argdict.items():
+            self.log('set_config osd %s %s=%v' % (osdnum, k, v))
             self.wait_run_admin_socket(
                 'osd', osdnum,
                 ['config', 'set', str(k), str(v)])
