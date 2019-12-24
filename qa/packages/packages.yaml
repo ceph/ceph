@@ -43,7 +43,6 @@ ceph:
   - ceph-immutable-object-cache
   - ceph-mgr
   - ceph-mgr-dashboard
-  - ceph-mgr-diskprediction-cloud
   - ceph-mgr-diskprediction-local
   - ceph-mgr-rook
   - ceph-mgr-cephadm

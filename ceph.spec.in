@@ -539,6 +539,13 @@ BuildArch:      noarch
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+%if 0%{without python2}
+Requires:       python3-grpcio
+Requires:       python3-protobuf
+%else
+Requires:       python2-grpcio
+Requires:       python2-protobuf
+%endif
 %description mgr-diskprediction-cloud
 ceph-mgr-diskprediction-cloud is a ceph-mgr plugin that tries to predict
 disk failures using services in the Google cloud.
