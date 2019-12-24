@@ -21,6 +21,7 @@
 #include <syslog.h>
 
 #include <iostream>
+#include <set>
 
 #define MAX_LOG_BUF 65536
 
@@ -347,10 +348,14 @@ void Log::dump_recent()
   _flush(m_flush, false);
 
   _log_message("--- begin dump of recent events ---", true);
+  std::set<pthread_t> recent_pthread_ids;
   {
     EntryVector t;
     t.insert(t.end(), std::make_move_iterator(m_recent.begin()), std::make_move_iterator(m_recent.end()));
     m_recent.clear();
+    for (const auto& e : t) {
+      recent_pthread_ids.emplace(e.m_thread);
+    }
     _flush(t, true);
   }
 
@@ -360,11 +365,20 @@ void Log::dump_recent()
     snprintf(buf, sizeof(buf), "  %2d/%2d %s", p.log_level, p.gather_level, p.name);
     _log_message(buf, true);
   }
-
   sprintf(buf, "  %2d/%2d (syslog threshold)", m_syslog_log, m_syslog_crash);
   _log_message(buf, true);
   sprintf(buf, "  %2d/%2d (stderr threshold)", m_stderr_log, m_stderr_crash);
   _log_message(buf, true);
+
+  _log_message("--- pthread ID / name mapping for recent threads ---", true);
+  for (const auto pthread_id : recent_pthread_ids)
+  {
+    char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
+    ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
+    snprintf(buf, sizeof(buf), "  %lx / %s", pthread_id, pthread_name);
+    _log_message(buf, true);
+  }
+
   sprintf(buf, "  max_recent %9zu", m_max_recent);
   _log_message(buf, true);
   sprintf(buf, "  max_new    %9zu", m_max_new);
