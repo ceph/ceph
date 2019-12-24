@@ -131,17 +131,6 @@ inline void btree_swap_helper(T &a, T &b) {
   swap(a, b);
 }
 
-// A template helper used to select A or B based on a condition.
-template<bool cond, typename A, typename B>
-struct if_{
-  typedef A type;
-};
-
-template<typename A, typename B>
-struct if_<false, A, B> {
-  typedef B type;
-};
-
 // Types small_ and big_ are promise that sizeof(small_) < sizeof(big_)
 typedef char small_;
 
@@ -262,9 +251,9 @@ struct btree_common_params {
   // If Compare is derived from btree_key_compare_to_tag then use it as the
   // key_compare type. Otherwise, use btree_key_compare_to_adapter<> which will
   // fall-back to Compare if we don't have an appropriate specialization.
-  typedef typename if_<
+  using key_compare = std::conditional_t<
     btree_is_key_compare_to<Compare>::value,
-    Compare, btree_key_compare_to_adapter<Compare> >::type key_compare;
+    Compare, btree_key_compare_to_adapter<Compare> >;
   // A type which indicates if we have a key-compare-to functor or a plain old
   // key-compare functor.
   typedef btree_is_key_compare_to<key_compare> is_key_compare_to;
@@ -284,10 +273,10 @@ struct btree_common_params {
 
   // This is an integral type large enough to hold as many
   // ValueSize-values as will fit a node of TargetNodeSize bytes.
-  typedef typename if_<
+  using node_count_type = std::conditional_t<
     (kNodeValueSpace / ValueSize) >= 256,
     uint16_t,
-    uint8_t>::type node_count_type;
+    uint8_t>;
 };
 
 // A parameters structure for holding the type parameters for a btree_map.
@@ -439,23 +428,23 @@ class btree_node {
     key_type, self_type, key_compare> binary_search_compare_to_type;
   // If we have a valid key-compare-to type, use linear_search_compare_to,
   // otherwise use linear_search_plain_compare.
-  typedef typename if_<
+  using linear_search_type = std::conditional_t<
     Params::is_key_compare_to::value,
     linear_search_compare_to_type,
-    linear_search_plain_compare_type>::type linear_search_type;
+    linear_search_plain_compare_type>;
   // If we have a valid key-compare-to type, use binary_search_compare_to,
   // otherwise use binary_search_plain_compare.
-  typedef typename if_<
+  using binary_search_type = std::conditional_t<
     Params::is_key_compare_to::value,
     binary_search_compare_to_type,
-    binary_search_plain_compare_type>::type binary_search_type;
+    binary_search_plain_compare_type>;
   // If the key is an integral or floating point type, use linear search which
   // is faster than binary search for such types. Might be wise to also
   // configure linear search based on node-size.
-  typedef typename if_<
+  using search_type = std::conditional_t<
     std::is_integral<key_type>::value ||
     std::is_floating_point<key_type>::value,
-    linear_search_type, binary_search_type>::type search_type;
+    linear_search_type, binary_search_type>;
 
   struct base_fields {
     typedef typename Params::node_count_type field_type;
@@ -860,10 +849,10 @@ class btree : public Params::key_compare {
 
   friend class btree_internal_locate_plain_compare;
   friend class btree_internal_locate_compare_to;
-  typedef typename if_<
+  using internal_locate_type = std::conditional_t<
     is_key_compare_to::value,
     btree_internal_locate_compare_to,
-    btree_internal_locate_plain_compare>::type internal_locate_type;
+    btree_internal_locate_plain_compare>;
 
   enum {
     kNodeValues = node_type::kNodeValues,
@@ -1382,11 +1371,11 @@ class btree : public Params::key_compare {
   // A never instantiated helper function that returns big_ if we have a
   // key-compare-to functor or if R is bool and small_ otherwise.
   template <typename R>
-  static typename if_<
-   if_<is_key_compare_to::value,
-             std::is_same<R, int>,
-             std::is_same<R, bool> >::type::value,
-   big_, small_>::type key_compare_checker(R);
+  static std::conditional_t<
+   (is_key_compare_to::value ?
+    std::is_same_v<R, int> :
+    std::is_same_v<R, bool>),
+   big_, small_> key_compare_checker(R);
 
   // A never instantiated helper function that returns the key comparison
   // functor.
