@@ -12,7 +12,7 @@
 #include "include/ipaddr.h"
 #include "msg/msg_types.h"
 #include "common/pick_address.h"
-
+#include<regex>
 void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
 			 struct in_addr *out) {
@@ -50,13 +50,13 @@ const struct ifaddrs *find_ipv4_in_subnet(const struct ifaddrs *addrs,
   struct in_addr want, temp;
 
   netmask_ipv4(&net->sin_addr, prefix_len, &want);
-
+  std::regex reg("^lo.*");
   for (; addrs != NULL; addrs = addrs->ifa_next) {
 
     if (addrs->ifa_addr == NULL)
       continue;
 
-    if (strcmp(addrs->ifa_name, "lo") == 0)
+    if (std::regex_match(addrs->ifa_name,reg))
       continue;
 
     if (numa_node >= 0 && !match_numa_node(addrs->ifa_name, numa_node))
@@ -98,13 +98,13 @@ const struct ifaddrs *find_ipv6_in_subnet(const struct ifaddrs *addrs,
   struct in6_addr want, temp;
 
   netmask_ipv6(&net->sin6_addr, prefix_len, &want);
-
+  std::regex reg("^lo.*");
   for (; addrs != NULL; addrs = addrs->ifa_next) {
 
     if (addrs->ifa_addr == NULL)
       continue;
 
-    if (strcmp(addrs->ifa_name, "lo") == 0)
+    if (std::regex_match(addrs->ifa_name,reg))
       continue;
 
     if (numa_node >= 0 && !match_numa_node(addrs->ifa_name, numa_node))
