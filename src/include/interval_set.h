@@ -99,11 +99,11 @@ class interval_set {
           return prev;
         }
 
-    friend class interval_set<T,Map>::const_iterator;
+    friend class interval_set::const_iterator;
 
     protected:
         typename Map::iterator _iter;
-    friend class interval_set<T,Map>;
+    friend class interval_set;
   };
 
   class const_iterator : public std::iterator <std::forward_iterator_tag, T>
@@ -502,7 +502,7 @@ class interval_set {
     }
   }
 
-  void swap(interval_set<T,Map>& other) {
+  void swap(interval_set& other) {
     m.swap(other.m);
     std::swap(_size, other._size);
   }    
