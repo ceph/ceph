@@ -22,7 +22,6 @@ export class InventoryComponent implements OnChanges, OnInit {
   docsUrl: string;
 
   devices: Array<InventoryDevice> = [];
-  isLoadingDevices = false;
 
   constructor(
     private cephReleaseNamePipe: CephReleaseNamePipe,
@@ -48,10 +47,6 @@ export class InventoryComponent implements OnChanges, OnInit {
     this.orchService.status().subscribe((data: { available: boolean }) => {
       this.orchestratorExist = data.available;
       this.checkingOrchestrator = false;
-
-      if (this.orchestratorExist) {
-        this.getInventory();
-      }
     });
   }
 
@@ -63,23 +58,20 @@ export class InventoryComponent implements OnChanges, OnInit {
   }
 
   getInventory() {
-    if (this.isLoadingDevices) {
-      return;
-    }
-    this.isLoadingDevices = true;
     if (this.hostname === '') {
-      this.isLoadingDevices = false;
       return;
     }
     this.orchService.inventoryDeviceList(this.hostname).subscribe(
       (devices: InventoryDevice[]) => {
         this.devices = devices;
-        this.isLoadingDevices = false;
       },
       () => {
         this.devices = [];
-        this.isLoadingDevices = false;
       }
     );
+  }
+
+  refresh() {
+    this.getInventory();
   }
 }
