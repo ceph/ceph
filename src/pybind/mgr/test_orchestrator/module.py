@@ -261,11 +261,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("update_mgrs")
     def update_mgrs(self, spec):
-        assert not spec.nodes or len(spec.placement.nodes) == spec.placement.count
-        assert all([isinstance(h, str) for h in spec.nodes])
+        assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
+        assert all([isinstance(h, str) for h in spec.placement.hosts])
 
     @deferred_write("update_mons")
     def update_mons(self, spec):
-        assert not spec.nodes or len(spec.placement.nodes) == spec.placement.count
-        assert all([isinstance(h[0], str) for h in spec.nodes])
-        assert all([isinstance(h[1], str) or h[1] is None for h in spec.nodes])
+        assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
+        assert all([isinstance(h[0], str) for h in spec.placement.hosts])
+        assert all([isinstance(h[1], str) or h[1] is None for h in spec.placement.hosts])
