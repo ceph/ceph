@@ -826,6 +826,18 @@ def distribute_config_and_admin_keyring(ctx, config):
         ])
 
 @contextlib.contextmanager
+def crush_setup(ctx, config):
+    cluster_name = config['cluster']
+    first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
+
+    profile = config.get('crush_tunables', 'default')
+    log.info('Setting crush tunables to %s', profile)
+    _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+        args=['ceph', 'osd', 'crush', 'tunables', profile])
+    yield
+
+@contextlib.contextmanager
 def task(ctx, config):
     if config is None:
         config = {}
@@ -908,6 +920,7 @@ def task(ctx, config):
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
             lambda: ceph_bootstrap(ctx=ctx, config=config),
+            lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
