@@ -32,7 +32,7 @@ extern "C" {
 #include "features.h"
 
 #define LIBRBD_VER_MAJOR 1
-#define LIBRBD_VER_MINOR 12
+#define LIBRBD_VER_MINOR 15
 #define LIBRBD_VER_EXTRA 0
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
