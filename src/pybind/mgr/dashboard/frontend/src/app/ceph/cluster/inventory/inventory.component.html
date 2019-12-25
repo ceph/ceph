@@ -11,7 +11,8 @@
     <div class="col-md-12">
       <cd-inventory-devices [devices]="devices"
                             [hiddenColumns]="hostname === undefined ? [] : ['hostname']"
-                            selectionType="single">
+                            selectionType="single"
+                            (fetchInventory)="refresh()">
       </cd-inventory-devices>
     </div>
   </div>
