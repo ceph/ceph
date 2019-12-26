@@ -155,7 +155,6 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("host", "rm", "hostname")
 
     def test_mon_update(self):
-        self._orch_cmd("mon", "update", "3")
         self._orch_cmd("mon", "update", "3", "host1:1.2.3.0/24", "host2:1.2.3.0/24", "host3:10.0.0.0/8")
         self._orch_cmd("mon", "update", "3", "host1:1.2.3.4", "host2:1.2.3.4", "host3:10.0.0.1")
 
