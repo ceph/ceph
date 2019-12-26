@@ -3,7 +3,7 @@ from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
-                   LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
+                   LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
 import time
 import threading
@@ -592,6 +592,27 @@ class TestIoctx(object):
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
+
+    def test_xattrs_op(self):
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        with WriteOpCtx() as write_op:
+            write_op.new(LIBRADOS_CREATE_EXCLUSIVE)
+            for key, value in xattrs.items():
+                write_op.set_xattr(key, value)
+                self.ioctx.operate_write_op(write_op, "abc")
+                eq(self.ioctx.get_xattr('abc', key), value)
+            stored_xattrs_1 = {}
+            for key, value in self.ioctx.get_xattrs('abc'):
+                stored_xattrs_1[key] = value
+            eq(stored_xattrs_1, xattrs)
+            for key in xattrs.keys():
+                write_op.rm_xattr(key)
+                self.ioctx.operate_write_op(write_op, "abc")
+            stored_xattrs_2 = {}
+            for key, value in self.ioctx.get_xattrs('abc'):
+                stored_xattrs_2[key] = value
+            eq(stored_xattrs_2, {})
+            write_op.remove()
 
     def test_locator(self):
         self.ioctx.set_locator_key("bar")
