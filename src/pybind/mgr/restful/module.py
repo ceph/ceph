@@ -159,37 +159,31 @@ class CommandsRequest(object):
     def __json__(self):
         return {
             'id': self.id,
-            'running': map(
-                lambda x: {
+            'running': [
+                {
                     'command': x.command,
                     'outs': x.outs,
                     'outb': x.outb,
-                },
-                self.running
-            ),
-            'finished': map(
-                lambda x: {
+                } for x in self.running
+            ],
+            'finished': [
+                {
                     'command': x.command,
                     'outs': x.outs,
                     'outb': x.outb,
-                },
-                self.finished
-            ),
-            'waiting': map(
-                lambda x: map(
-                    lambda y: common.humanify_command(y),
-                    x
-                ),
-                self.waiting
-            ),
-            'failed': map(
-                lambda x: {
+                } for x in self.finished
+            ],
+            'waiting': [
+                [common.humanify_command(y) for y in x]
+                for x in self.waiting
+            ],
+            'failed': [
+                {
                     'command': x.command,
                     'outs': x.outs,
                     'outb': x.outb,
-                },
-                self.failed
-            ),
+                } for x in self.failed
+            ],
             'is_waiting': self.is_waiting(),
             'is_finished': self.is_finished(),
             'has_failed': self.has_failed(),
