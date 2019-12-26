@@ -140,8 +140,9 @@ void MetricsHandler::reset_seq() {
 }
 
 void MetricsHandler::handle_payload(Session *session, const CapInfoPayload &payload) {
-  dout(20) << ": session=" << session << ", hits=" << payload.cap_hits << ", misses="
-           << payload.cap_misses << dendl;
+  dout(20) << ": type=" << static_cast<ClientMetricType>(CapInfoPayload::METRIC_TYPE)
+	   << ", session=" << session << ", hits=" << payload.cap_hits << ", misses="
+	   << payload.cap_misses << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
@@ -155,7 +156,8 @@ void MetricsHandler::handle_payload(Session *session, const CapInfoPayload &payl
 }
 
 void MetricsHandler::handle_payload(Session *session, const ReadLatencyPayload &payload) {
-  dout(20) << ": session=" << session << ", latency=" << payload.lat << dendl;
+  dout(20) << ": type=" << static_cast<ClientMetricType>(ReadLatencyPayload::METRIC_TYPE)
+	   << ", session=" << session << ", latency=" << payload.lat << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
@@ -169,7 +171,8 @@ void MetricsHandler::handle_payload(Session *session, const ReadLatencyPayload &
 }
 
 void MetricsHandler::handle_payload(Session *session, const WriteLatencyPayload &payload) {
-  dout(20) << ": session=" << session << ", latency=" << payload.lat << dendl;
+  dout(20) << ": type=" << static_cast<ClientMetricType>(WriteLatencyPayload::METRIC_TYPE)
+	   << ", session=" << session << ", latency=" << payload.lat << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
@@ -183,7 +186,8 @@ void MetricsHandler::handle_payload(Session *session, const WriteLatencyPayload 
 }
 
 void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPayload &payload) {
-  dout(20) << ": session=" << session << ", latency=" << payload.lat << dendl;
+  dout(20) << ": type=" << static_cast<ClientMetricType>(MetadataLatencyPayload::METRIC_TYPE)
+	   << ", session=" << session << ", latenc]y=" << payload.lat << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
@@ -197,7 +201,7 @@ void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPaylo
 }
 
 void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payload) {
-  dout(5) << ": session=" << session << ", ignoring unknown payload" << dendl;
+  dout(5) << ": type=Unknown, session=" << session << ", ignoring unknown payload" << dendl;
 }
 
 void MetricsHandler::handle_client_metrics(const cref_t<MClientMetrics> &m) {
