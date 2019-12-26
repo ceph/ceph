@@ -479,7 +479,11 @@ void BootstrapRequest<I>::handle_image_sync(int r) {
   }
 
   if (r < 0) {
-    derr << "failed to sync remote image: " << cpp_strerror(r) << dendl;
+    if (r == -ECANCELED) {
+      dout(10) << "request canceled" << dendl;
+    } else {
+      derr << "failed to sync remote image: " << cpp_strerror(r) << dendl;
+    }
     m_ret_val = r;
   }
 
