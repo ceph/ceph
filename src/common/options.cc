@@ -5754,7 +5754,7 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
     .set_description("URL to OPA server."),
 
-    Option("rgw_opa_policy_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("rgw_opa_send_policy_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("URL for sending policies to OPA server."),
 

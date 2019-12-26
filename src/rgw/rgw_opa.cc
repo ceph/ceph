@@ -81,26 +81,27 @@ int rgw_opa_authorize(RGWOp *& op,
   return 0;
 }
 
-int rgw_send_policy_to_opa(RGWOp *& op,
-                      req_state * const s)
+int rgw_send_bucket_policy_to_opa(RGWOp *& op,
+                      req_state * const s,
+                      std::string policy)
 {
 
-  ldpp_dout(op, 2) << "sending policy to OPA" << dendl;
+  ldpp_dout(op, 2) << "sending bucket policy to OPA" << dendl;
 
   /* get OPA url */
-  const string& opa_policy_url = s->cct->_conf->rgw_opa_policy_url;
-  if (opa_policy_url == "") {
-    ldpp_dout(op, 2) << "OPA__POLICY_URL not provided" << dendl;
+  const string& opa_send_policy_url = s->cct->_conf->rgw_opa_send_policy_url;
+  if (opa_send_policy_url == "") {
+    ldpp_dout(op, 2) << "OPA_SEND_POLICY_URL not provided" << dendl;
     return -ERR_INVALID_REQUEST;
   }
-  ldpp_dout(op, 2) << "OPA POLICY URL= " << opa_policy_url.c_str() << dendl;
+  ldpp_dout(op, 2) << "OPA send policy URL= " << opa_send_policy_url.c_str() << dendl;
 
   /* get authentication token for OPA */
   const string& opa_token = s->cct->_conf->rgw_opa_token;
 
   int ret;
   bufferlist bl;
-  RGWHTTPTransceiver req(s->cct, "POST", opa_policy_url.c_str(), &bl);
+  RGWHTTPTransceiver req(s->cct, "POST", opa_send_policy_url.c_str(), &bl);
 
   /* set required headers for OPA request */
   req.append_header("X-Auth-Token", opa_token);
@@ -119,11 +120,10 @@ int rgw_send_policy_to_opa(RGWOp *& op,
   jf.dump_string("params", s->info.request_params.c_str());
   jf.dump_string("request_uri_aws4", s->info.request_uri_aws4.c_str());
   jf.dump_string("object_name", s->object.name.c_str());
-  jf.dump_object("object_acl", s->object_acl);
   jf.dump_object("user_info", *s->user);
-  jf.dump_object("user_acl", s->user_acl);
   jf.dump_object("bucket_info", s->bucket_info);
-  jf.dump_object("bucket_acl", s->bucket_acl);
+  jf.dump_string("bucket_policy_method", op->name())
+  jf.dump_string("bucket_policy", policy.c_str());
   jf.close_section();
   jf.close_section();
 

@@ -50,6 +50,7 @@
 #include "rgw_perf_counters.h"
 #include "rgw_notify.h"
 #include "rgw_notify_event_type.h"
+#include "rgw_opa.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -7709,6 +7710,11 @@ void RGWPutBucketPolicy::execute()
 	op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							      &s->bucket_info.objv_tracker,
 							      s->yield);
+
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    op_ret = rgw_send_bucket_policy_to_opa(this, s, p.text);
+  }
+
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -7781,10 +7787,22 @@ void RGWDeleteBucketPolicy::execute()
 {
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
       auto attrs = s->bucket_attrs;
+      
+      std::string policy = "";
+      auto pos = attrs.find(RGW_ATTR_IAM_POLICY);
+      if (pos != attrs.end()) {
+        policy = pos->second.c_str();
+      }
+
       attrs.erase(RGW_ATTR_IAM_POLICY);
       op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							    &s->bucket_info.objv_tracker,
 							    s->yield);
+
+      if (s->cct->_conf->rgw_use_opa_authz) {
+        op_ret = rgw_send_bucket_policy_to_opa(this, s, policy);
+      }
+
       return op_ret;
     });
 }

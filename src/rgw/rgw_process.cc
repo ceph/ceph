@@ -288,19 +288,6 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 done:
   try {
     client_io->complete_request();
-
-    if (s->cct->_conf->rgw_use_opa_authz) {
-      //Send new policies to opa server
-      if (s->op_type == RGW_OP_PUT_BUCKET_POLICY ||
-          s->op_type == RGW_OP_DELETE_BUCKET_POLICY)
-      {
-        if (op) {
-          rgw_send_policy_to_opa(op, s);
-        } else {
-          rgw_send_policy_to_opa(s, s);
-        }
-      }
-    }
   } catch (rgw::io::Exception& e) {
     dout(0) << "ERROR: client_io->complete_request() returned "
             << e.what() << dendl;

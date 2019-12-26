@@ -27,7 +27,7 @@ The following configuration options are available for OPA integration::
 
      rgw use opa authz = {use opa server to authorize client requests}
      rgw opa url = {opa server url:opa server port}
-     rgw opa policy url = {opa policy server url:opa policy server port}
+     rgw opa send policy url = {opa send policy server url:opa policy server port}
      rgw opa token = {opa bearer token}
      rgw opa verify ssl = {verify opa server ssl certificate}
 
