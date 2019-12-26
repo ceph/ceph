@@ -22,11 +22,7 @@ namespace ceph {
  *   newer.
  */
 struct inode_backpointer_t {
-  inodeno_t dirino;    // containing directory ino
-  string dname;        // linking dentry name
-  version_t version;   // child's version at time of backpointer creation
-
-  inode_backpointer_t() : version(0) {}
+  inode_backpointer_t() {}
   inode_backpointer_t(inodeno_t i, std::string_view d, version_t v) : dirino(i), dname(d), version(v) {}
 
   void encode(bufferlist& bl) const;
@@ -34,6 +30,10 @@ struct inode_backpointer_t {
   void decode_old(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<inode_backpointer_t*>& ls);
+
+  inodeno_t dirino;    // containing directory ino
+  string dname;        // linking dentry name
+  version_t version = 0;   // child's version at time of backpointer creation
 };
 WRITE_CLASS_ENCODER(inode_backpointer_t)
 
@@ -51,13 +51,7 @@ inline ostream& operator<<(ostream& out, const inode_backpointer_t& ib) {
  * an xattr on an object).
  */
 struct inode_backtrace_t {
-  inodeno_t ino;       // my ino
-  vector<inode_backpointer_t> ancestors;
-  int64_t pool;
-  // we use a set for old_pools to avoid duplicate entries, e.g. setlayout 0, 1, 0
-  set<int64_t> old_pools;
-
-  inode_backtrace_t() : pool(-1) {}
+  inode_backtrace_t() {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator &bl);
@@ -78,6 +72,12 @@ struct inode_backtrace_t {
    */
   int compare(const inode_backtrace_t& other,
                bool *equivalent, bool *divergent) const;
+
+  inodeno_t ino;       // my ino
+  vector<inode_backpointer_t> ancestors;
+  int64_t pool = -1;
+  // we use a set for old_pools to avoid duplicate entries, e.g. setlayout 0, 1, 0
+  set<int64_t> old_pools;
 };
 WRITE_CLASS_ENCODER(inode_backtrace_t)
 
@@ -94,4 +94,3 @@ inline bool operator==(const inode_backtrace_t& l,
 }
 
 #endif
-
