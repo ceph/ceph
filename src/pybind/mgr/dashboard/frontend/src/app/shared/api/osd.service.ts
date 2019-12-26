@@ -234,6 +234,10 @@ export class OsdService {
     return this.http.post(`${this.path}/${id}/reweight`, { weight: weight });
   }
 
+  update(id: number, deviceClass: string) {
+    return this.http.put(`${this.path}/${id}`, { device_class: deviceClass });
+  }
+
   markLost(id: number) {
     return this.http.post(`${this.path}/${id}/mark_lost`, null);
   }
