@@ -88,6 +88,13 @@ describe('OsdService', () => {
     expect(req.request.body).toEqual({ weight: 0.5 });
   });
 
+  it('should update OSD', () => {
+    service.update(1, 'hdd').subscribe();
+    const req = httpTesting.expectOne('api/osd/1');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ device_class: 'hdd' });
+  });
+
   it('should mark an OSD lost', () => {
     service.markLost(1).subscribe();
     const req = httpTesting.expectOne('api/osd/1/mark_lost');
