@@ -1,5 +1,8 @@
 #!/bin/sh -ex
 
+source $(dirname $0)/../ceph-helpers-root.sh
+install python3-nose
+
 relpath=$(dirname $0)/../../../src/test/pybind
 
 if [ -n "${VALGRIND}" ]; then
