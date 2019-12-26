@@ -392,7 +392,7 @@ void objectstore_perf_stat_t::generate_test_instances(std::list<objectstore_perf
 }
 
 // -- osd_stat_t --
-void osd_stat_t::dump(Formatter *f) const
+void osd_stat_t::dump(Formatter *f, bool with_net) const
 {
   f->dump_unsigned("up_from", up_from);
   f->dump_unsigned("seq", seq);
@@ -429,6 +429,7 @@ void osd_stat_t::dump(Formatter *f) const
   f->open_array_section("alerts");
   ::dump(f, os_alerts);
   f->close_section();
+  if (with_net) {
   f->open_array_section("network_ping_times");
   for (auto &i : hb_pingtime) {
     f->open_object_section("entry");
@@ -484,6 +485,7 @@ void osd_stat_t::dump(Formatter *f) const
     f->close_section(); // entry
   }
   f->close_section(); // network_ping_time
+  }
 }
 
 void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
