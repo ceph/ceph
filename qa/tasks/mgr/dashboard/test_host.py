@@ -83,5 +83,9 @@ class HostControllerTest(DashboardTestCase):
         self.assertSchema(data, JList(JObj({
             'daemons': JList(str),
             'devid': str,
-            'location': JList(JObj({'host': str, 'dev': str}))
+            'location': JList(JObj({
+                'host': str,
+                'dev': str,
+                'path': str
+            }))
         })))
