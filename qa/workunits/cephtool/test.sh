@@ -2576,19 +2576,14 @@ function test_mon_ping()
 
 function test_mon_deprecated_commands()
 {
-  # current DEPRECATED commands are:
-  #  ceph compact
-  #  ceph scrub
+  # current DEPRECATED commands are marked with FLAG(DEPRECATED)
   #
   # Testing should be accomplished by setting
   # 'mon_debug_deprecated_as_obsolete = true' and expecting ENOTSUP for
   # each one of these commands.
 
   ceph tell mon.* injectargs '--mon-debug-deprecated-as-obsolete'
-  expect_false ceph compact 2> $TMPFILE
-  check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
-
-  expect_false ceph scrub 2> $TMPFILE
+  expect_false ceph config-key list 2> $TMPFILE
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
   ceph tell mon.* injectargs '--no-mon-debug-deprecated-as-obsolete'
