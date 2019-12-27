@@ -9,6 +9,7 @@
 #include <seastar/core/shared_ptr.hh>
 
 #include "crimson/net/Connection.h"
+#include "crimson/osd/object_context.h"
 
 namespace crimson::osd {
 
@@ -34,6 +35,9 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   };
   std::set<NotifyRef, NotifyCmp> in_progress_notifies;
   crimson::net::ConnectionRef conn;
+  crimson::osd::ObjectContextRef obc;
+
+  watch_info_t winfo;
 
   seastar::future<> start_notify(NotifyRef);
   seastar::future<> send_notify_msg(NotifyRef);
@@ -41,7 +45,11 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   friend Notify;
 
 public:
-  Watch(private_ctag_t) {
+  Watch(private_ctag_t,
+        const watch_info_t& winfo,
+        crimson::osd::ObjectContextRef obc)
+    : winfo(winfo),
+      obc(std::move(obc)) {
   }
 
   seastar::future<> connect(crimson::net::ConnectionRef, bool);
@@ -77,12 +85,19 @@ using WatchRef = seastar::shared_ptr<Watch>;
 
 class Notify {
   std::set<WatchRef> watchers;
+  notify_info_t ninfo;
+  uint64_t client_gid;
+  uint64_t user_version;
 
-  uint64_t get_id() const { return 0; }
-  void propagate() {}
+  uint64_t get_id() const { return ninfo.notify_id; }
+  seastar::future<> propagate() { return seastar::now(); }
 
   template <class WatchIteratorT>
-  Notify(WatchIteratorT begin, WatchIteratorT end);
+  Notify(WatchIteratorT begin,
+         WatchIteratorT end,
+         const notify_info_t& ninfo,
+         const uint64_t client_gid,
+         const uint64_t user_version);
   // this is a private tag for the public constructor that turns it into
   // de facto private one. The motivation behind the hack is make_shared
   // used by create_n_propagate factory.
@@ -95,31 +110,44 @@ public:
   Notify(private_ctag_t, Args&&... args) : Notify(std::forward<Args>(args)...) {
   }
 
-  template <class WatchIteratorT>
+  template <class WatchIteratorT, class... Args>
   static seastar::future<> create_n_propagate(
     WatchIteratorT begin,
-    WatchIteratorT end);
+    WatchIteratorT end,
+    Args&&... args);
 };
 
 
 template <class WatchIteratorT>
-Notify::Notify(WatchIteratorT begin, WatchIteratorT end)
-  : watchers(begin, end) {
+Notify::Notify(WatchIteratorT begin,
+               WatchIteratorT end,
+               const notify_info_t& ninfo,
+               const uint64_t client_gid,
+               const uint64_t user_version)
+  : watchers(begin, end),
+    ninfo(ninfo),
+    client_gid(client_gid),
+    user_version(user_version) {
 }
 
-template <class WatchIteratorT>
+template <class WatchIteratorT, class... Args>
 seastar::future<> Notify::create_n_propagate(
   WatchIteratorT begin,
-  WatchIteratorT end)
+  WatchIteratorT end,
+  Args&&... args)
 {
   static_assert(
     std::is_same_v<typename std::iterator_traits<WatchIteratorT>::value_type,
                    crimson::osd::WatchRef>);
-  auto notify = seastar::make_shared<Notify>(private_ctag_t{}, begin, end);
-  seastar::do_for_each(begin, end, [=] (auto& watchref) {
+  auto notify = seastar::make_shared<Notify>(
+    private_ctag_t{},
+    begin,
+    end,
+    std::forward<Args>(args)...);
+  return seastar::do_for_each(begin, end, [=] (auto& watchref) {
     return watchref->start_notify(notify);
-  }).then([notify = std::move(notify)] {;
-    notify->propagate();
+  }).then([notify = std::move(notify)] {
+    return notify->propagate();
   });
 }
 
