@@ -115,16 +115,22 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
       c->second = metrics.cap_hit_metric.misses;
       break;
     case MDSPerformanceCounterType::READ_LATENCY_METRIC:
-      c->first = metrics.read_latency_metric.lat.tv.tv_sec;
-      c->second = metrics.read_latency_metric.lat.tv.tv_nsec;
+      if (metrics.read_latency_metric.updated) {
+        c->first = metrics.read_latency_metric.lat.tv.tv_sec;
+        c->second = metrics.read_latency_metric.lat.tv.tv_nsec;
+      }
       break;
     case MDSPerformanceCounterType::WRITE_LATENCY_METRIC:
-      c->first = metrics.write_latency_metric.lat.tv.tv_sec;
-      c->second = metrics.write_latency_metric.lat.tv.tv_nsec;
+      if (metrics.write_latency_metric.updated) {
+        c->first = metrics.write_latency_metric.lat.tv.tv_sec;
+        c->second = metrics.write_latency_metric.lat.tv.tv_nsec;
+      }
       break;
     case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
-      c->first = metrics.metadata_latency_metric.lat.tv.tv_sec;
-      c->second = metrics.metadata_latency_metric.lat.tv.tv_nsec;
+      if (metrics.metadata_latency_metric.updated) {
+        c->first = metrics.metadata_latency_metric.lat.tv.tv_sec;
+        c->second = metrics.metadata_latency_metric.lat.tv.tv_nsec;
+      }
       break;
     default:
       ceph_abort_msg("unknown counter type");
