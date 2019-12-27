@@ -16,6 +16,7 @@
 #include <seastar/core/thread.hh>
 
 #include "crimson/osd/exceptions.h"
+#include "crimson/osd/watch.h"
 #include "osd/ClassHandler.h"
 
 namespace {
@@ -156,7 +157,8 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_watch(
     [] (auto&& ctx, ObjectContextRef obc) {
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
-        it->second = crimson::osd::Watch::create();
+        const auto& cookie = ctx.key.first;
+        it->second = crimson::osd::Watch::create(ctx.info, obc);
         logger().info("op_effect: added new watcher: {}", ctx.key);
       } else {
         logger().info("op_effect: found existing watcher: {}", ctx.key);
@@ -245,6 +247,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch(
   ObjectState& os,
   ceph::os::Transaction& txn)
 {
+  logger().debug("{}", __func__);
   if (!os.exists) {
     return crimson::ct_error::enoent::make();
   }
@@ -265,33 +268,51 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch(
   return crimson::ct_error::invarg::make();
 }
 
+static uint64_t get_next_notify_id(epoch_t e)
+{
+  // FIXME
+  static std::uint64_t next_notify_id = 0;
+  return (((uint64_t)e) << 32) | ((uint64_t)(next_notify_id++));
+}
+
 OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
   OSDOp& osd_op,
   const ObjectState& os)
 {
+  logger().debug("{}, msg epoch: {}", __func__, get_message().get_map_epoch());
+
   if (!os.exists) {
     return crimson::ct_error::enoent::make();
   }
-  return with_effect_on_obc(notify_info_t{},
+  struct notify_ctx_t {
+    notify_info_t ninfo;
+    const uint64_t client_gid;
+    const epoch_t epoch;
+
+    notify_ctx_t(const MOSDOp& msg)
+      : client_gid(msg.get_reqid().name.num()),
+        epoch(msg.get_map_epoch()) {
+    }
+  };
+  return with_effect_on_obc(notify_ctx_t{ get_message() },
     [&] (auto& ctx) {
       try {
         auto bp = osd_op.indata.cbegin();
         uint32_t ver; // obsolete
         ceph::decode(ver, bp);
-        ceph::decode(ctx.timeout, bp);
-        ceph::decode(ctx.bl, bp);
+        ceph::decode(ctx.ninfo.timeout, bp);
+        ceph::decode(ctx.ninfo.bl, bp);
       } catch (const buffer::error&) {
-        ctx.timeout = 0;
+        ctx.ninfo.timeout = 0;
       }
-      if (!ctx.timeout) {
+      if (!ctx.ninfo.timeout) {
         using crimson::common::local_conf;
-        ctx.timeout = local_conf()->osd_default_notify_timeout;
+        ctx.ninfo.timeout = local_conf()->osd_default_notify_timeout;
       }
-      // FIXME
-      ctx.notify_id = 42; //osd->get_next_id(get_osdmap_epoch());
-      ctx.cookie = osd_op.op.notify.cookie;
+      ctx.ninfo.notify_id = get_next_notify_id(ctx.epoch);
+      ctx.ninfo.cookie = osd_op.op.notify.cookie;
       // return our unique notify id to the client
-      ceph::encode(ctx.notify_id, osd_op.outdata);
+      ceph::encode(ctx.ninfo.notify_id, osd_op.outdata);
       return seastar::now();
     },
     [] (auto&& ctx, ObjectContextRef obc) {
@@ -303,7 +324,10 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
         });
       return crimson::osd::Notify::create_n_propagate(
         std::begin(alive_watchers),
-        std::end(alive_watchers));
+        std::end(alive_watchers),
+        ctx.ninfo,
+        ctx.client_gid,
+        obc->obs.oi.user_version);
   });
 }
 
@@ -311,6 +335,8 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
   OSDOp& osd_op,
   const ObjectState& os)
 {
+  logger().debug("{}", __func__);
+
   struct notifyack_ctx_t {
     const entity_name_t entity;
     uint64_t watch_cookie;
