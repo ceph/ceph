@@ -431,7 +431,7 @@ int Inode::caps_wanted()
 {
   int want = caps_file_wanted();
   int used = caps_used();
-  if (used & CEPH_CAP_FILE_BUFFER)
+  if (is_file() && (used & CEPH_CAP_FILE_BUFFER))
     want |= CEPH_CAP_FILE_EXCL;
   return want;
 }
