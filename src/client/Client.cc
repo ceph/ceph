@@ -942,10 +942,16 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 			   st->ctime, st->mtime, st->atime);
   }
 
-  if (new_version ||
-      (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
-    in->layout = st->layout;
-    update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
+  if (in->is_dir()) {
+    if (new_version ||
+	(new_issued & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)))
+      in->layout = st->layout;
+  } else {
+    if (new_version ||
+	(new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
+      in->layout = st->layout;
+      update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
+    }
   }
 
   if (in->is_dir()) {
@@ -3343,7 +3349,7 @@ void Client::get_cap_ref(Inode *in, int cap)
     ldout(cct, 5) << __func__ << " got first FILE_BUFFER ref on " << *in << dendl;
     in->iget();
   }
-  if ((cap & CEPH_CAP_FILE_CACHE) &&
+  if (in->is_file() && (cap & CEPH_CAP_FILE_CACHE) &&
       in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
     ldout(cct, 5) << __func__ << " got first FILE_CACHE ref on " << *in << dendl;
     in->iget();
@@ -3374,7 +3380,7 @@ void Client::put_cap_ref(Inode *in, int cap)
 	++put_nref;
       }
     }
-    if (last & CEPH_CAP_FILE_CACHE) {
+    if (in->is_file() && (last & CEPH_CAP_FILE_CACHE)) {
       ldout(cct, 5) << __func__ << " dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
     }
@@ -3502,7 +3508,8 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 int Client::get_caps_used(Inode *in)
 {
   unsigned used = in->caps_used();
-  if (!(used & CEPH_CAP_FILE_CACHE) &&
+  if (in->is_file() &&
+      !(used & CEPH_CAP_FILE_CACHE) &&
       !objectcacher->set_is_empty(&in->oset))
     used |= CEPH_CAP_FILE_CACHE;
   return used;
@@ -3697,7 +3704,8 @@ void Client::check_caps(Inode *in, unsigned flags)
   int revoking = implemented & ~issued;
 
   int orig_used = used;
-  used = adjust_caps_used_for_lazyio(used, issued, implemented);
+  if (in->is_file())
+    used = adjust_caps_used_for_lazyio(used, issued, implemented);
 
   unsigned wanted = file_wanted;
   int retain = wanted | used | CEPH_CAP_PIN;
@@ -3739,7 +3747,8 @@ void Client::check_caps(Inode *in, unsigned flags)
   if (in->caps.empty())
     return;   // guard if at end of func
 
-  if (!(orig_used & CEPH_CAP_FILE_BUFFER) &&
+  if (in->is_file() &&
+      !(orig_used & CEPH_CAP_FILE_BUFFER) &&
       (revoking & used & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO))) {
     if (_release(in))
       used &= ~(CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO);
@@ -4110,7 +4119,8 @@ bool Client::_release(Inode *in)
 {
   ldout(cct, 20) << "_release " << *in << dendl;
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
-    _invalidate_inode_cache(in);
+    if (in->is_file())
+      _invalidate_inode_cache(in);
     return true;
   }
   return false;
@@ -4180,7 +4190,8 @@ void Client::check_cap_issue(Inode *in, unsigned issued)
 {
   unsigned had = in->caps_issued();
 
-  if ((issued & CEPH_CAP_FILE_CACHE) &&
+  if (in->is_file() &&
+      (issued & CEPH_CAP_FILE_CACHE) &&
       !(had & CEPH_CAP_FILE_CACHE))
     in->cache_gen++;
 
@@ -5501,10 +5512,15 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 			   m->get_ctime(), m->get_mtime(), m->get_atime());
   }
 
-  if (new_caps & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR)) {
-    in->layout = m->get_layout();
-    update_inode_file_size(in, issued, m->get_size(),
-			   m->get_truncate_seq(), m->get_truncate_size());
+  if (in->is_dir()) {
+    if (new_caps & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL))
+      in->layout = m->get_layout();
+  } else {
+    if (new_caps & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR)) {
+      in->layout = m->get_layout();
+      update_inode_file_size(in, issued, m->get_size(),
+			     m->get_truncate_seq(), m->get_truncate_size());
+    }
   }
 
   if (m->inline_version > in->inline_version) {
@@ -5555,15 +5571,18 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
     else if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_WR))
       in->recall_deleg(true);
 
-    used = adjust_caps_used_for_lazyio(used, cap->issued, cap->implemented);
-    if ((used & revoked & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO)) &&
-	!_flush(in, new C_Client_FlushComplete(this, in))) {
-      // waitin' for flush
-    } else if (used & revoked & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) {
-      if (_release(in))
+    if (in->is_file()) {
+      used = adjust_caps_used_for_lazyio(used, cap->issued, cap->implemented);
+      if ((used & revoked & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO)) &&
+	  !_flush(in, new C_Client_FlushComplete(this, in))) {
+	// waitin' for flush
+      } else if (used & revoked & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) {
+	if (_release(in))
+	  check = true;
+      } else {
 	check = true;
+      }
     } else {
-      cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
     }
   } else if (cap->issued == new_caps) {
