@@ -39,10 +39,13 @@ struct CapHitMetric {
 
 struct ReadLatencyMetric {
   utime_t lat;
+  bool updated = false;
 
   DENC(ReadLatencyMetric, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.lat, p);
+    if (struct_v >= 2)
+      denc(v.updated, p);
     DENC_FINISH(p);
   }
 
@@ -58,10 +61,13 @@ struct ReadLatencyMetric {
 
 struct WriteLatencyMetric {
   utime_t lat;
+  bool updated = false;
 
   DENC(WriteLatencyMetric, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.lat, p);
+    if (struct_v >= 2)
+      denc(v.updated, p);
     DENC_FINISH(p);
   }
 
@@ -77,10 +83,13 @@ struct WriteLatencyMetric {
 
 struct MetadataLatencyMetric {
   utime_t lat;
+  bool updated = false;
 
   DENC(MetadataLatencyMetric, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.lat, p);
+    if (struct_v >= 2)
+      denc(v.updated, p);
     DENC_FINISH(p);
   }
 
