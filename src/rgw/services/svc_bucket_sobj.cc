@@ -507,7 +507,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
         return r;
       }
     } else {
-      *orig_info = &shared_bucket_info;
+      orig_info = &shared_bucket_info;
     }
   }
 
