@@ -1716,6 +1716,69 @@ int Mirror<I>::image_instance_id_list(
 }
 
 template <typename I>
+int Mirror<I>::image_info_list(
+    librados::IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+    const std::string &start_id, size_t max,
+    std::map<std::string, std::pair<mirror_image_mode_t,
+                                    mirror_image_info_t>> *entries) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "pool=" << io_ctx.get_pool_name() << ", mode_filter="
+                 << (mode_filter ? stringify(*mode_filter) : "null")
+                 << ", start_id=" << start_id << ", max=" << max << dendl;
+
+  std::string last_read = start_id;
+  entries->clear();
+
+  while (entries->size() < max) {
+    map<std::string, cls::rbd::MirrorImage> images;
+    map<std::string, cls::rbd::MirrorImageStatus> statuses;
+
+    int r = librbd::cls_client::mirror_image_status_list(&io_ctx, last_read,
+                                                         max, &images,
+                                                         &statuses);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to list mirror image statuses: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (images.empty()) {
+      break;
+    }
+
+    for (auto &it : images) {
+      auto &image_id = it.first;
+      auto &image = it.second;
+      auto mode = static_cast<mirror_image_mode_t>(image.mode);
+
+      if ((mode_filter && mode != *mode_filter) ||
+          image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+        continue;
+      }
+
+      // need to call get_info for every image to retrieve promotion state
+      // TODO: optimize
+
+      mirror_image_info_t info;
+      I *image_ctx = I::create("", image_id, nullptr, io_ctx, true);
+      r = image_ctx->state->open(0);
+      if (r < 0) {
+        continue;
+      }
+      r = image_get_info(image_ctx, &info);
+      image_ctx->state->close();
+      if (r >= 0) {
+        (*entries)[image_id] = {mode, info};
+      }
+    }
+
+    last_read = images.rbegin()->first;
+  }
+
+  return 0;
+}
+
+template <typename I>
 int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
