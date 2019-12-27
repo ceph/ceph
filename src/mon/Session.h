@@ -263,7 +263,7 @@ struct MonSessionMap {
     for (auto& p : m) {
       f->open_array_section(ceph_entity_type_name(p.first));
       for (auto& q : p.second) {
-        f->dump_object("group", *q);
+        f->dump_object("session", *q);
       }
       f->close_section();
     }
