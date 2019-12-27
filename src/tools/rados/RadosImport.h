@@ -37,7 +37,7 @@ class RadosImport : public RadosDump
     RadosImport(int file_fd_, uint64_t align_, bool dry_run_)
       : RadosDump(file_fd_, dry_run_), align(align_)
     {}
-
+    int import_object(librados::IoCtx &ioctx, bool no_overwrite);
     int import(std::string pool, bool no_overwrite);
     int import(librados::IoCtx &io_ctx, bool no_overwrite);
 };

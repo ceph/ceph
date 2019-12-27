@@ -22,6 +22,126 @@ using namespace librados;
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
+
+
+int PoolDump::export_object(IoCtx *io_ctx, std::string oid, std::string nspace, std::string oloc)
+{
+  ceph_assert(io_ctx != NULL);
+  write_super();
+  dout(10) << __func__ <<  "OID '" << oid << "'" << dendl;
+  return dump_object(io_ctx, oid, nspace, oloc);
+}
+
+int PoolDump::dump_object(IoCtx *io_ctx, std::string oid, std::string nspace, std::string oloc) 
+{
+  // Compose OBJECT_BEGIN
+  // ====================
+  object_begin obj_begin;
+  obj_begin.hoid.hobj.oid = oid;
+  obj_begin.hoid.hobj.nspace = nspace;
+  obj_begin.hoid.hobj.set_key(oloc);
+
+  // Only output head, RadosImport only wants that
+  obj_begin.hoid.hobj.snap = CEPH_NOSNAP;
+
+  // Skip setting object_begin.oi, RadosImport doesn't care
+
+  int r = write_section(TYPE_OBJECT_BEGIN, obj_begin, file_fd);
+  if (r != 0) {
+    return r;
+  }
+
+  // Compose TYPE_DATA chunks
+  // ========================
+  const uint32_t op_size = 4096 * 1024;
+  uint64_t offset = 0;
+  io_ctx->set_namespace(nspace);
+  while (true) {
+    bufferlist outdata;
+    r = io_ctx->read(oid, outdata, op_size, offset);
+    if (r <= 0) {
+      // Error or no data
+      break;
+    }
+
+    r = write_section(TYPE_DATA,
+        data_section(offset, outdata.length(), outdata), file_fd);
+    if (r != 0) {
+      // Output stream error
+      return r;
+    }
+
+    if (outdata.length() < op_size) {
+      // No more data
+      break;
+    }
+    offset += outdata.length();
+  }
+
+  // Compose TYPE_ATTRS chunk
+  // ========================
+  std::map<std::string, bufferlist> raw_xattrs;
+  std::map<std::string, bufferlist> xattrs;
+  r = io_ctx->getxattrs(oid, raw_xattrs);
+  if (r < 0) {
+    cerr << "error getting xattr set " << oid << ": " << cpp_strerror(r)
+         << std::endl;
+    return r;
+  }
+  // Prepend "_" to mimic how user keys are represented in a pg export
+  for (std::map<std::string, bufferlist>::iterator i = raw_xattrs.begin();
+       i != raw_xattrs.end(); ++i) {
+    std::pair< std::string, bufferlist> item(std::string("_") + std::string(i->first.c_str()), i->second);
+    xattrs.insert(item);
+  }
+  r = write_section(TYPE_ATTRS, attr_section(xattrs), file_fd);
+  if (r != 0) {
+    return r;
+  }
+
+  // Compose TYPE_OMAP_HDR section
+  // =============================
+  bufferlist omap_header;
+  r = io_ctx->omap_get_header(oid, &omap_header);
+  if (r < 0) {
+    cerr << "error getting omap header " << oid
+         << ": " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  r = write_section(TYPE_OMAP_HDR, omap_hdr_section(omap_header), file_fd);
+  if (r != 0) {
+    return r;
+  }
+
+  // Compose TYPE_OMAP
+  int MAX_READ = 512;
+  string last_read = "";
+  do {
+    map<string, bufferlist> values;
+    r = io_ctx->omap_get_vals(oid, last_read, MAX_READ, &values);
+    if (r < 0) {
+      cerr << "error getting omap keys " << oid << ": "
+           << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (values.size()) {
+      last_read = values.rbegin()->first;
+    } else {
+      break;
+    }
+
+    r = write_section(TYPE_OMAP, omap_section(values), file_fd);
+    if (r != 0) {
+      return r;
+    }
+    r = values.size();
+  } while (r == MAX_READ);
+
+  // Close object
+  // =============
+  r = write_simple(TYPE_OBJECT_END, file_fd);
+  return r;
+}
 /**
  * Export RADOS objects from a live cluster
  * to a serialized format via a file descriptor.
@@ -46,115 +166,12 @@ int PoolDump::dump(IoCtx *io_ctx)
   librados::NObjectIterator i_end = io_ctx->nobjects_end();
   for (; i != i_end; ++i) {
     const std::string oid = i->get_oid();
+    const std::string nspace = i->get_nspace();
+    const std::string oloc = i->get_locator();
+ 
     dout(10) << "OID '" << oid << "'" << dendl;
-
-    // Compose OBJECT_BEGIN
-    // ====================
-    object_begin obj_begin;
-    obj_begin.hoid.hobj.oid = i->get_oid();
-    obj_begin.hoid.hobj.nspace = i->get_nspace();
-    obj_begin.hoid.hobj.set_key(i->get_locator());
-
-    // Only output head, RadosImport only wants that
-    obj_begin.hoid.hobj.snap = CEPH_NOSNAP;
-
-    // Skip setting object_begin.oi, RadosImport doesn't care
-
-    r = write_section(TYPE_OBJECT_BEGIN, obj_begin, file_fd);
-    if (r != 0) {
-      return r;
-    }
-
-    // Compose TYPE_DATA chunks
-    // ========================
-    const uint32_t op_size = 4096 * 1024;
-    uint64_t offset = 0;
-    io_ctx->set_namespace(i->get_nspace());
-    while (true) {
-      bufferlist outdata;
-      r = io_ctx->read(oid, outdata, op_size, offset);
-      if (r <= 0) {
-        // Error or no data
-        break;
-      }
-
-      r = write_section(TYPE_DATA,
-          data_section(offset, outdata.length(), outdata), file_fd);
-      if (r != 0) {
-        // Output stream error
-        return r;
-      }
-
-      if (outdata.length() < op_size) {
-        // No more data
-        break;
-      }
-      offset += outdata.length();
-    }
-
-    // Compose TYPE_ATTRS chunk
-    // ========================
-    std::map<std::string, bufferlist> raw_xattrs;
-    std::map<std::string, bufferlist> xattrs;
-    r = io_ctx->getxattrs(oid, raw_xattrs);
+    r = dump_object(io_ctx, oid, nspace, oloc);
     if (r < 0) {
-      cerr << "error getting xattr set " << oid << ": " << cpp_strerror(r)
-           << std::endl;
-      return r;
-    }
-    // Prepend "_" to mimic how user keys are represented in a pg export
-    for (std::map<std::string, bufferlist>::iterator i = raw_xattrs.begin();
-         i != raw_xattrs.end(); ++i) {
-      std::pair< std::string, bufferlist> item(std::string("_") + std::string(i->first.c_str()), i->second);
-      xattrs.insert(item);
-    }
-    r = write_section(TYPE_ATTRS, attr_section(xattrs), file_fd);
-    if (r != 0) {
-      return r;
-    }
-
-    // Compose TYPE_OMAP_HDR section
-    // =============================
-    bufferlist omap_header;
-    r = io_ctx->omap_get_header(oid, &omap_header);
-    if (r < 0) {
-      cerr << "error getting omap header " << oid
-	   << ": " << cpp_strerror(r) << std::endl;
-      return r;
-    }
-    r = write_section(TYPE_OMAP_HDR, omap_hdr_section(omap_header), file_fd);
-    if (r != 0) {
-      return r;
-    }
-
-    // Compose TYPE_OMAP
-    int MAX_READ = 512;
-    string last_read = "";
-    do {
-      map<string, bufferlist> values;
-      r = io_ctx->omap_get_vals(oid, last_read, MAX_READ, &values);
-      if (r < 0) {
-	cerr << "error getting omap keys " << oid << ": "
-	     << cpp_strerror(r) << std::endl;
-	return r;
-      }
-      if (values.size()) {
-        last_read = values.rbegin()->first;
-      } else {
-        break;
-      }
-
-      r = write_section(TYPE_OMAP, omap_section(values), file_fd);
-      if (r != 0) {
-        return r;
-      }
-      r = values.size();
-    } while (r == MAX_READ);
-
-    // Close object
-    // =============
-    r = write_simple(TYPE_OBJECT_END, file_fd);
-    if (r != 0) {
       return r;
     }
   }

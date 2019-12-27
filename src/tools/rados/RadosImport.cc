@@ -166,6 +166,46 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
   return 0;
 }
 
+int RadosImport::import_object(librados::IoCtx &ioctx, bool no_overwrite) 
+{
+  bufferlist ebl;
+  int ret = read_super();
+  if (ret != 0) {
+    return ret;
+  }
+  
+  if (sh.magic != super_header::super_magic) {
+    cerr << "Invalid magic number: 0x"
+      << std::hex << sh.magic << " vs. 0x" << super_header::super_magic
+      << std::dec << std::endl;
+    return -EFAULT;
+  }
+  
+  if (sh.version > super_header::super_ver) {
+    cerr << "Can't handle export format version=" << sh.version << std::endl;
+    return -EINVAL;
+  }
+
+
+  //First section must be TYPE_OBJECT_BEGIN
+  sectiontype_t type;
+  ret = read_section(&type, &ebl);
+  if (ret != 0) {
+    return ret;
+  }
+ 
+  if (type != TYPE_OBJECT_BEGIN) {
+    cerr << "Invalid section code " << type << std::endl;
+    return -EFAULT;
+  }
+
+  ret = get_object_rados(ioctx, ebl, no_overwrite);
+  if (ret != 0) {
+    cerr << "Error exporting object: " << ret << std::endl;
+  }
+  return ret;
+}
+
 int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
 {
   auto ebliter = bl.cbegin();

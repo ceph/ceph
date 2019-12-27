@@ -138,7 +138,10 @@ void usage(ostream& out)
 "       Serialize pool contents to a file or standard out.\n"
 "   import [--dry-run] [--no-overwrite] < filename | - >\n"
 "       Load pool contents from a file or standard in\n"
+"   export-object [objname] [filename]\n"
+"   import-object [filename]\n"
 "\n"
+
 "ADVISORY LOCKS\n"
 "   lock list <obj-name>\n"
 "       List all advisory locks on an object\n"
@@ -3797,6 +3800,35 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
+  } else if (strcmp(nargs[0], "export-object") == 0) {
+    // export-object object filename
+    if (!pool_name) {
+      usage(cerr);
+      return 1;
+    }  
+    int file_fd;
+    if (nargs.size() < 2 || std::string(nargs[1]) == "-") {
+      file_fd = STDOUT_FILENO;
+    } else {
+      file_fd = open(nargs[2], O_WRONLY|O_CREAT|O_TRUNC, 0666);
+      if (file_fd < 0) {
+        cerr << "Error opening '" << nargs[1] << "': "
+          << cpp_strerror(file_fd) << std::endl;
+        return 1;
+      }
+    }
+    string oid(nargs[1]);
+    ret = PoolDump(file_fd).export_object(&io_ctx, oid, nspace, oloc);
+    
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
+    if (ret < 0) {
+      cerr << "error from export-object: " << oid 
+	   << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
   } else if (strcmp(nargs[0], "export") == 0) {
     // export [filename]
     if (!pool_name || nargs.size() > 2) {
@@ -3827,6 +3859,38 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
+  } else if (strcmp(nargs[0], "import-object") == 0) {
+    // import-object filename 
+    if (!pool_name || nargs.size() != 2) {
+      usage(cerr);
+      return 1;
+    } 
+    std::string const filename = nargs[nargs.size() - 1];
+      
+    int file_fd;
+    if (filename == "-") {
+      file_fd = STDIN_FILENO;
+    } else {
+      file_fd = open(filename.c_str(), O_RDONLY);
+      if (file_fd < 0) {
+        cerr << "Error opening '" << filename << "': "
+          << cpp_strerror(file_fd) << std::endl;
+        return 1;
+      }
+    }
+  
+    ret = RadosImport(file_fd, 0, false).import_object(io_ctx, true);
+
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
+    if (ret < 0) {
+      cerr << "error from import-object: "
+	   << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
+    
   } else if (strcmp(nargs[0], "import") == 0) {
     // import [--no-overwrite] [--dry-run] <filename | - >
     if (!pool_name || nargs.size() > 4 || nargs.size() < 2) {
