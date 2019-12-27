@@ -461,26 +461,28 @@ class MirrorSnapshotScheduleHandler:
             for namespace in namespaces:
                 images[pool_id][namespace] = {}
                 ioctx.set_namespace(namespace)
-                for image_name in rbd.RBD().list(ioctx):
-                    with rbd.Image(ioctx, image_name,
-                                   read_only=True) as image:
-                        mode = image.mirror_image_get_mode()
-                        if mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
-                            continue
-                        info = image.mirror_image_get_info()
-                        if info['state'] != rbd.RBD_MIRROR_IMAGE_ENABLED or \
-                           not info['primary']:
-                            continue
-
-                        if namespace:
-                            name = "{}/{}/{}".format(pool_name, namespace, image_name)
-                        else:
-                            name = "{}/{}".format(pool_name, image_name)
-                        self.log.debug("Adding image {}({})".format(
-                            name, image.id()))
-                        images[pool_id][namespace][image.id()] = name
+                mirror_images = dict(rbd.RBD().mirror_image_info_list(
+                    ioctx, rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT))
+                if not mirror_images:
+                    continue
+                image_names = dict(
+                    [(x['id'], x['name']) for x in filter(
+                        lambda x: x['id'] in mirror_images,
+                        rbd.RBD().list2(ioctx))])
+                for image_id in mirror_images:
+                    image_name = image_names.get(image_id)
+                    if not image_name:
+                        continue
+                    if namespace:
+                        name = "{}/{}/{}".format(pool_name, namespace,
+                                                 image_name)
+                    else:
+                        name = "{}/{}".format(pool_name, image_name)
+                    self.log.debug("Adding image {}".format(name))
+                    images[pool_id][namespace][image_id] = name
         except Exception as e:
-            self.log.error("exception when scanning pool {}: {}".format(pool_name, e))
+            self.log.error("exception when scanning pool {}: {}".format(
+                pool_name, e))
             pass
 
     def find_schedule(self, pool_id, namespace, image_id):
