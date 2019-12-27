@@ -28,7 +28,7 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
-                 RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
+                 RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
                  RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
@@ -1996,11 +1996,19 @@ class TestMirroring(object):
         info = self.image.mirror_image_get_info()
         self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, False)
 
+        entries = dict(self.rbd.mirror_image_info_list(ioctx))
+        info['mode'] = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+        eq(info, entries[self.image.id()])
+
         self.image.mirror_image_resync()
 
         self.image.mirror_image_promote(True)
         info = self.image.mirror_image_get_info()
         self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+        entries = dict(self.rbd.mirror_image_info_list(ioctx))
+        info['mode'] = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+        eq(info, entries[self.image.id()])
 
         fail = False
         try:
@@ -2067,6 +2075,14 @@ class TestMirroring(object):
         self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
         mode = self.image.mirror_image_get_mode()
         eq(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode)
+
+        info = self.image.mirror_image_get_info()
+        eq(True, info['primary'])
+        entries = dict(
+            self.rbd.mirror_image_info_list(ioctx,
+                                            RBD_MIRROR_IMAGE_MODE_SNAPSHOT))
+        info['mode'] = RBD_MIRROR_IMAGE_MODE_SNAPSHOT;
+        eq(info, entries[self.image.id()])
 
         snap_id = self.image.mirror_image_create_snapshot()
 

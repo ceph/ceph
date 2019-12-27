@@ -425,6 +425,16 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_mirror_image_instance_id_list_cleanup(char **image_ids,
                                                    char **instance_ids,
                                                    size_t len)
+    int rbd_mirror_image_info_list(rados_ioctx_t io_ctx,
+                                   rbd_mirror_image_mode_t *mode_filter,
+                                   const char *start_id, size_t max,
+                                   char **image_ids,
+                                   rbd_mirror_image_mode_t *mode_entries,
+                                   rbd_mirror_image_info_t *info_entries,
+                                   size_t *num_entries)
+    void rbd_mirror_image_info_list_cleanup(char **image_ids,
+                                            rbd_mirror_image_info_t *info_entries,
+                                            size_t num_entries)
 
     int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
                               char *value, size_t *val_len)
@@ -593,6 +603,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_get_info(rbd_image_t image,
                                   rbd_mirror_image_info_t *mirror_image_info,
                                   size_t info_size)
+    void rbd_mirror_image_get_info_cleanup(
+        rbd_mirror_image_info_t *mirror_image_info)
     int rbd_mirror_image_get_mode(rbd_image_t image,
                                   rbd_mirror_image_mode_t *mode)
     int rbd_mirror_image_get_global_status(
@@ -2127,6 +2139,17 @@ class RBD(object):
         """
         return MirrorImageInstanceIdIterator(ioctx)
 
+    def mirror_image_info_list(self, ioctx, mode_filter=None):
+        """
+        Iterate over the mirror image instance ids of a pool.
+
+        :param ioctx: determines which RADOS pool is read
+        :param mode_filter: list images in this image mirror mode
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`MirrorImageInfoIterator`
+        """
+        return MirrorImageInfoIterator(ioctx, mode_filter)
+
     def pool_metadata_get(self, ioctx, key):
         """
         Get pool metadata for the given key.
@@ -2859,6 +2882,88 @@ cdef class MirrorImageInstanceIdIterator(object):
                                                     &self.size)
         if ret < 0:
             raise make_ex(ret, 'error listing mirror images instance ids')
+        if self.size > 0:
+            last_read = cstr(self.image_ids[self.size - 1], 'last_read')
+            free(self.last_read)
+            self.last_read = strdup(last_read)
+        else:
+            free(self.last_read)
+            self.last_read = strdup("")
+
+cdef class MirrorImageInfoIterator(object):
+    """
+    Iterator over mirror image info for a pool.
+
+    Yields ``(image_id, info)`` tuple.
+    """
+
+    cdef:
+        rados_ioctx_t ioctx
+        rbd_mirror_image_mode_t mode_filter
+        rbd_mirror_image_mode_t *mode_filter_ptr
+        size_t max_read
+        char *last_read
+        char **image_ids
+        rbd_mirror_image_info_t *info_entries
+        rbd_mirror_image_mode_t *mode_entries
+        size_t size
+
+    def __init__(self, ioctx, mode_filter):
+        self.ioctx = convert_ioctx(ioctx)
+        if mode_filter is not None:
+            self.mode_filter = mode_filter
+            self.mode_filter_ptr = &self.mode_filter
+        else:
+            self.mode_filter_ptr = NULL
+        self.max_read = 1024
+        self.last_read = strdup("")
+        self.image_ids = <char **>realloc_chk(NULL,
+            sizeof(char *) * self.max_read)
+        self.info_entries = <rbd_mirror_image_info_t *>realloc_chk(NULL,
+            sizeof(rbd_mirror_image_info_t) * self.max_read)
+        self.mode_entries = <rbd_mirror_image_mode_t *>realloc_chk(NULL,
+            sizeof(rbd_mirror_image_mode_t) * self.max_read)
+        self.size = 0
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while self.size > 0:
+            for i in range(self.size):
+                yield (decode_cstr(self.image_ids[i]),
+                       {
+                           'mode'      : int(self.mode_entries[i]),
+                           'global_id' : decode_cstr(self.info_entries[i].global_id),
+                           'state'     : int(self.info_entries[i].state),
+                           'primary'   : self.info_entries[i].primary,
+                       })
+            if self.size < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def __dealloc__(self):
+        rbd_mirror_image_info_list_cleanup(self.image_ids, self.info_entries,
+                                           self.size)
+        if self.last_read:
+            free(self.last_read)
+        if self.image_ids:
+            free(self.image_ids)
+        if self.info_entries:
+            free(self.info_entries)
+        if self.mode_entries:
+            free(self.mode_entries)
+
+    def get_next_chunk(self):
+        if self.size > 0:
+            rbd_mirror_image_info_list_cleanup(self.image_ids,
+                                               self.info_entries, self.size)
+            self.size = 0
+        with nogil:
+            ret = rbd_mirror_image_info_list(self.ioctx, self.mode_filter_ptr,
+                                             self.last_read, self.max_read,
+                                             self.image_ids, self.mode_entries,
+                                             self.info_entries, &self.size)
+        if ret < 0:
+            raise make_ex(ret, 'error listing mirror image info')
         if self.size > 0:
             last_read = cstr(self.image_ids[self.size - 1], 'last_read')
             free(self.last_read)
@@ -4622,7 +4727,7 @@ written." % (self.name, ret, length))
             'state'     : int(c_info.state),
             'primary'   : c_info.primary,
             }
-        free(c_info.global_id)
+        rbd_mirror_image_get_info_cleanup(&c_info)
         return info
 
     def mirror_image_get_mode(self):

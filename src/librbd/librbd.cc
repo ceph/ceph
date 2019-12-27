@@ -1172,6 +1172,15 @@ namespace librbd {
                                                          instance_ids);
   }
 
+  int RBD::mirror_image_info_list(
+      IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+      const std::string &start_id, size_t max,
+      std::map<std::string, std::pair<mirror_image_mode_t,
+                                      mirror_image_info_t>> *entries) {
+    return librbd::api::Mirror<>::image_info_list(io_ctx, mode_filter, start_id,
+                                                  max, entries);
+  }
+
   int RBD::group_create(IoCtx& io_ctx, const char *group_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -3340,7 +3349,7 @@ extern "C" int rbd_mirror_image_global_status_list(rados_ioctx_t p,
 extern "C" void rbd_mirror_image_global_status_cleanup(
     rbd_mirror_image_global_status_t *global_status) {
   free(global_status->name);
-  free(global_status->info.global_id);
+  rbd_mirror_image_get_info_cleanup(&global_status->info);
   for (auto idx = 0U; idx < global_status->site_statuses_count; ++idx) {
     free(global_status->site_statuses[idx].fsid);
     free(global_status->site_statuses[idx].description);
@@ -3460,7 +3469,7 @@ extern "C" void rbd_mirror_image_status_list_cleanup(char **image_ids,
   for (size_t i = 0; i < len; i++) {
     free(image_ids[i]);
     free(images[i].name);
-    free(images[i].info.global_id);
+    rbd_mirror_image_get_info_cleanup(&images[i].info);
     free(images[i].description);
   }
 }
@@ -3521,6 +3530,43 @@ extern "C" void rbd_mirror_image_instance_id_list_cleanup(
   for (size_t i = 0; i < len; i++) {
     free(image_ids[i]);
     free(instance_ids[i]);
+  }
+}
+
+extern "C" int rbd_mirror_image_info_list(
+    rados_ioctx_t p, rbd_mirror_image_mode_t *mode_filter,
+    const char *start_id, size_t max, char **image_ids,
+    rbd_mirror_image_mode_t *mode_entries,
+    rbd_mirror_image_info_t *info_entries, size_t *num_entries) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  std::map<std::string, std::pair<librbd::mirror_image_mode_t,
+                                  librbd::mirror_image_info_t>> cpp_entries;
+
+  int r = librbd::api::Mirror<>::image_info_list(io_ctx, mode_filter, start_id,
+                                                 max, &cpp_entries);
+  if (r < 0) {
+    return r;
+  }
+
+  ceph_assert(cpp_entries.size() <= max);
+
+  for (auto &it : cpp_entries) {
+    *(image_ids++) = strdup(it.first.c_str());
+    *(mode_entries++) = it.second.first;
+    mirror_image_info_cpp_to_c(it.second.second, info_entries++);
+  }
+  *num_entries = cpp_entries.size();
+
+  return 0;
+}
+
+extern "C" void rbd_mirror_image_info_list_cleanup(
+    char **image_ids, rbd_mirror_image_info_t *info_entries,
+    size_t num_entries) {
+  for (size_t i = 0; i < num_entries; i++) {
+    free(*(image_ids++));
+    rbd_mirror_image_get_info_cleanup(info_entries++);
   }
 }
 
@@ -6226,6 +6272,12 @@ extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
 
   mirror_image_info_cpp_to_c(cpp_mirror_image, mirror_image_info);
   return 0;
+}
+
+extern "C" void rbd_mirror_image_get_info_cleanup(
+    rbd_mirror_image_info_t *mirror_image_info)
+{
+  free(mirror_image_info->global_id);
 }
 
 extern "C" int rbd_mirror_image_get_mode(rbd_image_t image,
