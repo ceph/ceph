@@ -21,73 +21,59 @@ class dir_result_t;
 struct MetaRequest {
 private:
   InodeRef _inode, _old_inode, _other_inode;
-  Dentry *_dentry; //associated with path
-  Dentry *_old_dentry; //associated with path2
-  int abort_rc;
+  Dentry *_dentry = nullptr;	 //associated with path
+  Dentry *_old_dentry = nullptr; //associated with path2
+  int abort_rc = 0;
 public:
-  uint64_t tid;
+  uint64_t tid = 0;
   utime_t  op_stamp;
   ceph_mds_request_head head;
   filepath path, path2;
   std::string alternate_name;
   bufferlist data;
-  int inode_drop; //the inode caps this operation will drop
-  int inode_unless; //unless we have these caps already
-  int old_inode_drop, old_inode_unless;
-  int dentry_drop, dentry_unless;
-  int old_dentry_drop, old_dentry_unless;
-  int other_inode_drop, other_inode_unless;
+  int inode_drop = 0, inode_unless = 0;
+  int old_inode_drop = 0, old_inode_unless = 0;
+  int dentry_drop = 0, dentry_unless = 0;
+  int old_dentry_drop = 0, old_dentry_unless = 0;
+  int other_inode_drop = 0, other_inode_unless = 0;
   vector<MClientRequest::Release> cap_releases;
 
-  int regetattr_mask;          // getattr mask if i need to re-stat after a traceless reply
+  int regetattr_mask = 0;	// getattr mask if i need to re-stat after a traceless reply
  
   utime_t  sent_stamp;
-  mds_rank_t mds;                // who i am asking
-  mds_rank_t resend_mds;         // someone wants you to (re)send the request here
-  bool     send_to_auth;       // must send to auth mds
-  __u32    sent_on_mseq;       // mseq at last submission of this request
-  int      num_fwd;            // # of times i've been forwarded
-  int      retry_attempt;
+  mds_rank_t mds = MDS_RANK_NONE;	// who i am asking
+  mds_rank_t resend_mds = MDS_RANK_NONE;// someone wants you to (re)send the request here
+  bool     send_to_auth = false;	// must send to auth mds
+  __u32    sent_on_mseq = 0;		// mseq at last submission of this request
+  int      num_fwd = 0;			// # of times i've been forwarded
+  int      retry_attempt = 0;
   std::atomic<uint64_t> ref = { 1 };
   
-  ceph::cref_t<MClientReply> reply;         // the reply
-  bool kick;
-  bool success;
+  ceph::cref_t<MClientReply> reply;
+  bool kick = false;
+  bool success = false;
   
   // readdir result
-  dir_result_t *dirp;
+  dir_result_t *dirp = nullptr;
 
   //possible responses
-  bool got_unsafe;
+  bool got_unsafe = false;
 
   xlist<MetaRequest*>::item item;
   xlist<MetaRequest*>::item unsafe_item;
   xlist<MetaRequest*>::item unsafe_dir_item;
   xlist<MetaRequest*>::item unsafe_target_item;
 
-  ceph::condition_variable *caller_cond;          // who to take up
-  ceph::condition_variable *dispatch_cond;        // who to kick back
+  ceph::condition_variable *caller_cond = nullptr;          // who to take up
+  ceph::condition_variable *dispatch_cond = nullptr;        // who to kick back
   list<ceph::condition_variable*> waitfor_safe;
 
   InodeRef target;
   UserPerm perms;
 
   explicit MetaRequest(int op) :
-    _dentry(NULL), _old_dentry(NULL), abort_rc(0),
-    tid(0),
-    inode_drop(0), inode_unless(0),
-    old_inode_drop(0), old_inode_unless(0),
-    dentry_drop(0), dentry_unless(0),
-    old_dentry_drop(0), old_dentry_unless(0),
-    other_inode_drop(0), other_inode_unless(0),
-    regetattr_mask(0),
-    mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
-    num_fwd(0), retry_attempt(0),
-    reply(0),
-    kick(false), success(false), dirp(NULL),
-    got_unsafe(false), item(this), unsafe_item(this),
-    unsafe_dir_item(this), unsafe_target_item(this),
-    caller_cond(0), dispatch_cond(0) {
+    item(this), unsafe_item(this),
+    unsafe_dir_item(this), unsafe_target_item(this) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
