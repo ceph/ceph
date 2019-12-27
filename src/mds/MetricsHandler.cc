@@ -165,6 +165,7 @@ void MetricsHandler::handle_payload(Session *session, const ReadLatencyPayload &
   auto &metrics = it->second.second;
   metrics.update_type = UPDATE_TYPE_REFRESH;
   metrics.read_latency_metric.lat = payload.lat;
+  metrics.read_latency_metric.updated = true;
 }
 
 void MetricsHandler::handle_payload(Session *session, const WriteLatencyPayload &payload) {
@@ -178,6 +179,7 @@ void MetricsHandler::handle_payload(Session *session, const WriteLatencyPayload 
   auto &metrics = it->second.second;
   metrics.update_type = UPDATE_TYPE_REFRESH;
   metrics.write_latency_metric.lat = payload.lat;
+  metrics.write_latency_metric.updated = true;
 }
 
 void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPayload &payload) {
@@ -191,6 +193,7 @@ void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPaylo
   auto &metrics = it->second.second;
   metrics.update_type = UPDATE_TYPE_REFRESH;
   metrics.metadata_latency_metric.lat = payload.lat;
+  metrics.metadata_latency_metric.updated = true;
 }
 
 void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payload) {
