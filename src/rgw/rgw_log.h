@@ -26,9 +26,9 @@ struct rgw_log_entry {
   string uri;
   string http_status;
   string error_code;
-  uint64_t bytes_sent;
-  uint64_t bytes_received;
-  uint64_t obj_size;
+  uint64_t bytes_sent = 0;
+  uint64_t bytes_received = 0;
+  uint64_t obj_size = 0;
   Clock::duration total_time{};
   string user_agent;
   string referrer;
