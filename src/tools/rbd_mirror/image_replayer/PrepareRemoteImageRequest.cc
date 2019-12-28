@@ -37,7 +37,7 @@ void PrepareRemoteImageRequest<I>::send() {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::get_remote_mirror_uuid() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_uuid_get_start(&op);
@@ -60,7 +60,7 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid(int r) {
     }
   }
 
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
   if (r < 0) {
     if (r == -ENOENT) {
       dout(5) << "remote mirror uuid missing" << dendl;
@@ -77,7 +77,7 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid(int r) {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::get_remote_image_id() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = create_context_callback<
     PrepareRemoteImageRequest<I>,
@@ -90,7 +90,7 @@ void PrepareRemoteImageRequest<I>::get_remote_image_id() {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::handle_get_remote_image_id(int r) {
-  dout(20) << "r=" << r << ", "
+  dout(10) << "r=" << r << ", "
            << "remote_image_id=" << *m_remote_image_id << dendl;
 
   if (r < 0) {
@@ -103,7 +103,7 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_image_id(int r) {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::get_client() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   ceph_assert(*m_remote_journaler == nullptr);
   *m_remote_journaler = new Journaler(m_threads->work_queue, m_threads->timer,
@@ -121,7 +121,7 @@ void PrepareRemoteImageRequest<I>::get_client() {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::handle_get_client(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r == -ENOENT) {
     dout(10) << "client not registered" << dendl;
@@ -141,7 +141,7 @@ void PrepareRemoteImageRequest<I>::handle_get_client(int r) {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::register_client() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta{
     m_local_image_id};
@@ -160,7 +160,7 @@ void PrepareRemoteImageRequest<I>::register_client() {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::handle_register_client(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
     derr << "failed to register with remote journal: " << cpp_strerror(r)
@@ -178,7 +178,7 @@ void PrepareRemoteImageRequest<I>::handle_register_client(int r) {
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::finish(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
     delete *m_remote_journaler;

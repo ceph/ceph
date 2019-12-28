@@ -596,8 +596,14 @@ void Replayer<I>::handle_wait_for_in_flight_ops(int r) {
   ReplayStatusFormatter<I>::destroy(m_replay_status_formatter);
   m_replay_status_formatter = nullptr;
 
-  ceph_assert(m_on_init_shutdown != nullptr);
-  m_on_init_shutdown->complete(m_error_code);
+  Context* on_init_shutdown = nullptr;
+  {
+    std::unique_lock locker{m_lock};
+    ceph_assert(m_on_init_shutdown != nullptr);
+    std::swap(m_on_init_shutdown, on_init_shutdown);
+    m_state = STATE_COMPLETE;
+  }
+  on_init_shutdown->complete(m_error_code);
 }
 
 template <typename I>
