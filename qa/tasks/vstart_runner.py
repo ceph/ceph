@@ -176,6 +176,7 @@ class LocalRemoteProcess(object):
                 return
 
         out, err = self.subproc.communicate()
+        out, err = out.decode(), err.decode()
         self.stdout.write(out)
         self.stderr.write(err)
 
