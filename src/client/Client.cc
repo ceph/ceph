@@ -1865,7 +1865,6 @@ int Client::make_request(MetaRequest *request,
     ceph_assert(request->aborted());
     ceph_assert(!request->got_unsafe);
     r = request->get_abort_code();
-    request->item.remove_myself();
     unregister_request(request);
     put_request(request);
     return r;
@@ -1900,8 +1899,31 @@ int Client::make_request(MetaRequest *request,
   return r;
 }
 
+void Client::register_unsafe_request(MetaRequest *req, MetaSession *session)
+{
+  session->unsafe_requests.push_back(&req->unsafe_item);
+  if (is_dir_operation(req)) {
+    Inode *dir = req->inode();
+    ceph_assert(dir);
+    dir->unsafe_ops.push_back(&req->unsafe_dir_item);
+  }
+  if (req->target) {
+    InodeRef &in = req->target;
+    in->unsafe_ops.push_back(&req->unsafe_target_item);
+  }
+}
+
 void Client::unregister_request(MetaRequest *req)
 {
+  if (req->got_unsafe) {
+    req->unsafe_item.remove_myself();
+    req->unsafe_dir_item.remove_myself();
+    req->unsafe_target_item.remove_myself();
+    signal_cond_list(req->waitfor_safe);
+  }
+
+  req->item.remove_myself();
+
   mds_requests.erase(req->tid);
   if (req->tid == oldest_tid) {
     map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.upper_bound(oldest_tid);
@@ -2510,16 +2532,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   // Handle unsafe reply
   if (!is_safe) {
     request->got_unsafe = true;
-    session->unsafe_requests.push_back(&request->unsafe_item);
-    if (is_dir_operation(request)) {
-      Inode *dir = request->inode();
-      ceph_assert(dir);
-      dir->unsafe_ops.push_back(&request->unsafe_dir_item);
-    }
-    if (request->target) {
-      InodeRef &in = request->target;
-      in->unsafe_ops.push_back(&request->unsafe_target_item);
-    }
+    register_unsafe_request(request, session);
   }
 
   // Only signal the caller once (on the first reply):
@@ -2547,13 +2560,6 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   if (is_safe) {
     // the filesystem change is committed to disk
     // we're done, clean up
-    if (request->got_unsafe) {
-      request->unsafe_item.remove_myself();
-      request->unsafe_dir_item.remove_myself();
-      request->unsafe_target_item.remove_myself();
-      signal_cond_list(request->waitfor_safe);
-    }
-    request->item.remove_myself();
     unregister_request(request);
   }
   if (is_unmounting())
@@ -3083,27 +3089,24 @@ void Client::kick_requests_closed(MetaSession *session)
 	req->kick = true;
 	req->caller_cond->notify_all();
       }
-      req->item.remove_myself();
       if (req->got_unsafe) {
 	lderr(cct) << __func__ << " removing unsafe request " << req->get_tid() << dendl;
-	req->unsafe_item.remove_myself();
 	if (is_dir_operation(req)) {
 	  Inode *dir = req->inode();
 	  assert(dir);
 	  dir->set_async_err(-CEPHFS_EIO);
 	  lderr(cct) << "kick_requests_closed drop req of inode(dir) : "
 		     <<  dir->ino  << " " << req->get_tid() << dendl;
-	  req->unsafe_dir_item.remove_myself();
 	}
 	if (req->target) {
 	  InodeRef &in = req->target;
 	  in->set_async_err(-CEPHFS_EIO);
 	  lderr(cct) << "kick_requests_closed drop req of inode : "
 		     <<  in->ino  << " " << req->get_tid() << dendl;
-	  req->unsafe_target_item.remove_myself();
 	}
-	signal_cond_list(req->waitfor_safe);
 	unregister_request(req);
+      } else {
+	req->item.remove_myself();
       }
     }
   }

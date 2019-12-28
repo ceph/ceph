@@ -888,6 +888,7 @@ protected:
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
   void put_request(MetaRequest *request);
+  void register_unsafe_request(MetaRequest *request, MetaSession *session);
   void unregister_request(MetaRequest *request);
 
   int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
