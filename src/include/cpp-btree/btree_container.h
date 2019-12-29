@@ -196,6 +196,11 @@ class btree_unique_container : public btree_container<Tree> {
   iterator insert(iterator position, const value_type &x) {
     return this->tree_.insert_unique(position, x);
   }
+  template<class... Args>
+  iterator emplace_hint(iterator hint, Args&&... args) {
+    return this->tree_.insert_unique(hint,
+                                     value_type(std::forward<Args>(args)...));
+  }
   template <typename InputIterator>
   void insert(InputIterator b, InputIterator e) {
     this->tree_.insert_unique(b, e);
