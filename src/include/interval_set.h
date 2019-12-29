@@ -33,9 +33,11 @@
 template<typename T, typename Map = std::map<T,T>>
 class interval_set {
  public:
-  using value_type = T;
-  using interval_type = typename Map::value_type;
-  using interval_const_type = const interval_type;
+  using value_type = typename Map::value_type;
+  using offset_type = T;
+  using length_type = T;
+  using reference = value_type&;
+  using const_reference = const value_type&;
   using size_type = typename Map::size_type;
 
   class const_iterator;
@@ -59,26 +61,26 @@ class interval_set {
         }
 
         // Dereference this iterator to get a pair.
-        interval_type& operator*() const {
+        reference operator*() const {
           return *_iter;
         }
 
         // Return the interval start.
-        value_type get_start() const {
+        offset_type get_start() const {
           return _iter->first;
         }
 
         // Return the interval length.
-        value_type get_len() const {
+        length_type get_len() const {
           return _iter->second;
         }
 
-        value_type get_end() const {
+        offset_type get_end() const {
           return _iter->first + _iter->second;
         }
 
         // Set the interval length.
-        void set_len(const value_type& len) {
+        void set_len(const length_type& len) {
           _iter->second = len;
         }
 
@@ -97,11 +99,11 @@ class interval_set {
           return prev;
         }
 
-    friend class interval_set<T,Map>::const_iterator;
+    friend class interval_set::const_iterator;
 
     protected:
         typename Map::iterator _iter;
-    friend class interval_set<T,Map>;
+    friend class interval_set;
   };
 
   class const_iterator : public std::iterator <std::forward_iterator_tag, T>
@@ -127,20 +129,20 @@ class interval_set {
         }
 
         // Dereference this iterator to get a pair.
-        interval_const_type& operator*() const {
+        const_reference operator*() const {
           return *_iter;
         }
 
         // Return the interval start.
-        value_type get_start() const {
+        offset_type get_start() const {
           return _iter->first;
         }
-        value_type get_end() const {
+        offset_type get_end() const {
           return _iter->first + _iter->second;
         }
 
         // Return the interval length.
-        value_type get_len() const {
+        length_type get_len() const {
           return _iter->second;
         }
 
@@ -285,9 +287,8 @@ class interval_set {
       auto start = std::max<T>(ps->first, pl->first);
       auto en = std::min<T>(ps->first + ps->second, offset);
       ceph_assert(en > start);
-      auto i = interval_type{start, en - start};
-      mi = m.insert(mi, i);
-      _size += i.second;
+      mi = m.emplace_hint(mi, start, en - start);
+      _size += mi->second;
       if (ps->first + ps->second <= offset) {
         ++ps;
         if (ps == s.m.end())
@@ -409,12 +410,12 @@ class interval_set {
   bool empty() const {
     return m.empty();
   }
-  value_type range_start() const {
+  offset_type range_start() const {
     ceph_assert(!empty());
     auto p = m.begin();
     return p->first;
   }
-  value_type range_end() const {
+  offset_type range_end() const {
     ceph_assert(!empty());
     auto p = m.end();
     p--;
@@ -428,14 +429,14 @@ class interval_set {
     if (p == m.end()) return false;
     return true;
   }
-  value_type start_after(T i) const {
+  offset_type start_after(T i) const {
     ceph_assert(!contains(i));
     auto p = find_inc(i);
     return p->first;
   }
 
   // interval end that contains start
-  value_type end_after(T start) const {
+  offset_type end_after(T start) const {
     ceph_assert(contains(start));
     auto p = find_inc(start);
     return p->first+p->second;
@@ -501,7 +502,7 @@ class interval_set {
     }
   }
 
-  void swap(interval_set<T,Map>& other) {
+  void swap(interval_set& other) {
     m.swap(other.m);
     std::swap(_size, other._size);
   }    
@@ -613,9 +614,8 @@ class interval_set {
       T start = std::max(pa->first, pb->first);
       T en = std::min(pa->first+pa->second, pb->first+pb->second);
       ceph_assert(en > start);
-      auto i = interval_type{start, en - start};
-      mi = m.insert(mi, i);
-      _size += i.second;
+      mi = m.emplace_hint(mi, start, en - start);
+      _size += mi->second;
       if (pa->first+pa->second > pb->first+pb->second)
         pb++;
       else
