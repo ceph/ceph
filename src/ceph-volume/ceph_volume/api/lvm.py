@@ -1344,7 +1344,76 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
 # Later, these can be easily merged with get_api_* methods
 #
 ###########################################################
-def get_pvs(fields=PV_FIELDS, sep='";"', filters=''):
+
+def convert_filters_to_str(filters):
+    """
+    Convert filter args from dictionary to following format -
+        filters={filter_name=filter_val,...}
+    """
+    if not filters:
+        return filters
+
+    filter_arg = ''
+    for k, v in filters.items():
+        filter_arg += k + '=' + v + ','
+    # get rid of extra comma at the end
+    filter_arg = filter_arg[:len(filter_arg) - 1]
+
+    return filter_arg
+
+def convert_tags_to_str(tags):
+    """
+    Convert tags from dictionary to following format -
+        tags={tag_name=tag_val,...}
+    """
+    if not tags:
+        return tags
+
+    tag_arg = 'tags={'
+    for k, v in tags.items():
+        tag_arg += k + '=' + v + ','
+    # get rid of extra comma at the end
+    tag_arg = tag_arg[:len(tag_arg) - 1] + '}'
+
+    return tag_arg
+
+def make_filters_lvmcmd_ready(filters, tags):
+    """
+    Convert filters (including tags) from dictionary to following format -
+        filter_name=filter_val...,tags={tag_name=tag_val,...}
+
+    The command will look as follows =
+        lvs -S filter_name=filter_val...,tags={tag_name=tag_val,...}
+    """
+    filters = convert_filters_to_str(filters)
+    tags = convert_tags_to_str(tags)
+
+    if filters and tags:
+        return filters + ',' + tags
+    if filters and not tags:
+        return filters
+    if not filters and tags:
+        return tags
+    else:
+        return ''
+
+def get_pvs(fields=PV_FIELDS, sep='";"', filters='', tags=None):
+    """
+    Return a list of PVs that are available on the system and match the
+    filters and tags passed. Argument filters takes a dictionary containing
+    arguments required by -S option of LVM. Passing a list of LVM tags can be
+    quite tricky to pass as a dictionary within dictionary, therefore pass
+    dictionary of tags via tags argument and tricky part will be taken care of
+    by the helper methods.
+
+    :param fields: string containing list of fields to be displayed by the
+                   pvs command
+    :param sep: string containing separator to be used between two fields
+    :param filters: dictionary containing LVM filters
+    :param tags: dictionary containng LVM tags
+    :returns: list of class PVolume object representing pvs on the system
+    """
+    filters = make_filters_lvmcmd_ready(filters, tags)
     args = ['pvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
             filters, '-o', fields]
 
@@ -1352,7 +1421,23 @@ def get_pvs(fields=PV_FIELDS, sep='";"', filters=''):
     pvs_report = _output_parser(stdout, fields)
     return [PVolume(**pv_report) for pv_report in pvs_report]
 
-def get_vgs(fields=VG_FIELDS, sep='";"', filters=''):
+def get_vgs(fields=VG_FIELDS, sep='";"', filters='', tags=None):
+    """
+    Return a list of VGs that are available on the system and match the
+    filters and tags passed. Argument filters takes a dictionary containing
+    arguments required by -S option of LVM. Passing a list of LVM tags can be
+    quite tricky to pass as a dictionary within dictionary, therefore pass
+    dictionary of tags via tags argument and tricky part will be taken care of
+    by the helper methods.
+
+    :param fields: string containing list of fields to be displayed by the
+                   vgs command
+    :param sep: string containing separator to be used between two fields
+    :param filters: dictionary containing LVM filters
+    :param tags: dictionary containng LVM tags
+    :returns: list of class VolumeGroup object representing vgs on the system
+    """
+    filters = make_filters_lvmcmd_ready(filters, tags)
     args = ['vgs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
             filters, '-o', fields]
 
@@ -1360,7 +1445,23 @@ def get_vgs(fields=VG_FIELDS, sep='";"', filters=''):
     vgs_report =_output_parser(stdout, fields)
     return [VolumeGroup(**vg_report) for vg_report in vgs_report]
 
-def get_lvs(fields=LV_FIELDS, sep='";"', filters=''):
+def get_lvs(fields=LV_FIELDS, sep='";"', filters='', tags=None):
+    """
+    Return a list of LVs that are available on the system and match the
+    filters and tags passed. Argument filters takes a dictionary containing
+    arguments required by -S option of LVM. Passing a list of LVM tags can be
+    quite tricky to pass as a dictionary within dictionary, therefore pass
+    dictionary of tags via tags argument and tricky part will be taken care of
+    by the helper methods.
+
+    :param fields: string containing list of fields to be displayed by the
+                   lvs command
+    :param sep: string containing separator to be used between two fields
+    :param filters: dictionary containing LVM filters
+    :param tags: dictionary containng LVM tags
+    :returns: list of class Volume object representing LVs on the system
+    """
+    filters = make_filters_lvmcmd_ready(filters, tags)
     args = ['lvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
             filters, '-o', fields]
 
