@@ -1,25 +1,38 @@
 import pytest
+from copy import deepcopy
 from ceph_volume.util import device
 from ceph_volume.api import lvm as api
 
 
 class TestDevice(object):
 
-    def test_sys_api(self, device_info):
+    def test_sys_api(self, volumes, monkeypatch, device_info):
+        volume = api.Volume(lv_name='lv', lv_uuid='y', vg_name='vg',
+                            lv_tags={}, lv_path='/dev/VolGroup/lv')
+        volumes.append(volume)
+        monkeypatch.setattr(api, 'get_lvs', lambda **kwargs:
+                            deepcopy(volumes))
+
         data = {"/dev/sda": {"foo": "bar"}}
         device_info(devices=data)
         disk = device.Device("/dev/sda")
         assert disk.sys_api
         assert "foo" in disk.sys_api
 
-    def test_lvm_size(self, device_info):
+    def test_lvm_size(self, volumes, monkeypatch, device_info):
+        volume = api.Volume(lv_name='lv', lv_uuid='y', vg_name='vg',
+                            lv_tags={}, lv_path='/dev/VolGroup/lv')
+        volumes.append(volume)
+        monkeypatch.setattr(api, 'get_lvs', lambda **kwargs:
+                            deepcopy(volumes))
+
         # 5GB in size
         data = {"/dev/sda": {"size": "5368709120"}}
         device_info(devices=data)
         disk = device.Device("/dev/sda")
         assert disk.lvm_size.gb == 4
 
-    def test_lvm_size_rounds_down(self, device_info):
+    def test_lvm_size_rounds_down(self, device_info, volumes):
         # 5.5GB in size
         data = {"/dev/sda": {"size": "5905580032"}}
         device_info(devices=data)
