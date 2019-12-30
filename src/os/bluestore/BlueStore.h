@@ -208,12 +208,12 @@ public:
     }
 
     BufferSpace *space;
-    uint16_t state;             ///< STATE_*
-    uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
-    uint32_t flags;             ///< FLAG_*
     uint64_t seq;
     uint64_t p_offset;
     uint32_t length;
+    uint16_t flags;             ///< FLAG_*
+    uint8_t state;             ///< STATE_*
+    uint8_t cache_private = 0; ///< opaque (to us) value used by Cache impl
     ceph::buffer::list data;
 
     boost::intrusive::list_member_hook<> lru_item;
@@ -221,11 +221,11 @@ public:
 
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint32_t l,
 	   unsigned f = 0)
-      : space(space), state(s), flags(f), seq(q), p_offset(o), length(l) {}
+      : space(space), seq(q), p_offset(o), length(l), flags(f), state(s) {}
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, ceph::buffer::list& b,
 	   unsigned f = 0)
-      : space(space), state(s), flags(f), seq(q), p_offset(o),
-	length(b.length()), data(b) {}
+      : space(space), seq(q), p_offset(o), length(b.length()), flags(f), state(s),
+	data(b) {}
 
     bool is_empty() const {
       return state == STATE_EMPTY;
