@@ -135,6 +135,7 @@ class Prepare(object):
             raise RuntimeError('unable to use device')
         return uuid
 
+    # TODO: get rid of this method?
     def get_lv(self, argument):
         """
         Perform some parsing of the command-line value so that the process
@@ -148,7 +149,8 @@ class Prepare(object):
             vg_name, lv_name = argument.split('/')
         except (ValueError, AttributeError):
             return None
-        return api.get_lv(lv_name=lv_name, vg_name=vg_name)
+        return api.get_first_lv(filters={'lv_name': lv_name, 'vg_name':
+                                         vg_name})
 
     def setup_device(self, device_type, device_name, tags, size):
         """
