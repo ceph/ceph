@@ -318,6 +318,12 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
   }
 
   m_image_deleter->print_status(f, ss);
+
+  if (f) {
+    f->close_section();
+    f->close_section();
+    f->flush(*ss);
+  }
 }
 
 void Mirror::start()
