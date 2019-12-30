@@ -52,6 +52,25 @@ To decompile a CRUSH map, execute the following::
 
 	crushtool -d {compiled-crushmap-filename} -o {decompiled-crushmap-filename}
 
+.. _compilecrushmap:
+
+Recompile a CRUSH Map
+---------------------
+
+To compile a CRUSH map, execute the following::
+
+	crushtool -c {decompiled-crushmap-filename} -o {compiled-crushmap-filename}
+
+.. _setcrushmap:
+
+Set the CRUSH Map
+-----------------
+
+To set the CRUSH map for your cluster, execute the following::
+
+	ceph osd setcrushmap -i {compiled-crushmap-filename}
+
+Ceph will load (-i) a compiled CRUSH map from the filename you specified.
 
 Sections
 --------
