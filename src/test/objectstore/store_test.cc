@@ -6316,10 +6316,12 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     //'mixed' non-overlapping writes to the same blob 
 
     ObjectStore::Transaction t;
-    bufferlist bl, orig;
+    bufferlist bl, orig, orig2;
     size_t block_size = 8000;
     bl.append(std::string(block_size, 'a'));
     orig = bl;
+    orig2 = orig;
+    orig2.append(orig);
     t.remove(cid, hoid);
     t.write(cid, hoid, 0, bl.length(), bl);
     cerr << "Remove then create" << std::endl;
@@ -6344,16 +6346,32 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     ASSERT_EQ((int)block_size, r);
     ASSERT_TRUE(bl_eq(orig, in));
 
+    // do the same reading via scattered reads and with csum on
     SetVal(g_conf(), "bluestore_csum_type", "crc32c");
     g_conf().apply_changes(nullptr);
     in.clear();
-    r = store->read(ch, hoid, 0, block_size, in);
-    ASSERT_EQ((int)block_size, r);
-    ASSERT_TRUE(bl_eq(orig, in));
-    in.clear();
-    r = store->read(ch, hoid, block_size*2, block_size, in);
-    ASSERT_EQ((int)block_size, r);
-    ASSERT_TRUE(bl_eq(orig, in));
+    interval_set<uint64_t> m;
+    m.insert(0, block_size);
+    m.insert(block_size * 2, block_size);
+    r = store->readv(ch, hoid, m, in, 0);
+    ASSERT_EQ((int)block_size * 2, r);
+    ASSERT_TRUE(bl_eq(orig2, in));
+
+    // and scattered read again including small zero-filled gap in between
+    {
+      in.clear();
+      interval_set<uint64_t> m;
+      m.insert(0, block_size);
+      const int gap_len = 3;
+      m.insert(block_size + 4, gap_len);
+      m.insert(block_size * 2, block_size);
+      orig2 = orig;
+      orig2.append_zero(gap_len);
+      orig2.append(orig);
+      r = store->readv(ch, hoid, m, in, 0);
+      ASSERT_EQ((int)block_size * 2 + gap_len, r);
+      ASSERT_TRUE(bl_eq(orig2, in));
+    }
   }
   {
     //partially blob overwrite under a different csum enablement mode
