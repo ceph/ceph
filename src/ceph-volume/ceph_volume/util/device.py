@@ -252,7 +252,6 @@ class Device(object):
                     # actually unused (not 100% sure) and can simply be removed
                     self.vg_name = vgs[0]
                     self._is_lvm_member = True
-
                     self.lvs.extend(lvm.get_device_lvs(path))
         return self._is_lvm_member
 
