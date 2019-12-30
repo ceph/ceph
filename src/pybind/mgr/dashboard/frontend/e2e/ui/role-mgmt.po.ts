@@ -7,7 +7,7 @@ export class RoleMgmtPageHelper extends PageHelper {
     create: '/#/user-management/roles/create'
   };
 
-  async create(name, description): Promise<void> {
+  async create(name: string, description: string): Promise<void> {
     await this.navigateTo('create');
 
     // fill in fields
@@ -21,7 +21,7 @@ export class RoleMgmtPageHelper extends PageHelper {
     await this.waitPresence(this.getFirstTableCellWithText(name));
   }
 
-  async edit(name, description): Promise<void> {
+  async edit(name: string, description: string): Promise<void> {
     await this.navigateTo();
 
     await this.getFirstTableCellWithText(name).click(); // select role from table

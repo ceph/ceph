@@ -59,7 +59,7 @@ describe('RbdTrashListComponent', () => {
   describe('handling of executing tasks', () => {
     let images: any[];
 
-    const addImage = (id) => {
+    const addImage = (id: string) => {
       images.push({
         id: id,
         pool_name: 'pl'
@@ -89,7 +89,9 @@ describe('RbdTrashListComponent', () => {
 
     it('should gets all images without tasks', () => {
       expect(component.images.length).toBe(2);
-      expect(component.images.every((image) => !image.cdExecuting)).toBeTruthy();
+      expect(
+        component.images.every((image: Record<string, any>) => !image.cdExecuting)
+      ).toBeTruthy();
     });
 
     it('should show when an existing image is being modified', () => {

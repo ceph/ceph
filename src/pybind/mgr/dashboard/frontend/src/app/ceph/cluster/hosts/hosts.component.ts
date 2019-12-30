@@ -136,7 +136,7 @@ export class HostsComponent implements OnInit {
     this.hostService.list().subscribe(
       (resp: any[]) => {
         resp.map((host) => {
-          host.services.map((service) => {
+          host.services.map((service: any) => {
             service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
             const permission = this.permissions[typeToPermissionKey[service.type]];
             service.canRead = permission ? permission.read : false;

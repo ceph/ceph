@@ -24,7 +24,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   grafanaExist = false;
   mode = '&kiosk';
   loading = true;
-  styles = {};
+  styles: Record<string, string> = {};
   dashboardExist = true;
   time: string;
   grafanaTimes: any;

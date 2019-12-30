@@ -45,7 +45,8 @@ describe('OsdListComponent', () => {
     }
   };
 
-  const getTableAction = (name) => component.tableActions.find((action) => action.name === name);
+  const getTableAction = (name: string) =>
+    component.tableActions.find((action) => action.name === name);
 
   const setFakeSelection = () => {
     // Default data and selection
@@ -59,7 +60,7 @@ describe('OsdListComponent', () => {
     component.permissions = fakeAuthStorageService.getPermissions();
   };
 
-  const openActionModal = (actionName) => {
+  const openActionModal = (actionName: string) => {
     setFakeSelection();
     getTableAction(actionName).click();
   };
@@ -118,24 +119,25 @@ describe('OsdListComponent', () => {
   });
 
   describe('getOsdList', () => {
-    let osds;
+    let osds: any[];
 
-    const createOsd = (n: number) => ({
-      in: 'in',
-      up: 'up',
-      tree: {
-        device_class: 'ssd'
-      },
-      stats_history: {
-        op_out_bytes: [[n, n], [n * 2, n * 2]],
-        op_in_bytes: [[n * 3, n * 3], [n * 4, n * 4]]
-      },
-      stats: {
-        stat_bytes_used: n * n,
-        stat_bytes: n * n * n
-      },
-      state: []
-    });
+    const createOsd = (n: number) =>
+      <Record<string, any>>{
+        in: 'in',
+        up: 'up',
+        tree: {
+          device_class: 'ssd'
+        },
+        stats_history: {
+          op_out_bytes: [[n, n], [n * 2, n * 2]],
+          op_in_bytes: [[n * 3, n * 3], [n * 4, n * 4]]
+        },
+        stats: {
+          stat_bytes_used: n * n,
+          stat_bytes: n * n * n
+        },
+        state: []
+      };
 
     const expectAttributeOnEveryOsd = (attr: string) =>
       expect(component.osds.every((osd) => Boolean(_.get(osd, attr)))).toBeTruthy();
@@ -354,7 +356,7 @@ describe('OsdListComponent', () => {
      *
      * @param modalClass - The expected class of the modal
      */
-    const expectOpensModal = (actionName: string, modalClass): void => {
+    const expectOpensModal = (actionName: string, modalClass: any): void => {
       openActionModal(actionName);
 
       // @TODO: check why tsc is complaining when passing 'expectationFailOutput' param.

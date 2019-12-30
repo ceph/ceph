@@ -20,7 +20,7 @@ describe('InputModalComponent', () => {
   let fixture: ComponentFixture<FormModalComponent>;
   let fh: FixtureHelper;
   let formHelper: FormHelper;
-  let submitted;
+  let submitted: object;
 
   const initialState = {
     titleText: 'Some title',
@@ -48,7 +48,7 @@ describe('InputModalComponent', () => {
       }
     ],
     submitButtonText: 'Submit button name',
-    onSubmit: (values) => (submitted = values)
+    onSubmit: (values: object) => (submitted = values)
   };
 
   configureTestBed({

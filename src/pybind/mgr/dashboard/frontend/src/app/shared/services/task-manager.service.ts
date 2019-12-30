@@ -12,7 +12,7 @@ class TaskSubscription {
   metadata: object;
   onTaskFinished: (finishedTask: FinishedTask) => any;
 
-  constructor(name, metadata, onTaskFinished) {
+  constructor(name: string, metadata: object, onTaskFinished: any) {
     this.name = name;
     this.metadata = metadata;
     this.onTaskFinished = onTaskFinished;
@@ -47,7 +47,7 @@ export class TaskManagerService {
     });
   }
 
-  subscribe(name, metadata, onTaskFinished: (finishedTask: FinishedTask) => any) {
+  subscribe(name: string, metadata: object, onTaskFinished: (finishedTask: FinishedTask) => any) {
     this.subscriptions.push(new TaskSubscription(name, metadata, onTaskFinished));
   }
 

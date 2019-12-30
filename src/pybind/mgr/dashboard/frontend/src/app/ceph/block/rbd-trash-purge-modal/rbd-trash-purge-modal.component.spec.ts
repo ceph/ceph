@@ -1,4 +1,8 @@
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import {
+  HttpClientTestingModule,
+  HttpTestingController,
+  TestRequest
+} from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -69,7 +73,7 @@ describe('RbdTrashPurgeModalComponent', () => {
   describe('should call purge', () => {
     let notificationService: NotificationService;
     let modalRef: BsModalRef;
-    let req;
+    let req: TestRequest;
 
     beforeEach(() => {
       fixture.detectChanges();

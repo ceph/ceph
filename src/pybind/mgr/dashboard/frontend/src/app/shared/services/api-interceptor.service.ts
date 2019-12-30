@@ -92,7 +92,7 @@ export class ApiInterceptorService implements HttpInterceptor {
     );
   }
 
-  private prepareNotification(resp): number {
+  private prepareNotification(resp: any): number {
     return this.notificationService.show(() => {
       let message = '';
       if (_.isPlainObject(resp.error) && _.isString(resp.error.detail)) {

@@ -30,7 +30,7 @@ export class UserService {
     return this.http.put(`api/user/${user.username}`, user);
   }
 
-  changePassword(username, oldPassword, newPassword) {
+  changePassword(username: string, oldPassword: string, newPassword: string) {
     // Note, the specified user MUST be logged in to be able to change
     // the password. The backend ensures that the password of another
     // user can not be changed, otherwise an error will be thrown.

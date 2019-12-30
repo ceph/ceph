@@ -58,9 +58,9 @@ export class OsdListComponent implements OnInit {
   icons = Icons;
 
   selection = new CdTableSelection();
-  osds = [];
+  osds: any[] = [];
 
-  protected static collectStates(osd) {
+  protected static collectStates(osd: any) {
     const states = [osd['in'] ? 'in' : 'out'];
     if (osd['up']) {
       states.push('up');
@@ -325,8 +325,8 @@ export class OsdListComponent implements OnInit {
     this.osdService.getList().subscribe((data: any[]) => {
       this.osds = data.map((osd) => {
         osd.collectedStates = OsdListComponent.collectStates(osd);
-        osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i) => i[1]);
-        osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i) => i[1]);
+        osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i: string) => i[1]);
+        osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i: string) => i[1]);
         osd.stats.usage = osd.stats.stat_bytes_used / osd.stats.stat_bytes;
         osd.cdIsBinary = true;
         return osd;
@@ -352,7 +352,7 @@ export class OsdListComponent implements OnInit {
           }
         ],
         submitButtonText: this.i18n('Edit OSD'),
-        onSubmit: (values) => {
+        onSubmit: (values: any) => {
           this.osdService.update(selectedOsd.id, values.deviceClass).subscribe(() => {
             this.notificationService.show(
               NotificationType.success,
@@ -367,7 +367,7 @@ export class OsdListComponent implements OnInit {
     });
   }
 
-  scrubAction(deep) {
+  scrubAction(deep: boolean) {
     if (!this.hasOsdSelected) {
       return;
     }

@@ -20,7 +20,7 @@ import {
 } from '../app/shared/models/prometheus-alerts';
 import { _DEV_ } from '../unit-test-configuration';
 
-export function configureTestBed(configuration, useOldMethod?) {
+export function configureTestBed(configuration: any, useOldMethod?: boolean) {
   if (_DEV_ && !useOldMethod) {
     const resetTestingModule = TestBed.resetTestingModule;
     beforeAll((done) =>
@@ -190,7 +190,7 @@ export class FormHelper {
  *
  * Please make sure to call this function *inside* your mock and return the reference at the end.
  */
-export function modalServiceShow(componentClass: Type<any>, modalConfig) {
+export function modalServiceShow(componentClass: Type<any>, modalConfig: any) {
   const ref = new BsModalRef();
   const fixture = TestBed.createComponent(componentClass);
   let component = fixture.componentInstance;
@@ -276,7 +276,7 @@ export class FixtureHelper {
 }
 
 export class PrometheusHelper {
-  createSilence(id) {
+  createSilence(id: string) {
     return {
       id: id,
       createdBy: `Creator of ${id}`,
@@ -293,7 +293,7 @@ export class PrometheusHelper {
     };
   }
 
-  createRule(name, severity, alerts: any[]): PrometheusRule {
+  createRule(name: string, severity: string, alerts: any[]): PrometheusRule {
     return {
       name: name,
       labels: {
@@ -303,7 +303,7 @@ export class PrometheusHelper {
     } as PrometheusRule;
   }
 
-  createAlert(name, state = 'active', timeMultiplier = 1): AlertmanagerAlert {
+  createAlert(name: string, state = 'active', timeMultiplier = 1): AlertmanagerAlert {
     return {
       fingerprint: name,
       status: { state },
@@ -321,7 +321,7 @@ export class PrometheusHelper {
     } as AlertmanagerAlert;
   }
 
-  createNotificationAlert(name, status = 'firing'): AlertmanagerNotificationAlert {
+  createNotificationAlert(name: string, status = 'firing'): AlertmanagerNotificationAlert {
     return {
       status: status,
       labels: {
@@ -342,7 +342,7 @@ export class PrometheusHelper {
     return { alerts, status } as AlertmanagerNotification;
   }
 
-  createLink(url) {
+  createLink(url: string) {
     return `<a href="${url}" target="_blank"><i class="${Icons.lineChart}"></i></a>`;
   }
 }

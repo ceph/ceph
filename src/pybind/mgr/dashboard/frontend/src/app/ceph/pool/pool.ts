@@ -67,7 +67,7 @@ export class Pool {
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];
 
-  constructor(name) {
+  constructor(name: string) {
     this.pool_name = name;
   }
 }

@@ -22,8 +22,8 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
   let httpTesting: HttpTestingController;
   let req: TestRequest;
 
-  const elem = (css) => fixture.debugElement.query(By.css(css));
-  const elemDisabled = (css) => elem(css).nativeElement.disabled;
+  const elem = (css: string) => fixture.debugElement.query(By.css(css));
+  const elemDisabled = (css: string) => elem(css).nativeElement.disabled;
 
   configureTestBed({
     declarations: [IscsiTargetDiscoveryModalComponent],

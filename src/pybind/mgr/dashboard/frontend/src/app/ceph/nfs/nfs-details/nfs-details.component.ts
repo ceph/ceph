@@ -19,7 +19,7 @@ export class NfsDetailsComponent implements OnChanges {
   data: any;
 
   clientsColumns: CdTableColumn[];
-  clients = [];
+  clients: any[] = [];
 
   constructor(private i18n: I18n) {
     this.clientsColumns = [
@@ -51,7 +51,7 @@ export class NfsDetailsComponent implements OnChanges {
       this.data[this.i18n('Cluster')] = this.selectedItem.cluster_id;
       this.data[this.i18n('Daemons')] = this.selectedItem.daemons;
       this.data[this.i18n('NFS Protocol')] = this.selectedItem.protocols.map(
-        (protocol) => 'NFSv' + protocol
+        (protocol: string) => 'NFSv' + protocol
       );
       this.data[this.i18n('Pseudo')] = this.selectedItem.pseudo;
       this.data[this.i18n('Access Type')] = this.selectedItem.access_type;

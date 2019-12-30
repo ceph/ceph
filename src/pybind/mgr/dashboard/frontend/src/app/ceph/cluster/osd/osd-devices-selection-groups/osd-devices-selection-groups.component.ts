@@ -36,7 +36,7 @@ export class OsdDevicesSelectionGroupsComponent {
 
   icons = Icons;
   devices: InventoryDevice[] = [];
-  appliedFilters = [];
+  appliedFilters: any[] = [];
 
   constructor(private bsModalService: BsModalService) {}
 

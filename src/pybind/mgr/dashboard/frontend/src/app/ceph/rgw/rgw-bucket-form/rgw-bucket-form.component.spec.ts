@@ -20,7 +20,7 @@ describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
   let fixture: ComponentFixture<RgwBucketFormComponent>;
   let rgwBucketService: RgwBucketService;
-  let getPlacementTargetsSpy;
+  let getPlacementTargetsSpy: jasmine.Spy;
 
   configureTestBed({
     declarations: [RgwBucketFormComponent],
@@ -46,7 +46,7 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('bucketNameValidator', () => {
-    const testValidator = (name, valid) => {
+    const testValidator = (name: string, valid: boolean) => {
       const validatorFn = component.bucketNameValidator();
       const ctrl = new FormControl(name);
       ctrl.markAsDirty();
@@ -136,7 +136,7 @@ describe('RgwBucketFormComponent', () => {
     });
 
     it('should get zonegroup and placement targets', () => {
-      const payload = {
+      const payload: Record<string, any> = {
         zonegroup: 'default',
         placement_targets: [
           {

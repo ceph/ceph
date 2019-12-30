@@ -127,7 +127,7 @@ describe('TaskManagerMessageService', () => {
     });
 
     describe('rbd tasks', () => {
-      let metadata;
+      let metadata: Record<string, any>;
       let childMsg: string;
       let destinationMsg: string;
       let snapMsg: string;

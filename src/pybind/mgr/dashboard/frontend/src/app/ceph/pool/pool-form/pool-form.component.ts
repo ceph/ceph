@@ -58,7 +58,7 @@ export class PoolFormComponent implements OnInit {
   data = new PoolFormData(this.i18n);
   externalPgChange = false;
   private modalSubscription: Subscription;
-  current = {
+  current: Record<string, any> = {
     rules: []
   };
   initializeConfigData = new EventEmitter<{
@@ -141,7 +141,7 @@ export class PoolFormComponent implements OnInit {
           validators: [
             CdValidators.custom(
               'tooFewOsds',
-              (rule) => this.info && rule && this.info.osd_count < rule.min_size
+              (rule: any) => this.info && rule && this.info.osd_count < rule.min_size
             )
           ]
         }),
@@ -160,7 +160,7 @@ export class PoolFormComponent implements OnInit {
           validators: [Validators.min(0)]
         })
       },
-      [CdValidators.custom('form', () => null)]
+      [CdValidators.custom('form', (): null => null)]
     );
   }
 
@@ -411,7 +411,7 @@ export class PoolFormComponent implements OnInit {
     }
   }
 
-  private replicatedPgCalc(pgs): number {
+  private replicatedPgCalc(pgs: number): number {
     const sizeControl = this.form.get('size');
     const size = sizeControl.value;
     if (sizeControl.valid && size > 0) {
@@ -421,7 +421,7 @@ export class PoolFormComponent implements OnInit {
     return undefined;
   }
 
-  private erasurePgCalc(pgs): number {
+  private erasurePgCalc(pgs: number): number {
     const ecpControl = this.form.get('erasureProfile');
     const ecp = ecpControl.value;
     if ((ecpControl.valid || ecpControl.disabled) && ecp) {
@@ -443,7 +443,7 @@ export class PoolFormComponent implements OnInit {
           this.form.get('name').validator,
           CdValidators.custom(
             'uniqueName',
-            (name) =>
+            (name: string) =>
               this.data.pool &&
               this.info &&
               this.info.pool_names.indexOf(name) !== -1 &&
@@ -458,11 +458,11 @@ export class PoolFormComponent implements OnInit {
         [
           CdValidators.custom(
             'min',
-            (value) => this.form.getValue('size') && value < this.getMinSize()
+            (value: number) => this.form.getValue('size') && value < this.getMinSize()
           ),
           CdValidators.custom(
             'max',
-            (value) => this.form.getValue('size') && this.getMaxSize() < value
+            (value: number) => this.form.getValue('size') && this.getMaxSize() < value
           )
         ]
       );
@@ -472,7 +472,7 @@ export class PoolFormComponent implements OnInit {
           this.form.get('name').validator,
           CdValidators.custom(
             'uniqueName',
-            (name) => this.info && this.info.pool_names.indexOf(name) !== -1
+            (name: string) => this.info && this.info.pool_names.indexOf(name) !== -1
           )
         ]);
     }
@@ -482,13 +482,13 @@ export class PoolFormComponent implements OnInit {
   private setCompressionValidators() {
     CdValidators.validateIf(this.form.get('minBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
-      CdValidators.custom('maximum', (size) =>
+      CdValidators.custom('maximum', (size: string) =>
         this.oddBlobSize(size, this.form.getValue('maxBlobSize'))
       )
     ]);
     CdValidators.validateIf(this.form.get('maxBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
-      CdValidators.custom('minimum', (size) =>
+      CdValidators.custom('minimum', (size: string) =>
         this.oddBlobSize(this.form.getValue('minBlobSize'), size)
       )
     ]);
@@ -498,10 +498,10 @@ export class PoolFormComponent implements OnInit {
     ]);
   }
 
-  private oddBlobSize(minimum, maximum) {
-    minimum = this.formatter.toBytes(minimum);
-    maximum = this.formatter.toBytes(maximum);
-    return Boolean(minimum && maximum && minimum >= maximum);
+  private oddBlobSize(minimum: string, maximum: string) {
+    const min = this.formatter.toBytes(minimum);
+    const max = this.formatter.toBytes(maximum);
+    return Boolean(min && max && min >= max);
   }
 
   hasCompressionEnabled() {
@@ -564,7 +564,7 @@ export class PoolFormComponent implements OnInit {
       {
         externalFieldName: 'pg_num',
         formControlName: 'pgNum',
-        replaceFn: (value) => (this.form.getValue('pgAutoscaleMode') === 'on' ? 1 : value),
+        replaceFn: (value: number) => (this.form.getValue('pgAutoscaleMode') === 'on' ? 1 : value),
         editable: true
       },
       this.form.getValue('poolType') === 'replicated'
@@ -603,7 +603,7 @@ export class PoolFormComponent implements OnInit {
             externalFieldName: 'compression_mode',
             formControlName: 'mode',
             editable: true,
-            replaceFn: (value) => this.hasCompressionEnabled() && value
+            replaceFn: (value: boolean) => this.hasCompressionEnabled() && value
           },
           {
             externalFieldName: 'compression_algorithm',
@@ -706,7 +706,7 @@ export class PoolFormComponent implements OnInit {
     pool[externalFieldName] = apiValue;
   }
 
-  private triggerApiTask(pool) {
+  private triggerApiTask(pool: Record<string, any>) {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('pool/' + (this.editing ? URLVerbs.EDIT : URLVerbs.CREATE), {

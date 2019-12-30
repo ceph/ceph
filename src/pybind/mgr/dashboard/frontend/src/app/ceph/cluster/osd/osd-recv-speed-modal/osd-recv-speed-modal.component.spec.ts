@@ -31,7 +31,7 @@ describe('OsdRecvSpeedModalComponent', () => {
     providers: [BsModalRef, i18nProviders]
   });
 
-  let configOptions = [];
+  let configOptions: any[] = [];
 
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdRecvSpeedModalComponent);
@@ -72,8 +72,8 @@ describe('OsdRecvSpeedModalComponent', () => {
   });
 
   describe('ngOnInit', () => {
-    let setPriority;
-    let setValidators;
+    let setPriority: jasmine.Spy;
+    let setValidators: jasmine.Spy;
 
     beforeEach(() => {
       setPriority = spyOn(component, 'setPriority').and.callThrough();
@@ -192,35 +192,35 @@ describe('OsdRecvSpeedModalComponent', () => {
     };
 
     it('should return priority "low" if the config option values have been set accordingly', () => {
-      component.detectPriority(configOptionsLow, (priority) => {
+      component.detectPriority(configOptionsLow, (priority: Record<string, any>) => {
         expect(priority.name).toBe('low');
       });
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();
     });
 
     it('should return priority "default" if the config option values have been set accordingly', () => {
-      component.detectPriority(configOptionsDefault, (priority) => {
+      component.detectPriority(configOptionsDefault, (priority: Record<string, any>) => {
         expect(priority.name).toBe('default');
       });
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();
     });
 
     it('should return priority "high" if the config option values have been set accordingly', () => {
-      component.detectPriority(configOptionsHigh, (priority) => {
+      component.detectPriority(configOptionsHigh, (priority: Record<string, any>) => {
         expect(priority.name).toBe('high');
       });
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();
     });
 
     it('should return priority "custom" if the config option values do not match any priority', () => {
-      component.detectPriority(configOptionsCustom, (priority) => {
+      component.detectPriority(configOptionsCustom, (priority: Record<string, any>) => {
         expect(priority.name).toBe('custom');
       });
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeTruthy();
     });
 
     it('should return no priority if the config option values are incomplete', () => {
-      component.detectPriority(configOptionsIncomplete, (priority) => {
+      component.detectPriority(configOptionsIncomplete, (priority: Record<string, any>) => {
         expect(priority.name).toBeNull();
       });
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();

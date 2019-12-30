@@ -5,10 +5,10 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { DimlessBinaryPipe } from 'app/shared/pipes/dimless-binary.pipe';
 import { CdFormBuilder } from '../../forms/cd-form-builder';
 import { CdFormGroup } from '../../forms/cd-form-group';
 import { CdFormModalFieldConfig } from '../../models/cd-form-modal-field-config';
+import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
 import { FormatterService } from '../../services/formatter.service';
 
 @Component({
@@ -40,7 +40,7 @@ export class FormModalComponent implements OnInit {
   }
 
   createForm() {
-    const controlsConfig = {};
+    const controlsConfig: Record<string, FormControl> = {};
     this.fields.forEach((field) => {
       controlsConfig[field.name] = this.createFormControl(field);
     });
@@ -94,7 +94,7 @@ export class FormModalComponent implements OnInit {
     return this.i18n('An error occurred.');
   }
 
-  onSubmitForm(values) {
+  onSubmitForm(values: any) {
     const binaries = this.fields
       .filter((field) => field.type === 'binary')
       .map((field) => field.name);

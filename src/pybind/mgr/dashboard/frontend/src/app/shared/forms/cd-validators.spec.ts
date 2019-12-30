@@ -11,9 +11,9 @@ describe('CdValidators', () => {
   let formHelper: FormHelper;
   let form: CdFormGroup;
 
-  const expectValid = (value) => formHelper.expectValidChange('x', value);
-  const expectPatternError = (value) => formHelper.expectErrorChange('x', value, 'pattern');
-  const updateValidity = (controlName) => form.get(controlName).updateValueAndValidity();
+  const expectValid = (value: any) => formHelper.expectValidChange('x', value);
+  const expectPatternError = (value: any) => formHelper.expectErrorChange('x', value, 'pattern');
+  const updateValidity = (controlName: string) => form.get(controlName).updateValueAndValidity();
 
   beforeEach(() => {
     form = new CdFormGroup({
@@ -117,7 +117,7 @@ describe('CdValidators', () => {
   });
 
   describe('uuid validator', () => {
-    const expectUuidError = (value) =>
+    const expectUuidError = (value: string) =>
       formHelper.expectErrorChange('x', value, 'invalidUuid', true);
     beforeEach(() => {
       form.get('x').setValidators(CdValidators.uuid());
@@ -302,7 +302,7 @@ describe('CdValidators', () => {
     });
 
     it('should error because of successful condition', () => {
-      const conditionFn = (value) => {
+      const conditionFn = (value: string) => {
         return value === 'abc';
       };
       // Define prereqs that force the validator to validate the value of
@@ -321,10 +321,10 @@ describe('CdValidators', () => {
   describe('custom validation', () => {
     beforeEach(() => {
       form = new CdFormGroup({
-        x: new FormControl(3, CdValidators.custom('odd', (x) => x % 2 === 1)),
+        x: new FormControl(3, CdValidators.custom('odd', (x: number) => x % 2 === 1)),
         y: new FormControl(
           5,
-          CdValidators.custom('not-dividable-by-x', (y) => {
+          CdValidators.custom('not-dividable-by-x', (y: number) => {
             const x = (form && form.get('x').value) || 1;
             return y % x !== 0;
           })
@@ -352,8 +352,8 @@ describe('CdValidators', () => {
         y: new FormControl(5)
       });
       CdValidators.validateIf(form.get('x'), () => ((form && form.get('y').value) || 0) > 10, [
-        CdValidators.custom('min', (x) => x < 7),
-        CdValidators.custom('max', (x) => x > 12)
+        CdValidators.custom('min', (x: number) => x < 7),
+        CdValidators.custom('max', (x: number) => x > 12)
       ]);
       formHelper = new FormHelper(form);
     });

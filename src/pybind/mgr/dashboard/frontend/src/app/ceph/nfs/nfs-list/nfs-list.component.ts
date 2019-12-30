@@ -17,6 +17,7 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
+import { Task } from '../../../shared/models/task';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -48,7 +49,7 @@ export class NfsListComponent implements OnInit, OnDestroy {
   modalRef: BsModalRef;
 
   builders = {
-    'nfs/create': (metadata) => {
+    'nfs/create': (metadata: any) => {
       return {
         path: metadata['path'],
         cluster_id: metadata['cluster_id'],
@@ -170,8 +171,8 @@ export class NfsListComponent implements OnInit, OnDestroy {
   }
 
   prepareResponse(resp: any): any[] {
-    let result = [];
-    resp.forEach((nfs) => {
+    let result: any[] = [];
+    resp.forEach((nfs: any) => {
       nfs.id = `${nfs.cluster_id}:${nfs.export_id}`;
       nfs.state = 'LOADING';
       result = result.concat(nfs);
@@ -185,14 +186,14 @@ export class NfsListComponent implements OnInit, OnDestroy {
     this.viewCacheStatus = { status: ViewCacheStatus.ValueException };
   }
 
-  itemFilter(entry, task) {
+  itemFilter(entry: any, task: Task) {
     return (
       entry.cluster_id === task.metadata['cluster_id'] &&
       entry.export_id === task.metadata['export_id']
     );
   }
 
-  taskFilter(task) {
+  taskFilter(task: Task) {
     return ['nfs/create', 'nfs/delete', 'nfs/edit'].includes(task.name);
   }
 

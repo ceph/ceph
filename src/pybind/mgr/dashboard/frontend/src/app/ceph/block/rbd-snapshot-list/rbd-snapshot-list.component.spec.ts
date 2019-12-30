@@ -75,7 +75,7 @@ describe('RbdSnapshotListComponent', () => {
   });
 
   describe('api delete request', () => {
-    let called;
+    let called: boolean;
     let rbdService: RbdService;
     let notificationService: NotificationService;
     let authStorageService: AuthStorageService;
@@ -121,7 +121,7 @@ describe('RbdSnapshotListComponent', () => {
   describe('handling of executing tasks', () => {
     let snapshots: RbdSnapshotModel[];
 
-    const addSnapshot = (name) => {
+    const addSnapshot = (name: string) => {
       const model = new RbdSnapshotModel();
       model.id = 1;
       model.name = name;
@@ -138,7 +138,7 @@ describe('RbdSnapshotListComponent', () => {
       summaryService.addRunningTask(task);
     };
 
-    const refresh = (data) => {
+    const refresh = (data: any) => {
       summaryService['summaryDataSource'].next(data);
     };
 

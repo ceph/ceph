@@ -5,7 +5,7 @@ import { LoggingService } from '../api/logging.service';
 export class JsErrorHandler implements ErrorHandler {
   constructor(private injector: Injector) {}
 
-  handleError(error) {
+  handleError(error: any) {
     const loggingService = this.injector.get(LoggingService);
     const url = window.location.href;
     const message = error && error.message;

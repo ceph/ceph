@@ -13,7 +13,7 @@ export class CrushmapComponent implements OnInit {
   tree: TreeModel;
   metadata: any;
   metadataTitle: string;
-  metadataKeyMap: { [key: number]: number } = {};
+  metadataKeyMap: { [key: number]: any } = {};
 
   constructor(private healthService: HealthService) {}
 
@@ -34,8 +34,8 @@ export class CrushmapComponent implements OnInit {
       };
     }
 
-    const roots = [];
-    nodes.reverse().forEach((node) => {
+    const roots: any[] = [];
+    nodes.reverse().forEach((node: any) => {
       if (node.type === 'root') {
         roots.push(node.id);
       }
@@ -52,7 +52,7 @@ export class CrushmapComponent implements OnInit {
     };
   }
 
-  private generateTreeLeaf(node: any, treeNodeMap) {
+  private generateTreeLeaf(node: any, treeNodeMap: any) {
     const id = node.id;
     this.metadataKeyMap[id] = node;
     const settings = { static: true };
@@ -63,7 +63,7 @@ export class CrushmapComponent implements OnInit {
     const children: any[] = [];
     const resultNode = { value, status, settings, id, type: node.type };
     if (node.children) {
-      node.children.sort().forEach((childId) => {
+      node.children.sort().forEach((childId: any) => {
         children.push(treeNodeMap[childId]);
       });
 

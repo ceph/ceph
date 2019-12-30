@@ -1,6 +1,8 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
+
 import { HostService } from '../../../shared/api/host.service';
 import { OsdService } from '../../../shared/api/osd.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -48,7 +50,7 @@ export class SmartListComponent implements OnInit, OnChanges {
     return _.get(data, 'device.protocol', '').toLowerCase() === 'ata';
   }
 
-  private fetchData(data) {
+  private fetchData(data: any) {
     const result: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
     _.each(data, (smartData, deviceId) => {
       if (this.isSmartError(smartData)) {

@@ -32,8 +32,8 @@ describe('CephfsTabsComponent', () => {
   };
 
   let old: any;
-  const getReload = () => component['reloadSubscriber'];
-  const setReload = (sth?) => (component['reloadSubscriber'] = sth);
+  const getReload: any = () => component['reloadSubscriber'];
+  const setReload = (sth?: any) => (component['reloadSubscriber'] = sth);
   const mockRunOutside = () => {
     component['subscribeInterval'] = () => {
       // It's mocked because the rxjs timer subscription ins't called through the use of 'tick'.
@@ -143,14 +143,14 @@ describe('CephfsTabsComponent', () => {
   });
 
   it('should set default values on id change before api request', () => {
-    const defaultDetails = {
+    const defaultDetails: Record<string, any> = {
       standbys: '',
       pools: [],
       ranks: [],
       mdsCounters: {},
       name: ''
     };
-    const defaultClients = {
+    const defaultClients: Record<string, any> = {
       data: [],
       status: ViewCacheStatus.ValueNone
     };

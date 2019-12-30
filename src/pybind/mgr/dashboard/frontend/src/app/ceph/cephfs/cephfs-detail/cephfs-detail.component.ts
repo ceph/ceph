@@ -31,7 +31,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
     ranks: CdTableColumn[];
     pools: CdTableColumn[];
   };
-  standbys = [];
+  standbys: any[] = [];
 
   objectValues = Object.values;
 
@@ -71,7 +71,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
         {
           name: this.i18n('Usage'),
           cellTemplate: this.poolUsageTpl,
-          comparator: (_valueA, _valueB, rowA, rowB) => {
+          comparator: (_valueA: any, _valueB: any, rowA: any, rowB: any) => {
             const valA = rowA.used / rowA.avail;
             const valB = rowB.used / rowB.avail;
 
@@ -90,7 +90,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
     };
   }
 
-  trackByFn(_index, item) {
+  trackByFn(_index: any, item: any) {
     return item.name;
   }
 }

@@ -4,7 +4,12 @@ import { PageHelper } from '../page-helper.po';
 export class LogsPageHelper extends PageHelper {
   pages = { index: '/#/logs' };
 
-  async checkAuditForPoolFunction(poolname, poolfunction, hour, minute) {
+  async checkAuditForPoolFunction(
+    poolname: string,
+    poolfunction: string,
+    hour: number,
+    minute: number
+  ) {
     await this.navigateTo();
 
     // sometimes the modal from deleting pool is still present at this point.
@@ -64,7 +69,12 @@ export class LogsPageHelper extends PageHelper {
     await expect(logs.getText()).toMatch(`pool ${poolfunction}`);
   }
 
-  async checkAuditForConfigChange(configname, setting, hour, minute) {
+  async checkAuditForConfigChange(
+    configname: string,
+    setting: string,
+    hour: number,
+    minute: number
+  ) {
     await this.navigateTo();
 
     // go to audit logs tab

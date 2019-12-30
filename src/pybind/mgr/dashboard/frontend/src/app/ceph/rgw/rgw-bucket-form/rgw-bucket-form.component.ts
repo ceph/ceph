@@ -25,11 +25,11 @@ export class RgwBucketFormComponent implements OnInit {
   editing = false;
   error = false;
   loading = false;
-  owners = null;
+  owners: string[] = null;
   action: string;
   resource: string;
   zonegroup: string;
-  placementTargets: Object[] = [];
+  placementTargets: object[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -66,7 +66,7 @@ export class RgwBucketFormComponent implements OnInit {
 
     if (!this.editing) {
       // Get placement targets:
-      this.rgwSiteService.getPlacementTargets().subscribe((placementTargets) => {
+      this.rgwSiteService.getPlacementTargets().subscribe((placementTargets: any) => {
         this.zonegroup = placementTargets['zonegroup'];
         _.forEach(placementTargets['placement_targets'], (placementTarget) => {
           placementTarget['description'] = `${placementTarget['name']} (${this.i18n('pool')}: ${
@@ -95,7 +95,7 @@ export class RgwBucketFormComponent implements OnInit {
         // Get the default values.
         const defaults = _.clone(this.bucketForm.value);
         // Extract the values displayed in the form.
-        let value = _.pick(resp, _.keys(this.bucketForm.value));
+        let value: object = _.pick(resp, _.keys(this.bucketForm.value));
         value['placement-target'] = resp['placement_rule'];
         // Append default values.
         value = _.merge(defaults, value);
@@ -182,19 +182,19 @@ export class RgwBucketFormComponent implements OnInit {
         }
         const constraints = [];
         // - Bucket names cannot be formatted as IP address.
-        constraints.push((name) => {
+        constraints.push((name: AbstractControl) => {
           const validatorFn = CdValidators.ip();
           return !validatorFn(name);
         });
         // - Bucket names can be between 3 and 63 characters long.
-        constraints.push((name) => _.inRange(name.length, 3, 64));
+        constraints.push((name: string) => _.inRange(name.length, 3, 64));
         // - Bucket names must not contain uppercase characters or underscores.
         // - Bucket names must start with a lowercase letter or number.
         // - Bucket names must be a series of one or more labels. Adjacent
         //   labels are separated by a single period (.). Bucket names can
         //   contain lowercase letters, numbers, and hyphens. Each label must
         //   start and end with a lowercase letter or a number.
-        constraints.push((name) => {
+        constraints.push((name: string) => {
           const labels = _.split(name, '.');
           return _.every(labels, (label) => {
             // Bucket names must not contain uppercase characters or underscores.
@@ -211,7 +211,7 @@ export class RgwBucketFormComponent implements OnInit {
             });
           });
         });
-        if (!_.every(constraints, (func) => func(control.value))) {
+        if (!_.every(constraints, (func: Function) => func(control.value))) {
           resolve({ bucketNameInvalid: true });
           return;
         }

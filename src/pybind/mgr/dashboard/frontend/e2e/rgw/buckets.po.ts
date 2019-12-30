@@ -177,7 +177,7 @@ export class BucketsPageHelper extends PageHelper {
     return element(by.cssContainingText('button', 'Cancel')).click();
   }
 
-  async testInvalidEdit(name) {
+  async testInvalidEdit(name: string) {
     await this.navigateTo();
 
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click

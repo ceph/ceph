@@ -30,7 +30,7 @@ export class TimeDiffService {
     const m = date.getUTCMinutes();
     const d = Math.floor(ms / (24 * 3600 * 1000));
 
-    const format = (n, s) => (n ? n + s : n);
+    const format = (n: number, s: string) => (n ? n + s : n);
     return [format(d, 'd'), format(h, 'h'), format(m, 'm')].filter((x) => x).join(' ');
   }
 
@@ -50,8 +50,8 @@ export class TimeDiffService {
     return ((d * 24 + h) * 60 + m) * 60000;
   }
 
-  private getNumbersFromString(duration, prefix): number {
+  private getNumbersFromString(duration: string, prefix: string): number {
     const match = duration.match(new RegExp(`[0-9 ]+${prefix}`, 'i'));
-    return match ? parseInt(match, 10) : 0;
+    return match ? parseInt(match[0], 10) : 0;
   }
 }

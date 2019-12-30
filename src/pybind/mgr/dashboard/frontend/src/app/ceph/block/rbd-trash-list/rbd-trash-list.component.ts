@@ -19,6 +19,7 @@ import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { ImageSpec } from '../../../shared/models/image-spec';
 import { Permission } from '../../../shared/models/permissions';
+import { Task } from '../../../shared/models/task';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
@@ -115,12 +116,12 @@ export class RbdTrashListComponent implements OnInit {
       }
     ];
 
-    const itemFilter = (entry, task) => {
+    const itemFilter = (entry: any, task: Task) => {
       const imageSpec = new ImageSpec(entry.pool_name, entry.namespace, entry.id);
       return imageSpec.toString() === task.metadata['image_id_spec'];
     };
 
-    const taskFilter = (task) => {
+    const taskFilter = (task: Task) => {
       return ['rbd/trash/remove', 'rbd/trash/restore'].includes(task.name);
     };
 
@@ -136,9 +137,9 @@ export class RbdTrashListComponent implements OnInit {
   }
 
   prepareResponse(resp: any[]): any[] {
-    let images = [];
+    let images: any[] = [];
     const viewCacheStatusMap = {};
-    resp.forEach((pool) => {
+    resp.forEach((pool: Record<string, any>) => {
       if (_.isUndefined(viewCacheStatusMap[pool.status])) {
         viewCacheStatusMap[pool.status] = [];
       }
@@ -146,7 +147,7 @@ export class RbdTrashListComponent implements OnInit {
       images = images.concat(pool.value);
     });
 
-    const viewCacheStatusList = [];
+    const viewCacheStatusList: any[] = [];
     _.forEach(viewCacheStatusMap, (value: any, key) => {
       viewCacheStatusList.push({
         status: parseInt(key, 10),
@@ -208,7 +209,7 @@ export class RbdTrashListComponent implements OnInit {
     });
   }
 
-  isExpired(expiresAt): boolean {
+  isExpired(expiresAt: string): boolean {
     return moment().isAfter(expiresAt);
   }
 

@@ -16,7 +16,7 @@ export class AuthStorageService {
   set(
     username: string,
     token: string,
-    permissions: object = {},
+    permissions = {},
     sso = false,
     pwdExpirationDate: number = null
   ) {

@@ -49,9 +49,9 @@ export class OsdFormComponent implements OnInit {
   allDevices: InventoryDevice[] = [];
 
   availDevices: InventoryDevice[] = [];
-  dataDeviceFilters = [];
-  dbDeviceFilters = [];
-  walDeviceFilters = [];
+  dataDeviceFilters: any[] = [];
+  dbDeviceFilters: any[] = [];
+  walDeviceFilters: any[] = [];
   hostname = '';
   driveGroup = new DriveGroup();
 
@@ -129,7 +129,7 @@ export class OsdFormComponent implements OnInit {
         validators: [Validators.min(0)]
       }),
       features: new CdFormGroup(
-        this.featureList.reduce((acc, e) => {
+        this.featureList.reduce((acc: object, e) => {
           // disable initially because no data devices are selected
           acc[e.key] = new FormControl({ value: false, disabled: true });
           return acc;

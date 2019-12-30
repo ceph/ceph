@@ -35,7 +35,7 @@ describe('RbdListComponent', () => {
   let summaryService: SummaryService;
   let rbdService: RbdService;
 
-  const refresh = (data) => {
+  const refresh = (data: any) => {
     summaryService['summaryDataSource'].next(data);
   };
 
@@ -102,7 +102,7 @@ describe('RbdListComponent', () => {
   describe('handling of executing tasks', () => {
     let images: RbdModel[];
 
-    const addImage = (name) => {
+    const addImage = (name: string) => {
       const model = new RbdModel();
       model.id = '-1';
       model.name = name;
@@ -159,7 +159,7 @@ describe('RbdListComponent', () => {
 
     it('should gets all images without tasks', () => {
       expect(component.images.length).toBe(3);
-      expect(component.images.every((image) => !image.cdExecuting)).toBeTruthy();
+      expect(component.images.every((image: any) => !image.cdExecuting)).toBeTruthy();
     });
 
     it('should add a new image from a task', () => {

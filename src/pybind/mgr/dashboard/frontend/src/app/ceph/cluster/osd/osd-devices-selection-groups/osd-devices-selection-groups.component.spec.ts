@@ -10,6 +10,7 @@ import {
   i18nProviders
 } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
+import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
 import { OsdDevicesSelectionGroupsComponent } from './osd-devices-selection-groups.component';
 
@@ -17,7 +18,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   let component: OsdDevicesSelectionGroupsComponent;
   let fixture: ComponentFixture<OsdDevicesSelectionGroupsComponent>;
   let fixtureHelper: FixtureHelper;
-  const devices = [
+  const devices: InventoryDevice[] = [
     {
       hostname: 'node0',
       uid: '1',
@@ -126,7 +127,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       spyOn(component.cleared, 'emit');
       fixtureHelper.clickElement(clearTextSelector);
       fixtureHelper.expectElementVisible('cd-inventory-devices', false);
-      const event = {
+      const event: Record<string, any> = {
         type: undefined,
         clearedDevices: devices
       };
