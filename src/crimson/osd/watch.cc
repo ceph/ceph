@@ -51,4 +51,73 @@ seastar::future<> Watch::start_notify(NotifyRef notify)
   return is_connected() ? send_notify_msg(*it) : seastar::now();
 }
 
+seastar::future<> Watch::notify_ack(
+  const uint64_t notify_id,
+  const ceph::bufferlist& reply_bl)
+{
+  logger().info("{}", __func__);
+  return seastar::do_for_each(in_progress_notifies,
+    [this_shared=shared_from_this(), &reply_bl] (auto notify) {
+      return notify->complete_watcher(this_shared, reply_bl);
+    }
+  ).then([this] {
+    in_progress_notifies.clear();
+    return seastar::now();
+  });
+}
+
+bool notify_reply_t::operator<(const notify_reply_t& rhs) const
+{
+  // comparing std::pairs to emphasize our legacy. ceph-osd stores
+  // notify_replies as std::multimap<std::pair<gid, cookie>, bl>.
+  // unfortunately, what seems to be an implementation detail, got
+  // exposed as part of our public API (the `reply_buffer` parameter
+  // of the `rados_notify` family).
+  const auto lhsp = std::make_pair(watcher_gid, watcher_cookie);
+  const auto rhsp = std::make_pair(rhs.watcher_gid, rhs.watcher_cookie);
+  return lhsp < rhsp;
+}
+
+seastar::future<> Notify::complete_watcher(
+  WatchRef watch,
+  const ceph::bufferlist& reply_bl)
+{
+  if (discarded || complete) {
+    return seastar::now();
+  }
+  notify_replies.emplace(notify_reply_t{
+    watch->get_watcher_gid(),
+    watch->get_cookie(),
+    reply_bl});
+  watchers.erase(watch);
+  return maybe_send_completion();
+}
+
+seastar::future<> Notify::maybe_send_completion()
+{
+  logger().info("{} -- {} in progress watchers", __func__, watchers.size());
+  if (watchers.empty()) {
+    // prepare reply
+    ceph::bufferlist bl;
+    encode(notify_replies, bl);
+    // FIXME: this is just a stub
+    std::list<std::pair<uint64_t,uint64_t>> missed;
+    encode(missed, bl);
+
+    complete = true;
+
+    ceph::bufferlist empty;
+    auto reply = make_message<MWatchNotify>(
+      ninfo.cookie,
+      user_version,
+      ninfo.notify_id,
+      CEPH_WATCH_EVENT_NOTIFY_COMPLETE,
+      empty,
+      client_gid);
+    reply->set_data(bl);
+    return conn->send(std::move(reply));
+  }
+  return seastar::now();
+}
+
 } // namespace crimson::osd
