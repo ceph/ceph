@@ -212,5 +212,8 @@ found in `doc_deps.deb.txt`:
 To build the documentation, ensure that you are in the top-level
 `/ceph` directory, and execute the build script. For example:
 
-	admin/build-doc
+	./admin/build-doc
 
+The built documentation will be available at buid-doc/output. There you will have access to the man and html pages.
+
+Please see https://docs.ceph.com/docs/master/dev/generatedocs/ for detailed info.
