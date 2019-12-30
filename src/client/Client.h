@@ -765,6 +765,7 @@ public:
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
+  bool is_dentry_lease_valid(Inode *dir, Dentry *dn);
 
   bool use_faked_inos() { return _use_faked_inos; }
   vinodeno_t map_faked_ino(ino_t ino);
@@ -1255,8 +1256,6 @@ private:
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
-
-  bool _dentry_valid(const Dentry *dn);
 
   // internal interface
   //   call these with client_lock held!
