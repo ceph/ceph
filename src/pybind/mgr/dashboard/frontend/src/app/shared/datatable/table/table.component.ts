@@ -23,7 +23,7 @@ import {
 } from '@swimlane/ngx-datatable';
 import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
 import * as _ from 'lodash';
-import { Observable, timer as observableTimer } from 'rxjs';
+import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
 
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CellTemplate } from '../../enum/cell-template.enum';
@@ -124,7 +124,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   // Only needed to set if the classAddingTpl is used
   @Input()
-  customCss?: { [css: string]: number | string | ((any) => boolean) };
+  customCss?: { [css: string]: number | string | ((any: any) => boolean) };
 
   // Columns that aren't displayed but can be used as filters
   @Input()
@@ -174,7 +174,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     [key: string]: TemplateRef<any>;
   } = {};
   search = '';
-  rows = [];
+  rows: any[] = [];
   loadingIndicator = true;
   loadingError = false;
   paginationClasses = {
@@ -186,8 +186,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   userConfig: CdUserConfig = {};
   tableName: string;
   localStorage = window.localStorage;
-  private saveSubscriber;
-  private reloadSubscriber;
+  private saveSubscriber: Subscription;
+  private reloadSubscriber: Subscription;
   private updating = false;
 
   // Internal variable to check if it is necessary to recalculate the
@@ -291,8 +291,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
   }
 
-  _calculateUniqueTableName(columns) {
-    const stringToNumber = (s) => {
+  _calculateUniqueTableName(columns: any[]) {
+    const stringToNumber = (s: string) => {
       if (!_.isString(s)) {
         return 0;
       }
@@ -319,13 +319,13 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   _initUserConfigAutoSave() {
-    const source = Observable.create(this._initUserConfigProxy.bind(this));
+    const source: Observable<any> = Observable.create(this._initUserConfigProxy.bind(this));
     this.saveSubscriber = source.subscribe(this._saveUserConfig.bind(this));
   }
 
-  _initUserConfigProxy(observer) {
+  _initUserConfigProxy(observer: Subject<any>) {
     this.userConfig = new Proxy(this.userConfig, {
-      set(config, prop, value) {
+      set(config, prop: string, value) {
         config[prop] = value;
         observer.next(config);
         return true;
@@ -333,7 +333,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     });
   }
 
-  _saveUserConfig(config) {
+  _saveUserConfig(config: any) {
     this.localStorage.setItem(this.tableName, JSON.stringify(config));
   }
 
@@ -430,7 +430,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   doColumnFiltering() {
     const appliedFilters: CdTableColumnFiltersChange['filters'] = [];
     let data = [...this.data];
-    let dataOut = [];
+    let dataOut: any[] = [];
     this.columnFilters.forEach((filter) => {
       if (filter.value === undefined) {
         return;
@@ -528,7 +528,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.useData();
   }
 
-  setLimit(e) {
+  setLimit(e: any) {
     const value = parseInt(e.target.value, 10);
     if (value > 0) {
       this.userConfig.limit = value;
@@ -560,7 +560,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   rowIdentity() {
-    return (row) => {
+    return (row: any) => {
       const id = row[this.identifier];
       if (_.isUndefined(id)) {
         throw new Error(`Wrong identifier "${this.identifier}" -> "${id}"`);
@@ -598,7 +598,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (this.updateSelectionOnRefresh === 'never') {
       return;
     }
-    const newSelected = [];
+    const newSelected: any[] = [];
     this.selection.selected.forEach((selectedItem) => {
       for (const row of this.data) {
         if (selectedItem[this.identifier] === row[this.identifier]) {
@@ -616,7 +616,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.onSelect(this.selection);
   }
 
-  onSelect($event) {
+  onSelect($event: any) {
     this.selection.selected = $event['selected'];
     this.updateSelection.emit(_.clone(this.selection));
   }
@@ -652,7 +652,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     ];
   }
 
-  changeSorting({ sorts }) {
+  changeSorting({ sorts }: any) {
     this.userConfig.sorts = sorts;
   }
 
@@ -683,7 +683,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.rows = rows;
   }
 
-  subSearch(data: any[], currentSearch: string[], columns: CdTableColumn[]) {
+  subSearch(data: any[], currentSearch: string[], columns: CdTableColumn[]): any[] {
     if (currentSearch.length === 0 || data.length === 0) {
       return data;
     }

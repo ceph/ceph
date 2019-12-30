@@ -38,7 +38,7 @@ export class SettingsService {
   }
 
   // Easiest way to stop reloading external content that can't be reached
-  disableSetting(url) {
+  disableSetting(url: string) {
     this.settings[url] = '';
   }
 
@@ -46,7 +46,7 @@ export class SettingsService {
     return data.value || data.instance || '';
   }
 
-  validateGrafanaDashboardUrl(uid) {
+  validateGrafanaDashboardUrl(uid: string) {
     return this.http.get(`api/grafana/validation/${uid}`);
   }
 

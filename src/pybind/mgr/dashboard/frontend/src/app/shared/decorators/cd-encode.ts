@@ -31,7 +31,7 @@ export function cdEncode(...args: any[]): any {
  * @param {string} propertyKey
  * @param {number} index
  */
-export function cdEncodeNot(target: Object, propertyKey: string, index: number) {
+export function cdEncodeNot(target: object, propertyKey: string, index: number) {
   const metadataKey = `__ignore_${propertyKey}`;
   if (Array.isArray(target[metadataKey])) {
     target[metadataKey].push(index);

@@ -38,7 +38,7 @@ class MockComponent {
   // Normally private, but public is needed by tests
   constructor(public modalService: BsModalService) {}
 
-  private openModal(extendBaseState: object = {}) {
+  private openModal(extendBaseState = {}) {
     this.modalRef = this.modalService.show(ConfirmationModalComponent, {
       initialState: Object.assign(
         {

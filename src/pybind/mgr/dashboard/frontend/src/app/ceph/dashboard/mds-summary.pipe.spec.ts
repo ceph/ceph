@@ -46,7 +46,7 @@ describe('MdsSummaryPipe', () => {
   });
 
   it('transforms with 0 filesystems', () => {
-    const payload = {
+    const payload: Record<string, any> = {
       standbys: [0],
       filesystems: []
     };

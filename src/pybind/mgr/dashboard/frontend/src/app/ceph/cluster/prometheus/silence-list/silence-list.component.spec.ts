@@ -105,7 +105,7 @@ describe('SilenceListComponent', () => {
       deletion.callSubmitAction();
     };
 
-    const expectSilenceToExpire = (silenceId) => {
+    const expectSilenceToExpire = (silenceId: string) => {
       setSelectedSilence(silenceId);
       expireSilence();
       expect(prometheusService.expireSilence).toHaveBeenCalledWith(silenceId);

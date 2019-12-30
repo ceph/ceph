@@ -15,7 +15,13 @@ describe('CephfsDetailComponent', () => {
   let component: CephfsDetailComponent;
   let fixture: ComponentFixture<CephfsDetailComponent>;
 
-  const updateDetails = (standbys, pools, ranks, mdsCounters, name) => {
+  const updateDetails = (
+    standbys: string,
+    pools: any[],
+    ranks: any[],
+    mdsCounters: object,
+    name: string
+  ) => {
     component.data = {
       standbys,
       pools,

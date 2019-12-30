@@ -87,7 +87,7 @@ describe('ErasureCodeProfileFormComponent', () => {
     });
 
     it(`should show all default form controls`, () => {
-      const showDefaults = (plugin) => {
+      const showDefaults = (plugin: string) => {
         formHelper.setValue('plugin', plugin);
         fixtureHelper.expectIdElementsVisible(
           [

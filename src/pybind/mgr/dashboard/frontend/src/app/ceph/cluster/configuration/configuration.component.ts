@@ -21,7 +21,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 export class ConfigurationComponent implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
-  data = [];
+  data: any[] = [];
   icons = Icons;
   columns: CdTableColumn[];
   selection = new CdTableSelection();

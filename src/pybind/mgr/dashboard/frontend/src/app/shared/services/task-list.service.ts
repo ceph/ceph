@@ -15,7 +15,7 @@ export class TaskListService implements OnDestroy {
   setList: (_: any[]) => void;
   onFetchError: (error: any) => void;
   taskFilter: (task: ExecutingTask) => boolean;
-  itemFilter: (item, task: ExecutingTask) => boolean;
+  itemFilter: (item: any, task: ExecutingTask) => boolean;
   builders: object;
 
   constructor(
@@ -45,7 +45,7 @@ export class TaskListService implements OnDestroy {
     setList: (_: any[]) => void,
     onFetchError: (error: any) => void,
     taskFilter: (task: ExecutingTask) => boolean,
-    itemFilter: (item, task: ExecutingTask) => boolean,
+    itemFilter: (item: any, task: ExecutingTask) => boolean,
     builders: object
   ) {
     this.getUpdate = getUpdate;

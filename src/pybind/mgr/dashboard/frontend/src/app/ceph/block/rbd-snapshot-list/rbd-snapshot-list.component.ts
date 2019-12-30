@@ -17,6 +17,7 @@ import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { ImageSpec } from '../../../shared/models/image-spec';
 import { Permission } from '../../../shared/models/permissions';
+import { Task } from '../../../shared/models/task';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -61,7 +62,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   modalRef: BsModalRef;
 
   builders = {
-    'rbd/snap/create': (metadata) => {
+    'rbd/snap/create': (metadata: any) => {
       const model = new RbdSnapshotModel();
       model.name = metadata['snapshot_name'];
       return model;
@@ -144,11 +145,11 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     actions.deleteSnap.click = () => this.deleteSnapshotModal();
     this.tableActions = actions.ordering;
 
-    const itemFilter = (entry, task) => {
+    const itemFilter = (entry: any, task: Task) => {
       return entry.name === task.metadata['snapshot_name'];
     };
 
-    const taskFilter = (task) => {
+    const taskFilter = (task: Task) => {
       return (
         ['rbd/snap/create', 'rbd/snap/delete', 'rbd/snap/edit', 'rbd/snap/rollback'].includes(
           task.name

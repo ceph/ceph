@@ -6,6 +6,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { SelectMessages } from '../select/select-messages.model';
 import { SelectOption } from '../select/select-option.model';
+import { SelectComponent } from '../select/select.component';
 
 @Component({
   selector: 'cd-select-badges',
@@ -30,7 +31,7 @@ export class SelectBadgesComponent {
   selection = new EventEmitter();
 
   @ViewChild('cdSelect', { static: true })
-  cdSelect;
+  cdSelect: SelectComponent;
 
   icons = Icons;
 

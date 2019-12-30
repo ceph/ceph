@@ -33,7 +33,7 @@ describe('UserFormComponent', () => {
   let router: Router;
   let formHelper: FormHelper;
 
-  const setUrl = (url) => Object.defineProperty(router, 'url', { value: url });
+  const setUrl = (url: string) => Object.defineProperty(router, 'url', { value: url });
 
   @Component({ selector: 'cd-fake', template: '' })
   class FakeComponent {}

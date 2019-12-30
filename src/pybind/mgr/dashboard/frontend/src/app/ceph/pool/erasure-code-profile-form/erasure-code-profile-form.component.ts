@@ -64,7 +64,7 @@ export class ErasureCodeProfileFormComponent implements OnInit {
           Validators.pattern('[A-Za-z0-9_-]+'),
           CdValidators.custom(
             'uniqueName',
-            (value) => this.names && this.names.indexOf(value) !== -1
+            (value: string) => this.names && this.names.indexOf(value) !== -1
           )
         ]
       ],
@@ -88,7 +88,7 @@ export class ErasureCodeProfileFormComponent implements OnInit {
     this.form.get('plugin').valueChanges.subscribe((plugin) => this.onPluginChange(plugin));
   }
 
-  onPluginChange(plugin) {
+  onPluginChange(plugin: string) {
     this.plugin = plugin;
     if (plugin === this.PLUGIN.JERASURE) {
       this.setJerasureDefaults();

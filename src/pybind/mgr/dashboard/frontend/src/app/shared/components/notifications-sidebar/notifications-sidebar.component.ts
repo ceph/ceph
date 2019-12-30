@@ -130,7 +130,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     this.notificationService.toggleSidebar(true);
   }
 
-  trackByFn(index) {
+  trackByFn(index: number) {
     return index;
   }
 }

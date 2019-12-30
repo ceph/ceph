@@ -19,6 +19,7 @@ import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { Pool } from '../../pool/pool';
 
 @Component({
   selector: 'cd-rbd-namespace-form',
@@ -27,7 +28,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 })
 export class RbdNamespaceFormComponent implements OnInit {
   poolPermission: Permission;
-  pools: Array<string> = null;
+  pools: Array<Pool> = null;
   pool: string;
   namespace: string;
 
@@ -101,7 +102,7 @@ export class RbdNamespaceFormComponent implements OnInit {
 
     if (this.poolPermission.read) {
       this.poolService.list(['pool_name', 'type', 'application_metadata']).then((resp) => {
-        const pools = [];
+        const pools: Pool[] = [];
         for (const pool of resp) {
           if (this.rbdService.isRBDPool(pool) && pool.type === 'replicated') {
             pools.push(pool);

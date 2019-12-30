@@ -271,7 +271,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     return this.dirs.filter((d) => d.parent.startsWith(path));
   }
 
-  selectOrigin(path) {
+  selectOrigin(path: string) {
     this.treeComponent.getControllerByNodeId(path).select();
   }
 
@@ -284,7 +284,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   }
 
   private setSettings(node: Tree) {
-    const readable = (value: number, fn?: (number) => number | string): number | string =>
+    const readable = (value: number, fn?: (number: number) => number | string): number | string =>
       value ? (fn ? fn(value) : value) : '';
 
     this.settings = [
@@ -298,7 +298,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   private getQuota(
     tree: Tree,
     quotaKey: string,
-    valueConvertFn: (number) => number | string
+    valueConvertFn: (number: number) => number | string
   ): QuotaSetting {
     // Get current maximum
     const currentPath = tree.id;
@@ -374,7 +374,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           : undefined,
         fields: [this.getQuotaFormField(selection.row.name, key, value, nextMax.value)],
         submitButtonText: this.i18n('Save'),
-        onSubmit: (values) => this.updateQuota(values)
+        onSubmit: (values: CephfsQuotas) => this.updateQuota(values)
       }
     });
   }
@@ -498,7 +498,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           }
         ],
         submitButtonText: this.i18n('Create Snapshot'),
-        onSubmit: (values) => {
+        onSubmit: (values: CephfsSnapshot) => {
           this.cephfsService.mkSnapshot(this.id, path, values.name).subscribe((name) => {
             this.notificationService.show(
               NotificationType.success,

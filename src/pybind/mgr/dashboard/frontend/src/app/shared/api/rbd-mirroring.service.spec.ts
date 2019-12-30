@@ -8,7 +8,7 @@ describe('RbdMirroringService', () => {
   let service: RbdMirroringService;
   let httpTesting: HttpTestingController;
 
-  const summary = {
+  const summary: Record<string, any> = {
     status: 0,
     content_data: {
       daemons: [],
@@ -46,7 +46,7 @@ describe('RbdMirroringService', () => {
   });
 
   it('should periodically poll summary', fakeAsync(() => {
-    const calledWith = [];
+    const calledWith: any[] = [];
     service.subscribeSummary((data) => {
       calledWith.push(data);
     });

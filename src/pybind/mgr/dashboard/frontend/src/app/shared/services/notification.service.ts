@@ -219,7 +219,7 @@ export class NotificationService {
    * Prevent the notification from being shown.
    * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
    */
-  cancel(timeoutId) {
+  cancel(timeoutId: number) {
     window.clearTimeout(timeoutId);
   }
 

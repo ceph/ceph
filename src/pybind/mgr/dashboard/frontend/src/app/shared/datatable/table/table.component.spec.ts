@@ -17,7 +17,7 @@ describe('TableComponent', () => {
   let component: TableComponent;
   let fixture: ComponentFixture<TableComponent>;
 
-  const createFakeData = (n) => {
+  const createFakeData = (n: number) => {
     const data = [];
     for (let i = 0; i < n; i++) {
       data.push({
@@ -413,7 +413,7 @@ describe('TableComponent', () => {
   });
 
   describe('after ngInit', () => {
-    const toggleColumn = (prop, checked) => {
+    const toggleColumn = (prop: string, checked: boolean) => {
       component.toggleColumn({
         target: {
           name: prop,
@@ -491,7 +491,7 @@ describe('TableComponent', () => {
     });
 
     it('should call fetchData callback function', () => {
-      component.fetchData.subscribe((context) => {
+      component.fetchData.subscribe((context: any) => {
         expect(context instanceof CdTableFetchDataContext).toBeTruthy();
       });
       component.reloadData();
@@ -499,7 +499,7 @@ describe('TableComponent', () => {
 
     it('should call error function', () => {
       component.data = createFakeData(5);
-      component.fetchData.subscribe((context) => {
+      component.fetchData.subscribe((context: any) => {
         context.error();
         expect(component.loadingError).toBeTruthy();
         expect(component.data.length).toBe(0);
@@ -511,7 +511,7 @@ describe('TableComponent', () => {
 
     it('should call error function with custom config', () => {
       component.data = createFakeData(10);
-      component.fetchData.subscribe((context) => {
+      component.fetchData.subscribe((context: any) => {
         context.errorConfig.resetData = false;
         context.errorConfig.displayError = false;
         context.error();

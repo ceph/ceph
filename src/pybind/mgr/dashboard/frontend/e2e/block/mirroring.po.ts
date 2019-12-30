@@ -11,7 +11,7 @@ export class MirroringPageHelper extends PageHelper {
    * pool and chooses an option (either pool, image, or disabled)
    */
   @PageHelper.restrictTo(pages.index)
-  async editMirror(name, option) {
+  async editMirror(name: string, option: string) {
     // Clicks the pool in the table
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
 

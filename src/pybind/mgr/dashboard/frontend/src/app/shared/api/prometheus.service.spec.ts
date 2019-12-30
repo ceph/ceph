@@ -162,7 +162,7 @@ describe('PrometheusService', () => {
 
   describe('ifAlertmanagerConfigured', () => {
     let x: any;
-    let host;
+    let host: string;
 
     const receiveConfig = () => {
       const req = httpTesting.expectOne('api/settings/alertmanager-api-host');
@@ -200,7 +200,7 @@ describe('PrometheusService', () => {
 
   describe('ifPrometheusConfigured', () => {
     let x: any;
-    let host;
+    let host: string;
 
     const receiveConfig = () => {
       const req = httpTesting.expectOne('api/settings/prometheus-api-host');

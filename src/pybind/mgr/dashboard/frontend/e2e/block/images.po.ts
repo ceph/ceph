@@ -9,7 +9,7 @@ export class ImagesPageHelper extends PageHelper {
 
   // Creates a block image and fills in the name, pool, and size fields. Then checks
   // if the image is present in the Images table.
-  async createImage(name, pool, size) {
+  async createImage(name: string, pool: string, size: string) {
     await this.navigateTo('create');
 
     // Need the string '[value="<pool>"]' to find the pool in the dropdown menu
@@ -31,7 +31,7 @@ export class ImagesPageHelper extends PageHelper {
     return this.waitPresence(this.getFirstTableCellWithText(name));
   }
 
-  async editImage(name, pool, newName, newSize) {
+  async editImage(name: string, pool: string, newName: string, newSize: string) {
     const base_url = '/#/block/rbd/edit/';
     const editURL = base_url
       .concat(encodeURIComponent(pool))
@@ -59,7 +59,7 @@ export class ImagesPageHelper extends PageHelper {
 
   // Selects RBD image and moves it to the trash, checks that it is present in the
   // trash table
-  async moveToTrash(name) {
+  async moveToTrash(name: string) {
     await this.navigateTo();
     // wait for image to be created
     await this.waitTextNotPresent($$('.datatable-body').first(), '(Creating...)');
@@ -79,7 +79,7 @@ export class ImagesPageHelper extends PageHelper {
 
   // Checks trash tab table for image and then restores it to the RBD Images table
   // (could change name if new name is given)
-  async restoreImage(name, newName?: string) {
+  async restoreImage(name: string, newName?: string) {
     await this.navigateTo();
     // clicks on trash tab
     await element(by.cssContainingText('.nav-link', 'Trash')).click();
@@ -104,7 +104,7 @@ export class ImagesPageHelper extends PageHelper {
 
   // Enters trash tab and purges trash, thus emptying the trash table. Checks if
   // Image is still in the table.
-  async purgeTrash(name, pool?: string) {
+  async purgeTrash(name: string, pool?: string) {
     await this.navigateTo();
     // clicks trash tab
     await element(by.cssContainingText('.nav-link', 'Trash')).click();

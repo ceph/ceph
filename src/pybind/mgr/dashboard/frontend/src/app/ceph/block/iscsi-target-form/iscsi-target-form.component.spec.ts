@@ -46,7 +46,7 @@ describe('IscsiTargetFormComponent', () => {
     api_version: 1
   };
 
-  const LIST_TARGET = [
+  const LIST_TARGET: any[] = [
     {
       target_iqn: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw',
       portals: [{ host: 'node1', ip: '192.168.100.201' }],
@@ -85,7 +85,7 @@ describe('IscsiTargetFormComponent', () => {
     ceph_iscsi_config_version: 11
   };
 
-  const RBD_LIST = [
+  const RBD_LIST: any[] = [
     { status: 0, value: [], pool_name: 'ganesha' },
     {
       status: 0,

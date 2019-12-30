@@ -92,7 +92,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     await this.waitVisibility(this.getFirstTableCellWithText('devicehealth'));
     // Checks for visibility of devicehealth in table
     await this.getFirstTableCellWithText('devicehealth').click();
-    for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
+    for (let i = 0, devHealthTuple: [string, string]; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
         await this.waitFn(async () => {
           // Repeatedly reclicks the module to check if edits has been done
@@ -132,7 +132,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     await this.navigateTo();
     await this.waitVisibility(this.getFirstTableCellWithText('devicehealth'));
     await this.getFirstTableCellWithText('devicehealth').click();
-    for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
+    for (let i = 0, devHealthTuple: [string, string]; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
         await this.waitFn(async () => {
           // Repeatedly reclicks the module to check if clearing has been done

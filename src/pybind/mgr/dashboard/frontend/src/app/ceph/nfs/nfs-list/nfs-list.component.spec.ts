@@ -28,7 +28,7 @@ describe('NfsListComponent', () => {
   let nfsService: NfsService;
   let httpTesting: HttpTestingController;
 
-  const refresh = (data) => {
+  const refresh = (data: object) => {
     summaryService['summaryDataSource'].next(data);
   };
 
@@ -96,7 +96,7 @@ describe('NfsListComponent', () => {
   describe('handling of executing tasks', () => {
     let exports: any[];
 
-    const addExport = (export_id) => {
+    const addExport = (export_id: string) => {
       const model = {
         export_id: export_id,
         path: 'path_' + export_id,

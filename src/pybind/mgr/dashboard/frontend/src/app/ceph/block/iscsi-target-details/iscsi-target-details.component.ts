@@ -115,7 +115,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       }
     };
 
-    const disks = [];
+    const disks: any[] = [];
     _.forEach(this.selectedItem.disks, (disk) => {
       const id = 'disk_' + disk.pool + '_' + disk.image;
       this.metadata[id] = {
@@ -133,12 +133,12 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       });
     });
 
-    const portals = [];
+    const portals: any[] = [];
     _.forEach(this.selectedItem.portals, (portal) => {
       portals.push({ value: `${portal.host}:${portal.ip}` });
     });
 
-    const clients = [];
+    const clients: any[] = [];
     _.forEach(this.selectedItem.clients, (client) => {
       const client_metadata = _.cloneDeep(client.auth);
       if (client.info) {
@@ -150,8 +150,8 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       }
       this.metadata['client_' + client.client_iqn] = client_metadata;
 
-      const luns = [];
-      client.luns.forEach((lun) => {
+      const luns: any[] = [];
+      client.luns.forEach((lun: Record<string, any>) => {
         luns.push({
           value: `${lun.pool}/${lun.image}`,
           id: 'disk_' + lun.pool + '_' + lun.image,
@@ -173,18 +173,18 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       });
     });
 
-    const groups = [];
+    const groups: any[] = [];
     _.forEach(this.selectedItem.groups, (group) => {
-      const luns = [];
-      group.disks.forEach((disk) => {
+      const luns: any[] = [];
+      group.disks.forEach((disk: Record<string, any>) => {
         luns.push({
           value: `${disk.pool}/${disk.image}`,
           id: 'disk_' + disk.pool + '_' + disk.image
         });
       });
 
-      const initiators = [];
-      group.members.forEach((member) => {
+      const initiators: any[] = [];
+      group.members.forEach((member: string) => {
         initiators.push({
           value: member,
           id: 'client_' + member
@@ -258,7 +258,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     };
   }
 
-  private format(value) {
+  private format(value: any) {
     if (typeof value === 'boolean') {
       return this.booleanTextPipe.transform(value);
     }

@@ -25,7 +25,7 @@ export class MillisecondsDirective implements OnInit {
   }
 
   @HostListener('blur', ['$event.target.value'])
-  onUpdate(value) {
+  onUpdate(value: string) {
     this.setValue(value);
   }
 }
