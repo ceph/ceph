@@ -592,6 +592,25 @@ public:
     return p->offset + x_off;
   }
 
+  bool has_pextent(uint64_t p_off, uint64_t len, bool assert_if_partial_overlap) const {
+    bool found = false;
+    for (auto& p : extents) {
+      if (!p.is_valid())
+        continue;
+      if (p.offset <= p_off) {
+        if (p.offset + p.length >= p_off + len) {
+          found = true;
+          break;
+        } else if (assert_if_partial_overlap) {
+          ceph_assert(p.offset + p.length <= p_off);
+        }
+      } else if (assert_if_partial_overlap) {
+        ceph_assert(p.offset >= p_off + len);
+      }
+    }
+    return found;
+  }
+
   // validate whether or not the status of pextents within the given range
   // meets the requirement(allocated or unallocated).
   bool _validate_range(uint64_t b_off, uint64_t b_len,
@@ -887,7 +906,8 @@ public:
     return res;
   }
 
-  void split(uint32_t blob_offset, bluestore_blob_t& rb);
+  void split(uint32_t blob_offset, bluestore_blob_t& rb,
+    std::function<void(const PExtentVector&)> observer);
   void allocated(uint32_t b_off, uint32_t length, const PExtentVector& allocs);
   void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
 

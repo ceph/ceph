@@ -992,12 +992,14 @@ bool bluestore_blob_t::release_extents(bool all,
   return false;
 }
 
-void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
+void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb,
+  std::function<void(const PExtentVector&)> observer = nullptr)
 {
   size_t left = blob_offset;
   uint32_t llen_lb = 0;
   uint32_t llen_rb = 0;
   unsigned i = 0;
+  PExtentVector to_split;
   for (auto p = extents.begin(); p != extents.end(); ++p, ++i) {
     if (p->length <= left) {
       left -= p->length;
@@ -1006,11 +1008,10 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
     }
     if (left) {
       if (p->is_valid()) {
-	rb.extents.emplace_back(bluestore_pextent_t(p->offset + left,
+	to_split.emplace_back(bluestore_pextent_t(p->offset + left,
 	  p->length - left));
-      }
-      else {
-	rb.extents.emplace_back(bluestore_pextent_t(
+      } else {
+        to_split.emplace_back(bluestore_pextent_t(
 	  bluestore_pextent_t::INVALID_OFFSET,
 	  p->length - left));
       }
@@ -1022,12 +1023,22 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
     }
     while (p != extents.end()) {
       llen_rb += p->length;
-      rb.extents.push_back(*p++);
+      to_split.push_back(*p++);
     }
     extents.resize(i);
     logical_length = llen_lb;
     rb.logical_length = llen_rb;
     break;
+  }
+  if (!to_split.empty() ){
+    if (observer) {
+      observer(to_split);
+    }
+    if (rb.extents.empty()) {
+      rb.extents.swap(to_split);
+    } else {
+      rb.extents.insert(rb.extents.end(), to_split.begin(), to_split.end());
+    }
   }
   rb.flags = flags;
 
