@@ -1077,6 +1077,32 @@ void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, Me
     dn->mark_primary();
 }
 
+bool Client::is_dentry_lease_valid(Inode *dir, Dentry *dn)
+{
+  // dir shared caps?
+  if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true) &&
+      dn->cap_shared_gen == dir->shared_gen) {
+    return true;
+  }
+
+  utime_t now = ceph_clock_now();
+  if (dn->lease_mds >= 0 &&
+      dn->lease_ttl > now &&
+      mds_sessions.count(dn->lease_mds)) {
+    MetaSession &s = mds_sessions.at(dn->lease_mds);
+    if (s.cap_ttl > now &&
+	s.cap_gen == dn->lease_gen) {
+      // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
+      // make trim_caps() behave.
+      dir->try_touch_cap(dn->lease_mds);
+      dlease_hit();
+      return true;
+    }
+  }
+
+  dlease_miss();
+  return false;
+}
 
 /*
  * update MDS location cache for a single inode
@@ -3256,6 +3282,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   if (keepdentry) {
     dn->lease_mds = -1;
+    dn->cap_shared_gen = 0;
   } else {
     ldout(cct, 15) << "unlink  removing '" << dn->name << "' dn " << dn << dendl;
 
@@ -6674,28 +6701,6 @@ int Client::_do_lookup(Inode *dir, Dentry *dn, int mask,
   return r;
 }
 
-bool Client::_dentry_valid(const Dentry *dn)
-{
-  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
-
-  // is dn lease valid?
-  utime_t now = ceph_clock_now();
-  if (dn->lease_mds >= 0 && dn->lease_ttl > now &&
-      mds_sessions.count(dn->lease_mds)) {
-    MetaSession &s = mds_sessions.at(dn->lease_mds);
-    if (s.cap_ttl > now && s.cap_gen == dn->lease_gen) {
-      dlease_hit();
-      return true;
-    }
-
-    ldout(cct, 20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
-                   << " vs lease_gen " << dn->lease_gen << dendl;
-  }
-
-  dlease_miss();
-  return false;
-}
-
 int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 		    const UserPerm& perms)
 {
@@ -6755,23 +6760,9 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 	     << dendl;
 
     if (!dn->inode || dn->inode->caps_issued_mask(mask, true)) {
-      if (_dentry_valid(dn)) {
-        // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
-        // make trim_caps() behave.
-        dir->try_touch_cap(dn->lease_mds);
-          goto hit_dn;
-      }
-      // dir shared caps?
-      if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
-	if (dn->cap_shared_gen == dir->shared_gen &&
-	    (!dn->inode || dn->inode->caps_issued_mask(mask, true)))
-	      goto hit_dn;
-	if (!dn->inode && (dir->flags & I_COMPLETE)) {
-	  ldout(cct, 10) << __func__ << " concluded ENOENT locally for "
-			 << *dir << " dn '" << dname << "'" << dendl;
-	  return -ENOENT;
-	}
-      }
+      // is dn lease valid?
+      if (is_dentry_lease_valid(dir, dn))
+	  goto hit_dn;
     } else {
       ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
     }
@@ -6816,10 +6807,11 @@ int Client::get_or_create(Inode *dir, const char* name,
   dir->open_dir();
   if (dir->dir->dentries.count(name)) {
     Dentry *dn = dir->dir->dentries[name];
-    if (_dentry_valid(dn)) {
-      if (expect_null)
-        return -EEXIST;
-    }
+    if (expect_null &&
+	dn->inode &&
+	is_dentry_lease_valid(dir, dn))
+      return -EEXIST;
+
     *pdn = dn;
   } else {
     // otherwise link up a new one
