@@ -165,7 +165,8 @@ class Zap(object):
         Device examples: vg-name/lv-name, /dev/vg-name/lv-name
         Requirements: Must be a logical volume (LV)
         """
-        lv = api.get_lv(lv_name=device.lv_name, vg_name=device.vg_name)
+        lv = api.get_first_lv(filters={'lv_name': device.lv_name, 'vg_name':
+                                       device.vg_name})
         self.unmount_lv(lv)
 
         wipefs(device.abspath)
