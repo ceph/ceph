@@ -146,26 +146,28 @@ namespace mempool {
 // define memory pools
 
 #define DEFINE_MEMORY_POOLS_HELPER(f) \
-  f(bloom_filter)		      \
-  f(bluestore_alloc)		      \
-  f(bluestore_cache_data)	      \
-  f(bluestore_cache_onode)	      \
-  f(bluestore_cache_other)	      \
-  f(bluestore_fsck)		      \
-  f(bluestore_txc)		      \
-  f(bluestore_writing_deferred)	      \
-  f(bluestore_writing)		      \
-  f(bluefs)			      \
-  f(buffer_anon)		      \
-  f(buffer_meta)		      \
-  f(osd)			      \
-  f(osd_mapbl)			      \
-  f(osd_pglog)			      \
-  f(osdmap)			      \
-  f(osdmap_mapping)		      \
-  f(pgmap)			      \
-  f(mds_co)			      \
-  f(unittest_1)			      \
+  f(bloom_filter)                     \
+  f(bluestore_alloc)                  \
+  f(bluestore_cache_data)             \
+  f(bluestore_cache_onode)            \
+  f(bluestore_cache_other)            \
+  f(bluestore_fsck)                   \
+  f(bluestore_txc)                    \
+  f(bluestore_writing_deferred)       \
+  f(bluestore_writing)                \
+  f(bluefs)                           \
+  f(kstore_cache_onode)               \
+  f(kstore_cache_other)               \
+  f(buffer_anon)                      \
+  f(buffer_meta)                      \
+  f(osd)                              \
+  f(osd_mapbl)                        \
+  f(osd_pglog)                        \
+  f(osdmap)                           \
+  f(osdmap_mapping)                   \
+  f(pgmap)                            \
+  f(mds_co)                           \
+  f(unittest_1)                       \
   f(unittest_2)
 
 

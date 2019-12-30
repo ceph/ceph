@@ -57,6 +57,7 @@ public:
 
   /// an in-memory object
   struct Onode {
+    MEMPOOL_CLASS_HELPERS();
     CephContext* cct;
     std::atomic_int nref;  ///< reference count
 
@@ -87,6 +88,17 @@ public:
         tail_offset(0) {
     }
 
+    Onode(CephContext* cct, const ghobject_t& o, const mempool::kstore_cache_other::string& k)
+      : cct(cct),
+	nref(0),
+	oid(o),
+	key(k),
+	dirty(false),
+	exists(false),
+	tail_offset(0) {
+    }
+
+
     void flush();
     void get() {
       ++nref;
@@ -116,7 +128,7 @@ public:
 	&Onode::lru_item> > lru_list_t;
 
     std::mutex lock;
-    ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
+    mempool::kstore_cache_other::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
     lru_list_t lru;                                      ///< lru
 
     OnodeHashLRU(CephContext* cct) : cct(cct) {}

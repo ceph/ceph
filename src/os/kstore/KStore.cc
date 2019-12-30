@@ -36,6 +36,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_kstore
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(KStore::Onode, kstore_onode, kstore_cache_onode);
 /*
 
   TODO:
@@ -84,8 +85,8 @@ const string PREFIX_OMAP = "M"; // u64 + keyname -> value
  * and will get escaped if it is present in the string.
  *
  */
-
-static void append_escaped(const string &in, string *out)
+template<typename S>
+static void append_escaped(const string &in, S *out)
 {
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
@@ -122,7 +123,8 @@ static int decode_escaped(const char *p, string *out)
 
 // some things we encode in binary (as le32 or le64); print the
 // resulting key strings nicely
-static string pretty_binary_string(const string& in)
+template<typename S>
+static string pretty_binary_string(const S& in)
 {
   char buf[10];
   string out;
@@ -171,7 +173,8 @@ static string pretty_binary_string(const string& in)
   return out;
 }
 
-static void _key_encode_shard(shard_id_t shard, string *key)
+template<typename T>
+static void _key_encode_shard(shard_id_t shard, T *key)
 {
   // make field ordering match with ghobject_t compare operations
   if (shard == shard_id_t::NO_SHARD) {
@@ -251,10 +254,12 @@ static void get_coll_key_range(const coll_t& cid, int bits,
   }
 }
 
-static int get_key_object(const string& key, ghobject_t *oid);
+template<typename S>
+static int get_key_object(const S& key, ghobject_t *oid);
 
+template<typename S>
 static void get_object_key(CephContext* cct, const ghobject_t& oid,
-			   string *key)
+			  S *key)
 {
   key->clear();
 
@@ -304,7 +309,8 @@ static void get_object_key(CephContext* cct, const ghobject_t& oid,
   }
 }
 
-static int get_key_object(const string& key, ghobject_t *oid)
+template<typename S>
+static int get_key_object(const S& key, ghobject_t *oid)
 {
   int r;
   const char *p = key.c_str();
@@ -444,7 +450,7 @@ KStore::OnodeRef KStore::OnodeHashLRU::lookup(const ghobject_t& oid)
 {
   std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << dendl;
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
+  auto p = onode_map.find(oid);
   if (p == onode_map.end()) {
     dout(30) << __func__ << " " << oid << " miss" << dendl;
     return OnodeRef();
@@ -467,9 +473,8 @@ void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
 {
   std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
-  po = onode_map.find(old_oid);
-  pn = onode_map.find(new_oid);
+  auto po = onode_map.find(old_oid);
+  auto pn = onode_map.find(new_oid);
 
   ceph_assert(po != onode_map.end());
   if (pn != onode_map.end()) {
@@ -501,14 +506,14 @@ bool KStore::OnodeHashLRU::get_next(
     if (lru.empty()) {
       return false;
     }
-    ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.begin();
+    auto p = onode_map.begin();
     ceph_assert(p != onode_map.end());
     next->first = p->first;
     next->second = p->second;
     return true;
   }
 
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(after);
+ auto p = onode_map.find(after);
   ceph_assert(p != onode_map.end()); // for now
   lru_list_t::iterator pi = lru.iterator_to(*p->second);
   ++pi;
@@ -602,14 +607,14 @@ KStore::OnodeRef KStore::Collection::get_onode(
   if (o)
     return o;
 
-  string key;
+  mempool::kstore_cache_other::string key;
   get_object_key(store->cct, oid, &key);
 
   ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
 			<< pretty_binary_string(key) << dendl;
 
   bufferlist v;
-  int r = store->db->get(PREFIX_OBJ, key, &v);
+  int r = store->db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
   ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
   Onode *on;
   if (v.length() == 0) {
