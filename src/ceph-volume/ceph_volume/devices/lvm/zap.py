@@ -81,13 +81,13 @@ def find_associated_devices(osd_id=None, osd_fsid=None):
         lv_tags['ceph.osd_id'] = osd_id
     if osd_fsid:
         lv_tags['ceph.osd_fsid'] = osd_fsid
-    lvs = api.Volumes()
-    lvs.filter(lv_tags=lv_tags)
+
+    lvs = api.get_lvs(tags=lv_tags)
     if not lvs:
-        raise RuntimeError('Unable to find any LV for zapping OSD: %s' % osd_id or osd_fsid)
+        raise RuntimeError('Unable to find any LV for zapping OSD: '
+                           '%s' % osd_id or osd_fsid)
 
     devices_to_zap = ensure_associated_lvs(lvs)
-
     return [Device(path) for path in set(devices_to_zap) if path]
 
 
@@ -100,14 +100,11 @@ def ensure_associated_lvs(lvs):
     # receive a filtering for osd.1, and have multiple failed deployments
     # leaving many journals with osd.1 - usually, only a single LV will be
     # returned
-    journal_lvs = lvs._filter(lv_tags={'ceph.type': 'journal'})
-    db_lvs = lvs._filter(lv_tags={'ceph.type': 'db'})
-    wal_lvs = lvs._filter(lv_tags={'ceph.type': 'wal'})
-    backing_devices = [
-        (journal_lvs, 'journal'),
-        (db_lvs, 'db'),
-        (wal_lvs, 'wal')
-    ]
+    journal_lvs = api.get_lvs(tags={'ceph.type': 'journal'})
+    db_lvs = api.get_lvs(tags={'ceph.type': 'db'})
+    wal_lvs = api.get_lvs(tags={'ceph.type': 'wal'})
+    backing_devices = [(journal_lvs, 'journal'), (db_lvs, 'db'),
+                       (wal_lvs, 'wal')]
 
     verified_devices = []
 
@@ -175,14 +172,19 @@ class Zap(object):
         zap_data(device.abspath)
 
         if self.args.destroy:
-            lvs = api.Volumes()
-            lvs.filter(vg_name=device.vg_name)
-            if len(lvs) <= 1:
-                mlogger.info('Only 1 LV left in VG, will proceed to destroy volume group %s', device.vg_name)
+            lvs = api.get_lvs(filters={'vg_name': device.vg_name})
+            if lvs == []:
+                mlogger.info('No LVs left, exiting', device.vg_name)
+                return
+            elif len(lvs) <= 1:
+                mlogger.info('Only 1 LV left in VG, will proceed to destroy '
+                             'volume group %s', device.vg_name)
                 api.remove_vg(device.vg_name)
             else:
-                mlogger.info('More than 1 LV left in VG, will proceed to destroy LV only')
-                mlogger.info('Removing LV because --destroy was given: %s', device.abspath)
+                mlogger.info('More than 1 LV left in VG, will proceed to '
+                             'destroy LV only')
+                mlogger.info('Removing LV because --destroy was given: %s',
+                             device.abspath)
                 api.remove_lv(device.abspath)
         elif lv:
             # just remove all lvm metadata, leaving the LV around
