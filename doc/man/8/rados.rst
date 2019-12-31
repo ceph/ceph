@@ -202,10 +202,10 @@ Pool specific commands
   Set the value of the object map header of object name.
 
 :command:`export` *filename*
-  Serialize pool contents to a file or standard output.\n"
+  Serialize pool contents to a file or standard output.
 
 :command:`import` [--dry-run] [--no-overwrite] < filename | - >
-  Load pool contents from a file or standard input
+  Load contents from a file or standard input into a pool.
 
 
 Examples
