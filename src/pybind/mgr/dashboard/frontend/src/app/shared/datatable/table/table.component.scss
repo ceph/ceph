@@ -87,6 +87,10 @@
     min-width: 85px;
     padding-right: 8px;
   }
+  .filter-chips {
+    float: right;
+    padding: 0 8px;
+  }
 }
 
 ::ng-deep .cd-datatable {
