@@ -248,6 +248,8 @@ bool PoolReplayer<I>::is_running() const {
 
 template <typename I>
 void PoolReplayer<I>::init(const std::string& site_name) {
+  std::lock_guard locker{m_lock};
+
   ceph_assert(!m_pool_replayer_thread.is_started());
 
   // reset state
@@ -695,6 +697,19 @@ int PoolReplayer<I>::list_mirroring_namespaces(
   }
 
   return 0;
+}
+
+template <typename I>
+void PoolReplayer<I>::reopen_logs()
+{
+  std::lock_guard locker{m_lock};
+
+  if (m_local_rados) {
+    reinterpret_cast<CephContext *>(m_local_rados->cct())->reopen_logs();
+  }
+  if (m_remote_rados) {
+    reinterpret_cast<CephContext *>(m_remote_rados->cct())->reopen_logs();
+  }
 }
 
 template <typename I>
