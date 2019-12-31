@@ -8,6 +8,7 @@ import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
+import { CdTableColumnFilter } from '../../models/cd-table-column-filter';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
 import { PipesModule } from '../../pipes/pipes.module';
 import { TableComponent } from './table.component';
@@ -50,9 +51,9 @@ describe('TableComponent', () => {
 
     component.data = createFakeData(10);
     component.columns = [
-      { prop: 'a', name: 'Index' },
+      { prop: 'a', name: 'Index', filterable: true },
       { prop: 'b', name: 'Index times ten' },
-      { prop: 'c', name: 'Odd?' }
+      { prop: 'c', name: 'Odd?', filterable: true }
     ];
   });
 
@@ -103,12 +104,180 @@ describe('TableComponent', () => {
     component.ngOnInit();
   });
 
+  describe('test column filtering', () => {
+    let filterIndex: CdTableColumnFilter;
+    let filterOdd: CdTableColumnFilter;
+    let filterCustom: CdTableColumnFilter;
+
+    const expectColumnFilterCreated = (
+      filter: CdTableColumnFilter,
+      prop: string,
+      options: string[],
+      value?: { raw: string; formatted: string }
+    ) => {
+      expect(filter.column.prop).toBe(prop);
+      expect(_.map(filter.options, 'raw')).toEqual(options);
+      expect(filter.value).toEqual(value);
+    };
+
+    const expectColumnFiltered = (
+      changes: { filter: CdTableColumnFilter; value?: string }[],
+      results: any[],
+      search: string = ''
+    ) => {
+      component.search = search;
+      _.forEach(changes, (change) => {
+        component.onChangeFilter(
+          change.filter,
+          change.value ? { raw: change.value, formatted: change.value } : undefined
+        );
+      });
+      expect(component.rows).toEqual(results);
+      component.onClearSearch();
+      component.onClearFilters();
+    };
+
+    describe('with visible columns', () => {
+      beforeEach(() => {
+        component.initColumnFilters();
+        component.updateColumnFilterOptions();
+        filterIndex = component.columnFilters[0];
+        filterOdd = component.columnFilters[1];
+      });
+
+      it('should have filters initialized', () => {
+        expect(component.columnFilters.length).toBe(2);
+        expectColumnFilterCreated(
+          filterIndex,
+          'a',
+          _.map(component.data, (row) => _.toString(row.a))
+        );
+        expectColumnFilterCreated(filterOdd, 'c', ['false', 'true']);
+      });
+
+      it('should add filters', () => {
+        // single
+        expectColumnFiltered([{ filter: filterIndex, value: '1' }], [{ a: 1, b: 10, c: true }]);
+
+        // multiple
+        expectColumnFiltered(
+          [{ filter: filterOdd, value: 'false' }, { filter: filterIndex, value: '2' }],
+          [{ a: 2, b: 20, c: false }]
+        );
+
+        // Clear should work
+        expect(component.rows).toEqual(component.data);
+      });
+
+      it('should remove filters', () => {
+        // single
+        expectColumnFiltered(
+          [
+            { filter: filterOdd, value: 'true' },
+            { filter: filterIndex, value: '1' },
+            { filter: filterIndex, value: undefined }
+          ],
+          [
+            { a: 1, b: 10, c: true },
+            { a: 3, b: 30, c: true },
+            { a: 5, b: 50, c: true },
+            { a: 7, b: 70, c: true },
+            { a: 9, b: 90, c: true }
+          ]
+        );
+
+        // multiple
+        expectColumnFiltered(
+          [
+            { filter: filterOdd, value: 'true' },
+            { filter: filterIndex, value: '1' },
+            { filter: filterIndex, value: undefined },
+            { filter: filterOdd, value: undefined }
+          ],
+          component.data
+        );
+
+        // a selected filter should be removed if it's selected again
+        expectColumnFiltered(
+          [
+            { filter: filterOdd, value: 'true' },
+            { filter: filterIndex, value: '1' },
+            { filter: filterIndex, value: '1' }
+          ],
+          [
+            { a: 1, b: 10, c: true },
+            { a: 3, b: 30, c: true },
+            { a: 5, b: 50, c: true },
+            { a: 7, b: 70, c: true },
+            { a: 9, b: 90, c: true }
+          ]
+        );
+      });
+
+      it('should search from filtered rows', () => {
+        expectColumnFiltered(
+          [{ filter: filterOdd, value: 'true' }],
+          [{ a: 9, b: 90, c: true }],
+          '9'
+        );
+
+        // Clear should work
+        expect(component.rows).toEqual(component.data);
+      });
+    });
+
+    describe('with custom columns', () => {
+      beforeEach(() => {
+        // create a new additional column in data
+        for (let i = 0; i < component.data.length; i++) {
+          const row = component.data[i];
+          row['d'] = row.a;
+        }
+        // create a custom column filter
+        component.extraFilterableColumns = [
+          {
+            name: 'd less than 5',
+            prop: 'd',
+            filterOptions: ['yes', 'no'],
+            filterInitValue: 'yes',
+            filterPredicate: (row, value) => {
+              if (value === 'yes') {
+                return row.d < 5;
+              } else {
+                return row.d >= 5;
+              }
+            }
+          }
+        ];
+        component.initColumnFilters();
+        component.updateColumnFilterOptions();
+        filterIndex = component.columnFilters[0];
+        filterOdd = component.columnFilters[1];
+        filterCustom = component.columnFilters[2];
+      });
+
+      it('should have filters initialized', () => {
+        expect(component.columnFilters.length).toBe(3);
+        expectColumnFilterCreated(filterCustom, 'd', ['yes', 'no'], {
+          raw: 'yes',
+          formatted: 'yes'
+        });
+        component.useData();
+        expect(component.rows).toEqual(_.slice(component.data, 0, 5));
+      });
+
+      it('should remove filters', () => {
+        expectColumnFiltered([{ filter: filterCustom, value: 'no' }], _.slice(component.data, 5));
+      });
+    });
+  });
+
   describe('test search', () => {
     const expectSearch = (keyword: string, expectedResult: object[]) => {
       component.search = keyword;
       component.updateFilter();
       expect(component.rows).toEqual(expectedResult);
-      component.updateFilter(true);
+      component.onClearSearch();
     };
 
     describe('searchableObjects', () => {
@@ -238,7 +407,7 @@ describe('TableComponent', () => {
       component.search = '3';
       component.updateFilter();
       expect(component.rows.length).toBe(1);
-      component.updateFilter(true);
+      component.onClearSearch();
       expect(component.rows.length).toBe(10);
     });
   });
