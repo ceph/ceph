@@ -9,6 +9,7 @@ import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
+import { PipesModule } from '../../pipes/pipes.module';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -38,7 +39,8 @@ describe('TableComponent', () => {
       FormsModule,
       ComponentsModule,
       RouterTestingModule,
-      BsDropdownModule.forRoot()
+      BsDropdownModule.forRoot(),
+      PipesModule
     ]
   });
 
@@ -108,6 +110,33 @@ describe('TableComponent', () => {
       expect(component.rows).toEqual(expectedResult);
       component.updateFilter(true);
     };
+
+    describe('searchableObjects', () => {
+      const testObject = {
+        obj: {
+          min: 8,
+          max: 123
+        }
+      };
+
+      beforeEach(() => {
+        component.data = [testObject];
+        component.columns = [{ prop: 'obj', name: 'Object' }];
+      });
+
+      it('should not search through objects as default case', () => {
+        expect(component.searchableObjects).toBe(false);
+        expectSearch('8', []);
+      });
+
+      it('should search through objects if searchableObjects is set to true', () => {
+        component.searchableObjects = true;
+        expectSearch('28', []);
+        expectSearch('8', [testObject]);
+        expectSearch('123', [testObject]);
+        expectSearch('max', [testObject]);
+      });
+    });
 
     it('should find a particular number', () => {
       expectSearch('5', [{ a: 5, b: 50, c: true }]);

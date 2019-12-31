@@ -105,6 +105,7 @@ private:
   feature_bitset_t supported_features;
   feature_bitset_t required_client_features;
 
+  bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;
 
@@ -192,9 +193,7 @@ public:
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
-  void set_trace_dist(Session *session, const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
-		      snapid_t snapid,
-		      int num_dentries_wanted,
+  void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      MDRequestRef& mdr);
 
 
@@ -208,23 +207,18 @@ public:
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
-  CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_view dname);
-  CDir *traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath);
-  CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_view dname, bool okexist=false);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    file_layout_t *layout=NULL);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
-  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
-			      bool want_auth, bool no_want_auth=false,
-			      file_layout_t **layout=nullptr,
-			      bool no_lookup=false);
-  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
-				    MutationImpl::LockOpVec& lov,
-				    bool okexist, bool mustexist, bool alwaysxlock,
-				    file_layout_t **layout=nullptr);
+  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
+			      bool no_want_auth=false);
+  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
+				    bool okexist=false, bool want_layout=false);
+  std::pair<CDentry*, CDentry*>
+	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
@@ -239,6 +233,9 @@ public:
   void handle_client_file_setlock(MDRequestRef& mdr);
   void handle_client_file_readlock(MDRequestRef& mdr);
 
+  bool xlock_policylock(MDRequestRef& mdr, CInode *in,
+			bool want_layout=false, bool xlock_snaplock=false);
+  CInode* try_get_auth_inode(MDRequestRef& mdr, inodeno_t ino);
   void handle_client_setattr(MDRequestRef& mdr);
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
@@ -251,12 +248,8 @@ public:
                           string name,
                           string value,
                           file_layout_t *layout);
-  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			 file_layout_t *dir_layout,
-			 MutationImpl::LockOpVec& lov);
-  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
-			    file_layout_t *dir_layout,
-			    MutationImpl::LockOpVec& lov);
+  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 

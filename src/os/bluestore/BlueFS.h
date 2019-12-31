@@ -14,6 +14,7 @@
 #include "global/global_context.h"
 
 #include "boost/intrusive/list.hpp"
+#include "boost/dynamic_bitset.hpp"
 
 class PerfCounters;
 
@@ -74,6 +75,25 @@ public:
   virtual size_t available_freespace(uint64_t alloc_size) = 0;
 };
 
+class BlueFSVolumeSelector {
+public:
+  typedef std::vector<std::pair<std::string, uint64_t>> paths;
+
+  virtual ~BlueFSVolumeSelector() {
+  }
+  virtual void* get_hint_by_device(uint8_t dev) const = 0;
+  virtual void* get_hint_by_dir(const string& dirname) const = 0;
+
+  virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
+  virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
+  virtual void add_usage(void* file_hint, uint64_t fsize) = 0;
+  virtual void sub_usage(void* file_hint, uint64_t fsize) = 0;
+  virtual uint8_t select_prefer_bdev(void* hint) = 0;
+  virtual void get_paths(const std::string& base, paths& res) const = 0;
+  virtual void dump(ostream& sout) = 0;
+};
+class BlueFS;
+
 class BlueFS {
 public:
   CephContext* cct;
@@ -103,6 +123,8 @@ public:
     std::atomic_int num_readers, num_writers;
     std::atomic_int num_reading;
 
+    void* vselector_hint = nullptr;
+
   private:
     FRIEND_MAKE_REF(File);
     File()
@@ -113,7 +135,8 @@ public:
 	deleted(false),
 	num_readers(0),
 	num_writers(0),
-	num_reading(0)
+	num_reading(0),
+        vselector_hint(nullptr)
       {}
     ~File() override {
       ceph_assert(num_readers.load() == 0);
@@ -301,6 +324,7 @@ private:
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
   BlueFSDeviceExpander* slow_dev_expander = nullptr;
+  std::unique_ptr<BlueFSVolumeSelector> vselector;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -384,6 +408,10 @@ private:
 
   int _open_super();
   int _write_super(int dev);
+  int _check_new_allocations(const bluefs_fnode_t& fnode,
+    size_t dev_count,
+    boost::dynamic_bitset<uint64_t>* owned_blocks,
+    boost::dynamic_bitset<uint64_t>* used_blocks);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
@@ -485,6 +513,17 @@ public:
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;
   }
+  void set_volume_selector(BlueFSVolumeSelector* s) {
+    vselector.reset(s);
+  }
+  void dump_volume_selector(ostream& sout) {
+    vselector->dump(sout);
+  }
+  void get_vselector_paths(const std::string& base,
+                           BlueFSVolumeSelector::paths& res) const {
+    return vselector->get_paths(base, res);
+  }
+
   int add_block_device(unsigned bdev, const string& path, bool trim,
 		       bool shared_with_bluestore=false);
   bool bdev_support_label(unsigned id);
@@ -544,6 +583,48 @@ public:
     return _truncate(h, offset);
   }
 
+  /// test purpose methods
+  void debug_inject_duplicate_gift(unsigned bdev, uint64_t offset, uint64_t len);
+  const PerfCounters* get_perf_counters() const {
+    return logger;
+  }
+};
+
+class OriginalVolumeSelector : public BlueFSVolumeSelector {
+  uint64_t wal_total;
+  uint64_t db_total;
+  uint64_t slow_total;
+
+public:
+  OriginalVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total)
+    : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
+
+  void* get_hint_by_device(uint8_t dev) const override;
+  void* get_hint_by_dir(const string& dirname) const override;
+
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    // do nothing
+    return;
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    // do nothing
+    return;
+  }
+  void add_usage(void* hint, uint64_t fsize) override {
+    // do nothing
+    return;
+  }
+  void sub_usage(void* hint, uint64_t fsize) override {
+    // do nothing
+    return;
+  }
+
+  uint8_t select_prefer_bdev(void* hint) override;
+  void get_paths(const std::string& base, paths& res) const override;
+  void dump(ostream& sout) override;
 };
 
 #endif

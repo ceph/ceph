@@ -302,11 +302,12 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, ScrubCleanObjects) {
 
   C_SaferCond cond_ctx1;
   {
-    librbd::ObjectMap om(*ictx, ictx->snap_id);
+    librbd::ObjectMap<> *om = new librbd::ObjectMap<>(*ictx, ictx->snap_id);
     std::shared_lock owner_locker{ictx->owner_lock};
     std::unique_lock image_locker{ictx->image_lock};
-    om.set_object_map(object_map);
-    om.aio_save(&cond_ctx1);
+    om->set_object_map(object_map);
+    om->aio_save(&cond_ctx1);
+    om->put();
   }
   ASSERT_EQ(0, cond_ctx1.wait());
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));

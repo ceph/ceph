@@ -1,44 +1,3 @@
-14.2.1
-------
-
-* The default value for `mon_crush_min_required_version` has been
-  changed from `firefly` to `hammer`, which means the cluster will
-  issue a health warning if your CRUSH tunables are older than hammer.
-  There is generally a small (but non-zero) amount of data that will
-  move around by making the switch to hammer tunables; for more information,
-  see :ref:`crush-map-tunables`.
-
-  If possible, we recommend that you set the oldest allowed client to `hammer`
-  or later.  You can tell what the current oldest allowed client is with::
-
-    ceph osd dump | min_compat_client
-
-  If the current value is older than hammer, you can tell whether it
-  is safe to make this change by verifying that there are no clients
-  older than hammer current connected to the cluster with::
-
-    ceph features
-
-  The newer `straw2` CRUSH bucket type was introduced in hammer, and
-  ensuring that all clients are hammer or newer allows new features
-  only supported for `straw2` buckets to be used, including the
-  `crush-compat` mode for the :ref:`balancer`.
-
-
-14.2.5
-------
-
-* Ceph will now issue a health warning if a RADOS pool as a ``pg_num``
-  value that is not a power of two.  This can be fixed by adjusting
-  the pool to a nearby power of two::
-
-    ceph osd pool set <pool-name> pg_num <new-pg-num>
-
-  Alternatively, the warning can be silenced with::
-
-    ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
-
-
 >=15.0.0
 --------
 
@@ -173,24 +132,50 @@
   cluster-wide and per-pool flags to be backward comaptible with pre-infernalis
   clusters.
 
-* The telemetry module now has a 'device' channel, enabled by default, that
-  will report anonymized hard disk and SSD health metrics to telemetry.ceph.com
-  in order to build and improve device failure prediction algorithms.  Because
-  the content of telemetry reports has changed, you will need to either re-opt-in
-  with::
+* The telemetry module now reports more information.
+
+  First, there is a new 'device' channel, enabled by default, that
+  will report anonymized hard disk and SSD health metrics to
+  telemetry.ceph.com in order to build and improve device failure
+  prediction algorithms.  If you are not comfortable sharing device
+  metrics, you can disable that channel first before re-opting-in::
+
+    ceph config set mgr mgr/telemetry/channel_device false
+
+  Second, we now report more information about CephFS file systems,
+  including:
+
+    - how many MDS daemons (in total and per file system)
+    - which features are (or have been) enabled
+    - how many data pools
+    - approximate file system age (year + month of creation)
+    - how many files, bytes, and snapshots
+    - how much metadata is being cached
+
+  We have also added:
+
+    - which Ceph release the monitors are running
+    - whether msgr v1 or v2 addresses are used for the monitors
+    - whether IPv4 or IPv6 addresses are used for the monitors
+    - whether RADOS cache tiering is enabled (and which mode)
+    - whether pools are replicated or erasure coded, and
+      which erasure code profile plugin and parameters are in use
+    - how many hosts are in the cluster, and how many hosts have each type of daemon
+    - whether a separate OSD cluster network is being used
+    - how many RBD pools and images are in the cluster, and how many pools have RBD mirroring enabled
+    - how many RGW daemons, zones, and zonegroups are present; which RGW frontends are in use
+    - aggregate stats about the CRUSH map, like which algorithms are used, how
+      big buckets are, how many rules are defined, and what tunables are in
+      use
+
+  If you had telemetry enabled, you will need to re-opt-in with::
 
     ceph telemetry on
 
   You can view exactly what information will be reported first with::
 
-    ceph telemetry show
-    ceph telemetry show device   # specifically show the device channel
-
-  If you are not comfortable sharing device metrics, you can disable that
-  channel first before re-opting-in:
-
-    ceph config set mgr mgr/telemetry/channel_crash false
-    ceph telemetry on
+    ceph telemetry show        # see everything
+    ceph telemetry show basic  # basic cluster info (including all of the new info)
 
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
@@ -229,6 +214,12 @@
 
     ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
 
+* The format of MDSs in `ceph fs dump` has changed.
+
+* The ``mds_cache_size`` config option is completely removed. Since luminous,
+  the ``mds_cache_memory_limit`` config option has been preferred to configure
+  the MDS's cache limits.
+
 * The ``pg_autoscale_mode`` is now set to ``on`` by default for newly
   created pools, which means that Ceph will automatically manage the
   number of PGs.  To change this behavior, or to learn more about PG
@@ -244,3 +235,50 @@
   Accordingly, the ``osd_op_queue_mclock*`` family of config options
   has been removed in favor of the ``osd_mclock_scheduler*`` family
   of options.
+
+* The config subsystem now searches dot ('.') delineated prefixes for
+  options.  That means for an entity like ``client.foo.bar``, it's
+  overall configuration will be a combination of the global options,
+  ``client``, ``client.foo``, and ``client.foo.bar``.  Previously,
+  only global, ``client``, and ``client.foo.bar`` options would apply.
+  This change may affect the configuration for clients that include a
+  ``.`` in their name.
+
+  Note that this only applies to configuration options in the
+  monitor's database--config file parsing is not affected.
+
+* RGW: bucket listing performance on sharded bucket indexes has been
+  notably improved by heuristically -- and significantly, in many
+  cases -- reducing the number of entries requested from each bucket
+  index shard.
+
+* MDS default cache memory limit is now 4GB.
+
+* The behaviour of the ``-o`` argument to the rados tool has been reverted to
+  its orignal behaviour of indicating an output file. This reverts it to a more
+  consisten behaviour when compared to other tools. Specifying obect size is now
+  accomplished by using an upper case O ``-O``.
+
+* In certain rare cases, OSDs would self-classify themselves as type
+  'nvme' instead of 'hdd' or 'ssd'.  This appears to be limited to
+  cases where BlueStore was deployed with older versions of ceph-disk,
+  or manually without ceph-volume and LVM.  Going forward, the OSD
+  will limit itself to only 'hdd' and 'ssd' (or whatever device class the user
+  manually specifies).
+
+* RGW: a mismatch between the bucket notification documentation and the actual
+  message format was fixed. This means that any endpoints receiving bucket 
+  notification, will now receive the same notifications inside an JSON array
+  named 'Records'. Note that this does not affect pulling bucket notification
+  from a subscription in a 'pubsub' zone, as these are already wrapped inside
+  that array.
+
+* The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for upmap
+  balancing has been removed. Instead use the mgr balancer config
+  ``upmap_max_deviation`` which now is an integer number of PGs of deviation
+  from the target PGs per OSD.  This can be set with a command like
+  ``ceph config set mgr mgr/balancer/upmap_max_deviation 2``.  The default
+  ``upmap_max_deviation`` is 1.  There are situations where crush rules
+  would not allow a pool to ever have completely balanced PGs.  For example, if
+  crush requires 1 replica on each of 3 racks, but there are fewer OSDs in 1 of
+  the racks.  In those cases, the configuration value can be increased.

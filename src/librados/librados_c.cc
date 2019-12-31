@@ -442,6 +442,15 @@ extern "C" int _rados_blacklist_add(rados_t cluster, char *client_address,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_blacklist_add);
 
+extern "C" int _rados_getaddrs(rados_t cluster, char** addrs)
+{
+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+  auto s = radosp->get_addrs();
+  *addrs = strdup(s.c_str());
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_getaddrs);
+
 extern "C" void _rados_set_osdmap_full_try(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
@@ -615,8 +624,10 @@ extern "C" int _rados_pool_list(rados_t cluster, char *buf, size_t len)
   }
 
   char *b = buf;
-  if (b)
+  if (b) {
+    // FIPS zeroization audit 20191116: this memset is not security related.
     memset(b, 0, len);
+  }
   int needed = 0;
   std::list<std::pair<int64_t, std::string> >::const_iterator i = pools.begin();
   std::list<std::pair<int64_t, std::string> >::const_iterator p_end =
@@ -661,8 +672,10 @@ extern "C" int _rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
   }
 
   char *b = buf;
-  if (b)
+  if (b) {
+    // FIPS zeroization audit 20191116: this memset is not security related.
     memset(b, 0, len);
+  }
   int needed = 0;
   for (const auto& s : pgs) {
     unsigned rl = s.length() + 1;
@@ -2002,6 +2015,7 @@ extern "C" int _rados_object_list(rados_ioctx_t io,
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
   // Zero out items so that they will be safe to free later
+  // FIPS zeroization audit 20191116: this memset is not security related.
   memset(result_items, 0, sizeof(rados_object_list_item) * result_item_count);
 
   std::list<librados::ListObjectImpl> result;
@@ -2240,6 +2254,20 @@ extern "C" int _rados_aio_create_completion(void *cb_arg,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_aio_create_completion);
 
+extern "C" int _rados_aio_create_completion2(void *cb_arg,
+					     rados_callback_t cb_complete,
+					     rados_completion_t *pc)
+{
+  tracepoint(librados, rados_aio_create_completion2_enter, cb_arg, cb_complete);
+  librados::AioCompletionImpl *c = new librados::AioCompletionImpl;
+  if (cb_complete)
+    c->set_complete_callback(cb_arg, cb_complete);
+  *pc = c;
+  tracepoint(librados, rados_aio_create_completion2_exit, 0, *pc);
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_aio_create_completion2);
+
 extern "C" int _rados_aio_wait_for_complete(rados_completion_t c)
 {
   tracepoint(librados, rados_aio_wait_for_complete_enter, c);
@@ -2252,7 +2280,7 @@ LIBRADOS_C_API_BASE_DEFAULT(rados_aio_wait_for_complete);
 extern "C" int _rados_aio_wait_for_safe(rados_completion_t c)
 {
   tracepoint(librados, rados_aio_wait_for_safe_enter, c);
-  int retval = ((librados::AioCompletionImpl*)c)->wait_for_safe();
+  int retval = ((librados::AioCompletionImpl*)c)->wait_for_complete();
   tracepoint(librados, rados_aio_wait_for_safe_exit, retval);
   return retval;
 }
@@ -2516,6 +2544,7 @@ static void rados_aio_getxattr_complete(rados_completion_t c, void *arg) {
     }
   }
   cdata->user_completion.finish(rc);
+  ((librados::AioCompletionImpl*)c)->put();
   delete cdata;
 }
 
@@ -2569,6 +2598,7 @@ static void rados_aio_getxattrs_complete(rados_completion_t c, void *arg) {
     cdata->it = 0;
     cdata->user_completion.finish(0);
   }
+  ((librados::AioCompletionImpl*)c)->put();
   delete cdata;
 }
 
@@ -3012,6 +3042,7 @@ extern "C" int _rados_aio_unlock(rados_ioctx_t io, const char *o, const char *na
   librados::IoCtx ctx;
   librados::IoCtx::from_rados_ioctx_t(io, ctx);
   librados::AioCompletionImpl *comp = (librados::AioCompletionImpl*)completion;
+  comp->get();
   librados::AioCompletion c(comp);
   int retval = ctx.aio_unlock(o, name, cookie, &c);
   tracepoint(librados, rados_aio_unlock_exit, retval);

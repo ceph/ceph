@@ -1,0 +1,65 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container *ngIf="titleText"
+                class="modal-title">
+    {{ titleText }}
+  </ng-container>
+  <ng-container class="modal-content">
+    <form [formGroup]="formGroup"
+          #formDir="ngForm"
+          novalidate>
+      <div class="modal-body">
+        <p *ngIf="message">{{ message }}</p>
+        <ng-container *ngFor="let field of fields">
+          <div class="form-group row cd-{{field.name}}-form-group">
+            <label *ngIf="field.label"
+                   class="col-form-label col-sm-3"
+                   [for]="field.name">
+              {{ field.label }}
+            </label>
+            <div [ngClass]="{'col-sm-9': field.label, 'col-sm-12': !field.label}">
+              <input *ngIf="['text', 'number'].includes(field.type)"
+                     [type]="field.type"
+                     class="form-control"
+                     [id]="field.name"
+                     [name]="field.name"
+                     [formControlName]="field.name">
+              <input *ngIf="field.type === 'binary'"
+                     type="text"
+                     class="form-control"
+                     [id]="field.name"
+                     [name]="field.name"
+                     [formControlName]="field.name"
+                     cdDimlessBinary>
+              <select *ngIf="field.name === 'select'"
+                      class="form-control custom-select"
+                      [id]="field.name"
+                      [formControlName]="field.name">
+                <option *ngIf="field.placeholder"
+                        [ngValue]="null">
+                  {{ field.placeholder }}
+                </option>
+                <option *ngFor="let option of field.options"
+                        [value]="option.value">
+                  {{ option.text }}
+                </option>
+              </select>
+              <span *ngIf="formGroup.showError(field.name,formDir)"
+                    class="invalid-feedback">
+                {{ getError(field) }}
+              </span>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="formGroup"
+                            (submitAction)="onSubmitForm(formGroup.value)">
+            {{ submitButtonText }}
+          </cd-submit-button>
+          <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

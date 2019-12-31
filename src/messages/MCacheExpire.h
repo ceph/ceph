@@ -21,7 +21,7 @@
 
 #include "mds/mdstypes.h"
 
-class MCacheExpire : public Message {
+class MCacheExpire : public SafeMessage {
 private:
   __s32 from;
 
@@ -66,9 +66,9 @@ public:
   int get_from() const { return from; }
 
 protected:
-  MCacheExpire() : Message{MSG_MDS_CACHEEXPIRE}, from(-1) {}
+  MCacheExpire() : SafeMessage{MSG_MDS_CACHEEXPIRE}, from(-1) {}
   MCacheExpire(int f) : 
-    Message{MSG_MDS_CACHEEXPIRE},
+    SafeMessage{MSG_MDS_CACHEEXPIRE},
     from(f) { }
   ~MCacheExpire() override {}
 

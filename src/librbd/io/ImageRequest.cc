@@ -219,7 +219,6 @@ void ImageRequest<I>::aio_compare_and_write(I *ictx, AioCompletion *c,
   req.send();
 }
 
-
 template <typename I>
 void ImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
@@ -234,6 +233,10 @@ void ImageRequest<I>::send() {
   int r = clip_request();
   if (r < 0) {
     m_aio_comp->fail(r);
+    return;
+  }
+
+  if (finish_request_early()) {
     return;
   }
 
@@ -408,6 +411,27 @@ void ImageReadRequest<I>::send_image_cache_request() {
 }
 
 template <typename I>
+bool AbstractImageWriteRequest<I>::finish_request_early() {
+  AioCompletion *aio_comp = this->m_aio_comp;
+  {
+    std::shared_lock image_locker{this->m_image_ctx.image_lock};
+    if (this->m_image_ctx.snap_id != CEPH_NOSNAP || this->m_image_ctx.read_only) {
+      aio_comp->fail(-EROFS);
+      return true;
+    }
+  }
+  uint64_t total_bytes = 0;
+  for (auto& image_extent : this->m_image_extents) {
+    total_bytes += image_extent.second;
+  }
+  if (total_bytes == 0) {
+    aio_comp->set_request_count(0);
+    return true;
+  }
+  return false;
+}
+
+template <typename I>
 void AbstractImageWriteRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
@@ -420,10 +444,6 @@ void AbstractImageWriteRequest<I>::send_request() {
     // prevent image size from changing between computing clip and recording
     // pending async operation
     std::shared_lock image_locker{image_ctx.image_lock};
-    if (image_ctx.snap_id != CEPH_NOSNAP || image_ctx.read_only) {
-      aio_comp->fail(-EROFS);
-      return;
-    }
 
     snapc = image_ctx.snapc;
     journaling = (image_ctx.journal != nullptr &&

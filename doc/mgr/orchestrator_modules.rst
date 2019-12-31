@@ -114,9 +114,9 @@ Completions and batching
 ------------------------
 
 All methods that read or modify the state of the system can potentially
-be long running.  To handle that, all such methods return a *completion*
-object (a *ReadCompletion* or a *WriteCompletion*).  Orchestrator modules
-must implement the *wait* method: this takes a list of completions, and
+be long running.  To handle that, all such methods return a *Completion*
+object.  Orchestrator modules
+must implement the *process* method: this takes a list of completions, and
 is responsible for checking if they're finished, and advancing the underlying
 operations as needed.
 
@@ -125,24 +125,21 @@ for completions.  This might involve running the underlying operations
 in threads, or batching the operations up before later executing
 in one go in the background.  If implementing such a batching pattern, the
 module would do no work on any operation until it appeared in a list
-of completions passed into *wait*.
+of completions passed into *process*.
 
-*WriteCompletion* objects have a two-stage execution.  First they become
-*persistent*, meaning that the write has made it to the orchestrator
-itself, and been persisted there (e.g. a manifest file has been updated).
-If ceph-mgr crashed at this point, the operation would still eventually take
-effect.  Second, the completion becomes *effective*, meaning that the operation has really happened (e.g. a service has actually been started).
+Some operations need to show a progress. Those operations need to add
+a *ProgressReference* to the completion. At some point, the progress reference
+becomes *effective*, meaning that the operation has really happened
+(e.g. a service has actually been started).
 
-.. automethod:: Orchestrator.wait
+.. automethod:: Orchestrator.process
 
-.. autoclass:: _Completion
+.. autoclass:: Completion
    :members:
 
-.. autoclass:: ReadCompletion
+.. autoclass:: ProgressReference
    :members:
 
-.. autoclass:: WriteCompletion
-   :members:
 
 Placement
 ---------
@@ -196,7 +193,7 @@ In detail, orchestrators need to explicitly deal with different kinds of errors:
 5. Errors when actually executing commands
 
    The resulting Completion should contain an error string that assists in understanding the
-   problem. In addition, :func:`_Completion.is_errored` is set to ``True``
+   problem. In addition, :func:`Completion.is_errored` is set to ``True``
 
 6. Invalid configuration in the orchestrator modules
 
@@ -205,7 +202,7 @@ In detail, orchestrators need to explicitly deal with different kinds of errors:
 
 All other errors are unexpected orchestrator issues and thus should raise an exception that are then
 logged into the mgr log file. If there is a completion object at that point,
-:func:`_Completion.result` may contain an error message.
+:func:`Completion.result` may contain an error message.
 
 
 Excluded functionality
@@ -230,10 +227,18 @@ Inventory and status
 
 .. automethod:: Orchestrator.get_inventory
 .. autoclass:: InventoryFilter
-.. autoclass:: InventoryNode
 
-.. autoclass:: InventoryDevice
+.. py:currentmodule:: ceph.deployment.inventory
+
+.. autoclass:: Devices
    :members:
+
+.. autoclass:: Device
+   :members:
+
+.. py:currentmodule:: orchestrator
+
+
 
 .. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription
@@ -259,6 +264,9 @@ OSD management
    :exclude-members: from_json
 
 .. py:currentmodule:: orchestrator
+
+.. automethod:: Orchestrator.blink_device_light
+.. autoclass:: DeviceLightLoc
 
 .. _orchestrator-osd-replace:
 

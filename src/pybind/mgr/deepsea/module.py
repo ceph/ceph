@@ -10,10 +10,16 @@ ceph-mgr DeepSea orchestrator module
 
 import json
 import errno
+try:
+    from typing import Dict
+except ImportError:
+    pass  # type checking
+
 import requests
 
 from threading import Event, Thread, Lock
 
+from ceph.deployment import inventory
 from mgr_module import MgrModule
 import orchestrator
 
@@ -24,23 +30,9 @@ class RequestException(Exception):
         self.status_code = status_code
 
 
-class DeepSeaReadCompletion(orchestrator.ReadCompletion):
-    def __init__(self, process_result_callback):
-        super(DeepSeaReadCompletion, self).__init__()
-        self._complete = False
-        self._cb = process_result_callback
-
+class DeepSeaReadCompletion(orchestrator.Completion):
     def _process_result(self, data):
-        self._result = self._cb(data)
-        self._complete = True
-
-    @property
-    def result(self):
-        return self._result
-
-    @property
-    def is_complete(self):
-        return self._complete
+        self.finalize(data)
 
 
 class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
@@ -106,7 +98,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._event_reader = None
         self._reading_events = False
         self._last_failure_msg = None
-        self._all_completions = dict()
+        self._all_completions = dict()  # type: Dict[str, DeepSeaReadCompletion]
         self._completion_lock = Lock()
         self.inventory_cache = orchestrator.OutdatableDict()
         self.service_cache = orchestrator.OutdatableDict()
@@ -154,14 +146,14 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         # nodes, the cache will never be populated, and you'll always have
                         # the full round trip to DeepSea.
                         self.inventory_cache[node_name] = orchestrator.OutdatableData(node_devs)
-                    devs = orchestrator.InventoryDevice.from_ceph_volume_inventory_list(node_devs)
+                    devs = inventory.Devices.from_json(node_devs)
                     result.append(orchestrator.InventoryNode(node_name, devs))
             else:
                 self.log.error(event_data['return'])
             return result
 
         with self._completion_lock:
-            c = DeepSeaReadCompletion(process_result)
+            c = DeepSeaReadCompletion(on_complete=process_result)
 
             nodes = []
             roles = []
@@ -260,7 +252,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             return result
 
         with self._completion_lock:
-            c = DeepSeaReadCompletion(process_result)
+            c = DeepSeaReadCompletion(on_complete=process_result)
 
             # Always request all services, so we always have all services cached.
             resp = self._do_request_with_login("POST", data = {
@@ -271,29 +263,24 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return c
 
-    def wait(self, completions):
-        incomplete = False
+    def process(self, completions):
+        """
+        Does nothing, as completions are processed in another thread.
+        """
 
-        with self._completion_lock:
-            for c in completions:
-                if c.is_complete:
-                    continue
-                if not c.is_complete:
-                    # TODO: the job is in the bus, it should reach us eventually
-                    # unless something has gone wrong (e.g. salt-api died, etc.),
-                    # in which case it's possible the job finished but we never
-                    # noticed the salt/run/$id/ret event.  Need to add the job ID
-                    # (or possibly the full event tag) to the completion object.
-                    # That way, if we want to double check on a job that hasn't
-                    # been completed yet, we can make a synchronous request to
-                    # salt-api to invoke jobs.lookup_jid, and if it's complete we
-                    # should be able to pass its return value to _process_result()
-                    # Question: do we do this automatically after some timeout?
-                    # Or do we add a function so the admin can check and "unstick"
-                    # a stuck completion?
-                    incomplete = True
-
-        return not incomplete
+        # If the job is still incomplete:
+        # TODO: the job is in the bus, it should reach us eventually
+        # unless something has gone wrong (e.g. salt-api died, etc.),
+        # in which case it's possible the job finished but we never
+        # noticed the salt/run/$id/ret event.  Need to add the job ID
+        # (or possibly the full event tag) to the completion object.
+        # That way, if we want to double check on a job that hasn't
+        # been completed yet, we can make a synchronous request to
+        # salt-api to invoke jobs.lookup_jid, and if it's complete we
+        # should be able to pass its return value to _process_result()
+        # Question: do we do this automatically after some timeout?
+        # Or do we add a function so the admin can check and "unstick"
+        # a stuck completion?
 
 
     def handle_command(self, inbuf, cmd):
@@ -421,6 +408,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                     # Logging a warning if the request failed, so we can continue
                     # checking any other completions, then get onto reading events
                     self.log.warn("Error looking up inflight event {}: {}".format(tag, str(ex)))
+                    self._all_completions[tag].fail(ex)
 
             for line in self._event_response.iter_lines():
                 with self._completion_lock:

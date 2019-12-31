@@ -1,9 +1,11 @@
 # see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-os_type: centos
+#os_type: centos
+# ubuntu and no valgrind until we migrate test to py3
+os_type: ubuntu
 
 overrides:
   install:
-    flavor: notcmalloc
+#    flavor: notcmalloc
   ceph:
     conf:
       global:
@@ -11,6 +13,7 @@ overrides:
         osd_max_pg_log_entries: 10
       client:
         debug rgw: 20
+        rgw crypt s3 kms backend: testing
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl: false
         rgw enable static website: True
@@ -20,8 +23,8 @@ overrides:
         rgw enable apis: s3website
     rgw:
       client.0:
-        valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
+#        valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
       client.1:
-        valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
+#        valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
   s3tests:
     calling-format: subdomain

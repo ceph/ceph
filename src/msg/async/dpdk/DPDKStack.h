@@ -135,12 +135,17 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     }
 
     std::vector<fragment> frags;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
+    auto pb = bl.buffers().begin();
     uint64_t left_pbrs = bl.buffers().size();
     uint64_t len = 0;
     uint64_t seglen = 0;
     while (len < available && left_pbrs--) {
       seglen = pb->length();
+      // Buffer length is zero, no need to send, so skip it
+      if (seglen == 0) {
+        ++pb;
+        continue;
+      }
       if (len + seglen > available) {
         // don't continue if we enough at least 1 fragment since no available
         // space for next ptr.

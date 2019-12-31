@@ -367,6 +367,7 @@ public:
     static const char *KEYS[] = {
       "enable_experimental_unrecoverable_data_corrupting_features",
       "crush_location",
+      "container_image",  // just so we don't hear complaints about it!
       NULL
     };
     return KEYS;
@@ -569,6 +570,7 @@ int CephContext::_do_command(
 	r = -EINVAL;
       } else {
 	char buf[4096];
+	// FIPS zeroization audit 20191115: this memset is not security related.
 	memset(buf, 0, sizeof(buf));
 	char *tmp = buf;
 	r = _conf.get_val(var.c_str(), &tmp, sizeof(buf));

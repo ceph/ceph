@@ -1,3 +1,5 @@
+# for now, s3-tests requires py2
+os_type: ubuntu
 # this runs s3tests against rgw, using civetweb
 roles:
 - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
@@ -11,7 +13,7 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
-      force-branch: master
+      force-branch: ceph-master
 overrides:
   ceph:
     fs: xfs

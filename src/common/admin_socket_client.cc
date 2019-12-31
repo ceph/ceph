@@ -56,6 +56,7 @@ static std::string asok_connect(const std::string &path, int *fd)
   }
 
   struct sockaddr_un address;
+  // FIPS zeroization audit 20191115: this memset is fine.
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path), "%s", path.c_str());
@@ -70,7 +71,7 @@ static std::string asok_connect(const std::string &path, int *fd)
   }
 
   struct timeval timer;
-  timer.tv_sec = 5;
+  timer.tv_sec = 10;
   timer.tv_usec = 0;
   if (::setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timer, sizeof(timer))) {
     int err = errno;
@@ -80,7 +81,7 @@ static std::string asok_connect(const std::string &path, int *fd)
     close(socket_fd);
     return oss.str();
   }
-  timer.tv_sec = 5;
+  timer.tv_sec = 10;
   timer.tv_usec = 0;
   if (::setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timer, sizeof(timer))) {
     int err = errno;

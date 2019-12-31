@@ -98,6 +98,7 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
         break;
       }
 
+      // FIPS zeroization audit 20191115: this memset is not security related.
       memset(&cm_params, 0, sizeof(cm_params));
       cm_params.retry_count = RETRY_COUNT;
       cm_params.qp_num = local_qpn;

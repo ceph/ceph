@@ -222,15 +222,6 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return ioctl(fd, BLKDISCARD, range);
 }
 
-bool BlkDev::is_nvme() const
-{
-  char vendor[80];
-  // nvme has a device/device/vendor property; infer from that.  There is
-  // probably a better way?
-  int r = get_string_property(BLKDEV_PROP_VENDOR, vendor, 80);
-  return (r == 0);
-}
-
 bool BlkDev::is_rotational() const
 {
   return get_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
@@ -668,6 +659,34 @@ static int block_device_run_vendor_nvme(
   return ret;
 }
 
+std::string get_device_path(const std::string& devname,
+			    std::string *err)
+{
+  std::set<std::string> links;
+  int r = easy_readdir("/dev/disk/by-path", &links);
+  if (r < 0) {
+    *err = "unable to list contents of /dev/disk/by-path: "s +
+      cpp_strerror(r);
+    return {};
+  }
+  for (auto& i : links) {
+    char fn[PATH_MAX];
+    char target[PATH_MAX+1];
+    snprintf(fn, sizeof(fn), "/dev/disk/by-path/%s", i.c_str());
+    int r = readlink(fn, target, sizeof(target));
+    if (r < 0 || r >= (int)sizeof(target))
+      continue;
+    target[r] = 0;
+    if ((unsigned)r > devname.size() + 1 &&
+	strncmp(target + r - devname.size(), devname.c_str(), r) == 0 &&
+	target[r - devname.size() - 1] == '/') {
+      return fn;
+    }
+  }
+  *err = "no symlink to "s + devname + " in /dev/disk/by-path";
+  return {};
+}
+
 static int block_device_run_smartctl(const string& devname, int timeout,
 				     std::string *result)
 {
@@ -830,11 +849,6 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::is_nvme() const
-{
-  return false;
-}
-
 bool BlkDev::is_rotational() const
 {
   return false;
@@ -899,6 +913,16 @@ std::string get_device_id(const std::string& devname,
   return std::string();
 }
 
+std::string get_device_path(const std::string& devname,
+			    std::string *err)
+{
+  // FIXME: implement me
+  if (err) {
+    *err = "not implemented";
+  }
+  return std::string();
+}
+
 #elif defined(__FreeBSD__)
 
 const char *BlkDev::sysfsdir() const {
@@ -952,25 +976,6 @@ bool BlkDev::support_discard() const
 int BlkDev::discard(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
-}
-
-bool BlkDev::is_nvme() const
-{
-  // FreeBSD doesn't have a good way to tell if a device's underlying protocol
-  // is NVME, especially since multiple GEOM transforms may be involved.  So
-  // we'll just guess based on the device name.
-  struct fiodgname_arg arg;
-  const char *nda = "nda";        //CAM-based attachment
-  const char *nvd = "nvd";        //CAM-less attachment
-  char devname[PATH_MAX];
-
-  arg.buf = devname;
-  arg.len = sizeof(devname);
-  if (ioctl(fd, FIODGNAME, &arg) < 0)
-    return false; //When in doubt, it's probably not NVME
-
-  return (strncmp(nvd, devname, strlen(nvd)) == 0 ||
-          strncmp(nda, devname, strlen(nda)) == 0);
 }
 
 bool BlkDev::is_rotational() const
@@ -1078,6 +1083,16 @@ std::string get_device_id(const std::string& devname,
   return std::string();
 }
 
+std::string get_device_path(const std::string& devname,
+			    std::string *err)
+{
+  // FIXME: implement me for freebsd
+  if (err) {
+    *err = "not implemented for FreeBSD";
+  }
+  return std::string();
+}
+
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
 {
@@ -1163,11 +1178,6 @@ int BlkDev::discard(int fd, int64_t offset, int64_t len) const
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::is_nvme(const char *devname) const
-{
-  return false;
-}
-
 bool BlkDev::is_rotational(const char *devname) const
 {
   return false;
@@ -1227,6 +1237,16 @@ std::string get_device_id(const std::string& devname,
   return std::string();
 }
 
+std::string get_device_path(const std::string& devname,
+			  std::string *err)
+{
+  // not implemented
+  if (err) {
+    *err = "not implemented";
+  }
+  return std::string();
+}
+
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
 {
@@ -1246,3 +1266,36 @@ int block_device_run_nvme(const char *device, const char *vendor, int timeout,
 }
 
 #endif
+
+
+
+void get_device_metadata(
+  const std::set<std::string>& devnames,
+  std::map<std::string,std::string> *pm,
+  std::map<std::string,std::string> *errs)
+{
+  (*pm)["devices"] = stringify(devnames);
+  string &devids = (*pm)["device_ids"];
+  string &devpaths = (*pm)["device_paths"];
+  for (auto& dev : devnames) {
+    string err;
+    string id = get_device_id(dev, &err);
+    if (id.size()) {
+      if (!devids.empty()) {
+	devids += ",";
+      }
+      devids += dev + "=" + id;
+    } else {
+      (*errs)[dev] = " no unique device id for "s + dev + ": " + err;
+    }
+    string path = get_device_path(dev, &err);
+    if (path.size()) {
+      if (!devpaths.empty()) {
+	devpaths += ",";
+      }
+      devpaths += dev + "=" + path;
+    } else {
+      (*errs)[dev] + " no unique device path for "s + dev + ": " + err;
+    }
+  }
+}

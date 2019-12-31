@@ -6,6 +6,8 @@ import logging
 import gevent
 from teuthology import misc as teuthology
 
+import six
+
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
@@ -153,6 +155,10 @@ def task(ctx, config):
         args.extend(['--low_tier_pool', config.get('low_tier_pool', None)])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
+    if config.get('balance_reads', False):
+        args.extend(['--balance-reads'])
+    if config.get('localize_reads', False):
+        args.extend(['--localize-reads'])
     args.extend([
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
@@ -225,7 +231,7 @@ def task(ctx, config):
             existing_pools = config.get('pools', [])
             created_pools = []
             for role in config.get('clients', clients):
-                assert isinstance(role, basestring)
+                assert isinstance(role, six.string_types)
                 PREFIX = 'client.'
                 assert role.startswith(PREFIX)
                 id_ = role[len(PREFIX):]

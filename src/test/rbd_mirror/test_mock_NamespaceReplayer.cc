@@ -176,7 +176,8 @@ struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
 
   static MirrorStatusUpdater *create(librados::IoCtx &io_ctx,
                                      Threads<librbd::MockTestImageCtx> *threads,
-                                     const std::string& site_name) {
+                                     const std::string& site_name,
+                                     const std::string& fsid) {
     ceph_assert(s_instance[site_name] != nullptr);
     return s_instance[site_name];
   }
@@ -221,8 +222,8 @@ std::map<int64_t, PoolWatcher<librbd::MockTestImageCtx> *> PoolWatcher<librbd::M
 
 template<>
 struct ServiceDaemon<librbd::MockTestImageCtx> {
-  MOCK_METHOD3(add_or_update_attribute,
-               void(int64_t, const std::string&,
+  MOCK_METHOD4(add_or_update_namespace_attribute,
+               void(int64_t, const std::string&, const std::string&,
                     const service_daemon::AttributeValue&));
   MOCK_METHOD2(remove_attribute,
                void(int64_t, const std::string&));
@@ -386,20 +387,6 @@ public:
       .WillOnce(CompleteContext(m_mock_threads->work_queue, 0));
   }
 
-  void expect_service_daemon_add_or_update_attribute(
-      MockServiceDaemon &mock_service_daemon, const std::string& key,
-      const service_daemon::AttributeValue& value) {
-    EXPECT_CALL(mock_service_daemon, add_or_update_attribute(_, key, value));
-  }
-
-  void expect_service_daemon_add_or_update_instance_id_attribute(
-      MockInstanceWatcher &mock_instance_watcher,
-      MockServiceDaemon &mock_service_daemon) {
-    expect_instance_watcher_get_instance_id(mock_instance_watcher, "1234");
-    expect_service_daemon_add_or_update_attribute(
-        mock_service_daemon, "instance_id", {std::string("1234")});
-  }
-
   MockThreads *m_mock_threads;
 };
 
@@ -515,9 +502,6 @@ TEST_F(TestMockNamespaceReplayer, Init) {
   expect_instance_watcher_init(*mock_instance_watcher, 0);
 
   MockServiceDaemon mock_service_daemon;
-  expect_service_daemon_add_or_update_instance_id_attribute(
-      *mock_instance_watcher, mock_service_daemon);
-
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "remote mirror uuid", "siteA", m_mock_threads, nullptr, nullptr,
@@ -558,9 +542,6 @@ TEST_F(TestMockNamespaceReplayer, AcuqireLeader) {
   expect_instance_watcher_init(*mock_instance_watcher, 0);
 
   MockServiceDaemon mock_service_daemon;
-  expect_service_daemon_add_or_update_instance_id_attribute(
-      *mock_instance_watcher, mock_service_daemon);
-
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "remote mirror uuid", "siteA", m_mock_threads, nullptr, nullptr,

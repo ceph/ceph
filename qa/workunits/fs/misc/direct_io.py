@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import json
 import mmap
@@ -21,26 +21,26 @@ def main():
     pool_name = get_data_pool()
 
     buf = mmap.mmap(-1, 1)
-    buf.write('1')
+    buf.write(b'1')
     os.write(fd, buf)
 
     proc = subprocess.Popen(['rados', '-p', pool_name, 'get', obj_name, 'tmpfile'])
     proc.wait()
 
-    with open('tmpfile', 'r') as tmpf:
-        out = tmpf.read()
-        if out != '1':
+    with open('tmpfile', 'rb') as tmpf:
+        out = tmpf.read(1)
+        if out != b'1':
             raise RuntimeError("data were not written to object store directly")
 
-    with open('tmpfile', 'w') as tmpf:
-        tmpf.write('2')
+    with open('tmpfile', 'wb') as tmpf:
+        tmpf.write(b'2')
 
     proc = subprocess.Popen(['rados', '-p', pool_name, 'put', obj_name, 'tmpfile'])
     proc.wait()
 
     os.lseek(fd, 0, os.SEEK_SET)
     out = os.read(fd, 1)
-    if out != '2':
+    if out != b'2':
         raise RuntimeError("data were not directly read from object store")
 
     os.close(fd)

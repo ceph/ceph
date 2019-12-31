@@ -6,7 +6,10 @@
        class="col-12">
     <h3 class="cd-header">
       <span (click)="toggleSectionVisibility(section.class)"
-        class="collapsible">{{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle" aria-hidden="true"></i></span>
+            class="collapsible">
+        {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
+                                 aria-hidden="true"></i>
+      </span>
     </h3>
     <div class="{{ section.class }}"
          [hidden]="!sectionVisibility[section.class]">

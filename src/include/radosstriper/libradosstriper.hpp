@@ -22,15 +22,15 @@ namespace libradosstriper
     MultiAioCompletion(MultiAioCompletionImpl *pc_) : pc(pc_) {}
     ~MultiAioCompletion();
     int set_complete_callback(void *cb_arg, librados::callback_t cb);
-    int set_safe_callback(void *cb_arg, librados::callback_t cb);
+    int set_safe_callback(void *cb_arg, librados::callback_t cb) __attribute__ ((deprecated));
     void wait_for_complete();
-    void wait_for_safe();
+    void wait_for_safe() __attribute__ ((deprecated));
     void wait_for_complete_and_cb();
-    void wait_for_safe_and_cb();
+    void wait_for_safe_and_cb() __attribute__ ((deprecated));
     bool is_complete();
-    bool is_safe();
+    bool is_safe() __attribute__ ((deprecated));
     bool is_complete_and_cb();
-    bool is_safe_and_cb();
+    bool is_safe_and_cb() __attribute__ ((deprecated));
     int get_return_value();
     void release();
     MultiAioCompletionImpl *pc;

@@ -26,9 +26,18 @@
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << " RecoveryQueue::" << __func__ << " "
 
 class C_MDC_Recover : public MDSIOContextBase {
+public:
+  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) :
+    MDSIOContextBase(false), rq(rq_), in(i) {
+    ceph_assert(rq != NULL);
+  }
+  void print(ostream& out) const override {
+    out << "file_recover(" << in->ino() << ")";
+  }
+
+  uint64_t size = 0;
+  utime_t mtime;
 protected:
-  RecoveryQueue *rq;
-  CInode *in;
   void finish(int r) override {
     rq->_recovered(in, r, size, mtime);
   }
@@ -37,26 +46,15 @@ protected:
     return rq->mds;
   }
 
-public:
-  uint64_t size;
-  utime_t mtime;
-
-  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) :
-    MDSIOContextBase(false), rq(rq_), in(i), size(0) {
-    ceph_assert(rq != NULL);
-  }
-  void print(ostream& out) const override {
-    out << "file_recover(" << in->ino() << ")";
-  }
+  RecoveryQueue *rq;
+  CInode *in;
 };
-
 
 RecoveryQueue::RecoveryQueue(MDSRank *mds_) :
   file_recover_queue(member_offset(CInode, item_dirty_dirfrag_dir)),
   file_recover_queue_front(member_offset(CInode, item_dirty_dirfrag_nest)),
-  mds(mds_), logger(NULL), filer(mds_->objecter, mds_->finisher)
+  mds(mds_), filer(mds_->objecter, mds_->finisher)
 { }
-
 
 /**
  * Progress the queue.  Call this after enqueuing something or on

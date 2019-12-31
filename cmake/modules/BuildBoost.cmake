@@ -109,15 +109,15 @@ function(do_build_boost version)
     " : ${CMAKE_CXX_COMPILER}"
     " ;\n")
   if(with_python_version)
-    find_package(Python ${with_python_version} QUIET REQUIRED
+    find_package(Python3 ${with_python_version} QUIET REQUIRED
       COMPONENTS Development)
-    string(REPLACE ";" " " python_includes "${Python_INCLUDE_DIRS}")
+    string(REPLACE ";" " " python3_includes "${Python3_INCLUDE_DIRS}")
     file(APPEND ${user_config}
       "using python"
       " : ${with_python_version}"
-      " : ${Python_EXECUTABLE}"
-      " : ${python_includes}"
-      " : ${Python_LIBRARIES}"
+      " : ${Python3_EXECUTABLE}"
+      " : ${python3_includes}"
+      " : ${Python3_LIBRARIES}"
       " ;\n")
   endif()
   list(APPEND b2 --user-config=${user_config})
@@ -142,14 +142,14 @@ function(do_build_boost version)
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.67)
+  elseif(version VERSION_GREATER 1.72)
     message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
   else()
     message(STATUS "boost will be downloaded...")
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.67.0)
-    set(boost_sha256 2684c972994ee57fc5632e03bf044746f6eb45d4920c343937a465fd67a5adba)
+    set(boost_version 1.72.0)
+    set(boost_sha256 59c9b274bc451cf91a9ba1dd2c7fdcaf5d60b1b3aa83f2c9fa143417cc660722)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     set(boost_url 
       https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
@@ -168,9 +168,6 @@ function(do_build_boost version)
   include(ExternalProject)
   ExternalProject_Add(Boost
     ${source_dir}
-    PATCH_COMMAND
-      patch -d <SOURCE_DIR> -p1 < ${CMAKE_MODULE_PATH}/boost_context_asm_arm_syntax_unified.patch &&
-      patch -d <SOURCE_DIR> -p1 < ${CMAKE_MODULE_PATH}/boost_lockfree_queue_valgrind_error.patch
     CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
     BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
     BUILD_IN_SOURCE 1
@@ -213,7 +210,7 @@ macro(build_boost version)
     endif()
     add_dependencies(Boost::${c} Boost)
     if(c MATCHES "^python")
-      set(c "python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}")
+      set(c "python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
     endif()
     if(Boost_USE_STATIC_LIBS)
       set(Boost_${upper_c}_LIBRARY

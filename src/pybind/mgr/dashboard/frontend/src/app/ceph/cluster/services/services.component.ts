@@ -18,7 +18,10 @@ export class ServicesComponent implements OnChanges, OnInit {
   @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
-  @Input() hostname = '';
+  @Input() hostname: string;
+
+  // Do not display these columns
+  @Input() hiddenColumns: string[] = [];
 
   checkingOrchestrator = true;
   orchestratorExist = false;
@@ -36,7 +39,12 @@ export class ServicesComponent implements OnChanges, OnInit {
   ) {}
 
   ngOnInit() {
-    this.columns = [
+    const columns = [
+      {
+        name: this.i18n('Hostname'),
+        prop: 'nodename',
+        flexGrow: 2
+      },
       {
         name: this.i18n('Service type'),
         prop: 'service_type',
@@ -84,14 +92,9 @@ export class ServicesComponent implements OnChanges, OnInit {
       }
     ];
 
-    if (!this.hostname) {
-      const hostnameColumn = {
-        name: this.i18n('Hostname'),
-        prop: 'nodename',
-        flexGrow: 2
-      };
-      this.columns.splice(0, 0, hostnameColumn);
-    }
+    this.columns = columns.filter((col: any) => {
+      return !this.hiddenColumns.includes(col.prop);
+    });
 
     // duplicated code with grafana
     const subs = this.summaryService.subscribe((summary: any) => {

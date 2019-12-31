@@ -192,6 +192,7 @@ public:
 private:
   OSDMapRef next_osdmap;
   ceph::condition_variable pre_publish_cond;
+  int pre_publish_waiter = 0;
 
 public:
   void pre_publish_map(OSDMapRef map) {
@@ -224,17 +225,21 @@ public:
     if (--(i->second) == 0) {
       map_reservations.erase(i);
     }
-    pre_publish_cond.notify_all();
+    if (pre_publish_waiter) {
+      pre_publish_cond.notify_all();
+    }
   }
   /// blocks until there are no reserved maps prior to next_osdmap
   void await_reserved_maps() {
     std::unique_lock l{pre_publish_lock};
     ceph_assert(next_osdmap);
+    pre_publish_waiter++;
     pre_publish_cond.wait(l, [this] {
       auto i = map_reservations.cbegin();
       return (i == map_reservations.cend() ||
 	      i->first >= next_osdmap->get_epoch());
     });
+    pre_publish_waiter--;
   }
   OSDMapRef get_next_osdmap() {
     std::lock_guard l(pre_publish_lock);
@@ -256,6 +261,7 @@ public:
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
+  void send_message_osd_cluster(std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch);
   void send_message_osd_cluster(Message *m, Connection *con) {
     con->send_message(m);
   }
@@ -509,11 +515,17 @@ public:
     promote_counter.finish(bytes);
   }
   void promote_throttle_recalibrate();
+  unsigned get_num_shards() const {
+    return m_objecter_finishers;
+  }
+  Finisher* get_objecter_finisher(int shard) {
+    return objecter_finishers[shard].get();
+  }
 
   // -- Objecter, for tiering reads/writes from/to other OSDs --
-  Objecter *objecter;
+  std::unique_ptr<Objecter> objecter;
   int m_objecter_finishers;
-  vector<Finisher*> objecter_finishers;
+  std::vector<std::unique_ptr<Finisher>> objecter_finishers;
 
   // -- Watch --
   ceph::mutex watch_lock = ceph::make_mutex("OSDService::watch_lock");
@@ -899,7 +911,7 @@ public:
 #endif
 
   explicit OSDService(OSD *osd);
-  ~OSDService();
+  ~OSDService() = default;
 };
 
 /*
@@ -1760,7 +1772,7 @@ protected:
   std::atomic<size_t> num_pgs = {0};
 
   std::mutex pending_creates_lock;
-  using create_from_osd_t = std::pair<pg_t, bool /* is primary*/>;
+  using create_from_osd_t = std::pair<spg_t, bool /* is primary*/>;
   std::set<create_from_osd_t> pending_creates_from_osd;
   unsigned pending_creates_from_mon = 0;
 
@@ -2031,8 +2043,7 @@ private:
   void handle_fast_scrub(struct MOSDScrub2 *m);
   void handle_osd_ping(class MOSDPing *m);
 
-  int init_op_flags(OpRequestRef& op);
-
+  size_t get_num_cache_shards();
   int get_num_op_shards();
   int get_num_op_threads();
 
@@ -2075,10 +2086,8 @@ public:
   friend class OSDService;
 
 private:
-  void set_perf_queries(
-      const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries);
-  void get_perf_reports(
-      std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports);
+  void set_perf_queries(const ConfigPayload &config_payload);
+  MetricPayload get_perf_reports();
 
   ceph::mutex m_perf_queries_lock = ceph::make_mutex("OSD::m_perf_queries_lock");
   std::list<OSDPerfMetricQuery> m_perf_queries;

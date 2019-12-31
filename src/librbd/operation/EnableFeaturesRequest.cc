@@ -408,19 +408,20 @@ template <typename I>
 void EnableFeaturesRequest<I>::send_enable_mirror_image() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << dendl;
 
   if (!m_enable_mirroring) {
     send_notify_update();
     return;
   }
 
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
   Context *ctx = create_context_callback<
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_enable_mirror_image>(this);
 
-  mirror::EnableRequest<I> *req =
-    mirror::EnableRequest<I>::create(&image_ctx, ctx);
+  mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
+    &image_ctx, RBD_MIRROR_IMAGE_MODE_JOURNAL, ctx);
   req->send();
 }
 

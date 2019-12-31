@@ -5,17 +5,21 @@ from __future__ import absolute_import
 import os
 import errno
 import json
+import logging
 import threading
 import warnings
 
 import six
 from six.moves.urllib import parse
 
-from .. import mgr, logger
+from .. import mgr
 from ..tools import prepare_url_prefix
 
 if six.PY2:
     FileNotFoundError = IOError  # pylint: disable=redefined-builtin
+
+
+logger = logging.getLogger('sso')
 
 try:
     from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
@@ -71,17 +75,17 @@ class SsoDB(object):
         return "{}{}".format(cls.SSODB_CONFIG_KEY, version)
 
     def check_and_update_db(self):
-        logger.debug("SSO: Checking for previews DB versions")
+        logger.debug("Checking for previous DB versions")
         if self.VERSION != 1:
             raise NotImplementedError()
 
     @classmethod
     def load(cls):
-        logger.info("SSO: Loading SSO DB version=%s", cls.VERSION)
+        logger.info("Loading SSO DB version=%s", cls.VERSION)
 
         json_db = mgr.get_store(cls.ssodb_config_key(), None)
         if json_db is None:
-            logger.debug("SSO: No DB v%s found, creating new...", cls.VERSION)
+            logger.debug("No DB v%s found, creating new...", cls.VERSION)
             db = cls(cls.VERSION, '', Saml2({}))
             # check if we can update from a previous version database
             db.check_and_update_db()
@@ -122,8 +126,8 @@ SSO_COMMANDS = [
                'name=idp_metadata,type=CephString '
                'name=idp_username_attribute,type=CephString,req=false '
                'name=idp_entity_id,type=CephString,req=false '
-               'name=sp_x_509_cert,type=CephString,req=false '
-               'name=sp_private_key,type=CephString,req=false',
+               'name=sp_x_509_cert,type=CephFilepath,req=false '
+               'name=sp_private_key,type=CephFilepath,req=false',
         'desc': 'Setup SAML2 Single Sign-On',
         'perm': 'w'
     }
@@ -184,15 +188,19 @@ def handle_sso_command(cmd):
         if not sp_x_509_cert_path and sp_private_key_path:
             return -errno.EINVAL, '', 'Missing parameter `sp_x_509_cert`.'
         has_sp_cert = sp_x_509_cert_path != "" and sp_private_key_path != ""
-        try:
-            with open(sp_x_509_cert_path, 'r') as f:
-                sp_x_509_cert = f.read()
-        except FileNotFoundError:
+        if has_sp_cert:
+            try:
+                with open(sp_x_509_cert_path, 'r') as f:
+                    sp_x_509_cert = f.read()
+            except FileNotFoundError:
+                return -errno.EINVAL, '', '`{}` not found.'.format(sp_x_509_cert_path)
+            try:
+                with open(sp_private_key_path, 'r') as f:
+                    sp_private_key = f.read()
+            except FileNotFoundError:
+                return -errno.EINVAL, '', '`{}` not found.'.format(sp_private_key_path)
+        else:
             sp_x_509_cert = ''
-        try:
-            with open(sp_private_key_path, 'r') as f:
-                sp_private_key = f.read()
-        except FileNotFoundError:
             sp_private_key = ''
 
         if os.path.isfile(idp_metadata):

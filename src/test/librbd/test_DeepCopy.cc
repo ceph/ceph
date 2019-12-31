@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "librbd/Operations.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/internal.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -59,8 +60,8 @@ struct TestDeepCopy : public TestFixture {
     vector<librbd::snap_info_t> src_snaps, dst_snaps;
 
     EXPECT_EQ(m_src_ictx->size, m_dst_ictx->size);
-    EXPECT_EQ(0, librbd::snap_list(m_src_ictx, src_snaps));
-    EXPECT_EQ(0, librbd::snap_list(m_dst_ictx, dst_snaps));
+    EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_src_ictx, src_snaps));
+    EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_dst_ictx, dst_snaps));
     EXPECT_EQ(src_snaps.size(), dst_snaps.size());
     for (size_t i = 0; i <= src_snaps.size(); i++) {
       const char *src_snap_name = nullptr;

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_IAM_H
-#define CEPH_RGW_REST_IAM_H
+#pragma once
 
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
@@ -44,6 +43,3 @@ public:
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;
 };
-
-#endif /* CEPH_RGW_REST_STS_H */
-

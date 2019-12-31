@@ -1,0 +1,42 @@
+<cd-table [data]="filterInDevices"
+          [columns]="columns"
+          identifier="uid"
+          [forceIdentifier]="true"
+          [selectionType]="selectionType"
+          columnMode="flex"
+          [autoReload]="false"
+          [searchField]="false"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <div class="table-filters form-inline"
+       *ngIf="filters.length !== 0">
+    <div class="form-group filter tc_filter"
+         *ngFor="let filter of filters">
+      <label class="col-form-label"><span>{{ filter.label }}</span><span>: </span></label>
+      <select class="custom-select"
+              [(ngModel)]="filter.value"
+              [ngModelOptions]="{standalone: true}"
+              (ngModelChange)="onFilterChange()"
+              [disabled]="filter.disabled">
+        <option *ngFor="let opt of filter.options"
+                [value]="opt.value">{{ opt.formatValue }}</option>
+      </select>
+    </div>
+    <div class="widget-toolbar tc_refreshBtn"
+         *ngIf="filters.length !== 0">
+      <button type="button"
+              title="Reset filters"
+              class="btn btn-light"
+              (click)="onFilterReset()">
+        <span [ngClass]="[icons.stack]">
+          <i [ngClass]="[icons.filter, icons.stack2x]"></i>
+          <i [ngClass]="[icons.destroy, icons.stack1x]"></i>
+        </span>
+      </button>
+    </div>
+  </div>
+</cd-table>

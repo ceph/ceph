@@ -790,6 +790,55 @@ the `cram task`_.
 .. _`cram`: https://bitheap.org/cram/
 .. _`cram task`: https://github.com/ceph/ceph/blob/master/qa/tasks/cram.py
 
+Tox based testing of python modules
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Most python modules can be found under ``./src/pybind/``.
+
+Many modules use **tox** to run their unit tests.
+**tox** itself is a generic virtualenv management and test command line tool.
+
+To find out quickly if tox can be run you can either just try to run ``tox`` or find out if a
+``tox.ini`` exists.
+
+Currently the following modules use tox:
+
+- Ansible (``./src/pybind/mgr/ansible``)
+- Insights (``./src/pybind/mgr/insights``)
+- Orchestrator cli (``./src/pybind/mgr/orchestrator_cli``)
+- Manager core (``./src/pybind/mgr``)
+- Dashboard (``./src/pybind/mgr/dashboard``)
+- Python common (``./src/python-common/tox.ini``)
+
+Most tox configuration support multiple environments and tasks. You can see which environments and
+tasks are supported by looking into the ``tox.ini`` file to see what ``envlist`` is assigned.
+To run **tox**, just execute ``tox`` in the directory where ``tox.ini`` lies.
+Without any specified environments ``-e $env1,$env2``, all environments will be run.
+Jenkins will run ``tox`` by executing ``run_tox.sh`` which lies under ``./src/script``.
+
+Here some examples from ceph dashboard on how to specify different environments and run options::
+
+  ## Run Python 2+3 tests+lint commands:
+  $ tox -e py27,py3,lint,check
+
+  ## Run Python 3 tests+lint commands:
+  $ tox -e py3,lint,check
+
+  ## To run it like Jenkins would do
+  $ ../../../script/run_tox.sh --tox-env py27,py3,lint,check
+  $ ../../../script/run_tox.sh --tox-env py3,lint,check
+
+Manager core unit tests
+"""""""""""""""""""""""
+
+Currently only doctests_ inside
+``mgr_util.py`` are run.
+
+To add more files that should be tested inside the core of the manager add them at the end
+of the line that includes ``mgr_util.py`` inside ``tox.ini``.
+
+.. _doctests: https://docs.python.org/3/library/doctest.html
+
 Unit test caveats
 -----------------
 
@@ -801,7 +850,7 @@ Unit test caveats
 .. _`integration testing`:
 .. _`integration tests`:
 
-Testing - integration tests
+Testing - Integration Tests
 ===========================
 
 Ceph has two types of tests: `make check`_ tests and integration tests.
@@ -831,7 +880,7 @@ Teuthology deploys these platforms on machines (bare-metal or
 cloud-provisioned), installs the packages on them, and deploys Ceph
 clusters on them - all as called for by the test.
 
-The nightlies
+The Nightlies
 -------------
 
 A number of integration tests are run on a regular basis in the `Sepia
@@ -845,7 +894,7 @@ test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.
 
-Testing priority
+Testing Priority
 ----------------
 
 The ``teuthology-suite`` command includes an almost mandatory option ``-p <N>``
@@ -864,17 +913,22 @@ the following recommendations should be followed:
 
 * **10 <= Priority < 50:** Use this if your tests are urgent and blocking other important development.
 
-* **50 <= Priority < 75:** Use this if you are testing a particular feature/fix and running fewer than about 25 jobs.
+* **50 <= Priority < 75:** Use this if you are testing a particular feature/fix and running fewer than about 25 jobs. This range can also be used for urgent release testing.
 
 * **75 <= Priority < 100:** Tech Leads will regularly schedule integration tests with this priority to verify pull requests against master.
 
-* **100 <= Priority < 150:** This priority is to be used for release QA.
+* **100 <= Priority < 150:** This priority is to be used for QE validation of point releases.
 
 * **150 <= Priority < 200:** Use this priority for 100 jobs or fewer of a particular feature/fix that you'd like results on in a day or so.
 
 * **200 <= Priority < 1000:** Use this priority for large test runs that can be done over the course of a week.
 
-Suites inventory
+In case you don't know how many jobs would be triggered by
+``teuthology-suite`` command, use ``--dry-run`` to get a count first and then
+issue ``teuthology-suite`` command again, this time without ``--dry-run`` and
+with ``-p`` and an appropriate number as an argument to it.
+
+Suites Inventory
 ----------------
 
 The ``suites`` directory of the `ceph/qa sub-directory`_ contains
@@ -888,13 +942,16 @@ all the integration tests, for all the Ceph components.
   verify the `integration testing`_ infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
-  test CephFS
+  test CephFS mounted using FUSE
 
 `kcephfs <https://github.com/ceph/ceph/tree/master/qa/suites/kcephfs>`_
-  test the CephFS kernel module
+  test CephFS mounted using kernel
 
 `krbd <https://github.com/ceph/ceph/tree/master/qa/suites/krbd>`_
   test the RBD kernel module
+
+`multimds <https://github.com/ceph/ceph/tree/master/qa/suites/multimds>`_
+  test CephFS with multiple MDSs
 
 `powercycle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_
   verify the Ceph cluster behaves when machines are powered off

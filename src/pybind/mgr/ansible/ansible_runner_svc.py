@@ -6,8 +6,16 @@ import json
 import re
 from functools import wraps
 import collections
+import logging
+try:
+    from typing import Optional, Dict, Any, List, Set
+except ImportError:
+    pass # just for type checking
 
 import requests
+from orchestrator import OrchestratorError
+
+logger = logging.getLogger(__name__)
 
 # Ansible Runner service API endpoints
 API_URL = "api"
@@ -17,7 +25,7 @@ EVENT_DATA_URL = "api/v1/jobs/%s/events/%s"
 URL_MANAGE_GROUP = "api/v1/groups/{group_name}"
 URL_ADD_RM_HOSTS = "api/v1/hosts/{host_name}/groups/{inventory_group}"
 
-class AnsibleRunnerServiceError(Exception):
+class AnsibleRunnerServiceError(OrchestratorError):
     """Generic Ansible Runner Service Exception"""
     pass
 
@@ -46,9 +54,12 @@ class PlayBookExecution(object):
     """Object to provide all the results of a Playbook execution
     """
 
-    def __init__(self, rest_client, playbook, logger, result_pattern="",
-                 the_params=None,
-                 querystr_dict=None):
+    def __init__(self, rest_client,  # type: Client
+                 playbook,  # type: str
+                 result_pattern="",  # type: str
+                 the_params=None,  # type: Optional[dict]
+                 querystr_dict=None  # type: Optional[dict]
+                 ):
 
         self.rest_client = rest_client
 
@@ -67,9 +78,6 @@ class PlayBookExecution(object):
         # Query string used in the "launch" request
         self.querystr_dict = querystr_dict
 
-        # Logger
-        self.log = logger
-
     def launch(self):
         """ Launch the playbook execution
         """
@@ -82,7 +90,7 @@ class PlayBookExecution(object):
                                                   self.params,
                                                   self.querystr_dict)
         except AnsibleRunnerServiceError:
-            self.log.exception("Error launching playbook <%s>", self.playbook)
+            logger.exception("Error launching playbook <%s>", self.playbook)
             raise
 
         # Here we have a server response, but an error trying
@@ -91,7 +99,7 @@ class PlayBookExecution(object):
         # to the orchestrator (via completion object)
         if response.ok:
             self.play_uuid = json.loads(response.text)["data"]["play_uuid"]
-            self.log.info("Playbook execution launched succesfuly")
+            logger.info("Playbook execution launched succesfuly")
         else:
             raise AnsibleRunnerServiceError(response.reason)
 
@@ -117,7 +125,7 @@ class PlayBookExecution(object):
             try:
                 response = self.rest_client.http_get(endpoint)
             except AnsibleRunnerServiceError:
-                self.log.exception("Error getting playbook <%s> status",
+                logger.exception("Error getting playbook <%s> status",
                                    self.playbook)
 
             if response:
@@ -131,7 +139,7 @@ class PlayBookExecution(object):
             else:
                 status_value = ExecutionStatusCode.ERROR
 
-        self.log.info("Requested playbook execution status is: %s", status_value)
+        logger.info("Requested playbook execution status is: %s", status_value)
         return status_value
 
     def get_result(self, event_filter):
@@ -148,10 +156,10 @@ class PlayBookExecution(object):
         try:
             response = self.rest_client.http_get(PLAYBOOK_EVENTS % self.play_uuid)
         except AnsibleRunnerServiceError:
-            self.log.exception("Error getting playbook <%s> result", self.playbook)
+            logger.exception("Error getting playbook <%s> result", self.playbook)
 
         if not response:
-            result_events = {}
+            result_events = {}  # type: Dict[str, Any]
         else:
             events = json.loads(response.text)["data"]["events"]
 
@@ -170,7 +178,7 @@ class PlayBookExecution(object):
                 result_events = {event:data for event, data in result_events.items()
                                  if re.match(type_of_events, data['event'])}
 
-        self.log.info("Requested playbook result is: %s", json.dumps(result_events))
+        logger.info("Requested playbook result is: %s", json.dumps(result_events))
         return result_events
 
 class Client(object):
@@ -178,8 +186,13 @@ class Client(object):
     and execute easily playbooks
     """
 
-    def __init__(self, server_url, verify_server, ca_bundle, client_cert,
-                 client_key, logger):
+    def __init__(self,
+                 server_url,  # type: str
+                 verify_server,  # type: bool
+                 ca_bundle,  # type: str
+                 client_cert, # type: str
+                 client_key  # type: str
+                 ):
         """Provide an https client to make easy interact with the Ansible
         Runner Service"
 
@@ -194,17 +207,15 @@ class Client(object):
                             file
         :param client_key: Path to Ansible Runner Service client certificate key
                            file
-        :param logger: Log file
         """
         self.server_url = server_url
-        self.log = logger
         self.client_cert = (client_cert, client_key)
 
         # used to provide the "verify" parameter in requests
         # a boolean that sometimes contains a string :-(
         self.verify_server = verify_server
         if ca_bundle: # This intentionallly overwrites
-            self.verify_server = ca_bundle
+            self.verify_server = ca_bundle  # type: ignore
 
         self.server_url = "https://{0}".format(self.server_url)
 
@@ -238,11 +249,11 @@ class Client(object):
                                 headers={})
 
         if response.status_code != requests.codes.ok:
-            self.log.error("http GET %s <--> (%s - %s)\n%s",
+            logger.error("http GET %s <--> (%s - %s)\n%s",
                            the_url, response.status_code, response.reason,
                            response.text)
         else:
-            self.log.info("http GET %s <--> (%s - %s)",
+            logger.info("http GET %s <--> (%s - %s)",
                           the_url, response.status_code, response.text)
 
         return response
@@ -267,11 +278,11 @@ class Client(object):
                                  params=params_dict)
 
         if response.status_code != requests.codes.ok:
-            self.log.error("http POST %s [%s] <--> (%s - %s:%s)\n",
+            logger.error("http POST %s [%s] <--> (%s - %s:%s)\n",
                            the_url, payload, response.status_code,
                            response.reason, response.text)
         else:
-            self.log.info("http POST %s <--> (%s - %s)",
+            logger.info("http POST %s <--> (%s - %s)",
                           the_url, response.status_code, response.text)
 
         return response
@@ -292,11 +303,11 @@ class Client(object):
                                    headers={})
 
         if response.status_code != requests.codes.ok:
-            self.log.error("http DELETE %s <--> (%s - %s)\n%s",
+            logger.error("http DELETE %s <--> (%s - %s)\n%s",
                            the_url, response.status_code, response.reason,
                            response.text)
         else:
-            self.log.info("http DELETE %s <--> (%s - %s)",
+            logger.info("http DELETE %s <--> (%s - %s)",
                           the_url, response.status_code, response.text)
 
         return response
@@ -335,7 +346,7 @@ class Client(object):
             if response.status_code != 200:
                 raise AnsibleRunnerServiceError("Error when trying to "\
                                                 "create group:{}".format(group))
-            hosts_in_group = []
+            hosts_in_group = []  # type: List[str]
         else:
             hosts_in_group = json.loads(response.text)["data"]["members"]
 
@@ -400,6 +411,7 @@ class InventoryGroup(collections.MutableSet):
     """ Manages an Ansible Inventory Group
     """
     def __init__(self, group_name, ars_client):
+        # type: (str, Client) -> None
         """Init the group_name attribute and
            Create the inventory group if it does not exist
 
@@ -407,7 +419,7 @@ class InventoryGroup(collections.MutableSet):
         : returns    : Nothing
         """
 
-        self.elements = set()
+        self.elements = set()  # type: Set[Any]
 
         self.group_name = group_name
         self.url_group = URL_MANAGE_GROUP.format(group_name=self.group_name)
@@ -509,4 +521,4 @@ class InventoryGroup(collections.MutableSet):
                                             "create group:{}".format(
                                                 self.group_name))
         self.created = True
-        self.elements = {}
+        self.elements = set()

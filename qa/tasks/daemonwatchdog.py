@@ -1,7 +1,6 @@
 import logging
 import signal
 import time
-import random
 
 from gevent import sleep
 from gevent.greenlet import Greenlet
@@ -107,7 +106,7 @@ class DaemonWatchdog(Greenlet):
 
             for thrasher in self.thrashers:
                 if thrasher.exception is not None:
-                    self.log("thrasher on fs.{name} failed".format(name=thrasher.fs.name))
+                    self.log("{name} failed".format(name=thrasher.name))
                     bark = True
 
             if bark:

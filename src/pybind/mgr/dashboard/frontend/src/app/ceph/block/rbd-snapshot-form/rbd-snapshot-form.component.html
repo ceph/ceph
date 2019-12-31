@@ -1,6 +1,6 @@
 <div class="modal-header">
   <h4 class="modal-title float-left"
-      i18n>{ editing, select, true {Rename} other {Create}} RBD Snapshot</h4>
+      i18n="form title|Example: Create rbdSnapshot@@formTitle">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
   <button type="button"
           class="close float-right"
           aria-label="Close"
@@ -41,7 +41,7 @@
     <div class="button-group text-right">
       <cd-submit-button [form]="snapshotForm"
                         (submitAction)="submit()"
-                        i18n>{ editing, select, true {Rename} other {Create}} Snapshot</cd-submit-button>
+                        i18n="form action button|Example: Create rbdSnapshot@@formActionButton">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
       <cd-back-button [back]="modalRef.hide"
                       name="Close"
                       i18n-name>

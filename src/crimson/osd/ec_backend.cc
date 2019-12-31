@@ -12,10 +12,11 @@ ECBackend::ECBackend(shard_id_t shard,
   // todo
 }
 
-seastar::future<bufferlist> ECBackend::_read(const hobject_t& hoid,
-                                             uint64_t off,
-                                             uint64_t len,
-                                             uint32_t flags)
+ECBackend::ll_read_errorator::future<ceph::bufferlist>
+ECBackend::_read(const hobject_t& hoid,
+                 const uint64_t off,
+                 const uint64_t len,
+                 const uint32_t flags)
 {
   // todo
   return seastar::make_ready_future<bufferlist>();

@@ -3,7 +3,8 @@ set -x
 
 git submodule update --init --recursive
 
-[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+: ${BUILD_DIR:=build}
+: ${CEPH_GIT_DIR:=..}
 
 if [ -e $BUILD_DIR ]; then
     echo "'$BUILD_DIR' dir already exists; either rm -rf '$BUILD_DIR' and re-run, or set BUILD_DIR env var to a different directory name"
@@ -28,18 +29,20 @@ if [ -r /etc/os-release ]; then
       opensuse*|suse|sles)
           PYBUILD="3"
           ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+          ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
           ;;
   esac
 elif [ "$(uname)" == FreeBSD ] ; then
   PYBUILD="3"
   ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+  ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
 else
   echo Unknown release
   exit 1
 fi
 
 if [[ "$PYBUILD" =~ ^3(\..*)?$ ]] ; then
-    ARGS+=" -DWITH_PYTHON2=OFF -DWITH_PYTHON3=${PYBUILD} -DMGR_PYTHON_VERSION=${PYBUILD}"
+    ARGS+=" -DWITH_PYTHON3=${PYBUILD}"
 fi
 
 if type ccache > /dev/null 2>&1 ; then
@@ -54,7 +57,7 @@ if type cmake3 > /dev/null 2>&1 ; then
 else
     CMAKE=cmake
 fi
-${CMAKE} $ARGS "$@" .. || exit 1
+${CMAKE} $ARGS "$@" $CEPH_GIT_DIR || exit 1
 set +x
 
 # minimal config to find plugins

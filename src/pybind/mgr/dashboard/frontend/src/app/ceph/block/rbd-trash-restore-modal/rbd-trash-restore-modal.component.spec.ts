@@ -49,7 +49,9 @@ describe('RbdTrashRestoreModalComponent', () => {
       modalRef = TestBed.get(BsModalRef);
 
       component.poolName = 'foo';
-      component.imageId = 'bar';
+      component.imageName = 'bar';
+      component.imageId = '113cb6963793';
+      component.ngOnInit();
 
       spyOn(modalRef, 'hide').and.stub();
       spyOn(component.restoreForm, 'setErrors').and.stub();
@@ -57,7 +59,7 @@ describe('RbdTrashRestoreModalComponent', () => {
 
       component.restore();
 
-      req = httpTesting.expectOne('api/block/image/trash/foo/bar/restore');
+      req = httpTesting.expectOne('api/block/image/trash/foo%2F113cb6963793/restore');
     });
 
     it('with success', () => {

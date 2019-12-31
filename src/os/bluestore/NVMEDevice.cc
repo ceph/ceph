@@ -397,7 +397,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
               ns, qpair, lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
-            derr << __func__ << " failed to do write command" << dendl;
+            derr << __func__ << " failed to do write command: " << cpp_strerror(r) << dendl;
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
             t->release_segs(this);
             delete t;
@@ -421,7 +421,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
               ns, qpair, lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
-            derr << __func__ << " failed to read" << dendl;
+            derr << __func__ << " failed to read: " << cpp_strerror(r) << dendl;
             t->release_segs(this);
             delete t;
             ceph_abort();
@@ -437,7 +437,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
           dout(20) << __func__ << " flush command issueed " << dendl;
           r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
           if (r < 0) {
-            derr << __func__ << " failed to flush" << dendl;
+            derr << __func__ << " failed to flush: " << cpp_strerror(r) << dendl;
             t->release_segs(this);
             delete t;
             ceph_abort();

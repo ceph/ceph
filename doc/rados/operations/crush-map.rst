@@ -141,6 +141,7 @@ used to describe these nodes.  By default, these types include:
 - pod
 - room
 - datacenter
+- zone
 - region
 - root
 

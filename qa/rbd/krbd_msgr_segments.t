@@ -1,6 +1,6 @@
 
   $ get_block_name_prefix() {
-  >     rbd info --format=json $1 | python -c "import sys, json; print json.load(sys.stdin)['block_name_prefix']"
+  >     rbd info --format=json $1 | python3 -c "import sys, json; print(json.load(sys.stdin)['block_name_prefix'])"
   > }
 
 Short segments:

@@ -147,6 +147,9 @@ set(librgw_common_srcs
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  list(APPEND librgw_common_srcs rgw_kafka.cc)
+endif()
 
 add_library(rgw_common OBJECT ${librgw_common_srcs})
 
@@ -210,6 +213,9 @@ target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
 endif()
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  find_package(RDKafka 0.9.2 REQUIRED)
+endif()
 
 target_link_libraries(rgw_a
   PRIVATE
@@ -234,6 +240,10 @@ set(rgw_libs rgw_a)
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # used by rgw_amqp.cc
   list(APPEND rgw_libs RabbitMQ::RabbitMQ)
+endif()
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  # used by rgw_kafka.cc
+  list(APPEND rgw_libs RDKafka::RDKafka)
 endif()
 
 set(rgw_schedulers_srcs
@@ -348,6 +358,10 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
 endif()
 
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  target_link_libraries(rgw PRIVATE RDKafka::RDKafka)
+endif()
+
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -383,6 +397,9 @@ set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSI
 install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   target_link_libraries(rgw_admin_user PRIVATE RabbitMQ::RabbitMQ)
+endif()
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  target_link_libraries(rgw_admin_user PRIVATE RDKafka::RDKafka)
 endif()
 if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)

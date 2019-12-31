@@ -75,12 +75,6 @@ describe('PoolListComponent', () => {
     expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
   });
 
-  it('returns pool details correctly', () => {
-    const pool = { prop1: 1, cdIsBinary: true, prop2: 2, cdExecuting: true, prop3: 3 };
-    const expected = { prop1: 1, prop2: 2, prop3: 3 };
-    expect(component.getPoolDetails(pool)).toEqual(expected);
-  });
-
   describe('monAllowPoolDelete', () => {
     let configOptRead: boolean;
     let configurationService: ConfigurationService;
@@ -146,10 +140,8 @@ describe('PoolListComponent', () => {
   describe('pool deletion', () => {
     let taskWrapper: TaskWrapperService;
 
-    const setSelectedPool = (poolName: string) => {
-      component.selection.selected = [{ pool_name: poolName }];
-      component.selection.update();
-    };
+    const setSelectedPool = (poolName: string) =>
+      (component.selection.selected = [{ pool_name: poolName }]);
 
     const callDeletion = () => {
       component.deletePoolModal();
@@ -428,12 +420,7 @@ describe('PoolListComponent', () => {
 
   describe('getSelectionTiers', () => {
     const setSelectionTiers = (tiers: number[]) => {
-      component.selection.selected = [
-        {
-          tiers
-        }
-      ];
-      component.selection.update();
+      component.selection.selected = [{ tiers }];
       component.getSelectionTiers();
     };
 

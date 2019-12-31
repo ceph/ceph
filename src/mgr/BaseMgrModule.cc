@@ -25,6 +25,7 @@
 #include "mon/MonClient.h"
 #include "common/errno.h"
 #include "common/version.h"
+#include "mgr/Types.h"
 
 #include "PyUtil.h"
 #include "BaseMgrModule.h"
@@ -90,9 +91,9 @@ public:
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
       ceph_assert(set_fn != nullptr);
 
-      auto pyR = PyInt_FromLong(r);
-      auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
-      auto pyOutS = PyString_FromString(outs.c_str());
+      auto pyR = PyLong_FromLong(r);
+      auto pyOutBl = PyUnicode_FromString(outbl.to_str().c_str());
+      auto pyOutS = PyUnicode_FromString(outs.c_str());
       auto args = PyTuple_Pack(3, pyR, pyOutBl, pyOutS);
       Py_DECREF(pyR);
       Py_DECREF(pyOutBl);
@@ -286,26 +287,27 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
       }
       string ks(k);
       if (ks == "severity") {
-	if (auto [vs, valid] = PyString_ToString(v); !valid) {
+	if (!PyUnicode_Check(v)) {
 	  derr << __func__ << " check " << check_name
 	       << " severity value not string" << dendl;
 	  continue;
-	} else if (vs == "warning") {
+	}
+	if (const string vs = PyUnicode_AsUTF8(v); vs == "warning") {
 	  severity = HEALTH_WARN;
 	} else if (vs == "error") {
 	  severity = HEALTH_ERR;
 	}
       } else if (ks == "summary") {
-	if (auto [vs, valid] = PyString_ToString(v); !valid) {
+	if (!PyUnicode_Check(v)) {
 	  derr << __func__ << " check " << check_name
 	       << " summary value not [unicode] string" << dendl;
 	  continue;
 	} else {
-	  summary = std::move(vs);
+	  summary = PyUnicode_AsUTF8(v);
 	}
       } else if (ks == "count") {
-	if (PyInt_Check(v)) {
-	  count = PyInt_AsLong(v);
+	if (PyLong_Check(v)) {
+	  count = PyLong_AsLong(v);
 	} else {
 	  derr << __func__ << " check " << check_name
 	       << " count value not int" << dendl;
@@ -319,12 +321,12 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 	}
 	for (int k = 0; k < PyList_Size(v); ++k) {
 	  PyObject *di = PyList_GET_ITEM(v, k);
-	  if (auto [vs, valid] = PyString_ToString(di); !valid) {
+	  if (!PyUnicode_Check(di)) {
 	    derr << __func__ << " check " << check_name
 		 << " detail item " << k << " not a [unicode] string" << dendl;
 	    continue;
 	  } else {
-	    detail.push_back(std::move(vs));
+	    detail.push_back(PyUnicode_AsUTF8(di));
 	  }
 	}
       } else {
@@ -382,7 +384,7 @@ ceph_get_server(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_get_mgr_id(BaseMgrModule *self, PyObject *args)
 {
-  return PyString_FromString(g_conf()->name.get_id().c_str());
+  return PyUnicode_FromString(g_conf()->name.get_id().c_str());
 }
 
 static PyObject*
@@ -476,7 +478,7 @@ ceph_store_get(BaseMgrModule *self, PyObject *args)
       what, &value);
   if (found) {
     dout(10) << "ceph_store_get " << what << " found: " << value.c_str() << dendl;
-    return PyString_FromString(value.c_str());
+    return PyUnicode_FromString(value.c_str());
   } else {
     dout(4) << "ceph_store_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
@@ -528,15 +530,14 @@ get_daemon_status(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_log(BaseMgrModule *self, PyObject *args)
 {
-  int level = 0;
   char *record = nullptr;
-  if (!PyArg_ParseTuple(args, "is:log", &level, &record)) {
+  if (!PyArg_ParseTuple(args, "s:log", &record)) {
     return nullptr;
   }
 
   ceph_assert(self->this_module);
 
-  self->this_module->log(level, record);
+  self->this_module->log(record);
 
   Py_RETURN_NONE;
 }
@@ -570,13 +571,13 @@ ceph_cluster_log(BaseMgrModule *self, PyObject *args)
 static PyObject *
 ceph_get_version(BaseMgrModule *self, PyObject *args)
 {
-  return PyString_FromString(pretty_version_to_str().c_str());
+  return PyUnicode_FromString(pretty_version_to_str().c_str());
 }
 
 static PyObject *
 ceph_get_release_name(BaseMgrModule *self, PyObject *args)
 {
-  return PyString_FromString(ceph_release_to_str());
+  return PyUnicode_FromString(ceph_release_to_str());
 }
 
 static PyObject *
@@ -849,12 +850,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
             Py_RETURN_NONE;
           }
           if (param_name == NAME_SUB_KEY_TYPE) {
-            if (!PyString_Check(param_value)) {
+            if (!PyUnicode_Check(param_value)) {
               derr << __func__ << " query " << query_param_name << " item " << j
                    << " contains invalid param " << param_name << dendl;
               Py_RETURN_NONE;
             }
-            auto type = PyString_AsString(param_value);
+            auto type = PyUnicode_AsUTF8(param_value);
             auto it = sub_key_types.find(type);
             if (it == sub_key_types.end()) {
               derr << __func__ << " query " << query_param_name << " item " << j
@@ -863,12 +864,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
             }
             d.type = it->second;
           } else if (param_name == NAME_SUB_KEY_REGEX) {
-            if (!PyString_Check(param_value)) {
+            if (!PyUnicode_Check(param_value)) {
               derr << __func__ << " query " << query_param_name << " item " << j
                    << " contains invalid param " << param_name << dendl;
               Py_RETURN_NONE;
             }
-            d.regex_str = PyString_AsString(param_value);
+            d.regex_str = PyUnicode_AsUTF8(param_value);
             try {
               d.regex = d.regex_str.c_str();
             } catch (const std::regex_error& e) {
@@ -903,12 +904,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
       }
       for (int j = 0; j < PyList_Size(query_param_val); j++) {
         PyObject *py_type = PyList_GET_ITEM(query_param_val, j);
-        if (!PyString_Check(py_type)) {
+        if (!PyUnicode_Check(py_type)) {
           derr << __func__ << " query " << query_param_name << " item " << j
                << " not a string" << dendl;
           Py_RETURN_NONE;
         }
-        auto type = PyString_AsString(py_type);
+        auto type = PyUnicode_AsUTF8(py_type);
         auto it = counter_types.find(type);
         if (it == counter_types.end()) {
           derr << __func__ << " query " << query_param_name << " item " << type
@@ -939,12 +940,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
         }
 
         if (limit_param_name == NAME_LIMIT_ORDER_BY) {
-          if (!PyString_Check(limit_param_val)) {
+          if (!PyUnicode_Check(limit_param_val)) {
             derr << __func__ << " " << limit_param_name << " not a string"
                  << dendl;
             Py_RETURN_NONE;
           }
-          auto order_by = PyString_AsString(limit_param_val);
+          auto order_by = PyUnicode_AsUTF8(limit_param_val);
           auto it = counter_types.find(order_by);
           if (it == counter_types.end()) {
             derr << __func__ << " limit " << limit_param_name
@@ -953,12 +954,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
           }
           limit->order_by = it->second;
         } else if (limit_param_name == NAME_LIMIT_MAX_COUNT) {
-          if (!PyInt_Check(limit_param_val)) {
+          if (!PyLong_Check(limit_param_val)) {
             derr << __func__ << " " << limit_param_name << " not an int"
                  << dendl;
             Py_RETURN_NONE;
           }
-          limit->max_count = PyInt_AsLong(limit_param_val);
+          limit->max_count = PyLong_AsLong(limit_param_val);
         } else {
           derr << __func__ << " unknown limit param: " << limit_param_name
                << dendl;
@@ -993,7 +994,7 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_remove_osd_perf_query(BaseMgrModule *self, PyObject *args)
 {
-  OSDPerfMetricQueryID query_id;
+  MetricQueryID query_id;
   if (!PyArg_ParseTuple(args, "i:ceph_remove_osd_perf_query", &query_id)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
@@ -1006,13 +1007,75 @@ ceph_remove_osd_perf_query(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_get_osd_perf_counters(BaseMgrModule *self, PyObject *args)
 {
-  OSDPerfMetricQueryID query_id;
+  MetricQueryID query_id;
   if (!PyArg_ParseTuple(args, "i:ceph_get_osd_perf_counters", &query_id)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
 
   return self->py_modules->get_osd_perf_counters(query_id);
+}
+
+static PyObject*
+ceph_is_authorized(BaseMgrModule *self, PyObject *args)
+{
+  PyObject *args_dict = NULL;
+  if (!PyArg_ParseTuple(args, "O:ceph_is_authorized", &args_dict)) {
+    return nullptr;
+  }
+
+  if (!PyDict_Check(args_dict)) {
+    derr << __func__ << " arg not a dict" << dendl;
+    Py_RETURN_FALSE;
+  }
+
+  std::map<std::string, std::string> arguments;
+
+  PyObject *args_list = PyDict_Items(args_dict);
+  for (int i = 0; i < PyList_Size(args_list); ++i) {
+    PyObject *kv = PyList_GET_ITEM(args_list, i);
+
+    char *arg_key = nullptr;
+    char *arg_value = nullptr;
+    if (!PyArg_ParseTuple(kv, "ss:pair", &arg_key, &arg_value)) {
+      derr << __func__ << " dict item " << i << " not a size 2 tuple" << dendl;
+      continue;
+    }
+
+    arguments[arg_key] = arg_value;
+  }
+
+  if (self->this_module->is_authorized(arguments)) {
+    Py_RETURN_TRUE;
+  }
+
+  Py_RETURN_FALSE;
+}
+
+static PyObject*
+ceph_register_client(BaseMgrModule *self, PyObject *args)
+{
+  char *addrs = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
+    return nullptr;
+  }
+
+  self->py_modules->register_client(self->this_module->get_name(), addrs);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_unregister_client(BaseMgrModule *self, PyObject *args)
+{
+  char *addrs = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
+    return nullptr;
+  }
+
+  self->py_modules->unregister_client(self->this_module->get_name(), addrs);
+
+  Py_RETURN_NONE;
 }
 
 PyMethodDef BaseMgrModule_methods[] = {
@@ -1107,6 +1170,15 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_osd_perf_counters", (PyCFunction)ceph_get_osd_perf_counters,
     METH_VARARGS, "Get osd perf counters"},
+
+  {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized,
+    METH_VARARGS, "Verify the current session caps are valid"},
+
+  {"_ceph_register_client", (PyCFunction)ceph_register_client,
+    METH_VARARGS, "Register RADOS instance for potential blacklisting"},
+
+  {"_ceph_unregister_client", (PyCFunction)ceph_unregister_client,
+    METH_VARARGS, "Unregister RADOS instance for potential blacklisting"},
 
   {NULL, NULL, 0, NULL}
 };

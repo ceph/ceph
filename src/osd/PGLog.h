@@ -25,7 +25,7 @@
 #ifdef WITH_SEASTAR
 #include <seastar/core/future.hh>
 #include "crimson/os/futurized_store.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/cyanstore/cyan_collection.h"
 #endif
 
 constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
@@ -326,6 +326,16 @@ public:
 	return true;
       }
 
+      return false;
+    }
+
+    bool has_write_since(const hobject_t &oid, const eversion_t &bound) const {
+      for (auto i = log.rbegin(); i != log.rend(); ++i) {
+	if (i->version <= bound)
+	  return false;
+	if (i->soid.get_head() == oid.get_head())
+	  return true;
+      }
       return false;
     }
 

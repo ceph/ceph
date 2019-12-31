@@ -22,7 +22,8 @@
                      type="text"
                      id="target_iqn"
                      name="target_iqn"
-                     formControlName="target_iqn" />
+                     formControlName="target_iqn"
+                     cdTrim />
               <span class="input-group-append">
                 <button class="btn btn-light"
                         id="ecp-info-button"
@@ -87,10 +88,6 @@
               </div>
             </ng-container>
 
-            <span class="invalid-feedback"
-                  *ngIf="targetForm.showError('portals', formDir, 'minGateways')"
-                  i18n>At least {{ minimum_gateways }} gateways are required.</span>
-
             <div class="row">
               <div class="col-md-12">
                 <cd-select [data]="portals.value"
@@ -103,6 +100,16 @@
                 </cd-select>
               </div>
             </div>
+
+            <input class="form-control"
+                   type="hidden"
+                   id="portals"
+                   name="portals"
+                   formControlName="portals" />
+
+            <span class="invalid-feedback"
+                  *ngIf="targetForm.showError('portals', formDir, 'minGateways')"
+                  i18n>At least {{ minimum_gateways }} gateways are required.</span>
 
             <hr />
           </div>
@@ -121,6 +128,8 @@
                        [value]="image"
                        disabled />
                 <span class="input-group-append">
+                  <div class="input-group-text"
+                       *ngIf="api_version >= 1">lun: {{ imagesSettings[image]['lun'] }}</div>
                   <button class="btn btn-light"
                           type="button"
                           (click)="imageSettingsModal(image)">
@@ -146,9 +155,19 @@
               </span>
             </ng-container>
 
+            <input class="form-control"
+                   type="hidden"
+                   id="disks"
+                   name="disks"
+                   formControlName="disks" />
+
             <span class="invalid-feedback"
-                  *ngIf="targetForm.showError('disks', formDir, 'required')"
-                  i18n>At least 1 image is required.</span>
+                  *ngIf="targetForm.showError('disks', formDir, 'dupLunId')"
+                  i18n>Duplicated LUN numbers.</span>
+
+            <span class="invalid-feedback"
+                  *ngIf="targetForm.showError('disks', formDir, 'dupWwn')"
+                  i18n>Duplicated WWN.</span>
 
             <div class="row">
               <div class="col-md-12">
@@ -186,7 +205,8 @@
         </div>
 
         <!-- Target level authentication was introduced in ceph-iscsi config v11 -->
-        <div formGroupName="auth" *ngIf="cephIscsiConfigVersion > 10 && !targetForm.getValue('acl_enabled')">
+        <div formGroupName="auth"
+             *ngIf="cephIscsiConfigVersion > 10 && !targetForm.getValue('acl_enabled')">
 
           <!-- Target user -->
           <div class="form-group row">
@@ -226,7 +246,6 @@
                        id="target_password"
                        name="target_password"
                        formControlName="password" />
-
                 <span class="input-group-append">
                   <button type="button"
                           class="btn btn-light"
@@ -345,6 +364,7 @@
                     <input class="form-control"
                            type="text"
                            formControlName="client_iqn"
+                           cdTrim
                            (blur)="updatedInitiatorSelector()">
 
                     <span class="invalid-feedback"

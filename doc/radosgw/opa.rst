@@ -47,7 +47,7 @@ Example request::
        "input": {
            "method": "GET",
            "user_info": {
-               "used_id": "john",
+               "user_id": "john",
                "display_name": "John"  
            },
            "bucket_info": {

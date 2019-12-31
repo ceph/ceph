@@ -56,6 +56,7 @@ int get_process_name(char *buf, int len)
      * null-terminated. */
     return -ENAMETOOLONG;
   }
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(buf, 0, len);
   return prctl(PR_GET_NAME, buf);
 }

@@ -1,4 +1,4 @@
-<cd-modal>
+<cd-modal [modalRef]="modalRef">
   <ng-container i18n
                 class="modal-title">Restore Image</ng-container>
 
@@ -11,7 +11,7 @@
       <div class="modal-body">
         <p>
           <ng-container i18n>To restore</ng-container>&nbsp;
-          <kbd>{{ poolName }}/{{ imageName }}@{{ imageId }}</kbd>,&nbsp;
+          <kbd>{{ imageSpec }}@{{ imageId }}</kbd>,&nbsp;
           <ng-container i18n>type the image's new name and click</ng-container>&nbsp;
           <kbd i18n>Restore Image</kbd>.
         </p>

@@ -14,6 +14,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/PromoteRequest.h"
+#include "librbd/mirror/GetInfoRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -33,77 +34,42 @@ DisableRequest<I>::DisableRequest(I *image_ctx, bool force, bool remove,
 
 template <typename I>
 void DisableRequest<I>::send() {
-  send_get_mirror_image();
+  send_get_mirror_info();
 }
 
 template <typename I>
-void DisableRequest<I>::send_get_mirror_image() {
+void DisableRequest<I>::send_get_mirror_info() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, m_image_ctx->id);
 
   using klass = DisableRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
+  Context *ctx = util::create_context_callback<
+      klass, &klass::handle_get_mirror_info>(this);
+
+  auto req = GetInfoRequest<I>::create(*m_image_ctx, &m_mirror_image,
+                                       &m_promotion_state, ctx);
+  req->send();
 }
 
 template <typename I>
-Context *DisableRequest<I>::handle_get_mirror_image(int *result) {
+Context *DisableRequest<I>::handle_get_mirror_info(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result == 0) {
-    auto iter = m_out_bl.cbegin();
-    *result = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
-  }
 
   if (*result < 0) {
     if (*result == -ENOENT) {
       ldout(cct, 20) << this << " " << __func__
                      << ": mirroring is not enabled for this image" << dendl;
       *result = 0;
-    } else if (*result == -EOPNOTSUPP) {
-      ldout(cct, 5) << this << " " << __func__
-                    << ": mirroring is not supported by OSD" << dendl;
     } else {
-      lderr(cct) << "failed to retrieve mirror image: " << cpp_strerror(*result)
+      lderr(cct) << "failed to get mirroring info: " << cpp_strerror(*result)
                  << dendl;
     }
     return m_on_finish;
   }
 
-  send_get_tag_owner();
-  return nullptr;
-}
-
-template <typename I>
-void DisableRequest<I>::send_get_tag_owner() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  using klass = DisableRequest<I>;
-  Context *ctx = util::create_context_callback<
-      klass, &klass::handle_get_tag_owner>(this);
-
-  Journal<I>::is_tag_owner(m_image_ctx, &m_is_primary, ctx);
-}
-
-template <typename I>
-Context *DisableRequest<I>::handle_get_tag_owner(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result < 0) {
-    lderr(cct) << "failed to check tag ownership: " << cpp_strerror(*result)
-               << dendl;
-    return m_on_finish;
-  }
+  m_is_primary = (m_promotion_state == PROMOTION_STATE_PRIMARY);
 
   if (!m_is_primary && !m_force) {
     lderr(cct) << "mirrored image is not primary, "
@@ -129,7 +95,6 @@ void DisableRequest<I>::send_set_mirror_image() {
   using klass = DisableRequest<I>;
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
-  m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
   ceph_assert(r == 0);
   comp->release();
@@ -173,6 +138,33 @@ Context *DisableRequest<I>::handle_notify_mirroring_watcher(int *result) {
     lderr(cct) << "failed to send update notification: "
                << cpp_strerror(*result) << dendl;
     *result = 0;
+  }
+
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    // remove mirroring snapshots
+
+    bool removing_snapshots = false;
+    {
+      std::lock_guard locker{m_lock};
+      std::shared_lock image_locker{m_image_ctx->image_lock};
+
+      for (auto &it : m_image_ctx->snap_info) {
+        auto &snap_info = it.second;
+        auto type = cls::rbd::get_snap_namespace_type(
+          snap_info.snap_namespace);
+        if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY ||
+            type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY) {
+          send_remove_snap("", snap_info.snap_namespace, snap_info.name);
+          removing_snapshots = true;
+        }
+      }
+    }
+
+    if (!removing_snapshots) {
+      send_remove_mirror_image();
+    }
+
+    return nullptr;
   }
 
   send_promote_image();
@@ -334,13 +326,22 @@ Context *DisableRequest<I>::handle_remove_snap(int *result,
   m_current_ops[client_id]--;
 
   if (*result < 0 && *result != -ENOENT) {
-    lderr(cct) <<
-      "failed to remove temporary snapshot created by remote peer: "
+    lderr(cct) << "failed to remove mirroring snapshot: "
                << cpp_strerror(*result) << dendl;
     m_ret[client_id] = *result;
   }
 
   if (m_current_ops[client_id] == 0) {
+    if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      ceph_assert(client_id.empty());
+      m_current_ops.erase(client_id);
+      if (m_ret[client_id] < 0) {
+        return m_on_finish;
+      }
+      send_remove_mirror_image();
+      return nullptr;
+    }
+
     send_unregister_client(client_id);
   }
 
@@ -415,7 +416,6 @@ void DisableRequest<I>::send_remove_mirror_image() {
   using klass = DisableRequest<I>;
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_remove_mirror_image>(this);
-  m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
   ceph_assert(r == 0);
   comp->release();

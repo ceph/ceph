@@ -383,11 +383,15 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       cur_off = 0;
 
       double time_sum = boost::accumulators::rolling_sum(time_acc);
-      printf("%5d  %8d  %8.2lf  %8.2lf\n",
-             (int)elapsed.count(),
-             (int)(ios - io_threads),
-             boost::accumulators::rolling_sum(ios_acc) / time_sum,
-             boost::accumulators::rolling_sum(off_acc) / time_sum);
+      std::cout.width(5);
+      std::cout << (int)elapsed.count();
+      std::cout.width(10);
+      std::cout << (int)(ios - io_threads);
+      std::cout.width(10);
+      std::cout << boost::accumulators::rolling_sum(ios_acc) / time_sum;
+      std::cout.width(10);
+      std::cout << byte_u_t(boost::accumulators::rolling_sum(off_acc) / time_sum) << "/s"
+                << std::endl;
       last = elapsed;
     }
   }
@@ -404,18 +408,23 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   coarse_mono_time now = coarse_mono_clock::now();
   chrono::duration<double> elapsed = now - start;
 
-  printf("elapsed: %5d  ops: %8d  ops/sec: %8.2lf  bytes/sec: %8.2lf\n",
-         (int)elapsed.count(), ios, (double)ios / elapsed.count(),
-         (double)off / elapsed.count());
+  std::cout << "elapsed: " << (int)elapsed.count() << "   "
+            << "ops: " << ios << "   "
+            << "ops/sec: " << (double)ios / elapsed.count() << "   "
+            << "bytes/sec: " << byte_u_t((double)off / elapsed.count()) << "/s"
+            << std::endl;
 
   if (io_type == IO_TYPE_RW) {
-    printf("read_ops: %5d   read_ops/sec: %8.2lf   read_bytes/sec: %8.2lf\n",
-           read_ops, (double)read_ops / elapsed.count(),
-           (double)read_ops * io_size / elapsed.count());
+  std::cout << "read_ops: " << read_ops << "   "
+            << "read_ops/sec: " << (double)read_ops / elapsed.count() << "   "
+            << "read_bytes/sec: " << byte_u_t((double)read_ops * io_size / elapsed.count()) << "/s"
+            << std::endl;
 
-    printf("write_ops: %5d   write_ops/sec: %8.2lf   write_bytes/sec: %8.2lf\n",
-           write_ops, (double)write_ops / elapsed.count(),
-           (double)write_ops * io_size / elapsed.count());
+  std::cout << "write_ops: " << write_ops << "   "
+            << "write_ops/sec: " << (double)write_ops / elapsed.count() << "   "
+            << "write_bytes/sec: " << byte_u_t((double)write_ops * io_size / elapsed.count()) << "/s"
+            << std::endl;
+
   }
 
   return 0;

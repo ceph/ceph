@@ -17,6 +17,7 @@
 #include "librbd/api/Image.h"
 #include "librbd/api/Migration.h"
 #include "librbd/api/PoolMetadata.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -713,11 +714,14 @@ TEST_F(TestInternal, SnapshotCopyup)
         state = OBJECT_EXISTS_CLEAN;
       }
 
-      librbd::ObjectMap<> object_map(*ictx2, ictx2->snap_id);
+      librbd::ObjectMap<> *object_map = new librbd::ObjectMap<>(*ictx2, ictx2->snap_id);
       C_SaferCond ctx;
-      object_map.open(&ctx);
+      object_map->open(&ctx);
       ASSERT_EQ(0, ctx.wait());
-      ASSERT_EQ(state, object_map[0]);
+
+      std::shared_lock image_locker{ictx2->image_lock};
+      ASSERT_EQ(state, (*object_map)[0]);
+      object_map->put();
     }
   }
 }
@@ -799,13 +803,14 @@ TEST_F(TestInternal, SnapshotCopyupZeros)
         state = OBJECT_NONEXISTENT;
       }
 
-      librbd::ObjectMap<> object_map(*ictx2, ictx2->snap_id);
+      librbd::ObjectMap<> *object_map = new librbd::ObjectMap<>(*ictx2, ictx2->snap_id);
       C_SaferCond ctx;
-      object_map.open(&ctx);
+      object_map->open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
       std::shared_lock image_locker{ictx2->image_lock};
-      ASSERT_EQ(state, object_map[0]);
+      ASSERT_EQ(state, (*object_map)[0]);
+      object_map->put();
     }
   }
 }
@@ -886,13 +891,14 @@ TEST_F(TestInternal, SnapshotCopyupZerosMigration)
         state = OBJECT_NONEXISTENT;
       }
 
-      librbd::ObjectMap<> object_map(*ictx2, ictx2->snap_id);
+      librbd::ObjectMap<> *object_map = new librbd::ObjectMap<>(*ictx2, ictx2->snap_id);
       C_SaferCond ctx;
-      object_map.open(&ctx);
+      object_map->open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
       std::shared_lock image_locker{ictx2->image_lock};
-      ASSERT_EQ(state, object_map[0]);
+      ASSERT_EQ(state, (*object_map)[0]);
+      object_map->put();
     }
   }
 }
@@ -1771,7 +1777,7 @@ TEST_F(TestInternal, MissingDataPool) {
   ASSERT_EQ(0, librbd::info(ictx, info, sizeof(info)));
 
   vector<librbd::snap_info_t> snaps;
-  EXPECT_EQ(0, librbd::snap_list(ictx, snaps));
+  EXPECT_EQ(0, librbd::api::Snapshot<>::list(ictx, snaps));
   EXPECT_EQ(1U, snaps.size());
   EXPECT_EQ("snap1", snaps[0].name);
 

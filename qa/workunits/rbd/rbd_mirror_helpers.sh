@@ -101,10 +101,7 @@ if [ -e CMakeCache.txt ]; then
 
     # needed for ceph CLI under cmake
     export LD_LIBRARY_PATH=${CEPH_ROOT}/lib:${LD_LIBRARY_PATH}
-    export PYTHONPATH=${PYTHONPATH}:${CEPH_SRC}/pybind
-    for x in ${CEPH_ROOT}/lib/cython_modules/lib* ; do
-        export PYTHONPATH="${PYTHONPATH}:${x}"
-    done
+    export PYTHONPATH=${PYTHONPATH}:${CEPH_SRC}/pybind:${CEPH_ROOT}/lib/cython_modules/lib.3
 fi
 
 # These vars facilitate running this script in an environment with
@@ -961,6 +958,47 @@ wait_for_snap_present()
     for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
 	sleep ${s}
         rbd --cluster ${cluster} info ${pool}/${image}@${snap_name} || continue
+        return 0
+    done
+    return 1
+}
+
+test_snap_moved_to_trash()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_name=$4
+
+    rbd --cluster ${cluster} snap ls ${pool}/${image} --all |
+        grep -F " trash (${snap_name})"
+}
+
+wait_for_snap_moved_to_trash()
+{
+    local s
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
+	sleep ${s}
+        test_snap_moved_to_trash $@ || continue
+        return 0
+    done
+    return 1
+}
+
+test_snap_removed_from_trash()
+{
+    test_snap_moved_to_trash $@ && return 1
+    return 0
+}
+
+wait_for_snap_removed_from_trash()
+{
+    local s
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
+	sleep ${s}
+        test_snap_removed_from_trash $@ || continue
         return 0
     done
     return 1

@@ -6,7 +6,7 @@ import logging
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.config import config as teuth_config
+from teuthology.exceptions import ConfigError
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ def configure_instance(ctx, config):
         to_config(cconfig, params, 'identity', cpar)
         to_config(cconfig, params, 'object-storage', cpar)
         to_config(cconfig, params, 'object-storage-feature-enabled', cpar)
-        cpar.write(file(local_conf, 'w+'))
+        cpar.write(open(local_conf, 'w+'))
 
         remote.put_file(local_conf, tetcdir + '/tempest.conf')
     yield
@@ -247,7 +247,6 @@ def task(ctx, config):
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
-    clients = config.keys()
 
     overrides = ctx.config.get('overrides', {})
     # merge each client section, not the top level.

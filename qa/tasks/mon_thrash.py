@@ -85,8 +85,9 @@ class MonitorThrasher(Thrasher):
           all:
             - mon/workloadgen.sh
     """
-    def __init__(self, ctx, manager, config, logger):
+    def __init__(self, ctx, manager, config, name, logger):
         super(MonitorThrasher, self).__init__()
+
         self.ctx = ctx
         self.manager = manager
         self.manager.wait_for_clean()
@@ -94,6 +95,7 @@ class MonitorThrasher(Thrasher):
         self.stopping = False
         self.logger = logger
         self.config = config
+        self.name = name
 
         if self.config is None:
             self.config = dict()
@@ -230,7 +232,7 @@ class MonitorThrasher(Thrasher):
             self._do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
-            self.exception = e
+            self.set_thrasher_exception(e)
             self.logger.exception("exception:")
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.
@@ -371,7 +373,7 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
     thrash_proc = MonitorThrasher(ctx,
-        manager, config,
+        manager, config, "MonitorThrasher",
         logger=log.getChild('mon_thrasher'))
     ctx.ceph[config['cluster']].thrashers.append(thrash_proc)
     try:

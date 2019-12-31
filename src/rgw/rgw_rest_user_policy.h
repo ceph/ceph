@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_USER_POLICY_H
-#define CEPH_RGW_REST_USER_POLICY_H
+#pragma once
 
 class RGWRestUserPolicy : public RGWRESTOp {
 protected:
@@ -71,6 +70,3 @@ public:
   uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_DELETE_USER_POLICY; }
 };
-
-#endif /* CEPH_RGW_REST_USER_POLICY_H */
-

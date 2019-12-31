@@ -228,6 +228,13 @@ public:
     return umask;
   }
 
+  std::string getaddrs()
+  {
+    CachedStackStringStream cos;
+    *cos << messenger->get_myaddrs();
+    return std::string(cos->strv());
+  }
+
   int conf_read_file(const char *path_list)
   {
     int ret = cct->_conf.parse_config_files(path_list, nullptr, 0);
@@ -424,6 +431,15 @@ extern "C" uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount)
 {
   if (cmount->is_initialized())
     return cmount->get_client()->get_nodeid().v;
+  return 0;
+}
+
+extern "C" int ceph_getaddrs(struct ceph_mount_info *cmount, char** addrs)
+{
+  if (!cmount->is_initialized())
+    return -ENOTCONN;
+  auto s = cmount->getaddrs();
+  *addrs = strdup(s.c_str());
   return 0;
 }
 

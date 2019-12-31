@@ -1,7 +1,4 @@
 overrides:
-  ceph:
-    log-whitelist:
-    - \(SLOW_OPS\) # see https://tracker.ceph.com/issues/41834
   rgw:
     ec-data-pool: true
     erasure_code_profile:
@@ -10,4 +7,5 @@ overrides:
       m: 1
       crush-failure-domain: osd
   s3tests:
+    force-branch: ceph-master
     slow_backend: true

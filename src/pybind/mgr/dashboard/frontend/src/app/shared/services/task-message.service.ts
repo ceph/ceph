@@ -4,6 +4,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
+import { ImageSpec } from '../models/image-spec';
 import { Task } from '../models/task';
 
 export class TaskMessageOperation {
@@ -93,29 +94,58 @@ export class TaskMessageService {
       this.i18n('Removing'),
       this.i18n('remove'),
       this.i18n('Removed')
+    ),
+    import: new TaskMessageOperation(
+      this.i18n('Importing'),
+      this.i18n('import'),
+      this.i18n('Imported')
     )
   };
 
   rbd = {
     default: (metadata) =>
       this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.pool_name}/${metadata.image_name}`
+        id: `${metadata.image_spec}`
       }),
-    child: (metadata) =>
-      this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.child_pool_name}/${metadata.child_image_name}`
-      }),
-    destination: (metadata) =>
-      this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.dest_pool_name}/${metadata.dest_image_name}`
-      }),
+    create: (metadata) => {
+      const id = new ImageSpec(
+        metadata.pool_name,
+        metadata.namespace,
+        metadata.image_name
+      ).toString();
+      return this.i18n(`RBD '{{id}}'`, {
+        id: id
+      });
+    },
+    child: (metadata) => {
+      const id = new ImageSpec(
+        metadata.child_pool_name,
+        metadata.child_namespace,
+        metadata.child_image_name
+      ).toString();
+      return this.i18n(`RBD '{{id}}'`, {
+        id: id
+      });
+    },
+    destination: (metadata) => {
+      const id = new ImageSpec(
+        metadata.dest_pool_name,
+        metadata.dest_namespace,
+        metadata.dest_image_name
+      ).toString();
+      return this.i18n(`RBD '{{id}}'`, {
+        id: id
+      });
+    },
     snapshot: (metadata) =>
       this.i18n(`RBD snapshot '{{id}}'`, {
-        id: `${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}`
+        id: `${metadata.image_spec}@${metadata.snapshot_name}`
       })
   };
 
   rbd_mirroring = {
+    site_name: () => this.i18n('mirroring site name'),
+    bootstrap: () => this.i18n('bootstrap token'),
     pool: (metadata) =>
       this.i18n(`mirror mode for pool '{{id}}'`, {
         id: `${metadata.pool_name}`
@@ -174,10 +204,10 @@ export class TaskMessageService {
     // RBD tasks
     'rbd/create': this.newTaskMessage(
       this.commonOperations.create,
-      this.rbd.default,
+      this.rbd.create,
       (metadata) => ({
         '17': this.i18n('Name is already used by {{rbd_name}}.', {
-          rbd_name: this.rbd.default(metadata)
+          rbd_name: this.rbd.create(metadata)
         })
       })
     ),
@@ -265,7 +295,7 @@ export class TaskMessageService {
       new TaskMessageOperation(this.i18n('Moving'), this.i18n('move'), this.i18n('Moved')),
       (metadata) =>
         this.i18n(`image '{{id}}' to trash`, {
-          id: `${metadata.pool_name}/${metadata.image_name}`
+          id: metadata.image_spec
         }),
       () => ({
         2: this.i18n('Could not find image.')
@@ -275,12 +305,12 @@ export class TaskMessageService {
       new TaskMessageOperation(this.i18n('Restoring'), this.i18n('restore'), this.i18n('Restored')),
       (metadata) =>
         this.i18n(`image '{{id}}' into '{{new_id}}'`, {
-          id: `${metadata.pool_name}@${metadata.image_id}`,
-          new_id: `${metadata.pool_name}/${metadata.new_image_name}`
+          id: metadata.image_id_spec,
+          new_id: metadata.new_image_name
         }),
       (metadata) => ({
         17: this.i18n(`Image name '{{id}}' is already in use.`, {
-          id: `${metadata.pool_name}/${metadata.new_image_name}`
+          id: metadata.new_image_name
         })
       })
     ),
@@ -288,7 +318,7 @@ export class TaskMessageService {
       new TaskMessageOperation(this.i18n('Deleting'), this.i18n('delete'), this.i18n('Deleted')),
       (metadata) =>
         this.i18n(`image '{{id}}'`, {
-          id: `${metadata.pool_name}/${metadata.image_name}@${metadata.image_id}`
+          id: `${metadata.image_id_spec}`
         })
     ),
     'rbd/trash/purge': this.newTaskMessage(
@@ -304,6 +334,21 @@ export class TaskMessageService {
       }
     ),
     // RBD mirroring tasks
+    'rbd/mirroring/site_name/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      this.rbd_mirroring.site_name,
+      () => ({})
+    ),
+    'rbd/mirroring/bootstrap/create': this.newTaskMessage(
+      this.commonOperations.create,
+      this.rbd_mirroring.bootstrap,
+      () => ({})
+    ),
+    'rbd/mirroring/bootstrap/import': this.newTaskMessage(
+      this.commonOperations.import,
+      this.rbd_mirroring.bootstrap,
+      () => ({})
+    ),
     'rbd/mirroring/pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool,
@@ -348,6 +393,15 @@ export class TaskMessageService {
       this.commonOperations.update,
       this.grafana.update_dashboards,
       () => ({})
+    ),
+    // Orchestrator tasks
+    'orchestrator/identify_device': this.newTaskMessage(
+      new TaskMessageOperation(
+        this.i18n('Identifying'),
+        this.i18n('identify'),
+        this.i18n('Identified')
+      ),
+      (metadata) => this.i18n(`device '{{device}}' on host '{{hostname}}'`, metadata)
     )
   };
 

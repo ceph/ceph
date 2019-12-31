@@ -1,7 +1,6 @@
-
 #pragma once
 
-#include "PythonCompat.h"
+#include <Python.h>
 
 extern PyTypeObject BaseMgrStandbyModuleType;
 

@@ -158,7 +158,9 @@ void Processor::start()
       for (auto& listen_socket : listen_sockets) {
 	if (listen_socket) {
           if (listen_socket.fd() == -1) {
-            ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
+            ldout(msgr->cct, 1) << __func__ 
+                << " Error: processor restart after listen_socket.fd closed. " 
+                << this << dendl;
             return;
           }
 	  worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE,
@@ -678,19 +680,19 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
 
 ConnectionRef AsyncMessenger::connect_to(int type,
 					 const entity_addrvec_t& addrs,
-					 bool anon)
+					 bool anon, bool not_local_dest)
 {
-  if (*my_addrs == addrs ||
-      (addrs.v.size() == 1 &&
-       my_addrs->contains(addrs.front()))) {
-    // local
-    return local_connection;
+  if (!not_local_dest) {
+    if (*my_addrs == addrs ||
+	(addrs.v.size() == 1 &&
+	 my_addrs->contains(addrs.front()))) {
+      // local
+      return local_connection;
+    }
   }
 
-  std::lock_guard l{lock};
-
   auto av = _filter_addrs(addrs);
-
+  std::lock_guard l{lock};
   if (anon) {
     return create_connect(av, type, anon);
   }

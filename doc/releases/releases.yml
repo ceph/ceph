@@ -14,6 +14,8 @@
 releases:
   nautilus:
     releases:
+      - version: 14.2.5
+        released: 2019-12-10
       - version: 14.2.4
         released: 2019-09-17
       - version: 14.2.3
@@ -27,6 +29,10 @@ releases:
 
   mimic:
     releases:
+      - version: 13.2.8
+        released: 2019-12-13
+      - version: 13.2.7
+        released: 2019-11-25
       - version: 13.2.6
         released: 2019-06-04
       - version: 13.2.5

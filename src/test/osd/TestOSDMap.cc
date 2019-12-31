@@ -1323,15 +1323,11 @@ TEST_F(OSDMapTest, BUG_38897) {
 
   // ready to go
   {
-    // require perfect distribution!
-    auto ret = g_ceph_context->_conf.set_val(
-      "osd_calc_pg_upmaps_max_stddev", "0");
-    ASSERT_EQ(0, ret);
-    g_ceph_context->_conf.apply_changes(nullptr);
     set<int64_t> only_pools;
     ASSERT_TRUE(pool_1_id >= 0);
     only_pools.insert(pool_1_id);
     OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    // require perfect distribution! (max deviation 0)
     osdmap.calc_pg_upmaps(g_ceph_context,
                           0, // so we can force optimizing
                           100,
@@ -1483,7 +1479,7 @@ TEST_F(OSDMapTest, BUG_42052) {
   }
 }
 
-TEST_F(OSDMapTest, CleanPGUpmapsFixLeakedUpmaps) {
+TEST_F(OSDMapTest, BUG_42485) {
   set_up_map(60);
   {
     // build a temporary crush topology of 2datacenters, 3racks per dc,
@@ -1562,6 +1558,7 @@ TEST_F(OSDMapTest, CleanPGUpmapsFixLeakedUpmaps) {
       crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
       tmp.apply_incremental(pending_inc);
     }
+    // create a repliacted pool referencing the above rule
     int64_t pool_xeus_993;
     {
       OSDMap::Incremental new_pool_inc(tmp.get_epoch() + 1);
@@ -1665,7 +1662,7 @@ TEST_F(OSDMapTest, CleanPGUpmapsFixLeakedUpmaps) {
             auto rack_to = tmp.crush->get_parent_of_type(i.second, 3, rno);
             rack_parents.insert(rack_from);
             rack_parents.insert(rack_to);
-        }
+	}
         for (int i = 0; i < (int)get_num_osds(); i++) {
           if (std::find(rep_up.begin(), rep_up.end(), i) == rep_up.end()) {
             auto dc_p = tmp.crush->get_parent_of_type(i, 8 /* dc */, rno);
@@ -1716,3 +1713,154 @@ TEST(PGTempMap, basic)
   ASSERT_EQ(998u, m.size());
 }
 
+TEST_F(OSDMapTest, BUG_43124) {
+  set_up_map(200);
+  {
+    // https://tracker.ceph.com/issues/43124
+
+    // build a temporary crush topology of 5racks,
+    // 4 hosts per rack, 10osds per host
+    OSDMap tmp; // use a tmpmap here, so we do not dirty origin map..
+    tmp.deepish_copy_from(osdmap);
+    const int expected_host_num = 20;
+    int osd_per_host = (int)get_num_osds() / expected_host_num;
+    ASSERT_GE(osd_per_host, 10);
+    int host_per_rack = 4;
+    int index = 0;
+    int rack_index = 0;
+    for (int i = 0; i < (int)get_num_osds(); i++) {
+      if (i && i % osd_per_host == 0) {
+        ++index;
+      }
+      if (i && i % (host_per_rack * osd_per_host) == 0) {
+        ++rack_index;
+      }
+      stringstream osd_name;
+      stringstream host_name;
+      stringstream rack_name;
+      vector<string> move_to;
+      osd_name << "osd." << i;
+      host_name << "host-" << index;
+      rack_name << "rack-" << rack_index;
+      move_to.push_back("root=default");
+      string rack_loc = "rack=" + rack_name.str();
+      move_to.push_back(rack_loc);
+      string host_loc = "host=" + host_name.str();
+      move_to.push_back(host_loc);
+      auto r = crush_move(tmp, osd_name.str(), move_to);
+      ASSERT_EQ(0, r);
+    }
+
+    // build crush rule
+    CrushWrapper crush;
+    get_crush(tmp, crush);
+    string rule_name = "rule_angel_1944";
+    int rule_type = pg_pool_t::TYPE_ERASURE;
+    ASSERT_TRUE(!crush.rule_exists(rule_name));
+    int rno;
+    for (rno = 0; rno < crush.get_max_rules(); rno++) {
+      if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+        break;
+    }
+    int min_size = 1;
+    int max_size = 20;
+    int steps = 6;
+    string root_name = "default";
+    int root = crush.get_item_id(root_name);
+    crush_rule *rule = crush_make_rule(steps, rno, rule_type, min_size, max_size);
+    int step = 0;
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_FIRSTN, 4, 3 /* rack */);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_INDEP, 3, 1 /* host */);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+    ASSERT_TRUE(step == steps);
+    auto r = crush_add_rule(crush.get_crush_map(), rule, rno);
+    ASSERT_TRUE(r >= 0);
+    crush.set_rule_name(rno, rule_name);
+    {
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      pending_inc.crush.clear();
+      crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      tmp.apply_incremental(pending_inc);
+    }
+    {
+      stringstream oss;
+      crush.dump_tree(&oss, NULL);
+      std::cout << oss.str() << std::endl;
+      Formatter *f = Formatter::create("json-pretty");
+      f->open_object_section("crush_rules");
+      crush.dump_rules(f);
+      f->close_section();
+      f->flush(cout);
+      delete f;
+    }
+    // create a erasuce-coded pool referencing the above rule
+    int64_t pool_angel_1944;
+    {
+      OSDMap::Incremental new_pool_inc(tmp.get_epoch() + 1);
+      new_pool_inc.new_pool_max = tmp.get_pool_max();
+      new_pool_inc.fsid = tmp.get_fsid();
+      pg_pool_t empty;
+      pool_angel_1944 = ++new_pool_inc.new_pool_max;
+      pg_pool_t *p = new_pool_inc.get_new_pool(pool_angel_1944, &empty);
+      p->size = 12;
+      p->set_pg_num(4096);
+      p->set_pgp_num(4096);
+      p->type = pg_pool_t::TYPE_ERASURE;
+      p->crush_rule = rno;
+      p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      new_pool_inc.new_pool_names[pool_angel_1944] = "pool_angel_1944";
+      tmp.apply_incremental(new_pool_inc);
+    }
+
+    pg_t rep_pg(0, pool_angel_1944);
+    pg_t rep_pgid = tmp.raw_pg_to_pg(rep_pg);
+    {
+      // insert a pg_upmap_item
+      int from = -1;
+      int to = -1;
+      vector<int> rep_up;
+      int rep_up_primary;
+      tmp.pg_to_raw_up(rep_pgid, &rep_up, &rep_up_primary);
+      std::cout << "pgid " << rep_pgid << " up " << rep_up << std::endl;
+      ASSERT_TRUE(rep_up.size() == 12);
+      from = *(rep_up.begin());
+      ASSERT_TRUE(from >= 0);
+      auto from_rack = tmp.crush->get_parent_of_type(from, 3 /* rack */, rno);
+      set<int> failure_domains;
+      for (auto &osd : rep_up) {
+        failure_domains.insert(tmp.crush->get_parent_of_type(osd, 1 /* host */, rno));
+      }
+      for (int i = 0; i < (int)get_num_osds(); i++) {
+        if (std::find(rep_up.begin(), rep_up.end(), i) == rep_up.end()) {
+          auto to_rack = tmp.crush->get_parent_of_type(i, 3 /* rack */, rno);
+          auto to_host = tmp.crush->get_parent_of_type(i, 1 /* host */, rno);
+          if (to_rack != from_rack && failure_domains.count(to_host) == 0) {
+            to = i;
+            break;
+          }
+        }
+      }
+      ASSERT_TRUE(to >= 0);
+      ASSERT_TRUE(from != to);
+      std::cout << "from " << from << " to " << to << std::endl;
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(from, to));
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[rep_pgid] =
+        mempool::osdmap::vector<pair<int32_t,int32_t>>(
+          new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      tmp.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmp.have_pg_upmaps(rep_pgid));
+    }
+    {
+      // *maybe_remove_pg_upmaps* should not remove the above upmap_item
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      clean_pg_upmaps(g_ceph_context, tmp, pending_inc);
+      tmp.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmp.have_pg_upmaps(rep_pgid));
+    }
+  }
+}

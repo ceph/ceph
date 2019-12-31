@@ -13,6 +13,8 @@
  *
  */
 
+#include <cstdio>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -46,6 +48,7 @@ int manual_fallocate(int fd, off_t offset, off_t len) {
     return errno;
   char data[1024*128];
   // TODO: compressing filesystems would require random data
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(data, 0x42, sizeof(data));
   for (off_t off = 0; off < len; off += sizeof(data)) {
     if (off + static_cast<off_t>(sizeof(data)) > len)

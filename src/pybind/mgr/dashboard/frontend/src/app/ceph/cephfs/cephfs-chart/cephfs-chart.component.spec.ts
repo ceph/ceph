@@ -33,12 +33,8 @@ describe('CephfsChartComponent', () => {
 
   it('completed the chart', () => {
     const lhs = component.chart.datasets[0].data;
-    expect(lhs.length).toBe(4);
+    expect(lhs.length).toBe(3);
     expect(lhs).toEqual([
-      {
-        x: 0,
-        y: 15
-      },
       {
         x: 5000,
         y: 15
@@ -62,11 +58,11 @@ describe('CephfsChartComponent', () => {
       },
       {
         x: 10000,
-        y: 2
+        y: 10
       },
       {
         x: 15000,
-        y: 5
+        y: 25
       }
     ]);
   });

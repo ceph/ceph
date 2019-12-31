@@ -15,6 +15,7 @@
 #include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
 #include "librbd/api/DiffIterate.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -42,10 +43,6 @@ namespace {
 
 template <typename I>
 int disable_mirroring(I *ictx) {
-  if (!ictx->test_features(RBD_FEATURE_JOURNALING)) {
-    return 0;
-  }
-
   cls::rbd::MirrorImage mirror_image;
   int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
   if (r == -ENOENT) {
@@ -110,7 +107,8 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
   ContextWQ *op_work_queue;
   ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
   C_SaferCond ctx;
-  auto req = mirror::EnableRequest<I>::create(io_ctx, image_id, "",
+  auto req = mirror::EnableRequest<I>::create(io_ctx, image_id,
+                                              RBD_MIRROR_IMAGE_MODE_JOURNAL, "",
                                               op_work_queue, &ctx);
   req->send();
   r = ctx.wait();
@@ -152,7 +150,8 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     if (ictx->exclusive_lock != nullptr) {
       ictx->exclusive_lock->block_requests(0);
 
-      r = ictx->operations->prepare_image_update(false);
+      r = ictx->operations->prepare_image_update(
+        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, false);
       if (r < 0) {
         lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
         ictx->owner_lock.unlock_shared();

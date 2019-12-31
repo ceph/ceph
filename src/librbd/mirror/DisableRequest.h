@@ -8,6 +8,8 @@
 #include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/mirror/Types.h"
+
 #include <map>
 #include <string>
 
@@ -39,10 +41,7 @@ private:
    * <start>
    *    |
    *    v
-   * GET_MIRROR_IMAGE * * * * * * * * * * * * * * * * * * * * * * *
-   *    |                                                         *
-   *    v                                                         *
-   * GET_TAG_OWNER  * * * * * * * * * * * * * * * * * * * * * * * *
+   * GET_MIRROR_INFO  * * * * * * * * * * * * * * * * * * * * * * *
    *    |                                                         *
    *    v                                                         *
    * SET_MIRROR_IMAGE * * * * * * * * * * * * * * * * * * * * * * *
@@ -86,8 +85,8 @@ private:
   Context *m_on_finish;
 
   bool m_is_primary = false;
-  bufferlist m_out_bl;
   cls::rbd::MirrorImage m_mirror_image;
+  PromotionState m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
   std::set<cls::journal::Client> m_clients;
   std::map<std::string, int> m_ret;
   std::map<std::string, int> m_current_ops;
@@ -95,11 +94,8 @@ private:
   mutable ceph::mutex m_lock =
     ceph::make_mutex("mirror::DisableRequest::m_lock");
 
-  void send_get_mirror_image();
-  Context *handle_get_mirror_image(int *result);
-
-  void send_get_tag_owner();
-  Context *handle_get_tag_owner(int *result);
+  void send_get_mirror_info();
+  Context *handle_get_mirror_info(int *result);
 
   void send_set_mirror_image();
   Context *handle_set_mirror_image(int *result);

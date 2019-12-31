@@ -103,6 +103,7 @@ enum {
   l_bluestore_compressed_allocated,
   l_bluestore_compressed_original,
   l_bluestore_onodes,
+  l_bluestore_pinned_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
   l_bluestore_onode_shard_hits,
@@ -1049,20 +1050,22 @@ public:
   };
 
   struct OnodeSpace;
-
+  struct OnodeCacheShard;
   /// an in-memory object
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
+    // Not persisted and updated on cache insertion/removal
+    OnodeCacheShard *s;
+    bool pinned = false; // Only to be used by the onode cache shard
 
     std::atomic_int nref;  ///< reference count
     Collection *c;
-
     ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
     mempool::bluestore_cache_other::string key;
 
-    boost::intrusive::list_member_hook<> lru_item;
+    boost::intrusive::list_member_hook<> lru_item, pin_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
@@ -1079,7 +1082,8 @@ public:
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_other::string& k)
-      : nref(0),
+      : s(nullptr),
+        nref(0),
 	c(c),
 	oid(o),
 	key(k),
@@ -1088,7 +1092,8 @@ public:
     }
     Onode(Collection* c, const ghobject_t& o,
       const string& k)
-      : nref(0),
+      : s(nullptr),
+      nref(0),
       c(c),
       oid(o),
       key(k),
@@ -1097,7 +1102,8 @@ public:
     }
     Onode(Collection* c, const ghobject_t& o,
       const char* k)
-      : nref(0),
+      : s(nullptr),
+      nref(0),
       c(c),
       oid(o),
       key(k),
@@ -1115,11 +1121,18 @@ public:
 
     void flush();
     void get() {
-      ++nref;
+      if (++nref == 2 && s != nullptr) {
+        s->pin(*this);
+      }
     }
     void put() {
-      if (--nref == 0)
+      int n = --nref;
+      if (n == 1 && s != nullptr) {
+        s->unpin(*this);
+      }
+      if (n == 0) {
 	delete this;
+      }
     }
 
     const string& get_omap_prefix();
@@ -1154,7 +1167,7 @@ public:
       return num;
     }
 
-    virtual void _trim_to(uint64_t max) = 0;
+    virtual void _trim_to(uint64_t new_size) = 0;
     void _trim() {
       if (cct->_conf->objectstore_blackhole) {
 	// do not trim if we are throwing away IOs a layer down
@@ -1162,6 +1175,7 @@ public:
       }
       _trim_to(max);
     }
+
     void trim() {
       std::lock_guard l(lock);
       _trim();    
@@ -1182,6 +1196,8 @@ public:
 
   /// A Generic onode Cache Shard
   struct OnodeCacheShard : public CacheShard {
+    std::atomic<uint64_t> num_pinned = {0};
+
     std::array<std::pair<ghobject_t, mono_clock::time_point>, 64> dumped_onodes;
   public:
     OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
@@ -1190,8 +1206,20 @@ public:
     virtual void _add(OnodeRef& o, int level) = 0;
     virtual void _rm(OnodeRef& o) = 0;
     virtual void _touch(OnodeRef& o) = 0;
-    virtual void add_stats(uint64_t *onodes) = 0;
+    virtual void _pin(Onode& o) = 0;
+    virtual void _unpin(Onode& o) = 0;
 
+    void pin(Onode& o) {
+      std::lock_guard l(lock);
+      _pin(o);
+    }
+
+    void unpin(Onode& o) {
+      std::lock_guard l(lock);
+      _unpin(o);
+    }
+
+    virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
     bool empty() {
       return _get_num() == 0;
     }
@@ -1542,8 +1570,8 @@ public:
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
     uint64_t seq = 0;
-    utime_t start;
-    utime_t last_stamp;
+    mono_clock::time_point start;
+    mono_clock::time_point last_stamp;
 
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
@@ -1557,7 +1585,7 @@ public:
       : ch(c),
 	osr(o),
 	ioc(cct, this),
-	start(ceph_clock_now()) {
+	start(mono_clock::now()) {
       last_stamp = start;
       if (on_commits) {
 	oncommits.swap(*on_commits);
@@ -1669,7 +1697,7 @@ public:
     void complete(TransContext &txc) {}
 #endif
 
-    utime_t log_state_latency(
+    mono_clock::duration log_state_latency(
       TransContext &txc, PerfCounters *logger, int state);
     bool try_start_transaction(
       KeyValueDB &db,
@@ -1762,8 +1790,6 @@ public:
     std::atomic_int kv_committing_serially = {0};
 
     std::atomic_int kv_submitted_waiters = {0};
-
-    std::atomic_int kv_drain_preceding_waiters = {0};
 
     std::atomic_bool zombie = {false};    ///< in zombie_osr set (collection going away)
 
@@ -2780,6 +2806,9 @@ public:
   const PerfCounters* get_perf_counters() const override {
     return logger;
   }
+  const PerfCounters* get_bluefs_perf_counters() const {
+    return bluefs->get_perf_counters();
+  }
 
   int queue_transactions(
     CollectionHandle& ch,
@@ -3260,7 +3289,7 @@ public:
     const ghobject_t& oid,
     const string& key,
     const bufferlist& value,
-    mempool::bluestore_fsck::list<string>& expecting_shards,
+    mempool::bluestore_fsck::list<string>* expecting_shards,
     map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     const BlueStore::FSCK_ObjectCtx& ctx);
 
@@ -3485,4 +3514,189 @@ private:
   fsck_interval misreferenced_extents;
 
 };
+
+class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
+{
+  template <class T, size_t MaxX, size_t MaxY>
+  class matrix_2d {
+    T values[MaxX][MaxY];
+  public:
+    matrix_2d() {
+      clear();
+    }
+    T& at(size_t x, size_t y) {
+      ceph_assert(x < MaxX);
+      ceph_assert(y < MaxY);
+
+      return values[x][y];
+    }
+    size_t get_max_x() const {
+      return MaxX;
+    }
+    size_t get_max_y() const {
+      return MaxY;
+    }
+    void clear() {
+      memset(values, 0, sizeof(values));
+    }
+  };
+
+  enum {
+    // use 0/nullptr as unset indication
+    LEVEL_FIRST = 1,
+    LEVEL_WAL = LEVEL_FIRST,
+    LEVEL_DB,
+    LEVEL_SLOW,
+    LEVEL_MAX
+  };
+  // add +1 row for corresponding per-device totals
+  // add +1 column for per-level actual (taken from file size) total
+  typedef matrix_2d<uint64_t, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
+
+  per_level_per_dev_usage_t per_level_per_dev_usage;
+
+  // Note: maximum per-device totals below might be smaller than corresponding
+  // perf counters by up to a single alloc unit (1M) due to superblock extent.
+  // The later is not accounted here.
+  per_level_per_dev_usage_t per_level_per_dev_max;
+
+  uint64_t l_totals[LEVEL_MAX - LEVEL_FIRST];
+  uint64_t db_avail4slow = 0;
+  enum {
+    OLD_POLICY,
+    USE_SOME_EXTRA
+  };
+
+public:
+  RocksDBBlueFSVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total,
+    uint64_t _level0_size,
+    uint64_t _level_base,
+    uint64_t _level_multiplier,
+    double reserved_factor,
+    uint64_t reserved,
+    bool new_pol)
+  {
+    l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
+    l_totals[LEVEL_DB - LEVEL_FIRST] = _db_total;
+    l_totals[LEVEL_SLOW - LEVEL_FIRST] = _slow_total;
+
+    if (!new_pol) {
+      return;
+    }
+
+    // Calculating how much extra space is available at DB volume.
+    // Depending on the presence of explicit reserved size specification it might be either
+    // * DB volume size - reserved
+    // or
+    // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
+    if (!reserved) {
+      uint64_t prev_levels = _level0_size;
+      uint64_t cur_level = _level_base;
+      uint64_t cur_threshold = 0;
+      do {
+        uint64_t next_level = cur_level * _level_multiplier;
+        uint64_t next_threshold = prev_levels + cur_level + next_level * reserved_factor;
+        if (_db_total <= next_threshold) {
+          db_avail4slow = cur_threshold ? _db_total - cur_threshold : 0;
+          break;
+        } else {
+          prev_levels += cur_level;
+          cur_level = next_level;
+          cur_threshold = next_threshold;
+        }
+      } while (true);
+    } else {
+      db_avail4slow = _db_total - reserved;
+    }
+  }
+
+  void* get_hint_by_device(uint8_t dev) const override {
+    ceph_assert(dev == BlueFS::BDEV_WAL); // others aren't used atm
+    return  reinterpret_cast<void*>(LEVEL_WAL);
+  }
+  void* get_hint_by_dir(const string& dirname) const override;
+
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      auto& max = per_level_per_dev_max.at(p.bdev, pos);
+      cur += p.length;
+      if (cur > max) {
+        max = cur;
+      }
+      {
+        //update per-device totals
+        auto& cur = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+        auto& max = per_level_per_dev_max.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+        cur += p.length;
+        if (cur > max) {
+          max = cur;
+        }
+      }
+    }
+    {
+      //update per-level actual totals
+      auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+      auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+      cur += fnode.size;
+      if (cur > max) {
+        max = cur;
+      }
+    }
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      ceph_assert(cur >= p.length);
+      cur -= p.length;
+
+      //update per-device totals
+      auto& cur2 = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+      ceph_assert(cur2 >= p.length);
+      cur2 -= p.length;
+    }
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fnode.size);
+    cur -= fnode.size;
+  }
+  void add_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+    cur += fsize;
+    if (cur > max) {
+      max = cur;
+    }
+  }
+  void sub_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fsize);
+    per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos) -= fsize;
+  }
+
+  uint8_t select_prefer_bdev(void* h) override;
+  void get_paths(
+    const std::string& base,
+    BlueFSVolumeSelector::paths& res) const override;
+
+  void dump(ostream& sout) override;
+};
+
 #endif

@@ -22,7 +22,6 @@ set(osd_srcs
   PGBackend.cc
   OSDCap.cc
   Watch.cc
-  ClassHandler.cc
   Session.cc
   SnapMapper.cc
   ScrubStore.cc

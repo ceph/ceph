@@ -90,6 +90,7 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
   RDMAIWARPConnectedSocketImpl* server =
     new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w), &info);
 
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&local_conn_param, 0, sizeof(local_conn_param));
   local_conn_param.qp_num = server->get_local_qpn();
 

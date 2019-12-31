@@ -741,7 +741,7 @@ To run the tests, run ``src/script/run_tox.sh`` in the dashboard directory (wher
   $ ../../../script/run_tox.sh --tox-env py3,lint,check
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
-  $ WITH_PYTHON2=OFF ../../../script/run_tox.sh --tox-env py3 "" tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+  $ ../../../script/run_tox.sh --tox-env py3 "" tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
 
 You can also run tox instead of ``run_tox.sh``::
 
@@ -1175,16 +1175,18 @@ How to access the manager module instance from a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We provide the manager module instance as a global variable that can be
-imported in any module. We also provide a logger instance in the same way.
+imported in any module.
 
 Example:
 
 .. code-block:: python
 
+  import logging
   import cherrypy
-  from .. import logger, mgr
+  from .. import mgr
   from ..tools import ApiController, RESTController
 
+  logger = logging.getLogger(__name__)
 
   @ApiController('servers')
   class Servers(RESTController):
@@ -1940,7 +1942,6 @@ In order to create a new plugin, the following steps are required:
 The available Mixins (helpers) are:
 
 - ``CanMgr``: provides the plug-in with access to the ``mgr`` instance under ``self.mgr``.
-- ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
 
 The available Interfaces are:
 
@@ -1983,9 +1984,8 @@ A sample plugin implementation would look like this:
   import cherrypy
 
   @PM.add_plugin
-  class Mute(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
-                       I.HasCommands, I.FilterRequest.BeforeHandler,
-                       I.HasControllers):
+  class Mute(I.CanMgr, I.Setupable, I.HasOptions, I.HasCommands,
+                       I.FilterRequest.BeforeHandler, I.HasControllers):
     @PM.add_hook
     def get_options(self):
       return [Option('mute', default=False, type='bool')]
@@ -2024,7 +2024,7 @@ facilitates the basic tasks (Options, Commands, and common Mixins). The previous
 plugin could be rewritten like this:
 
 .. code-block:: python
-  
+
   from . import PLUGIN_MANAGER as PM
   from . import interfaces as I
   from .plugin import SimplePlugin as SP

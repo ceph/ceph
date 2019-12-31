@@ -32,7 +32,6 @@ using ceph::Formatter;
 
 OpRequest::OpRequest(Message* req, OpTracker* tracker)
     : TrackedOp(tracker, req->get_throttle_stamp()),
-      rmw_flags(0),
       request(req),
       hit_flag_points(0),
       latest_flag_point(0),
@@ -101,65 +100,21 @@ void OpRequest::_unregistered() {
   request->set_connection(nullptr);
 }
 
-bool OpRequest::check_rmw(int flag) const {
-  ceph_assert(rmw_flags != 0);
-  return rmw_flags & flag;
-}
-bool OpRequest::may_read() const {
-  return need_read_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
-}
-bool OpRequest::may_write() const {
-  return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
-}
-bool OpRequest::may_cache() const { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
-bool OpRequest::rwordered_forced() const {
-  return check_rmw(CEPH_OSD_RMW_FLAG_RWORDERED);
-}
-bool OpRequest::rwordered() const {
-  return may_write() || may_cache() || rwordered_forced();
-}
+int OpRequest::maybe_init_op_info(const OSDMap &osdmap) {
+  if (op_info.get_flags())
+    return 0;
 
-bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
-bool OpRequest::need_read_cap() const {
-  return check_rmw(CEPH_OSD_RMW_FLAG_READ);
-}
-bool OpRequest::need_write_cap() const {
-  return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
-}
-bool OpRequest::need_promote() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE);
-}
-bool OpRequest::need_skip_handle_cache() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE);
-}
-bool OpRequest::need_skip_promote() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
-}
-bool OpRequest::allows_returnvec() const {
-  return check_rmw(CEPH_OSD_RMW_FLAG_RETURNVEC);
-}
+  auto m = get_req<MOSDOp>();
 
-void OpRequest::set_rmw_flags(int flags) {
 #ifdef WITH_LTTNG
-  int old_rmw_flags = rmw_flags;
+  auto old_rmw_flags = op_info.get_flags();
 #endif
-  rmw_flags |= flags;
+  auto ret = op_info.set_from_op(m, osdmap);
   tracepoint(oprequest, set_rmw_flags, reqid.name._type,
 	     reqid.name._num, reqid.tid, reqid.inc,
-	     flags, old_rmw_flags, rmw_flags);
+	     op_info.get_flags(), old_rmw_flags, op_info.get_flags());
+  return ret;
 }
-
-void OpRequest::set_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ); }
-void OpRequest::set_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_WRITE); }
-void OpRequest::set_class_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_READ); }
-void OpRequest::set_class_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_WRITE); }
-void OpRequest::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
-void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
-void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
-void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
-void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
-void OpRequest::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
-void OpRequest::set_returnvec() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RETURNVEC); }
 
 void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
 #ifdef WITH_LTTNG
@@ -169,7 +124,7 @@ void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
+	     reqid.name._num, reqid.tid, reqid.inc, op_info.get_flags(),
 	     flag, s, old_flags, hit_flag_points);
 }
 
@@ -181,7 +136,7 @@ void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
+	     reqid.name._num, reqid.tid, reqid.inc, op_info.get_flags(),
 	     flag, s.c_str(), old_flags, hit_flag_points);
 }
 
@@ -213,9 +168,3 @@ bool OpRequest::filter_out(const set<string>& filters)
   return false;
 }
 
-ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i)
-{
-  out << "class " << i.class_name << " method " << i.method_name
-      << " rd " << i.read << " wr " << i.write << " wl " << i.whitelisted;
-  return out;
-}

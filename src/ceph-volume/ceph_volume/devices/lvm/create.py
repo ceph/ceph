@@ -42,16 +42,24 @@ class Create(object):
         Create an OSD by assigning an ID and FSID, registering them with the
         cluster with an ID and FSID, formatting and mounting the volume, adding
         all the metadata to the logical volumes using LVM tags, and starting
-        the OSD daemon.
+        the OSD daemon. This is a convinience command that combines the prepare
+        and activate steps.
 
-        Existing logical volume (lv) or device:
+        Encryption is supported via dmcrypt and the --dmcrypt flag.
 
-            ceph-volume lvm create --data {vg name/lv name} --journal /path/to/device
+        Existing logical volume (lv):
 
-        Or:
+            ceph-volume lvm create --data {vg/lv}
 
-            ceph-volume lvm create --data {vg name/lv name} --journal {vg name/lv name}
+        Existing block device (a logical volume will be created):
 
+            ceph-volume lvm create --data /path/to/device
+
+        Optionally, can consume db and wal block devices, partitions or logical
+        volumes. A device will get a logical volume, partitions and existing
+        logical volumes will be used as is:
+
+            ceph-volume lvm create --data {vg/lv} --block.wal {partition} --block.db {/path/to/device}
         """)
         parser = create_parser(
             prog='ceph-volume lvm create',

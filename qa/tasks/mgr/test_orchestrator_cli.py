@@ -1,7 +1,7 @@
 import errno
 import json
 import logging
-from tempfile import NamedTemporaryFile
+from time import sleep
 
 from teuthology.exceptions import CommandFailedError
 
@@ -14,8 +14,11 @@ log = logging.getLogger(__name__)
 class TestOrchestratorCli(MgrTestCase):
     MGRS_REQUIRED = 1
 
+    def _cmd(self, module, *args):
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd(module, *args)
+
     def _orch_cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("orchestrator", *args)
+        return self._cmd("orchestrator", *args)
 
     def _progress_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", *args)
@@ -42,15 +45,15 @@ class TestOrchestratorCli(MgrTestCase):
 
     def test_device_ls(self):
         ret = self._orch_cmd("device", "ls")
-        self.assertIn("localhost:", ret)
+        self.assertIn("localhost", ret)
 
     def test_device_ls_refresh(self):
         ret = self._orch_cmd("device", "ls", "--refresh")
-        self.assertIn("localhost:", ret)
+        self.assertIn("localhost", ret)
 
     def test_device_ls_hoshs(self):
         ret = self._orch_cmd("device", "ls", "localhost", "host1")
-        self.assertIn("localhost:", ret)
+        self.assertIn("localhost", ret)
 
 
     def test_device_ls_json(self):
@@ -93,11 +96,35 @@ class TestOrchestratorCli(MgrTestCase):
         with self.assertRaises(CommandFailedError):
             self._orch_cmd("osd", "create", "notfound:device")
 
+    def test_blink_device_light(self):
+        def _ls_lights(what):
+            return json.loads(self._cmd("device", "ls-lights"))[what]
+
+        metadata = json.loads(self._cmd("osd", "metadata"))
+        dev_name_ids = [osd["device_ids"] for osd in metadata]
+        _, dev_id = [d.split('=') for d in dev_name_ids if len(d.split('=')) == 2][0]
+
+        for t in ["ident", "fault"]:
+            self.assertNotIn(dev_id, _ls_lights(t))
+            self._cmd("device", "light", "on", dev_id, t)
+            self.assertIn(dev_id, _ls_lights(t))
+
+            health = {
+                'ident': 'DEVICE_IDENT_ON',
+                'fault': 'DEVICE_FAULT_ON',
+            }[t]
+            self.wait_for_health(health, 30)
+
+            self._cmd("device", "light", "off", dev_id, t)
+            self.assertNotIn(dev_id, _ls_lights(t))
+
+        self.wait_for_health_clear(30)
+
     def test_mds_add(self):
         self._orch_cmd("mds", "add", "service_name")
 
     def test_rgw_add(self):
-        self._orch_cmd("rgw", "add", "service_name")
+        self._orch_cmd("rgw", "add", "myrealm", "myzone")
 
     def test_nfs_add(self):
         self._orch_cmd("nfs", "add", "service_name", "pool", "--namespace", "ns")
@@ -110,14 +137,16 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("mds", "rm", "foo")
 
     def test_rgw_rm(self):
-        self._orch_cmd("rgw", "rm", "foo")
+        self._orch_cmd("rgw", "rm", "myrealm", "myzone")
 
     def test_nfs_rm(self):
         self._orch_cmd("nfs", "rm", "service_name")
 
     def test_host_ls(self):
-        out = self._orch_cmd("host", "ls")
-        self.assertEqual(out, "localhost\n")
+        out = self._orch_cmd("host", "ls", "--format=json")
+        hosts = json.loads(out)
+        self.assertEqual(len(hosts), 1)
+        self.assertEqual(hosts[0]["host"], "localhost")
 
     def test_host_add(self):
         self._orch_cmd("host", "add", "hostname")
@@ -127,8 +156,8 @@ class TestOrchestratorCli(MgrTestCase):
 
     def test_mon_update(self):
         self._orch_cmd("mon", "update", "3")
-        self._orch_cmd("mon", "update", "3", "host1", "host2", "host3")
-        self._orch_cmd("mon", "update", "3", "host1:network", "host2:network", "host3:network")
+        self._orch_cmd("mon", "update", "3", "host1:1.2.3.0/24", "host2:1.2.3.0/24", "host3:10.0.0.0/8")
+        self._orch_cmd("mon", "update", "3", "host1:1.2.3.4", "host2:1.2.3.4", "host3:10.0.0.1")
 
     def test_mgr_update(self):
         self._orch_cmd("mgr", "update", "3")
@@ -153,6 +182,7 @@ class TestOrchestratorCli(MgrTestCase):
         evs = json.loads(self._progress_cmd('json'))['completed']
         self.assertEqual(len(evs), 0)
         self._orch_cmd("mgr", "update", "4")
+        sleep(6)  # There is a sleep(5) in the test_orchestrator.module.serve()
         evs = json.loads(self._progress_cmd('json'))['completed']
         self.assertEqual(len(evs), 1)
         self.assertIn('update_mgrs', evs[0]['message'])

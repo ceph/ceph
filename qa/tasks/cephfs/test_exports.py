@@ -132,8 +132,8 @@ class TestExports(CephFSTestCase):
             p = self.mount_a.client_remote.run(args=['uname', '-r'], stdout=StringIO(), wait=True)
             dir_pin = self.mount_a.getfattr("1", "ceph.dir.pin")
             log.debug("mount.getfattr('1','ceph.dir.pin'): %s " % dir_pin)
-	    if str(p.stdout.getvalue()) < "5" and not(dir_pin):
-	        self.skipTest("Kernel does not support getting the extended attribute ceph.dir.pin")
+            if str(p.stdout.getvalue()) < "5" and not(dir_pin):
+                self.skipTest("Kernel does not support getting the extended attribute ceph.dir.pin")
         self.assertTrue(self.mount_a.getfattr("1", "ceph.dir.pin") == "1")
         self.assertTrue(self.mount_a.getfattr("1/2", "ceph.dir.pin") == "0")
         if (len(self.fs.get_active_names()) > 2):
@@ -150,7 +150,6 @@ class TestExports(CephFSTestCase):
         status = self.fs.wait_for_daemons()
 
         rank1 = self.fs.get_rank(rank=1, status=status)
-        name1 = 'mds.'+rank1['name']
 
         # Create a directory that is pre-exported to rank 1
         self.mount_a.run_shell(["mkdir", "-p", "a/aa"])

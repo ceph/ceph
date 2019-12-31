@@ -3,7 +3,7 @@
 #include "messages/MOSDRepOpReply.h"
 
 #include "crimson/common/log.h"
-#include "crimson/os/cyan_object.h"
+#include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/shard_services.h"
 
@@ -23,10 +23,11 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
     shard_services{shard_services}
 {}
 
-seastar::future<bufferlist> ReplicatedBackend::_read(const hobject_t& hoid,
-                                                     uint64_t off,
-                                                     uint64_t len,
-                                                     uint32_t flags)
+ReplicatedBackend::ll_read_errorator::future<ceph::bufferlist>
+ReplicatedBackend::_read(const hobject_t& hoid,
+                         const uint64_t off,
+                         const uint64_t len,
+                         const uint32_t flags)
 {
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }

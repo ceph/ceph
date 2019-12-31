@@ -27,8 +27,8 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_collection.h"
-#include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
@@ -713,11 +713,8 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	  startmap->pg_to_up_acting_osds(
 	    info->pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
-	  int role = startmap->calc_pg_role(whoami, acting, acting.size());
-	  if (!pp->is_replicated() && role != info->pgid.shard) {
-	    role = -1;
-	  }
-
+	  int role = startmap->calc_pg_role(pg_shard_t(whoami, info->pgid.shard),
+					    acting);
 
 	  create_pg_collection(
 	    rctx.transaction,

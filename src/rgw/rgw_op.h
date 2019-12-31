@@ -781,7 +781,7 @@ public:
 
 class RGWListBucket : public RGWOp {
 protected:
-  rgw::sal::RGWSalBucket* bucket;
+  rgw::sal::RGWBucket* bucket;
   string prefix;
   rgw_obj_key marker; 
   rgw_obj_key next_marker; 
@@ -944,7 +944,7 @@ public:
 
 class RGWStatBucket : public RGWOp {
 protected:
-  rgw::sal::RGWSalBucket* bucket;
+  rgw::sal::RGWBucket* bucket;
 
 public:
   RGWStatBucket() : bucket(nullptr) {}
@@ -1810,6 +1810,7 @@ protected:
   map<string, bool> common_prefixes;
   bool is_truncated;
   int default_max;
+  bool encode_url {false};
 
 public:
   RGWListBucketMultiparts() {

@@ -9,7 +9,8 @@ except ImportError:
 from . import ControllerTestCase
 from .. import mgr
 from ..controllers.summary import Summary
-from ..controllers.rbd_mirroring import RbdMirroringSummary
+from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringSummary, \
+    RbdMirroringPoolBootstrap
 from ..services import progress
 
 
@@ -47,6 +48,81 @@ mock_osd_map = {
 }
 
 
+class RbdMirroringControllerTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        # pylint: disable=protected-access
+        RbdMirroring._cp_config['tools.authenticate.on'] = False
+        # pylint: enable=protected-access
+
+        cls.setup_controllers([RbdMirroring])
+
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
+    def test_site_name(self, mock_rbd):
+        result = {'site_name': 'fsid'}
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_site_name_get.return_value = \
+            result['site_name']
+
+        self._get('/api/block/mirroring/site_name')
+        self.assertStatus(200)
+        self.assertJsonBody(result)
+
+        result['site_name'] = 'site-a'
+        mock_rbd_instance.mirror_site_name_get.return_value = \
+            result['site_name']
+        self._put('/api/block/mirroring/site_name', result)
+        self.assertStatus(200)
+        self.assertJsonBody(result)
+        mock_rbd_instance.mirror_site_name_set.assert_called_with(
+            mock.ANY, result['site_name'])
+
+
+class RbdMirroringPoolBootstrapControllerTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        # pylint: disable=protected-access
+        RbdMirroringPoolBootstrap._cp_config['tools.authenticate.on'] = False
+        # pylint: enable=protected-access
+
+        cls.setup_controllers([RbdMirroringPoolBootstrap])
+
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
+    def test_token(self, mock_rbd):
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_peer_bootstrap_create.return_value = "1234"
+
+        self._post('/api/block/mirroring/pool/abc/bootstrap/token')
+        self.assertStatus(200)
+        self.assertJsonBody({"token": "1234"})
+        mgr.rados.open_ioctx.assert_called_with("abc")
+
+        mock_rbd_instance.mirror_peer_bootstrap_create.assert_called()
+
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
+    def test_peer(self, mock_rbd_module):
+        mock_rbd_instance = mock_rbd_module.RBD.return_value
+
+        values = {
+            "direction": "invalid",
+            "token": "1234"
+        }
+        self._post('/api/block/mirroring/pool/abc/bootstrap/peer', values)
+        self.assertStatus(500)
+        mgr.rados.open_ioctx.assert_called_with("abc")
+
+        values["direction"] = "rx"
+        self._post('/api/block/mirroring/pool/abc/bootstrap/peer', values)
+        self.assertStatus(200)
+        self.assertJsonBody({})
+        mgr.rados.open_ioctx.assert_called_with("abc")
+
+        mock_rbd_instance.mirror_peer_bootstrap_import.assert_called_with(
+            mock.ANY, mock_rbd_module.RBD_MIRROR_PEER_DIRECTION_RX, '1234')
+
+
 class RbdMirroringSummaryControllerTest(ControllerTestCase):
 
     @classmethod
@@ -81,19 +157,26 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
 
         cls.setup_controllers([RbdMirroringSummary, Summary], '/test')
 
-    @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
-    def test_default(self, rbd_mock):  # pylint: disable=W0613
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
+    def test_default(self, mock_rbd):
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_site_name_get.return_value = 'site-a'
+
         self._get('/test/api/block/mirroring/summary')
         result = self.json_body()
         self.assertStatus(200)
+        self.assertEqual(result['site_name'], 'site-a')
         self.assertEqual(result['status'], 0)
         for k in ['daemons', 'pools', 'image_error', 'image_syncing', 'image_ready']:
             self.assertIn(k, result['content_data'])
 
     @mock.patch('dashboard.controllers.BaseController._has_permissions')
-    @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
-    def test_summary(self, rbd_mock, has_perms_mock):  # pylint: disable=W0613
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
+    def test_summary(self, mock_rbd, has_perms_mock):
         """We're also testing `summary`, as it also uses code from `rbd_mirroring.py`"""
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_site_name_get.return_value = 'site-a'
+
         has_perms_mock.return_value = True
         self._get('/test/api/summary')
         self.assertStatus(200)

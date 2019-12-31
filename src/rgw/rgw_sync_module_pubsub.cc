@@ -20,6 +20,9 @@
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#include "rgw_kafka.h"
+#endif
 
 #include <boost/algorithm/hex.hpp>
 #include <boost/asio/yield.hpp>
@@ -384,14 +387,6 @@ struct objstore_event {
   }
 };
 
-static void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
-  char buf[64];
-  const auto len = snprintf(buf, sizeof(buf), "%010ld.%06ld.%s", (long)ts.sec(), (long)ts.usec(), hash.c_str());
-  if (len > 0) {
-    id.assign(buf, len);
-  }
-}
-
 static void make_event_ref(CephContext *cct, const rgw_bucket& bucket,
                        const rgw_obj_key& key,
                        const ceph::real_time& mtime,
@@ -423,22 +418,18 @@ static void make_s3_record_ref(CephContext *cct, const rgw_bucket& bucket,
   *record = std::make_shared<rgw_pubsub_s3_record>();
 
   EventRef<rgw_pubsub_s3_record>& r = *record;
-  r->eventVersion = "2.1";
-  r->eventSource = "aws:s3";
   r->eventTime = mtime;
   r->eventName = rgw::notify::to_string(event_type);
-  r->userIdentity = "";         // user that triggered the change: not supported in sync module
-  r->sourceIPAddress = "";      // IP address of client that triggered the change: not supported in sync module
-  r->x_amz_request_id = "";     // request ID of the original change: not supported in sync module
-  r->x_amz_id_2 = "";           // RGW on which the change was made: not supported in sync module
-  r->s3SchemaVersion = "1.0";
+  // userIdentity: not supported in sync module
+  // x_amz_request_id: not supported in sync module
+  // x_amz_id_2: not supported in sync module
   // configurationId is filled from subscription configuration
   r->bucket_name = bucket.name;
   r->bucket_ownerIdentity = owner.to_str();
   r->bucket_arn = to_string(rgw::ARN(bucket));
   r->bucket_id = bucket.bucket_id; // rgw extension
   r->object_key = key.name;
-  r->object_size = 0;           // not supported in sync module
+  // object_size not supported in sync module
   objstore_event oevent(bucket, key, mtime, attrs);
   r->object_etag = oevent.get_hash();
   r->object_versionId = key.instance;
@@ -448,8 +439,6 @@ static void make_s3_record_ref(CephContext *cct, const rgw_bucket& bucket,
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
           std::back_inserter(r->object_sequencer));
  
-  // event ID is rgw extension (not in the S3 spec), used for acking the event
-  // same format is used in both S3 compliant and Ceph specific events
   set_event_id(r->id, r->object_etag, ts);
 }
 
@@ -481,7 +470,7 @@ public:
   PSEvent(const EventRef<EventType>& _event) : event(_event) {}
 
   void format(bufferlist *bl) const {
-    bl->append(json_str(EventType::json_type_single, *event));
+    bl->append(json_str("", *event));
   }
 
   void encode_event(bufferlist& bl) const {
@@ -1552,11 +1541,19 @@ RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFor
     ldout(cct, 1) << "ERROR: failed to initialize AMQP manager in pubsub sync module" << dendl;
   }
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  if (!rgw::kafka::init(cct)) {
+    ldout(cct, 1) << "ERROR: failed to initialize Kafka manager in pubsub sync module" << dendl;
+  }
+#endif
 }
 
 RGWPSSyncModuleInstance::~RGWPSSyncModuleInstance() {
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  rgw::kafka::shutdown();
 #endif
 }
 

@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-class MMDSFindInoReply : public Message {
+class MMDSFindInoReply : public SafeMessage {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:
@@ -26,8 +26,8 @@ public:
   filepath path;
 
 protected:
-  MMDSFindInoReply() : Message{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION} {}
-  MMDSFindInoReply(ceph_tid_t t) : Message{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION}, tid(t) {}
+  MMDSFindInoReply() : SafeMessage{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSFindInoReply(ceph_tid_t t) : SafeMessage{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION}, tid(t) {}
   ~MMDSFindInoReply() override {}
 
 public:

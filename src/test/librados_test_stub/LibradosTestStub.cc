@@ -116,17 +116,13 @@ librados::TestRadosClient *create_rados_client() {
 
 } // anonymous namespace
 
-extern "C" int rados_aio_create_completion(void *cb_arg,
-                                           rados_callback_t cb_complete,
-                                           rados_callback_t cb_safe,
-                                           rados_completion_t *pc)
+extern "C" int rados_aio_create_completion2(void *cb_arg,
+					    rados_callback_t cb_complete,
+					    rados_completion_t *pc)
 {
   librados::AioCompletionImpl *c = new librados::AioCompletionImpl;
   if (cb_complete) {
     c->set_complete_callback(cb_arg, cb_complete);
-  }
-  if (cb_safe) {
-    c->set_safe_callback(cb_arg, cb_safe);
   }
   *pc = c;
   return 0;
@@ -349,9 +345,13 @@ extern "C" int rados_wait_for_latest_osdmap(rados_t cluster) {
 
 namespace librados {
 
-void AioCompletion::release() {
-  AioCompletionImpl *c = reinterpret_cast<AioCompletionImpl *>(pc);
+AioCompletion::~AioCompletion()
+{
+  auto c = reinterpret_cast<AioCompletionImpl *>(pc);
   c->release();
+}
+
+void AioCompletion::release() {
   delete this;
 }
 
@@ -1005,10 +1005,9 @@ void Rados::from_rados_t(rados_t p, Rados &rados) {
 }
 
 AioCompletion *Rados::aio_create_completion(void *cb_arg,
-                                            callback_t cb_complete,
-                                            callback_t cb_safe) {
+                                            callback_t cb_complete) {
   AioCompletionImpl *c;
-  int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe,
+  int r = rados_aio_create_completion2(cb_arg, cb_complete,
       reinterpret_cast<void**>(&c));
   ceph_assert(r == 0);
   return new AioCompletion(c);

@@ -2,13 +2,16 @@
 from __future__ import absolute_import
 
 import json
+import logging
 import os
 import time
 import requests
 
-from . import logger
 from .exceptions import GrafanaError
 from .settings import Settings
+
+
+logger = logging.getLogger('grafana')
 
 
 class GrafanaRestClient(object):
@@ -17,8 +20,8 @@ class GrafanaRestClient(object):
     def url_validation(method, path):
         response = requests.request(
             method,
-            path)
-
+            path,
+            verify=Settings.GRAFANA_API_SSL_VERIFY)
         return response.status_code
 
     @staticmethod
@@ -48,6 +51,7 @@ class GrafanaRestClient(object):
                 data=json.dumps(payload),
                 auth=(Settings.GRAFANA_API_USERNAME,
                       Settings.GRAFANA_API_PASSWORD),
+                verify=Settings.GRAFANA_API_SSL_VERIFY
             )
         except requests.ConnectionError:
             raise GrafanaError("Could not connect to Grafana server")

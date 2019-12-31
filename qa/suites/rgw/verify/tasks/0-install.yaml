@@ -1,14 +1,16 @@
 # see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-os_type: centos
+#os_type: centos
+# ubuntu and no valgrind until we migrate test to py3
+os_type: ubuntu
 
 tasks:
 - install:
-    flavor: notcmalloc
+#    flavor: notcmalloc
 - ceph:
 - openssl_keys:
 - rgw:
     client.0:
-      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
+#      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
 
 overrides:
   ceph:

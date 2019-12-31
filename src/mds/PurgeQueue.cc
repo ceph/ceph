@@ -89,13 +89,7 @@ PurgeQueue::PurgeQueue(
     journaler("pq", MDS_INO_PURGE_QUEUE + rank, metadata_pool,
       CEPH_FS_ONDISK_MAGIC, objecter_, nullptr, 0,
       &finisher),
-    on_error(on_error_),
-    ops_in_flight(0),
-    max_purge_ops(0),
-    drain_initial(0),
-    draining(false),
-    delayed_flush(nullptr),
-    recovered(false)
+    on_error(on_error_)
 {
   ceph_assert(cct != nullptr);
   ceph_assert(on_error != nullptr);

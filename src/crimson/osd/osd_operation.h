@@ -13,6 +13,8 @@
 #include <seastar/core/shared_mutex.hh>
 #include <seastar/core/future.hh>
 
+#include "include/ceph_assert.h"
+
 namespace ceph {
   class Formatter;
 }
@@ -146,7 +148,7 @@ public:
 
   template <typename... T>
   seastar::future<T...> with_blocking_future(blocking_future<T...> &&f) {
-    if (f.fut.available() || f.fut.failed()) {
+    if (f.fut.available()) {
       return std::move(f.fut);
     }
     assert(f.blocker);

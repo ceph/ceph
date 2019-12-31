@@ -5,6 +5,7 @@ Archived Releases
 .. toctree::
    :maxdepth: 1
 
+   Jewel <jewel>
    Kraken <kraken>
    Infernalis <infernalis>
    Hammer <hammer>

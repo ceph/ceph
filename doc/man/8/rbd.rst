@@ -64,8 +64,9 @@ Parameters
      format is understood by all versions of librbd and the kernel rbd module,
      but does not support newer features like cloning.
 
-   * format 2 - Use the second rbd format, which is supported by
-     librbd and kernel since version 3.11 (except for striping). This adds
+   * format 2 - Use the second rbd format, which is supported by librbd since
+     the Bobtail release and the kernel rbd module since kernel 3.10 (except
+     for "fancy" striping, which is supported since kernel 4.17). This adds
      support for cloning and is more easily extensible to allow more
      features in the future.
 
@@ -684,8 +685,7 @@ The striping is controlled by three parameters:
   we move on to the next [*stripe_count*] objects.
 
 By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] is 1.  Specifying a different
-[*stripe_unit*] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
-used.
+[*stripe_unit*] and/or [*stripe_count*] is often referred to as using "fancy" striping and requires format 2.
 
 
 Kernel rbd (krbd) options

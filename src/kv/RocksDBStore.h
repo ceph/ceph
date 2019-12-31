@@ -115,19 +115,25 @@ class RocksDBStore : public KeyValueDB {
 
   void compact_range(const string& start, const string& end);
   void compact_range_async(const string& start, const string& end);
+  int tryInterpret(const string& key, const string& val, rocksdb::Options& opt);
 
 public:
   /// compact the underlying rocksdb store
   bool compact_on_mount;
   bool disableWAL;
+  const uint64_t delete_range_threshold;
   void compact() override;
 
   void compact_async() override {
     compact_range_async(string(), string());
   }
 
-  int tryInterpret(const string& key, const string& val, rocksdb::Options &opt);
-  int ParseOptionsFromString(const string& opt_str, rocksdb::Options &opt);
+  int ParseOptionsFromString(const string& opt_str, rocksdb::Options& opt);
+  static int ParseOptionsFromStringStatic(
+    CephContext* cct,
+    const string& opt_str,
+    rocksdb::Options &opt,
+    function<int(const string&, const string&, rocksdb::Options&)> interp);
   static int _test_init(const string& dir);
   int init(string options_str) override;
   /// compact rocksdb for all keys with a given prefix
@@ -157,7 +163,8 @@ public:
     compact_queue_stop(false),
     compact_thread(this),
     compact_on_mount(false),
-    disableWAL(false)
+    disableWAL(false),
+    delete_range_threshold(cct->_conf.get_val<uint64_t>("rocksdb_delete_range_threshold"))
   {}
 
   ~RocksDBStore() override;
