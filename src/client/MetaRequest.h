@@ -17,6 +17,8 @@
 
 class Dentry;
 class dir_result_t;
+class MetaSession;
+class Client;
 
 struct MetaRequest {
 private:
@@ -39,6 +41,7 @@ public:
   vector<MClientRequest::Release> cap_releases;
 
   int regetattr_mask = 0;	// getattr mask if i need to re-stat after a traceless reply
+
  
   utime_t  sent_stamp;
   mds_rank_t mds = MDS_RANK_NONE;	// who i am asking
@@ -52,12 +55,14 @@ public:
   ceph::cref_t<MClientReply> reply;
   bool kick = false;
   bool success = false;
-  
+  bool async = false;
+  //possible responses
+  bool got_unsafe = false;
+
   // readdir result
   dir_result_t *dirp = nullptr;
 
-  //possible responses
-  bool got_unsafe = false;
+  void (Client::*async_dirop_cb)(MetaRequest *req, MetaSession *session, int err) = nullptr;
 
   xlist<MetaRequest*>::item item;
   xlist<MetaRequest*>::item unsafe_item;

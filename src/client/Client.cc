@@ -1106,6 +1106,8 @@ void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, Me
   dn->cap_shared_gen = dn->dir->parent_inode->shared_gen;
   if (dlease->mask & CEPH_LEASE_PRIMARY_LINK)
     dn->mark_primary();
+  else
+    dn->clear_primary();
   dn->alternate_name = std::move(dlease->alternate_name);
 }
 
@@ -1824,10 +1826,6 @@ int Client::make_request(MetaRequest *request,
       break;
     }
 
-    // set up wait cond
-    ceph::condition_variable caller_cond;
-    request->caller_cond = &caller_cond;
-
     // choose mds
     Inode *hash_diri = NULL;
     mds_rank_t mds = choose_target_mds(request, &hash_diri);
@@ -1868,8 +1866,18 @@ int Client::make_request(MetaRequest *request,
       session = &mds_sessions.at(mds);
     }
 
+    if (request->async_dirop_cb)
+      (this->*request->async_dirop_cb)(request, session, 0);
+
     // send request.
     send_request(request, session);
+
+    if (request->async)
+      break;
+
+    // set up wait cond
+    ceph::condition_variable caller_cond;
+    request->caller_cond = &caller_cond;
 
     // wait for signal
     ldout(cct, 20) << "awaiting reply|forward|kick on " << &caller_cond << dendl;
@@ -1889,19 +1897,22 @@ int Client::make_request(MetaRequest *request,
   }
 
   if (!request->reply) {
-    ceph_assert(request->aborted());
     ceph_assert(!request->got_unsafe);
-    r = request->get_abort_code();
-    unregister_request(request);
-    put_request(request);
+    if (request->aborted()) {
+      r = request->get_abort_code();
+      unregister_request(request);
+      put_request(request);
+    } else {
+      ceph_assert(request->async);
+      put_request(request);
+      r = 0;
+    }
     return r;
   }
 
   // got it!
   auto reply = std::move(request->reply);
   r = reply->get_result();
-  if (r >= 0)
-    request->success = true;
 
   // kick dispatcher (we've got it!)
   ceph_assert(request->dispatch_cond);
@@ -1928,6 +1939,11 @@ int Client::make_request(MetaRequest *request,
 
 void Client::register_unsafe_request(MetaRequest *req, MetaSession *session)
 {
+  if (req->unsafe_item.is_on_list()) {
+    ceph_assert(req->got_unsafe && req->async);
+    return;
+  }
+
   session->unsafe_requests.push_back(&req->unsafe_item);
   if (is_dir_operation(req)) {
     Inode *dir = req->inode();
@@ -1942,7 +1958,8 @@ void Client::register_unsafe_request(MetaRequest *req, MetaSession *session)
 
 void Client::unregister_request(MetaRequest *req)
 {
-  if (req->got_unsafe) {
+  if (req->unsafe_item.is_on_list()) {
+    ceph_assert(req->got_unsafe || req->async);
     req->unsafe_item.remove_myself();
     req->unsafe_dir_item.remove_myself();
     req->unsafe_target_item.remove_myself();
@@ -2370,13 +2387,16 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   if (request->dentry()) {
     r->set_dentry_wanted();
     if (Inode *dir = request->inode())
-      dir->touch_open_ref(CEPH_FILE_MODE_RD);
+      dir->touch_open_ref(request->is_write() ? CEPH_FILE_MODE_WR : CEPH_FILE_MODE_RD);
   }
   if (request->got_unsafe) {
     r->set_replayed_op();
     if (request->target)
       r->head.ino = request->target->ino;
   } else {
+    if (request->async) {
+      r->set_async_op();
+    }
     encode_cap_releases(request, mds);
     if (drop_cap_releases) // we haven't send cap reconnect yet, drop cap releases
       request->cap_releases.clear();
@@ -2509,27 +2529,36 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   }
 
   ceph_tid_t tid = reply->get_tid();
+  int result = reply->get_result();
   bool is_safe = reply->is_safe();
 
-  if (mds_requests.count(tid) == 0) {
-    lderr(cct) << __func__ << " no pending request on tid " << tid
-	       << " safe is:" << is_safe << dendl;
+  auto it = mds_requests.find(tid);
+  if (it == mds_requests.end()) {
+    ldout(cct, 0) << __func__ << " no pending request on tid " << tid
+		  << " result:" << result << " safe:" << is_safe << dendl;
     return;
   }
-  MetaRequest *request = mds_requests.at(tid);
 
-  ldout(cct, 20) << __func__ << " got a reply. Safe:" << is_safe
-		 << " tid " << tid << dendl;
+  MetaRequest *request = it->second;
 
   if (request->got_unsafe && !is_safe) {
     //duplicate response
-    ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
-	    << mds_num << " safe:" << is_safe << dendl;
+    ldout(cct, 0) << __func__ << " got duplicate unsafe reply on tid " << tid
+		  << " result:" << result << " safe:" << is_safe << dendl;
     return;
   }
 
+<<<<<<< HEAD
   if (-CEPHFS_ESTALE == reply->get_result()) { // see if we can get to proper MDS
     ldout(cct, 20) << "got ESTALE on tid " << request->tid
+=======
+  ldout(cct, 20) << __func__ << " got a reply on tid " << tid
+		 << " result:" << result << " safe:" << is_safe << dendl;
+
+
+  if (-ESTALE == reply->get_result()) { // see if we can get to proper MDS
+    ldout(cct, 20) << " got ESTALE on tid " << request->tid
+>>>>>>> 00eed19e21... client: enable async unlink if have sufficient caps
 		   << " from mds." << request->mds << dendl;
     request->send_to_auth = true;
     request->resend_mds = choose_target_mds(request);
@@ -2540,7 +2569,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
 	(in == NULL ||
          (it = in->caps.find(request->resend_mds)) != in->caps.end() ||
          request->sent_on_mseq == it->second.mseq)) {
-      ldout(cct, 20) << "have to return ESTALE" << dendl;
+      ldout(cct, 20) << " have to return ESTALE" << dendl;
     } else {
       request->caller_cond->notify_all();
       return;
@@ -2557,26 +2586,38 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
     register_unsafe_request(request, session);
   }
 
-  // Only signal the caller once (on the first reply):
-  // Either its an unsafe reply, or its a safe reply and no unsafe reply was sent.
+  // Only for the first reply:
+  // Either its an unsafe reply, or its a safe reply and no unsafe reply.
   if (!is_safe || !request->got_unsafe) {
-    ceph::condition_variable cond;
-    request->dispatch_cond = &cond;
+    if (result >= 0)
+      request->success = true;
 
-    // wake up waiter
-    ldout(cct, 20) << __func__ << " signalling caller " << (void*)request->caller_cond << dendl;
-    request->caller_cond->notify_all();
+    if (request->async) {
+      ceph_assert(request->async_dirop_cb);
+      (this->*request->async_dirop_cb)(request, session, result);
+      request->async_dirop_cb = nullptr;
+    }
 
-    // wake for kick back
-    std::unique_lock l{client_lock, std::adopt_lock};
-    cond.wait(l, [tid, request, &cond, this] {
-      if (request->dispatch_cond) {
-        ldout(cct, 20) << "handle_client_reply awaiting kickback on tid "
-		       << tid << " " << &cond << dendl;
-      }
-      return !request->dispatch_cond;
-    });
-    l.release();
+    if (request->caller_cond) {
+      // wake up waiter
+      ldout(cct, 20) << " signalling caller " << (void*)request->caller_cond << dendl;
+      request->caller_cond->notify_all();
+
+      // wake for kick back
+      ceph::condition_variable cond;
+      request->dispatch_cond = &cond;
+      std::unique_lock l{client_lock, std::adopt_lock};
+      cond.wait(l, [tid, request, &cond, this] {
+	if (request->dispatch_cond) {
+	  ldout(cct, 20) << "handle_client_reply awaiting kickback on tid "
+			 << tid << " " << &cond << dendl;
+	}
+	return !request->dispatch_cond;
+      });
+      l.release();
+    } else {
+      request->reply.reset();
+    }
   }
 
   if (is_safe) {
@@ -3036,7 +3077,7 @@ void Client::kick_requests(MetaSession *session)
        p != mds_requests.end();
        ++p) {
     MetaRequest *req = p->second;
-    if (req->got_unsafe)
+    if (req->got_unsafe || req->async)
       continue;
     if (req->aborted()) {
       if (req->caller_cond) {
@@ -3066,7 +3107,7 @@ void Client::resend_unsafe_requests(MetaSession *session)
        p != mds_requests.end();
        ++p) {
     MetaRequest *req = p->second;
-    if (req->got_unsafe)
+    if (req->got_unsafe || req->async)
       continue;
     if (req->aborted())
       continue;
@@ -3126,6 +3167,11 @@ void Client::kick_requests_closed(MetaSession *session)
 	  lderr(cct) << "kick_requests_closed drop req of inode : "
 		     <<  in->ino  << " " << req->get_tid() << dendl;
 	}
+	unregister_request(req);
+      } else if (req->async) {
+	ceph_assert(req->async_dirop_cb);
+	(this->*req->async_dirop_cb)(req, session, -EIO);
+	req->async_dirop_cb = nullptr;
 	unregister_request(req);
       } else {
 	req->item.remove_myself();
@@ -3738,14 +3784,19 @@ void Client::check_caps(Inode *in, unsigned flags)
   if (!is_unmounting() && in->nlink > 0) {
     if (wanted) {
       retain |= CEPH_CAP_ANY;
-    } else if (in->is_dir() &&
-	       (issued & CEPH_CAP_FILE_SHARED) &&
-	       (in->flags & I_COMPLETE)) {
-      // we do this here because we don't want to drop to Fs (and then
-      // drop the Fs if we do a create!) if that alone makes us send lookups
-      // to the MDS. Doing it in in->caps_wanted() has knock-on effects elsewhere
-      wanted = CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_EXCL;
-      retain |= wanted;
+    } else if (in->is_dir()) {
+      if (issued & CEPH_CAP_FILE_EXCL) {
+	wanted = CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_EXCL |
+	         (issued & CEPH_CAP_ANY_DIR_OPS);
+	retain |= wanted;
+      } else if ((issued & CEPH_CAP_FILE_SHARED) &&
+	         (in->flags & I_COMPLETE)) {
+	// we do this here because we don't want to drop to Fs (and then
+	// drop the Fs if we do a create!) if that alone makes us send lookups
+	// to the MDS. Doing it in in->caps_wanted() has knock-on effects elsewhere
+	wanted = CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_EXCL;
+	retain |= wanted;
+      }
     } else {
       retain |= CEPH_CAP_ANY_SHARED;
       // keep RD only if we didn't have the file open RW,
@@ -6375,7 +6426,7 @@ void Client::_abort_mds_sessions(int err)
     auto req = p->second;
     ++p;
     // unsafe requests will be removed during close session below.
-    if (req->got_unsafe)
+    if (req->got_unsafe || req->async)
       continue;
 
     req->abort(err);
@@ -6916,18 +6967,11 @@ int Client::get_or_create(Inode *dir, const char* name,
   dir->open_dir();
   if (dir->dir->dentries.count(name)) {
     Dentry *dn = dir->dir->dentries[name];
-<<<<<<< HEAD
-    if (_dentry_valid(dn)) {
-      if (expect_null)
-        return -CEPHFS_EEXIST;
-    }
-=======
     if (expect_null &&
 	dn->inode &&
 	is_dentry_lease_valid(dir, dn))
-      return -EEXIST;
+      return -CEPHFS_EEXIST;
 
->>>>>>> d0809f62e5... client: cleanup dentry lease check
     *pdn = dn;
   } else {
     // otherwise link up a new one
@@ -13298,6 +13342,46 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
   return r;
 }
 
+void Client::_async_unlink_cb(MetaRequest *req, MetaSession *session, int err)
+{
+  Inode *diri = req->inode();
+  Dentry *dn = req->dentry();
+  unsigned want = CEPH_CAP_FILE_EXCL | CEPH_CAP_DIR_UNLINK;
+
+  if (req->async) {
+    if (err < 0) {
+      lderr(cct) << "got error " << cpp_strerror(err) << " for async unlink tid "
+		 << req->tid << " " << diri->ino  << " " << dn->name << dendl;
+      diri->set_async_err(err);
+    }
+    put_cap_ref(diri, want);
+    return;
+  }
+
+  Cap *auth_cap = diri->auth_cap;
+  if (!auth_cap || session != auth_cap->session)
+    return;
+
+  if ((diri->caps_issued() & want) != want)
+    return;
+  // We have CEPH_CAP_FILE_EXCL, which implies CEPH_CAP_FILE_SHARED.
+  if (dn->cap_shared_gen != diri->shared_gen ||
+      !dn->primary_link)
+    return;
+
+  diri->mtime = req->op_stamp;
+  diri->dirstat.nfiles++;
+  diri->dir_ordered_count++;
+  clear_dir_complete_and_ordered(diri, false);
+  unlink(dn, true, true);  // keep dir, dentry
+
+  get_cap_ref(diri, want);
+  req->resend_mds = session->mds_num;
+  req->async = true;
+  register_unsafe_request(req, session);
+  ldout(cct, 10) << __func__ << " succeed" <<  dendl;
+}
+
 int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 {
   ldout(cct, 8) << "_unlink(" << dir->ino << " " << name
@@ -13333,9 +13417,9 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   req->set_other_inode(in);
   in->break_all_delegs();
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
-
   req->set_inode(dir);
 
+  req->async_dirop_cb = &Client::_async_unlink_cb;
   res = make_request(req, perm);
 
   trim_cache();

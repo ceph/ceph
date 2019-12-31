@@ -1266,6 +1266,7 @@ private:
 
   int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm, std::string alternate_name,
 	    InodeRef *inp = 0);
+  void _async_unlink_cb(MetaRequest *req, MetaSession *session, int err);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
