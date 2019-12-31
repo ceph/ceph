@@ -224,6 +224,11 @@ bool JournalTool::can_execute_for_all_ranks(const std::string &mode,
  */
 int JournalTool::main_journal(std::vector<const char*> &argv)
 {
+  if (argv.empty()) {
+    derr << "Missing journal command, please see help" << dendl;
+    return -EINVAL;
+  }
+
   std::string command = argv[0];
   if (command == "inspect") {
     return journal_inspect();
@@ -291,8 +296,8 @@ int JournalTool::main_header(std::vector<const char*> &argv)
     ceph_assert(js.header != NULL);
   }
 
-  if (argv.size() == 0) {
-    derr << "Invalid header command, must be [get|set]" << dendl;
+  if (argv.empty()) {
+    derr << "Missing header command, must be [get|set]" << dendl;
     return -EINVAL;
   }
   std::vector<const char *>::iterator arg = argv.begin();
@@ -367,8 +372,12 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 {
   int r;
 
-  std::vector<const char*>::iterator arg = argv.begin();
+  if (argv.empty()) {
+    derr << "Missing event command, please see help" << dendl;
+    return -EINVAL;
+  }
 
+  std::vector<const char*>::iterator arg = argv.begin();
   std::string command = *(arg++);
   if (command != "get" && command != "splice" && command != "recover_dentries") {
     derr << "Unknown argument '" << command << "'" << dendl;
