@@ -130,7 +130,6 @@ class MixedType(MixedStrategy):
         super(MixedType, self).__init__(args, data_devs, db_devs, wal_devs)
         self.block_db_size = self.get_block_db_size()
         self.block_wal_size = self.get_block_wal_size()
-        self.system_vgs = lvm.VolumeGroups()
         self.common_vg = None
         self.common_wal_vg = None
         self.dbs_needed = len(self.data_devs) * self.osds_per_device
