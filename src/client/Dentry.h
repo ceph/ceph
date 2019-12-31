@@ -67,6 +67,10 @@ public:
   void mark_primary() {
     if (inode && inode->dentries.front() != this)
       inode->dentries.push_front(&inode_xlist_link);
+    primary_link = true;
+  }
+  void clear_primary() {
+    primary_link = false;
   }
   void detach(void) {
     ceph_assert(!inode);
@@ -90,6 +94,7 @@ public:
   uint64_t lease_gen = 0;
   ceph_seq_t lease_seq = 0;
   int cap_shared_gen = 0;
+  bool primary_link = false;
 
 private:
   xlist<Dentry *>::item inode_xlist_link;

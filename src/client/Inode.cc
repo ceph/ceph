@@ -393,6 +393,7 @@ int Inode::caps_file_wanted()
 
     if (open_by_mode[WR_SHIFT] > 0 || last_wr > used_cutoff) {
       want |= CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_EXCL;
+      want |= CEPH_CAP_ANY_DIR_OPS;
     }
 
     if (want || open_by_mode[PIN_SHIFT] > 0)
