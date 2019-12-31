@@ -6,10 +6,7 @@ Reference:https://wiki.linuxfoundation.org/networking/netem.
 
 import logging
 import contextlib
-from teuthology import misc as teuthology
 from cStringIO import StringIO
-from teuthology.orchestra import run
-from teuthology import contextutil
 from paramiko import SSHException
 import socket
 import time
@@ -168,7 +165,7 @@ class Toggle:
             try:
                 self.packet_drop()
                 log.info('link down')
-            except SSHException as e:
+            except SSHException:
                 log.debug('Failed to run command')
 
             self.stop_event.wait(timeout=self.interval)
@@ -176,7 +173,7 @@ class Toggle:
             try:
                 delete_dev(self.remote, self.interface)
                 log.info('link up')
-            except SSHException as e:
+            except SSHException:
                 log.debug('Failed to run command')
 
     def begin(self, gname):

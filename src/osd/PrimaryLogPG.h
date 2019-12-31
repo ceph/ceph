@@ -459,6 +459,7 @@ public:
     const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
+    const eversion_t &min_last_complete_ondisk,
     bool transaction_applied,
     ObjectStore::Transaction &t,
     bool async = false) override {
@@ -473,9 +474,17 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
+    if (!is_primary() && !is_ec_pg()) {
+      replica_clear_repop_obc(logv, t);
+    }
     recovery_state.append_log(
-      logv, trim_to, roll_forward_to, t, transaction_applied, async);
+      logv, trim_to, roll_forward_to, min_last_complete_ondisk,
+      t, transaction_applied, async);
   }
+
+  void replica_clear_repop_obc(
+    const vector<pg_log_entry_t> &logv,
+    ObjectStore::Transaction &t);
 
   void op_applied(const eversion_t &applied_version) override;
 
@@ -527,11 +536,21 @@ public:
     return recovery_state.get_min_peer_features();
   }
   void send_message_osd_cluster(
-    int peer, Message *m, epoch_t from_epoch) override;
+    int peer, Message *m, epoch_t from_epoch) override {
+    osd->send_message_osd_cluster(peer, m, from_epoch);
+  }
   void send_message_osd_cluster(
-    Message *m, Connection *con) override;
+    std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override {
+    osd->send_message_osd_cluster(messages, from_epoch);
+  }
   void send_message_osd_cluster(
-    Message *m, const ConnectionRef& con) override;
+    Message *m, Connection *con) override {
+    osd->send_message_osd_cluster(m, con);
+  }
+  void send_message_osd_cluster(
+    Message *m, const ConnectionRef& con) override {
+    osd->send_message_osd_cluster(m, con);
+  }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
   entity_name_t get_cluster_msgr_name() override {
     return osd->get_cluster_msgr_name();
@@ -673,7 +692,7 @@ public:
       return inflightreads == 0;
     }
 
-    ObjectContext::RWState::State lock_type;
+    RWState::State lock_type;
     ObcLockManager lock_manager;
 
     std::map<int, std::unique_ptr<OpFinisher>> op_finishers;
@@ -698,7 +717,7 @@ public:
       num_write(0),
       sent_reply(false),
       inflightreads(0),
-      lock_type(ObjectContext::RWState::RWNONE) {
+      lock_type(RWState::RWNONE) {
       if (obc->ssc) {
 	new_snapset = obc->ssc->snapset;
 	snapset = &obc->ssc->snapset;
@@ -715,7 +734,7 @@ public:
       num_read(0),
       num_write(0),
       inflightreads(0),
-      lock_type(ObjectContext::RWState::RWNONE) {}
+      lock_type(RWState::RWNONE) {}
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
@@ -839,12 +858,12 @@ protected:
      * to get the second.
      */
     if (write_ordered && ctx->op->may_read()) {
-      ctx->lock_type = ObjectContext::RWState::RWEXCL;
+      ctx->lock_type = RWState::RWEXCL;
     } else if (write_ordered) {
-      ctx->lock_type = ObjectContext::RWState::RWWRITE;
+      ctx->lock_type = RWState::RWWRITE;
     } else {
       ceph_assert(ctx->op->may_read());
-      ctx->lock_type = ObjectContext::RWState::RWREAD;
+      ctx->lock_type = RWState::RWREAD;
     }
 
     if (ctx->head_obc) {
@@ -854,7 +873,7 @@ protected:
 	    ctx->head_obc->obs.oi.soid,
 	    ctx->head_obc,
 	    ctx->op)) {
-	ctx->lock_type = ObjectContext::RWState::RWNONE;
+	ctx->lock_type = RWState::RWNONE;
 	return false;
       }
     }
@@ -866,7 +885,7 @@ protected:
       return true;
     } else {
       ceph_assert(!ctx->head_obc);
-      ctx->lock_type = ObjectContext::RWState::RWNONE;
+      ctx->lock_type = RWState::RWNONE;
       return false;
     }
   }
@@ -1500,6 +1519,9 @@ public:
   void clear_cache();
   int get_cache_obj_count() {
     return object_contexts.get_count();
+  }
+  unsigned get_pg_shard() const {
+    return info.pgid.hash_to_shard(osd->get_num_shards());
   }
   void do_request(
     OpRequestRef& op,

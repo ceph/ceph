@@ -29,7 +29,6 @@ using ::operator<<;
 
 namespace {
 
-const std::string SERVICE_DAEMON_INSTANCE_ID_KEY("instance_id");
 const std::string SERVICE_DAEMON_LOCAL_COUNT_KEY("image_local_count");
 const std::string SERVICE_DAEMON_REMOTE_COUNT_KEY("image_remote_count");
 
@@ -44,6 +43,7 @@ NamespaceReplayer<I>::NamespaceReplayer(
     Throttler<I> *image_sync_throttler, Throttler<I> *image_deletion_throttler,
     ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler) :
+  m_namespace_name(name),
   m_local_mirror_uuid(local_mirror_uuid),
   m_remote_mirror_uuid(remote_mirror_uuid),
   m_local_site_name(local_site_name),
@@ -183,16 +183,14 @@ void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
            << "added_count=" << added_image_ids.size() << ", "
            << "removed_count=" << removed_image_ids.size() << dendl;
 
-  // TODO: add namespace support to service daemon
-  if (m_local_io_ctx.get_namespace().empty()) {
-    m_service_daemon->add_or_update_attribute(
-        m_local_io_ctx.get_id(), SERVICE_DAEMON_LOCAL_COUNT_KEY,
-        m_local_pool_watcher->get_image_count());
-    if (m_remote_pool_watcher) {
-      m_service_daemon->add_or_update_attribute(
-          m_local_io_ctx.get_id(), SERVICE_DAEMON_REMOTE_COUNT_KEY,
-          m_remote_pool_watcher->get_image_count());
-    }
+  m_service_daemon->add_or_update_namespace_attribute(
+    m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
+    SERVICE_DAEMON_LOCAL_COUNT_KEY, m_local_pool_watcher->get_image_count());
+  if (m_remote_pool_watcher) {
+    m_service_daemon->add_or_update_namespace_attribute(
+      m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
+      SERVICE_DAEMON_REMOTE_COUNT_KEY,
+      m_remote_pool_watcher->get_image_count());
   }
 
   std::set<std::string> added_global_image_ids;
@@ -265,7 +263,7 @@ void NamespaceReplayer<I>::init_local_status_updater() {
   ceph_assert(!m_local_status_updater);
 
   m_local_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_local_io_ctx, m_threads, ""));
+    m_local_io_ctx, m_threads, "", ""));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_local_status_updater>(this);
@@ -300,8 +298,23 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!m_remote_status_updater);
 
+  std::string local_site_name;
+  if (m_namespace_name.empty()) {
+    local_site_name = m_local_site_name;
+  }
+
+  librados::Rados rados(m_local_io_ctx);
+  std::string local_fsid;
+  int r = rados.cluster_fsid(&local_fsid);
+  if (r < 0) {
+    derr << "failed to retrieve local fsid: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    shut_down_local_status_updater();
+    return;
+  }
+
   m_remote_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_remote_io_ctx, m_threads, m_local_site_name));
+    m_remote_io_ctx, m_threads, local_site_name, local_fsid));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_remote_status_updater>(this);
@@ -395,13 +408,6 @@ void NamespaceReplayer<I>::handle_init_instance_watcher(int r) {
     m_ret_val = r;
     shut_down_instance_replayer();
     return;
-  }
-
-  // TODO: add namespace support to service daemon
-  if (m_local_io_ctx.get_namespace().empty()) {
-    m_service_daemon->add_or_update_attribute(
-        m_local_io_ctx.get_id(), SERVICE_DAEMON_INSTANCE_ID_KEY,
-        m_instance_watcher->get_instance_id());
   }
 
   ceph_assert(m_on_finish != nullptr);

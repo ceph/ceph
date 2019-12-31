@@ -148,6 +148,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     uint32_t hi = bid >> 32;
     uint32_t lo = bid & 0xFFFFFFFF;
     uint32_t extra = rand() % 0xFFFFFFFF;
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&ondisk, 0, sizeof(ondisk));
 
     memcpy(&ondisk.text, RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
@@ -511,131 +512,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
 
     return (*opts_)->empty();
-  }
-
-  int flatten_children(ImageCtx *ictx, const char* snap_name,
-                       ProgressContext& pctx)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "children flatten " << ictx->name << dendl;
-
-    int r = ictx->state->refresh_if_required();
-    if (r < 0) {
-      return r;
-    }
-
-    std::shared_lock l{ictx->image_lock};
-    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
-                                       snap_name);
-
-    cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
-                                          ictx->md_ctx.get_namespace(),
-                                          ictx->id, snap_id};
-    std::vector<librbd::linked_image_spec_t> child_images;
-    r = api::Image<>::list_children(ictx, parent_spec, &child_images);
-    if (r < 0) {
-      return r;
-    }
-
-    size_t size = child_images.size();
-    if (size == 0) {
-      return 0;
-    }
-
-    librados::IoCtx child_io_ctx;
-    int64_t child_pool_id = -1;
-    size_t i = 0;
-    for (auto &child_image : child_images){
-      std::string pool = child_image.pool_name;
-      if (child_pool_id == -1 ||
-          child_pool_id != child_image.pool_id ||
-          child_io_ctx.get_namespace() != child_image.pool_namespace) {
-        r = util::create_ioctx(ictx->md_ctx, "child image",
-                               child_image.pool_id, child_image.pool_namespace,
-                               &child_io_ctx);
-        if (r < 0) {
-          return r;
-        }
-
-        child_pool_id = child_image.pool_id;
-      }
-
-      ImageCtx *imctx = new ImageCtx("", child_image.image_id, nullptr,
-                                     child_io_ctx, false);
-      r = imctx->state->open(0);
-      if (r < 0) {
-        lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
-        return r;
-      }
-
-      if ((imctx->features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
-          !imctx->snaps.empty()) {
-        lderr(cct) << "snapshot in-use by " << pool << "/" << imctx->name
-                   << dendl;
-        imctx->state->close();
-        return -EBUSY;
-      }
-
-      librbd::NoOpProgressContext prog_ctx;
-      r = imctx->operations->flatten(prog_ctx);
-      if (r < 0) {
-        lderr(cct) << "error flattening image: " << pool << "/"
-                   << (child_image.pool_namespace.empty() ?
-                        "" : "/" + child_image.pool_namespace)
-                   << child_image.image_name << cpp_strerror(r) << dendl;
-        imctx->state->close();
-        return r;
-      }
-
-      r = imctx->state->close();
-      if (r < 0) {
-        lderr(cct) << "failed to close image: " << cpp_strerror(r) << dendl;
-        return r;
-      }
-
-      pctx.update_progress(++i, size);
-      ceph_assert(i <= size);
-    }
-
-    return 0;
-  }
-
-  int get_snap_namespace(ImageCtx *ictx,
-			 const char *snap_name,
-			 cls::rbd::SnapshotNamespace *snap_namespace) {
-    ldout(ictx->cct, 20) << "get_snap_namespace " << ictx << " " << snap_name
-			 << dendl;
-
-    int r = ictx->state->refresh_if_required();
-    if (r < 0)
-      return r;
-    std::shared_lock l{ictx->image_lock};
-    snap_t snap_id = ictx->get_snap_id(*snap_namespace, snap_name);
-    if (snap_id == CEPH_NOSNAP)
-      return -ENOENT;
-    r = ictx->get_snap_namespace(snap_id, snap_namespace);
-    return r;
-  }
-
-  int snap_is_protected(ImageCtx *ictx, const char *snap_name, bool *is_protected)
-  {
-    ldout(ictx->cct, 20) << "snap_is_protected " << ictx << " " << snap_name
-			 << dendl;
-
-    int r = ictx->state->refresh_if_required();
-    if (r < 0)
-      return r;
-
-    std::shared_lock l{ictx->image_lock};
-    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
-    if (snap_id == CEPH_NOSNAP)
-      return -ENOENT;
-    bool is_unprotected;
-    r = ictx->is_snap_unprotected(snap_id, &is_unprotected);
-    // consider both PROTECTED or UNPROTECTING to be 'protected',
-    // since in either state they can't be deleted
-    *is_protected = !is_unprotected;
-    return r;
   }
 
   int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t size, int order)
@@ -1118,14 +994,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
-    if (!ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
-      lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
-      return -EINVAL;
-    }
-
     managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
-    ExclusiveLock<>(*ictx).get_locker(&locker, &get_owner_ctx);
+    {
+      std::shared_lock owner_locker{ictx->owner_lock};
+
+      if (ictx->exclusive_lock == nullptr) {
+        lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+        return -EINVAL;
+      }
+
+      ictx->exclusive_lock->get_locker(&locker, &get_owner_ctx);
+    }
+
     int r = get_owner_ctx.wait();
     if (r == -ENOENT) {
       return r;
@@ -1201,124 +1082,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
     return 0;
   }
-
-  int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)
-  {
-    ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
-
-    int r = ictx->state->refresh_if_required();
-    if (r < 0)
-      return r;
-
-    std::shared_lock l{ictx->image_lock};
-    for (map<snap_t, SnapInfo>::iterator it = ictx->snap_info.begin();
-	 it != ictx->snap_info.end(); ++it) {
-      snap_info_t info;
-      info.name = it->second.name;
-      info.id = it->first;
-      info.size = it->second.size;
-      snaps.push_back(info);
-    }
-
-    return 0;
-  }
-
-  int snap_exists(ImageCtx *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
-		  const char *snap_name, bool *exists)
-  {
-    ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
-
-    int r = ictx->state->refresh_if_required();
-    if (r < 0)
-      return r;
-
-    std::shared_lock l{ictx->image_lock};
-    *exists = ictx->get_snap_id(snap_namespace, snap_name) != CEPH_NOSNAP;
-    return 0;
-  }
-
-  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags,
-		  ProgressContext& pctx)
-  {
-    ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << " flags: " << flags << dendl;
-
-    int r = 0;
-
-    r = ictx->state->refresh_if_required();
-    if (r < 0)
-      return r;
-
-    if (flags & RBD_SNAP_REMOVE_FLATTEN) {
-	r = flatten_children(ictx, snap_name, pctx);
-	if (r < 0) {
-	  return r;
-	}
-    }
-
-    bool is_protected;
-    r = snap_is_protected(ictx, snap_name, &is_protected);
-    if (r < 0) {
-      return r;
-    }
-
-    if (is_protected && flags & RBD_SNAP_REMOVE_UNPROTECT) {
-      r = ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), snap_name);
-      if (r < 0) {
-	lderr(ictx->cct) << "failed to unprotect snapshot: " << snap_name << dendl;
-	return r;
-      }
-
-      r = snap_is_protected(ictx, snap_name, &is_protected);
-      if (r < 0) {
-	return r;
-      }
-      if (is_protected) {
-	lderr(ictx->cct) << "snapshot is still protected after unprotection" << dendl;
-	ceph_abort();
-      }
-    }
-
-    C_SaferCond ctx;
-    ictx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(), snap_name, &ctx);
-
-    r = ctx.wait();
-    return r;
-  }
-
-  int snap_get_timestamp(ImageCtx *ictx, uint64_t snap_id, struct timespec *timestamp)
-  {
-    std::map<librados::snap_t, SnapInfo>::iterator snap_it = ictx->snap_info.find(snap_id);
-    ceph_assert(snap_it != ictx->snap_info.end());
-    utime_t time = snap_it->second.timestamp;
-    time.to_timespec(timestamp);
-    return 0;
-  }
-
-  int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
-  {
-    int r = cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
-                                           limit);
-    if (r == -EOPNOTSUPP) {
-      *limit = UINT64_MAX;
-      r = 0;
-    }
-    return r;
-  }
-
-  int snap_set_limit(ImageCtx *ictx, uint64_t limit)
-  {
-    return ictx->operations->snap_set_limit(limit);
-  }
-
-  struct CopyProgressCtx {
-    explicit CopyProgressCtx(ProgressContext &p)
-      : destictx(NULL), src_size(0), prog_ctx(p)
-    { }
-
-    ImageCtx *destictx;
-    uint64_t src_size;
-    ProgressContext &prog_ctx;
-  };
 
   int copy(ImageCtx *src, IoCtx& dest_md_ctx, const char *destname,
 	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size)

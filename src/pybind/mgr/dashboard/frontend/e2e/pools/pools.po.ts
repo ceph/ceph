@@ -53,23 +53,25 @@ export class PoolPageHelper extends PageHelper {
     return Promise.resolve();
   }
 
-  async edit_pool_pg(name: string, new_pg: number): Promise<void> {
+  async edit_pool_pg(name: string, new_pg: number, wait = true): Promise<void> {
     if (!this.isPowerOf2(new_pg)) {
       return Promise.reject(`Placement groups ${new_pg} are not a power of 2`);
     }
     const elem = await this.getTableCellByContent(name);
-    await elem.click(); // select pool from the table
+    await this.waitClickableAndClick(elem); // select pool from the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click edit button
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit'); // verify we are now on edit page
     await $('input[name=pgNum]').sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, new_pg);
     await element(by.css('cd-submit-button')).click();
     const str = `${new_pg} active+clean`;
     await this.waitVisibility(this.getTableRow(name), 'Timed out waiting for table row to load');
-    await this.waitTextToBePresent(
-      this.getTableRow(name),
-      str,
-      'Timed out waiting for placement group to be updated'
-    );
+    if (wait) {
+      await this.waitTextToBePresent(
+        this.getTableRow(name),
+        str,
+        'Timed out waiting for placement group to be updated'
+      );
+    }
   }
 
   private async setApplications(apps: string[]) {

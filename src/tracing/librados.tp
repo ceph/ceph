@@ -1991,6 +1991,26 @@ TRACEPOINT_EVENT(librados, rados_aio_create_completion_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_aio_create_completion2_enter,
+    TP_ARGS(
+        void*, cb_arg,
+        rados_callback_t, cb_complete),
+    TP_FIELDS(
+        ctf_integer_hex(void*, cb_arg, cb_arg)
+        ctf_integer_hex(rados_callback_t, cb_complete, cb_complete)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_create_completion2_exit,
+    TP_ARGS(
+        int, retval,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_aio_wait_for_complete_enter,
     TP_ARGS(
         rados_completion_t, completion),

@@ -2,17 +2,17 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { of } from 'rxjs';
-
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';
-import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
+import { TablePerformanceCounterComponent } from '../../../performance-counter/table-performance-counter/table-performance-counter.component';
+import { DeviceListComponent } from '../../../shared/device-list/device-list.component';
+import { SmartListComponent } from '../../../shared/smart-list/smart-list.component';
 import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
-import { OsdSmartListComponent } from '../osd-smart-list/osd-smart-list.component';
 import { OsdDetailsComponent } from './osd-details.component';
 
 describe('OsdDetailsComponent', () => {
@@ -23,13 +23,14 @@ describe('OsdDetailsComponent', () => {
   let getDetailsSpy;
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      TabsModule.forRoot(),
-      PerformanceCounterModule,
-      SharedModule
+    imports: [HttpClientTestingModule, TabsModule.forRoot(), SharedModule],
+    declarations: [
+      OsdDetailsComponent,
+      DeviceListComponent,
+      SmartListComponent,
+      TablePerformanceCounterComponent,
+      OsdPerformanceHistogramComponent
     ],
-    declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent, OsdSmartListComponent],
     providers: i18nProviders
   });
 

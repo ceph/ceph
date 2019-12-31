@@ -95,6 +95,7 @@ class EventCenter {
   struct AssociatedCenters {
     EventCenter *centers[MAX_EVENTCENTER];
     AssociatedCenters() {
+      // FIPS zeroization audit 20191115: this memset is not security related.
       memset(centers, 0, MAX_EVENTCENTER * sizeof(EventCenter*));
     }
   };

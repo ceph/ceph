@@ -891,13 +891,8 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 size_t Session::get_request_count() const
 {
   size_t result = 0;
-
-  auto it = requests.begin(member_offset(MDRequestImpl, item_session_request));
-  while (!it.end()) {
+  for (auto p = requests.begin(); !p.end(); ++p)
     ++result;
-    ++it;
-  }
-
   return result;
 }
 
@@ -1103,8 +1098,15 @@ int SessionFilter::parse(
 
     auto eq = s.find("=");
     if (eq == std::string::npos || eq == s.size()) {
-      *ss << "Invalid filter '" << s << "'";
-      return -EINVAL;
+      // allow this to be a bare id for compatibility with pre-octopus asok
+      // 'session evict'.
+      std::string err;
+      id = strict_strtoll(s.c_str(), 10, &err);
+      if (!err.empty()) {
+	*ss << "Invalid filter '" << s << "'";
+	return -EINVAL;
+      }
+      return 0;
     }
 
     // Keys that start with this are to be taken as referring

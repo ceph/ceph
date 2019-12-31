@@ -21,6 +21,7 @@
 #include <syslog.h>
 
 #include <iostream>
+#include <set>
 
 #define MAX_LOG_BUF 65536
 
@@ -209,7 +210,7 @@ void Log::flush()
     m_queue_mutex_holder = 0;
   }
 
-  _flush(m_flush, true, false);
+  _flush(m_flush, false);
   m_flush_mutex_holder = 0;
 }
 
@@ -235,14 +236,15 @@ void Log::_flush_logbuf()
   }
 }
 
-void Log::_flush(EntryVector& t, bool requeue, bool crash)
+void Log::_flush(EntryVector& t, bool crash)
 {
   long len = 0;
+  if (t.empty()) {
+    assert(m_log_buf.empty());
+    return;
+  }
   if (crash) {
     len = t.size();
-  }
-  if (!requeue && t.empty()) {
-    return;
   }
   for (auto& e : t) {
     auto prio = e.m_prio;
@@ -302,9 +304,7 @@ void Log::_flush(EntryVector& t, bool requeue, bool crash)
       m_graylog->log_entry(e);
     }
 
-    if (requeue) {
-      m_recent.push_back(std::move(e));
-    }
+    m_recent.push_back(std::move(e));
   }
   t.clear();
 
@@ -345,15 +345,18 @@ void Log::dump_recent()
     m_queue_mutex_holder = 0;
   }
 
-  _flush(m_flush, true, false);
-  _flush_logbuf();
+  _flush(m_flush, false);
 
   _log_message("--- begin dump of recent events ---", true);
+  std::set<pthread_t> recent_pthread_ids;
   {
     EntryVector t;
     t.insert(t.end(), std::make_move_iterator(m_recent.begin()), std::make_move_iterator(m_recent.end()));
     m_recent.clear();
-    _flush(t, true, true);
+    for (const auto& e : t) {
+      recent_pthread_ids.emplace(e.m_thread);
+    }
+    _flush(t, true);
   }
 
   char buf[4096];
@@ -362,11 +365,20 @@ void Log::dump_recent()
     snprintf(buf, sizeof(buf), "  %2d/%2d %s", p.log_level, p.gather_level, p.name);
     _log_message(buf, true);
   }
-
   sprintf(buf, "  %2d/%2d (syslog threshold)", m_syslog_log, m_syslog_crash);
   _log_message(buf, true);
   sprintf(buf, "  %2d/%2d (stderr threshold)", m_stderr_log, m_stderr_crash);
   _log_message(buf, true);
+
+  _log_message("--- pthread ID / name mapping for recent threads ---", true);
+  for (const auto pthread_id : recent_pthread_ids)
+  {
+    char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
+    ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
+    snprintf(buf, sizeof(buf), "  %lx / %s", pthread_id, pthread_name);
+    _log_message(buf, true);
+  }
+
   sprintf(buf, "  max_recent %9zu", m_max_recent);
   _log_message(buf, true);
   sprintf(buf, "  max_new    %9zu", m_max_new);
@@ -376,7 +388,7 @@ void Log::dump_recent()
 
   _log_message("--- end dump of recent events ---", true);
 
-  _flush_logbuf();
+  assert(m_log_buf.empty());
 
   m_flush_mutex_holder = 0;
 }

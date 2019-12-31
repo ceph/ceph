@@ -24,7 +24,7 @@
 
 class MOSDRepOp : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -54,8 +54,7 @@ public:
 
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
-  eversion_t pg_roll_forward_to;   // primary->replica: trim rollback
-                                    // info to here
+  eversion_t min_last_complete_ondisk; // lower bound on committed version
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
   hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
@@ -110,7 +109,15 @@ public:
 
     decode(from, p);
     decode(updated_hit_set_history, p);
-    decode(pg_roll_forward_to, p);
+
+    if (header.version >= 3) {
+      decode(min_last_complete_ondisk, p);
+    } else {
+      /* This field used to mean pg_roll_foward_to, but ReplicatedBackend
+       * simply assumes that we're rolling foward to version. */
+      eversion_t pg_roll_forward_to;
+      decode(pg_roll_forward_to, p);
+    }
     final_decode_needed = false;
   }
 
@@ -137,7 +144,7 @@ public:
     encode(discard_temp_oid, payload);
     encode(from, payload);
     encode(updated_hit_set_history, payload);
-    encode(pg_roll_forward_to, payload);
+    encode(min_last_complete_ondisk, payload);
   }
 
   MOSDRepOp()
@@ -159,6 +166,11 @@ public:
       version(v) {
     set_tid(rtid);
   }
+
+  void set_rollback_to(const eversion_t &rollback_to) {
+    header.version = 2;
+    min_last_complete_ondisk = rollback_to;
+  }
 private:
   ~MOSDRepOp() override {}
 
@@ -171,6 +183,11 @@ public:
       out << " " << poid << " v " << version;
       if (updated_hit_set_history)
         out << ", has_updated_hit_set_history";
+      if (header.version < 3) {
+	out << ", rollback_to(legacy)=" << min_last_complete_ondisk;
+      } else {
+	out << ", mlcod=" << min_last_complete_ondisk;
+      }
     }
     out << ")";
   }

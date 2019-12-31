@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 import json
 
-from .helper import DashboardTestCase
+from .helper import DashboardTestCase, JList, JObj
 from .test_orchestrator import test_data
 
 
@@ -73,3 +73,19 @@ class HostControllerTest(DashboardTestCase):
         test_hostnames = {inventory_node['name'] for inventory_node in test_data['inventory']}
         resp_hostnames = {host['hostname'] for host in data}
         self.assertEqual(len(test_hostnames.intersection(resp_hostnames)), 0)
+
+    def test_host_devices(self):
+        hosts = self._get('{}'.format(self.URL_HOST))
+        hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
+        assert hosts[0]
+        data = self._get('{}/devices'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
+        self.assertStatus(200)
+        self.assertSchema(data, JList(JObj({
+            'daemons': JList(str),
+            'devid': str,
+            'location': JList(JObj({
+                'host': str,
+                'dev': str,
+                'path': str
+            }))
+        })))

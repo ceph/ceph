@@ -218,6 +218,7 @@ write_image ${CLUSTER1} ${POOL} ${force_promote_image} 100
 write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
 
 testlog "TEST: cloned images"
+testlog " - default"
 parent_image=test_parent
 parent_snap=snap
 create_image ${CLUSTER2} ${PARENT_POOL} ${parent_image}
@@ -240,6 +241,7 @@ wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${clone_image}
 
+testlog " - clone v1"
 clone_image ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
 
 clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} \
@@ -248,6 +250,7 @@ test $(get_clone_format ${CLUSTER2} ${POOL} ${clone_image}_v1) = 1
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}_v1
 test $(get_clone_format ${CLUSTER1} ${POOL} ${clone_image}_v1) = 1
 
+testlog " - clone v2"
 parent_snap=snap_v2
 create_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
 clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} \
@@ -255,6 +258,25 @@ clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} \
 test $(get_clone_format ${CLUSTER2} ${POOL} ${clone_image}_v2) = 2
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}_v2
 test $(get_clone_format ${CLUSTER1} ${POOL} ${clone_image}_v2) = 2
+
+remove_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+test_snap_moved_to_trash ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+wait_for_snap_moved_to_trash ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
+remove_image_retry ${CLUSTER2} ${POOL} ${clone_image}_v2
+wait_for_image_present ${CLUSTER1} ${POOL} ${clone_image}_v2 'deleted'
+test_snap_removed_from_trash ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+wait_for_snap_removed_from_trash ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
+
+testlog " - clone v2 non-primary"
+create_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+wait_for_snap_present ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
+clone_image ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} \
+            ${clone_image}_v2 --rbd-default-clone-format 2
+remove_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+test_snap_removed_from_trash ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+wait_for_snap_moved_to_trash ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
+remove_image_retry ${CLUSTER1} ${POOL} ${clone_image}_v2
+wait_for_snap_removed_from_trash ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
 
 testlog "TEST: data pool"
 dp_image=test_data_pool

@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 import re
+import logging
 import ipaddress
 from distutils.util import strtobool
 import xml.etree.ElementTree as ET  # noqa: N814
@@ -10,12 +11,15 @@ from ..awsauth import S3Auth
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
 from ..tools import build_url, dict_contains_path, json_str_to_object, partial_dict
-from .. import mgr, logger
+from .. import mgr
 
 try:
     from typing import Any, Dict, List  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
+
+
+logger = logging.getLogger('rgw_client')
 
 
 class NoCredentialsException(RequestException):

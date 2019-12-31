@@ -11,6 +11,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
 #include "crimson/osd/osdmap_service.h"
+#include "crimson/osd/object_context.h"
 
 namespace crimson::net {
   class Messenger;
@@ -158,6 +159,8 @@ public:
   }
   HeartbeatStampsRef get_hb_stamps(int peer);
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
+
+  crimson::osd::ObjectContextRegistry obc_registry;
 };
 
 }

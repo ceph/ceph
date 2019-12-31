@@ -132,7 +132,7 @@ public:
     EXPECT_EQ(0, m_local_ioctx.create(RBD_MIRRORING, false));
 
     m_local_status_updater = rbd::mirror::MirrorStatusUpdater<>::create(
-      m_local_ioctx, m_threads.get(), "");
+      m_local_ioctx, m_threads.get(), "", "");
     C_SaferCond status_updater_ctx;
     m_local_status_updater->init(&status_updater_ctx);
     EXPECT_EQ(0, status_updater_ctx.wait());
@@ -464,7 +464,8 @@ TEST_F(TestImageReplayer, BootstrapMirrorDisabling)
                                                RBD_MIRROR_MODE_IMAGE));
   librbd::ImageCtx *ictx;
   open_remote_image(&ictx);
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(ictx, false));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
+              ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
   cls::rbd::MirrorImage mirror_image;
   ASSERT_EQ(0, librbd::cls_client::mirror_image_get(&m_remote_ioctx, ictx->id,
                                                     &mirror_image));
@@ -668,9 +669,9 @@ TEST_F(TestImageReplayer, Resync)
   flush(ictx);
   close_image(ictx);
 
-  C_SaferCond ctx;
-  m_replayer->resync_image(&ctx);
-  ASSERT_EQ(0, ctx.wait());
+  open_local_image(&ictx);
+  librbd::Journal<>::request_resync(ictx);
+  close_image(ictx);
 
   wait_for_stopped();
 

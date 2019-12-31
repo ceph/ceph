@@ -210,10 +210,7 @@ class HealthTest(DashboardTestCase):
                 'active_mgr_features': int,
                 'active_gid': int,
                 'active_name': str,
-                'always_on_modules': JObj(
-                    {},
-                    allow_unknown=True, unknown_schema=JList(str)
-                ),
+                'always_on_modules': JObj({}, allow_unknown=True),
                 'available': bool,
                 'available_modules': JList(module_info_schema),
                 'epoch': int,

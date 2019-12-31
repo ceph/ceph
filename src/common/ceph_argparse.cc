@@ -504,6 +504,9 @@ CephInitParameters ceph_argparse_early_args
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
       *conf_file_list = val;
     }
+    else if (ceph_argparse_flag(args, i, "--no-config-file", (char*)NULL)) {
+      iparams.no_config_file = true;
+    }
     else if (ceph_argparse_witharg(args, i, &val, "--cluster", (char*)NULL)) {
       *cluster = val;
     }

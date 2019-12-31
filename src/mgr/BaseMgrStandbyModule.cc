@@ -57,7 +57,7 @@ BaseMgrStandbyModule_init(BaseMgrStandbyModule *self, PyObject *args, PyObject *
 static PyObject*
 ceph_get_mgr_id(BaseMgrStandbyModule *self, PyObject *args)
 {
-  return PyString_FromString(g_conf()->name.get_id().c_str());
+  return PyUnicode_FromString(g_conf()->name.get_id().c_str());
 }
 
 static PyObject*
@@ -110,7 +110,7 @@ ceph_option_get(BaseMgrStandbyModule *self, PyObject *args)
   int r = g_conf().get_val(string(what), &value);
   if (r >= 0) {
     dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
-    return PyString_FromString(value.c_str());
+    return PyUnicode_FromString(value.c_str());
   } else {
     dout(4) << "ceph_option_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
@@ -136,7 +136,7 @@ ceph_store_get(BaseMgrStandbyModule *self, PyObject *args)
 
   if (found) {
     dout(10) << "ceph_store_get " << what << " found: " << value.c_str() << dendl;
-    return PyString_FromString(value.c_str());
+    return PyUnicode_FromString(value.c_str());
   } else {
     dout(4) << "ceph_store_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
@@ -146,21 +146,20 @@ ceph_store_get(BaseMgrStandbyModule *self, PyObject *args)
 static PyObject*
 ceph_get_active_uri(BaseMgrStandbyModule *self, PyObject *args)
 {
-  return PyString_FromString(self->this_module->get_active_uri().c_str());
+  return PyUnicode_FromString(self->this_module->get_active_uri().c_str());
 }
 
 static PyObject*
 ceph_log(BaseMgrStandbyModule *self, PyObject *args)
 {
-  int level = 0;
   char *record = nullptr;
-  if (!PyArg_ParseTuple(args, "is:log", &level, &record)) {
+  if (!PyArg_ParseTuple(args, "s:log", &record)) {
     return nullptr;
   }
 
   ceph_assert(self->this_module);
 
-  self->this_module->log(level, record);
+  self->this_module->log(record);
 
   Py_RETURN_NONE;
 }

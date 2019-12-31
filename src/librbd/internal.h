@@ -95,15 +95,6 @@ namespace librbd {
   int lock_break(ImageCtx *ictx, rbd_lock_mode_t lock_mode,
                  const std::string &lock_owner);
 
-  int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
-  int snap_exists(ImageCtx *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
-		  const char *snap_name, bool *exists);
-  int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
-  int snap_set_limit(ImageCtx *ictx, uint64_t limit);
-  int snap_get_timestamp(ImageCtx *ictx, uint64_t snap_id, struct timespec *timestamp);
-  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx);
-  int snap_is_protected(ImageCtx *ictx, const char *snap_name,
-			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size);
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx, size_t sparse_size);

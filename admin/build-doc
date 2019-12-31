@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -e
 
 cd "$(dirname "$0")"
 cd ..
@@ -58,7 +58,7 @@ cd build-doc
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --python=python3 --system-site-packages $vdir
+    virtualenv --python=python3 $vdir
 fi
 $vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
 
@@ -159,3 +159,5 @@ mkdir $JAVA_OUTDIR
 
 # Copy JavaDocs to target directory
 cp -a $JAVADIR/doc/* $JAVA_OUTDIR/
+
+echo "SUCCESS"

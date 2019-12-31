@@ -1,0 +1,60 @@
+<div class="row">
+  <div class="col-sm-4">
+    <tree [tree]="tree"
+          (nodeSelected)="onNodeSelected($event)">
+      <ng-template let-node>
+        <span class="node-name"
+              [innerHTML]="node.value"></span>
+      </ng-template>
+    </tree>
+  </div>
+  <!-- Selection details -->
+  <div class="col-sm-8 metadata"
+       *ngIf="selectedDir">
+    <div class="card">
+      <div class="card-header">
+        {{ selectedDir.path }}
+      </div>
+      <div class="card-body">
+        <legend i18n>Quotas</legend>
+        <cd-table [data]="settings"
+                  [columns]="quota.columns"
+                  [limit]="0"
+                  [footer]="false"
+                  selectionType="single"
+                  (updateSelection)="quota.updateSelection($event)"
+                  [onlyActionHeader]="true"
+                  identifier="quotaKey"
+                  [forceIdentifier]="true"
+                  [toolHeader]="false">
+          <cd-table-actions class="only-table-actions"
+                            [permission]="permission"
+                            [selection]="quota.selection"
+                            [tableActions]="quota.tableActions">
+          </cd-table-actions>
+        </cd-table>
+
+        <legend i18n>Snapshots</legend>
+        <cd-table [data]="selectedDir.snapshots"
+                  [columns]="snapshot.columns"
+                  identifier="name"
+                  forceIdentifier="true"
+                  selectionType="multiClick"
+                  (updateSelection)="snapshot.updateSelection($event)">
+          <cd-table-actions class="table-actions"
+                            [permission]="permission"
+                            [selection]="snapshot.selection"
+                            [tableActions]="snapshot.tableActions">
+          </cd-table-actions>
+        </cd-table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #origin
+             let-row="row"
+             let-value="value">
+  <span class="quota-origin"
+        (click)="selectOrigin(value)">{{value}}</span>
+</ng-template>

@@ -1,4 +1,10 @@
-<tabset *ngIf="selection.hasSingleSelection">
+<tabset *ngIf="selection.hasSingleSelection"
+        id="tabset-osd-details">
+  <tab heading="Devices"
+       i18n-heading>
+    <cd-device-list *ngIf="osd.loaded && osd.id !== null"
+                    [osdId]="osd.id"></cd-device-list>
+  </tab>
 
   <tab heading="Attributes (OSD map)"
        i18n-heading>
@@ -14,13 +20,14 @@
                         [data]="osd.details.osd_metadata">
     </cd-table-key-value>
     <ng-template #noMetaData>
-      <cd-alert-panel type="warning" i18n>Metadata not available</cd-alert-panel>
+      <cd-alert-panel type="warning"
+                      i18n>Metadata not available</cd-alert-panel>
     </ng-template>
   </tab>
 
   <tab heading="Device health"
        i18n-heading>
-    <cd-osd-smart-list [osdId]="osd.id"></cd-osd-smart-list>
+    <cd-smart-list [osdId]="osd.id"></cd-smart-list>
   </tab>
 
   <tab heading="Performance counter"

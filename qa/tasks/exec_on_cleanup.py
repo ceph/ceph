@@ -5,7 +5,6 @@ import logging
 import contextlib
 
 from teuthology import misc as teuthology
-from teuthology import contextutil
 
 log = logging.getLogger(__name__)
 

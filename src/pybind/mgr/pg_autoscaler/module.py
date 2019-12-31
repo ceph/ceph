@@ -24,7 +24,7 @@ Some terminology is made up for the purposes of this module:
 
 INTERVAL = 5
 
-PG_NUM_MIN = 4  # unless specified on a per-pool basis
+PG_NUM_MIN = 16  # unless specified on a per-pool basis
 
 def nearest_power_of_two(n):
     v = int(n)
@@ -115,7 +115,7 @@ class PgAutoscaler(MgrModule):
         ps, root_map, pool_root = self._get_pool_status(osdmap, pools)
 
         if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
-            return 0, json.dumps(ps, indent=2), ''
+            return 0, json.dumps(ps, indent=4, sort_keys=True), ''
         else:
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',
@@ -174,6 +174,10 @@ class PgAutoscaler(MgrModule):
             self._maybe_adjust()
             self._update_progress_events()
             self._shutdown.wait(timeout=int(self.sleep_interval))
+
+    def shutdown(self):
+        self.log.info('Stopping pg_autoscaler')
+        self._shutdown.set()
 
     def get_subtree_resource_status(self, osdmap, crush):
         """
@@ -487,7 +491,7 @@ class PgAutoscaler(MgrModule):
         too_much_target_ratio = []
         for root_id, total in iteritems(total_ratio):
             total_target = total_target_ratio[root_id]
-            if total > 1.0:
+            if total_target > 0 and total > 1.0:
                 too_much_target_ratio.append(
                     'Pools %s overcommit available storage by %.03fx due to '
                     'target_size_ratio %.03f on pools %s' % (
@@ -515,7 +519,7 @@ class PgAutoscaler(MgrModule):
         too_much_target_bytes = []
         for root_id, total in iteritems(total_bytes):
             total_target = total_target_bytes[root_id]
-            if total > root_map[root_id].capacity:
+            if total_target > 0 and total > root_map[root_id].capacity:
                 too_much_target_bytes.append(
                     'Pools %s overcommit available storage by %.03fx due to '
                     'target_size_bytes %s on pools %s' % (

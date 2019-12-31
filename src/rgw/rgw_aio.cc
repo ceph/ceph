@@ -31,7 +31,7 @@ struct state {
 
   state(Aio* aio, AioResult& r)
     : aio(aio),
-      c(librados::Rados::aio_create_completion(&r, nullptr, &cb)) {}
+      c(librados::Rados::aio_create_completion(&r, &cb)) {}
 };
 
 void cb(librados::completion_t, void* arg) {

@@ -2,7 +2,7 @@ import { PoolPageHelper } from './pools.po';
 
 describe('Pools page', () => {
   let pools: PoolPageHelper;
-  const poolName = 'pool_e2e_pool_test';
+  const poolName = 'pool_e2e_pool/test';
 
   beforeAll(async () => {
     pools = new PoolPageHelper();

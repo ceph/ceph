@@ -24,10 +24,10 @@ function assert_locked() {
 
     local actual
     actual="$(rados -p rbd --format=json lock info rbd_header.$IMAGE_ID rbd_lock |
-        python -m json.tool)"
+        python3 -m json.tool)"
 
     local expected
-    expected="$(cat <<EOF | python -m json.tool
+    expected="$(cat <<EOF | python3 -m json.tool
 {
     "lockers": [
         {
@@ -53,13 +53,22 @@ function assert_unlocked() {
         grep '"lockers":\[\]'
 }
 
+function blacklist_add() {
+    local dev_id="${1#/dev/rbd}"
+
+    local client_addr
+    client_addr="$(< $SYSFS_DIR/$dev_id/client_addr)"
+
+    ceph osd blacklist add $client_addr
+}
+
 SYSFS_DIR="/sys/bus/rbd/devices"
 IMAGE_NAME="exclusive-option-test"
 
 rbd create --size 1 --image-feature '' $IMAGE_NAME
 
 IMAGE_ID="$(rbd info --format=json $IMAGE_NAME |
-    python -c "import sys, json; print json.load(sys.stdin)['block_name_prefix'].split('.')[1]")"
+    python3 -c "import sys, json; print(json.load(sys.stdin)['block_name_prefix'].split('.')[1])")"
 
 DEV=$(sudo rbd map $IMAGE_NAME)
 assert_unlocked
@@ -69,11 +78,27 @@ assert_unlocked
 expect_false sudo rbd map -o exclusive $IMAGE_NAME
 assert_unlocked
 
+expect_false sudo rbd map -o lock_on_read $IMAGE_NAME
+assert_unlocked
+
 rbd feature enable $IMAGE_NAME exclusive-lock
 rbd snap create $IMAGE_NAME@snap
 
 DEV=$(sudo rbd map $IMAGE_NAME)
+assert_locked $DEV
+[[ $(blockdev --getro $DEV) -eq 0 ]]
+sudo rbd unmap $DEV
 assert_unlocked
+
+DEV=$(sudo rbd map $IMAGE_NAME@snap)
+assert_unlocked
+[[ $(blockdev --getro $DEV) -eq 1 ]]
+sudo rbd unmap $DEV
+assert_unlocked
+
+DEV=$(sudo rbd map -o ro $IMAGE_NAME)
+assert_unlocked
+[[ $(blockdev --getro $DEV) -eq 1 ]]
 sudo rbd unmap $DEV
 assert_unlocked
 
@@ -84,32 +109,74 @@ sudo rbd unmap $DEV
 assert_unlocked
 
 DEV=$(sudo rbd map -o exclusive $IMAGE_NAME@snap)
-assert_locked $DEV
+assert_unlocked
 [[ $(blockdev --getro $DEV) -eq 1 ]]
 sudo rbd unmap $DEV
 assert_unlocked
 
 DEV=$(sudo rbd map -o exclusive,ro $IMAGE_NAME)
-assert_locked $DEV
+assert_unlocked
 [[ $(blockdev --getro $DEV) -eq 1 ]]
 sudo rbd unmap $DEV
 assert_unlocked
 
 # alternate syntax
 DEV=$(sudo rbd map --exclusive --read-only $IMAGE_NAME)
-assert_locked $DEV
+assert_unlocked
 [[ $(blockdev --getro $DEV) -eq 1 ]]
 sudo rbd unmap $DEV
 assert_unlocked
 
 DEV=$(sudo rbd map $IMAGE_NAME)
-assert_unlocked
+assert_locked $DEV
+OTHER_DEV=$(sudo rbd map -o noshare $IMAGE_NAME)
+assert_locked $OTHER_DEV
 dd if=/dev/urandom of=$DEV bs=4k count=10 oflag=direct
 assert_locked $DEV
-OTHER_DEV=$(sudo rbd map -o noshare,exclusive $IMAGE_NAME)
+dd if=/dev/urandom of=$OTHER_DEV bs=4k count=10 oflag=direct
 assert_locked $OTHER_DEV
 sudo rbd unmap $DEV
 sudo rbd unmap $OTHER_DEV
+assert_unlocked
+
+DEV=$(sudo rbd map $IMAGE_NAME)
+assert_locked $DEV
+OTHER_DEV=$(sudo rbd map -o noshare,exclusive $IMAGE_NAME)
+assert_locked $OTHER_DEV
+dd if=$DEV of=/dev/null bs=4k count=10 iflag=direct
+expect_false dd if=/dev/urandom of=$DEV bs=4k count=10 oflag=direct
+assert_locked $OTHER_DEV
+sudo rbd unmap $OTHER_DEV
+assert_unlocked
+dd if=$DEV of=/dev/null bs=4k count=10 iflag=direct
+assert_unlocked
+dd if=/dev/urandom of=$DEV bs=4k count=10 oflag=direct
+assert_locked $DEV
+sudo rbd unmap $DEV
+assert_unlocked
+
+DEV=$(sudo rbd map -o lock_on_read $IMAGE_NAME)
+assert_locked $DEV
+OTHER_DEV=$(sudo rbd map -o noshare,exclusive $IMAGE_NAME)
+assert_locked $OTHER_DEV
+expect_false dd if=$DEV of=/dev/null bs=4k count=10 iflag=direct
+expect_false dd if=/dev/urandom of=$DEV bs=4k count=10 oflag=direct
+sudo udevadm settle
+assert_locked $OTHER_DEV
+sudo rbd unmap $OTHER_DEV
+assert_unlocked
+dd if=$DEV of=/dev/null bs=4k count=10 iflag=direct
+assert_locked $DEV
+dd if=/dev/urandom of=$DEV bs=4k count=10 oflag=direct
+assert_locked $DEV
+sudo rbd unmap $DEV
+assert_unlocked
+
+DEV=$(sudo rbd map -o exclusive $IMAGE_NAME)
+assert_locked $DEV
+expect_false sudo rbd map -o noshare $IMAGE_NAME
+assert_locked $DEV
+sudo rbd unmap $DEV
 assert_unlocked
 
 DEV=$(sudo rbd map -o exclusive $IMAGE_NAME)
@@ -119,44 +186,31 @@ assert_locked $DEV
 sudo rbd unmap $DEV
 assert_unlocked
 
+DEV=$(sudo rbd map $IMAGE_NAME)
+assert_locked $DEV
+rbd resize --size 1G $IMAGE_NAME
+assert_unlocked
+sudo rbd unmap $DEV
+assert_unlocked
+
 DEV=$(sudo rbd map -o exclusive $IMAGE_NAME)
 assert_locked $DEV
-OTHER_DEV=$(sudo rbd map -o noshare $IMAGE_NAME)
-dd if=/dev/urandom of=$OTHER_DEV bs=4k count=10 oflag=direct &
-PID=$!
-sleep 20
+expect_false rbd resize --size 2G $IMAGE_NAME
 assert_locked $DEV
-[[ "$(ps -o stat= $PID)" =~ ^D ]]
 sudo rbd unmap $DEV
+assert_unlocked
+
+DEV=$(sudo rbd map $IMAGE_NAME)
+assert_locked $DEV
+dd if=/dev/urandom of=$DEV bs=4k count=10 oflag=direct
+{ sleep 10; blacklist_add $DEV; } &
+PID=$!
+expect_false dd if=/dev/urandom of=$DEV bs=4k count=200000 oflag=direct
 wait $PID
+# break lock
+OTHER_DEV=$(sudo rbd map -o noshare $IMAGE_NAME)
 assert_locked $OTHER_DEV
-sudo rbd unmap $OTHER_DEV
-assert_unlocked
-
-DEV=$(sudo rbd map -o exclusive $IMAGE_NAME)
-assert_locked $DEV
-OTHER_DEV=$(sudo rbd map -o noshare,lock_timeout=60 $IMAGE_NAME)
-dd if=/dev/urandom of=$OTHER_DEV bs=4k count=10 oflag=direct &
-PID=$!
-sleep 20
-assert_locked $DEV
-[[ "$(ps -o stat= $PID)" =~ ^D ]]
-expect_false wait $PID
-assert_locked $DEV
 sudo rbd unmap $DEV
-sudo rbd unmap $OTHER_DEV
-assert_unlocked
-
-DEV=$(sudo rbd map -o exclusive $IMAGE_NAME)
-assert_locked $DEV
-sudo rbd map -o noshare,lock_on_read $IMAGE_NAME &
-SUDO_PID=$!
-sleep 20
-assert_locked $DEV
-PID="$(ps -o pid= --ppid $SUDO_PID)"
-[[ "$(ps -o stat= $PID)" =~ ^D ]]
-sudo rbd unmap $DEV
-wait $SUDO_PID
 assert_locked $OTHER_DEV
 sudo rbd unmap $OTHER_DEV
 assert_unlocked

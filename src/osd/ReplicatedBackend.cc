@@ -257,14 +257,14 @@ int ReplicatedBackend::objects_read_sync(
 
 int ReplicatedBackend::objects_readv_sync(
   const hobject_t &hoid,
-  map<uint64_t, uint64_t>& m,
+  map<uint64_t, uint64_t>&& m,
   uint32_t op_flags,
   bufferlist *bl)
 {
-  interval_set<uint64_t> im(m);
+  interval_set<uint64_t> im(std::move(m));
   auto r = store->readv(ch, ghobject_t(hoid), im, *bl, op_flags);
   if (r >= 0) {
-    im.move_into(m);
+    m = std::move(im).detach();
   }
   return r;
 }
@@ -420,7 +420,8 @@ void generate_transaction(
 	      goid,
 	      extent.get_off(),
 	      extent.get_len(),
-	      op.buffer);
+	      op.buffer,
+	      op.fadvise_flags);
 	  },
 	  [&](const BufferUpdate::Zero &op) {
 	    t->zero(
@@ -449,7 +450,7 @@ void ReplicatedBackend::submit_transaction(
   const eversion_t &at_version,
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
-  const eversion_t &roll_forward_to,
+  const eversion_t &min_last_complete_ondisk,
   const vector<pg_log_entry_t> &_log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
@@ -497,7 +498,7 @@ void ReplicatedBackend::submit_transaction(
     tid,
     reqid,
     trim_to,
-    at_version,
+    min_last_complete_ondisk,
     added.size() ? *(added.begin()) : hobject_t(),
     removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
@@ -513,6 +514,7 @@ void ReplicatedBackend::submit_transaction(
     hset_history,
     trim_to,
     at_version,
+    min_last_complete_ondisk,
     true,
     op_t);
   
@@ -919,7 +921,7 @@ Message * ReplicatedBackend::generate_subop(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t pg_roll_forward_to,
+  eversion_t min_last_complete_ondisk,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const bufferlist &log_entries,
@@ -955,7 +957,14 @@ Message * ReplicatedBackend::generate_subop(
     wr->pg_stats = get_info().stats;
 
   wr->pg_trim_to = pg_trim_to;
-  wr->pg_roll_forward_to = pg_roll_forward_to;
+
+  if (HAVE_FEATURE(parent->min_peer_features(), OSD_REPOP_MLCOD)) {
+    wr->min_last_complete_ondisk = min_last_complete_ondisk;
+  } else {
+    /* Some replicas need this field to be at_version.  New replicas
+     * will ignore it */
+    wr->set_rollback_to(at_version);
+  }
 
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
@@ -969,7 +978,7 @@ void ReplicatedBackend::issue_op(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t pg_roll_forward_to,
+  eversion_t min_last_complete_ondisk,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const vector<pg_log_entry_t> &log_entries,
@@ -1002,7 +1011,7 @@ void ReplicatedBackend::issue_op(
 	  tid,
 	  reqid,
 	  pg_trim_to,
-	  pg_roll_forward_to,
+	  min_last_complete_ondisk,
 	  new_temp_oid,
 	  discard_temp_oid,
 	  logs,
@@ -1102,7 +1111,8 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     log,
     m->updated_hit_set_history,
     m->pg_trim_to,
-    m->pg_roll_forward_to,
+    m->version, /* Replicated PGs don't have rollback info */
+    m->min_last_complete_ondisk,
     update_snaps,
     rm->localt,
     async);
@@ -1212,7 +1222,7 @@ void ReplicatedBackend::calc_head_subsets(
     return;
   }
 
-  if (cloning.num_intervals() > cct->_conf->osd_recover_clone_overlap_limit) {
+  if (cloning.num_intervals() > g_conf().get_val<uint64_t>("osd_recover_clone_overlap_limit")) {
     dout(10) << "skipping clone, too many holes" << dendl;
     get_parent()->release_locks(manager);
     clone_subsets.clear();
@@ -1302,7 +1312,7 @@ void ReplicatedBackend::calc_clone_subsets(
 	     << " overlap " << next << dendl;
   }
 
-  if (cloning.num_intervals() > cct->_conf->osd_recover_clone_overlap_limit) {
+  if (cloning.num_intervals() > g_conf().get_val<uint64_t>("osd_recover_clone_overlap_limit")) {
     dout(10) << "skipping clone, too many holes" << dendl;
     get_parent()->release_locks(manager);
     clone_subsets.clear();
@@ -2080,7 +2090,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       int r = store->fiemap(ch, ghobject_t(recovery_info.soid), 0,
                             copy_subset.range_end(), m);
       if (r >= 0)  {
-        interval_set<uint64_t> fiemap_included(m);
+        interval_set<uint64_t> fiemap_included(std::move(m));
         copy_subset.intersection_of(fiemap_included);
       } else {
         // intersection of copy_subset and empty interval_set would be empty anyway

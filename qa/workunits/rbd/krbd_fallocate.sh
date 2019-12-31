@@ -11,7 +11,7 @@ set -ex
 function py_blkdiscard() {
     local offset=$1
 
-    python <<EOF
+    python3 <<EOF
 import fcntl, struct
 BLKDISCARD = 0x1277
 with open('$DEV', 'w') as dev:
@@ -24,7 +24,7 @@ function py_fallocate() {
     local mode=$1
     local offset=$2
 
-    python <<EOF
+    python3 <<EOF
 import os, ctypes, ctypes.util
 FALLOC_FL_KEEP_SIZE = 0x01
 FALLOC_FL_PUNCH_HOLE = 0x02
@@ -82,13 +82,13 @@ IMAGE_NAME="fallocate-test"
 
 rbd create --size 200 $IMAGE_NAME
 
-IMAGE_SIZE=$(rbd info --format=json $IMAGE_NAME | python -c 'import sys, json; print json.load(sys.stdin)["size"]')
-OBJECT_SIZE=$(rbd info --format=json $IMAGE_NAME | python -c 'import sys, json; print json.load(sys.stdin)["object_size"]')
+IMAGE_SIZE=$(rbd info --format=json $IMAGE_NAME | python3 -c 'import sys, json; print(json.load(sys.stdin)["size"])')
+OBJECT_SIZE=$(rbd info --format=json $IMAGE_NAME | python3 -c 'import sys, json; print(json.load(sys.stdin)["object_size"])')
 NUM_OBJECTS=$((IMAGE_SIZE / OBJECT_SIZE))
 [[ $((IMAGE_SIZE % OBJECT_SIZE)) -eq 0 ]]
 
 IMAGE_ID="$(rbd info --format=json $IMAGE_NAME |
-    python -c "import sys, json; print json.load(sys.stdin)['block_name_prefix'].split('.')[1]")"
+    python3 -c "import sys, json; print(json.load(sys.stdin)['block_name_prefix'].split('.')[1])")"
 
 DEV=$(sudo rbd map $IMAGE_NAME)
 

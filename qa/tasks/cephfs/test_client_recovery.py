@@ -447,10 +447,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.wait_until_mounted()
 
     def test_dir_fsync(self):
-	self._test_fsync(True);
+        self._test_fsync(True);
 
     def test_create_fsync(self):
-	self._test_fsync(False);
+        self._test_fsync(False);
 
     def _test_fsync(self, dirfsync):
         """
@@ -591,7 +591,7 @@ class TestClientRecovery(CephFSTestCase):
         SESSION_AUTOCLOSE = 50
         time_at_beg = time.time()
         mount_a_gid = self.mount_a.get_global_id()
-        mount_a_pid = self.mount_a.client_pid
+        _ = self.mount_a.client_pid
         self.fs.set_var('session_timeout', SESSION_TIMEOUT)
         self.fs.set_var('session_autoclose', SESSION_AUTOCLOSE)
         self.assert_session_count(2, self.fs.mds_asok(['session', 'ls']))

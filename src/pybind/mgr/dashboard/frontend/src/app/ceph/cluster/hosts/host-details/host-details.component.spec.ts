@@ -1,18 +1,21 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
+
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
-
-import { RouterTestingModule } from '@angular/router/testing';
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { CoreModule } from '../../../../core/core.module';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryComponent } from '../../inventory/inventory.component';
-import { ServicesComponent } from '../../services/services.component';
+import { CephModule } from '../../../ceph.module';
+import { CephSharedModule } from '../../../shared/ceph-shared.module';
 import { HostDetailsComponent } from './host-details.component';
 
 describe('HostDetailsComponent', () => {
@@ -24,10 +27,15 @@ describe('HostDetailsComponent', () => {
       HttpClientTestingModule,
       TabsModule.forRoot(),
       BsDropdownModule.forRoot(),
+      NgBootstrapFormValidationModule.forRoot(),
       RouterTestingModule,
-      SharedModule
+      CephModule,
+      CoreModule,
+      CephSharedModule,
+      SharedModule,
+      ToastrModule.forRoot()
     ],
-    declarations: [HostDetailsComponent, InventoryComponent, ServicesComponent],
+    declarations: [],
     providers: [i18nProviders]
   });
 
@@ -41,9 +49,8 @@ describe('HostDetailsComponent', () => {
     });
     const orchService = TestBed.get(OrchestratorService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-    spyOn(orchService, 'inventoryList').and.returnValue(of([]));
+    spyOn(orchService, 'inventoryDeviceList').and.returnValue(of([]));
     spyOn(orchService, 'serviceList').and.returnValue(of([]));
-    fixture.detectChanges();
   });
 
   it('should create', () => {
@@ -52,27 +59,23 @@ describe('HostDetailsComponent', () => {
 
   describe('Host details tabset', () => {
     beforeEach(() => {
-      component.selection.selected = [
-        {
-          hostname: 'localhost'
-        }
-      ];
-      component.selection.update();
+      component.selection.selected = [{ hostname: 'localhost' }];
+      fixture.detectChanges();
     });
 
     it('should recognize a tabset child', () => {
-      fixture.detectChanges();
-      const tabsetChild: TabsetComponent = component.tabsetChild;
+      const tabsetChild = component.tabsetChild;
       expect(tabsetChild).toBeDefined();
     });
 
     it('should show tabs', () => {
-      fixture.detectChanges();
-      const tabs = component.tabsetChild.tabs;
-      expect(tabs.length).toBe(3);
-      expect(tabs[0].heading).toBe('Inventory');
-      expect(tabs[1].heading).toBe('Services');
-      expect(tabs[2].heading).toBe('Performance Details');
+      expect(component.tabsetChild.tabs.map((t) => t.heading)).toEqual([
+        'Devices',
+        'Device health',
+        'Inventory',
+        'Services',
+        'Performance Details'
+      ]);
     });
   });
 });

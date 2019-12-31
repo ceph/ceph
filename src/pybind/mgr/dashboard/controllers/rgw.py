@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
 import json
 
 import cherrypy
 
 from . import ApiController, BaseController, RESTController, Endpoint, \
     ReadPermission
-from .. import logger
 from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
 from ..tools import json_str_to_object
+
+
+logger = logging.getLogger('controllers.rgw')
 
 
 @ApiController('/rgw', Scope.RGW)

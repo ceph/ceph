@@ -4,6 +4,7 @@ import getpass
 import pytest
 from textwrap import dedent
 from ceph_volume.util import system
+from mock.mock import patch
 
 
 class TestMkdirP(object):
@@ -205,8 +206,9 @@ class TestWhich(object):
         assert system.which('exedir') == 'exedir'
 
     def test_executable_exists_as_file(self, monkeypatch):
-        monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
-        monkeypatch.setattr(system.os.path, 'exists', lambda x: True)
+        monkeypatch.setattr(system.os, 'getenv', lambda x, y: '')
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: x != 'ceph')
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: x != 'ceph')
         assert system.which('ceph') == '/usr/local/bin/ceph'
 
     def test_warnings_when_executable_isnt_matched(self, monkeypatch, capsys):
@@ -214,5 +216,64 @@ class TestWhich(object):
         monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
         system.which('exedir')
         cap = capsys.readouterr()
-        assert 'Absolute path not found for executable: exedir' in cap.err
-        assert 'Ensure $PATH environment variable contains common executable locations' in cap.err
+        assert 'Executable exedir not in PATH' in cap.err
+
+@pytest.fixture
+def stub_which(monkeypatch):
+    def apply(value='/bin/restorecon'):
+        monkeypatch.setattr(system, 'which', lambda x: value)
+    return apply
+
+
+# python2 has no FileNotFoundError
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = OSError
+
+
+class TestSetContext(object):
+
+    def setup(self):
+        try:
+            os.environ.pop('CEPH_VOLUME_SKIP_RESTORECON')
+        except KeyError:
+            pass
+
+    @pytest.mark.parametrize('value', ['1', 'True', 'true', 'TRUE', 'yes'])
+    def test_set_context_skips(self, stub_call, fake_run, value):
+        stub_call(('', '', 0))
+        os.environ['CEPH_VOLUME_SKIP_RESTORECON'] = value
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    @pytest.mark.parametrize('value', ['0', 'False', 'false', 'FALSE', 'no'])
+    def test_set_context_doesnt_skip_with_env(self, stub_call, stub_which, fake_run, value):
+        stub_call(('', '', 0))
+        stub_which()
+        os.environ['CEPH_VOLUME_SKIP_RESTORECON'] = value
+        system.set_context('/tmp/foo')
+        assert len(fake_run.calls)
+
+    def test_set_context_skips_on_executable(self, stub_call, stub_which, fake_run):
+        stub_call(('', '', 0))
+        stub_which('restorecon')
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    def test_set_context_no_skip_on_executable(self, stub_call, stub_which, fake_run):
+        stub_call(('', '', 0))
+        stub_which('/bin/restorecon')
+        system.set_context('/tmp/foo')
+        assert len(fake_run.calls)
+
+    @patch('ceph_volume.process.call')
+    def test_selinuxenabled_doesnt_exist(self, mocked_call, fake_run):
+        mocked_call.side_effect = FileNotFoundError()
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    def test_selinuxenabled_is_not_enabled(self, stub_call, fake_run):
+        stub_call(('', '', 1))
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []

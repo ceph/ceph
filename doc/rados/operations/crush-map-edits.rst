@@ -154,8 +154,9 @@ For example::
 	type 6 pod
 	type 7 room
 	type 8 datacenter
-	type 9 region
-	type 10 root
+	type 9 zone
+	type 10 region
+	type 11 root
 
 
 
@@ -223,7 +224,7 @@ result in bringing down numerous hosts/nodes and their OSDs.
 When declaring a bucket instance, you must specify its type, give it a unique
 name (string), assign it a unique ID expressed as a negative integer (optional),
 specify a weight relative to the total capacity/capability of its item(s),
-specify the bucket algorithm (usually ``straw``), and the hash (usually ``0``,
+specify the bucket algorithm (usually ``straw2``), and the hash (usually ``0``,
 reflecting hash algorithm ``rjenkins1``). A bucket may have one or more items.
 The items may consist of node buckets or leaves. Items may have a weight that
 reflects the relative weight of the item.
@@ -233,7 +234,7 @@ You may declare a node bucket with the following syntax::
 	[bucket-type] [bucket-name] {
 		id [a unique negative numeric ID]
 		weight [the relative capacity/capability of the item(s)]
-		alg [the bucket type: uniform | list | tree | straw ]
+		alg [the bucket type: uniform | list | tree | straw | straw2 ]
 		hash [the hash type: 0 by default]
 		item [item-name] weight [weight]
 	}
@@ -243,7 +244,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 	host node1 {
 		id -1
-		alg straw
+		alg straw2
 		hash 0
 		item osd.0 weight 1.00
 		item osd.1 weight 1.00
@@ -251,7 +252,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 	host node2 {
 		id -2
-		alg straw
+		alg straw2
 		hash 0
 		item osd.2 weight 1.00
 		item osd.3 weight 1.00
@@ -259,7 +260,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 	rack rack1 {
 		id -3
-		alg straw
+		alg straw2
 		hash 0
 		item node1 weight 2.00
 		item node2 weight 2.00
@@ -271,14 +272,14 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 .. topic:: Bucket Types
 
-   Ceph supports four bucket types, each representing a tradeoff between
+   Ceph supports five bucket types, each representing a tradeoff between
    performance and reorganization efficiency. If you are unsure of which bucket
-   type to use, we recommend using a ``straw`` bucket.  For a detailed
+   type to use, we recommend using a ``straw2`` bucket.  For a detailed
    discussion of bucket types, refer to
    `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
    and more specifically to **Section 3.4**. The bucket types are:
 
-	#. **Uniform**: Uniform buckets aggregate devices with **exactly** the same
+	#. **uniform**: Uniform buckets aggregate devices with **exactly** the same
 	   weight. For example, when firms commission or decommission hardware, they
 	   typically do so with many machines that have exactly the same physical
 	   configuration (e.g., bulk purchases). When storage devices have exactly
@@ -286,7 +287,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   CRUSH to map replicas into uniform buckets in constant time. With
 	   non-uniform weights, you should use another bucket algorithm.
 
-	#. **List**: List buckets aggregate their content as linked lists. Based on
+	#. **list**: List buckets aggregate their content as linked lists. Based on
 	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`P` algorithm,
 	   a list is a natural and intuitive choice for an **expanding cluster**:
 	   either an object is relocated to the newest device with some appropriate
@@ -296,13 +297,13 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   amount of unnecessary movement, making list buckets most suitable for
 	   circumstances in which they **never (or very rarely) shrink**.
 
-	#. **Tree**: Tree buckets use a binary search tree. They are more efficient
+	#. **tree**: Tree buckets use a binary search tree. They are more efficient
 	   than list buckets when a bucket contains a larger set of items. Based on
 	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`R` algorithm,
 	   tree buckets reduce the placement time to O(log :sub:`n`), making them
 	   suitable for managing much larger sets of devices or nested buckets.
 
-	#. **Straw**: List and Tree buckets use a divide and conquer strategy
+	#. **straw**: List and Tree buckets use a divide and conquer strategy
 	   in a way that either gives certain items precedence (e.g., those
 	   at the beginning of a list) or obviates the need to consider entire
 	   subtrees of items at all. That improves the performance of the replica
@@ -312,7 +313,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   fairly “compete” against each other for replica placement through a
 	   process analogous to a draw of straws.
 
-        #. **Straw2**: Straw2 buckets improve Straw to correctly avoid any data 
+        #. **straw2**: Straw2 buckets improve Straw to correctly avoid any data
            movement between items when neighbor weights change.
 
            For example the weight of item A including adding it anew or removing
@@ -577,7 +578,7 @@ There are three types of transformations possible:
      host node1 {
         id -2           # do not change unnecessarily
         # weight 109.152
-        alg straw
+        alg straw2
         hash 0  # rjenkins1
         item osd.0 weight 9.096
         item osd.1 weight 9.096
@@ -591,7 +592,7 @@ There are three types of transformations possible:
      host node1-ssd {
         id -10          # do not change unnecessarily
         # weight 2.000
-        alg straw
+        alg straw2
         hash 0  # rjenkins1
         item osd.80 weight 2.000
 	...
@@ -599,7 +600,7 @@ There are three types of transformations possible:
 
      root default {
         id -1           # do not change unnecessarily
-        alg straw
+        alg straw2
         hash 0  # rjenkins1
         item node1 weight 110.967
         ...
@@ -608,7 +609,7 @@ There are three types of transformations possible:
      root ssd {
         id -18          # do not change unnecessarily
         # weight 16.000
-        alg straw
+        alg straw2
         hash 0  # rjenkins1
         item node1-ssd weight 2.000
 	...

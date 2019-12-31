@@ -395,10 +395,16 @@ export class RgwUserFormComponent implements OnInit {
       const uid = userMatches[1];
       const args = {
         subuser: userMatches[2] ? userMatches[3] : '',
-        generate_key: key.generate_key ? 'true' : 'false',
-        access_key: key.access_key,
-        secret_key: key.secret_key
+        generate_key: key.generate_key ? 'true' : 'false'
       };
+      if (args['generate_key'] === 'false') {
+        if (!_.isNil(key.access_key)) {
+          args['access_key'] = key.access_key;
+        }
+        if (!_.isNil(key.secret_key)) {
+          args['secret_key'] = key.secret_key;
+        }
+      }
       this.submitObservables.push(this.rgwUserService.addS3Key(uid, args));
       // If the access and the secret key are auto-generated, then visualize
       // this to the user by displaying a notification instead of the key.

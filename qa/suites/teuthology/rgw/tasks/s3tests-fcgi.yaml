@@ -1,3 +1,5 @@
+# for now, s3-tests requires py2
+os_type: ubuntu
 # this runs s3tests against rgw, using mod_proxy_fcgi
 # the choice between uds or tcp with mod_proxy_fcgi depends on the distro
 roles:
@@ -12,7 +14,7 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
-      force-branch: master
+      force-branch: ceph-master
 overrides:
   ceph:
     fs: xfs

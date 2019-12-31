@@ -17,8 +17,9 @@ namespace cache {
  * Example passthrough client-side, image extent cache
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class PassthroughImageCache : public ImageCache {
+class PassthroughImageCache : public ImageCache<ImageCtxT> {
 public:
+  using typename ImageCache<ImageCtxT>::Extents;
   explicit PassthroughImageCache(ImageCtx &image_ctx);
 
   /// client AIO methods

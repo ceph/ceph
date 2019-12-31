@@ -160,7 +160,7 @@ RBD supports advanced features which can be specified via the command line when 
 :Description: Layering enables you to use cloning.
 :Internal value: 1
 :CLI value: layering
-:Added in: v0.70 (Emperor)
+:Added in: v0.52 (Bobtail)
 :KRBD support: since v3.10
 :Default: yes
 
@@ -169,8 +169,8 @@ RBD supports advanced features which can be specified via the command line when 
 :Description: Striping spreads data across multiple objects. Striping helps with parallelism for sequential read/write workloads.
 :Internal value: 2
 :CLI value: striping
-:Added in: v0.70 (Emperor)
-:KRBD support: since v3.10
+:Added in: v0.55 (Bobtail)
+:KRBD support: since v3.10 (default striping only, "fancy" striping added in v4.17)
 :Default: yes
 
 ``Exclusive locking``

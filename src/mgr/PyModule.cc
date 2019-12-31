@@ -54,7 +54,7 @@ std::string handle_pyerror()
           // returning only the exception string value
           PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
           std::stringstream ss;
-          ss << PyString_AsString(name_attr) << ": " << PyString_AsString(val);
+          ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
           Py_XDECREF(name_attr);
           return ss.str();
         }
@@ -67,7 +67,7 @@ std::string handle_pyerror()
           // returning only the exception string value
           PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
           std::stringstream ss;
-          ss << PyString_AsString(name_attr) << ": " << PyString_AsString(val);
+          ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
           Py_XDECREF(name_attr);
           return ss.str();
         }
@@ -87,7 +87,7 @@ std::string peek_pyerror()
   ceph_assert(ptype);
   ceph_assert(pvalue);
   PyObject *pvalue_str = PyObject_Str(pvalue);
-  std::string exc_msg = PyString_AsString(pvalue_str);
+  std::string exc_msg = PyUnicode_AsUTF8(pvalue_str);
   Py_DECREF(pvalue_str);
   PyErr_Restore(ptype, pvalue, ptraceback);
 
@@ -145,16 +145,6 @@ void PyModuleConfig::set_config(
 {
   const std::string global_key = PyModule::config_prefix
                                    + module_name + "/" + key;
-  {
-    std::lock_guard l(lock);
-
-    if (val) {
-      config[global_key] = *val;
-    } else {
-      config.erase(global_key);
-    }
-  }
-
   Command set_cmd;
   {
     std::ostringstream cmd_json;
@@ -162,23 +152,33 @@ void PyModuleConfig::set_config(
     jf.open_object_section("cmd");
     if (val) {
       jf.dump_string("prefix", "config set");
-      jf.dump_string("who", "mgr");
-      jf.dump_string("name", global_key);
       jf.dump_string("value", *val);
     } else {
       jf.dump_string("prefix", "config rm");
-      jf.dump_string("name", "mgr");
-      jf.dump_string("key", global_key);
     }
+    jf.dump_string("who", "mgr");
+    jf.dump_string("name", global_key);
     jf.close_section();
     jf.flush(cmd_json);
     set_cmd.run(monc, cmd_json.str());
   }
   set_cmd.wait();
 
-  if (set_cmd.r != 0) {
-    dout(0) << "`config set mgr" << global_key << " " << val << "` failed: "
-      << cpp_strerror(set_cmd.r) << dendl;
+  if (set_cmd.r == 0) {
+    std::lock_guard l(lock);
+    if (val) {
+      config[global_key] = *val;
+    } else {
+      config.erase(global_key);
+    }
+  } else {
+    if (val) {
+      dout(0) << "`config set mgr " << global_key << " " << val << "` failed: "
+        << cpp_strerror(set_cmd.r) << dendl;
+    } else {
+      dout(0) << "`config rm mgr " << global_key << "` failed: "
+        << cpp_strerror(set_cmd.r) << dendl;
+    }
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }
 }
@@ -202,7 +202,7 @@ std::string PyModule::get_site_packages()
       if (i != 0) {
         site_packages << ":";
       }
-      site_packages << PyString_AsString(PyList_GetItem(site_packages_list, i));
+      site_packages << PyUnicode_AsUTF8(PyList_GetItem(site_packages_list, i));
     }
 
     Py_DECREF(site_packages_list);
@@ -231,13 +231,13 @@ std::string PyModule::get_site_packages()
     auto n = PyList_Size(sys_path);
     bool first = true;
     for (Py_ssize_t i = 0; i < n; ++i) {
-      dout(1) << "  " << PyString_AsString(PyList_GetItem(sys_path, i)) << dendl;
+      dout(1) << "  " << PyUnicode_AsUTF8(PyList_GetItem(sys_path, i)) << dendl;
       if (first) {
         first = false;
       } else {
         site_packages << ":";
       }
-      site_packages << PyString_AsString(PyList_GetItem(sys_path, i));
+      site_packages << PyUnicode_AsUTF8(PyList_GetItem(sys_path, i));
     }
 
     Py_DECREF(sys_path);
@@ -401,7 +401,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       if (PyTuple_Check(pCanRunTuple) && PyTuple_Size(pCanRunTuple) == 2) {
         PyObject *pCanRun = PyTuple_GetItem(pCanRunTuple, 0);
         PyObject *can_run_str = PyTuple_GetItem(pCanRunTuple, 1);
-        if (!PyBool_Check(pCanRun) || !PyString_Check(can_run_str)) {
+        if (!PyBool_Check(pCanRun) || !PyUnicode_Check(can_run_str)) {
           derr << "Module " << get_name()
                << " returned wrong type in can_run" << dendl;
           error_string = "wrong type returned from can_run";
@@ -409,7 +409,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
         } else {
           can_run = (pCanRun == Py_True);
           if (!can_run) {
-            error_string = PyString_AsString(can_run_str);
+            error_string = PyUnicode_AsUTF8(can_run_str);
             dout(4) << "Module " << get_name()
                     << " reported that it cannot run: "
                     << error_string << dendl;
@@ -476,7 +476,8 @@ int PyModule::walk_dict_list(
 int PyModule::load_commands()
 {
   PyObject *pRegCmd = PyObject_CallMethod(pClass,
-  const_cast<char*>("_register_commands"), const_cast<char*>("()"));
+      const_cast<char*>("_register_commands"), const_cast<char*>("(s)"),
+      module_name.c_str());
   if (pRegCmd != nullptr) {
     Py_DECREF(pRegCmd);
   } else {
@@ -490,22 +491,22 @@ int PyModule::load_commands()
 
     PyObject *pCmd = PyDict_GetItemString(pCommand, "cmd");
     ceph_assert(pCmd != nullptr);
-    command.cmdstring = PyString_AsString(pCmd);
+    command.cmdstring = PyUnicode_AsUTF8(pCmd);
 
     dout(20) << "loaded command " << command.cmdstring << dendl;
 
     PyObject *pDesc = PyDict_GetItemString(pCommand, "desc");
     ceph_assert(pDesc != nullptr);
-    command.helpstring = PyString_AsString(pDesc);
+    command.helpstring = PyUnicode_AsUTF8(pDesc);
 
     PyObject *pPerm = PyDict_GetItemString(pCommand, "perm");
     ceph_assert(pPerm != nullptr);
-    command.perm = PyString_AsString(pPerm);
+    command.perm = PyUnicode_AsUTF8(pPerm);
 
     command.polling = false;
     PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
     if (pPoll) {
-      std::string polling = PyString_AsString(pPoll);
+      std::string polling = PyUnicode_AsUTF8(pPoll);
       if (boost::iequals(polling, "true")) {
         command.polling = true;
       }
@@ -530,40 +531,40 @@ int PyModule::load_options()
     PyObject *p;
     p = PyDict_GetItemString(pOption, "name");
     ceph_assert(p != nullptr);
-    option.name = PyString_AsString(p);
+    option.name = PyUnicode_AsUTF8(p);
     option.type = Option::TYPE_STR;
     p = PyDict_GetItemString(pOption, "type");
-    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
-      std::string s = PyString_AsString(p);
+    if (p && PyObject_TypeCheck(p, &PyUnicode_Type)) {
+      std::string s = PyUnicode_AsUTF8(p);
       int t = Option::str_to_type(s);
       if (t >= 0) {
 	option.type = t;
       }
     }
     p = PyDict_GetItemString(pOption, "desc");
-    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
-      option.desc = PyString_AsString(p);
+    if (p && PyObject_TypeCheck(p, &PyUnicode_Type)) {
+      option.desc = PyUnicode_AsUTF8(p);
     }
     p = PyDict_GetItemString(pOption, "long_desc");
-    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
-      option.long_desc = PyString_AsString(p);
+    if (p && PyObject_TypeCheck(p, &PyUnicode_Type)) {
+      option.long_desc = PyUnicode_AsUTF8(p);
     }
     p = PyDict_GetItemString(pOption, "default");
     if (p) {
       auto q = PyObject_Str(p);
-      option.default_value = PyString_AsString(q);
+      option.default_value = PyUnicode_AsUTF8(q);
       Py_DECREF(q);
     }
     p = PyDict_GetItemString(pOption, "min");
     if (p) {
       auto q = PyObject_Str(p);
-      option.min = PyString_AsString(q);
+      option.min = PyUnicode_AsUTF8(q);
       Py_DECREF(q);
     }
     p = PyDict_GetItemString(pOption, "max");
     if (p) {
       auto q = PyObject_Str(p);
-      option.max = PyString_AsString(q);
+      option.max = PyUnicode_AsUTF8(q);
       Py_DECREF(q);
     }
     p = PyDict_GetItemString(pOption, "enum_allowed");
@@ -572,7 +573,7 @@ int PyModule::load_options()
 	auto q = PyList_GetItem(p, i);
 	if (q) {
 	  auto r = PyObject_Str(q);
-	  option.enum_allowed.insert(PyString_AsString(r));
+	  option.enum_allowed.insert(PyUnicode_AsUTF8(r));
 	  Py_DECREF(r);
 	}
       }
@@ -581,8 +582,8 @@ int PyModule::load_options()
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
       for (unsigned i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
-	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
-	  option.see_also.insert(PyString_AsString(q));
+	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
+	  option.see_also.insert(PyUnicode_AsUTF8(q));
 	}
       }
     }
@@ -590,8 +591,8 @@ int PyModule::load_options()
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
       for (unsigned i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
-	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
-	  option.tags.insert(PyString_AsString(q));
+	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
+	  option.tags.insert(PyUnicode_AsUTF8(q));
 	}
       }
     }
@@ -629,7 +630,7 @@ PyObject *PyModule::get_typed_option_value(const std::string& name,
   if (p != options.end()) {
     return get_python_typed_option_value((Option::type_t)p->second.type, value);
   }
-  return PyString_FromString(value.c_str());
+  return PyUnicode_FromString(value.c_str());
 }
 
 int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
@@ -674,7 +675,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
     if (PyObject_RichCompareBool(value, mgr_module_type, Py_EQ)) {
       continue;
     }
-    auto class_name = PyString_AsString(key);
+    auto class_name = PyUnicode_AsUTF8(key);
     if (*py_class) {
       derr << __func__ << ": ignoring '"
 	   << module_name << "." << class_name << "'"

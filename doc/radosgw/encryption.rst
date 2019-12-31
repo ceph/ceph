@@ -14,6 +14,8 @@ Object Gateway stores that data in the Ceph Storage Cluster in encrypted form.
           for SSL termination, ``rgw trust forwarded https`` must be enabled
           before forwarded requests will be trusted as secure.
 
+.. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
+
 Customer-Provided Keys
 ======================
 

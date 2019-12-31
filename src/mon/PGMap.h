@@ -443,7 +443,7 @@ public:
   void dump_basic(ceph::Formatter *f) const;
   void dump_pg_stats(ceph::Formatter *f, bool brief) const;
   void dump_pool_stats(ceph::Formatter *f) const;
-  void dump_osd_stats(ceph::Formatter *f) const;
+  void dump_osd_stats(ceph::Formatter *f, bool with_net = false) const;
   void dump_delta(ceph::Formatter *f) const;
   void dump_filtered_pg_stats(ceph::Formatter *f, std::set<pg_t>& pgs) const;
   void dump_pool_stats_full(const OSDMap &osd_map, std::stringstream *ss,
@@ -495,6 +495,7 @@ public:
     CephContext *cct,
     const OSDMap& osdmap,
     health_check_map_t *checks) const;
+  void print_summary(ceph::Formatter *f, ostream *out) const;
 
   static void generate_test_instances(std::list<PGMap*>& o);
 };

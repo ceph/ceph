@@ -6,6 +6,7 @@ from __future__ import absolute_import
 
 import collections
 import errno
+import logging
 import os
 import socket
 import tempfile
@@ -39,7 +40,7 @@ if 'COVERAGE_ENABLED' in os.environ:
     cherrypy.engine.subscribe('stop', __cov.stop)
 
 # pylint: disable=wrong-import-position
-from . import logger, mgr
+from . import mgr
 from .controllers import generate_routes, json_error_page
 from .grafana import push_local_dashboards
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
@@ -66,6 +67,9 @@ def os_exit_noop(*args):
 
 # pylint: disable=W0212
 os._exit = os_exit_noop
+
+
+logger = logging.getLogger(__name__)
 
 
 class CherryPyConfig(object):
@@ -126,6 +130,9 @@ class CherryPyConfig(object):
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
 
+        cherrypy.log.access_log.propagate = False
+        cherrypy.log.error_log.propagate = False
+
         # Apply the 'global' CherryPy configuration.
         config = {
             'engine.autoreload.on': False,
@@ -179,7 +186,7 @@ class CherryPyConfig(object):
 
         uri = "{0}://{1}:{2}{3}/".format(
             'https' if ssl else 'http',
-            socket.getfqdn() if server_addr == "::" else server_addr,
+            socket.getfqdn() if server_addr in ['::', '0.0.0.0'] else server_addr,
             server_port,
             self.url_prefix
         )

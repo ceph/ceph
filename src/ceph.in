@@ -1,4 +1,4 @@
-#!@Python_EXECUTABLE@
+#!@Python3_EXECUTABLE@
 # -*- mode:python -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
@@ -66,7 +66,7 @@ DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH *
 def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
     execv_cmd = []
     if 'CEPH_DBG' in os.environ:
-        execv_cmd += ['@Python_EXECUTABLE@', '-mpdb']
+        execv_cmd += ['@Python3_EXECUTABLE@', '-mpdb']
 
     if platform.system() == "Darwin":
         lib_path_var = "DYLD_LIBRARY_PATH"
@@ -1111,7 +1111,7 @@ def main():
     if parsed_args.output_file:
         try:
             if parsed_args.output_file == '-':
-                outf = sys.stdout
+                outf = raw_stdout
             else:
                 outf = open(parsed_args.output_file, 'wb')
         except Exception as e:

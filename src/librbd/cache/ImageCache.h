@@ -6,21 +6,26 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
+#include "librbd/io/Types.h"
 #include <vector>
 
 class Context;
 
 namespace librbd {
+struct ImageCtx;
 namespace cache {
 
 /**
  * client-side, image extent cache interface
  */
+template <typename ImageCtxT = ImageCtx>
 struct ImageCache {
-  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+protected:
+  ImageCache() {}
+public:
+  typedef io::Extents Extents;
 
-  virtual ~ImageCache() {
-  }
+  virtual ~ImageCache() {}
 
   /// client AIO methods
   virtual void aio_read(Extents&& image_extents, ceph::bufferlist* bl,
@@ -47,10 +52,11 @@ struct ImageCache {
 
   virtual void invalidate(Context *on_finish) = 0;
   virtual void flush(Context *on_finish) = 0;
-
 };
 
 } // namespace cache
 } // namespace librbd
+
+extern template class librbd::cache::ImageCache<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_IMAGE_CACHE

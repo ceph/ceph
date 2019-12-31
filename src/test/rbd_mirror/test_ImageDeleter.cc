@@ -43,6 +43,7 @@
 using rbd::mirror::RadosRef;
 using rbd::mirror::TestFixture;
 using namespace librbd;
+using cls::rbd::MirrorImageMode;
 using cls::rbd::MirrorImageState;
 
 
@@ -79,7 +80,8 @@ public:
                                 m_remote_mirror_uuid, true));
 
     cls::rbd::MirrorImage mirror_image(
-      GLOBAL_IMAGE_ID, MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
+      MirrorImageMode::MIRROR_IMAGE_MODE_JOURNAL, GLOBAL_IMAGE_ID,
+      MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
     EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
                                               mirror_image));
   }
@@ -204,7 +206,8 @@ public:
                                GLOBAL_CLONE_IMAGE_ID, m_remote_mirror_uuid));
 
     cls::rbd::MirrorImage mirror_image(
-      GLOBAL_CLONE_IMAGE_ID, MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
+      MirrorImageMode::MIRROR_IMAGE_MODE_JOURNAL, GLOBAL_CLONE_IMAGE_ID,
+      MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
     EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, clone_id,
                                               mirror_image));
     EXPECT_EQ(0, ictx->state->close());

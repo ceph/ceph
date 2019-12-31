@@ -69,11 +69,6 @@
 #define MDS_INO_STRAY_OWNER(i) (signed (((unsigned (i)) - MDS_INO_STRAY_OFFSET) / NUM_STRAY))
 #define MDS_INO_STRAY_INDEX(i) (((unsigned (i)) - MDS_INO_STRAY_OFFSET) % NUM_STRAY)
 
-#define MDS_TRAVERSE_FORWARD       1
-#define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
-#define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
-
-
 typedef int32_t mds_rank_t;
 constexpr mds_rank_t MDS_RANK_NONE = -1;
 
@@ -534,6 +529,7 @@ struct inode_t {
   inode_t()
   {
     clear_layout();
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&dir_layout, 0, sizeof(dir_layout));
   }
 
@@ -712,8 +708,10 @@ void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
 
   if (struct_v >= 4)
     decode(dir_layout, p);
-  else
+  else {
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&dir_layout, 0, sizeof(dir_layout));
+  }
   decode(layout, p);
   decode(size, p);
   decode(truncate_seq, p);
@@ -1375,6 +1373,7 @@ struct cap_reconnect_t {
   bufferlist flockbl;
 
   cap_reconnect_t() {
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&capinfo, 0, sizeof(capinfo));
     snap_follows = 0;
   }
@@ -1404,6 +1403,7 @@ struct snaprealm_reconnect_t {
   mutable ceph_mds_snaprealm_reconnect realm;
 
   snaprealm_reconnect_t() {
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&realm, 0, sizeof(realm));
   }
   snaprealm_reconnect_t(inodeno_t ino, snapid_t seq, inodeno_t parent) {

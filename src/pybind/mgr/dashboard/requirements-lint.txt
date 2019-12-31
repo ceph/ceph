@@ -8,3 +8,4 @@ flake8-colors==0.1.6; python_version >= '3'
 #pep8-naming
 rstcheck==3.3.1; python_version >= '3'
 autopep8; python_version >= '3'
+pyfakefs; python_version >= '3'

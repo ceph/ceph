@@ -409,7 +409,6 @@ void PeeringState::advance_map(
   vector<int>& newacting, int acting_primary,
   PeeringCtx &rctx)
 {
-  ceph_assert(lastmap->get_epoch() == osdmap_ref->get_epoch());
   ceph_assert(lastmap == osdmap_ref);
   psdout(10) << "handle_advance_map "
 	    << newup << "/" << newacting
@@ -581,11 +580,8 @@ void PeeringState::start_peering_interval(
   else
     state_clear(PG_STATE_REMAPPED);
 
-  int role = osdmap->calc_pg_role(pg_whoami.osd, acting, acting.size());
-  if (pool.info.is_replicated() || role == pg_whoami.shard)
-    set_role(role);
-  else
-    set_role(-1);
+  int role = osdmap->calc_pg_role(pg_whoami, acting);
+  set_role(role);
 
   // did acting, up, primary|acker change?
   if (!lastmap) {
@@ -738,6 +734,9 @@ void PeeringState::on_new_interval()
       continue;
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
+  psdout(20) << __func__ << " upacting_features 0x" << std::hex
+	     << upacting_features << std::dec
+	     << " from " << acting << "+" << up << dendl;
 
   psdout(20) << __func__ << " checking missing set deletes flag. missing = "
 	     << get_pg_log().get_missing() << dendl;
@@ -1130,9 +1129,13 @@ void PeeringState::send_lease()
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
   if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
+    psdout(20) << __func__ << " no-op, upacting_features 0x" << std::hex
+	       << upacting_features << std::dec
+	       << " does not include SERVER_OCTOPUS" << dendl;
     return;
   }
   if (!is_nonprimary()) {
+    psdout(20) << __func__ << " no-op, !nonprimary" << dendl;
     return;
   }
   psdout(10) << __func__ << " " << l << dendl;
@@ -1703,9 +1706,6 @@ void PeeringState::calc_replicated_acting(
       acting_backfill->insert(up_cand);
       ss << " osd." << i << " (up) accepted " << cur_info << std::endl;
     }
-    if (want->size() >= size) {
-      break;
-    }
   }
 
   if (want->size() >= size) {
@@ -2080,6 +2080,14 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 	get_osdmap());
     }
   }
+  while (want.size() > pool.info.size) {
+    // async recovery should have taken out as many osds as it can.
+    // if not, then always evict the last peer
+    // (will get synchronously recovered later)
+    psdout(10) << __func__ << " evicting osd." << want.back()
+               << " from oversized want " << want << dendl;
+    want.pop_back();
+  }
   if (want != acting) {
     psdout(10) << __func__ << " want " << want << " != acting " << acting
 	       << ", requesting pg_temp change" << dendl;
@@ -2217,6 +2225,11 @@ bool PeeringState::discover_all_missing(
       continue;
     }
 
+    if (peer_purged.count(peer)) {
+      psdout(20) << __func__ << " skipping purged osd." << peer << dendl;
+      continue;
+    }
+
     map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(peer);
     if (iter != peer_info.end() &&
         (iter->second.is_empty() || iter->second.dne())) {
@@ -2321,9 +2334,9 @@ void PeeringState::activate(
 
   auto &missing = pg_log.get_missing();
 
+  min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   if (is_primary()) {
     last_update_ondisk = info.last_update;
-    min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
   last_update_applied = info.last_update;
   last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
@@ -2920,7 +2933,7 @@ void PeeringState::split_into(
     newacting,
     up_primary,
     primary);
-  child->role = OSDMap::calc_pg_role(pg_whoami.osd, child->acting);
+  child->role = OSDMap::calc_pg_role(pg_whoami, child->acting);
 
   // this comparison includes primary rank via pg_shard_t
   if (get_primary() != child->get_primary())
@@ -3188,6 +3201,16 @@ void PeeringState::update_calc_stats()
   info.stats.stats.sum.num_objects_misplaced = 0;
   info.stats.avail_no_missing.clear();
   info.stats.object_location_counts.clear();
+
+  // We should never hit this condition, but if end up hitting it,
+  // make sure to update num_objects and set PG_STATE_INCONSISTENT.
+  if (info.stats.stats.sum.num_objects < 0) {
+    psdout(0) << __func__ << " negative num_objects = "
+              << info.stats.stats.sum.num_objects << " setting it to 0 "
+              << dendl;
+    info.stats.stats.sum.num_objects = 0;
+    state_set(PG_STATE_INCONSISTENT);
+  }
 
   if ((is_remapped() || is_undersized() || !is_clean()) &&
       (is_peered()|| is_activating())) {
@@ -3760,6 +3783,7 @@ void PeeringState::append_log(
   const vector<pg_log_entry_t>& logv,
   eversion_t trim_to,
   eversion_t roll_forward_to,
+  eversion_t mlcod,
   ObjectStore::Transaction &t,
   bool transaction_applied,
   bool async)
@@ -3823,6 +3847,9 @@ void PeeringState::append_log(
   // update the local pg, pg log
   dirty_info = true;
   write_if_dirty(t);
+
+  if (!is_primary())
+    min_last_complete_ondisk = mlcod;
 }
 
 void PeeringState::recover_got(
@@ -4296,6 +4323,7 @@ void PeeringState::Started::exit()
   DECLARE_LOCALS;
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_started_latency, dur);
+  ps->state_clear(PG_STATE_WAIT | PG_STATE_LAGGY);
 }
 
 /*--------Reset---------*/
@@ -5338,7 +5366,14 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
   ps->state_clear(PG_STATE_FORCED_RECOVERY);
   pl->cancel_local_background_io_reservation();
   pl->publish_stats_to_osd();
-  // XXX: Is this needed?
+  // transit any async_recovery_targets back into acting
+  // so pg won't have to stay undersized for long
+  // as backfill might take a long time to complete..
+  if (!ps->async_recovery_targets.empty()) {
+    pg_shard_t auth_log_shard;
+    bool history_les_bound = false;
+    ps->choose_acting(auth_log_shard, true, &history_les_bound);
+  }
   return transit<WaitLocalBackfillReserved>();
 }
 
@@ -6038,6 +6073,8 @@ void PeeringState::ReplicaActive::exit()
   pl->cancel_remote_recovery_reservation();
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_replicaactive_latency, dur);
+
+  ps->min_last_complete_ondisk = eversion_t();
 }
 
 /*-------Stray---*/
@@ -6945,9 +6982,9 @@ void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t ente
 
 ostream &operator<<(ostream &out, const PeeringState &ps) {
   out << "pg[" << ps.info
-      << " " << ps.up;
+      << " " << pg_vector_string(ps.up);
   if (ps.acting != ps.up)
-    out << "/" << ps.acting;
+    out << "/" << pg_vector_string(ps.acting);
   if (ps.is_ec_pg())
     out << "p" << ps.get_primary();
   if (!ps.async_recovery_targets.empty())
@@ -6990,9 +7027,7 @@ ostream &operator<<(ostream &out, const PeeringState &ps) {
   if (ps.last_complete_ondisk != ps.info.last_complete)
     out << " lcod " << ps.last_complete_ondisk;
 
-  if (ps.is_primary()) {
-    out << " mlcod " << ps.min_last_complete_ondisk;
-  }
+  out << " mlcod " << ps.min_last_complete_ondisk;
 
   out << " " << pg_state_string(ps.get_state());
   if (ps.should_send_notify())

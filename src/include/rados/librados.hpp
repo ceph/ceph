@@ -191,16 +191,18 @@ inline namespace v14_2_0 {
 
   struct CEPH_RADOS_API AioCompletion {
     AioCompletion(AioCompletionImpl *pc_) : pc(pc_) {}
+    ~AioCompletion();
     int set_complete_callback(void *cb_arg, callback_t cb);
-    int set_safe_callback(void *cb_arg, callback_t cb);
+    int set_safe_callback(void *cb_arg, callback_t cb)
+      __attribute__ ((deprecated));
     int wait_for_complete();
-    int wait_for_safe();
+    int wait_for_safe() __attribute__ ((deprecated));
     int wait_for_complete_and_cb();
-    int wait_for_safe_and_cb();
+    int wait_for_safe_and_cb() __attribute__ ((deprecated));
     bool is_complete();
-    bool is_safe();
+    bool is_safe() __attribute__ ((deprecated));
     bool is_complete_and_cb();
-    bool is_safe_and_cb();
+    bool is_safe_and_cb() __attribute__ ((deprecated));
     int get_return_value();
     int get_version() __attribute__ ((deprecated));
     uint64_t get_version64();
@@ -210,6 +212,7 @@ inline namespace v14_2_0 {
 
   struct CEPH_RADOS_API PoolAsyncCompletion {
     PoolAsyncCompletion(PoolAsyncCompletionImpl *pc_) : pc(pc_) {}
+    ~PoolAsyncCompletion();
     int set_callback(void *cb_arg, callback_t cb);
     int wait();
     bool is_complete();
@@ -1475,7 +1478,9 @@ inline namespace v14_2_0 {
    // -- aio --
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
-						callback_t cb_safe);
+						callback_t cb_safe)
+      __attribute__ ((deprecated));
+    static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
     
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:

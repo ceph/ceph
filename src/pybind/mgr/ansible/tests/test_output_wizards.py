@@ -1,7 +1,7 @@
 """ Test output wizards
 """
 import unittest
-import mock
+from tests import mock
 
 from ..ansible_runner_svc import EVENT_DATA_URL
 from ..output_wizards import ProcessHostsList, ProcessPlaybookResult, \
@@ -24,8 +24,7 @@ class  OutputWizardProcessHostsList(unittest.TestCase):
                 }
                 """
     ar_client = mock.Mock()
-    logger = mock.Mock()
-    test_wizard = ProcessHostsList(ar_client, logger)
+    test_wizard = ProcessHostsList(ar_client)
 
     def test_process(self):
         """Test a normal call"""
@@ -64,9 +63,7 @@ class OutputWizardProcessPlaybookResult(unittest.TestCase):
     ar_client = mock.Mock()
     ar_client.http_get = mock.MagicMock(return_value=mocked_response)
 
-    logger = mock.Mock()
-
-    test_wizard = ProcessPlaybookResult(ar_client, logger)
+    test_wizard = ProcessPlaybookResult(ar_client)
 
     def test_process(self):
         """Test a normal call
@@ -177,9 +174,7 @@ class OutputWizardProcessInventory(unittest.TestCase):
     ar_client = mock.Mock()
     ar_client.http_get = mock.MagicMock(return_value=mocked_response)
 
-    logger = mock.Mock()
-
-    test_wizard = ProcessInventory(ar_client, logger)
+    test_wizard = ProcessInventory(ar_client)
 
     def test_process(self):
         """Test a normal call
@@ -199,9 +194,9 @@ class OutputWizardProcessInventory(unittest.TestCase):
         self.assertEqual(nodes_list[0].name, "192.168.121.144")
 
         # Devices
-        self.assertTrue(len(nodes_list[0].devices), 4)
+        self.assertTrue(len(nodes_list[0].devices.devices), 4)
 
         expected_device_ids = ["/dev/sdc", "/dev/sda", "/dev/sdb", "/dev/vda"]
-        device_ids = [dev.id for dev in nodes_list[0].devices]
+        device_ids = [dev.path for dev in nodes_list[0].devices.devices]
 
         self.assertEqual(expected_device_ids, device_ids)

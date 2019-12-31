@@ -5,11 +5,18 @@ The external Orchestrator is the Ansible runner service (RESTful https service)
 """
 
 # pylint: disable=abstract-method, no-member, bad-continuation
-
+import functools
 import json
 import os
 import errno
 import tempfile
+
+try:
+    from typing import List, Optional, Callable, Any
+except ImportError:
+    pass # just for type checking
+
+
 import requests
 
 from mgr_module import MgrModule, Option, CLIWriteCommand
@@ -21,7 +28,9 @@ from .ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
                                 URL_MANAGE_GROUP, URL_ADD_RM_HOSTS
 
 from .output_wizards import ProcessInventory, ProcessPlaybookResult, \
-                            ProcessHostsList
+                            ProcessHostsList, OutputWizard
+
+
 
 # Time to clean the completions list
 WAIT_PERIOD = 10
@@ -59,366 +68,159 @@ URL_GET_HOST_GROUPS = "api/v1/hosts/{host_name}"
 URL_GET_HOSTS = "api/v1/hosts"
 
 
-class AnsibleReadOperation(orchestrator.ReadCompletion):
-    """ A read operation means to obtain information from the cluster.
+
+def deferred(f):
+    # type: (Callable) -> Callable[..., orchestrator.Completion]
     """
-    def __init__(self, client, logger):
-        """
-        :param client        : Ansible Runner Service Client
-        :param logger        : The object used to log messages
-        """
-        super(AnsibleReadOperation, self).__init__()
-
-        # Private attributes
-        self._is_complete = False
-        self._is_errored = False
-        self._result = []
-        self._status = ExecutionStatusCode.NOT_LAUNCHED
-
-        # Object used to process operation result in different ways
-        self.output_wizard = None
-
-        # Error description in operation
-        self.error = ""
-
-        # Ansible Runner Service client
-        self.ar_client = client
-
-        # Logger
-        self.log = logger
-
-    def __str__(self):
-        return "Playbook {playbook_name}".format(playbook_name=self.playbook)
-
-    @property
-    def is_complete(self):
-        return self._is_complete
-
-    @property
-    def is_errored(self):
-        return self._is_errored
-
-    @property
-    def result(self):
-        return self._result
-
-    @property
-    def status(self):
-        """Retrieve the current status of the operation and update state
-        attributes
-        """
-        raise NotImplementedError()
-
-class ARSOperation(AnsibleReadOperation):
-    """Execute an Ansible Runner Service Operation
+    Decorator to make RookOrchestrator methods return
+    a completion object that executes themselves.
     """
 
-    def __init__(self, client, logger, url, get_operation=True, payload=None):
-        """
-        :param client        : Ansible Runner Service Client
-        :param logger        : The object used to log messages
-        :param url           : The Ansible Runner Service URL that provides
-                               the operation
-        :param get_operation : True if operation is provided using an http GET
-        :param payload       : http request payload
-        """
-        super(ARSOperation, self).__init__(client, logger)
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        return orchestrator.Completion(on_complete=lambda _: f(*args, **kwargs))
 
-        self.url = url
-        self.get_operation = get_operation
-        self.payload = payload
-
-    def __str__(self):
-        return "Ansible Runner Service: {operation} {url}".format(
-                    operation="GET" if self.get_operation else "POST",
-                    url=self.url)
-
-    @property
-    def status(self):
-        """ Execute the Ansible Runner Service operation and update the status
-        and result of the underlying Completion object.
-        """
-
-        # Execute the right kind of http request
-        if self.get_operation:
-            response = self.ar_client.http_get(self.url)
-        else:
-            response = self.ar_client.http_post(self.url, self.payload)
-
-        # If no connection errors, the operation is complete
-        self._is_complete = True
-
-        # Depending of the response, status and result is updated
-        if not response:
-            self._is_errored = True
-            self._status = ExecutionStatusCode.ERROR
-            self._result = "Ansible Runner Service not Available"
-        else:
-            self._is_errored = (response.status_code != requests.codes.ok)
-
-            if not self._is_errored:
-                self._status = ExecutionStatusCode.SUCCESS
-                if self.output_wizard:
-                    self._result = self.output_wizard.process(self.url,
-                                                              response.text)
-                else:
-                    self._result = response.text
-            else:
-                self._status = ExecutionStatusCode.ERROR
-                self._result = response.reason
-
-        return self._status
+    return wrapper
 
 
-class PlaybookOperation(AnsibleReadOperation):
-    """Execute a playbook using the Ansible Runner Service
+def clean_inventory(ar_client, clean_hosts_on_success):
+    # type: (Client, dict) -> None
+    """ Remove hosts from inventory groups
     """
 
-    def __init__(self, client, playbook, logger, result_pattern,
-                 params,
-                 querystr_dict={}):
-        """
-        :param client        : Ansible Runner Service Client
-        :param playbook      : The playbook to execute
-        :param logger        : The object used to log messages
-        :param result_pattern: The "pattern" to discover what execution events
-                               have the information deemed as result
-        :param params        : http request payload for the playbook execution
-        :param querystr_dict : http request querystring for the playbook
-                               execution (DO NOT MODIFY HERE)
+    for group, hosts in clean_hosts_on_success.items():
+        InventoryGroup(group, ar_client).clean(hosts)
 
-        """
-        super(PlaybookOperation, self).__init__(client, logger)
 
-       # Private attributes
-        self.playbook = playbook
+def playbook_operation(client,  # type: Client
+                       playbook,  # type: str
+                       result_pattern,  # type: str
+                       params,  # type: dict
+                       event_filter_list=None,  # type: Optional[List[str]]
+                       querystr_dict=None,  # type: Optional[dict]
+                       output_wizard=None,  # type: Optional[OutputWizard]
+                       clean_hosts_on_success=None  # type: Optional[dict]
+                       ):
+    # type: (...) -> orchestrator.Completion
+    """
+    :param client        : Ansible Runner Service Client
+    :param playbook      : The playbook to execute
+    :param result_pattern: The "pattern" to discover what execution events
+                           have the information deemed as result
+    :param params        : http request payload for the playbook execution
+    :param querystr_dict : http request querystring for the playbook
+                           execution (DO NOT MODIFY HERE)
+    :param event_filter_list: An aditional filter of result events based in the event
+    :param clean_hosts_on_success: A dict with groups and hosts to remove from inventory if operation is
+        succesful. Ex: {"group1": ["host1"], "group2": ["host3", "host4"]}
+    """
 
-        # An aditional filter of result events based in the event
-        self.event_filter_list = [""]
+    querystr_dict = querystr_dict or {}
+    event_filter_list = event_filter_list or [""]
+    clean_hosts_on_success = clean_hosts_on_success or {}
 
-        # A dict with groups and hosts to remove from inventory if operation is
-        # succesful. Ex: {"group1": ["host1"], "group2": ["host3", "host4"]}
-        self.clean_hosts_on_success = {}
-
-        # Playbook execution object
-        self.pb_execution = PlayBookExecution(client,
-                                              playbook,
-                                              logger,
-                                              result_pattern,
-                                              params,
-                                              querystr_dict)
-
-    def __str__(self):
-        return "Playbook {playbook_name}".format(playbook_name=self.playbook)
-
-    @property
-    def status(self):
+    def status(_):
         """Check the status of the playbook execution and update the status
         and result of the underlying Completion object.
         """
 
-        if self._status in [ExecutionStatusCode.ON_GOING,
-                            ExecutionStatusCode.NOT_LAUNCHED]:
-            self._status = self.pb_execution.get_status()
+        status = pb_execution.get_status()
 
-        self._is_complete = (self._status == ExecutionStatusCode.SUCCESS) or \
-                            (self._status == ExecutionStatusCode.ERROR)
+        if status in (ExecutionStatusCode.SUCCESS, ExecutionStatusCode.ERROR):
+            if status == ExecutionStatusCode.ERROR:
+                raw_result = pb_execution.get_result(["runner_on_failed",
+                                                      "runner_on_unreachable",
+                                                      "runner_on_no_hosts",
+                                                      "runner_on_async_failed",
+                                                      "runner_item_on_failed"])
+            else:
+                raw_result = pb_execution.get_result(event_filter_list)
 
-        self._is_errored = (self._status == ExecutionStatusCode.ERROR)
-
-        if self._is_complete:
-            self.update_result()
+            if output_wizard:
+                processed_result = output_wizard.process(pb_execution.play_uuid,
+                                                         raw_result)
+            else:
+                processed_result = raw_result
 
             # Clean hosts if operation is succesful
-            if self._status == ExecutionStatusCode.SUCCESS:
-                self.clean_inventory()
+            if status == ExecutionStatusCode.SUCCESS:
+                assert clean_hosts_on_success is not None
+                clean_inventory(client, clean_hosts_on_success)
 
-        return self._status
-
-    def execute_playbook(self):
-        """Launch the execution of the playbook with the parameters configured
-        """
-        try:
-            self.pb_execution.launch()
-        except AnsibleRunnerServiceError:
-            self._status = ExecutionStatusCode.ERROR
-            raise
-
-    def update_result(self):
-        """Output of the read operation
-
-        The result of the playbook execution can be customized through the
-        function provided as 'process_output' attribute
-
-        :return string: Result of the operation formatted if it is possible
-        """
-
-        processed_result = []
-
-        if self._is_errored:
-            raw_result = self.pb_execution.get_result(["runner_on_failed",
-                                                       "runner_on_unreachable",
-                                                       "runner_on_no_hosts",
-                                                       "runner_on_async_failed",
-                                                       "runner_item_on_failed"])
-        elif self._is_complete:
-            raw_result = self.pb_execution.get_result(self.event_filter_list)
-
-        if self.output_wizard:
-            processed_result = self.output_wizard.process(self.pb_execution.play_uuid,
-                                                          raw_result)
+            return processed_result
         else:
-            processed_result = raw_result
+            return orchestrator.Completion(on_complete=status)
 
-        self._result = processed_result
+    pb_execution = PlayBookExecution(client, playbook, result_pattern, params, querystr_dict)
 
-    def clean_inventory(self):
-        """ Remove hosts from inventory groups
-        """
-
-        for group, hosts in self.clean_hosts_on_success.items():
-            InventoryGroup(group, self.ar_client).clean(hosts)
-            del self.clean_hosts_on_success[group]
+    return orchestrator.Completion(on_complete=lambda _: pb_execution.launch()).then(status)
 
 
+def ars_http_operation(url, http_operation, payload="", params_dict=None):
+    def inner(ar_client):
+        # type: (Client) -> str
+        if http_operation == "post":
+            response = ar_client.http_post(url,
+                                           payload,
+                                           params_dict)
+        elif http_operation == "delete":
+            response = ar_client.http_delete(url)
+        elif http_operation == "get":
+            response = ar_client.http_get(url)
+        else:
+            assert False, http_operation
 
-class AnsibleChangeOperation(orchestrator.WriteCompletion):
-    """Operations that changes the "cluster" state
+        # Any problem executing the secuence of operations will
+        # produce an errored completion object.
+        try:
+            response.raise_for_status()
+        except Exception as e:
+            raise AnsibleRunnerServiceError(str(e))
 
-    Modifications/Changes (writes) are a two-phase thing, firstly execute
-    the playbook that is going to change elements in the Ceph Cluster.
-    When the playbook finishes execution (independently of the result),
-    the modification/change operation has finished.
+        return response.text
+    return inner
+
+
+@deferred
+def ars_change(client, operations, output_wizard=None):
+    # type: (Client, List[Callable[[Client], str]], Optional[OutputWizard]) -> str
     """
-    def __init__(self):
-        super(AnsibleChangeOperation, self).__init__()
-
-        self._status = ExecutionStatusCode.NOT_LAUNCHED
-        self._result = None
-
-        # Object used to process operation result in different ways
-        self.output_wizard = None
-
-    @property
-    def status(self):
-        """Return the status code of the operation
-        """
-        raise NotImplementedError()
-
-    @property
-    def is_persistent(self):
-        """
-        Has the operation updated the orchestrator's configuration
-        persistently?  Typically this would indicate that an update
-        had been written to a manifest, but that the update
-        had not necessarily been pushed out to the cluster.
-
-        :return Boolean: True if the execution of the Ansible Playbook or the
-                         operation over the Ansible Runner Service has finished
-        """
-
-        return self._status in [ExecutionStatusCode.SUCCESS,
-                                ExecutionStatusCode.ERROR]
-
-    @property
-    def is_effective(self):
-        """Has the operation taken effect on the cluster?
-        For example, if we were adding a service, has it come up and appeared
-        in Ceph's cluster maps?
-
-        In the case of Ansible, this will be True if the playbooks has been
-        executed succesfully.
-
-        :return Boolean: if the playbook/ARS operation has been executed
-                         succesfully
-        """
-
-        return self._status == ExecutionStatusCode.SUCCESS
-
-    @property
-    def is_errored(self):
-        return self._status == ExecutionStatusCode.ERROR
-
-    @property
-    def result(self):
-        return self._result
-
-class HttpOperation(object):
-    """A class to ease the management of http operations
-    """
-
-    def __init__(self, url, http_operation, payload="", query_string="{}"):
-        self.url = url
-        self.http_operation = http_operation
-        self.payload = payload
-        self.query_string = query_string
-        self.response = None
-
-class ARSChangeOperation(AnsibleChangeOperation):
-    """Execute one or more Ansible Runner Service Operations that implies
+    Execute one or more Ansible Runner Service Operations that implies
     a change in the cluster
+
+    :param client         : Ansible Runner Service Client
+    :param operations     : A list of http_operation objects
+
+    Execute the Ansible Runner Service operations and update the status
+    and result of the underlying Completion object.
     """
-    def __init__(self, client, logger, operations):
-        """
-        :param client         : Ansible Runner Service Client
-        :param logger         : The object used to log messages
-        :param operations     : A list of http_operation objects
-        :param payload        : dict with http request payload
-        """
-        super(ARSChangeOperation, self).__init__()
 
-        assert operations, "At least one operation is needed"
-        self.ar_client = client
-        self.log = logger
-        self.operations = operations
-
-    def __str__(self):
-        # Use the last operation as the main
-        return "Ansible Runner Service: {operation} {url}".format(
-                                operation=self.operations[-1].http_operation,
-                                url=self.operations[-1].url)
-
-    @property
-    def status(self):
-        """Execute the Ansible Runner Service operations and update the status
-        and result of the underlying Completion object.
-        """
-
-        for my_request in self.operations:
-            # Execute the right kind of http request
-            try:
-                if my_request.http_operation == "post":
-                    response = self.ar_client.http_post(my_request.url,
-                                                        my_request.payload,
-                                                        my_request.query_string)
-                elif my_request.http_operation == "delete":
-                    response = self.ar_client.http_delete(my_request.url)
-                elif my_request.http_operation == "get":
-                    response = self.ar_client.http_get(my_request.url)
-
-                # Any problem executing the secuence of operations will
-                # produce an errored completion object.
-                if response.status_code != requests.codes.ok:
-                    self._status = ExecutionStatusCode.ERROR
-                    self._result = response.text
-                    return self._status
-
-            # Any kind of error communicating with ARS or preventing
-            # to have a right http response
-            except AnsibleRunnerServiceError as ex:
-                self._status = ExecutionStatusCode.ERROR
-                self._result = str(ex)
-                return self._status
-
+    out = None
+    for my_request in operations:
+        # Execute the right kind of http request
+        out = my_request(client)
         # If this point is reached, all the operations has been succesfuly
         # executed, and the final result is updated
-        self._status = ExecutionStatusCode.SUCCESS
-        if self.output_wizard:
-            self._result = self.output_wizard.process("", response.text)
-        else:
-            self._result = response.text
+    assert out is not None
+    if output_wizard:
+        return output_wizard.process("", out)
+    else:
+        return out
 
-        return self._status
+
+def ars_read(client, url, get_operation=True, payload=None, output_wizard=None):
+    # type: (Client, str, bool, Optional[str], Optional[OutputWizard]) -> orchestrator.Completion
+    """
+    Execute the Ansible Runner Service operation
+
+    :param client        : Ansible Runner Service Client
+    :param url           : The Ansible Runner Service URL that provides
+                           the operation
+    :param get_operation : True if operation is provided using an http GET
+    :param payload       : http request payload
+    """
+    return ars_change(client, [ars_http_operation(url, 'get' if get_operation else 'post', payload)], output_wizard)
+
 
 class Module(MgrModule, orchestrator.Orchestrator):
     """An Orchestrator that uses <Ansible Runner Service> to perform operations
@@ -440,7 +242,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         self.all_completions = []
 
-        self.ar_client = None
+        self._ar_client = None  # type: Optional[Client]
 
         # TLS certificate and key file names used to connect with the external
         # Ansible Runner Service
@@ -450,6 +252,14 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # used to provide more verbose explanation of errors in status method
         self.status_message = ""
 
+        self.all_progress_references = list()  # type: List[orchestrator.ProgressReference]
+
+    @property
+    def ar_client(self):
+        # type: () -> Client
+        assert self._ar_client is not None
+        return self._ar_client
+
     def available(self):
         """ Check if Ansible Runner service is working
         """
@@ -457,7 +267,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         msg = ""
         try:
 
-            if self.ar_client:
+            if self._ar_client:
                 available = self.ar_client.is_operative()
                 if not available:
                     msg = "No response from Ansible Runner Service"
@@ -475,7 +285,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return (available, msg)
 
-    def wait(self, completions):
+    def process(self, completions):
         """Given a list of Completion instances, progress any which are
            incomplete.
 
@@ -483,17 +293,8 @@ class Module(MgrModule, orchestrator.Orchestrator):
         :Returns          : True if everything is done.
         """
 
-        # Check progress and update status in each operation
-        # Access completion.status property do the trick
-        for operation in completions:
-            self.log.info("<%s> status:%s", operation, operation.status)
-
-        completions = filter(lambda x: not x.is_complete, completions)
-
-        ops_pending = len(completions)
-        self.log.info("Operations pending: %s", ops_pending)
-
-        return ops_pending == 0
+        if completions:
+            self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 
     def serve(self):
         """ Mandatory for standby modules
@@ -505,13 +306,12 @@ class Module(MgrModule, orchestrator.Orchestrator):
             self.verify_config()
 
             # Ansible runner service client
-            self.ar_client = Client(
+            self._ar_client = Client(
                 server_url=self.get_module_option('server_location', ''),
                 verify_server=self.get_module_option('verify_server', True),
                 ca_bundle=self.get_module_option('ca_bundle', ''),
                 client_cert=self.client_cert_fname,
-                client_key=self.client_key_fname,
-                logger=self.log)
+                client_key=self.client_key_fname)
 
         except AnsibleRunnerServiceError:
             self.log.exception("Ansible Runner Service not available. "
@@ -537,54 +337,41 @@ class Module(MgrModule, orchestrator.Orchestrator):
         """
 
         # Create a new read completion object for execute the playbook
-        playbook_operation = PlaybookOperation(client=self.ar_client,
-                                               playbook=GET_STORAGE_DEVICES_CATALOG_PLAYBOOK,
-                                               logger=self.log,
-                                               result_pattern="list storage inventory",
-                                               params={})
+        op = playbook_operation(client=self.ar_client,
+                                playbook=GET_STORAGE_DEVICES_CATALOG_PLAYBOOK,
+                                result_pattern="list storage inventory",
+                                params={},
+                                output_wizard=ProcessInventory(self.ar_client),
+                                event_filter_list=["runner_on_ok"])
 
+        self._launch_operation(op)
 
-        # Assign the process_output function
-        playbook_operation.output_wizard = ProcessInventory(self.ar_client,
-                                                            self.log)
-        playbook_operation.event_filter_list = ["runner_on_ok"]
+        return op
 
-        # Execute the playbook to obtain data
-        self._launch_operation(playbook_operation)
-
-        return playbook_operation
-
-    def create_osds(self, drive_group, all_hosts):
+    def create_osds(self, drive_group):
         """Create one or more OSDs within a single Drive Group.
         If no host provided the operation affects all the host in the OSDS role
 
 
         :param drive_group: (ceph.deployment.drive_group.DriveGroupSpec),
                             Drive group with the specification of drives to use
-        :param all_hosts  : (List[str]),
-                            List of hosts where the OSD's must be created
         """
 
         # Transform drive group specification to Ansible playbook parameters
         host, osd_spec = dg_2_ansible(drive_group)
 
         # Create a new read completion object for execute the playbook
-        playbook_operation = PlaybookOperation(client=self.ar_client,
-                                               playbook=ADD_OSD_PLAYBOOK,
-                                               logger=self.log,
-                                               result_pattern="",
-                                               params=osd_spec,
-                                               querystr_dict={"limit": host})
+        op = playbook_operation(client=self.ar_client,
+                                playbook=ADD_OSD_PLAYBOOK,
+                                result_pattern="",
+                                params=osd_spec,
+                                querystr_dict={"limit": host},
+                                output_wizard=ProcessPlaybookResult(self.ar_client),
+                                event_filter_list=["playbook_on_stats"])
 
-        # Filter to get the result
-        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
-                                                                  self.log)
-        playbook_operation.event_filter_list = ["playbook_on_stats"]
+        self._launch_operation(op)
 
-        # Execute the playbook
-        self._launch_operation(playbook_operation)
-
-        return playbook_operation
+        return op
 
     def remove_osds(self, osd_ids, destroy=False):
         """Remove osd's.
@@ -598,32 +385,24 @@ class Module(MgrModule, orchestrator.Orchestrator):
                      'ireallymeanit':'yes'}
 
         # Create a new read completion object for execute the playbook
-        playbook_operation = PlaybookOperation(client=self.ar_client,
-                                               playbook=REMOVE_OSD_PLAYBOOK,
-                                               logger=self.log,
-                                               result_pattern="",
-                                               params=extravars)
-
-        # Filter to get the result
-        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
-                                                                 self.log)
-        playbook_operation.event_filter_list = ["playbook_on_stats"]
-
+        op = playbook_operation(client=self.ar_client,
+                                playbook=REMOVE_OSD_PLAYBOOK,
+                                result_pattern="",
+                                params=extravars,
+                                output_wizard=ProcessPlaybookResult(self.ar_client),
+                                event_filter_list=["playbook_on_stats"])
 
         # Execute the playbook
-        self._launch_operation(playbook_operation)
+        self._launch_operation(op)
 
-        return playbook_operation
+        return op
 
     def get_hosts(self):
         """Provides a list Inventory nodes
         """
 
-        host_ls_op = ARSOperation(self.ar_client, self.log, URL_GET_HOSTS)
-
-        host_ls_op.output_wizard = ProcessHostsList(self.ar_client,
-                                                    self.log)
-
+        host_ls_op = ars_read(self.ar_client, url=URL_GET_HOSTS,
+                              output_wizard=ProcessHostsList(self.ar_client))
         return host_ls_op
 
     def add_host(self, host):
@@ -632,7 +411,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         group
 
         :param host: hostname
-        :returns : orchestrator.WriteCompletion
+        :returns : orchestrator.Completion
         """
 
         url_group = URL_MANAGE_GROUP.format(group_name=ORCHESTRATOR_GROUP)
@@ -647,16 +426,16 @@ class Module(MgrModule, orchestrator.Orchestrator):
             add_url = URL_ADD_RM_HOSTS.format(host_name=host,
                                               inventory_group=ORCHESTRATOR_GROUP)
 
-            operations = [HttpOperation(add_url, "post", "", None)]
+            operations = [ars_http_operation(add_url, "post", "", None)]
 
         except AnsibleRunnerServiceError as ex:
             # Problems with the external orchestrator.
             # Prepare the operation to return the error in a Completion object.
             self.log.exception("Error checking <orchestrator> group: %s",
                                str(ex))
-            operations = [HttpOperation(url_group, "post", "", None)]
+            operations = [ars_http_operation(url_group, "post", "", None)]
 
-        return ARSChangeOperation(self.ar_client, self.log, operations)
+        return ars_change(self.ar_client, operations)
 
     def remove_host(self, host):
         """
@@ -664,11 +443,10 @@ class Module(MgrModule, orchestrator.Orchestrator):
         inventory.
 
         :param host: hostname
-        :returns : orchestrator.WriteCompletion
+        :returns : orchestrator.Completion
         """
 
-        operations = []
-        host_groups = []
+        host_groups = []  # type: List[Any]
 
         try:
             # Get the list of groups where the host is included
@@ -680,25 +458,26 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         except AnsibleRunnerServiceError:
             self.log.exception("Error retrieving host groups")
+            raise
 
         if not host_groups:
             # Error retrieving the groups, prepare the completion object to
             # execute the problematic operation just to provide the error
             # to the caller
-            operations = [HttpOperation(groups_url, "get")]
+            operations = [ars_http_operation(groups_url, "get")]
         else:
             # Build the operations list
             operations = list(map(lambda x:
-                                  HttpOperation(URL_ADD_RM_HOSTS.format(
-                                                    host_name=host,
-                                                    inventory_group=x),
-                                                "delete"),
+                                  ars_http_operation(URL_ADD_RM_HOSTS.format(
+                                      host_name=host,
+                                      inventory_group=x),
+                                      "delete"),
                                   host_groups))
 
-        return ARSChangeOperation(self.ar_client, self.log, operations)
+        return ars_change(self.ar_client, operations)
 
     def add_rgw(self, spec):
-        # type: (orchestrator.RGWSpec) -> PlaybookOperation
+        # type: (orchestrator.RGWSpec) -> orchestrator.Completion
         """ Add a RGW service in the cluster
 
         : spec        : an Orchestrator.RGWSpec object
@@ -708,7 +487,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
 
         # Add the hosts to the inventory in the right group
-        hosts = spec.hosts
+        hosts = spec.placement.hosts
         if not hosts:
             raise orchestrator.OrchestratorError("No hosts provided. "
                 "At least one destination host is needed to install the RGW "
@@ -737,7 +516,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         InventoryGroup("rgws", self.ar_client).update(hosts)
 
         # Limit playbook execution to certain hosts
-        limited = ",".join(hosts)
+        limited = ",".join(str(host) for host in hosts)
 
         # Add the settings for this service
         extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
@@ -750,31 +529,26 @@ class Module(MgrModule, orchestrator.Orchestrator):
         resource_group = "rgw_zone_{}".format(spec.name)
         InventoryGroup(resource_group, self.ar_client).update(hosts)
 
-
         # Execute the playbook to create the service
-        playbook_operation = PlaybookOperation(client=self.ar_client,
-                                               playbook=SITE_PLAYBOOK,
-                                               logger=self.log,
-                                               result_pattern="",
-                                               params=extravars,
-                                               querystr_dict={"limit": limited})
-
-        # Filter to get the result
-        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
-                                                                 self.log)
-        playbook_operation.event_filter_list = ["playbook_on_stats"]
+        op = playbook_operation(client=self.ar_client,
+                                playbook=SITE_PLAYBOOK,
+                                result_pattern="",
+                                params=extravars,
+                                querystr_dict={"limit": limited},
+                                output_wizard=ProcessPlaybookResult(self.ar_client),
+                                event_filter_list=["playbook_on_stats"])
 
         # Execute the playbook
-        self._launch_operation(playbook_operation)
+        self._launch_operation(op)
 
-        return playbook_operation
+        return op
 
     def remove_rgw(self, zone):
         """ Remove a RGW service providing <zone>
 
-        :zone : <zone name> of the RGW
+        :param zone: <zone name> of the RGW
                             ...
-        : returns    : Completion object
+        :returns    : Completion object
         """
 
 
@@ -791,30 +565,25 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # Avoid manual confirmation
         extravars = {"ireallymeanit": "yes"}
 
-        # Execute the playbook to remove the service
-        playbook_operation = PlaybookOperation(client=self.ar_client,
-                                               playbook=PURGE_PLAYBOOK,
-                                               logger=self.log,
-                                               result_pattern="",
-                                               params=extravars,
-                                               querystr_dict={"limit": limited})
-
-        # Filter to get the result
-        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
-                                                                 self.log)
-        playbook_operation.event_filter_list = ["playbook_on_stats"]
-
         # Cleaning of inventory after a sucessful operation
         clean_inventory = {}
         clean_inventory[resource_group] = hosts_list
         clean_inventory[group] = hosts_list
-        playbook_operation.clean_hosts_on_success = clean_inventory
+
+        # Execute the playbook to remove the service
+        op = playbook_operation(client=self.ar_client,
+                                               playbook=PURGE_PLAYBOOK,
+                                               result_pattern="",
+                                               params=extravars,
+                                               querystr_dict={"limit": limited},
+                                output_wizard=ProcessPlaybookResult(self.ar_client),
+                                event_filter_list=["playbook_on_stats"],
+                                clean_hosts_on_success=clean_inventory)
 
         # Execute the playbook
-        self.log.info("Removing service rgw for resource %s", zone)
-        self._launch_operation(playbook_operation)
+        self._launch_operation(op)
 
-        return playbook_operation
+        return op
 
     def _launch_operation(self, ansible_operation):
         """Launch the operation and add the operation to the completion objects
@@ -822,9 +591,6 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         :ansible_operation: A read/write ansible operation (completion object)
         """
-
-        # Execute the playbook
-        ansible_operation.execute_playbook()
 
         # Add the operation to the list of things ongoing
         self.all_completions.append(ansible_operation)
@@ -844,7 +610,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         if the_crt is None or the_key is None:
             # If not possible... try to get generic certificates and key content
             # ex: mgr/ansible/[crt/key]
-            self.log.warning("Specific tls files for this manager not "\
+            self.log.warning("Specific tls files for this manager not "
                              "configured, trying to use generic files")
             the_crt = self.get_store("crt")
             the_key = self.get_store("key")

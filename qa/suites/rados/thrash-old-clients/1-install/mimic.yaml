@@ -1,6 +1,5 @@
 overrides:
   ceph:
-    mon_bind_addrvec: false
     mon_bind_msgr2: false
     log-whitelist:
       - \(MON_DOWN\)
@@ -15,12 +14,19 @@ tasks:
       - librados3
       - ceph-mgr-dashboard
       - ceph-mgr-diskprediction-local
-      - ceph-mgr-diskprediction-cloud
       - ceph-mgr-rook
-      - ceph-mgr-ssh
-      - ceph-daemon
-    extra_packages: ['librados2']
-- install.upgrade:
-    mon.a:
-    mon.b:
-    mon.c:
+      - ceph-mgr-cephadm
+      - cephadm
+      - ceph-immutable-object-cache
+      - ceph-base
+      - python3-rados
+      - python3-rgw
+      - python3-rbd
+      - python3-cephfs
+      - librados-devel
+    extra_packages:
+      - librados2
+      - python-rados
+      - python-rgw
+      - python-rbd
+      - python-cephfs

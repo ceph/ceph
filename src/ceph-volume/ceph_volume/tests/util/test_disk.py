@@ -1,5 +1,6 @@
 import os
 import pytest
+from mock.mock import patch
 from ceph_volume.util import disk
 
 
@@ -101,90 +102,6 @@ class TestDeviceFamily(object):
             assert parsed['NAME'] in names
 
 
-class TestMapDevPaths(object):
-
-    def test_errors_return_empty_mapping(self, tmpdir):
-        bad_dir = os.path.join(str(tmpdir), 'nonexisting')
-        assert disk._map_dev_paths(bad_dir) == {}
-
-    def test_base_name_and_abspath(self, tmpfile):
-        sda_path = tmpfile(name='sda', contents='')
-        directory = os.path.dirname(sda_path)
-        result = disk._map_dev_paths(directory)
-        assert len(result.keys()) == 1
-        assert result['sda'] == sda_path
-
-    def test_abspath_included(self, tmpfile):
-        sda_path = tmpfile(name='sda', contents='')
-        directory = os.path.dirname(sda_path)
-        result = disk._map_dev_paths(directory, include_abspath=True)
-        assert sorted(result.keys()) == sorted(['sda', sda_path])
-        assert result['sda'] == sda_path
-        assert result[sda_path] == 'sda'
-
-    def test_realpath_included(self, tmpfile):
-        sda_path = tmpfile(name='sda', contents='')
-        directory = os.path.dirname(sda_path)
-        dm_path = os.path.join(directory, 'dm-0')
-        os.symlink(sda_path, os.path.join(directory, 'dm-0'))
-        result = disk._map_dev_paths(directory, include_realpath=True)
-        assert sorted(result.keys()) == sorted(['sda', 'dm-0'])
-        assert result['sda'] == dm_path
-        assert result['dm-0'] == dm_path
-
-    def test_absolute_and_realpath_included(self, tmpfile):
-        dm_path = tmpfile(name='dm-0', contents='')
-        directory = os.path.dirname(dm_path)
-        sda_path = os.path.join(directory, 'sda')
-        os.symlink(sda_path, os.path.join(directory, 'sda'))
-        result = disk._map_dev_paths(directory, include_realpath=True, include_abspath=True)
-        assert sorted(result.keys()) == sorted([dm_path, sda_path, 'sda', 'dm-0'])
-        assert result['sda'] == sda_path
-        assert result['dm-0'] == dm_path
-        assert result[sda_path] == sda_path
-        assert result[dm_path] == 'dm-0'
-
-
-class TestGetBlockDevs(object):
-
-    def test_loop_devices_are_missing(self, tmpfile):
-        path = os.path.dirname(tmpfile(name='loop0', contents=''))
-        result = disk.get_block_devs(sys_block_path=path)
-        assert result == []
-
-    def test_loop_devices_are_included(self, tmpfile):
-        path = os.path.dirname(tmpfile(name='loop0', contents=''))
-        result = disk.get_block_devs(sys_block_path=path, skip_loop=False)
-        assert len(result) == 1
-        assert result == ['loop0']
-
-
-class TestGetDevDevs(object):
-
-    def test_abspaths_are_included(self, tmpfile):
-        sda_path = tmpfile(name='sda', contents='')
-        directory = os.path.dirname(sda_path)
-        result = disk.get_dev_devs(directory)
-        assert sorted(result.keys()) == sorted(['sda', sda_path])
-        assert result['sda'] == sda_path
-        assert result[sda_path] == 'sda'
-
-
-class TestGetMapperDevs(object):
-
-    def test_abspaths_and_realpaths_are_included(self, tmpfile):
-        dm_path = tmpfile(name='dm-0', contents='')
-        directory = os.path.dirname(dm_path)
-        sda_path = os.path.join(directory, 'sda')
-        os.symlink(sda_path, os.path.join(directory, 'sda'))
-        result = disk.get_mapper_devs(directory)
-        assert sorted(result.keys()) == sorted([dm_path, sda_path, 'sda', 'dm-0'])
-        assert result['sda'] == sda_path
-        assert result['dm-0'] == dm_path
-        assert result[sda_path] == sda_path
-        assert result[dm_path] == 'dm-0'
-
-
 class TestHumanReadableSize(object):
 
     def test_bytes(self):
@@ -247,141 +164,118 @@ class TestSizeFromHumanReadable(object):
         assert result == disk.Size(tb=1.8)
 
 
+class TestGetBlockDevsLsblk(object):
+
+    @patch('ceph_volume.process.call')
+    def test_return_structure(self, patched_call):
+        lsblk_stdout = [
+			'/dev/dm-0 /dev/mapper/ceph--8b2684eb--56ff--49e4--8f28--522e04cbd6ab-osd--data--9fc29fbf--3b5b--4066--be10--61042569b5a7 lvm',
+			'/dev/vda  /dev/vda                                                                                                       disk',
+			'/dev/vda1 /dev/vda1                                                                                                      part',
+			'/dev/vdb  /dev/vdb                                                                                                       disk',]
+        patched_call.return_value = (lsblk_stdout, '', 0)
+        disks = disk.get_block_devs_lsblk()
+        assert len(disks) == len(lsblk_stdout)
+        assert len(disks[0]) == 3
+
+    @patch('ceph_volume.process.call')
+    def test_empty_lsblk(self, patched_call):
+        patched_call.return_value = ([], '', 0)
+        disks = disk.get_block_devs_lsblk()
+        assert len(disks) == 0
+
+    @patch('ceph_volume.process.call')
+    def test_raise_on_failure(self, patched_call):
+        patched_call.return_value = ([], 'error', 1)
+        with pytest.raises(OSError):
+            disk.get_block_devs_lsblk()
+
+
 class TestGetDevices(object):
 
-    def setup_paths(self, tmpdir):
-        paths = []
-        for directory in ['block', 'dev', 'mapper']:
-            path = os.path.join(str(tmpdir), directory)
-            paths.append(path)
-            os.makedirs(path)
-        return paths
+    def setup_path(self, tmpdir):
+        path = os.path.join(str(tmpdir), 'block')
+        os.makedirs(path)
+        return path
 
-    def test_no_devices_are_found(self, tmpdir):
-        result = disk.get_devices(
-            _sys_block_path=str(tmpdir),
-            _dev_path=str(tmpdir),
-            _mapper_path=str(tmpdir))
+    def test_no_devices_are_found(self, tmpdir, patched_get_block_devs_lsblk):
+        patched_get_block_devs_lsblk.return_value = []
+        result = disk.get_devices(_sys_block_path=str(tmpdir))
         assert result == {}
 
-    def test_no_devices_are_found_errors(self, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+    def test_sda_block_is_found(self, tmpdir, patched_get_block_devs_lsblk):
+        sda_path = '/dev/sda'
+        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        block_path = self.setup_path(tmpdir)
         os.makedirs(os.path.join(block_path, 'sda'))
-        result = disk.get_devices(
-            _sys_block_path=block_path, # has 1 device
-            _dev_path=str(tmpdir), # exists but no devices
-            _mapper_path='/does/not/exist/path') # does not exist
-        assert result == {}
-
-    def test_sda_block_is_found(self, tmpfile, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
-        dev_sda_path = os.path.join(dev_path, 'sda')
-        os.makedirs(os.path.join(block_path, 'sda'))
-        os.makedirs(dev_sda_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
+        result = disk.get_devices(_sys_block_path=block_path)
         assert len(result.keys()) == 1
-        assert result[dev_sda_path]['human_readable_size'] == '0.00 B'
-        assert result[dev_sda_path]['model'] == ''
-        assert result[dev_sda_path]['partitions'] == {}
+        assert result[sda_path]['human_readable_size'] == '0.00 B'
+        assert result[sda_path]['model'] == ''
+        assert result[sda_path]['partitions'] == {}
 
 
-    def test_dm_device_is_not_used(self, monkeypatch, tmpdir):
-        # the link to the mapper is used instead
-        monkeypatch.setattr(disk.lvm, 'is_lv', lambda: True)
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
-        dev_dm_path = os.path.join(dev_path, 'dm-0')
-        ceph_data_path = os.path.join(mapper_path, 'ceph-data')
-        os.symlink(dev_dm_path, ceph_data_path)
-        block_dm_path = os.path.join(block_path, 'dm-0')
-        os.makedirs(block_dm_path)
-
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        result = list(result.keys())
-        assert len(result) == 1
-        assert result == [ceph_data_path]
-
-    def test_sda_size(self, tmpfile, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+    def test_sda_size(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+        sda_path = '/dev/sda'
+        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
-        dev_sda_path = os.path.join(dev_path, 'sda')
         os.makedirs(block_sda_path)
-        os.makedirs(dev_sda_path)
         tmpfile('size', '1024', directory=block_sda_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        assert list(result.keys()) == [dev_sda_path]
-        assert result[dev_sda_path]['human_readable_size'] == '512.00 KB'
+        result = disk.get_devices(_sys_block_path=block_path)
+        assert list(result.keys()) == [sda_path]
+        assert result[sda_path]['human_readable_size'] == '512.00 KB'
 
-    def test_sda_sectorsize_fallsback(self, tmpfile, tmpdir):
+    def test_sda_sectorsize_fallsback(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
         # if no sectorsize, it will use queue/hw_sector_size
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+        sda_path = '/dev/sda'
+        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
-        dev_sda_path = os.path.join(dev_path, 'sda')
         os.makedirs(block_sda_path)
         os.makedirs(sda_queue_path)
-        os.makedirs(dev_sda_path)
         tmpfile('hw_sector_size', contents='1024', directory=sda_queue_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        assert list(result.keys()) == [dev_sda_path]
-        assert result[dev_sda_path]['sectorsize'] == '1024'
+        result = disk.get_devices(_sys_block_path=block_path)
+        assert list(result.keys()) == [sda_path]
+        assert result[sda_path]['sectorsize'] == '1024'
 
-    def test_sda_sectorsize_from_logical_block(self, tmpfile, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+    def test_sda_sectorsize_from_logical_block(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+        sda_path = '/dev/sda'
+        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
-        dev_sda_path = os.path.join(dev_path, 'sda')
         os.makedirs(block_sda_path)
         os.makedirs(sda_queue_path)
-        os.makedirs(dev_sda_path)
         tmpfile('logical_block_size', contents='99', directory=sda_queue_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        assert result[dev_sda_path]['sectorsize'] == '99'
+        result = disk.get_devices(_sys_block_path=block_path)
+        assert result[sda_path]['sectorsize'] == '99'
 
-    def test_sda_sectorsize_does_not_fallback(self, tmpfile, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+    def test_sda_sectorsize_does_not_fallback(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+        sda_path = '/dev/sda'
+        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
-        dev_sda_path = os.path.join(dev_path, 'sda')
         os.makedirs(block_sda_path)
         os.makedirs(sda_queue_path)
-        os.makedirs(dev_sda_path)
         tmpfile('logical_block_size', contents='99', directory=sda_queue_path)
         tmpfile('hw_sector_size', contents='1024', directory=sda_queue_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        assert result[dev_sda_path]['sectorsize'] == '99'
+        result = disk.get_devices(_sys_block_path=block_path)
+        assert result[sda_path]['sectorsize'] == '99'
 
-    def test_is_rotational(self, tmpfile, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+    def test_is_rotational(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+        sda_path = '/dev/sda'
+        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
-        dev_sda_path = os.path.join(dev_path, 'sda')
         os.makedirs(block_sda_path)
         os.makedirs(sda_queue_path)
-        os.makedirs(dev_sda_path)
         tmpfile('rotational', contents='1', directory=sda_queue_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        assert result[dev_sda_path]['rotational'] == '1'
+        result = disk.get_devices(_sys_block_path=block_path)
+        assert result[sda_path]['rotational'] == '1'
 
 
 class TestSizeCalculations(object):

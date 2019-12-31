@@ -20,6 +20,7 @@
 #include "librbd/api/Trash.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/CloneRequest.h"
@@ -185,6 +186,7 @@ int open_source_image(librados::IoCtx& io_ctx, const std::string &image_name,
                       I **src_image_ctx, librados::IoCtx *dst_io_ctx,
                       std::string *dst_image_name, std::string *dst_image_id,
                       bool *flatten, bool *mirroring,
+                      cls::rbd::MirrorImageMode *mirror_image_mode,
                       cls::rbd::MigrationState *state,
                       std::string *state_description) {
   CephContext* cct = reinterpret_cast<CephContext *>(io_ctx.cct());
@@ -327,6 +329,7 @@ int open_source_image(librados::IoCtx& io_ctx, const std::string &image_name,
   *dst_image_id = migration_spec.image_id;
   *flatten = migration_spec.flatten;
   *mirroring = migration_spec.mirroring;
+  *mirror_image_mode = migration_spec.mirror_image_mode;
   *state = migration_spec.state;
   *state_description = migration_spec.state_description;
 
@@ -425,8 +428,9 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
 
   ldout(cct, 20) << "updated opts=" << opts << dendl;
 
-  Migration migration(image_ctx, dest_io_ctx, dest_image_name, "", opts, flatten > 0,
-                      false, cls::rbd::MIGRATION_STATE_PREPARING, "", nullptr);
+  Migration migration(image_ctx, dest_io_ctx, dest_image_name, "", opts,
+                      flatten > 0, false, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                      cls::rbd::MIGRATION_STATE_PREPARING, "", nullptr);
   r = migration.prepare();
 
   features &= ~RBD_FEATURE_MIGRATING;
@@ -449,12 +453,14 @@ int Migration<I>::execute(librados::IoCtx& io_ctx,
   std::string dest_image_id;
   bool flatten;
   bool mirroring;
+  cls::rbd::MirrorImageMode mirror_image_mode;
   cls::rbd::MigrationState state;
   std::string state_description;
 
   int r = open_source_image(io_ctx, image_name, &image_ctx, &dest_io_ctx,
                             &dest_image_name, &dest_image_id, &flatten,
-                            &mirroring, &state, &state_description);
+                            &mirroring, &mirror_image_mode, &state,
+                            &state_description);
   if (r < 0) {
     return r;
   }
@@ -475,8 +481,8 @@ int Migration<I>::execute(librados::IoCtx& io_ctx,
 
   ImageOptions opts;
   Migration migration(image_ctx, dest_io_ctx, dest_image_name, dest_image_id,
-                      opts, flatten, mirroring, state, state_description,
-                      &prog_ctx);
+                      opts, flatten, mirroring, mirror_image_mode, state,
+                      state_description, &prog_ctx);
   r = migration.execute();
   if (r < 0) {
     return r;
@@ -498,12 +504,14 @@ int Migration<I>::abort(librados::IoCtx& io_ctx, const std::string &image_name,
   std::string dest_image_id;
   bool flatten;
   bool mirroring;
+  cls::rbd::MirrorImageMode mirror_image_mode;
   cls::rbd::MigrationState state;
   std::string state_description;
 
   int r = open_source_image(io_ctx, image_name, &image_ctx, &dest_io_ctx,
                             &dest_image_name, &dest_image_id, &flatten,
-                            &mirroring, &state, &state_description);
+                            &mirroring, &mirror_image_mode, &state,
+                            &state_description);
   if (r < 0) {
     return r;
   }
@@ -515,8 +523,8 @@ int Migration<I>::abort(librados::IoCtx& io_ctx, const std::string &image_name,
 
   ImageOptions opts;
   Migration migration(image_ctx, dest_io_ctx, dest_image_name, dest_image_id,
-                      opts, flatten, mirroring, state, state_description,
-                      &prog_ctx);
+                      opts, flatten, mirroring, mirror_image_mode, state,
+                      state_description, &prog_ctx);
   r = migration.abort();
 
   image_ctx->state->close();
@@ -542,12 +550,14 @@ int Migration<I>::commit(librados::IoCtx& io_ctx,
   std::string dest_image_id;
   bool flatten;
   bool mirroring;
+  cls::rbd::MirrorImageMode mirror_image_mode;
   cls::rbd::MigrationState state;
   std::string state_description;
 
   int r = open_source_image(io_ctx, image_name, &image_ctx, &dest_io_ctx,
                             &dest_image_name, &dest_image_id, &flatten,
-                            &mirroring, &state, &state_description);
+                            &mirroring, &mirror_image_mode, &state,
+                            &state_description);
   if (r < 0) {
     return r;
   }
@@ -565,8 +575,8 @@ int Migration<I>::commit(librados::IoCtx& io_ctx,
 
   ImageOptions opts;
   Migration migration(image_ctx, dest_io_ctx, dest_image_name, dest_image_id,
-                      opts, flatten, mirroring, state, state_description,
-                      &prog_ctx);
+                      opts, flatten, mirroring, mirror_image_mode, state,
+                      state_description, &prog_ctx);
   r = migration.commit();
 
   // image_ctx is closed in commit when removing src image
@@ -592,12 +602,14 @@ int Migration<I>::status(librados::IoCtx& io_ctx,
   std::string dest_image_id;
   bool flatten;
   bool mirroring;
+  cls::rbd::MirrorImageMode mirror_image_mode;
   cls::rbd::MigrationState state;
   std::string state_description;
 
   int r = open_source_image(io_ctx, image_name, &image_ctx, &dest_io_ctx,
                             &dest_image_name, &dest_image_id, &flatten,
-                            &mirroring, &state, &state_description);
+                            &mirroring, &mirror_image_mode, &state,
+                            &state_description);
   if (r < 0) {
     return r;
   }
@@ -608,8 +620,8 @@ int Migration<I>::status(librados::IoCtx& io_ctx,
 
   ImageOptions opts;
   Migration migration(image_ctx, dest_io_ctx, dest_image_name, dest_image_id,
-                      opts, flatten, mirroring, state, state_description,
-                      nullptr);
+                      opts, flatten, mirroring, mirror_image_mode, state,
+                      state_description, nullptr);
   r = migration.status(status);
 
   image_ctx->state->close();
@@ -626,6 +638,7 @@ Migration<I>::Migration(I *src_image_ctx, librados::IoCtx& dst_io_ctx,
                         const std::string &dstname,
                         const std::string &dst_image_id,
                         ImageOptions& opts, bool flatten, bool mirroring,
+                        cls::rbd::MirrorImageMode mirror_image_mode,
                         cls::rbd::MigrationState state,
                         const std::string &state_description,
                         ProgressContext *prog_ctx)
@@ -638,16 +651,18 @@ Migration<I>::Migration(I *src_image_ctx, librados::IoCtx& dst_io_ctx,
     m_dst_image_id(dst_image_id.empty() ?
                    util::generate_image_id(m_dst_io_ctx) : dst_image_id),
     m_dst_header_oid(util::header_name(m_dst_image_id)), m_image_options(opts),
-    m_flatten(flatten), m_mirroring(mirroring), m_prog_ctx(prog_ctx),
+    m_flatten(flatten), m_mirroring(mirroring),
+    m_mirror_image_mode(mirror_image_mode), m_prog_ctx(prog_ctx),
     m_src_migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_SRC,
                          m_dst_io_ctx.get_id(), m_dst_io_ctx.get_namespace(),
-                         m_dst_image_name, m_dst_image_id, {}, 0, flatten,
-                         mirroring, state, state_description),
+                         m_dst_image_name, m_dst_image_id, {}, 0, mirroring,
+                         mirror_image_mode, flatten, state, state_description),
     m_dst_migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST,
                          src_image_ctx->md_ctx.get_id(),
                          src_image_ctx->md_ctx.get_namespace(),
                          m_src_image_ctx->name, m_src_image_ctx->id, {}, 0,
-                         flatten, mirroring, state, state_description) {
+                         mirroring, mirror_image_mode, flatten, state,
+                         state_description) {
   m_src_io_ctx.dup(src_image_ctx->md_ctx);
 }
 
@@ -660,21 +675,21 @@ int Migration<I>::prepare() {
     return r;
   }
 
-  r = disable_mirroring(m_src_image_ctx, &m_mirroring);
+  r = disable_mirroring(m_src_image_ctx, &m_mirroring, &m_mirror_image_mode);
   if (r < 0) {
     return r;
   }
 
   r = unlink_src_image();
   if (r < 0) {
-    enable_mirroring(m_src_image_ctx, m_mirroring);
+    enable_mirroring(m_src_image_ctx, m_mirroring, m_mirror_image_mode);
     return r;
   }
 
   r = set_migration();
   if (r < 0) {
     relink_src_image();
-    enable_mirroring(m_src_image_ctx, m_mirroring);
+    enable_mirroring(m_src_image_ctx, m_mirroring, m_mirror_image_mode);
     return r;
   }
 
@@ -791,7 +806,7 @@ int Migration<I>::abort() {
     } BOOST_SCOPE_EXIT_END;
 
     std::vector<librbd::snap_info_t> snaps;
-    r = snap_list(dst_image_ctx, snaps);
+    r = Snapshot<I>::list(dst_image_ctx, snaps);
     if (r < 0) {
       lderr(m_cct) << "failed listing snapshots: " << cpp_strerror(r)
                    << dendl;
@@ -800,8 +815,8 @@ int Migration<I>::abort() {
 
     for (auto &snap : snaps) {
       librbd::NoOpProgressContext prog_ctx;
-      int r = snap_remove(dst_image_ctx, snap.name.c_str(),
-                          RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
+      int r = Snapshot<I>::remove(dst_image_ctx, snap.name.c_str(),
+                                  RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
       if (r < 0) {
         lderr(m_cct) << "failed removing snapshot: " << cpp_strerror(r)
                      << dendl;
@@ -856,7 +871,7 @@ int Migration<I>::abort() {
     return r;
   }
 
-  r = enable_mirroring(m_src_image_ctx, m_mirroring);
+  r = enable_mirroring(m_src_image_ctx, m_mirroring, m_mirror_image_mode);
   if (r < 0) {
     return r;
   }
@@ -899,7 +914,7 @@ int Migration<I>::commit() {
     return r;
   }
 
-  r = enable_mirroring(dst_image_ctx, m_mirroring);
+  r = enable_mirroring(dst_image_ctx, m_mirroring, m_mirror_image_mode);
   if (r < 0) {
     return r;
   }
@@ -974,7 +989,7 @@ template <typename I>
 int Migration<I>::list_src_snaps(std::vector<librbd::snap_info_t> *snaps) {
   ldout(m_cct, 10) << dendl;
 
-  int r = snap_list(m_src_image_ctx, *snaps);
+  int r = Snapshot<I>::list(m_src_image_ctx, *snaps);
   if (r < 0) {
     lderr(m_cct) << "failed listing snapshots: " << cpp_strerror(r) << dendl;
     return r;
@@ -1257,7 +1272,8 @@ int Migration<I>::create_dst_image() {
 
   {
     std::shared_lock owner_locker{dst_image_ctx->owner_lock};
-    r = dst_image_ctx->operations->prepare_image_update(true);
+    r = dst_image_ctx->operations->prepare_image_update(
+      exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true);
     if (r < 0) {
       lderr(m_cct) << "cannot obtain exclusive lock" << dendl;
       return r;
@@ -1293,7 +1309,7 @@ int Migration<I>::create_dst_image() {
   m_dst_migration_spec = {cls::rbd::MIGRATION_HEADER_TYPE_DST,
                           m_src_io_ctx.get_id(), m_src_io_ctx.get_namespace(),
                           m_src_image_name, m_src_image_id, snap_seqs, size,
-                          m_flatten, m_mirroring,
+                          m_mirroring, m_mirror_image_mode, m_flatten,
                           cls::rbd::MIGRATION_STATE_PREPARING, ""};
 
   r = cls_client::migration_set(&m_dst_io_ctx, m_dst_header_oid,
@@ -1412,12 +1428,10 @@ int Migration<I>::update_group(I *from_image_ctx, I *to_image_ctx) {
 }
 
 template <typename I>
-int Migration<I>::disable_mirroring(I *image_ctx, bool *was_enabled) {
+int Migration<I>::disable_mirroring(
+    I *image_ctx, bool *was_enabled,
+    cls::rbd::MirrorImageMode *mirror_image_mode) {
   *was_enabled = false;
-
-  if (!image_ctx->test_features(RBD_FEATURE_JOURNALING)) {
-    return 0;
-  }
 
   cls::rbd::MirrorImage mirror_image;
   int r = cls_client::mirror_image_get(&image_ctx->md_ctx, image_ctx->id,
@@ -1435,6 +1449,7 @@ int Migration<I>::disable_mirroring(I *image_ctx, bool *was_enabled) {
 
   if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
     *was_enabled = true;
+    *mirror_image_mode = mirror_image.mode;
   }
 
   ldout(m_cct, 10) << dendl;
@@ -1455,12 +1470,9 @@ int Migration<I>::disable_mirroring(I *image_ctx, bool *was_enabled) {
 }
 
 template <typename I>
-int Migration<I>::enable_mirroring(I *image_ctx, bool was_enabled) {
-
-  if (!image_ctx->test_features(RBD_FEATURE_JOURNALING)) {
-    return 0;
-  }
-
+int Migration<I>::enable_mirroring(
+    I *image_ctx, bool was_enabled,
+    cls::rbd::MirrorImageMode mirror_image_mode) {
   cls::rbd::MirrorMode mirror_mode;
   int r = cls_client::mirror_mode_get(&image_ctx->md_ctx, &mirror_mode);
   if (r < 0 && r != -ENOENT) {
@@ -1482,9 +1494,10 @@ int Migration<I>::enable_mirroring(I *image_ctx, bool was_enabled) {
   ldout(m_cct, 10) << dendl;
 
   C_SaferCond ctx;
-  auto req = mirror::EnableRequest<I>::create(image_ctx->md_ctx, image_ctx->id,
-                                              "", image_ctx->op_work_queue,
-                                              &ctx);
+  auto req = mirror::EnableRequest<I>::create(
+    image_ctx->md_ctx, image_ctx->id,
+    static_cast<mirror_image_mode_t>(mirror_image_mode), "",
+    image_ctx->op_work_queue, &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {
@@ -1730,8 +1743,8 @@ int Migration<I>::remove_src_image() {
     auto &snap = *it;
 
     librbd::NoOpProgressContext prog_ctx;
-    int r = snap_remove(m_src_image_ctx, snap.name.c_str(),
-                        RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
+    int r = Snapshot<I>::remove(m_src_image_ctx, snap.name.c_str(),
+                                RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
     if (r < 0) {
       lderr(m_cct) << "failed removing source image snapshot '" << snap.name
                    << "': " << cpp_strerror(r) << dendl;

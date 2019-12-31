@@ -1,45 +1,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from datetime import datetime
+
+import time
+
 import cherrypy
 
 from . import BaseController, ApiController, RESTController, Endpoint
 from .. import mgr
 from ..exceptions import DashboardException, UserAlreadyExists, \
-    UserDoesNotExist
+    UserDoesNotExist, PasswordCheckException, PwdExpirationDateNotValid
 from ..security import Scope
 from ..services.access_control import SYSTEM_ROLES, PasswordCheck
 from ..services.auth import JwtManager
 
 
-def check_password_complexity(password, username, old_password=None):
-    password_complexity = PasswordCheck(password, username, old_password)
-    if password_complexity.check_if_as_the_old_password():
-        raise DashboardException(msg='Password cannot be the\
-                                      same as the previous one.',
-                                 code='pwd-must-not-be-last-one',
-                                 component='user')
-    if password_complexity.check_if_contains_username():
-        raise DashboardException(msg='Password cannot contain username.',
-                                 code='pwd-must-not-contain-username',
-                                 component='user')
-    if password_complexity.check_if_contains_forbidden_words():
-        raise DashboardException(msg='Password cannot contain keywords.',
-                                 code='pwd-must-not-contain-forbidden-keywords',
-                                 component='user')
-    if password_complexity.check_if_repetetive_characters():
-        raise DashboardException(msg='Password cannot contain repetitive \
-                                      characters.',
-                                 code='pwd-must-not-contain-repetitive-chars',
-                                 component='user')
-    if password_complexity.check_if_sequential_characters():
-        raise DashboardException(msg='Password cannot contain sequential \
-                                      characters.',
-                                 code='pwd-must-not-contain-sequential-chars',
-                                 component='user')
-    if password_complexity.check_password_characters() < 10:
-        raise DashboardException(msg='Password is too weak.',
-                                 code='pwd-too-weak',
+def validate_password_policy(password, username, old_password=None):
+    pw_check = PasswordCheck(password, username, old_password)
+    try:
+        pw_check.check_all()
+    except PasswordCheckException as ex:
+        raise DashboardException(msg=str(ex),
+                                 code='password_policy_validation_failed',
                                  component='user')
 
 
@@ -75,7 +58,7 @@ class User(RESTController):
         return User._user_to_dict(user)
 
     def create(self, username=None, password=None, name=None, email=None,
-               roles=None, enabled=True):
+               roles=None, enabled=True, pwdExpirationDate=None):
         if not username:
             raise DashboardException(msg='Username is required',
                                      code='username_required',
@@ -84,14 +67,20 @@ class User(RESTController):
         if roles:
             user_roles = User._get_user_roles(roles)
         if password:
-            check_password_complexity(password, username)
+            validate_password_policy(password, username)
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(username, password, name,
-                                                  email, enabled)
+                                                  email, enabled, pwdExpirationDate)
         except UserAlreadyExists:
             raise DashboardException(msg='Username already exists',
                                      code='username_already_exists',
                                      component='user')
+        except PwdExpirationDateNotValid:
+            raise DashboardException(msg='Password expiration date must not be in '
+                                         'the past',
+                                     code='pwd_past_expiration_date',
+                                     component='user')
+
         if user_roles:
             user.set_roles(user_roles)
         mgr.ACCESS_CTRL_DB.save()
@@ -110,7 +99,7 @@ class User(RESTController):
         mgr.ACCESS_CTRL_DB.save()
 
     def set(self, username, password=None, name=None, email=None, roles=None,
-            enabled=None):
+            enabled=None, pwdExpirationDate=None):
         if JwtManager.get_username() == username and enabled is False:
             raise DashboardException(msg='You are not allowed to disable your user',
                                      code='cannot_disable_current_user',
@@ -124,12 +113,18 @@ class User(RESTController):
         if roles:
             user_roles = User._get_user_roles(roles)
         if password:
-            check_password_complexity(password, username)
+            validate_password_policy(password, username)
             user.set_password(password)
+        if pwdExpirationDate and \
+           (pwdExpirationDate < int(time.mktime(datetime.utcnow().timetuple()))):
+            raise DashboardException(
+                msg='Password expiration date must not be in the past',
+                code='pwd_past_expiration_date', component='user')
         user.name = name
         user.email = email
         if enabled is not None:
             user.enabled = enabled
+        user.pwd_expiration_date = pwdExpirationDate
         user.set_roles(user_roles)
         mgr.ACCESS_CTRL_DB.save()
         return User._user_to_dict(user)
@@ -152,6 +147,6 @@ class UserChangePassword(BaseController):
             raise DashboardException(msg='Invalid old password',
                                      code='invalid_old_password',
                                      component='user')
-        check_password_complexity(new_password, username, old_password)
+        validate_password_policy(new_password, username, old_password)
         user.set_password(new_password)
         mgr.ACCESS_CTRL_DB.save()

@@ -21,6 +21,7 @@ tasks:
         - \(OSD_DOWN\)
         - \(OSD_HOST_DOWN\)
         - \(POOL_APP_NOT_ENABLED\)
+        - \(OSDMAP_FLAGS\)
         - pauserd,pausewr flag\(s\) set
         - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
         - evicting unresponsive client .+
@@ -34,15 +35,17 @@ tasks:
         - tasks.mgr.dashboard.test_cluster_configuration
         - tasks.mgr.dashboard.test_erasure_code_profile
         - tasks.mgr.dashboard.test_ganesha
-        # - tasks.mgr.dashboard.test_health
+        - tasks.mgr.dashboard.test_health
         - tasks.mgr.dashboard.test_host
         - tasks.mgr.dashboard.test_logs
         - tasks.mgr.dashboard.test_mgr_module
         - tasks.mgr.dashboard.test_monitor
+        - tasks.mgr.dashboard.test_orchestrator
         - tasks.mgr.dashboard.test_osd
-        # - tasks.mgr.dashboard.test_perf_counters
+        - tasks.mgr.dashboard.test_perf_counters
         - tasks.mgr.dashboard.test_pool
         - tasks.mgr.dashboard.test_rbd
+        - tasks.mgr.dashboard.test_rbd_mirroring
         - tasks.mgr.dashboard.test_requests
         - tasks.mgr.dashboard.test_rgw
         - tasks.mgr.dashboard.test_role

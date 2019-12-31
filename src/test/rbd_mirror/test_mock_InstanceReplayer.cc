@@ -50,8 +50,8 @@ struct Threads<librbd::MockTestImageCtx> {
 
 template<>
 struct ServiceDaemon<librbd::MockTestImageCtx> {
-  MOCK_METHOD3(add_or_update_attribute,
-               void(int64_t, const std::string&,
+  MOCK_METHOD4(add_or_update_namespace_attribute,
+               void(int64_t, const std::string&, const std::string&,
                     const service_daemon::AttributeValue&));
 };
 
@@ -299,7 +299,8 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, destroy());
-  EXPECT_CALL(mock_service_daemon,add_or_update_attribute(_, _, _)).Times(3);
+  EXPECT_CALL(mock_service_daemon,
+              add_or_update_namespace_attribute(_, _, _, _)).Times(3);
 
   ASSERT_TRUE(start_image_replayers_ctx != nullptr);
   start_image_replayers_ctx->complete(0);

@@ -5,7 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
-import { ListPipe } from '../../../../shared/pipes/list.pipe';
+import { JoinPipe } from '../../../../shared/pipes/join.pipe';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { OsdScrubModalComponent } from './osd-scrub-modal.component';
 
@@ -27,11 +27,11 @@ describe('OsdScrubModalComponent', () => {
 
   configureTestBed({
     imports: [ReactiveFormsModule],
-    declarations: [OsdScrubModalComponent, ListPipe],
+    declarations: [OsdScrubModalComponent, JoinPipe],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
       BsModalRef,
-      ListPipe,
+      JoinPipe,
       { provide: OsdService, useValue: fakeService },
       { provide: NotificationService, useValue: fakeService },
       i18nProviders

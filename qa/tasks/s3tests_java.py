@@ -9,14 +9,11 @@ import os
 import random
 import string
 import yaml
-import socket
 import getpass
 
 from teuthology import misc as teuthology
-from teuthology.exceptions import ConfigError
 from teuthology.task import Task
 from teuthology.orchestra import run
-from teuthology.orchestra.remote import Remote
 
 log = logging.getLogger(__name__)
 
@@ -317,7 +314,7 @@ class S3tests_java(Task):
             args = ['cd',
                     '{tdir}/s3-tests-java'.format(tdir=testdir),
                     run.Raw('&&'),
-                    '/opt/gradle/gradle-4.7/bin/gradle', 'clean', 'test',
+                    '/opt/gradle/gradle/bin/gradle', 'clean', 'test',
                     '--rerun-tasks', '--no-build-cache',
                     ]
             extra_args = []
@@ -352,7 +349,7 @@ class S3tests_java(Task):
                         stdout=StringIO()
                     )
 
-                if gr is not 'All':
+                if gr != 'All':
                     self.ctx.cluster.only(client).run(
                         args=args + ['--tests'] + [gr] + extra_args,
                         stdout=StringIO()

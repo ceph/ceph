@@ -4,29 +4,109 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
-import copy
+import functools
+import logging
 import sys
 import time
-import fnmatch
+from collections import namedtuple
 from functools import wraps
 import uuid
 import string
 import random
 import datetime
-
+import copy
+import re
 import six
+import errno
 
-from mgr_module import MgrModule, PersistentStoreDict
+from ceph.deployment import inventory
+
+from mgr_module import MgrModule, PersistentStoreDict, CLICommand, HandleCommandResult
 from mgr_util import format_bytes
 
 try:
     from ceph.deployment.drive_group import DriveGroupSpec
-    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator
-
-    T = TypeVar('T')
-    G = Generic[T]
+    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
+        Type, Sequence
 except ImportError:
-    T, G = object, object
+    pass
+
+logger = logging.getLogger(__name__)
+
+
+class HostSpec(namedtuple('HostSpec', ['hostname', 'network', 'name'])):
+    def __str__(self):
+        res = ''
+        res += self.hostname
+        if self.network:
+            res += ':' + self.network
+        if self.name:
+            res += '=' + self.name
+        return res
+
+
+def parse_host_specs(host, require_network=True):
+    """
+    Split host into host, network, and (optional) daemon name parts.  The network
+    part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
+    e.g.,
+      "myhost"
+      "myhost=name"
+      "myhost:1.2.3.4"
+      "myhost:1.2.3.4=name"
+      "myhost:1.2.3.0/24"
+      "myhost:1.2.3.0/24=name"
+      "myhost:[v2:1.2.3.4:3000]=name"
+      "myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
+    """
+    # Matches from start to : or = or until end of string
+    host_re = r'^(.*?)(:|=|$)'
+    # Matches from : to = or until end of string
+    ip_re = r':(.*?)(=|$)'
+    # Matches from = to end of string
+    name_re = r'=(.*?)$'
+
+    # assign defaults
+    host_spec = HostSpec('', '', '')
+
+    match_host = re.search(host_re, host)
+    if match_host:
+        host_spec = host_spec._replace(hostname=match_host.group(1))
+
+    name_match = re.search(name_re, host)
+    if name_match:
+        host_spec = host_spec._replace(name=name_match.group(1))
+
+    ip_match = re.search(ip_re, host)
+    if ip_match:
+        host_spec = host_spec._replace(network=ip_match.group(1))
+
+    if not require_network:
+        return host_spec
+
+    from ipaddress import ip_network, ip_address
+    networks = list()  # type: List[str]
+    network = host_spec.network
+    # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
+    if ',' in network:
+        networks = [x for x in network.split(',')]
+    else:
+        networks.append(network)
+    for network in networks:
+        # only if we have versioned network configs
+        if network.startswith('v') or network.startswith('[v'):
+            network = network.split(':')[1]
+        try:
+            # if subnets are defined, also verify the validity
+            if '/' in network:
+                ip_network(six.text_type(network))
+            else:
+                ip_address(six.text_type(network))
+        except ValueError as e:
+            # logging?
+            raise e
+
+    return host_spec
 
 
 class OrchestratorError(Exception):
@@ -53,18 +133,429 @@ class OrchestratorValidationError(OrchestratorError):
     """
 
 
-class _Completion(G):
+def handle_exception(prefix, cmd_args, desc, perm, func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (OrchestratorError, ImportError) as e:
+            # Do not print Traceback for expected errors.
+            return HandleCommandResult(-errno.ENOENT, stderr=str(e))
+        except NotImplementedError:
+            msg = 'This Orchestrator does not support `{}`'.format(prefix)
+            return HandleCommandResult(-errno.ENOENT, stderr=msg)
+
+    return CLICommand(prefix, cmd_args, desc, perm)(wrapper)
+
+
+def _cli_command(perm):
+    def inner_cli_command(prefix, cmd_args="", desc=""):
+        return lambda func: handle_exception(prefix, cmd_args, desc, perm, func)
+    return inner_cli_command
+
+
+_cli_read_command = _cli_command('r')
+_cli_write_command = _cli_command('rw')
+
+
+def _no_result():
+    return object()
+
+
+class _Promise(object):
+    """
+    A completion may need multiple promises to be fulfilled. `_Promise` is one
+    step.
+
+    Typically ``Orchestrator`` implementations inherit from this class to
+    build their own way of finishing a step to fulfil a future.
+
+    They are not exposed in the orchestrator interface and can be seen as a
+    helper to build orchestrator modules.
+    """
+    INITIALIZED = 1  # We have a parent completion and a next completion
+    RUNNING = 2
+    FINISHED = 3  # we have a final result
+
+    NO_RESULT = _no_result()  # type: None
+    ASYNC_RESULT = object()
+
+    def __init__(self,
+                 _first_promise=None,  # type: Optional["_Promise"]
+                 value=NO_RESULT,  # type: Optional[Any]
+                 on_complete=None,    # type: Optional[Callable]
+                 name=None,  # type: Optional[str]
+                 ):
+        self._on_complete_ = on_complete
+        self._name = name
+        self._next_promise = None  # type: Optional[_Promise]
+
+        self._state = self.INITIALIZED
+        self._exception = None  # type: Optional[Exception]
+
+        # Value of this _Promise. may be an intermediate result.
+        self._value = value
+
+        # _Promise is not a continuation monad, as `_result` is of type
+        # T instead of (T -> r) -> r. Therefore we need to store the first promise here.
+        self._first_promise = _first_promise or self  # type: '_Promise'
+
+    @property
+    def _on_complete(self):
+        # type: () -> Optional[Callable]
+        # https://github.com/python/mypy/issues/4125
+        return self._on_complete_
+
+    @_on_complete.setter
+    def _on_complete(self, val):
+        # type: (Optional[Callable]) -> None
+        self._on_complete_ = val
+
+
+    def __repr__(self):
+        name = self._name or getattr(self._on_complete, '__name__', '??') if self._on_complete else 'None'
+        val = repr(self._value) if self._value is not self.NO_RESULT else 'NA'
+        return '{}(_s={}, val={}, _on_c={}, id={}, name={}, pr={}, _next={})'.format(
+            self.__class__, self._state, val, self._on_complete, id(self), name, getattr(next, '_progress_reference', 'NA'), repr(self._next_promise)
+        )
+
+    def pretty_print_1(self):
+        if self._name:
+            name = self._name
+        elif self._on_complete is None:
+            name = 'lambda x: x'
+        elif hasattr(self._on_complete, '__name__'):
+            name = getattr(self._on_complete, '__name__')
+        else:
+            name = self._on_complete.__class__.__name__
+        val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
+        prefix = {
+            self.INITIALIZED: '      ',
+            self.RUNNING:     '   >>>',
+            self.FINISHED:    '(done)'
+        }[self._state]
+        return '{} {}({}),'.format(prefix, name, val)
+
+    def then(self, on_complete):
+        # type: (Any, Callable) -> Any
+        """
+        Call ``on_complete`` as soon as this promise is finalized.
+        """
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+        if self._on_complete is not None:
+            assert self._next_promise is None
+            self._set_next_promise(self.__class__(
+                _first_promise=self._first_promise,
+                on_complete=on_complete
+            ))
+            return self._next_promise
+
+        else:
+            self._on_complete = on_complete
+            self._set_next_promise(self.__class__(_first_promise=self._first_promise))
+            return self._next_promise
+
+    def _set_next_promise(self, next):
+        # type: (_Promise) -> None
+        assert self is not next
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+
+        self._next_promise = next
+        assert self._next_promise is not None
+        for p in iter(self._next_promise):
+            p._first_promise = self._first_promise
+
+    def _finalize(self, value=NO_RESULT):
+        """
+        Sets this promise to complete.
+
+        Orchestrators may choose to use this helper function.
+
+        :param value: new value.
+        """
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+
+        self._state = self.RUNNING
+
+        if value is not self.NO_RESULT:
+            self._value = value
+        assert self._value is not self.NO_RESULT, repr(self)
+
+        if self._on_complete:
+            try:
+                next_result = self._on_complete(self._value)
+            except Exception as e:
+                self.fail(e)
+                return
+        else:
+            next_result = self._value
+
+        if isinstance(next_result, _Promise):
+            # hack: _Promise is not a continuation monad.
+            next_result = next_result._first_promise  # type: ignore
+            assert next_result not in self, repr(self._first_promise) + repr(next_result)
+            assert self not in next_result
+            next_result._append_promise(self._next_promise)
+            self._set_next_promise(next_result)
+            assert self._next_promise
+            if self._next_promise._value is self.NO_RESULT:
+                self._next_promise._value = self._value
+            self.propagate_to_next()
+        elif next_result is not self.ASYNC_RESULT:
+            # simple map. simply forward
+            if self._next_promise:
+                self._next_promise._value = next_result
+            else:
+                # Hack: next_result is of type U, _value is of type T
+                self._value = next_result  # type: ignore
+            self.propagate_to_next()
+        else:
+            # asynchronous promise
+            pass
+
+
+    def propagate_to_next(self):
+        self._state = self.FINISHED
+        logger.debug('finalized {}'.format(repr(self)))
+        if self._next_promise:
+            self._next_promise._finalize()
+
+    def fail(self, e):
+        # type: (Exception) -> None
+        """
+        Sets the whole completion to be faild with this exception and end the
+        evaluation.
+        """
+        if self._state == self.FINISHED:
+            raise ValueError(
+                'Invalid State: called fail, but Completion is already finished: {}'.format(str(e)))
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+        logger.exception('_Promise failed')
+        self._exception = e
+        self._value = 'exception'
+        if self._next_promise:
+            self._next_promise.fail(e)
+        self._state = self.FINISHED
+
+    def __contains__(self, item):
+        return any(item is p for p in iter(self._first_promise))
+
+    def __iter__(self):
+        yield self
+        elem = self._next_promise
+        while elem is not None:
+            yield elem
+            elem = elem._next_promise
+
+    def _append_promise(self, other):
+        if other is not None:
+            assert self not in other
+            assert other not in self
+            self._last_promise()._set_next_promise(other)
+
+    def _last_promise(self):
+        # type: () -> _Promise
+        return list(iter(self))[-1]
+
+
+class ProgressReference(object):
+    def __init__(self,
+                 message,  # type: str
+                 mgr,
+                 completion=None  # type: Optional[Callable[[], Completion]]
+                ):
+        """
+        ProgressReference can be used within Completions::
+
+            +---------------+      +---------------------------------+
+            |               | then |                                 |
+            | My Completion | +--> | on_complete=ProgressReference() |
+            |               |      |                                 |
+            +---------------+      +---------------------------------+
+
+        See :func:`Completion.with_progress` for an easy way to create
+        a progress reference
+
+        """
+        super(ProgressReference, self).__init__()
+        self.progress_id = str(uuid.uuid4())
+        self.message = message
+        self.mgr = mgr
+
+        #: The completion can already have a result, before the write
+        #: operation is effective. progress == 1 means, the services are
+        #: created / removed.
+        self.completion = completion  # type: Optional[Callable[[], Completion]]
+
+        #: if a orchestrator module can provide a more detailed
+        #: progress information, it needs to also call ``progress.update()``.
+        self.progress = 0.0
+
+        self._completion_has_result = False
+        self.mgr.all_progress_references.append(self)
+
+    def __str__(self):
+        """
+        ``__str__()`` is used for determining the message for progress events.
+        """
+        return self.message or super(ProgressReference, self).__str__()
+
+    def __call__(self, arg):
+        self._completion_has_result = True
+        if self.progress == 0.0:
+            self.progress = 0.5
+        return arg
+
+    @property
+    def progress(self):
+        return self._progress
+
+    @progress.setter
+    def progress(self, progress):
+        self._progress = progress
+        try:
+            if self.effective:
+                self.mgr.remote("progress", "complete", self.progress_id)
+                self.mgr.all_progress_references = [p for p in self.mgr.all_progress_references if p is not self]
+            else:
+                self.mgr.remote("progress", "update", self.progress_id, self.message,
+                                progress,
+                                [("origin", "orchestrator")])
+        except ImportError:
+            # If the progress module is disabled that's fine,
+            # they just won't see the output.
+            pass
+
+    @property
+    def effective(self):
+        return self.progress == 1 and self._completion_has_result
+
+    def update(self):
+        def progress_run(progress):
+            self.progress = progress
+        if self.completion:
+            c = self.completion().then(progress_run)
+            self.mgr.process([c._first_promise])
+        else:
+            self.progress = 1
+
+    def fail(self):
+        self._completion_has_result = True
+        self.progress = 1
+
+
+class Completion(_Promise):
+    """
+    Combines multiple promises into one overall operation.
+
+    Completions are composable by being able to
+    call one completion from another completion. I.e. making them re-usable
+    using Promises E.g.::
+
+        >>> return Orchestrator().get_hosts().then(self._create_osd)
+
+    where ``get_hosts`` returns a Completion of list of hosts and
+    ``_create_osd`` takes a list of hosts.
+
+    The concept behind this is to store the computation steps
+    explicit and then explicitly evaluate the chain:
+
+        >>> p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
+        ... p.finalize(2)
+        ... assert p.result = "4"
+
+    or graphically::
+
+        +---------------+      +-----------------+
+        |               | then |                 |
+        | lambda x: x*x | +--> | lambda x: str(x)|
+        |               |      |                 |
+        +---------------+      +-----------------+
+
+    """
+    def __init__(self,
+                 _first_promise=None,  # type: Optional["Completion"]
+                 value=_Promise.NO_RESULT,  # type: Any
+                 on_complete=None,  # type: Optional[Callable]
+                 name=None,  # type: Optional[str]
+                 ):
+        super(Completion, self).__init__(_first_promise, value, on_complete, name)
+
+    @property
+    def _progress_reference(self):
+        # type: () -> Optional[ProgressReference]
+        if hasattr(self._on_complete, 'progress_id'):
+            return self._on_complete  # type: ignore
+        return None
+
+    @property
+    def progress_reference(self):
+        # type: () -> Optional[ProgressReference]
+        """
+        ProgressReference. Marks this completion
+        as a write completeion.
+        """
+
+        references = [c._progress_reference for c in iter(self) if c._progress_reference is not None]
+        if references:
+            assert len(references) == 1
+            return references[0]
+        return None
+
+    @classmethod
+    def with_progress(cls,  # type: Any
+                      message,  # type: str
+                      mgr,
+                      _first_promise=None,  # type: Optional["Completion"]
+                      value=_Promise.NO_RESULT,  # type: Any
+                      on_complete=None,  # type: Optional[Callable]
+                      calc_percent=None  # type: Optional[Callable[[], Any]]
+                      ):
+        # type: (...) -> Any
+
+        c = cls(
+            _first_promise=_first_promise,
+            value=value,
+            on_complete=on_complete
+        ).add_progress(message, mgr, calc_percent)
+
+        return c._first_promise
+
+    def add_progress(self,
+                     message,  # type: str
+                     mgr,
+                     calc_percent=None  # type: Optional[Callable[[], Any]]
+                     ):
+        return self.then(
+            on_complete=ProgressReference(
+                message=message,
+                mgr=mgr,
+                completion=calc_percent
+            )
+        )
+
+    def fail(self, e):
+        super(Completion, self).fail(e)
+        if self._progress_reference:
+            self._progress_reference.fail()
+
+    def finalize(self, result=_Promise.NO_RESULT):
+        if self._first_promise._state == self.INITIALIZED:
+            self._first_promise._finalize(result)
+
     @property
     def result(self):
-        # type: () -> T
         """
-        Return the result of the operation that we were waited
-        for.  Only valid after calling Orchestrator.wait() on this
+        The result of the operation that we were waited
+        for.  Only valid after calling Orchestrator.process() on this
         completion.
         """
-        raise NotImplementedError()
+        last = self._last_promise()
+        assert last._state == _Promise.FINISHED
+        return last._value
 
     def result_str(self):
+        """Force a string."""
         if self.result is None:
             return ''
         return str(self.result)
@@ -72,27 +563,24 @@ class _Completion(G):
     @property
     def exception(self):
         # type: () -> Optional[Exception]
-        """
-        Holds an exception object.
-        """
-        try:
-            return self.__exception
-        except AttributeError:
-            return None
-
-    @exception.setter
-    def exception(self, value):
-        self.__exception = value
+        return self._last_promise()._exception
 
     @property
-    def is_read(self):
+    def has_result(self):
         # type: () -> bool
-        raise NotImplementedError()
+        """
+        Has the operation already a result?
 
-    @property
-    def is_complete(self):
-        # type: () -> bool
-        raise NotImplementedError()
+        For Write operations, it can already have a
+        result, if the orchestrator's configuration is
+        persistently written. Typically this would
+        indicate that an update had been written to
+        a manifest, but that the update had not
+        necessarily been pushed out to the cluster.
+
+        :return:
+        """
+        return self._last_promise()._state == _Promise.FINISHED
 
     @property
     def is_errored(self):
@@ -104,13 +592,38 @@ class _Completion(G):
         return self.exception is not None
 
     @property
-    def should_wait(self):
+    def needs_result(self):
         # type: () -> bool
-        raise NotImplementedError()
+        """
+        Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return not self.is_errored and not self.has_result
+
+    @property
+    def is_finished(self):
+        # type: () -> bool
+        """
+        Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return self.is_errored or (self.has_result)
+
+    def pretty_print(self):
+
+        reprs = '\n'.join(p.pretty_print_1() for p in iter(self._first_promise))
+        return """<{}>[\n{}\n]""".format(self.__class__.__name__, reprs)
+
+
+def pretty_print(completions):
+    # type: (Sequence[Completion]) -> str
+    return ', '.join(c.pretty_print() for c in completions)
 
 
 def raise_if_exception(c):
-    # type: (_Completion) -> None
+    # type: (Completion) -> None
     """
     :raises OrchestratorError: Some user error or a config error.
     :raises Exception: Some internal error
@@ -119,11 +632,15 @@ def raise_if_exception(c):
         # This is something like `return pickle.loads(pickle.dumps(r_obj))`
         # Without importing anything.
         r_cls = r_obj.__class__
-        if r_cls.__module__ == '__builtin__':
+        if r_cls.__module__ in ('__builtin__', 'builtins'):
             return r_obj
         my_cls = getattr(sys.modules[r_cls.__module__], r_cls.__name__)
         if id(my_cls) == id(r_cls):
             return r_obj
+        if hasattr(r_obj, '__reduce__'):
+            reduce_tuple = r_obj.__reduce__()
+            if len(reduce_tuple) >= 2:
+                return my_cls(*[copy_to_this_subinterpreter(a) for a in reduce_tuple[1]])
         my_obj = my_cls.__new__(my_cls)
         for k,v in r_obj.__dict__.items():
             setattr(my_obj, k, copy_to_this_subinterpreter(v))
@@ -137,106 +654,20 @@ def raise_if_exception(c):
         raise e
 
 
-class ReadCompletion(_Completion):
-    """
-    ``Orchestrator`` implementations should inherit from this
-    class to implement their own handles to operations in progress, and
-    return an instance of their subclass from calls into methods.
-    """
-
-    def __init__(self):
-        pass
-
-    @property
-    def is_read(self):
-        return True
-
-    @property
-    def should_wait(self):
-        """Could the external operation be deemed as complete,
-        or should we wait?
-        We must wait for a read operation only if it is not complete.
-        """
-        return not self.is_complete
-
-
-class TrivialReadCompletion(ReadCompletion):
+class TrivialReadCompletion(Completion):
     """
     This is the trivial completion simply wrapping a result.
     """
     def __init__(self, result):
         super(TrivialReadCompletion, self).__init__()
-        self._result = result
+        if result:
+            self.finalize(result)
 
-    @property
-    def result(self):
-        return self._result
-
-    @property
-    def is_complete(self):
-        return True
-
-
-class WriteCompletion(_Completion):
-    """
-    ``Orchestrator`` implementations should inherit from this
-    class to implement their own handles to operations in progress, and
-    return an instance of their subclass from calls into methods.
-    """
-
-    def __init__(self):
-        self.progress_id = str(uuid.uuid4())
-
-        #: if a orchestrator module can provide a more detailed
-        #: progress information, it needs to also call ``progress.update()``.
-        self.progress = 0.5
-
-    def __str__(self):
-        """
-        ``__str__()`` is used for determining the message for progress events.
-        """
-        return super(WriteCompletion, self).__str__()
-
-    @property
-    def is_persistent(self):
-        # type: () -> bool
-        """
-        Has the operation updated the orchestrator's configuration
-        persistently?  Typically this would indicate that an update
-        had been written to a manifest, but that the update
-        had not necessarily been pushed out to the cluster.
-        """
-        raise NotImplementedError()
-
-    @property
-    def is_effective(self):
-        """
-        Has the operation taken effect on the cluster?  For example,
-        if we were adding a service, has it come up and appeared
-        in Ceph's cluster maps?
-        """
-        raise NotImplementedError()
-
-    @property
-    def is_complete(self):
-        return self.is_errored or (self.is_persistent and self.is_effective)
-
-    @property
-    def is_read(self):
-        return False
-
-    @property
-    def should_wait(self):
-        """Could the external operation be deemed as complete,
-        or should we wait?
-        We must wait for a write operation only if we know
-        it is not persistent yet.
-        """
-        return not self.is_persistent
 
 def _hide_in_features(f):
     f._hide_in_features = True
     return f
+
 
 class Orchestrator(object):
     """
@@ -244,6 +675,10 @@ class Orchestrator(object):
     periods ranging from network latencies to package install latencies and large
     internet downloads.  For that reason, all are asynchronous, and return
     ``Completion`` objects.
+
+    Methods should only return the completion and not directly execute
+    anything, like network calls. Otherwise the purpose of
+    those completions is defeated.
 
     Implementations are not required to start work on an operation until
     the caller waits on the relevant Completion objects.  Callers making
@@ -294,19 +729,18 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     @_hide_in_features
-    def wait(self, completions):
+    def process(self, completions):
+        # type: (List[Completion]) -> None
         """
-        Given a list of Completion instances, progress any which are
-        incomplete.  Return a true if everything is done.
+        Given a list of Completion instances, process any which are
+        incomplete.
 
         Callers should inspect the detail of each completion to identify
         partial completion/progress information, and present that information
         to the user.
 
-        For fast operations (e.g. reading from a database), implementations
-        may choose to do blocking IO in this call.
-
-        :rtype: bool
+        This method should not block, as this would make it slow to query
+        a status, while other long running operations are in progress.
         """
         raise NotImplementedError()
 
@@ -330,7 +764,6 @@ class Orchestrator(object):
                 ... except (OrchestratorError, NotImplementedError):
                 ...     ...
 
-
         :returns: Dict of API method names to ``{'available': True or False}``
         """
         module = self.__class__
@@ -340,8 +773,16 @@ class Orchestrator(object):
                     }
         return features
 
+    @_hide_in_features
+    def cancel_completions(self):
+        # type: () -> None
+        """
+        Cancels ongoing completions. Unstuck the mgr.
+        """
+        raise NotImplementedError()
+
     def add_host(self, host):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """
         Add a host to the orchestrator inventory.
 
@@ -350,7 +791,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def remove_host(self, host):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """
         Remove a host from the orchestrator inventory.
 
@@ -359,7 +800,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def get_hosts(self):
-        # type: () -> ReadCompletion[List[InventoryNode]]
+        # type: () -> Completion
         """
         Report the hosts in the cluster.
 
@@ -369,8 +810,22 @@ class Orchestrator(object):
         """
         return self.get_inventory()
 
+    def add_host_label(self, host, label):
+        # type: (str, str) -> Completion
+        """
+        Add a host label
+        """
+        raise NotImplementedError()
+
+    def remove_host_label(self, host, label):
+        # type: (str, str) -> Completion
+        """
+        Remove a host label
+        """
+        raise NotImplementedError()
+
     def get_inventory(self, node_filter=None, refresh=False):
-        # type: (InventoryFilter, bool) -> ReadCompletion[List[InventoryNode]]
+        # type: (Optional[InventoryFilter], bool) -> Completion
         """
         Returns something that was created by `ceph-volume inventory`.
 
@@ -379,7 +834,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
-        # type: (Optional[str], Optional[str], Optional[str], bool) -> ReadCompletion[List[ServiceDescription]]
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -394,7 +849,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def service_action(self, action, service_type, service_name=None, service_id=None):
-        # type: (str, str, str, str) -> WriteCompletion
+        # type: (str, str, Optional[str], Optional[str]) -> Completion
         """
         Perform an action (start/stop/reload) on a service.
 
@@ -405,19 +860,19 @@ class Orchestrator(object):
         * If using service_id, perform the action on a single specific daemon
           instance.
 
-        :param action: one of "start", "stop", "reload"
+        :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
         :param service_type: e.g. "mds", "rgw", ...
         :param service_name: name of logical service ("cephfs", "us-east", ...)
         :param service_id: service daemon instance (usually a short hostname)
-        :rtype: WriteCompletion
+        :rtype: Completion
         """
-        assert action in ["start", "stop", "reload"]
-        assert service_name or service_id
-        assert not (service_name and service_id)
+        #assert action in ["start", "stop", "reload, "restart", "redeploy"]
+        #assert service_name or service_id
+        #assert not (service_name and service_id)
         raise NotImplementedError()
 
-    def create_osds(self, drive_group, all_hosts):
-        # type: (DriveGroupSpec, List[str]) -> WriteCompletion
+    def create_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> Completion
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -434,8 +889,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_osds(self, osd_ids, destroy=False):
-        # type: (List[str], bool) -> WriteCompletion
+    def remove_osds(self, osd_ids):
+        # type: (List[str]) -> Completion
         """
         :param osd_ids: list of OSD IDs
         :param destroy: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
@@ -445,8 +900,19 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def update_mgrs(self, num, hosts):
-        # type: (int, List[str]) -> WriteCompletion
+    def blink_device_light(self, ident_fault, on, locations):
+        # type: (str, bool, List[DeviceLightLoc]) -> Completion
+        """
+        Instructs the orchestrator to enable or disable either the ident or the fault LED.
+
+        :param ident_fault: either ``"ident"`` or ``"fault"``
+        :param on: ``True`` = on.
+        :param locations: See :class:`orchestrator.DeviceLightLoc`
+        """
+        raise NotImplementedError()
+
+    def update_mgrs(self, spec):
+        # type: (StatefulServiceSpec) -> Completion
         """
         Update the number of cluster managers.
 
@@ -455,46 +921,64 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def update_mons(self, num, hosts):
-        # type: (int, List[Tuple[str,str]]) -> WriteCompletion
+    def update_mons(self, spec):
+        # type: (StatefulServiceSpec) -> Completion
         """
         Update the number of cluster monitors.
 
         :param num: requested number of monitors.
-        :param hosts: list of hosts + network (optional)
+        :param hosts: list of hosts + network + name (optional)
         """
         raise NotImplementedError()
 
     def add_mds(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """Create a new MDS cluster"""
         raise NotImplementedError()
 
     def remove_mds(self, name):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """Remove an MDS cluster"""
         raise NotImplementedError()
 
     def update_mds(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """
         Update / redeploy existing MDS cluster
         Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
+    def add_rbd_mirror(self, spec):
+        # type: (StatelessServiceSpec) -> Completion
+        """Create rbd-mirror cluster"""
+        raise NotImplementedError()
+
+    def remove_rbd_mirror(self, name):
+        # type: (str) -> Completion
+        """Remove rbd-mirror cluster"""
+        raise NotImplementedError()
+
+    def update_rbd_mirror(self, spec):
+        # type: (StatelessServiceSpec) -> Completion
+        """
+        Update / redeploy rbd-mirror cluster
+        Like for example changing the number of service instances.
+        """
+        raise NotImplementedError()
+
     def add_nfs(self, spec):
-        # type: (NFSServiceSpec) -> WriteCompletion
+        # type: (NFSServiceSpec) -> Completion
         """Create a new MDS cluster"""
         raise NotImplementedError()
 
     def remove_nfs(self, name):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """Remove a NFS cluster"""
         raise NotImplementedError()
 
     def update_nfs(self, spec):
-        # type: (NFSServiceSpec) -> WriteCompletion
+        # type: (NFSServiceSpec) -> Completion
         """
         Update / redeploy existing NFS cluster
         Like for example changing the number of service instances.
@@ -502,31 +986,35 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_rgw(self, spec):
-        # type: (RGWSpec) -> WriteCompletion
+        # type: (RGWSpec) -> Completion
         """Create a new MDS zone"""
         raise NotImplementedError()
 
     def remove_rgw(self, zone):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """Remove a RGW zone"""
         raise NotImplementedError()
 
     def update_rgw(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (RGWSpec) -> Completion
         """
         Update / redeploy existing RGW zone
         Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
+    def upgrade_check(self, image, version):
+        # type: (Optional[str], Optional[str]) -> Completion
+        raise NotImplementedError()
+
     @_hide_in_features
     def upgrade_start(self, upgrade_spec):
-        # type: (UpgradeSpec) -> WriteCompletion
+        # type: (UpgradeSpec) -> Completion
         raise NotImplementedError()
 
     @_hide_in_features
     def upgrade_status(self):
-        # type: () -> ReadCompletion[UpgradeStatusSpec]
+        # type: () -> Completion
         """
         If an upgrade is currently underway, report on where
         we are in the process, or if some error has occurred.
@@ -537,13 +1025,14 @@ class Orchestrator(object):
 
     @_hide_in_features
     def upgrade_available(self):
-        # type: () -> ReadCompletion[List[str]]
+        # type: () -> Completion
         """
         Report on what versions are available to upgrade to
 
         :return: List of strings
         """
         raise NotImplementedError()
+
 
 class UpgradeSpec(object):
     # Request to orchestrator to initiate an upgrade to a particular
@@ -564,9 +1053,36 @@ class PlacementSpec(object):
     """
     For APIs that need to specify a node subset
     """
-    def __init__(self, label=None, nodes=[]):
+    def __init__(self, label=None, hosts=None, count=None):
+        # type: (Optional[str], Optional[List], Optional[int]) -> None
         self.label = label
-        self.nodes = nodes
+        if hosts:
+            if all([isinstance(host, HostSpec) for host in hosts]):
+                self.hosts = hosts  # type: List[HostSpec]
+            else:
+                self.hosts = [parse_host_specs(x, require_network=False) for x in hosts if x]
+        else:
+            self.hosts = []
+
+        self.count = count  # type: Optional[int]
+
+    def set_hosts(self, hosts):
+        # To backpopulate the .hosts attribute when using labels or count
+        # in the orchestrator backend.
+        self.hosts = hosts
+
+    @classmethod
+    def from_dict(cls, data):
+        _cls = cls(**data)
+        _cls.validate()
+        return _cls
+
+    def validate(self):
+        if self.hosts and self.label:
+            # TODO: a less generic Exception
+            raise Exception('Node and label are mutually exclusive')
+        if self.count is not None and self.count <= 0:
+            raise Exception("num/count must be > 1")
 
 
 def handle_type_error(method):
@@ -593,15 +1109,21 @@ class ServiceDescription(object):
     has decided the service should run.
     """
 
-    def __init__(self, nodename=None, container_id=None, service=None, service_instance=None,
+    def __init__(self, nodename=None,
+                 container_id=None, container_image_id=None,
+                 container_image_name=None,
+                 service=None, service_instance=None,
                  service_type=None, version=None, rados_config_location=None,
                  service_url=None, status=None, status_desc=None):
         # Node is at the same granularity as InventoryNode
         self.nodename = nodename
 
         # Not everyone runs in containers, but enough people do to
-        # justify having this field here.
-        self.container_id = container_id
+        # justify having the container_id (runtime id) and container_image
+        # (image name)
+        self.container_id = container_id                  # runtime id
+        self.container_image_id = container_image_id      # image hash
+        self.container_image_name = container_image_name  # image friendly name
 
         # Some services can be deployed in groups. For example, mds's can
         # have an active and standby daemons, and nfs-ganesha can run daemons
@@ -640,6 +1162,15 @@ class ServiceDescription(object):
         # Service status description when status == -1.
         self.status_desc = status_desc
 
+    def name(self):
+        if self.service_instance:
+            return '%s.%s' % (self.service_type, self.service_instance)
+        return self.service_type
+
+    def __repr__(self):
+        return "<ServiceDescription>({n_name}:{s_type})".format(n_name=self.nodename,
+                                                                s_type=self.name())
+
     def to_json(self):
         out = {
             'nodename': self.nodename,
@@ -661,6 +1192,22 @@ class ServiceDescription(object):
         return cls(**data)
 
 
+class StatefulServiceSpec(object):
+    """ Such as mgrs/mons
+    """
+    # TODO: create base class for Stateless/Stateful service specs and propertly inherit
+    def __init__(self, name=None, placement=None):
+        # type: (Optional[str], Optional[PlacementSpec]) -> None
+        self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
+        self.name = name
+
+        # for backwards-compatibility
+        if self.placement is not None and self.placement.count is not None:
+            self.count = self.placement.count
+        else:
+            self.count = 1
+
+
 class StatelessServiceSpec(object):
     # Request to orchestrator for a group of stateless services
     # such as MDS, RGW, nfs gateway, iscsi gateway
@@ -673,16 +1220,16 @@ class StatelessServiceSpec(object):
     # This structure is supposed to be enough information to
     # start the services.
 
-    def __init__(self, name, placement=None, count=None):
-        self.placement = PlacementSpec() if placement is None else placement
+    def __init__(self, name, placement=None):
+        self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         #: Give this set of statelss services a name: typically it would
         #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
         #: within one ceph cluster.
-        self.name = name
+        self.name = name  # type: str
 
         #: Count of service instances
-        self.count = 1 if count is None else count
+        self.count = self.placement.count if self.placement is not None else 1  # for backwards-compatibility
 
     def validate_add(self):
         if not self.name:
@@ -690,8 +1237,8 @@ class StatelessServiceSpec(object):
 
 
 class NFSServiceSpec(StatelessServiceSpec):
-    def __init__(self, name, pool=None, namespace=None, count=1, placement=None):
-        super(NFSServiceSpec, self).__init__(name, placement, count)
+    def __init__(self, name, pool=None, namespace=None, placement=None):
+        super(NFSServiceSpec, self).__init__(name, placement)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
@@ -712,7 +1259,9 @@ class RGWSpec(StatelessServiceSpec):
 
     """
     def __init__(self,
+                 rgw_realm,  # type: str
                  rgw_zone,  # type: str
+                 placement=None,
                  hosts=None,  # type: Optional[List[str]]
                  rgw_multisite=None,  # type: Optional[bool]
                  rgw_zonemaster=None,  # type: Optional[bool]
@@ -721,7 +1270,6 @@ class RGWSpec(StatelessServiceSpec):
                  rgw_frontend_port=None,  # type: Optional[int]
                  rgw_zonegroup=None,  # type: Optional[str]
                  rgw_zone_user=None,  # type: Optional[str]
-                 rgw_realm=None,  # type: Optional[str]
                  system_access_key=None,  # type: Optional[str]
                  system_secret_key=None,  # type: Optional[str]
                  count=None  # type: Optional[int]
@@ -730,10 +1278,12 @@ class RGWSpec(StatelessServiceSpec):
         # default values that makes sense for Ansible. Rook has default values implemented
         # in Rook itself. Thus we don't set any defaults here in this class.
 
-        super(RGWSpec, self).__init__(name=rgw_zone, count=count)
+        super(RGWSpec, self).__init__(name=rgw_realm + '.' + rgw_zone,
+                                      placement=placement)
 
         #: List of hosts where RGWs should run. Not for Rook.
-        self.hosts = hosts
+        if hosts:
+            self.placement = PlacementSpec(hosts=hosts)
 
         #: is multisite
         self.rgw_multisite = rgw_multisite
@@ -742,9 +1292,10 @@ class RGWSpec(StatelessServiceSpec):
         self.rgw_multisite_proto = rgw_multisite_proto
         self.rgw_frontend_port = rgw_frontend_port
 
+        self.rgw_realm = rgw_realm
+        self.rgw_zone = rgw_zone
         self.rgw_zonegroup = rgw_zonegroup
         self.rgw_zone_user = rgw_zone_user
-        self.rgw_realm = rgw_realm
 
         self.system_access_key = system_access_key
         self.system_secret_key = system_secret_key
@@ -752,13 +1303,13 @@ class RGWSpec(StatelessServiceSpec):
     @property
     def rgw_multisite_endpoint_addr(self):
         """Returns the first host. Not supported for Rook."""
-        return self.hosts[0]
+        return self.placement.hosts[0]
 
     @property
     def rgw_multisite_endpoints_list(self):
         return ",".join(["{}://{}:{}".format(self.rgw_multisite_proto,
                              host,
-                             self.rgw_frontend_port) for host in self.hosts])
+                             self.rgw_frontend_port) for host in self.placement.hosts])
 
     def genkey(self, nchars):
         """ Returns a random string of nchars
@@ -797,112 +1348,13 @@ class InventoryFilter(object):
 
     """
     def __init__(self, labels=None, nodes=None):
-        # type: (List[str], List[str]) -> None
-        self.labels = labels  # Optional: get info about nodes matching labels
-        self.nodes = nodes  # Optional: get info about certain named nodes only
+        # type: (Optional[List[str]], Optional[List[str]]) -> None
 
+        #: Optional: get info about nodes matching labels
+        self.labels = labels
 
-class InventoryDevice(object):
-    """
-    When fetching inventory, block devices are reported in this format.
-
-    Note on device identifiers: the format of this is up to the orchestrator,
-    but the same identifier must also work when passed into StatefulServiceSpec.
-    The identifier should be something meaningful like a device WWID or
-    stable device node path -- not something made up by the orchestrator.
-
-    "Extended" is for reporting any special configuration that may have
-    already been done out of band on the block device.  For example, if
-    the device has already been configured for encryption, report that
-    here so that it can be indicated to the user.  The set of
-    extended properties may differ between orchestrators.  An orchestrator
-    is permitted to support no extended properties (only normal block
-    devices)
-    """
-    def __init__(self, blank=False, type=None, id=None, size=None,
-                 rotates=False, available=False, dev_id=None, extended=None,
-                 metadata_space_free=None):
-        # type: (bool, str, str, int, bool, bool, str, dict, bool) -> None
-
-        self.blank = blank
-
-        #: 'ssd', 'hdd', 'nvme'
-        self.type = type
-
-        #: unique within a node (or globally if you like).
-        self.id = id
-
-        #: byte integer.
-        self.size = size
-
-        #: indicates if it is a spinning disk
-        self.rotates = rotates
-
-        #: can be used to create a new OSD?
-        self.available = available
-
-        #: vendor/model
-        self.dev_id = dev_id
-
-        #: arbitrary JSON-serializable object
-        self.extended = extended if extended is not None else extended
-
-        # If this drive is not empty, but is suitable for appending
-        # additional journals, wals, or bluestore dbs, then report
-        # how much space is available.
-        self.metadata_space_free = metadata_space_free
-
-    def to_json(self):
-        return dict(type=self.type, blank=self.blank, id=self.id,
-                    size=self.size, rotates=self.rotates,
-                    available=self.available, dev_id=self.dev_id,
-                    extended=self.extended)
-
-    @classmethod
-    @handle_type_error
-    def from_json(cls, data):
-        return cls(**data)
-
-    @classmethod
-    def from_ceph_volume_inventory(cls, data):
-        # TODO: change InventoryDevice itself to mirror c-v inventory closely!
-
-        dev = InventoryDevice()
-        dev.id = data["path"]
-        dev.type = 'hdd' if data["sys_api"]["rotational"] == "1" else 'ssd/nvme'
-        dev.size = data["sys_api"]["size"]
-        dev.rotates = data["sys_api"]["rotational"] == "1"
-        dev.available = data["available"]
-        dev.dev_id = "%s/%s" % (data["sys_api"]["vendor"],
-                                data["sys_api"]["model"])
-        dev.extended = data
-        return dev
-
-    @classmethod
-    def from_ceph_volume_inventory_list(cls, datas):
-        return [cls.from_ceph_volume_inventory(d) for d in datas]
-
-    def pretty_print(self, only_header=False):
-        """Print a human friendly line with the information of the device
-
-        :param only_header: Print only the name of the device attributes
-
-        Ex::
-
-            Device Path           Type       Size    Rotates  Available Model
-            /dev/sdc            hdd   50.00 GB       True       True ATA/QEMU
-
-        """
-        row_format = "  {0:<15} {1:>10} {2:>10} {3:>10} {4:>10} {5:<15}\n"
-        if only_header:
-            return row_format.format("Device Path", "Type", "Size", "Rotates",
-                                     "Available", "Model")
-        else:
-            return row_format.format(str(self.id), self.type if self.type is not None else "",
-                                     format_bytes(self.size if self.size is not None else 0, 5,
-                                                  colored=False),
-                                     str(self.rotates), str(self.available),
-                                     self.dev_id if self.dev_id is not None else "")
+        #: Optional: get info about certain named nodes only
+        self.nodes = nodes
 
 
 class InventoryNode(object):
@@ -910,34 +1362,71 @@ class InventoryNode(object):
     When fetching inventory, all Devices are groups inside of an
     InventoryNode.
     """
-    def __init__(self, name, devices):
-        # type: (str, List[InventoryDevice]) -> None
-        assert isinstance(devices, list)
+    def __init__(self, name, devices=None, labels=None):
+        # type: (str, Optional[inventory.Devices], Optional[List[str]]) -> None
+        if devices is None:
+            devices = inventory.Devices([])
+        if labels is None:
+            labels = []
+        assert isinstance(devices, inventory.Devices)
+
         self.name = name  # unique within cluster.  For example a hostname.
         self.devices = devices
+        self.labels = labels
 
     def to_json(self):
-        return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+        return {
+            'name': self.name,
+            'devices': self.devices.to_json(),
+            'labels': self.labels,
+        }
 
     @classmethod
     def from_json(cls, data):
         try:
             _data = copy.deepcopy(data)
             name = _data.pop('name')
-            devices = [InventoryDevice.from_json(device)
-                       for device in _data.pop('devices')]
+            devices = inventory.Devices.from_json(_data.pop('devices'))
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
-            return cls(name, devices)
+            labels = _data.get('labels', list())
+            return cls(name, devices, labels)
         except KeyError as e:
             error_msg = '{} is required for {}'.format(e, cls.__name__)
             raise OrchestratorValidationError(error_msg)
+        except TypeError as e:
+            raise OrchestratorValidationError('Failed to read inventory: {}'.format(e))
+
 
     @classmethod
     def from_nested_items(cls, hosts):
-        devs = InventoryDevice.from_ceph_volume_inventory_list
+        devs = inventory.Devices.from_json
         return [cls(item[0], devs(item[1].data)) for item in hosts]
+
+    def __repr__(self):
+        return "<InventoryNode>({name})".format(name=self.name)
+
+    @staticmethod
+    def get_host_names(nodes):
+        # type: (List[InventoryNode]) -> List[str]
+        return [node.name for node in nodes]
+
+    def __eq__(self, other):
+        return self.name == other.name and self.devices == other.devices
+
+
+class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev', 'path'])):
+    """
+    Describes a specific device on a specific host. Used for enabling or disabling LEDs
+    on devices.
+
+    hostname as in :func:`orchestrator.Orchestrator.get_hosts`
+
+    device_id: e.g. ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+       See ``ceph osd metadata | jq '.[].device_ids'``
+    """
+    __slots__ = ()
 
 
 def _mk_orch_methods(cls):
@@ -946,7 +1435,6 @@ def _mk_orch_methods(cls):
     def shim(method_name):
         def inner(self, *args, **kwargs):
             completion = self._oremote(method_name, args, kwargs)
-            self._update_completion_progress(completion, 0)
             return completion
         return inner
 
@@ -981,6 +1469,12 @@ class OrchestratorClientMixin(Orchestrator):
 
         self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties
 
+    def __get_mgr(self):
+        try:
+            return self.__mgr
+        except AttributeError:
+            return self
+
     def _oremote(self, meth, args, kwargs):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
@@ -989,10 +1483,8 @@ class OrchestratorClientMixin(Orchestrator):
         :raises OrchestratorError: orchestrator failed to perform
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
-        try:
-            mgr = self.__mgr
-        except AttributeError:
-            mgr = self
+        mgr = self.__get_mgr()
+
         try:
             o = mgr._select_orchestrator()
         except AttributeError:
@@ -1004,25 +1496,8 @@ class OrchestratorClientMixin(Orchestrator):
         mgr.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(mgr.module_name, o, meth, args, kwargs))
         return mgr.remote(o, meth, *args, **kwargs)
 
-    def _update_completion_progress(self, completion, force_progress=None):
-        # type: (WriteCompletion, Optional[float]) -> None
-        try:
-            progress = force_progress if force_progress is not None else completion.progress
-            if completion.is_complete:
-                self.remote("progress", "complete", completion.progress_id)
-            else:
-                self.remote("progress", "update", completion.progress_id, str(completion), progress,
-                            [("origin", "orchestrator")])
-        except AttributeError:
-            # No WriteCompletion. Ignore.
-            pass
-        except ImportError:
-            # If the progress module is disabled that's fine,
-            # they just won't see the output.
-            pass
-
     def _orchestrator_wait(self, completions):
-        # type: (List[_Completion]) -> None
+        # type: (List[Completion]) -> None
         """
         Wait for completions to complete (reads) or
         become persistent (writes).
@@ -1031,17 +1506,17 @@ class OrchestratorClientMixin(Orchestrator):
 
         :param completions: List of Completions
         :raises NoOrchestrator:
+        :raises RuntimeError: something went wrong while calling the process method.
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
-        for c in completions:
-            self._update_completion_progress(c)
-        while not self.wait(completions):
-            if any(c.should_wait for c in completions):
-                time.sleep(5)
+        while any(not c.has_result for c in completions):
+            self.process(completions)
+            self.__get_mgr().log.info("Operations pending: %s",
+                                      sum(1 for c in completions if not c.has_result))
+            if any(c.needs_result for c in completions):
+                time.sleep(1)
             else:
                 break
-        for c in completions:
-            self._update_completion_progress(c)
 
 
 class OutdatableData(object):
@@ -1051,13 +1526,13 @@ class OutdatableData(object):
         # type: (Optional[dict], Optional[datetime.datetime]) -> None
         self._data = data
         if data is not None and last_refresh is None:
-            self.last_refresh = datetime.datetime.utcnow()
+            self.last_refresh = datetime.datetime.utcnow()  # type: Optional[datetime.datetime]
         else:
             self.last_refresh = last_refresh
 
     def json(self):
         if self.last_refresh is not None:
-            timestr = self.last_refresh.strftime(self.DATEFMT)
+            timestr = self.last_refresh.strftime(self.DATEFMT)  # type: Optional[str]
         else:
             timestr = None
 
@@ -1081,18 +1556,17 @@ class OutdatableData(object):
         timestr = timestr.rstrip('Z')
         return datetime.datetime.strptime(timestr, cls.DATEFMT)
 
-
     @classmethod
     def from_json(cls, data):
         return cls(data['data'], cls.time_from_string(data['last_refresh']))
 
-    def outdated(self, timeout_min=None):
-        if timeout_min is None:
-            timeout_min = 10
+    def outdated(self, timeout=None):
+        if timeout is None:
+            timeout = 600
         if self.last_refresh is None:
             return True
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-            minutes=timeout_min)
+            seconds=timeout)
         return self.last_refresh < cutoff
 
     def __repr__(self):
@@ -1107,16 +1581,16 @@ class OutdatableDictMixin(object):
 
     def __getitem__(self, item):
         # type: (str) -> OutdatableData
-        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))
+        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))  # type: ignore
 
     def __setitem__(self, key, value):
         # type: (str, OutdatableData) -> None
         val = None if value is None else value.json()
-        super(OutdatableDictMixin, self).__setitem__(key, val)
+        super(OutdatableDictMixin, self).__setitem__(key, val)  # type: ignore
 
     def items(self):
-        # type: () -> Iterator[Tuple[str, OutdatableData]]
-        for item in super(OutdatableDictMixin, self).items():
+        ## type: () -> Iterator[Tuple[str, OutdatableData]]
+        for item in super(OutdatableDictMixin, self).items():  # type: ignore
             k, v = item
             yield k, OutdatableData.from_json(v)
 
@@ -1135,10 +1609,16 @@ class OutdatableDictMixin(object):
     def remove_outdated(self):
         outdated = [item[0] for item in self.items() if item[1].outdated()]
         for o in outdated:
-            del self[o]
+            del self[o]  # type: ignore
+
+    def invalidate(self, key):
+        self[key] = OutdatableData(self[key].data,
+                                   datetime.datetime.fromtimestamp(0))
+
 
 class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
     pass
+
 
 class OutdatableDict(OutdatableDictMixin, dict):
     pass

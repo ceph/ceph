@@ -27,12 +27,8 @@
 
 // sent from replica to auth
 
-class MMDSCacheRejoin : public Message {
-private:
-  static constexpr int HEAD_VERSION = 2;
-  static constexpr int COMPAT_VERSION = 1;
-
- public:
+class MMDSCacheRejoin : public SafeMessage {
+public:
   static constexpr int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static constexpr int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
   static constexpr int OP_ACK     = 3;  // auth -> replica, here is your lock state.
@@ -144,9 +140,6 @@ private:
   };
   WRITE_CLASS_ENCODER(dn_weak)
 
-  // -- data --
-  int32_t op;
-
   struct lock_bls {
     bufferlist file, nest, dft;
     void encode(bufferlist& bl) const {
@@ -163,28 +156,6 @@ private:
     }
   };
   WRITE_CLASS_ENCODER(lock_bls)
-
-  // weak
-  map<inodeno_t, map<string_snap_t, dn_weak> > weak;
-  set<dirfrag_t> weak_dirfrags;
-  set<vinodeno_t> weak_inodes;
-  map<inodeno_t, lock_bls> inode_scatterlocks;
-
-  // strong
-  map<dirfrag_t, dirfrag_strong> strong_dirfrags;
-  map<dirfrag_t, map<string_snap_t, dn_strong> > strong_dentries;
-  map<vinodeno_t, inode_strong> strong_inodes;
-
-  // open
-  map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
-  map<client_t, entity_inst_t> client_map;
-  map<client_t,client_metadata_t> client_metadata_map;
-  bufferlist imported_caps;
-
-  // full
-  bufferlist inode_base;
-  bufferlist inode_locks;
-  map<dirfrag_t, bufferlist> dirfrag_bases;
 
   // authpins, xlocks
   struct slave_reqid {
@@ -204,23 +175,7 @@ private:
       decode(attempt, bl);
     }
   };
-  map<vinodeno_t, list<slave_reqid> > authpinned_inodes;
-  map<vinodeno_t, slave_reqid> frozen_authpin_inodes;
-  map<vinodeno_t, map<__s32, slave_reqid> > xlocked_inodes;
-  map<vinodeno_t, map<__s32, list<slave_reqid> > > wrlocked_inodes;
-  map<dirfrag_t, map<string_snap_t, list<slave_reqid> > > authpinned_dentries;
-  map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
-  
-protected:
-  MMDSCacheRejoin() :
-    MMDSCacheRejoin{0}
-  {}
-  MMDSCacheRejoin(int o) : 
-    Message{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION},
-    op(o) {}
-  ~MMDSCacheRejoin() override {}
 
-public:
   std::string_view get_type_name() const override { return "cache_rejoin"; }
   void print(ostream& out) const override {
     out << "cache_rejoin " << get_opname(op);
@@ -352,9 +307,49 @@ public:
     if (header.version >= 2)
       decode(client_metadata_map, p);
   }
+
+  // -- data --
+  int32_t op = 0;
+
+  // weak
+  map<inodeno_t, map<string_snap_t, dn_weak> > weak;
+  set<dirfrag_t> weak_dirfrags;
+  set<vinodeno_t> weak_inodes;
+  map<inodeno_t, lock_bls> inode_scatterlocks;
+
+  // strong
+  map<dirfrag_t, dirfrag_strong> strong_dirfrags;
+  map<dirfrag_t, map<string_snap_t, dn_strong> > strong_dentries;
+  map<vinodeno_t, inode_strong> strong_inodes;
+
+  // open
+  map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
+  map<client_t, entity_inst_t> client_map;
+  map<client_t,client_metadata_t> client_metadata_map;
+  bufferlist imported_caps;
+
+  // full
+  bufferlist inode_base;
+  bufferlist inode_locks;
+  map<dirfrag_t, bufferlist> dirfrag_bases;
+
+  map<vinodeno_t, list<slave_reqid> > authpinned_inodes;
+  map<vinodeno_t, slave_reqid> frozen_authpin_inodes;
+  map<vinodeno_t, map<__s32, slave_reqid> > xlocked_inodes;
+  map<vinodeno_t, map<__s32, list<slave_reqid> > > wrlocked_inodes;
+  map<dirfrag_t, map<string_snap_t, list<slave_reqid> > > authpinned_dentries;
+  map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
+
+  MMDSCacheRejoin(int o) : MMDSCacheRejoin() { op = o; }
+  MMDSCacheRejoin() : SafeMessage{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION} {}
+  ~MMDSCacheRejoin() override {}
 };
 
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)

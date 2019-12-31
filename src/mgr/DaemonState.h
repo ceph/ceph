@@ -134,6 +134,9 @@ class DaemonState
   /// device ids -> devname, derived from metadata[device_ids]
   std::map<std::string,std::string> devices;
 
+  /// device ids -> by-path, derived from metadata[device_ids]
+  std::map<std::string,std::string> devices_bypath;
+
   // TODO: this can be generalized to other daemons
   std::vector<DaemonHealthMetric> daemon_health_metrics;
 
@@ -164,14 +167,23 @@ class DaemonState
 
   void set_metadata(const std::map<std::string,std::string>& m) {
     devices.clear();
+    devices_bypath.clear();
     metadata = m;
     auto p = m.find("device_ids");
     if (p != m.end()) {
-      map<std::string,std::string> devs;
+      map<std::string,std::string> devs, paths; // devname -> id or path
       get_str_map(p->second, &devs, ",; ");
+      auto q = m.find("device_paths");
+      if (q != m.end()) {
+	get_str_map(q->second, &paths, ",; ");
+      }
       for (auto& i : devs) {
 	if (i.second.size()) {  // skip blank ids
-	  devices[i.second] = i.first;
+	  devices[i.second] = i.first;   // id -> devname
+	  auto j = paths.find(i.first);
+	  if (j != paths.end()) {
+	    devices_bypath[i.second] = j->second; // id -> path
+	  }
 	}
       }
     }
@@ -201,7 +213,8 @@ typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
 struct DeviceState : public RefCountedObject
 {
   std::string devid;
-  std::set<pair<std::string,std::string>> devnames; ///< (server,devname)
+  /// (server,devname,path)
+  std::set<std::tuple<std::string,std::string,std::string>> attachments;
   std::set<DaemonKey> daemons;
 
   std::map<string,string> metadata;  ///< persistent metadata
@@ -387,6 +400,7 @@ public:
    */
   void cull(const std::string& svc_name,
 	    const std::set<std::string>& names_exist);
+  void cull_services(const std::set<std::string>& types_exist);
 };
 
 #endif

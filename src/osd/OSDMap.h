@@ -1380,52 +1380,27 @@ public:
   bool is_up_acting_osd_shard(spg_t pg, int osd) const {
     std::vector<int> up, acting;
     _pg_to_up_acting_osds(pg.pgid, &up, NULL, &acting, NULL, false);
-    if (pg.shard == shard_id_t::NO_SHARD) {
-      if (calc_pg_role(osd, acting, acting.size()) >= 0 ||
-	  calc_pg_role(osd, up, up.size()) >= 0)
-	return true;
-    } else {
-      if (pg.shard < (int)acting.size() && acting[pg.shard] == osd)
-	return true;
-      if (pg.shard < (int)up.size() && up[pg.shard] == osd)
-	return true;
+    if (calc_pg_role(pg_shard_t(osd, pg.shard), acting) >= 0 ||
+	calc_pg_role(pg_shard_t(osd, pg.shard), up) >= 0) {
+      return true;
     }
     return false;
   }
 
 
-  /* what replica # is a given osd? 0 primary, -1 for none. */
-  static int calc_pg_rank(int osd, const std::vector<int>& acting, int nrep=0);
-  static int calc_pg_role(int osd, const std::vector<int>& acting, int nrep=0);
-  static bool primary_changed(
+  static int calc_pg_role_broken(int osd, const std::vector<int>& acting, int nrep=0);
+  static int calc_pg_role(pg_shard_t who, const std::vector<int>& acting);
+  static bool primary_changed_broken(
     int oldprimary,
     const std::vector<int> &oldacting,
     int newprimary,
     const std::vector<int> &newacting);
   
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
-  int get_pg_acting_rank(pg_t pg, int osd) const {
+  int get_pg_acting_role(spg_t pg, int osd) const {
     std::vector<int> group;
-    pg_to_acting_osds(pg, group);
-    return calc_pg_rank(osd, group, group.size());
-  }
-  /* role is -1 (stray), 0 (primary), 1 (replica) */
-  int get_pg_acting_role(const pg_t& pg, int osd) const {
-    std::vector<int> group;
-    pg_to_acting_osds(pg, group);
-    return calc_pg_role(osd, group, group.size());
-  }
-
-  bool osd_is_valid_op_target(pg_t pg, int osd) const {
-    int primary;
-    std::vector<int> group;
-    pg_to_acting_osds(pg, &group, &primary);
-    if (osd == primary)
-      return true;
-    if (pg_is_ec(pg))
-      return false;
-
-    return calc_pg_role(osd, group, group.size()) >= 0;
+    pg_to_acting_osds(pg.pgid, group);
+    return calc_pg_role(pg_shard_t(osd, pg.shard), group);
   }
 
   bool try_pg_upmap(
@@ -1433,12 +1408,13 @@ public:
     pg_t pg,                       ///< pg to potentially remap
     const std::set<int>& overfull,      ///< osds we'd want to evacuate
     const std::vector<int>& underfull,  ///< osds to move to, in order of preference
+    const std::vector<int>& more_underfull,  ///< less full osds to move to, in order of preference
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
   int calc_pg_upmaps(
     CephContext *cct,
-    float max_deviation, ///< max deviation from target (value < 1.0)
+    uint32_t max_deviation, ///< max deviation from target (value >= 1)
     int max_iterations,  ///< max iterations to run
     const std::set<int64_t>& pools,        ///< [optional] restrict to pool
     Incremental *pending_inc

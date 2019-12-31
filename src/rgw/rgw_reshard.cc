@@ -72,7 +72,7 @@ class BucketReshardShard {
     librados::AioCompletion *c = aio_completions.front();
     aio_completions.pop_front();
 
-    c->wait_for_safe();
+    c->wait_for_complete();
 
     int ret = c->get_return_value();
     c->release();
@@ -93,7 +93,7 @@ class BucketReshardShard {
       }
     }
 
-    *c = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
+    *c = librados::Rados::aio_create_completion(nullptr, nullptr);
     aio_completions.push_back(*c);
 
     return 0;
@@ -375,7 +375,7 @@ int RGWBucketReshard::cancel()
 class BucketInfoReshardUpdate
 {
   rgw::sal::RGWRadosStore *store;
-  RGWBucketInfo bucket_info;
+  RGWBucketInfo& bucket_info;
   std::map<string, bufferlist> bucket_attrs;
 
   bool in_progress{false};
@@ -557,16 +557,16 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
 
-  verbose = verbose && (formatter != nullptr);
+  bool verbose_json_out = verbose && (formatter != nullptr) && (out != nullptr);
 
-  if (verbose) {
+  if (verbose_json_out) {
     formatter->open_array_section("entries");
   }
 
   uint64_t total_entries = 0;
 
-  if (!verbose) {
-    cout << "total entries:";
+  if (!verbose_json_out && out) {
+    (*out) << "total entries:";
   }
 
   const int num_source_shards =
@@ -585,7 +585,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
       for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
 	rgw_cls_bi_entry& entry = *iter;
-	if (verbose) {
+	if (verbose_json_out) {
 	  formatter->open_object_section("entry");
 
 	  encode_json("shard_id", i, formatter);
@@ -634,11 +634,9 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  }
 	}
 
-	if (verbose) {
+	if (verbose_json_out) {
 	  formatter->close_section();
-	  if (out) {
-	    formatter->flush(*out);
-	  }
+	  formatter->flush(*out);
 	} else if (out && !(total_entries % 1000)) {
 	  (*out) << " " << total_entries;
 	}
@@ -646,11 +644,9 @@ int RGWBucketReshard::do_reshard(int num_shards,
     }
   }
 
-  if (verbose) {
+  if (verbose_json_out) {
     formatter->close_section();
-    if (out) {
-      formatter->flush(*out);
-    }
+    formatter->flush(*out);
   } else if (out) {
     (*out) << " " << total_entries << std::endl;
   }
@@ -868,12 +864,13 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
     if (ret == -ENOENT) {
       *is_truncated = false;
       ret = 0;
-    }
-    lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << dendl;
-    if (ret == -EACCES) {
-      lderr(store->ctx()) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
+    } else {
+      lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << dendl;
+      if (ret == -EACCES) {
+        lderr(store->ctx()) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
                           << ". Fix the pool access permissions of your client" << dendl;
-    }
+      }
+    } 
   }
 
   return ret;
@@ -1013,35 +1010,62 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	RGWBucketInfo bucket_info;
 	map<string, bufferlist> attrs;
 
-	ret = store->getRados()->get_bucket_info(store->svc(), entry.tenant, entry.bucket_name,
-				     bucket_info, nullptr, null_yield, &attrs);
+	ret = store->getRados()->get_bucket_info(store->svc(),
+						 entry.tenant, entry.bucket_name,
+						 bucket_info, nullptr,
+						 null_yield, &attrs);
 	if (ret < 0) {
-	  ldout(cct, 0) <<  __func__ << ": Error in get_bucket_info: " <<
-	    cpp_strerror(-ret) << dendl;
-	  return -ret;
+	  ldout(cct, 0) <<  __func__ <<
+	    ": Error in get_bucket_info for bucket " << entry.bucket_name <<
+	    ": " << cpp_strerror(-ret) << dendl;
+	  if (ret != -ENOENT) {
+	    // any error other than ENOENT will abort
+	    return ret;
+	  }
+
+	  // we've encountered a reshard queue entry for an apparently
+	  // non-existent bucket; let's try to recover by cleaning up
+	  ldout(cct, 0) <<  __func__ <<
+	    ": removing reshard queue entry for non-existent bucket " <<
+	    entry.bucket_name << dendl;
+
+	  ret = remove(entry);
+	  if (ret < 0) {
+	    ldout(cct, 0) << __func__ <<
+	      ": Error removing non-existent bucket " <<
+	      entry.bucket_name << " from resharding queue: " <<
+	      cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
+
+	  // we cleaned up, move on to the next entry
+	  goto finished_entry;
 	}
 
 	RGWBucketReshard br(store, bucket_info, attrs, nullptr);
 	ret = br.execute(entry.new_num_shards, max_entries, false, nullptr,
 			 nullptr, this);
 	if (ret < 0) {
-	  ldout (store->ctx(), 0) <<  __func__ <<
-	    "ERROR in reshard_bucket " << entry.bucket_name << ":" <<
+	  ldout(store->ctx(), 0) <<  __func__ <<
+	    ": Error during resharding bucket " << entry.bucket_name << ":" <<
 	    cpp_strerror(-ret)<< dendl;
 	  return ret;
 	}
 
-	ldout (store->ctx(), 20) <<  " removing entry" << entry.bucket_name <<
+	ldout(store->ctx(), 20) << __func__ <<
+	  " removing reshard queue entry for bucket " << entry.bucket_name <<
 	  dendl;
 
       	ret = remove(entry);
 	if (ret < 0) {
-	  ldout(cct, 0)<< __func__ << ":Error removing bucket " <<
-	    entry.bucket_name << " for resharding queue: " <<
+	  ldout(cct, 0) << __func__ << ": Error removing bucket " <<
+	    entry.bucket_name << " from resharding queue: " <<
 	    cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
-      }
+      } // if new instance id is empty
+
+    finished_entry:
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
@@ -1052,7 +1076,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
       }
 
       entry.get_key(&marker);
-    }
+    } // entry for loop
   } while (truncated);
 
   logshard_lock.unlock();
@@ -1115,14 +1139,9 @@ void RGWReshard::stop_processor()
 }
 
 void *RGWReshard::ReshardWorker::entry() {
-  utime_t last_run;
   do {
     utime_t start = ceph_clock_now();
-    if (reshard->process_all_logshards()) {
-      /* All shards have been processed properly. Next time we can start
-       * from this moment. */
-      last_run = start;
-    }
+    reshard->process_all_logshards();
 
     if (reshard->going_down())
       break;

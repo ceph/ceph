@@ -912,6 +912,7 @@ public:
   RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     sync_marker.pos = index_pos;
+    sync_marker.timestamp = timestamp;
 
     tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
     RGWRados *rados = sync_env->store->getRados();

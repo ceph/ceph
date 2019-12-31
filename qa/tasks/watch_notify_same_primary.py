@@ -6,6 +6,8 @@ from cStringIO import StringIO
 import contextlib
 import logging
 
+import six
+
 from teuthology.orchestra import run
 from teuthology.contextutil import safe_while
 
@@ -41,7 +43,7 @@ def task(ctx, config):
     clients = config.get('clients', ['client.0'])
     assert len(clients) == 1
     role = clients[0]
-    assert isinstance(role, basestring)
+    assert isinstance(role, six.string_types)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     (remote,) = ctx.cluster.only(role).remotes.keys()

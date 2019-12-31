@@ -531,7 +531,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 	       << dirfragtree << " on " << *in << dendl;
       in->dirfragtree = dirfragtree;
       in->force_dirfrags();
-      if (in->has_dirfrags() && in->authority() == CDIR_AUTH_UNDEF) {
+      if (in->get_num_dirfrags() && in->authority() == CDIR_AUTH_UNDEF) {
 	auto&& ls = in->get_nested_dirfrags();
 	for (const auto& dir : ls) {
 	  if (dir->get_num_any() == 0 &&

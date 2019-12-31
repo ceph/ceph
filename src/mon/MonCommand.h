@@ -31,6 +31,9 @@ struct MonCommand {
   static const uint64_t FLAG_MGR        = 1 << 3;
   static const uint64_t FLAG_POLL       = 1 << 4;
   static const uint64_t FLAG_HIDDEN     = 1 << 5;
+  // asok and tell commands are not forwarded, and they should not be listed
+  // in --help output.
+  static const uint64_t FLAG_TELL       = (FLAG_NOFORWARD | FLAG_HIDDEN);
 
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
@@ -74,6 +77,10 @@ struct MonCommand {
   bool is_compat(const MonCommand* o) const {
     return cmdstring == o->cmdstring &&
 	module == o->module && req_perms == o->req_perms;
+  }
+
+  bool is_tell() const {
+    return has_flag(MonCommand::FLAG_TELL);
   }
 
   bool is_noforward() const {

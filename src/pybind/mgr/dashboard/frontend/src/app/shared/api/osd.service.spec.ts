@@ -88,6 +88,13 @@ describe('OsdService', () => {
     expect(req.request.body).toEqual({ weight: 0.5 });
   });
 
+  it('should update OSD', () => {
+    service.update(1, 'hdd').subscribe();
+    const req = httpTesting.expectOne('api/osd/1');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ device_class: 'hdd' });
+  });
+
   it('should mark an OSD lost', () => {
     service.markLost(1).subscribe();
     const req = httpTesting.expectOne('api/osd/1/mark_lost');
@@ -108,7 +115,13 @@ describe('OsdService', () => {
 
   it('should return if it is safe to destroy an OSD', () => {
     service.safeToDestroy('[0,1]').subscribe();
-    const req = httpTesting.expectOne('api/osd/[0,1]/safe_to_destroy');
+    const req = httpTesting.expectOne('api/osd/safe_to_destroy?ids=[0,1]');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call the devices endpoint to retrieve smart data', () => {
+    service.getDevices(1).subscribe();
+    const req = httpTesting.expectOne('api/osd/1/devices');
     expect(req.request.method).toBe('GET');
   });
 });

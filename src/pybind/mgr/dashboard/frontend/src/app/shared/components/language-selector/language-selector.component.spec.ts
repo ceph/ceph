@@ -68,6 +68,10 @@ describe('LanguageSelectorComponent', () => {
     expectLanguageChange('ja-JP');
   });
 
+  it('should change to ko-KR', () => {
+    expectLanguageChange('ko-KR');
+  });
+
   it('should change to pl-PL', () => {
     expectLanguageChange('pl-PL');
   });

@@ -18,31 +18,31 @@ function json_extract {
 var=""
 [ "$1" != "" ] && var=$(var_to_python_json_index $1)
 shift
-python - <<END
+python3 - <<END
 import json
 s='$@'
 data = json.loads(s) 
-print data$var
+print(data$var)
 END
 }
 
 function python_array_len {
-python - <<END
+python3 - <<END
 arr=$@
-print len(arr)
+print(len(arr))
 END
 }
 
 function project_python_array_field {
 var=$(var_to_python_json_index $1)
 shift
-python - <<END
+python3 - <<END
 arr=$@
 s='( '
 for x in arr:
     s += '"' + str(x$var) + '" '
 s += ')'
-print s
+print(s)
 END
 }
 

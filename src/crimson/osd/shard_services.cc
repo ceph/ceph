@@ -5,13 +5,12 @@
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
-#include "crimson/osd/osdmap_service.h"
-#include "crimson/os/cyan_store.h"
 #include "crimson/mgr/client.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Connection.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/cyanstore/cyan_store.h"
+#include "crimson/osd/osdmap_service.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
@@ -38,7 +37,8 @@ ShardServices::ShardServices(
       public_msgr(public_msgr),
       monc(monc),
       mgrc(mgrc),
-      store(store)
+      store(store),
+      obc_registry(crimson::common::local_conf())
 {
   perf = build_osd_logger(&cct);
   cct.get_perfcounters_collection()->add(perf);

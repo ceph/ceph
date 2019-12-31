@@ -204,11 +204,18 @@ static int get_user_policy_from_attr(CephContext * const cct,
   return 0;
 }
 
-static int get_bucket_instance_policy_from_attr(CephContext *cct,
-						RGWUserCtl *user_ctl,
-						RGWBucketInfo& bucket_info,
-						map<string, bufferlist>& bucket_attrs,
-						RGWAccessControlPolicy *policy)
+/**
+ * Get the AccessControlPolicy for an object off of disk.
+ * policy: must point to a valid RGWACL, and will be filled upon return.
+ * bucket: name of the bucket containing the object.
+ * object: name of the object to get the ACL for.
+ * Returns: 0 on success, -ERR# otherwise.
+ */
+int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
+				       RGWUserCtl *user_ctl,
+				       RGWBucketInfo& bucket_info,
+				       map<string, bufferlist>& bucket_attrs,
+				       RGWAccessControlPolicy *policy)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -274,22 +281,6 @@ static int get_obj_policy_from_attr(CephContext *cct,
   return ret;
 }
 
-
-/**
- * Get the AccessControlPolicy for an object off of disk.
- * policy: must point to a valid RGWACL, and will be filled upon return.
- * bucket: name of the bucket containing the object.
- * object: name of the object to get the ACL for.
- * Returns: 0 on success, -ERR# otherwise.
- */
-int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
-                                       RGWUserCtl *user_ctl,
-                                       RGWBucketInfo& bucket_info,
-                                       map<string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy)
-{
-  return get_bucket_instance_policy_from_attr(cct, user_ctl, bucket_info, bucket_attrs, policy);
-}
 
 static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
 							rgw::sal::RGWRadosStore* store,
@@ -621,7 +612,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     if (ret < 0) {
       if (ret != -ENOENT) {
         string bucket_log;
-        rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_log);
+        bucket_log = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
         ldpp_dout(s, 0) << "NOTICE: couldn't get bucket from bucket_name (name="
             << bucket_log << ")" << dendl;
         return ret;
@@ -2346,7 +2337,7 @@ void RGWListBuckets::execute()
                              decltype(policies_stats)::mapped_type());
     }
 
-    std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+    std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
     for (const auto& kv : m) {
       const auto& bucket = kv.second;
 
@@ -2372,8 +2363,9 @@ void RGWListBuckets::execute()
       started = true;
     }
 
-    if (!m.empty()) {
-      map<string, rgw::sal::RGWSalBucket*>::reverse_iterator riter = m.rbegin();
+    if (read_count > 0 &&
+        !m.empty()) {
+      map<string, rgw::sal::RGWBucket*>::reverse_iterator riter = m.rbegin();
       marker = riter->first;
 
       handle_listing_chunk(std::move(buckets));
@@ -2486,7 +2478,7 @@ void RGWStatAccount::execute()
                                decltype(policies_stats)::mapped_type());
       }
 
-      std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+      std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
       for (const auto& kv : m) {
         const auto& bucket = kv.second;
 
@@ -2554,6 +2546,20 @@ void RGWSetBucketVersioning::execute()
       !s->mfa_verified) {
     op_ret = -ERR_MFA_REQUIRED;
     return;
+  }
+  //if mfa is enabled for bucket, make sure mfa code is validated in case versioned status gets changed
+  if (cur_mfa_status) {
+    bool req_versioning_status = false;
+    //if requested versioning status is not the same as the one set for the bucket, return error
+    if (versioning_status == VersioningEnabled) {
+      req_versioning_status = (s->bucket_info.flags & BUCKET_VERSIONS_SUSPENDED) != 0;
+    } else if (versioning_status == VersioningSuspended) {
+      req_versioning_status = (s->bucket_info.flags & BUCKET_VERSIONS_SUSPENDED) == 0;
+    }
+    if (req_versioning_status && !s->mfa_verified) {
+      op_ret = -ERR_MFA_REQUIRED;
+      return;
+    }
   }
 
   if (!store->svc()->zone->is_meta_master()) {
@@ -3057,10 +3063,10 @@ void RGWCreateBucket::execute()
   buffer::list aclbl;
   buffer::list corsbl;
   bool existed;
-  string bucket_name;
-  rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_name);
+  string bucket_name = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
   rgw_raw_obj obj(store->svc()->zone->get_zone_params().domain_root, bucket_name);
   obj_version objv, *pobjv = NULL;
+  rgw::sal::RGWRadosUser user(store, *s->user);
 
   op_ret = get_params();
   if (op_ret < 0)
@@ -3099,15 +3105,20 @@ void RGWCreateBucket::execute()
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
-  op_ret = store->getRados()->get_bucket_info(store->svc(), s->bucket_tenant, s->bucket_name,
-				  s->bucket_info, nullptr, s->yield, &s->bucket_attrs);
+  s->bucket.tenant = s->bucket_tenant;
+  s->bucket.name = s->bucket_name;
+  rgw::sal::RGWBucket* bucket = NULL;
+  op_ret = store->get_bucket(user, s->bucket, &bucket);
   if (op_ret < 0 && op_ret != -ENOENT)
     return;
   s->bucket_exists = (op_ret != -ENOENT);
 
   s->bucket_owner.set_id(s->user->user_id);
-  s->bucket_owner.set_name(s->user->display_name);
+  s->bucket_owner.set_name(user.get_display_name());
   if (s->bucket_exists) {
+    s->bucket_info = bucket->get_info();
+    s->bucket_attrs = bucket->get_attrs();
+    delete bucket;
     int r = rgw_op_get_bucket_policy_from_attr(s->cct, store->ctl()->user, s->bucket_info,
                                                s->bucket_attrs, &old_policy);
     if (r >= 0)  {
@@ -5359,7 +5370,7 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  op_ret = policy->rebuild(store->ctl()->user, &owner, new_policy);
+  op_ret = policy->rebuild(store->ctl()->user, &owner, new_policy, s->err.message);
   if (op_ret < 0)
     return;
 
@@ -6021,7 +6032,7 @@ void RGWCompleteMultipart::execute()
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
-      if ((obj_iter != obj_parts.begin()) &&
+      if ((handled_parts > 0) &&
           ((part_compressed != compressed) ||
             (cs_info.compression_type != obj_part.cs_info.compression_type))) {
           ldpp_dout(this, 0) << "ERROR: compression type was changed during multipart upload ("

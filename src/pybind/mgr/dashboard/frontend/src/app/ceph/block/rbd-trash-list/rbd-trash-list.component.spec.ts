@@ -51,12 +51,8 @@ describe('RbdTrashListComponent', () => {
   });
 
   it('should call updateSelection', () => {
-    const selection = new CdTableSelection();
-    selection.selected = ['foo'];
-    selection.update();
-
     expect(component.selection.hasSelection).toBeFalsy();
-    component.updateSelection(selection);
+    component.updateSelection(new CdTableSelection(['foo']));
     expect(component.selection.hasSelection).toBeTruthy();
   });
 
@@ -65,7 +61,8 @@ describe('RbdTrashListComponent', () => {
 
     const addImage = (id) => {
       images.push({
-        id: id
+        id: id,
+        pool_name: 'pl'
       });
     };
 
@@ -73,7 +70,7 @@ describe('RbdTrashListComponent', () => {
       const task = new ExecutingTask();
       task.name = name;
       task.metadata = {
-        image_id: image_id
+        image_id_spec: `pl/${image_id}`
       };
       summaryService.addRunningTask(task);
     };

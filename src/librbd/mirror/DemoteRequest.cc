@@ -11,6 +11,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/mirror/GetInfoRequest.h"
+#include "librbd/mirror/snapshot/DemoteRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -44,7 +45,7 @@ void DemoteRequest<I>::handle_get_info(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
                << dendl;
     finish(r);
@@ -69,8 +70,12 @@ void DemoteRequest<I>::acquire_lock() {
   m_image_ctx.owner_lock.lock_shared();
   if (m_image_ctx.exclusive_lock == nullptr) {
     m_image_ctx.owner_lock.unlock_shared();
-    lderr(cct) << "exclusive lock is not active" << dendl;
-    finish(-EINVAL);
+    if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+      lderr(cct) << "exclusive lock is not active" << dendl;
+      finish(-EINVAL);
+    } else {
+      demote();
+    }
     return;
   }
 
@@ -88,7 +93,8 @@ void DemoteRequest<I>::acquire_lock() {
   ldout(cct, 20) << dendl;
 
   auto ctx = create_context_callback<
-    DemoteRequest<I>, &DemoteRequest<I>::handle_acquire_lock>(this);
+    DemoteRequest<I>,
+    &DemoteRequest<I>::handle_acquire_lock>(this, m_image_ctx.exclusive_lock);
   m_image_ctx.exclusive_lock->acquire_lock(ctx);
   m_image_ctx.owner_lock.unlock_shared();
 }
@@ -125,7 +131,16 @@ void DemoteRequest<I>::demote() {
 
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_demote>(this);
-  Journal<I>::demote(&m_image_ctx, ctx);
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    Journal<I>::demote(&m_image_ctx, ctx);
+  } else if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    auto req = mirror::snapshot::DemoteRequest<I>::create(&m_image_ctx, ctx);
+    req->send();
+  } else {
+    lderr(cct) << "unknown image mirror mode: " << m_mirror_image.mode << dendl;
+    m_ret_val = -EOPNOTSUPP;
+    release_lock();
+  }
 }
 
 template <typename I>
@@ -154,7 +169,8 @@ void DemoteRequest<I>::release_lock() {
   }
 
   auto ctx = create_context_callback<
-    DemoteRequest<I>, &DemoteRequest<I>::handle_release_lock>(this);
+    DemoteRequest<I>,
+    &DemoteRequest<I>::handle_release_lock>(this, m_image_ctx.exclusive_lock);
   m_image_ctx.exclusive_lock->release_lock(ctx);
   m_image_ctx.owner_lock.unlock_shared();
 }

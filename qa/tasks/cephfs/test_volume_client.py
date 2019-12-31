@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 import os
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -20,7 +19,7 @@ class TestVolumeClient(CephFSTestCase):
     def setUp(self):
         CephFSTestCase.setUp(self)
         self.py_version = self.ctx.config.get('overrides', {}).\
-                          get('python', TestVolumeClient.default_py_version)
+                          get('python3', TestVolumeClient.default_py_version)
         log.info("using python version: {python_version}".format(
             python_version=self.py_version
         ))
@@ -1078,7 +1077,7 @@ vc.disconnect()
         volume_prefix = "/myprefix"
         group_id = "grpid"
         volume_id = "volid"
-        mount_path = self._volume_client_python(vc_mount, dedent("""
+        self._volume_client_python(vc_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10, namespace_isolated=False)
             print(create_result['mount_path'])

@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { AbstractControl, FormControl } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -15,9 +15,11 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 export class IscsiTargetImageSettingsModalComponent implements OnInit {
   image: string;
   imagesSettings: any;
+  api_version: number;
   disk_default_controls: any;
   disk_controls_limits: any;
   backstores: any;
+  control: AbstractControl;
 
   settingsForm: CdFormGroup;
 
@@ -25,7 +27,9 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
 
   ngOnInit() {
     const fg = {
-      backstore: new FormControl(this.imagesSettings[this.image]['backstore'])
+      backstore: new FormControl(this.imagesSettings[this.image]['backstore']),
+      lun: new FormControl(this.imagesSettings[this.image]['lun']),
+      wwn: new FormControl(this.imagesSettings[this.image]['wwn'])
     };
     _.forEach(this.backstores, (backstore) => {
       const model = this.imagesSettings[this.image][backstore] || {};
@@ -38,11 +42,17 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
   }
 
   getDiskControlLimits(backstore, setting) {
-    return this.disk_controls_limits[backstore][setting];
+    if (this.disk_controls_limits) {
+      return this.disk_controls_limits[backstore][setting];
+    }
+    // backward compatibility
+    return { type: 'int' };
   }
 
   save() {
     const backstore = this.settingsForm.controls['backstore'].value;
+    const lun = this.settingsForm.controls['lun'].value;
+    const wwn = this.settingsForm.controls['wwn'].value;
     const settings = {};
     _.forIn(this.settingsForm.controls, (control, key) => {
       if (
@@ -62,8 +72,11 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
       }
     });
     this.imagesSettings[this.image]['backstore'] = backstore;
+    this.imagesSettings[this.image]['lun'] = lun;
+    this.imagesSettings[this.image]['wwn'] = wwn;
     this.imagesSettings[this.image][backstore] = settings;
     this.imagesSettings = { ...this.imagesSettings };
+    this.control.updateValueAndValidity({ emitEvent: false });
     this.modalRef.hide();
   }
 }

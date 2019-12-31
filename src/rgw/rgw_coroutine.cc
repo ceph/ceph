@@ -439,8 +439,7 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, const rgw_io_id& _io_id, void *_user_data) : completion_mgr(_mgr),
                                                                          io_id(_io_id),
                                                                          user_data(_user_data), registered(true) {
-  c = librados::Rados::aio_create_completion((void *)this, NULL,
-					     _aio_completion_notifier_cb);
+  c = librados::Rados::aio_create_completion(this, _aio_completion_notifier_cb);
 }
 
 RGWAioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier()

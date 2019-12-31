@@ -195,6 +195,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   dirty_dentries(member_offset(CDentry, item_dir_dirty)),
   item_dirty(this), item_new(this),
+  lock_caches_with_auth_pins(member_offset(MDLockCache::DirItem, item_dir)),
+  freezing_inodes(member_offset(CInode, item_freezing_inode)),
   dir_rep(REP_NONE),
   pop_me(mdcache->decayrate),
   pop_nested(mdcache->decayrate),
@@ -221,9 +223,10 @@ bool CDir::check_rstats(bool scrub)
 
   dout(25) << "check_rstats on " << this << dendl;
   if (!is_complete() || !is_auth() || is_frozen()) {
-    ceph_assert(!scrub);
-    dout(10) << "check_rstats bailing out -- incomplete or non-auth or frozen dir!" << dendl;
-    return true;
+    dout(3) << "check_rstats " << (scrub ? "(scrub) " : "")
+            << "bailing out -- incomplete or non-auth or frozen dir on " 
+            << *this << dendl;
+    return !scrub;
   }
 
   frag_info_t frag_info;
@@ -589,6 +592,11 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   if (in->auth_pins)
     dn->adjust_nested_auth_pins(in->auth_pins, NULL);
 
+  if (in->is_freezing_inode())
+    freezing_inodes.push_back(&in->item_freezing_inode);
+  else if (in->is_frozen_inode() || in->is_frozen_auth_pin())
+    num_frozen_inodes++;
+
   // verify open snaprealm parent
   if (in->snaprealm)
     in->snaprealm->adjust_parent();
@@ -669,6 +677,11 @@ void CDir::unlink_inode_work(CDentry *dn)
     // unlink auth_pin count
     if (in->auth_pins)
       dn->adjust_nested_auth_pins(-in->auth_pins, nullptr);
+
+    if (in->is_freezing_inode())
+      in->item_freezing_inode.remove_myself();
+    else if (in->is_frozen_inode() || in->is_frozen_auth_pin())
+      num_frozen_inodes--;
 
     // detach inode
     in->remove_primary_parent(dn);
@@ -2867,14 +2880,18 @@ bool CDir::freeze_tree()
   // gets decreased. Subtree become 'frozen' when the counter reaches zero.
   freeze_tree_state = std::make_shared<freeze_tree_state_t>(this);
   freeze_tree_state->auth_pins += get_auth_pins() + get_dir_auth_pins();
+  if (!lock_caches_with_auth_pins.empty())
+    cache->mds->locker->invalidate_lock_caches(this);
 
   _walk_tree([this](CDir *dir) {
       if (dir->freeze_tree_state)
 	return false;
       dir->freeze_tree_state = freeze_tree_state;
       freeze_tree_state->auth_pins += dir->get_auth_pins() + dir->get_dir_auth_pins();
+      if (!dir->lock_caches_with_auth_pins.empty())
+	cache->mds->locker->invalidate_lock_caches(dir);
       return true;
-     }
+    }
   );
 
   if (is_freezeable(true)) {
@@ -3117,6 +3134,8 @@ bool CDir::freeze_dir()
     return true;
   } else {
     state_set(STATE_FREEZINGDIR);
+    if (!lock_caches_with_auth_pins.empty())
+      cache->mds->locker->invalidate_lock_caches(this);
     dout(10) << "freeze_dir + wait " << *this << dendl;
     return false;
   } 
@@ -3160,6 +3179,19 @@ void CDir::unfreeze_dir()
     auth_unpin(this);
     
     finish_waiting(WAIT_UNFREEZE);
+  }
+}
+
+void CDir::enable_frozen_inode()
+{
+  ceph_assert(frozen_inode_suppressed > 0);
+  if (--frozen_inode_suppressed == 0) {
+    for (auto p = freezing_inodes.begin(); !p.end(); ) {
+      CInode *in = *p;
+      ++p;
+      ceph_assert(in->is_freezing_inode());
+      in->maybe_finish_freeze_inode();
+    }
   }
 }
 

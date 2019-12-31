@@ -29,6 +29,7 @@ public:
 			int max_seconds,
 			bool ec_pool,
 			bool balance_reads,
+			bool localize_reads,
 			bool set_redirect,
 			bool set_chunk,
 			bool enable_dedup) :
@@ -37,6 +38,7 @@ public:
     m_total_weight(0),
     m_ec_pool(ec_pool),
     m_balance_reads(balance_reads),
+    m_localize_reads(localize_reads),
     m_set_redirect(set_redirect),
     m_set_chunk(set_chunk),
     m_enable_dedup(enable_dedup)
@@ -282,7 +284,8 @@ private:
     switch (type) {
     case TEST_OP_READ:
       oid = *(rand_choose(context.oid_not_in_use));
-      return new ReadOp(m_op, &context, oid, m_balance_reads, m_stats);
+      return new ReadOp(m_op, &context, oid, m_balance_reads, m_localize_reads,
+			m_stats);
 
     case TEST_OP_WRITE:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -455,6 +458,7 @@ private:
   unsigned int m_total_weight;
   bool m_ec_pool;
   bool m_balance_reads;
+  bool m_localize_reads;
   bool m_set_redirect;
   bool m_set_chunk;
   bool m_enable_dedup;
@@ -511,6 +515,7 @@ int main(int argc, char **argv)
   bool no_omap = false;
   bool no_sparse = false;
   bool balance_reads = false;
+  bool localize_reads = false;
   bool set_redirect = false;
   bool set_chunk = false;
   bool enable_dedup = false;
@@ -536,8 +541,10 @@ int main(int argc, char **argv)
       no_omap = true;
     else if (strcmp(argv[i], "--no-sparse") == 0)
       no_sparse = true;
-    else if (strcmp(argv[i], "--balance_reads") == 0)
+    else if (strcmp(argv[i], "--balance-reads") == 0)
       balance_reads = true;
+    else if (strcmp(argv[i], "--localize-reads") == 0)
+      localize_reads = true;
     else if (strcmp(argv[i], "--pool-snaps") == 0)
       pool_snaps = true;
     else if (strcmp(argv[i], "--write-fadvise-dontneed") == 0)
@@ -665,7 +672,8 @@ int main(int argc, char **argv)
   WeightedTestGenerator gen = WeightedTestGenerator(
     ops, objects,
     op_weights, &stats, max_seconds,
-    ec_pool, balance_reads, set_redirect, set_chunk, enable_dedup);
+    ec_pool, balance_reads, localize_reads,
+    set_redirect, set_chunk, enable_dedup);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "

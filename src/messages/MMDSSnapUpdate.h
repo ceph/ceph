@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSSnapUpdate : public Message {
+class MMDSSnapUpdate : public SafeMessage {
 private:
   inodeno_t ino;
   __s16 snap_op;
@@ -29,9 +29,9 @@ public:
   bufferlist snap_blob;
 
 protected:
-  MMDSSnapUpdate() : Message{MSG_MDS_SNAPUPDATE} {}
+  MMDSSnapUpdate() : SafeMessage{MSG_MDS_SNAPUPDATE} {}
   MMDSSnapUpdate(inodeno_t i, version_t tid, int op) :
-    Message{MSG_MDS_SNAPUPDATE}, ino(i), snap_op(op) {
+    SafeMessage{MSG_MDS_SNAPUPDATE}, ino(i), snap_op(op) {
       set_tid(tid);
     }
   ~MMDSSnapUpdate() override {}

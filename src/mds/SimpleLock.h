@@ -28,6 +28,9 @@
 struct MutationImpl;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
+struct MDLockCache;
+struct MDLockCacheItem;
+
 extern "C" {
 #include "locks.h"
 }
@@ -142,10 +145,9 @@ public:
       case CEPH_LOCK_INEST: return "inest";
       case CEPH_LOCK_IXATTR: return "ixattr";
       case CEPH_LOCK_ISNAP: return "isnap";
-      case CEPH_LOCK_INO: return "ino";
       case CEPH_LOCK_IFLOCK: return "iflock";
       case CEPH_LOCK_IPOLICY: return "ipolicy";
-      default: ceph_abort(); return std::string_view();
+      default: return "unknown";
     }
   }
 
@@ -189,6 +191,7 @@ protected:
   enum {
     LEASED		= 1 << 0,
     NEED_RECOVER	= 1 << 1,
+    CACHED		= 1 << 2,
   };
 
 private:
@@ -204,6 +207,8 @@ private:
     client_t xlock_by_client = -1;
     client_t excl_client = -1;
 
+    elist<MDLockCacheItem*> lock_caches;
+
     bool empty() {
       return
 	gather_set.empty() &&
@@ -211,10 +216,10 @@ private:
 	num_xlock == 0 &&
 	xlock_by.get() == NULL &&
 	xlock_by_client == -1 &&
-	excl_client == -1;
+	excl_client == -1 &&
+	lock_caches.empty();
     }
-
-    unstable_bits_t() {}
+    unstable_bits_t();
   };
 
   mutable std::unique_ptr<unstable_bits_t> _unstable;
@@ -298,22 +303,6 @@ public:
     }
   }
 
-  struct ptr_lt {
-    bool operator()(const SimpleLock* l, const SimpleLock* r) const {
-      // first sort by object type (dn < inode)
-      if (!(l->type->type > CEPH_LOCK_DN) && (r->type->type > CEPH_LOCK_DN)) return true;
-      if ((l->type->type > CEPH_LOCK_DN) == (r->type->type > CEPH_LOCK_DN)) {
-	// then sort by object
-	if (l->parent->is_lt(r->parent)) return true;
-	if (l->parent == r->parent) {
-	  // then sort by (inode) lock type
-	  if (l->type->type < r->type->type) return true;
-	}
-      }
-      return false;
-    }
-  };
-
   void decode_locked_state(const bufferlist& bl) {
     parent->decode_lock_state(type->type, bl);
   }
@@ -332,8 +321,13 @@ public:
   bool is_waiter_for(uint64_t mask) const {
     return parent->is_waiter_for(mask << get_wait_shift());
   }
-  
-  
+
+  bool is_cached() const {
+    return state_flags & CACHED;
+  }
+  void add_cache(MDLockCacheItem& item);
+  void remove_cache(MDLockCacheItem& item);
+  MDLockCache* get_first_cache();
 
   // state
   int get_state() const { return state; }

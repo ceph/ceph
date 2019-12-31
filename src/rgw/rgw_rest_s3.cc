@@ -75,7 +75,7 @@ void list_all_buckets_end(struct req_state *s)
   s->formatter->close_section();
 }
 
-void dump_bucket(struct req_state *s, rgw::sal::RGWSalBucket& obj)
+void dump_bucket(struct req_state *s, rgw::sal::RGWBucket& obj)
 {
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_string("Name", obj.get_name());
@@ -624,11 +624,11 @@ void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buc
   if (!sent_data)
     return;
 
-  map<string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
-  map<string, rgw::sal::RGWSalBucket*>::iterator iter;
+  map<string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
+  map<string, rgw::sal::RGWBucket*>::iterator iter;
 
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    rgw::sal::RGWSalBucket* obj = iter->second;
+    rgw::sal::RGWBucket* obj = iter->second;
     dump_bucket(s, *obj);
   }
   rgw_flush_formatter(s, s->formatter);
@@ -1483,7 +1483,7 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWSalBucket* bucket)
+static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWBucket* bucket)
 {
   dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket->get_count()));
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket->get_size()));
@@ -3238,7 +3238,11 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
       RGWMPObj& mp = iter->mp;
       s->formatter->open_array_section("Upload");
-      s->formatter->dump_string("Key", mp.get_key());
+      if (encode_url) {
+        s->formatter->dump_string("Key", url_encode(mp.get_key(), false));
+      } else {
+        s->formatter->dump_string("Key", mp.get_key());
+      }
       s->formatter->dump_string("UploadId", mp.get_upload_id());
       dump_owner(s, s->user->user_id, s->user->display_name, "Initiator");
       dump_owner(s, s->user->user_id, s->user->display_name);
@@ -3248,10 +3252,13 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     }
     if (!common_prefixes.empty()) {
       s->formatter->open_array_section("CommonPrefixes");
-      map<string, bool>::iterator pref_iter;
-      for (pref_iter = common_prefixes.begin();
-	   pref_iter != common_prefixes.end(); ++pref_iter) {
-	s->formatter->dump_string("CommonPrefixes.Prefix", pref_iter->first);
+      for (const auto& kv : common_prefixes) {
+        if (encode_url) {
+          s->formatter->dump_string("CommonPrefixes.Prefix",
+                                    url_encode(kv.first, false));
+        } else {
+          s->formatter->dump_string("CommonPrefixes.Prefix", kv.first);
+        }
       }
       s->formatter->close_section();
     }
@@ -3632,7 +3639,7 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   return nullptr;
 }
 
-RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data) const
 {
   // Non-website mode
   if (get_data) {   
@@ -3731,8 +3738,6 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWPutBucketPolicy;
-  } else if (is_tagging_op()) {
-    return nullptr;
   } else if (is_object_lock_op()) {
     return new RGWPutBucketObjectLock_ObjStore_S3;
   } else if (is_notification_op()) {
@@ -4435,9 +4440,7 @@ RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
 }
 
 
-namespace rgw {
-namespace auth {
-namespace s3 {
+namespace rgw::auth::s3 {
 
 static rgw::auth::Completer::cmplptr_t
 null_completer_factory(const boost::optional<std::string>& secret_key)
@@ -4857,9 +4860,7 @@ AWSEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s)
   }
 }
 
-} /* namespace s3 */
-} /* namespace auth */
-} /* namespace rgw */
+} // namespace rgw::auth::s3
 
 rgw::LDAPHelper* rgw::auth::s3::LDAPEngine::ldh = nullptr;
 std::mutex rgw::auth::s3::LDAPEngine::mtx;
@@ -5046,7 +5047,13 @@ int
 rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
                                             STS::SessionToken& token) const
 {
-  string decodedSessionToken = rgw::from_base64(session_token);
+  string decodedSessionToken;
+  try {
+    decodedSessionToken = rgw::from_base64(session_token);
+  } catch (...) {
+    ldpp_dout(dpp, 0) << "ERROR: Invalid session token, not base64 encoded." << dendl;
+    return -EINVAL;
+  }
 
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {

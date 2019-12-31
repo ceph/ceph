@@ -12,6 +12,8 @@ class Context;
 
 namespace librbd {
 
+class UpdateWatchCtx;
+
 struct MockImageState {
   MOCK_CONST_METHOD0(is_refresh_required, bool());
   MOCK_METHOD1(refresh, void(Context*));
@@ -25,6 +27,9 @@ struct MockImageState {
 
   MOCK_METHOD1(prepare_lock, void(Context*));
   MOCK_METHOD0(handle_prepare_lock_complete, void());
+
+  MOCK_METHOD2(register_update_watcher, int(UpdateWatchCtx *, uint64_t *));
+  MOCK_METHOD2(unregister_update_watcher, void(uint64_t, Context *));  
 };
 
 } // namespace librbd

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_USER_H
-#define CEPH_RGW_REST_USER_H
+#pragma once
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -34,5 +33,3 @@ public:
     return new RGWHandler_User(auth_registry);
   }
 };
-
-#endif

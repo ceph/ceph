@@ -28,48 +28,14 @@ class MDCache;
 class Finisher;
 
 class ScrubStack {
-protected:
-  // reference to global cluster log client
-  LogChannelRef &clog;
-
-  /// A finisher needed so that we don't re-enter kick_off_scrubs
-  Finisher *finisher;
-
-  /// The stack of inodes we want to scrub
-  elist<CInode*> inode_stack;
-  /// current number of dentries we're actually scrubbing
-  int scrubs_in_progress;
-  ScrubStack *scrubstack; // hack for dout
-  int stack_size;
-
-  class C_KickOffScrubs : public MDSInternalContext {
-    ScrubStack *stack;
-  public:
-    C_KickOffScrubs(MDCache *mdcache, ScrubStack *s);
-    void finish(int r) override { }
-    void complete(int r) override {
-      if (r == -ECANCELED) {
-        return;
-      }
-
-      stack->scrubs_in_progress--;
-      stack->kick_off_scrubs();
-      // don't delete self
-    }
-  };
-  C_KickOffScrubs scrub_kick;
-
 public:
-  MDCache *mdcache;
   ScrubStack(MDCache *mdc, LogChannelRef &clog, Finisher *finisher_) :
+    mdcache(mdc),
     clog(clog),
     finisher(finisher_),
     inode_stack(member_offset(CInode, item_scrub)),
-    scrubs_in_progress(0),
     scrubstack(this),
-    stack_size(0),
-    scrub_kick(mdc, this),
-    mdcache(mdc) {}
+    scrub_kick(mdc, this) {}
   ~ScrubStack() {
     ceph_assert(inode_stack.empty());
     ceph_assert(!scrubs_in_progress);
@@ -139,6 +105,41 @@ public:
    */
   std::string_view scrub_summary();
 
+  MDCache *mdcache;
+
+protected:
+  class C_KickOffScrubs : public MDSInternalContext {
+  public:
+    C_KickOffScrubs(MDCache *mdcache, ScrubStack *s);
+    void finish(int r) override { }
+    void complete(int r) override {
+      if (r == -ECANCELED) {
+        return;
+      }
+
+      stack->scrubs_in_progress--;
+      stack->kick_off_scrubs();
+      // don't delete self
+    }
+  private:
+    ScrubStack *stack;
+  };
+
+  // reference to global cluster log client
+  LogChannelRef &clog;
+
+  /// A finisher needed so that we don't re-enter kick_off_scrubs
+  Finisher *finisher;
+
+  /// The stack of inodes we want to scrub
+  elist<CInode*> inode_stack;
+  /// current number of dentries we're actually scrubbing
+  int scrubs_in_progress = 0;
+  ScrubStack *scrubstack; // hack for dout
+  int stack_size = 0;
+
+  C_KickOffScrubs scrub_kick;
+
 private:
   // scrub abort is _not_ a state, rather it's an operation that's
   // performed after in-progress scrubs are finished.
@@ -150,16 +151,7 @@ private:
   };
   friend std::ostream &operator<<(std::ostream &os, const State &state);
 
-  State state = STATE_IDLE;
-  bool clear_inode_stack = false;
-
-  // list of pending context completions for asynchronous scrub
-  // control operations.
-  std::vector<Context *> control_ctxs;
-
-  // list of inodes for which scrub operations are running -- used
-  // to diplay out in `scrub status`.
-  std::set<CInode *> scrub_origins;
+  friend class C_InodeValidated;
 
   /**
    * Put the inode at either the top or bottom of the stack, with
@@ -201,7 +193,6 @@ private:
    */
   void _validate_inode_done(CInode *in, int r,
 			    const CInode::validated_data &result);
-  friend class C_InodeValidated;
 
   /**
    * Make progress on scrubbing a directory-representing dirfrag and
@@ -299,6 +290,17 @@ private:
    * @param in inode for which scrub has been queued or finished.
    */
   void clog_scrub_summary(CInode *in=nullptr);
+
+  State state = STATE_IDLE;
+  bool clear_inode_stack = false;
+
+  // list of pending context completions for asynchronous scrub
+  // control operations.
+  std::vector<Context *> control_ctxs;
+
+  // list of inodes for which scrub operations are running -- used
+  // to diplay out in `scrub status`.
+  std::set<CInode *> scrub_origins;
 };
 
 #endif /* SCRUBSTACK_H_ */

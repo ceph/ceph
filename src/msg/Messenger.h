@@ -524,18 +524,22 @@ public:
    */
   virtual ConnectionRef connect_to(
     int type, const entity_addrvec_t& dest,
-    bool anon=false) = 0;
-  ConnectionRef connect_to_mon(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_MON, dest, anon);
+    bool anon=false, bool not_local_dest=false) = 0;
+  ConnectionRef connect_to_mon(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_MON, dest, anon, not_local_dest);
   }
-  ConnectionRef connect_to_mds(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_MDS, dest, anon);
+  ConnectionRef connect_to_mds(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_MDS, dest, anon, not_local_dest);
   }
-  ConnectionRef connect_to_osd(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_OSD, dest, anon);
+  ConnectionRef connect_to_osd(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_OSD, dest, anon, not_local_dest);
   }
-  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest, bool anon=false) {
-    return connect_to(CEPH_ENTITY_TYPE_MGR, dest, anon);
+  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest,
+      bool anon=false, bool not_local_dest=false) {
+	return connect_to(CEPH_ENTITY_TYPE_MGR, dest, anon, not_local_dest);
   }
 
   /**

@@ -2,20 +2,11 @@
  MDS Config Reference
 ======================
 
-``mon force standby active`` 
-
-:Description: If ``true`` monitors force standby-replay to be active. Set
-              under ``[mon]`` or ``[global]``.
-
-:Type: Boolean
-:Default: ``true`` 
-
 ``mds cache memory limit``
 
 :Description: The memory limit the MDS should enforce for its cache.
-              Administrators should use this instead of ``mds cache size``.
 :Type:  64-bit Integer Unsigned
-:Default: ``1073741824``
+:Default: ``4G``
 
 ``mds cache reservation``
 
@@ -26,14 +17,6 @@
 :Type:  Float
 :Default: ``0.05``
 
-``mds cache size``
-
-:Description: The number of inodes to cache. A value of 0 indicates an
-              unlimited number. It is recommended to use
-              ``mds_cache_memory_limit`` to limit the amount of memory the MDS
-              cache uses.
-:Type:  32-bit Integer
-:Default: ``0``
 
 ``mds cache mid``
 
@@ -538,31 +521,6 @@
               
 :Type:  32-bit Integer
 :Default: ``0``
-
-
-``mds standby for name``
-
-:Description: An MDS daemon will standby for another MDS daemon of the name 
-              specified in this setting.
-
-:Type:  String
-:Default: N/A
-
-
-``mds standby for rank``
-
-:Description: An MDS daemon will standby for an MDS daemon of this rank. 
-:Type:  32-bit Integer
-:Default: ``-1``
-
-
-``mds standby replay``
-
-:Description: Determines whether a ``ceph-mds`` daemon should poll and replay 
-              the log of an active MDS (hot standby).
-              
-:Type:  Boolean
-:Default:  ``false``
 
 
 ``mds min caps per client``

@@ -69,10 +69,9 @@ performance is very different for workloads whose metadata fits within
 that cache.
 
 If your workload has more files than fit in your cache (configured using 
-``mds_cache_memory_limit`` or ``mds_cache_size`` settings), then
-make sure you test it appropriately: don't test your system with a small
-number of files and then expect equivalent performance when you move
-to a much larger number of files.
+``mds_cache_memory_limit`` settings), then make sure you test it
+appropriately: don't test your system with a small number of files and then
+expect equivalent performance when you move to a much larger number of files.
 
 Do you need a file system?
 --------------------------

@@ -74,8 +74,7 @@ public:
   AioWriter(OmapBench *omap_bench);
   ~AioWriter() override;
   virtual librados::AioCompletion * get_aioc();
-  virtual void set_aioc(librados::callback_t complete,
-      librados::callback_t safe);
+  virtual void set_aioc(librados::callback_t complete);
 };
 
 class OmapBench{
@@ -94,7 +93,6 @@ protected:
     ceph::make_mutex("OmapBench::data_lock");
   int busythreads_count;
   librados::callback_t comp;
-  librados::callback_t safe;
 
   string pool_name;
   string rados_id;
@@ -114,7 +112,7 @@ public:
     : test(&OmapBench::test_write_objects_in_parallel),
       omap_generator(generate_uniform_omap),
       busythreads_count(0),
-      comp(NULL), safe(aio_is_safe),
+      comp(aio_is_complete),
       pool_name("rbd"),
       rados_id("admin"),
       prefix(rados_id+".obj."),
@@ -128,13 +126,13 @@ public:
 
   /**
    * Callback for when an AioCompletion (called from an AioWriter)
-   * is safe. deletes the AioWriter that called it,
+   * is complete. deletes the AioWriter that called it,
    * Updates data, updates busythreads, and signals thread_is_free.
    *
    * @param c provided by aio_write - not used
    * @param arg the AioWriter that contains this AioCompletion
    */
-  static void aio_is_safe(rados_completion_t c, void *arg);
+  static void aio_is_complete(rados_completion_t c, void *arg);
 
   /**
    * Generates a random string len characters long

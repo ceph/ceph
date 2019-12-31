@@ -6,11 +6,11 @@
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "cls/rbd/cls_rbd_client.h"
-#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/image/DetachChildRequest.h"
+#include "librbd/mirror/snapshot/RemoveImageStateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -333,7 +333,7 @@ void SnapshotRemoveRequest<I>::remove_object_map() {
   }
 
   // object map disabled
-  release_snap_id();
+  remove_image_state();
 }
 
 template <typename I>
@@ -344,6 +344,44 @@ void SnapshotRemoveRequest<I>::handle_remove_object_map(int r) {
 
   if (r < 0) {
     lderr(cct) << "failed to remove snapshot object map: " << cpp_strerror(r)
+               << dendl;
+    this->complete(r);
+    return;
+  }
+
+  remove_image_state();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::remove_image_state() {
+  I &image_ctx = this->m_image_ctx;
+  auto type = cls::rbd::get_snap_namespace_type(m_snap_namespace);
+
+  if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY &&
+      type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY) {
+    release_snap_id();
+    return;
+  }
+
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = create_context_callback<
+    SnapshotRemoveRequest<I>,
+    &SnapshotRemoveRequest<I>::handle_remove_image_state>(this);
+  auto req = mirror::snapshot::RemoveImageStateRequest<I>::create(
+    &image_ctx, m_snap_id, ctx);
+  req->send();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::handle_remove_image_state(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to remove image state: " << cpp_strerror(r)
                << dendl;
     this->complete(r);
     return;

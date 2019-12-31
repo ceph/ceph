@@ -1926,6 +1926,7 @@ struct object_stat_sum_t {
   }
 
   void clear() {
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(this, 0, sizeof(*this));
   }
 
@@ -2408,7 +2409,7 @@ struct osd_stat_t {
       }
     }
   }
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, bool with_net = true) const;
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   static void generate_test_instances(std::list<osd_stat_t*>& o);
@@ -3886,7 +3887,7 @@ private:
   bool new_object;
   bool clean_omap;
   interval_set<uint64_t> clean_offsets;
-  static std::atomic<int32_t> max_num_intervals;
+  static std::atomic<uint32_t> max_num_intervals;
 
   /**
    * trim the number of intervals if clean_offsets.num_intervals()
@@ -3908,7 +3909,7 @@ public:
   bool operator==(const ObjectCleanRegions &orc) const {
     return new_object == orc.new_object && clean_omap == orc.clean_omap && clean_offsets == orc.clean_offsets;
   }
-  static void set_max_num_intervals(int32_t num);
+  static void set_max_num_intervals(uint32_t num);
   void merge(const ObjectCleanRegions &other);
   void mark_data_region_dirty(uint64_t offset, uint64_t len);
   void mark_omap_dirty();
@@ -3935,10 +3936,12 @@ struct OSDOp {
   errorcode32_t rval = 0;
 
   OSDOp() {
+    // FIPS zeroization audit 20191115: this memset clean for security
     memset(&op, 0, sizeof(ceph_osd_op));
   }
 
   OSDOp(const int op_code) {
+    // FIPS zeroization audit 20191115: this memset clean for security
     memset(&op, 0, sizeof(ceph_osd_op));
     op.op = op_code;
   }

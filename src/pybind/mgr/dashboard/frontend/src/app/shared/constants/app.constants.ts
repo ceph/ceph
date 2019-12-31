@@ -82,11 +82,13 @@ export class ActionLabelsI18n {
   REMOVE: string;
   EDIT: string;
   CANCEL: string;
+  CHANGE: string;
   COPY: string;
   CLONE: string;
   DEEP_SCRUB: string;
   DESTROY: string;
   EVICT: string;
+  EXPIRE: string;
   FLATTEN: string;
   MARK_DOWN: string;
   MARK_IN: string;
@@ -94,17 +96,18 @@ export class ActionLabelsI18n {
   MARK_OUT: string;
   PROTECT: string;
   PURGE: string;
+  RECREATE: string;
   RENAME: string;
   RESTORE: string;
   REWEIGHT: string;
   ROLLBACK: string;
   SCRUB: string;
+  SET: string;
   SHOW: string;
   TRASH: string;
   UNPROTECT: string;
-  RECREATE: string;
-  EXPIRE: string;
-  CHANGE: string;
+  UNSET: string;
+  UPDATE: string;
 
   constructor(private i18n: I18n) {
     /* Create a new item */
@@ -115,12 +118,15 @@ export class ActionLabelsI18n {
 
     /* Add an existing item to a container */
     this.ADD = this.i18n('Add');
+    this.SET = this.i18n('Set');
 
     /* Remove an item from a container WITHOUT deleting it */
     this.REMOVE = this.i18n('Remove');
+    this.UNSET = this.i18n('Unset');
 
     /* Make changes to an existing item */
     this.EDIT = this.i18n('Edit');
+    this.UPDATE = this.i18n('Update');
     this.CANCEL = this.i18n('Cancel');
 
     /* Non-standard actions */

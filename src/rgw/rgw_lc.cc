@@ -42,7 +42,6 @@ const char* LC_STATUS[] = {
 };
 
 using namespace librados;
-using namespace rgw::sal;
 
 bool LCRule::valid() const
 {
@@ -222,7 +221,7 @@ void *RGWLC::LCWorker::entry() {
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, RGWRadosStore *_store) {
+void RGWLC::initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store) {
   cct = _cct;
   store = _store;
   max_objs = cct->_conf->rgw_lc_max_objs;
@@ -470,7 +469,7 @@ static inline bool has_all_tags(const lc_op& rule_action,
 }
 
 class LCObjsLister {
-  RGWRadosStore *store;
+  rgw::sal::RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
   RGWRados::Bucket target;
   RGWRados::Bucket::List list_op;
@@ -483,7 +482,7 @@ class LCObjsLister {
   int64_t delay_ms;
 
 public:
-  LCObjsLister(RGWRadosStore *_store, RGWBucketInfo& _bucket_info) :
+  LCObjsLister(rgw::sal::RGWRadosStore *_store, RGWBucketInfo& _bucket_info) :
       store(_store), bucket_info(_bucket_info),
       target(store->getRados(), bucket_info), list_op(&target) {
     list_op.params.list_versions = bucket_info.versioned();
@@ -561,12 +560,12 @@ public:
 
 struct op_env {
   lc_op& op;
-  RGWRadosStore *store;
+  rgw::sal::RGWRadosStore *store;
   RGWLC *lc;
   RGWBucketInfo& bucket_info;
   LCObjsLister& ol;
 
-  op_env(lc_op& _op, RGWRadosStore *_store, RGWLC *_lc, RGWBucketInfo& _bucket_info,
+  op_env(lc_op& _op, rgw::sal::RGWRadosStore *_store, RGWLC *_lc, RGWBucketInfo& _bucket_info,
          LCObjsLister& _ol) : op(_op), store(_store), lc(_lc), bucket_info(_bucket_info), ol(_ol) {}
 };
 
@@ -577,7 +576,7 @@ struct lc_op_ctx {
   op_env& env;
   rgw_bucket_dir_entry& o;
 
-  RGWRadosStore *store;
+  rgw::sal::RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
   lc_op& op;
   LCObjsLister& ol;
@@ -864,7 +863,7 @@ public:
 
     auto mtime = get_effective_mtime(oc);
     bool is_expired;
-    if (transition.days <= 0) {
+    if (transition.days < 0) {
       if (transition.date == boost::none) {
         ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": no transition day/date set in rule, skipping" << dendl;
         return false;
@@ -1394,7 +1393,7 @@ static std::string get_lc_shard_name(const rgw_bucket& bucket){
 }
 
 template<typename F>
-static int guard_lc_modify(RGWRadosStore* store, const rgw_bucket& bucket, const string& cookie, const F& f) {
+static int guard_lc_modify(rgw::sal::RGWRadosStore* store, const rgw_bucket& bucket, const string& cookie, const F& f) {
   CephContext *cct = store->ctx();
 
   string shard_id = get_lc_shard_name(bucket);
@@ -1645,22 +1644,21 @@ std::string s3_expiration_header(
       rule_expiration_date =
 	boost::optional<ceph::real_time>(
 	  ceph::from_iso_8601(rule.get_expiration().get_date()));
-      rule_id = boost::optional<std::string>(id);
     } else {
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
 	  boost::optional<ceph::real_time>(
 	    mtime + make_timespan(rule_expiration.get_days()*24*60*60));
-	rule_id = boost::optional<std::string>(id);
       }
     }
 
     // update earliest expiration
     if (rule_expiration_date) {
       if ((! expiration_date) ||
-	  (*expiration_date < *rule_expiration_date)) {
+	  (*expiration_date > *rule_expiration_date)) {
       expiration_date =
 	boost::optional<ceph::real_time>(rule_expiration_date);
+      rule_id = boost::optional<std::string>(id);
       }
     }
   }

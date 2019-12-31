@@ -57,6 +57,9 @@ if(WITH_RADOSGW)
   if(WITH_RADOSGW_AMQP_ENDPOINT)
     list(APPEND rgw_libs amqp_mock)
   endif()
+  if(WITH_RADOSGW_KAFKA_ENDPOINT)
+    list(APPEND rgw_libs kafka_stub)
+  endif()
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
 if(WITH_RBD)
@@ -506,7 +509,7 @@ add_dependencies(tests
   ceph_test_objectstore
   ceph_erasure_code_non_regression
   ceph_erasure_code
-  cython${PY_BINDING_INFIX}_modules)
+  cython_modules)
 if (WITH_CEPHFS)
   add_dependencies(tests ceph-mds)
 endif()
@@ -888,6 +891,10 @@ target_link_libraries(unittest_subprocess global)
 add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset)
 target_link_libraries(unittest_pageset global)
+
+add_executable(unittest_random_string test_random_string.cc $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_random_string)
+target_link_libraries(unittest_random_string global)
 
 # unittest_any_
 add_executable(unittest_any test_any.cc)

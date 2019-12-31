@@ -837,6 +837,17 @@ std::string image_id(librbd::Image& image) {
   return id;
 }
 
+std::string mirror_image_mode(librbd::mirror_image_mode_t mode) {
+  switch (mode) {
+    case RBD_MIRROR_IMAGE_MODE_JOURNAL:
+      return "journal";
+    case RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+      return "snapshot";
+    default:
+      return "unknown";
+  }
+}
+
 std::string mirror_image_state(librbd::mirror_image_state_t state) {
   switch (state) {
     case RBD_MIRROR_IMAGE_DISABLING:

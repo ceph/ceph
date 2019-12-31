@@ -31,6 +31,8 @@ case $(distro_id) in
         esac
 		;;
 	centos|fedora|rhel)
+	        # el8 needs PowerTools for snappy-devel
+	        test -x /usr/bin/dnf && sudo dnf config-manager --set-enabled PowerTools || true
 		install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64
         if [ $(distro_id) = "fedora" ]; then
             install cmake
@@ -74,7 +76,7 @@ else
 fi
 
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
-mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
+mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=Debug -DWITH_TESTS=ON -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
 make rocksdb_env_librados_test -j8
 
 echo "Copy ceph.conf"

@@ -33,11 +33,11 @@ namespace po = boost::program_options;
 
 namespace {
 
-int validate_mirroring_enabled(librbd::Image& image) {
+int validate_mirroring_enabled(librbd::Image &image, bool snapshot = false) {
   librbd::mirror_image_info_t mirror_image;
   int r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
   if (r < 0) {
-    std::cerr << "rbd: failed to retrieve mirror mode: "
+    std::cerr << "rbd: failed to retrieve mirror info: "
               << cpp_strerror(r) << std::endl;
     return r;
   }
@@ -46,6 +46,23 @@ int validate_mirroring_enabled(librbd::Image& image) {
     std::cerr << "rbd: mirroring not enabled on the image" << std::endl;
     return -EINVAL;
   }
+
+  if (snapshot) {
+    librbd::mirror_image_mode_t mode;
+    r = image.mirror_image_get_mode(&mode);
+    if (r < 0) {
+      std::cerr << "rbd: failed to retrieve mirror mode: "
+                << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    if (mode != RBD_MIRROR_IMAGE_MODE_SNAPSHOT) {
+      std::cerr << "rbd: snapshot based mirroring not enabled on the image"
+                << std::endl;
+      return -EINVAL;
+    }
+  }
+
   return 0;
 }
 
@@ -54,6 +71,13 @@ int validate_mirroring_enabled(librbd::Image& image) {
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+}
+
+void get_arguments_enable(po::options_description *positional,
+                          po::options_description *options) {
+  at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  positional->add_options()
+    ("mode", "mirror image mode (journal or snapshot) [default: journal]");
 }
 
 void get_arguments_disable(po::options_description *positional,
@@ -87,7 +111,21 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
     return r;
   }
 
-  r = enable ? image.mirror_image_enable() : image.mirror_image_disable(force);
+  if (enable) {
+    librbd::mirror_image_mode_t mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+    std::string mode_arg = utils::get_positional_argument(vm, arg_index++);
+    if (mode_arg == "journal") {
+      mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+    } else if (mode_arg == "snapshot") {
+      mode = RBD_MIRROR_IMAGE_MODE_SNAPSHOT;
+    } else if (!mode_arg.empty()) {
+      std::cerr << "rbd: invalid mode name: " << mode_arg << std::endl;
+      return -EINVAL;
+    }
+    r = image.mirror_image_enable2(mode);
+  } else {
+    r = image.mirror_image_disable(force);
+  }
   if (r < 0) {
     return r;
   }
@@ -275,8 +313,11 @@ int execute_status(const po::variables_map &vm,
     return r;
   }
 
+  librados::IoCtx default_ns_io_ctx;
+  default_ns_io_ctx.dup(io_ctx);
+  default_ns_io_ctx.set_namespace("");
   std::vector<librbd::mirror_peer_site_t> mirror_peers;
-  utils::get_mirror_peer_sites(io_ctx, &mirror_peers);
+  utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
 
   std::map<std::string, std::string> peer_fsid_to_name;
   utils::get_mirror_peer_fsid_to_names(mirror_peers, &peer_fsid_to_name);
@@ -320,6 +361,35 @@ int execute_status(const po::variables_map &vm,
     }
   }
 
+  std::vector<librbd::snap_info_t> snaps;
+  if (status.info.primary && status.info.state == RBD_MIRROR_IMAGE_ENABLED) {
+    librbd::mirror_image_mode_t mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+    r = image.mirror_image_get_mode(&mode);
+    if (r < 0) {
+      std::cerr << "rbd: failed to retrieve mirror mode: "
+                << cpp_strerror(r) << std::endl;
+      // not fatal
+    }
+
+    if (mode == RBD_MIRROR_IMAGE_MODE_SNAPSHOT) {
+      image.snap_list(snaps);
+      snaps.erase(
+        remove_if(snaps.begin(),
+                  snaps.end(),
+                  [&image](const librbd::snap_info_t &snap) {
+                    librbd::snap_namespace_type_t type;
+                    int r = image.snap_get_namespace_type(snap.id, &type);
+                    if (r < 0) {
+                      return false;
+                    }
+                    return type != RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY;
+                  }),
+        snaps.end());
+    }
+  }
+
+  auto mirror_service = daemon_service_info.get_by_instance_id(instance_id);
+
   if (formatter != nullptr) {
     formatter->open_object_section("image");
     formatter->dump_string("name", image_name);
@@ -328,7 +398,9 @@ int execute_status(const po::variables_map &vm,
       formatter->dump_string("state", utils::mirror_image_site_status_state(
         local_status));
       formatter->dump_string("description", local_status.description);
-      daemon_service_info.dump(instance_id, formatter);
+      if (mirror_service != nullptr) {
+        mirror_service->dump_image(formatter);
+      }
       formatter->dump_string("last_update", utils::timestr(
         local_status.last_update));
     }
@@ -351,6 +423,28 @@ int execute_status(const po::variables_map &vm,
       }
       formatter->close_section(); // peer_sites
     }
+    if (!snaps.empty()) {
+      formatter->open_array_section("snapshots");
+      for (auto &snap : snaps) {
+        librbd::snap_mirror_primary_namespace_t info;
+        r = image.snap_get_mirror_primary_namespace(snap.id, &info,
+                                                    sizeof(info));
+        if (r < 0) {
+          continue;
+        }
+        formatter->open_object_section("snapshot");
+        formatter->dump_unsigned("id", snap.id);
+        formatter->dump_string("name", snap.name);
+        formatter->dump_bool("demoted", info.demoted);
+        formatter->open_array_section("mirror_peer_uuids");
+        for (auto &peer : info.mirror_peer_uuids) {
+          formatter->dump_string("peer_uuid", peer);
+        }
+        formatter->close_section(); // mirror_peer_uuids
+        formatter->close_section(); // snapshot
+      }
+      formatter->close_section(); // snapshots
+    }
     formatter->close_section(); // image
     formatter->flush(std::cout);
   } else {
@@ -360,9 +454,9 @@ int execute_status(const po::variables_map &vm,
       std::cout << "  state:       " << utils::mirror_image_site_status_state(
                   local_status) << "\n"
                 << "  description: " << local_status.description << "\n";
-      if (!instance_id.empty()) {
+      if (mirror_service != nullptr) {
         std::cout << "  service:     " <<
-          daemon_service_info.get_description(instance_id) << "\n";
+          mirror_service->get_image_description() << "\n";
       }
       std::cout << "  last_update: " << utils::timestr(
         local_status.last_update) << std::endl;
@@ -389,15 +483,78 @@ int execute_status(const po::variables_map &vm,
                     site.last_update) << std::endl;
       }
     }
+    if (!snaps.empty()) {
+      std::cout << "  snapshots:" << std::endl;
+
+      bool first_site = true;
+      for (auto &snap : snaps) {
+        librbd::snap_mirror_primary_namespace_t info;
+        r = image.snap_get_mirror_primary_namespace(snap.id, &info,
+                                                    sizeof(info));
+        if (r < 0) {
+          continue;
+        }
+
+        if (!first_site) {
+          std::cout << std::endl;
+        }
+
+        first_site = false;
+        std::cout << "    " << snap.id << " " << snap.name << " ("
+                  << (info.demoted ? "demoted " : "") << "peer_uuids:["
+                  << info.mirror_peer_uuids << "])";
+      }
+      std::cout << std::endl;
+    }
   }
 
+  return 0;
+}
+
+int execute_snapshot(const po::variables_map &vm,
+                     const std::vector<std::string> &ceph_global_init_args) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string namespace_name;
+  std::string image_name;
+  int r = utils::get_pool_image_snapshot_names(
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+      &image_name, nullptr, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(image, true);
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t snap_id;
+  r = image.mirror_image_create_snapshot(&snap_id);
+  if (r < 0) {
+    std::cerr << "rbd: error creating snapshot: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  std::cout << "Snapshot ID: " << snap_id << std::endl;
   return 0;
 }
 
 Shell::Action action_enable(
   {"mirror", "image", "enable"}, {},
   "Enable RBD mirroring for an image.", "",
-  &get_arguments, &execute_enable);
+  &get_arguments_enable, &execute_enable);
 Shell::Action action_disable(
   {"mirror", "image", "disable"}, {},
   "Disable RBD mirroring for an image.", "",
@@ -418,6 +575,10 @@ Shell::Action action_status(
   {"mirror", "image", "status"}, {},
   "Show RBD mirroring status for an image.", "",
   &get_status_arguments, &execute_status);
+Shell::Action action_snapshot(
+  {"mirror", "image", "snapshot"}, {},
+  "Create RBD mirroring image snapshot.", "",
+  &get_arguments, &execute_snapshot);
 
 } // namespace mirror_image
 } // namespace action

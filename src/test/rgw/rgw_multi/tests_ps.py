@@ -28,7 +28,7 @@ from nose.tools import assert_not_equal, assert_equal
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 
-skip_push_tests = False
+skip_push_tests = True
 
 ####################################
 # utility functions for pubsub tests
@@ -247,15 +247,30 @@ def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
     err = ''
     for key in keys:
         key_found = False
-        for event in events:
-            if event['info']['bucket']['name'] == key.bucket.name and \
-                event['info']['key']['name'] == key.name:
-                if deletions and event['event'] == 'OBJECT_DELETE':
-                    key_found = True
+        if type(events) is list:
+            for event_list in events: 
+                if key_found:
                     break
-                elif not deletions and event['event'] == 'OBJECT_CREATE':
-                    key_found = True
-                    break
+                for event in event_list['events']:
+                    if event['info']['bucket']['name'] == key.bucket.name and \
+                        event['info']['key']['name'] == key.name:
+                        if deletions and event['event'] == 'OBJECT_DELETE':
+                            key_found = True
+                            break
+                        elif not deletions and event['event'] == 'OBJECT_CREATE':
+                            key_found = True
+                            break
+        else:
+            for event in events['events']:
+                if event['info']['bucket']['name'] == key.bucket.name and \
+                    event['info']['key']['name'] == key.name:
+                    if deletions and event['event'] == 'OBJECT_DELETE':
+                        key_found = True
+                        break
+                    elif not deletions and event['event'] == 'OBJECT_CREATE':
+                        key_found = True
+                        break
+
         if not key_found:
             err = 'no ' + ('deletion' if deletions else 'creation') + ' event found for key: ' + str(key)
             log.error(events)
@@ -274,27 +289,44 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
     err = ''
     for key in keys:
         key_found = False
-        for record in records:
-            if record['s3']['bucket']['name'] == key.bucket.name and \
-                record['s3']['object']['key'] == key.name:
-                if deletions and 'ObjectRemoved' in record['eventName']:
-                    key_found = True
+        if type(records) is list:
+            for record_list in records:
+                if key_found:
                     break
-                elif not deletions and 'ObjectCreated' in record['eventName']:
-                    key_found = True
-                    break
+                for record in record_list['Records']:
+                    if record['s3']['bucket']['name'] == key.bucket.name and \
+                        record['s3']['object']['key'] == key.name:
+                        if deletions and 'ObjectRemoved' in record['eventName']:
+                            key_found = True
+                            break
+                        elif not deletions and 'ObjectCreated' in record['eventName']:
+                            key_found = True
+                            break
+        else:
+            for record in records['Records']:
+                if record['s3']['bucket']['name'] == key.bucket.name and \
+                    record['s3']['object']['key'] == key.name:
+                    if deletions and 'ObjectRemoved' in record['eventName']:
+                        key_found = True
+                        break
+                    elif not deletions and 'ObjectCreated' in record['eventName']:
+                        key_found = True
+                        break
+
         if not key_found:
             err = 'no ' + ('deletion' if deletions else 'creation') + ' event found for key: ' + str(key)
-            for record in records:
-                log.error(str(record['s3']['bucket']['name']) + ',' + str(record['s3']['object']['key']))
+            for record_list in records:
+                for record in record_list['Records']:
+                    log.error(str(record['s3']['bucket']['name']) + ',' + str(record['s3']['object']['key']))
             assert False, err
 
     if not len(records) == len(keys):
         err = 'superfluous records are found'
         log.warning(err)
         if exact_match:
-            for record in records:
-                log.error(str(record['s3']['bucket']['name']) + ',' + str(record['s3']['object']['key']))
+            for record_list in records:
+                for record in record_list['Records']:
+                    log.error(str(record['s3']['bucket']['name']) + ',' + str(record['s3']['object']['key']))
             assert False, err
 
 
@@ -342,6 +374,131 @@ def clean_rabbitmq(proc): #, data_dir, log_dir)
     #    os.rmdir(log_dir)
     #except:
     #    log.info('rabbitmq directories already removed')
+
+
+# Kafka endpoint functions
+
+kafka_server = 'localhost'
+
+class KafkaReceiver(object):
+    """class for receiving and storing messages on a topic from the kafka broker"""
+    def __init__(self, topic):
+        from kafka import KafkaConsumer
+        remaining_retries = 10
+        while remaining_retries > 0:
+            try:
+                self.consumer = KafkaConsumer(topic, bootstrap_servers = kafka_server)
+                print('Kafka consumer created on topic: '+topic)
+                break
+            except Exception as error:
+                remaining_retries -= 1
+                print('failed to connect to kafka (remaining retries '
+                    + str(remaining_retries) + '): ' + str(error))
+                time.sleep(1)
+
+        if remaining_retries == 0:
+            raise Exception('failed to connect to kafka - no retries left')
+
+        self.events = []
+        self.topic = topic
+        self.stop = False
+
+    def verify_s3_events(self, keys, exact_match=False, deletions=False):
+        """verify stored s3 records agains a list of keys"""
+        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions)
+        self.events = []
+
+
+def kafka_receiver_thread_runner(receiver):
+    """main thread function for the kafka receiver"""
+    try:
+        log.info('Kafka receiver started')
+        print('Kafka receiver started')
+        for msg in receiver.consumer:
+            if receiver.stop:
+                break
+            receiver.events.append(json.loads(msg.value))
+        log.info('Kafka receiver ended')
+        print('Kafka receiver ended')
+    except Exception as error:
+        log.info('Kafka receiver ended unexpectedly: %s', str(error))
+        print('Kafka receiver ended unexpectedly: ' + str(error))
+
+
+def create_kafka_receiver_thread(topic):
+    """create kafka receiver and thread"""
+    receiver = KafkaReceiver(topic)
+    task = threading.Thread(target=kafka_receiver_thread_runner, args=(receiver,))
+    task.daemon = True
+    return task, receiver
+
+def stop_kafka_receiver(receiver, task):
+    """stop the receiver thread and wait for it to finis"""
+    receiver.stop = True
+    task.join(5)
+    try:
+        receiver.consumer.close()
+    except Exception as error:
+        log.info('failed to gracefuly stop Kafka receiver: %s', str(error))
+
+
+def init_kafka():
+    """ start kafka/zookeeper """
+    KAFKA_DIR = os.environ['KAFKA_DIR']
+    if KAFKA_DIR == '':
+        log.info('KAFKA_DIR must be set to where kafka is installed')
+        print('KAFKA_DIR must be set to where kafka is installed')
+        return None, None, None
+    
+    DEVNULL = open(os.devnull, 'wb')
+
+    print('\nStarting zookeeper...')
+    try:
+        zk_proc = subprocess.Popen([KAFKA_DIR+'bin/zookeeper-server-start.sh', KAFKA_DIR+'config/zookeeper.properties'], stdout=DEVNULL)
+    except Exception as error:
+        log.info('failed to execute zookeeper: %s', str(error))
+        print('failed to execute zookeeper: %s' % str(error))
+        return None, None, None
+
+    time.sleep(5)
+    if zk_proc.poll() is not None:
+        print('zookeeper failed to start')
+        return None, None, None
+    print('Zookeeper started')
+    print('Starting kafka...')
+    kafka_log = open('./kafka.log', 'w')
+    try:
+        kafka_proc = subprocess.Popen([
+            KAFKA_DIR+'bin/kafka-server-start.sh', 
+            KAFKA_DIR+'config/server.properties'], 
+            stdout=kafka_log)
+    except Exception as error:
+        log.info('failed to execute kafka: %s', str(error))
+        print('failed to execute kafka: %s' % str(error))
+        zk_proc.terminate()
+        kafka_log.close()
+        return None, None, None
+
+    # TODO add kafka checkpoint instead of sleep
+    time.sleep(15)
+    if kafka_proc.poll() is not None:
+        zk_proc.terminate()
+        print('kafka failed to start. details in: ./kafka.log')
+        kafka_log.close()
+        return None, None, None
+
+    print('Kafka started')
+    return kafka_proc, zk_proc, kafka_log
+
+
+def clean_kafka(kafka_proc, zk_proc, kafka_log):
+    """ stop kafka/zookeeper """
+    try:
+        kafka_log.close()
+        kafka_proc.terminate()
+        zk_proc.terminate()
+    except:
+        log.info('kafka/zookeeper already terminated')
 
 
 def init_env(require_ps=True):
@@ -529,12 +686,12 @@ def test_ps_s3_notification_records():
 
     # get the events from the subscription
     result, _ = sub_conf.get_events()
-    parsed_result = json.loads(result)
-    for record in parsed_result['Records']:
+    records = json.loads(result)
+    for record in records['Records']:
         log.debug(record)
     keys = list(bucket.list())
     # TODO: use exact match
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(records, keys, exact_match=False)
 
     # cleanup
     _, status = s3_notification_conf.del_config()
@@ -896,8 +1053,8 @@ def ps_s3_notification_filter(on_master):
     found_in4 = []
 
     for event in receiver.get_and_reset_events():
-        notif_id = event['s3']['configurationId']
-        key_name = event['s3']['object']['key']
+        notif_id = event['Records'][0]['s3']['configurationId']
+        key_name = event['Records'][0]['s3']['object']['key']
         if notif_id == notification_name+'_1':
             found_in1.append(key_name)
         elif notif_id == notification_name+'_2':
@@ -1156,7 +1313,7 @@ def test_ps_s3_notification_push_amqp_on_master():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    print 'average time for deletion + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
@@ -1172,7 +1329,6 @@ def test_ps_s3_notification_push_amqp_on_master():
         err = 'amqp receiver 2 should have no deletions'
         assert False, err
 
-
     # cleanup
     stop_amqp_receiver(receiver1, task1)
     stop_amqp_receiver(receiver2, task2)
@@ -1182,6 +1338,171 @@ def test_ps_s3_notification_push_amqp_on_master():
     # delete the bucket
     zones[0].delete_bucket(bucket_name)
     clean_rabbitmq(proc)
+
+
+def test_ps_s3_notification_push_kafka():
+    """ test pushing kafka s3 notification on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    kafka_proc, zk_proc, kafka_log = init_kafka()
+    if kafka_proc is  None or zk_proc is None:
+        return SkipTest('end2end kafka tests require kafka/zookeeper installed')
+
+    zones, ps_zones  = init_env(require_ps=True)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # name is constant for manual testing
+    topic_name = bucket_name+'_topic'
+    # create consumer on the topic
+    task, receiver = create_kafka_receiver_thread(topic_name)
+    task.start()
+
+    # create topic
+    topic_conf = PSTopic(ps_zones[0].conn, topic_name,
+                         endpoint='kafka://' + kafka_server,
+                         endpoint_args='kafka-ack-level=broker')
+    result, status = topic_conf.set_config()
+    assert_equal(status/100, 2)
+    parsed_result = json.loads(result)
+    topic_arn = parsed_result['arn']
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+
+    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    # wait for sync
+    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
+    keys = list(bucket.list())
+    receiver.verify_s3_events(keys, exact_match=True)
+
+    # delete objects from the bucket
+    client_threads = []
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
+    receiver.verify_s3_events(keys, exact_match=True, deletions=True)
+    
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    stop_kafka_receiver(receiver, task)
+    clean_kafka(kafka_proc, zk_proc, kafka_log)
+
+
+def test_ps_s3_notification_push_kafka_on_master():
+    """ test pushing kafka s3 notification on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    kafka_proc, zk_proc, kafka_log = init_kafka()
+    if kafka_proc is None or zk_proc is None:
+        return SkipTest('end2end kafka tests require kafka/zookeeper installed')
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    # name is constant for manual testing
+    topic_name = bucket_name+'_topic'
+    # create consumer on the topic
+    task, receiver = create_kafka_receiver_thread(topic_name+'_1')
+    task.start()
+
+    # create s3 topic
+    endpoint_address = 'kafka://' + kafka_server
+    # without acks from broker
+    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'
+    topic_conf1 = PSTopicS3(zones[0].conn, topic_name+'_1', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=none'
+    topic_conf2 = PSTopicS3(zones[0].conn, topic_name+'_2', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name + '_1', 'TopicArn': topic_arn1,
+                         'Events': []
+                       },
+                       {'Id': notification_name + '_2', 'TopicArn': topic_arn2,
+                         'Events': []
+                       }]
+
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    time_diff = time.time() - start_time
+    print 'average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+    keys = list(bucket.list())
+    receiver.verify_s3_events(keys, exact_match=True)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    time_diff = time.time() - start_time
+    print 'average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+    receiver.verify_s3_events(keys, exact_match=True, deletions=True)
+    
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    topic_conf2.del_config()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    stop_kafka_receiver(receiver, task)
+    clean_kafka(kafka_proc, zk_proc, kafka_log)
 
 
 def test_ps_s3_notification_push_http_on_master():
@@ -1252,7 +1573,7 @@ def test_ps_s3_notification_push_http_on_master():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    print 'average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
@@ -1432,12 +1753,12 @@ def test_ps_subscription():
 
     # get the create events from the subscription
     result, _ = sub_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event: objname: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
     keys = list(bucket.list())
     # TODO: use exact match
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(events, keys, exact_match=False)
     # delete objects from the bucket
     for key in bucket.list():
         key.delete()
@@ -1447,11 +1768,11 @@ def test_ps_subscription():
 
     # get the delete events from the subscriptions
     result, _ = sub_conf.get_events()
-    for event in parsed_result['events']:
+    for event in events['events']:
         log.debug('Event: objname: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
     # TODO: check deletions
     # TODO: use exact match
-    # verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=True)
+    # verify_events_by_elements(events, keys, exact_match=False, deletions=True)
     # we should see the creations as well as the deletions
     # delete subscription
     _, status = sub_conf.del_config()
@@ -1530,28 +1851,28 @@ def test_ps_event_type_subscription():
 
     # get the events from the creation subscription
     result, _ = sub_create_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     keys = list(bucket.list())
     # TODO: use exact match
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(events, keys, exact_match=False)
     # get the events from the deletions subscription
     result, _ = sub_delete_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
-    assert_equal(len(parsed_result['events']), 0)
+    assert_equal(len(events['events']), 0)
     # get the events from the all events subscription
     result, _ = sub_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' +
                   str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
     # TODO: use exact match
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(events, keys, exact_match=False)
     # delete objects from the bucket
     for key in bucket.list():
         key.delete()
@@ -1561,32 +1882,32 @@ def test_ps_event_type_subscription():
 
     # get the events from the creations subscription
     result, _ = sub_create_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # deletions should not change the creation events
     # TODO: use exact match
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(events, keys, exact_match=False)
     # get the events from the deletions subscription
     result, _ = sub_delete_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # only deletions should be listed here
     # TODO: use exact match
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=True)
+    verify_events_by_elements(events, keys, exact_match=False, deletions=True)
     # get the events from the all events subscription
     result, _ = sub_create_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # both deletions and creations should be here
     # TODO: use exact match
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=False)
-    # verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=True)
+    verify_events_by_elements(events, keys, exact_match=False, deletions=False)
+    # verify_events_by_elements(events, keys, exact_match=False, deletions=True)
     # TODO: (1) test deletions (2) test overall number of events
 
     # test subscription deletion when topic is specified
@@ -1644,18 +1965,17 @@ def test_ps_event_fetching():
     while True:
         # get the events from the subscription
         result, _ = sub_conf.get_events(max_events, next_marker)
-        parsed_result = json.loads(result)
-        events = parsed_result['events']
-        total_events_count += len(events)
-        all_events.extend(events)
-        next_marker = parsed_result['next_marker']
-        for event in events:
+        events = json.loads(result)
+        total_events_count += len(events['events'])
+        all_events.extend(events['events'])
+        next_marker = events['next_marker']
+        for event in events['events']:
             log.debug('Event: objname: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
         if next_marker == '':
             break
     keys = list(bucket.list())
     # TODO: use exact match
-    verify_events_by_elements(all_events, keys, exact_match=False)
+    verify_events_by_elements({'events': all_events}, keys, exact_match=False)
 
     # cleanup
     sub_conf.del_config()
@@ -1699,17 +2019,16 @@ def test_ps_event_acking():
 
     # get the create events from the subscription
     result, _ = sub_conf.get_events()
-    parsed_result = json.loads(result)
-    events = parsed_result['events']
+    events = json.loads(result)
     original_number_of_events = len(events)
-    for event in events:
+    for event in events['events']:
         log.debug('Event (before ack)  id: "' + str(event['id']) + '"')
     keys = list(bucket.list())
     # TODO: use exact match
     verify_events_by_elements(events, keys, exact_match=False)
     # ack half of the  events
     events_to_ack = number_of_objects/2
-    for event in events:
+    for event in events['events']:
         if events_to_ack == 0:
             break
         _, status = sub_conf.ack_events(event['id'])
@@ -1718,10 +2037,10 @@ def test_ps_event_acking():
 
     # verify that acked events are gone
     result, _ = sub_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event (after ack) id: "' + str(event['id']) + '"')
-    assert len(parsed_result['events']) >= (original_number_of_events - number_of_objects/2)
+    assert len(events) >= (original_number_of_events - number_of_objects/2)
 
     # cleanup
     sub_conf.del_config()
@@ -1774,12 +2093,12 @@ def test_ps_creation_triggers():
 
     # get the create events from the subscription
     result, _ = sub_conf.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
 
     # TODO: verify the specific 3 keys: 'put', 'copy' and 'multipart'
-    assert len(parsed_result['events']) >= 3
+    assert len(events['events']) >= 3
     # cleanup
     sub_conf.del_config()
     notification_conf.del_config()
@@ -1930,13 +2249,13 @@ def test_ps_s3_multipart_on_master():
 
     events = receiver2.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['eventName'], 's3:ObjectCreated:Post')
-    assert_equal(events[0]['s3']['configurationId'], notification_name+'_2')
+    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:Post')
+    assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_2')
 
     events = receiver3.get_and_reset_events()
     assert_equal(len(events), 1)
-    assert_equal(events[0]['eventName'], 's3:ObjectCreated:CompleteMultipartUpload')
-    assert_equal(events[0]['s3']['configurationId'], notification_name+'_3')
+    assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:CompleteMultipartUpload')
+    assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_3')
 
     # cleanup
     stop_amqp_receiver(receiver1, task1)
@@ -2021,14 +2340,14 @@ def test_ps_versioned_deletion():
 
     # get the delete events from the subscription
     result, _ = sub_conf1.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
         assert_equal(str(event['event']), event_type1)
 
     result, _ = sub_conf2.get_events()
-    parsed_result = json.loads(result)
-    for event in parsed_result['events']:
+    events = json.loads(result)
+    for event in events['events']:
         log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
         assert_equal(str(event['event']), event_type2)
 
@@ -2176,13 +2495,14 @@ def test_ps_s3_versioned_deletion_on_master():
     events = receiver.get_and_reset_events()
     delete_events = 0
     delete_marker_create_events = 0
-    for event in events:
-        if event['eventName'] == 's3:ObjectRemoved:Delete':
-            delete_events += 1
-            assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_3']
-        if event['eventName'] == 's3:ObjectRemoved:DeleteMarkerCreated':
-            delete_marker_create_events += 1
-            assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_2']
+    for event_list in events:
+        for event in event_list['Records']:
+            if event['eventName'] == 's3:ObjectRemoved:Delete':
+                delete_events += 1
+                assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_3']
+            if event['eventName'] == 's3:ObjectRemoved:DeleteMarkerCreated':
+                delete_marker_create_events += 1
+                assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_2']
    
     # 3 key versions were deleted (v1, v2 and the deletion marker)
     # notified over the same topic via 2 notifications (1,3)
@@ -2510,9 +2830,9 @@ def test_ps_delete_bucket():
     sub_conf = PSSubscription(ps_zones[0].conn, notification_name,
                               topic_name)
     result, _ = sub_conf.get_events()
-    parsed_result = json.loads(result)
+    records = json.loads(result)
     # TODO: use exact match
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(records, keys, exact_match=False)
 
     # s3 notification is deleted with bucket
     _, status = s3_notification_conf.get_config(notification=notification_name)
@@ -2861,12 +3181,12 @@ def test_ps_s3_multiple_topics_notification():
 
     # get the events from both of the subscription
     result, _ = sub_conf1.get_events()
-    parsed_result = json.loads(result)
-    for record in parsed_result['Records']:
+    records = json.loads(result)
+    for record in records['Records']:
         log.debug(record)
     keys = list(bucket.list())
     # TODO: use exact match
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(records, keys, exact_match=False)
     receiver.verify_s3_events(keys, exact_match=False)
 
     result, _ = sub_conf2.get_events()
@@ -2875,7 +3195,7 @@ def test_ps_s3_multiple_topics_notification():
         log.debug(record)
     keys = list(bucket.list())
     # TODO: use exact match
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(records, keys, exact_match=False)
     http_server.verify_s3_events(keys, exact_match=False)
 
     # cleanup

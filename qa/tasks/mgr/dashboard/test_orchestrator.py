@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import os
 import json
 
 from .helper import DashboardTestCase
@@ -12,10 +11,7 @@ test_data = {
             'name': 'test-host0',
             'devices': [
                 {
-                    'type': 'hdd',
-                    'id': '/dev/sda',
-                    'size': 1024**4 * 4,
-                    'rotates': True
+                    'path': '/dev/sda',
                 }
             ]
         },
@@ -23,10 +19,7 @@ test_data = {
             'name': 'test-host1',
             'devices': [
                 {
-                    'type': 'hdd',
-                    'id': '/dev/sda',
-                    'size': 1024**4 * 4,
-                    'rotates': True
+                    'path': '/dev/sdb',
                 }
             ]
         }
@@ -58,11 +51,12 @@ test_data = {
 
 class OrchestratorControllerTest(DashboardTestCase):
 
-    AUTH_ROLES = ['read-only']
+    AUTH_ROLES = ['cluster-manager']
 
     URL_STATUS = '/api/orchestrator/status'
     URL_INVENTORY = '/api/orchestrator/inventory'
     URL_SERVICE = '/api/orchestrator/service'
+    URL_OSD = '/api/orchestrator/osd'
 
 
     @property
@@ -94,8 +88,8 @@ class OrchestratorControllerTest(DashboardTestCase):
 
         if not data['devices']:
             return
-        test_devices = sorted(data['devices'], key=lambda d: d['id'])
-        resp_devices = sorted(resp_data['devices'], key=lambda d: d['id'])
+        test_devices = sorted(data['devices'], key=lambda d: d['path'])
+        resp_devices = sorted(resp_data['devices'], key=lambda d: d['path'])
 
         for test, resp in zip(test_devices, resp_devices):
             self._validate_device(test, resp)
@@ -121,7 +115,7 @@ class OrchestratorControllerTest(DashboardTestCase):
         data = self._get(self.URL_STATUS)
         self.assertTrue(data['available'])
 
-    def test_iventory_list(self):
+    def test_inventory_list(self):
         # get all inventory
         data = self._get(self.URL_INVENTORY)
         self.assertStatus(200)
@@ -160,3 +154,33 @@ class OrchestratorControllerTest(DashboardTestCase):
         resp_services = sorted(data, key=sorting_key)
         for test, resp in zip(test_services, resp_services):
             self._validate_service(test, resp)
+
+    def test_create_osds(self):
+        data = {
+            'drive_group': {
+                'host_pattern': '*',
+                'data_devices': {
+                    'vendor': 'abc',
+                    'model': 'cba',
+                    'rotational': True,
+                    'size': '4 TB'
+                },
+                'wal_devices': {
+                    'vendor': 'def',
+                    'model': 'fed',
+                    'rotational': False,
+                    'size': '1 TB'
+                },
+                'db_devices': {
+                    'vendor': 'ghi',
+                    'model': 'ihg',
+                    'rotational': False,
+                    'size': '512 GB'
+                },
+                'wal_slots': 5,
+                'db_slots': 5,
+                'encrypted': True
+            }
+        }
+        self._post(self.URL_OSD, data)
+        self.assertStatus(201)

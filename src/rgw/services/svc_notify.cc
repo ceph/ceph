@@ -95,7 +95,7 @@ public:
       register_completion->release();
       register_completion = nullptr;
     }
-    register_completion = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
+    register_completion = librados::Rados::aio_create_completion(nullptr, nullptr);
     register_ret = obj.aio_watch(register_completion, &watch_handle, this);
     if (register_ret < 0) {
       register_completion->release();
@@ -111,7 +111,7 @@ public:
     if (!register_completion) {
       return -EINVAL;
     }
-    register_completion->wait_for_safe();
+    register_completion->wait_for_complete();
     int r = register_completion->get_return_value();
     register_completion->release();
     register_completion = nullptr;
