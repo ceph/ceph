@@ -44,6 +44,8 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
 
   seastar::future<> start_notify(NotifyRef);
   seastar::future<> send_notify_msg(NotifyRef);
+  seastar::future<> send_disconnect_msg();
+  void discard_state();
 
   friend Notify;
 
@@ -68,9 +70,7 @@ public:
     // NOP
   }
 
-  seastar::future<> remove(bool) {
-    return seastar::now();
-  }
+  seastar::future<> remove(bool send_disconnect);
 
   /// Call when notify_ack received on notify_id
   seastar::future<> notify_ack(
@@ -148,6 +148,7 @@ public:
     WatchIteratorT end,
     Args&&... args);
 
+  seastar::future<> remove_watcher(WatchRef watch);
   seastar::future<> complete_watcher(WatchRef watch,
                                      const ceph::bufferlist& reply_bl);
 };
