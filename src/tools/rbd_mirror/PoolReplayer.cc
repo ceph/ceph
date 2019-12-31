@@ -254,6 +254,8 @@ bool PoolReplayer::is_running() const {
 
 void PoolReplayer::init()
 {
+  Mutex::Locker l(m_lock);
+
   assert(!m_pool_replayer_thread.is_started());
 
   // reset state
@@ -511,6 +513,18 @@ void PoolReplayer::run()
   }
 
   m_instance_replayer->stop();
+}
+
+void PoolReplayer::reopen_logs()
+{
+  Mutex::Locker l(m_lock);
+
+  if (m_local_rados) {
+    reinterpret_cast<CephContext *>(m_local_rados->cct())->reopen_logs();
+  }
+  if (m_remote_rados) {
+    reinterpret_cast<CephContext *>(m_remote_rados->cct())->reopen_logs();
+  }
 }
 
 void PoolReplayer::print_status(Formatter *f, stringstream *ss)
