@@ -372,11 +372,18 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
       return seastar::do_for_each(obc->watchers,
         [ctx=std::move(ctx)] (auto& kv) {
           const auto& [key, watchp] = kv;
+          static_assert(
+            std::is_same_v<std::decay_t<decltype(watchp)>,
+                           seastar::shared_ptr<crimson::osd::Watch>>);
           auto& [cookie, entity] = key;
           if (ctx.entity != entity) {
+            logger().debug("skipping watch {}; entity name {} != {}",
+                           key, entity, ctx.entity);
             return seastar::now();
           }
           if (ctx.watch_cookie != cookie) {
+            logger().debug("skipping watch {}; cookie {} != {}",
+                           key, ctx.watch_cookie, cookie);
             return seastar::now();
           }
           logger().info("acking notify on watch {}", key);
