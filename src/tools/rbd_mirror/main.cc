@@ -54,7 +54,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler(SIGHUP, handle_signal);
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
@@ -74,7 +74,7 @@ int main(int argc, const char **argv)
   mirror->run();
 
  cleanup:
-  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGHUP, handle_signal);
   unregister_async_signal_handler(SIGINT, handle_signal);
   unregister_async_signal_handler(SIGTERM, handle_signal);
   shutdown_async_signal_handler();
