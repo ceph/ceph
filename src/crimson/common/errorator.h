@@ -79,7 +79,7 @@ public:
 template <class ErrorT, ErrorT ErrorV>
 struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
   unthrowable_wrapper(const unthrowable_wrapper&) = delete;
-  static constexpr unthrowable_wrapper instance{};
+  static const unthrowable_wrapper instance;
   [[nodiscard]] static const auto& make() {
     return instance;
   }
@@ -123,6 +123,8 @@ private:
 
   friend class error_t<unthrowable_wrapper<ErrorT, ErrorV>>;
 };
+template <class ErrorT, ErrorT ErrorV>
+const inline unthrowable_wrapper<ErrorT, ErrorV> unthrowable_wrapper<ErrorT, ErrorV>::instance{};
 
 template <class ErrorT, ErrorT ErrorV>
 std::exception_ptr unthrowable_wrapper<ErrorT, ErrorV>::carrier_instance = \
@@ -356,9 +358,9 @@ private:
 
     using base_t::base_t;
 
-    template <class Futurator, class ErrorVisitor>
+    template <class Futurator, class Future, class ErrorVisitor>
     [[gnu::noinline]]
-    static auto _safe_then_handle_errors(auto&& future,
+    static auto _safe_then_handle_errors(Future&& future,
                                          ErrorVisitor&& errfunc) {
       maybe_handle_error_t<ErrorVisitor, Futurator> maybe_handle_error(
         std::forward<ErrorVisitor>(errfunc),
