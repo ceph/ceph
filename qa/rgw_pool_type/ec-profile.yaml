@@ -7,5 +7,4 @@ overrides:
       m: 1
       crush-failure-domain: osd
   s3tests:
-    force-branch: ceph-master
     slow_backend: true
