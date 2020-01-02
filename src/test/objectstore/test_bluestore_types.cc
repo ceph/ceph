@@ -972,14 +972,12 @@ TEST(Blob, legacy_decode)
     B.bound_encode(
       bound,
       1, /*struct_v*/
-      0, /*sbid*/
       false);
     fake_ref_map.bound_encode(bound);
 
     B.bound_encode(
       bound2,
       2, /*struct_v*/
-      0, /*sbid*/
       true);
     {
       auto app = bl.get_contiguous_appender(bound);
@@ -987,14 +985,12 @@ TEST(Blob, legacy_decode)
       B.encode(
         app,
         1, /*struct_v*/
-        0, /*sbid*/
         false);
       fake_ref_map.encode(app);
 
       B.encode(
         app2,
         2, /*struct_v*/
-        0, /*sbid*/
         true);
     }
     auto p = bl.front().begin_deep();

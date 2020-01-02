@@ -3066,7 +3066,6 @@ bool BlueStore::ExtentMap::encode_some(
       p->blob->bound_encode(
         bound,
         struct_v,
-        p->blob->is_shared() ? p->blob->shared_blob()->get_sbid() : 0, // FIXME minor: get rid off passing sbid via param and resolve inside the func?
         false);
     }
   }
@@ -3128,7 +3127,6 @@ bool BlueStore::ExtentMap::encode_some(
       if (include_blob) {
 	p->blob->encode(app,
           struct_v,
-          p->blob->is_shared() ? p->blob->shared_blob()->get_sbid() : 0, // FIXME minor: get rid off passing sbid via param and resolve inside the func?
           false);
       }
     }
@@ -3231,8 +3229,7 @@ void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
   denc_varint((uint32_t)0, key_size);
   p += spanning_blob_map.size() * key_size;
   for (const auto& i : spanning_blob_map) {
-    uint64_t sbid = i.second->is_shared() ? i.second->shared_blob()->get_sbid() : 0;
-    i.second->bound_encode(p, struct_v, sbid, true);
+    i.second->bound_encode(p, struct_v, true);
   }
 }
 
@@ -3248,8 +3245,7 @@ void BlueStore::ExtentMap::encode_spanning_blobs(
   denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
     denc_varint(i.second->id, p);
-    uint64_t sbid = i.second->is_shared() ? i.second->shared_blob()->get_sbid() : 0;
-    i.second->encode(p, struct_v, sbid, true);
+    i.second->encode(p, struct_v, true);
   }
 }
 

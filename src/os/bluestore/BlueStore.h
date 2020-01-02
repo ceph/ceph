@@ -560,6 +560,10 @@ public:
       ceph_assert(is_shared());
       return _shared_blob;
     }
+    const SharedBlobRef shared_blob() const {
+      ceph_assert(is_shared());
+      return _shared_blob;
+    }
 
     void open_blob(Collection* coll, uint64_t sbid,
       BufferSpaceRef onode_bc);
@@ -723,10 +727,10 @@ public:
     void bound_encode(
       size_t& p,
       uint64_t struct_v,
-      uint64_t sbid,
       bool include_ref_map) const {
       denc(blob, p, struct_v);
       if (blob.is_shared()) {
+        auto sbid = shared_blob()->get_sbid();
         denc(sbid, p);
       }
       if (include_ref_map) {
@@ -736,10 +740,10 @@ public:
     void encode(
       ceph::buffer::list::contiguous_appender& p,
       uint64_t struct_v,
-      uint64_t sbid,
       bool include_ref_map) const {
       denc(blob, p, struct_v);
       if (blob.is_shared()) {
+        auto sbid = shared_blob()->get_sbid();
         denc(sbid, p);
       }
       if (include_ref_map) {
