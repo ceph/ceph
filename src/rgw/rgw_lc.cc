@@ -421,7 +421,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
             RGWObjState *state;
             int ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false);
             if (ret < 0) {
-              return ret;
+	      ldout(cct,5) << "ERROR: get_obj_state() failed for key=" << key << dendl;
+	      continue;
             }
             if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
               continue;
@@ -526,7 +527,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
               RGWObjState *state;
               int ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false);
               if (ret < 0) {
-                return ret;
+		ldout(cct,5) << "ERROR: get_obj_state() failed for key=" << obj_iter->key << dendl;
               }
               if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
                 continue;
