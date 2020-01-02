@@ -68,25 +68,11 @@ download_boost() {
     rm -rf src/boost
 }
 
-_python_autoselect() {
-  python_command=
-  for interpreter in python2.7 python3 ; do
-    type $interpreter > /dev/null 2>&1 || continue
-    python_command=$interpreter
-    break
-  done
-  if [ -z "$python_command" ] ; then
-    echo "Could not find a suitable python interpreter! Bailing out."
-    exit 1
-  fi
-  echo $python_command
-}
-
 build_dashboard_frontend() {
   CURR_DIR=`pwd`
   TEMP_DIR=`mktemp -d`
 
-  $CURR_DIR/src/tools/setup-virtualenv.sh --python=$(_python_autoselect) $TEMP_DIR
+  $CURR_DIR/src/tools/setup-virtualenv.sh $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
   $TEMP_DIR/bin/nodeenv -p --node=10.16.0
   cd src/pybind/mgr/dashboard/frontend
