@@ -1463,7 +1463,8 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	  unlink(dn, true, true);  // keep dir, dentry
 	}
       }
-      if (dlease.duration_ms > 0) {
+      if ((dirst.cap.caps & CEPH_CAP_FILE_SHARED) ||
+	  dlease.duration_ms > 0) {
 	if (!dn) {
 	  Dir *dir = diri->open_dir();
 	  dn = link(dir, dname, NULL, NULL);
