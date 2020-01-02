@@ -525,7 +525,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       obc->obs.oi.soid,
       ceph_osd_op_name(osd_op.op.op));
     return ox->execute_osd_op(osd_op);
-  }).safe_then([this, obc, m, ox = std::move(ox)] {
+  }).safe_then([this, obc, m, ox = ox.get()] {
     logger().debug(
       "do_osd_ops: {} - object {} all operations successful",
       *m,
@@ -547,7 +547,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
           return submit_transaction(std::move(obc), std::move(txn), *m);
         }
       });
-  }).safe_then([m, obc, this] {
+  }).safe_then([m, obc, this, ox_deleter = std::move(ox)] {
     auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
                                            0, false);
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
