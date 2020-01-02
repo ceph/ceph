@@ -713,7 +713,10 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
                                m_args));
 
         // TODO: make async
-        pool_replayer->init(site_name);
+        int r = pool_replayer->init(site_name);
+        if (r < 0) {
+          continue;
+        }
         m_pool_replayers.emplace(pool_peer, std::move(pool_replayer));
       }
     }

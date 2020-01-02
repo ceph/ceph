@@ -247,7 +247,7 @@ bool PoolReplayer<I>::is_running() const {
 }
 
 template <typename I>
-void PoolReplayer<I>::init(const std::string& site_name) {
+int PoolReplayer<I>::init(const std::string& site_name) {
   ceph_assert(!m_pool_replayer_thread.is_started());
 
   // reset state
@@ -263,7 +263,7 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
       "unable to connect to local cluster");
-    return;
+    return r;
   }
 
   r = init_rados(m_peer.cluster_name, m_peer.client_name,
@@ -274,14 +274,14 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
       "unable to connect to remote cluster");
-    return;
+    return r;
   }
 
   r = m_local_rados->ioctx_create2(m_local_pool_id, m_local_io_ctx);
   if (r < 0) {
     derr << "error accessing local pool " << m_local_pool_id << ": "
          << cpp_strerror(r) << dendl;
-    return;
+    return r;
   }
 
   auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
@@ -295,7 +295,7 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
       "unable to query local mirror uuid");
-    return;
+    return r;
   }
 
   r = m_remote_rados->ioctx_create(m_local_io_ctx.get_pool_name().c_str(),
@@ -306,7 +306,7 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_WARNING,
       "unable to access remote pool");
-    return;
+    return r;
   }
 
   dout(10) << "connected to " << m_peer << dendl;
@@ -333,7 +333,7 @@ void PoolReplayer<I>::init(const std::string& site_name) {
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
       "unable to initialize default namespace replayer");
     m_default_namespace_replayer.reset();
-    return;
+    return r;
   }
 
   m_leader_watcher.reset(LeaderWatcher<I>::create(m_threads, m_local_io_ctx,
@@ -345,7 +345,7 @@ void PoolReplayer<I>::init(const std::string& site_name) {
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
       "unable to initialize leader messenger object");
     m_leader_watcher.reset();
-    return;
+    return r;
   }
 
   if (m_callout_id != service_daemon::CALLOUT_ID_NONE) {
@@ -358,6 +358,7 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     stringify(m_local_io_ctx.get_instance_id()));
 
   m_pool_replayer_thread.create("pool replayer");
+  return 0;
 }
 
 template <typename I>

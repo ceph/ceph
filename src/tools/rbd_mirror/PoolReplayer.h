@@ -53,7 +53,7 @@ public:
   bool is_leader() const;
   bool is_running() const;
 
-  void init(const std::string& site_name);
+  int init(const std::string& site_name);
   void shut_down();
 
   void run();
