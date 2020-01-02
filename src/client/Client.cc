@@ -2033,15 +2033,14 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
   return released;
 }
 
-void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
-			   mds_rank_t mds, int drop, int unless)
+void Client::encode_dentry_release(Dentry *dn, MetaRequest *req, mds_rank_t mds)
 {
   ldout(cct, 20) << __func__ << " enter(dn:"
 	   << dn << ")" << dendl;
   int released = 0;
   if (dn->dir)
-    released = encode_inode_release(dn->dir->parent_inode, req,
-				    mds, drop, unless, 1);
+    released = encode_inode_release(dn->dir->parent_inode, req, mds,
+				    CEPH_CAP_FILE_SHARED, CEPH_CAP_FILE_EXCL, 1);
   if (released && dn->lease_mds == mds) {
     ldout(cct, 25) << "preemptively releasing dn to mds" << dendl;
     auto& rel = req->cap_releases.back();
@@ -2079,15 +2078,11 @@ void Client::encode_cap_releases(MetaRequest *req, mds_rank_t mds)
 			 mds, req->other_inode_drop,
 			 req->other_inode_unless);
   
-  if (req->dentry_drop && req->dentry())
-    encode_dentry_release(req->dentry(), req,
-			  mds, req->dentry_drop,
-			  req->dentry_unless);
+  if (req->dentry_drop_lease && req->dentry())
+    encode_dentry_release(req->dentry(), req, mds);
   
-  if (req->old_dentry_drop && req->old_dentry())
-    encode_dentry_release(req->old_dentry(), req,
-			  mds, req->old_dentry_drop,
-			  req->old_dentry_unless);
+  if (req->old_dentry_drop_lease && req->old_dentry())
+    encode_dentry_release(req->old_dentry(), req, mds);
   ldout(cct, 25) << __func__ << " exit (req: "
 	   << req << ", mds " << mds <<dendl;
 }
@@ -12835,8 +12830,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   req->set_filepath(path); 
   req->set_inode(dir);
   req->head.args.mknod.rdev = rdev;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->dentry_drop_lease = true;
 
   bufferlist xattrs_bl;
   int res = _posix_acl_create(dir, &mode, xattrs_bl, perms);
@@ -12994,8 +12988,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   else
     req->head.args.open.mask = 0;
   req->head.args.open.pool = pool_id;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->dentry_drop_lease = true;
 
   mode |= S_IFREG;
   bufferlist xattrs_bl;
@@ -13065,9 +13058,8 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->set_alternate_name(std::move(alternate_name));
+  req->dentry_drop_lease = true;
 
   mode |= S_IFDIR;
   bufferlist bl;
@@ -13210,8 +13202,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   req->set_alternate_name(std::move(alternate_name));
   req->set_inode(dir);
   req->set_string2(target); 
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->dentry_drop_lease = true;
 
   Dentry *de;
   int res = get_or_create(dir, name, &de);
@@ -13331,8 +13322,7 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   if (res < 0)
     goto fail;
   req->set_dentry(de);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->dentry_drop_lease = true;
 
   res = _lookup(dir, name, 0, &otherin, perm);
   if (res < 0)
@@ -13396,8 +13386,7 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
   req->set_filepath(path);
   req->set_inode(dir);
 
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->dentry_drop_lease = true;
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   InodeRef in;
@@ -13507,12 +13496,10 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   if (op == CEPH_MDS_OP_RENAME) {
     req->set_old_dentry(oldde);
-    req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
-    req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
+    req->old_dentry_drop_lease = true;
 
     req->set_dentry(de);
-    req->dentry_drop = CEPH_CAP_FILE_SHARED;
-    req->dentry_unless = CEPH_CAP_FILE_EXCL;
+    req->dentry_drop_lease = true;
 
     InodeRef oldin, otherin;
     res = _lookup(fromdir, fromname, 0, &oldin, perm);
