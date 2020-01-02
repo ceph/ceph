@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 import json
 import logging
+import os.path
 from textwrap import dedent
 from ceph_volume import decorators
 from ceph_volume.util import disk
@@ -162,7 +163,14 @@ class List(object):
         this tool before and contain enough metadata.
         """
         if args.device:
-            return self.single_report(args.device, lvs)
+            # The `args.device` argument can be a logical volume name or a
+            # device path. If it's a path that exists, use the canonical path
+            # (in particular, dereference symlinks); otherwise, assume it's a
+            # logical volume name and use it as-is.
+            device = args.device
+            if os.path.exists(device):
+                device = os.path.realpath(device)
+            return self.single_report(device, lvs)
         else:
             return self.full_report(lvs)
 
