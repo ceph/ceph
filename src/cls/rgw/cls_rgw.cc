@@ -3844,7 +3844,7 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
   try {
     decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_rgw_clear_bucket_resharding: failed to decode entry\n");
+    CLS_LOG(1, "ERROR: %s(): failed to decode entry\n", __func__);
     return -EINVAL;
   }
 
@@ -3871,7 +3871,7 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
   try {
     decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_rgw_clear_bucket_resharding: failed to decode entry\n");
+    CLS_LOG(1, "ERROR: %s(): failed to decode entry\n", __func__);
     return -EINVAL;
   }
 
