@@ -341,7 +341,7 @@ class UserTest(DashboardTestCase):
         self.assertError(code='pwd_past_expiration_date', component='user')
 
     def test_create_with_default_expiration_date(self):
-        future_date_1 = datetime.utcnow() + timedelta(days=10)
+        future_date_1 = datetime.utcnow() + timedelta(days=9)
         future_date_1 = int(time.mktime(future_date_1.timetuple()))
         future_date_2 = datetime.utcnow() + timedelta(days=11)
         future_date_2 = int(time.mktime(future_date_2.timetuple()))
@@ -375,6 +375,7 @@ class UserTest(DashboardTestCase):
         user_1 = self._get('/api/user/user1')
         self.assertStatus(200)
 
+        time.sleep(10)
         self.login('user1', 'mypassword10#')
         self._post('/api/user/user1/change_password', {
             'old_password': 'mypassword10#',
@@ -383,9 +384,9 @@ class UserTest(DashboardTestCase):
         self.assertStatus(200)
         self._reset_login_to_admin()
 
-        user_2 = self._get('/api/user/user1')
+        user_1_pwd_changed = self._get('/api/user/user1')
         self.assertStatus(200)
-        self.assertLess(user_1['pwdExpirationDate'], user_2['pwdExpirationDate'])
+        self.assertLess(user_1['pwdExpirationDate'], user_1_pwd_changed['pwdExpirationDate'])
 
         self._delete('/api/user/user1')
         self._ceph_cmd(['dashboard', 'set-user-pwd-expiration-span', '0'])
