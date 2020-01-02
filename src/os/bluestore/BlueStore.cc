@@ -13093,7 +13093,7 @@ void BlueStore::_do_write_small(
 	  if (head_read) {
 	    bufferlist head_bl;
 	    int r = _do_read(c.get(), o, offset - head_pad - head_read, head_read,
-			     head_bl, 0); //FIXME minor: add CEPH_OSD_OP_FLAG_FADVISE_NOCACHE??
+			     head_bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
 	    ceph_assert(r >= 0 && r <= (int)head_read);
 	    size_t zlen = head_read - r;
 	    if (zlen) {
@@ -13107,7 +13107,7 @@ void BlueStore::_do_write_small(
 	  if (tail_read) {
 	    bufferlist tail_bl;
 	    int r = _do_read(c.get(), o, offset + length + tail_pad, tail_read,
-			     tail_bl, 0); //FIXME minor: add CEPH_OSD_OP_FLAG_FADVISE_NOCACHE??
+			     tail_bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
 	    ceph_assert(r >= 0 && r <= (int)tail_read);
 	    size_t zlen = tail_read - r;
 	    if (zlen) {
@@ -14132,7 +14132,7 @@ int BlueStore::_do_gc(
     dout(20) << __func__ << " processing " << std::hex
             << offset << "~" << length << std::dec
 	    << dendl;
-    int r = _do_read(c.get(), o, offset, length, bl, 0); ////FIXME minor: add CEPH_OSD_OP_FLAG_FADVISE_NOCACHE??
+    int r = _do_read(c.get(), o, offset, length, bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
     ceph_assert(r == (int)length);
 
     _do_write_data(txc, c, o, offset, length, bl, &wctx_gc);
