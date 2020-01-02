@@ -391,15 +391,10 @@ class UserTest(DashboardTestCase):
         self._ceph_cmd(['dashboard', 'set-user-pwd-expiration-span', '0'])
 
     def test_validate_password_weak(self):
-        data = self._post('/api/user/validate_password', {
+        self._post('/api/user/validate_password', {
             'password': 'mypassword1'
         })
         self.assertStatus(200)
-        self.assertSchema(data, JObj(sub_elems={
-            'valid': JLeaf(bool),
-            'credits': JLeaf(int),
-            'valuation': JLeaf(str)
-        }))
         self.assertJsonBody({
             'valid': True,
             'credits': 11,
@@ -473,11 +468,3 @@ class UserTest(DashboardTestCase):
             'credits': 0,
             'valuation': 'Password must not be the same as the previous one.'
         })
-
-    @DashboardTestCase.RunAs('test', 'test', [{'user': ['read', 'delete']}])
-    def test_validate_password_invalid_permissions(self):
-        self._post('/api/user/validate_password', {
-            'password': 'foo'
-        })
-        self.assertStatus(403)
-        self.assertError(detail='You don\'t have permissions to access that resource')
