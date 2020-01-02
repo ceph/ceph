@@ -14,6 +14,11 @@ For details on RADOS Gateway administration, see `radosgw-admin`_.
 
 .. _radosgw-admin: ../../../man/8/radosgw-admin/ 
 
+.. note::
+  For those used to the Swift API this is implementing the Swift auth v1.0 API, as such
+  `{username}` above is generally equivalent to a Swift `account` and `{subusername}`
+  is a user under that account.
+
 Auth Get
 --------
 
