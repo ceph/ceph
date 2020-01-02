@@ -411,6 +411,16 @@ More details can be found in the documentation of the :ref:`mgr-prometheus`.
         org_name = Main Org.
         org_role = Viewer
 
+  In newer versions of Grafana (starting with 6.2.0-beta1) a new setting named
+  ``allow_embedding`` has been introduced. This setting needs to be explicitly
+  set to ``true`` for the Grafana integration in Ceph Dashboard to work, as its
+  default is ``false``.
+
+  ::
+
+    [security]
+    allow_embedding = true
+
 After you have set up Grafana and Prometheus, you will need to configure the
 connection information that the Ceph Dashboard will use to access Grafana.
 
