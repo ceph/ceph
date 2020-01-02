@@ -29,7 +29,10 @@ public:
   }
 
   void print(ostream &out) const override {
-    out << "client_metrics";
+    out << "client_metrics ";
+    for (auto &i : updates) {
+      i.print(&out);
+    }
   }
 
   void encode_payload(uint64_t features) override {
