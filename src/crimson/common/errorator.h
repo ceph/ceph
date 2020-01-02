@@ -4,6 +4,8 @@
 #pragma once
 
 #include <exception>
+#include <system_error>
+
 #include <seastar/core/future-util.hh>
 
 namespace crimson {
