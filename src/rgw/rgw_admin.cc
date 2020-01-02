@@ -2596,33 +2596,6 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
   return 0;
 }
 
-int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
-			       int new_num_shards,
-			       const RGWBucketInfo& bucket_info,
-			       map<string, bufferlist>& attrs,
-			       RGWBucketInfo& new_bucket_info)
-{
-
-  store->getRados()->create_bucket_id(&new_bucket_info.bucket.bucket_id);
-
-  new_bucket_info.num_shards = new_num_shards;
-  new_bucket_info.objv_tracker.clear();
-
-  int ret = store->svc()->bi->init_index(new_bucket_info);
-  if (ret < 0) {
-    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  ret = store->getRados()->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs);
-  if (ret < 0) {
-    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  return 0;
-}
-
 static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::otp_info_t& totp, vector<string>& pins,
                      time_t *pofs)
 {
