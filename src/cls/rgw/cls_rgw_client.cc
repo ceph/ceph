@@ -585,7 +585,7 @@ static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const string& oid, Buck
 {
   bufferlist in;
   librados::ObjectWriteOperation op;
-  op.exec("rgw", "bi_log_resync", in);
+  op.exec(RGW_CLASS, RGW_BI_LOG_RESYNC, in);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
@@ -598,7 +598,7 @@ static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const string& oid, Bucket
 {
   bufferlist in;
   librados::ObjectWriteOperation op;
-  op.exec("rgw", "bi_log_stop", in);
+  op.exec(RGW_CLASS, RGW_BI_LOG_STOP, in);
   return manager->aio_operate(io_ctx, oid, &op); 
 }
 
@@ -926,7 +926,7 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_resha
   cls_rgw_reshard_add_op call;
   call.entry = entry;
   encode(call, in);
-  op.exec("rgw", "reshard_add", in);
+  op.exec(RGW_CLASS, RGW_RESHARD_ADD, in);
 }
 
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
@@ -937,7 +937,7 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
   call.marker = marker;
   call.max = max;
   encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "reshard_list", in, out);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_RESHARD_LIST, in, out);
   if (r < 0)
     return r;
 
@@ -961,7 +961,7 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
   cls_rgw_reshard_get_op call;
   call.entry = entry;
   encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "reshard_get", in, out);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_RESHARD_GET, in, out);
   if (r < 0)
     return r;
 
@@ -986,7 +986,7 @@ void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_re
   call.bucket_name = entry.bucket_name;
   call.bucket_id = entry.bucket_id;
   encode(call, in);
-  op.exec("rgw", "reshard_remove", in);
+  op.exec(RGW_CLASS, RGW_RESHARD_REMOVE, in);
 }
 
 int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
@@ -996,7 +996,7 @@ int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   cls_rgw_set_bucket_resharding_op call;
   call.entry = entry;
   encode(call, in);
-  return io_ctx.exec(oid, "rgw", "set_bucket_resharding", in, out);
+  return io_ctx.exec(oid, RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in, out);
 }
 
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
@@ -1004,7 +1004,7 @@ int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
   bufferlist in, out;
   cls_rgw_clear_bucket_resharding_op call;
   encode(call, in);
-  return io_ctx.exec(oid, "rgw", "clear_bucket_resharding", in, out);
+  return io_ctx.exec(oid, RGW_CLASS, RGW_CLEAR_BUCKET_RESHARDING, in, out);
 }
 
 int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
@@ -1013,7 +1013,7 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   bufferlist in, out;
   cls_rgw_get_bucket_resharding_op call;
   encode(call, in);
-  int r= io_ctx.exec(oid, "rgw", "get_bucket_resharding", in, out);
+  int r= io_ctx.exec(oid, RGW_CLASS, RGW_GET_BUCKET_RESHARDING, in, out);
   if (r < 0)
     return r;
 
@@ -1036,7 +1036,7 @@ void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
   cls_rgw_guard_bucket_resharding_op call;
   call.ret_err = ret_err;
   encode(call, in);
-  op.exec("rgw", "guard_bucket_resharding", in);
+  op.exec(RGW_CLASS, RGW_GUARD_BUCKET_RESHARDING, in);
 }
 
 static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
@@ -1047,7 +1047,7 @@ static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx, const string& o
   call.entry = entry;
   encode(call, in);
   librados::ObjectWriteOperation op;
-  op.exec("rgw", "set_bucket_resharding", in);
+  op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
