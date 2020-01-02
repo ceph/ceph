@@ -246,9 +246,6 @@ class VolumeClient(object):
         # create the given pool
         command = {'prefix': 'osd pool create', 'pool': pool_name, 'pg_num': pg_num}
         r, outb, outs = self.mgr.mon_command(command)
-        if r != 0:
-            return r, outb, outs
-
         return r, outb, outs
 
     def remove_pool(self, pool_name):
@@ -302,11 +299,16 @@ class VolumeClient(object):
             return r, outb, outs
         r, outb, outs = self.create_pool(data_pool, 8)
         if r != 0:
+            #cleanup
+            self.remove_pool(metadata_pool)
             return r, outb, outs
         # create filesystem
         r, outb, outs = self.create_filesystem(volname, metadata_pool, data_pool)
         if r != 0:
             log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
+            #cleanup
+            self.remove_pool(data_pool)
+            self.remove_pool(metadata_pool)
             return r, outb, outs
         # create mds
         return self.create_mds(volname)
