@@ -42,7 +42,7 @@ For most deployments of Ceph, setting up a CephFS file system is as simple as:
 
 .. code:: bash
 
-    ceph volume create <fs name>
+    ceph fs volume create <fs name>
 
 The Ceph `Orchestrator`_  will automatically create and configure MDS for your
 file system if the back-end deployment technology supports it (see
