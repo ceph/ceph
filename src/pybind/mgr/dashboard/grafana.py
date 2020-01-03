@@ -6,6 +6,7 @@ import logging
 import os
 import time
 import requests
+from requests.exceptions import SSLError
 
 from .exceptions import GrafanaError
 from .settings import Settings
@@ -18,10 +19,14 @@ class GrafanaRestClient(object):
 
     @staticmethod
     def url_validation(method, path):
-        response = requests.request(
-            method,
-            path,
-            verify=Settings.GRAFANA_API_SSL_VERIFY)
+        try:
+            response = requests.request(
+                method,
+                path,
+                verify=Settings.GRAFANA_API_SSL_VERIFY)
+        except SSLError:
+            logger.exception("Failed to load Grafana dashboard for URL %s", path)
+            return 500
         return response.status_code
 
     @staticmethod

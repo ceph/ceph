@@ -10,13 +10,24 @@
   configure and enable the monitoring functionality.</cd-alert-panel>
 
 <cd-alert-panel type="info"
-                *ngIf="!dashboardExist"
-                i18n>Grafana Dashboard doesn't exist. Please refer to
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  add dashboards to Grafana.</cd-alert-panel>
+                *ngIf="grafanaExist && !dashboardValidated"
+                i18n>The requested Grafana Dashboard could not be displayed. Possible reasons for this are:
 
-<ng-container *ngIf="grafanaExist && dashboardExist">
+  <ul>
+    <li>The requested Dashboard does not exist.</li>
+    <li>Ceph Dashboard is not configured correctly.</li>
+    <li>There is an issue with Grafana.</li>
+  </ul>
+
+  <p>Please refer to the
+    <a href="{{ docsUrl }}"
+       target="_blank">documentation</a> on how to add dashboards to Grafana or configure them correctly and check the Ceph Manager logs (or Ceph Dashboard logs, if the Dashboard is configured to log to its own log files) for possible errors.
+  </p>
+
+  <p *ngIf="validationResponse">Grafana returned a <strong>{{ validationResponse }}</strong> HTTP status code.</p>
+</cd-alert-panel>
+
+<ng-container *ngIf="grafanaExist && dashboardValidated">
   <div class="row">
     <div class="col-12">
       <div class="form-inline timepicker">

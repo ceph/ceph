@@ -25,10 +25,12 @@ export class GrafanaComponent implements OnInit, OnChanges {
   mode = '&kiosk';
   loading = true;
   styles = {};
-  dashboardExist = true;
+  dashboardValidated = false;
   time: string;
   grafanaTimes: any;
   icons = Icons;
+  validationResponse: any = '';
+  showValidationResponse = false;
   readonly DEFAULT_TIME: string = 'from=now-1h&to=now';
 
   @Input()
@@ -203,9 +205,10 @@ export class GrafanaComponent implements OnInit, OnChanges {
   }
 
   getFrame() {
-    this.settingsService
-      .validateGrafanaDashboardUrl(this.uid)
-      .subscribe((data: any) => (this.dashboardExist = data === 200));
+    this.settingsService.validateGrafanaDashboardUrl(this.uid).subscribe((data: any) => {
+      this.validationResponse = data;
+      this.dashboardValidated = data === 200;
+    });
     this.url =
       this.baseUrl +
       this.uid +

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { AlertModule } from 'ngx-bootstrap/alert';
+import { of } from 'rxjs/internal/observable/of';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -75,9 +76,10 @@ describe('GrafanaComponent', () => {
       });
     });
 
-    it('should have Dashboard', () => {
-      TestBed.get(SettingsService).validateGrafanaDashboardUrl = { uid: 200 };
-      expect(component.dashboardExist).toBe(true);
+    it('should show Grafana dashboards when validation succeeded', () => {
+      TestBed.get(SettingsService).validateGrafanaDashboardUrl = () => of(200);
+      component.reset();
+      expect(component.dashboardValidated).toBe(true);
     });
   });
 });
