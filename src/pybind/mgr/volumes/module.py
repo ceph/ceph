@@ -5,7 +5,8 @@ from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
-from .fs.nfs import check_fsal_valid, create_instance, create_export, delete_export
+#from .fs.nfs import check_fsal_valid, create_instance, create_export, delete_export
+from .fs.nfs import *
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -454,9 +455,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_fs_nfs_create(self, inbuf, cmd):
         if check_fsal_valid(self.vc.mgr.get('fs_map')):
-            instance = create_instance(self)
+            pool_name = "nfs-ganesha"
+            create_rados_pool(self.vc.mgr, pool_name)
+            instance = create_instance(self, pool_name)
             return create_export(instance)
 
     def _cmd_fs_nfs_delete(self, inbuf, cmd):
-            instance = create_instance(self)
+            instance = create_instance(self, "nfs-ganesha")
             return delete_export(instance, cmd['export_id'])

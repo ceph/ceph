@@ -4,8 +4,11 @@ import cephfs
 import orchestrator
 from dashboard.services.cephx import CephX
 from dashboard.services.ganesha import Ganesha, NFSException, Export, GaneshaConfParser
+from .fs_util import create_pool
 
 log = logging.getLogger(__name__)
+
+exp_num = 0
 
 class GaneshaConf(object):
     # pylint: disable=R0902
@@ -179,14 +182,14 @@ class GaneshaConf(object):
             for daemon_id in daemons:
                 ioctx.notify("conf-{}".format(daemon_id))
 
-def create_instance(orch):
-    return GaneshaConf("a", "nfs-ganesha", "ganesha", orch)
+def create_instance(orch, pool_name):
+    return GaneshaConf("a", pool_name, "ganesha", orch)
 
 def create_export(ganesha_conf):
     ex_id = ganesha_conf.create_export({
         'path': "/",
         'pseudo': "/cephfs",
-        'cluster_id': "a",
+        'cluster_id': "cluster1",
         'daemons': ["ganesha.a"],
         'tag': "",
         'access_type': "RW",
@@ -199,6 +202,8 @@ def create_export(ganesha_conf):
         })
 
     log.info("Export ID is {}".format(ex_id))
+    global exp_num
+    exp_num += 1
     return 0, "", ""
 
 def delete_export(ganesha_conf, ex_id):
@@ -215,3 +220,19 @@ def check_fsal_valid(fs_map):
 
     #return 0, json.dumps(fsmap_res, indent=2), ""
     return fsmap_res
+
+def create_rados_pool(vc_mgr, pool_name):
+    global exp_num
+    if not exp_num:
+        r, outb, outs = create_pool(vc_mgr, pool_name)
+    """
+    if r != 0:
+        #return r, outb, outs
+
+    command = {'prefix': 'osd pool application enable', 'pool': pool_name, 'app': 'nfs'}
+    r, outb, outs = vc_mgr.mgr.mon_command(command)
+
+    if r != 0:
+        #return r, outb, outs
+    log.info("pool enable done r: {}".format(r))
+    """
