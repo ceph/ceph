@@ -22,7 +22,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   baseUrl: any;
   panelStyle: any;
   grafanaExist = false;
-  mode = '&kiosk';
+  mode = 'kiosk';
   loading = true;
   styles = {};
   dashboardValidated = false;
@@ -215,9 +215,8 @@ export class GrafanaComponent implements OnInit, OnChanges {
       '/' +
       this.grafanaPath +
       '&refresh=2s' +
-      this.mode +
-      '&' +
-      this.time;
+      `&${this.mode}` +
+      `&${this.time}`;
     this.grafanaSrc = this.sanitizer.bypassSecurityTrustResourceUrl(this.url);
   }
 
