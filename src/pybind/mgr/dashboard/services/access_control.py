@@ -292,7 +292,8 @@ SYSTEM_ROLES = {
 
 class User(object):
     def __init__(self, username, password, name=None, email=None, roles=None,
-                 last_update=None, enabled=True, pwd_expiration_date=None):
+                 last_update=None, enabled=True, pwd_expiration_date=None,
+                 pwd_update_required=False):
         self.username = username
         self.password = password
         self.name = name
@@ -309,6 +310,7 @@ class User(object):
         self.pwd_expiration_date = pwd_expiration_date
         if self.pwd_expiration_date is None:
             self.refresh_pwd_expiration_date()
+        self.pwd_update_required = pwd_update_required
 
     def refresh_last_update(self):
         self.last_update = int(time.time())
@@ -337,6 +339,7 @@ class User(object):
         self.password = hashed_password
         self.refresh_last_update()
         self.refresh_pwd_expiration_date()
+        self.pwd_update_required = False
 
     def compare_password(self, password):
         """
@@ -371,6 +374,9 @@ class User(object):
         self.refresh_last_update()
 
     def authorize(self, scope, permissions):
+        if self.pwd_update_required:
+            return False
+
         for role in self.roles:
             if role.authorize(scope, permissions):
                 return True
@@ -397,14 +403,16 @@ class User(object):
             'email': self.email,
             'lastUpdate': self.last_update,
             'enabled': self.enabled,
-            'pwdExpirationDate': self.pwd_expiration_date
+            'pwdExpirationDate': self.pwd_expiration_date,
+            'pwdUpdateRequired': self.pwd_update_required
         }
 
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'], u_dict['enabled'], u_dict['pwdExpirationDate'])
+                    u_dict['lastUpdate'], u_dict['enabled'],
+                    u_dict['pwdExpirationDate'], u_dict['pwdUpdateRequired'])
 
 
 class AccessControlDB(object):
@@ -444,7 +452,8 @@ class AccessControlDB(object):
 
             del self.roles[name]
 
-    def create_user(self, username, password, name, email, enabled=True, pwd_expiration_date=None):
+    def create_user(self, username, password, name, email, enabled=True,
+                    pwd_expiration_date=None, pwd_update_required=False):
         logger.debug("creating user: username=%s", username)
         with self.lock:
             if username in self.users:
@@ -453,7 +462,8 @@ class AccessControlDB(object):
                (pwd_expiration_date < int(time.mktime(datetime.utcnow().timetuple()))):
                 raise PwdExpirationDateNotValid()
             user = User(username, password_hash(password), name, email, enabled=enabled,
-                        pwd_expiration_date=pwd_expiration_date)
+                        pwd_expiration_date=pwd_expiration_date,
+                        pwd_update_required=pwd_update_required)
             self.users[username] = user
             return user
 
@@ -907,7 +917,8 @@ class LocalAuthenticator(object):
                 if user.enabled and user.compare_password(password) \
                    and not user.is_pwd_expired():
                     return {'permissions': user.permissions_dict(),
-                            'pwdExpirationDate': user.pwd_expiration_date}
+                            'pwdExpirationDate': user.pwd_expiration_date,
+                            'pwdUpdateRequired': user.pwd_update_required}
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)
         return None

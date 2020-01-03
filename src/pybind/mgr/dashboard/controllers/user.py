@@ -68,7 +68,7 @@ class User(RESTController):
         return User._user_to_dict(user)
 
     def create(self, username=None, password=None, name=None, email=None,
-               roles=None, enabled=True, pwdExpirationDate=None):
+               roles=None, enabled=True, pwdExpirationDate=None, pwdUpdateRequired=True):
         if not username:
             raise DashboardException(msg='Username is required',
                                      code='username_required',
@@ -80,7 +80,8 @@ class User(RESTController):
             validate_password_policy(password, username)
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(username, password, name,
-                                                  email, enabled, pwdExpirationDate)
+                                                  email, enabled, pwdExpirationDate,
+                                                  pwdUpdateRequired)
         except UserAlreadyExists:
             raise DashboardException(msg='Username already exists',
                                      code='username_already_exists',
@@ -109,7 +110,7 @@ class User(RESTController):
         mgr.ACCESS_CTRL_DB.save()
 
     def set(self, username, password=None, name=None, email=None, roles=None,
-            enabled=None, pwdExpirationDate=None):
+            enabled=None, pwdExpirationDate=None, pwdUpdateRequired=False):
         if JwtManager.get_username() == username and enabled is False:
             raise DashboardException(msg='You are not allowed to disable your user',
                                      code='cannot_disable_current_user',
@@ -136,6 +137,7 @@ class User(RESTController):
             user.enabled = enabled
         user.pwd_expiration_date = pwdExpirationDate
         user.set_roles(user_roles)
+        user.pwd_update_required = pwdUpdateRequired
         mgr.ACCESS_CTRL_DB.save()
         return User._user_to_dict(user)
 

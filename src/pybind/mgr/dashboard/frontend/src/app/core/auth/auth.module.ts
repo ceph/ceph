@@ -20,6 +20,7 @@ import { SsoNotFoundComponent } from './sso/sso-not-found/sso-not-found.componen
 import { UserFormComponent } from './user-form/user-form.component';
 import { UserListComponent } from './user-list/user-list.component';
 import { UserPasswordFormComponent } from './user-password-form/user-password-form.component';
+import { UserPasswordLoginFormComponent } from './user-password-login-form/user-password-login-form.component';
 import { UserTabsComponent } from './user-tabs/user-tabs.component';
 
 @NgModule({
@@ -45,7 +46,8 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     UserTabsComponent,
     UserListComponent,
     UserFormComponent,
-    UserPasswordFormComponent
+    UserPasswordFormComponent,
+    UserPasswordLoginFormComponent
   ]
 })
 export class AuthModule {}

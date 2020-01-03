@@ -4,4 +4,5 @@ export class LoginResponse {
   permissions: object;
   pwdExpirationDate: number;
   sso: boolean;
+  pwdUpdateRequired: boolean;
 }
