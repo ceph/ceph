@@ -15,6 +15,9 @@
 #define CEPH_COMMON_BIT_STR_H
 
 #include <functional>
+#include <ostream>
+#include <cstdint>
+#include <iosfwd>
 
 namespace ceph {
   class Formatter;
