@@ -129,10 +129,10 @@ class TestVolumes(CephFSTestCase):
         volname = self._generate_random_volume_name()
         self._fs_cmd("volume", "create", volname)
         volumels = json.loads(self._fs_cmd("volume", "ls"))
-        try:
-            if (not (volname in ([volume['name'] for volume in volumels]))):
-                raise RuntimeError("Error creating volume '{0}'".format(volname))
-        finally:
+
+        if not (volname in ([volume['name'] for volume in volumels])):
+            raise RuntimeError("Error creating volume '{0}'".format(volname))
+        else:
             # clean up
             self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
 
