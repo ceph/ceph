@@ -422,7 +422,7 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
            << g_conf()->mon_memory_target
            << " rocksdb_cache_size:"
            << g_conf()->rocksdb_cache_size
-           << ". Invalid size provided."
+           << ". Unable to update cache size."
            << dendl;
     }
   }
@@ -455,6 +455,11 @@ int OSDMonitor::_update_mon_cache_settings()
   if (g_conf()->mon_memory_target <= 0 ||
       g_conf()->mon_memory_target < mon_memory_min ||
       g_conf()->rocksdb_cache_size <= 0) {
+    return -EINVAL;
+  }
+
+  if (pcm == nullptr && rocksdb_binned_kv_cache == nullptr) {
+    derr << __func__ << " not using pcm and rocksdb" << dendl;
     return -EINVAL;
   }
 
@@ -496,7 +501,7 @@ int OSDMonitor::_update_mon_cache_settings()
     pcm->tune_memory();
     pcm->balance();
     _set_new_cache_sizes();
-    dout(10) << __func__ << " Updated mon cache setting."
+    dout(1) << __func__ << " Updated mon cache setting."
              << " target: " << target
              << " min: " << min
              << " max: " << max
@@ -899,7 +904,7 @@ int OSDMonitor::register_cache_with_pcm()
   pcm->insert("kv", rocksdb_binned_kv_cache, true);
   pcm->insert("inc", inc_cache, true);
   pcm->insert("full", full_cache, true);
-  dout(10) << __func__ << " pcm target: " << target
+  dout(1) << __func__ << " pcm target: " << target
            << " pcm max: " << max
            << " pcm min: " << min
            << " inc_osd_cache size: " << inc_osd_cache.get_size()
@@ -925,7 +930,7 @@ int OSDMonitor::_set_cache_ratios()
   inc_cache->set_cache_ratio(cache_inc_ratio);
   full_cache->set_cache_ratio(cache_full_ratio);
 
-  dout(10) << __func__ << " kv ratio " << cache_kv_ratio
+  dout(1) << __func__ << " kv ratio " << cache_kv_ratio
            << " inc ratio " << cache_inc_ratio
            << " full ratio " << cache_full_ratio
            << dendl;
@@ -4836,7 +4841,7 @@ void OSDMonitor::_set_new_cache_sizes()
   inc_osd_cache.set_bytes(inc_alloc);
   full_osd_cache.set_bytes(full_alloc);
 
-  dout(10) << __func__ << " cache_size:" << cache_size
+  dout(1) << __func__ << " cache_size:" << cache_size
            << " inc_alloc: " << inc_alloc
            << " full_alloc: " << full_alloc
            << " kv_alloc: " << kv_alloc
