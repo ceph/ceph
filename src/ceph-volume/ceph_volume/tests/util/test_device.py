@@ -50,11 +50,13 @@ class TestDevice(object):
         assert disk.is_lv
 
     def test_vgs_is_empty(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
-        BarPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", pv_tags={})
+        BarPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000",
+                                 pv_tags={})
         pvolumes.append(BarPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
         lsblk = {"TYPE": "disk"}
         device_info(lsblk=lsblk)
+        monkeypatch.setattr(api, 'get_pvs', lambda **kwargs: {})
+
         disk = device.Device("/dev/nvme0n1")
         assert disk.vgs == []
 
@@ -291,13 +293,23 @@ class TestDevice(object):
         assert not disk.available_raw
 
     @pytest.mark.parametrize("ceph_type", ["data", "block"])
-    def test_used_by_ceph(self, device_info, pvolumes, pvolumes_empty, monkeypatch, ceph_type):
-        FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
-        pvolumes.append(FooPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
+    def test_used_by_ceph(self, device_info, volumes, pvolumes, pvolumes_empty,
+                          monkeypatch, ceph_type):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part"}
-        lv_data = {"lv_path": "vg/lv", "vg_name": "vg", "lv_uuid": "0000", "tags": {"ceph.osd_id": 0, "ceph.type": ceph_type}}
+        FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000",
+                                 lv_uuid="0000", pv_tags={}, vg_name="vg")
+        pvolumes.append(FooPVolume)
+        lv_data = {"lv_name": "lv", "lv_path": "vg/lv", "vg_name": "vg",
+                   "lv_uuid": "0000", "lv_tags":
+                   "ceph.osd_id=0,ceph.type="+ceph_type}
+        lv = api.Volume(**lv_data)
+        volumes.append(lv)
+        monkeypatch.setattr(api, 'get_pvs', lambda **kwargs:
+                            deepcopy(pvolumes))
+        monkeypatch.setattr(api, 'get_lvs', lambda **kwargs:
+                            deepcopy(volumes))
+
         device_info(devices=data, lsblk=lsblk, lv=lv_data)
         vg = api.VolumeGroup(vg_name='foo/bar', vg_free_count=6,
                              vg_extent_size=1073741824)
@@ -308,10 +320,12 @@ class TestDevice(object):
     def test_not_used_by_ceph(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes.append(FooPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part"}
         lv_data = {"lv_path": "vg/lv", "vg_name": "vg", "lv_uuid": "0000", "tags": {"ceph.osd_id": 0, "ceph.type": "journal"}}
+        monkeypatch.setattr(api, 'get_pvs', lambda **kwargs:
+                            deepcopy(pvolumes))
+
         device_info(devices=data, lsblk=lsblk, lv=lv_data)
         disk = device.Device("/dev/sda")
         assert not disk.used_by_ceph
