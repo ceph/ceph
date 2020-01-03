@@ -78,7 +78,7 @@ class TestJournalMigration(CephFSTestCase):
                               "--path", "/tmp/journal.json"], 0)
         p = self.fs.tool_remote.run(
             args=[
-                "python",
+                "python3",
                 "-c",
                 "import json; print(len(json.load(open('/tmp/journal.json'))))"
             ],
