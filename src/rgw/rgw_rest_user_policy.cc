@@ -15,6 +15,7 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_user_policy.h"
+#include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -129,6 +130,15 @@ void RGWPutUserPolicy::execute()
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
+  }
+
+  if (!store->svc()->zone->is_meta_master()) {
+    ceph::bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
   }
 
   try {
@@ -326,6 +336,20 @@ void RGWDeleteUserPolicy::execute()
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
+  }
+
+  if (!store->svc()->zone->is_meta_master()) {
+    ceph::bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      // a policy might've been uploaded to this site when there was no sync
+      // req. in earlier releases, proceed deletion
+      if (op_ret != -ENOENT) {
+        ldpp_dout(this, 5) << "forward_request_to_master returned ret=" << op_ret << dendl;
+        return;
+      }
+      ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
+    }
   }
 
   map<string, string> policies;
