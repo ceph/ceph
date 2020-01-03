@@ -180,21 +180,18 @@ class List(object):
         volume in the form of vg/lv or a device with an absolute path like
         /dev/sda1 or /dev/sda
         """
-        if lvs is None:
-            lvs = api.Volumes()
         report = {}
-        lv = api.get_lv_from_argument(device)
+        lv = api.get_first_lv(filters={'lv_path': device})
 
         # check if there was a pv created with the
         # name of device
-        pv = api.get_pv(pv_name=device)
-        if pv and not lv:
-            try:
-                lv = api.get_lv(vg_name=pv.vg_name)
-            except MultipleLVsError:
-                lvs.filter(vg_name=pv.vg_name)
-                return self.full_report(lvs=lvs)
+        if not lv:
+            pv = api.get_first_pv(filters={'pv_name': device})
+            if pv:
+                return self.full_report(lvs=api.get_lv(filters={'vg_name':
+                                                                pv.vg_name}))
 
+        # TODO: a call to full_report just might work.
         if lv:
             try:
                 _id = lv.tags['ceph.osd_id']
@@ -206,28 +203,14 @@ class List(object):
             lv_report = lv.as_dict()
             lv_report['devices'] = self.match_devices(lv.lv_uuid)
             report[_id].append(lv_report)
-
         else:
-            # this has to be a journal/wal/db device (not a logical volume) so try
-            # to find the PARTUUID that should be stored in the OSD logical
-            # volume
-            for device_type in ['journal', 'block', 'wal', 'db']:
-                device_tag_name = 'ceph.%s_device' % device_type
-                device_tag_uuid = 'ceph.%s_uuid' % device_type
-                associated_lv = lvs.get(lv_tags={device_tag_name: device})
-                if associated_lv:
-                    _id = associated_lv.tags['ceph.osd_id']
-                    uuid = associated_lv.tags[device_tag_uuid]
-
-                    report.setdefault(_id, [])
-                    report[_id].append(
-                        {
-                            'tags': {'PARTUUID': uuid},
-                            'type': device_type,
-                            'path': device,
-                        }
-                    )
-        return report
+            # this has to be a journal/wal/db device (not a logical volume)
+            # so try to find the PARTUUID that should be stored in the OSD
+            # logical volume
+            vg_name = os.path.basename(device)
+            lvs = api.get_lvs(filters={'vg_name': vg_name})
+            if lvs:
+                return self.full_report(lvs=lvs)
 
     def full_report(self, lvs=None):
         """
@@ -235,7 +218,7 @@ class List(object):
         that have been previously prepared by Ceph
         """
         if lvs is None:
-            lvs = api.Volumes()
+            lvs = api.get_lvs()
         report = {}
 
         for lv in lvs:
@@ -257,7 +240,8 @@ class List(object):
                     # bluestore will not have a journal, filestore will not have
                     # a block/wal/db, so we must skip if not present
                     continue
-                if not api.get_lv(lv_uuid=device_uuid, lvs=lvs):
+                if not api.get_lvs(filters={'lv_uuid': device_uuid}):
+                    # if not api.get_lv(lv_uuid=device_uuid, lvs=lvs):
                     # means we have a regular device, so query blkid
                     disk_device = disk.get_device_from_partuuid(device_uuid)
                     if disk_device:
