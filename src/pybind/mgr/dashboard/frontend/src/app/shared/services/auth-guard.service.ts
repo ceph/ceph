@@ -10,7 +10,7 @@ export class AuthGuardService implements CanActivate, CanActivateChild {
   constructor(private router: Router, private authStorageService: AuthStorageService) {}
 
   canActivate() {
-    if (this.authStorageService.isLoggedIn()) {
+    if (this.authStorageService.isLoggedIn() && !this.authStorageService.getPwdUpdateRequired()) {
       return true;
     }
     this.router.navigate(['/login']);

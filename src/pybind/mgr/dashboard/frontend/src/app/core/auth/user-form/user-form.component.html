@@ -215,6 +215,23 @@
           </div>
         </div>
 
+        <!-- Change Password -->
+        <div class="form-group row"
+             *ngIf="!isCurrentUser()">
+          <div class="offset-sm-3 col-sm-9">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="pwdUpdateRequired"
+                     name="pwdUpdateRequired"
+                     formControlName="pwdUpdateRequired">
+              <label class="custom-control-label"
+                     for="pwdUpdateRequired"
+                     i18n>User must change password at next logon</label>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="card-footer">
         <div class="button-group text-right">

@@ -61,7 +61,11 @@ export class ApiInterceptorService implements HttpInterceptor {
               this.router.navigate(['/login']);
               break;
             case 403:
-              this.router.navigate(['/403']);
+              if (this.authStorageService.getPwdUpdateRequired()) {
+                this.router.navigate(['/login']);
+              } else {
+                this.router.navigate(['/403']);
+              }
               break;
             default:
               timeoutId = this.prepareNotification(resp);

@@ -21,10 +21,11 @@ class Auth(RESTController):
 
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
-        user_perms, pwd_expiration_date = None, None
+        user_perms, pwd_expiration_date, pwd_update_required = None, None, None
         if user_data:
             user_perms = user_data.get('permissions')
             pwd_expiration_date = user_data.get('pwdExpirationDate')
+            pwd_update_required = user_data.get('pwdUpdateRequired')
 
         if user_perms is not None:
             logger.debug('Login successful')
@@ -36,7 +37,8 @@ class Auth(RESTController):
                 'username': username,
                 'permissions': user_perms,
                 'pwdExpirationDate': pwd_expiration_date,
-                'sso': mgr.SSO_DB.protocol == 'saml2'
+                'sso': mgr.SSO_DB.protocol == 'saml2',
+                'pwdUpdateRequired': pwd_update_required
             }
 
         logger.debug('Login failed')
@@ -69,7 +71,8 @@ class Auth(RESTController):
                 return {
                     'username': user.username,
                     'permissions': user.permissions_dict(),
-                    'sso': mgr.SSO_DB.protocol == 'saml2'
+                    'sso': mgr.SSO_DB.protocol == 'saml2',
+                    'pwdUpdateRequired': user.pwd_update_required
                 }
         return {
             'login_url': self._get_login_url(),
