@@ -1421,6 +1421,16 @@ def get_pvs(fields=PV_FIELDS, sep='";"', filters='', tags=None):
     pvs_report = _output_parser(stdout, fields)
     return [PVolume(**pv_report) for pv_report in pvs_report]
 
+def get_first_pv(fields=PV_FIELDS, sep='";"', filters=None, tags=None):
+    """
+    Wrapper of get_pv meant to be a convenience method to avoid the phrase::
+        pvs = get_pvs()
+        if len(pvs) >= 1:
+            pv = pvs[0]
+    """
+    pvs = get_pvs(fields=fields, sep=sep, filters=filters, tags=tags)
+    return pvs[0] if len(pvs) > 0 else []
+
 def get_vgs(fields=VG_FIELDS, sep='";"', filters='', tags=None):
     """
     Return a list of VGs that are available on the system and match the
@@ -1445,6 +1455,16 @@ def get_vgs(fields=VG_FIELDS, sep='";"', filters='', tags=None):
     vgs_report =_output_parser(stdout, fields)
     return [VolumeGroup(**vg_report) for vg_report in vgs_report]
 
+def get_first_vg(fields=VG_FIELDS, sep='";"', filters=None, tags=None):
+    """
+    Wrapper of get_vg meant to be a convenience method to avoid the phrase::
+        vgs = get_vgs()
+        if len(vgs) >= 1:
+            vg = vgs[0]
+    """
+    vgs = get_vgs(fields=fields, sep=sep, filters=filters, tags=tags)
+    return vgs[0] if len(vgs) > 0 else []
+
 def get_lvs(fields=LV_FIELDS, sep='";"', filters='', tags=None):
     """
     Return a list of LVs that are available on the system and match the
@@ -1468,3 +1488,13 @@ def get_lvs(fields=LV_FIELDS, sep='";"', filters='', tags=None):
     stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
     lvs_report = _output_parser(stdout, fields)
     return [Volume(**lv_report) for lv_report in lvs_report]
+
+def get_first_lv(fields=LV_FIELDS, sep='";"', filters=None, tags=None):
+    """
+    Wrapper of get_lv meant to be a convenience method to avoid the phrase::
+        lvs = get_lvs()
+        if len(lvs) >= 1:
+            lv = lvs[0]
+    """
+    lvs = get_lvs(fields=fields, sep=sep, filters=filters, tags=tags)
+    return lvs[0] if len(lvs) > 0 else []
