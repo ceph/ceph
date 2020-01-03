@@ -1,5 +1,5 @@
 <div class="login"
-     *ngIf="isLoginActive">
+     *ngIf="isLoginActive || pwdUpdateRequired">
   <header>
     <nav class="navbar">
       <a class="navbar-brand"></a>
@@ -24,6 +24,7 @@
           <form name="loginForm"
                 (ngSubmit)="login()"
                 #loginForm="ngForm"
+                *ngIf="!pwdUpdateRequired"
                 novalidate>
 
             <!-- Username -->
@@ -70,6 +71,7 @@
                    value="Login"
                    i18n-value>
           </form>
+          <cd-user-password-login-form *ngIf="pwdUpdateRequired"></cd-user-password-login-form>
         </div>
       </div>
     </div>

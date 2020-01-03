@@ -30,14 +30,14 @@ export class UserPasswordFormComponent {
   icons = Icons;
 
   constructor(
-    private i18n: I18n,
+    protected i18n: I18n,
     public actionLabels: ActionLabelsI18n,
-    private notificationService: NotificationService,
-    private userService: UserService,
-    private authStorageService: AuthStorageService,
-    private formBuilder: CdFormBuilder,
-    private router: Router,
-    private userChangePasswordService: UserChangePasswordService
+    protected notificationService: NotificationService,
+    protected userService: UserService,
+    protected authStorageService: AuthStorageService,
+    protected formBuilder: CdFormBuilder,
+    protected router: Router,
+    protected userChangePasswordService: UserChangePasswordService
   ) {
     this.action = this.actionLabels.CHANGE;
     this.resource = this.i18n('password');

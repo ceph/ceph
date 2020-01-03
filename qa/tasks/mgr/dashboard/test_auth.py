@@ -45,7 +45,8 @@ class AuthTest(DashboardTestCase):
             'username': JLeaf(str),
             'permissions': JObj(sub_elems={}, allow_unknown=True),
             'sso': JLeaf(bool),
-            'pwdExpirationDate': JLeaf(int, none=True)
+            'pwdExpirationDate': JLeaf(int, none=True),
+            'pwdUpdateRequired': JLeaf(bool)
         }, allow_unknown=False))
         self._validate_jwt_token(data['token'], "admin", data['permissions'])
 
@@ -153,7 +154,8 @@ class AuthTest(DashboardTestCase):
         self.assertSchema(data, JObj(sub_elems={
             "username": JLeaf(str),
             "permissions": JObj(sub_elems={}, allow_unknown=True),
-            "sso": JLeaf(bool)
+            "sso": JLeaf(bool),
+            "pwdUpdateRequired": JLeaf(bool)
         }, allow_unknown=False))
         self.logout()
 

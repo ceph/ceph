@@ -102,7 +102,8 @@ export class UserFormComponent implements OnInit {
         roles: new FormControl([]),
         enabled: new FormControl(true, {
           validators: [Validators.required]
-        })
+        }),
+        pwdUpdateRequired: new FormControl(true)
       },
       {
         validators: [CdValidators.match('password', 'confirmpassword')]
@@ -161,7 +162,7 @@ export class UserFormComponent implements OnInit {
   }
 
   setResponse(response: UserFormModel) {
-    ['username', 'name', 'email', 'roles', 'enabled'].forEach((key) =>
+    ['username', 'name', 'email', 'roles', 'enabled', 'pwdUpdateRequired'].forEach((key) =>
       this.userForm.get(key).setValue(response[key])
     );
     const expirationDate = response['pwdExpirationDate'];
@@ -172,7 +173,7 @@ export class UserFormComponent implements OnInit {
 
   getRequest(): UserFormModel {
     const userFormModel = new UserFormModel();
-    ['username', 'password', 'name', 'email', 'roles', 'enabled'].forEach(
+    ['username', 'password', 'name', 'email', 'roles', 'enabled', 'pwdUpdateRequired'].forEach(
       (key) => (userFormModel[key] = this.userForm.get(key).value)
     );
     const expirationDate = this.userForm.get('pwdExpirationDate').value;

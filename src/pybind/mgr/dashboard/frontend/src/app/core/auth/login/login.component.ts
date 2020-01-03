@@ -5,6 +5,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { AuthService } from '../../../shared/api/auth.service';
 import { Credentials } from '../../../shared/models/credentials';
+import { LoginResponse } from '../../../shared/models/login-response';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
@@ -16,6 +17,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 export class LoginComponent implements OnInit {
   model = new Credentials();
   isLoginActive = false;
+  pwdUpdateRequired = false;
 
   constructor(
     private authService: AuthService,
@@ -27,6 +29,7 @@ export class LoginComponent implements OnInit {
 
   ngOnInit() {
     if (this.authStorageService.isLoggedIn()) {
+      this.pwdUpdateRequired = this.authStorageService.getPwdUpdateRequired();
       this.router.navigate(['']);
     } else {
       // Make sure all open modal dialogs are closed. This might be
@@ -54,13 +57,7 @@ export class LoginComponent implements OnInit {
             window.location.replace(login.login_url);
           }
         } else {
-          this.authStorageService.set(
-            login.username,
-            token,
-            login.permissions,
-            login.sso,
-            login.pwdExpirationDate
-          );
+          this.authStorageService.set(login.username, token, login.permissions, login.sso);
           this.router.navigate(['']);
         }
       });
@@ -68,8 +65,12 @@ export class LoginComponent implements OnInit {
   }
 
   login() {
-    this.authService.login(this.model).subscribe(() => {
-      this.router.navigate(['']);
+    this.authService.login(this.model).subscribe((resp: LoginResponse) => {
+      if (resp.pwdUpdateRequired) {
+        this.pwdUpdateRequired = true;
+      } else {
+        this.router.navigate(['']);
+      }
     });
   }
 }
