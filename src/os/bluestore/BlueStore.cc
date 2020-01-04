@@ -9546,56 +9546,82 @@ int BlueStore::_generate_read_result_bl(
     for (blob_read_t& br : brl) {
       ceph_assert(br.data.size() > 0);
 
-      // squash buffers and update cache
+    // squash buffers and update cache
       if (br.data.size() > 1) {
         bufferlist merged_bl;
         auto x_off = br.r_off;
-        for (auto it = br.data.begin();
-          it != br.data.end(); ++it) {
-          ceph_assert(x_off == it->first);
+        bool from_disk = false; // true even if data is from disk partially
 
+        // One needs to build full data extent then do checksum and then update
+        // cache with chunks retrieved from disk.
+        // Partial (for newly retrieved data chunk only) checksum verification
+        // isn't possible since generally disk reads aren't aligned with
+        // checksum chunks.
+        // Hence two runs through br.data below
+        for (auto it = br.data.begin(); it != br.data.end(); ++it) {
+          ceph_assert(x_off == it->first);
           auto& d = it->second;
-          if (d.first && buffered) {
-            // d.first is a physical offset + 1 for chunk to cache
-            // or 0 for one that is already in the cache.
-            bc->bc.did_read(bc->get_cache(), d.first - 1, d.second);
-            d.first = 0;
+          if (d.first != 0) {
+            from_disk = true;
           }
           x_off += d.second.length();
-          merged_bl.claim_append(d.second);
+          merged_bl.append(d.second);
         }
         ceph_assert(x_off == br.r_off + br.r_len);
+        ceph_assert(merged_bl.length() == br.r_len);
+        if (br.need_checksum && from_disk) {
+          ceph_assert(merged_bl.length() == br.r_len);
+          if (_verify_csum(o, &bptr->get_blob(), br.r_off, merged_bl, pos) < 0) {
+            *csum_error = true;
+            return -EIO;
+          }
+          br.need_checksum = false;
+        }
+        if (buffered) {
+          for (auto it = br.data.begin(); it != br.data.end(); ++it) {
+            auto& d = it->second;
+            if (d.first != 0) {
+              // d.first is a physical offset + 1 for chunk to cache
+              // or 0 for one that is already in the cache.
+              bc->bc.did_read(bc->get_cache(), d.first - 1, d.second);
+            }
+          }
+        }
+
+        // leave single blob_read entry
         br.data.clear();
         auto& d = br.data[br.r_off];
-        d.first = 0; // everything is cached
+        d.first = 0;
         d.second.swap(merged_bl);
-      } else if (buffered) {
+      } else {
         auto& d = br.data.begin()->second;
-        if (d.first) {
-          // d.first is a physical offset + 1 for chunk to cache
+        bufferlist& data = d.second;
+        if (d.first != 0) {
+          if (br.need_checksum) {
+            ceph_assert(data.length() == br.r_len);
+            if (_verify_csum(o, &bptr->get_blob(), br.r_off, data, pos) < 0) {
+              *csum_error = true;
+              return -EIO;
+            }
+            br.need_checksum = false;
+          }
+          // d.first is a physical offset + 1 for chunk from disk
           // or 0 for one that is already in the cache.
-          bc->bc.did_read(bc->get_cache(), d.first - 1, d.second);
+          if (buffered) {
+            bc->bc.did_read(bc->get_cache(), d.first - 1, data);
+          }
           d.first = 0;
         }
       }
 
-      // do checksum and decompress
-      bufferlist* data = &br.data.begin()->second.second;
-      if (br.need_checksum) {
-        //NB: this reruns csum on cached data as well, we can get rid off this
-        //FIXME: need to do this before did read call!
-        ceph_assert(data->length() == br.r_len);
-        if (_verify_csum(o, &bptr->get_blob(), br.r_off, *data, pos) < 0) {
-          *csum_error = true;
-          return -EIO;
-        }
-        br.need_checksum = false;
-      }
       if (br.need_decompress) {
+        bufferlist* data = &br.data.begin()->second.second;
+
         // a bit late check to make sure just chunk fits into
         // a single blob_read_t entry
         ceph_assert(data->length() == br.r_len);
         ceph_assert(brl.size() == 1);
+
         bufferlist raw_bl;
         auto r = _decompress(*data, &raw_bl);
         if (r < 0)
