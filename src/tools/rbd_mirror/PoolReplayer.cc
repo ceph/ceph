@@ -751,31 +751,39 @@ void PoolReplayer<I>::print_status(Formatter *f) {
     state = "stopped (manual)";
   } else if (m_stopping) {
     state = "stopped";
+  } else if (!is_running()) {
+    state = "error";
   }
   f->dump_string("state", state);
 
-  std::string leader_instance_id;
-  m_leader_watcher->get_leader_instance_id(&leader_instance_id);
-  f->dump_string("leader_instance_id", leader_instance_id);
+  if (m_leader_watcher) {
+    std::string leader_instance_id;
+    m_leader_watcher->get_leader_instance_id(&leader_instance_id);
+    f->dump_string("leader_instance_id", leader_instance_id);
 
-  bool leader = m_leader_watcher->is_leader();
-  f->dump_bool("leader", leader);
-  if (leader) {
-    std::vector<std::string> instance_ids;
-    m_leader_watcher->list_instances(&instance_ids);
-    f->open_array_section("instances");
-    for (auto instance_id : instance_ids) {
-      f->dump_string("instance_id", instance_id);
+    bool leader = m_leader_watcher->is_leader();
+    f->dump_bool("leader", leader);
+    if (leader) {
+      std::vector<std::string> instance_ids;
+      m_leader_watcher->list_instances(&instance_ids);
+      f->open_array_section("instances");
+      for (auto instance_id : instance_ids) {
+        f->dump_string("instance_id", instance_id);
+      }
+      f->close_section(); // instances
     }
-    f->close_section(); // instances
   }
 
-  f->dump_string("local_cluster_admin_socket",
-                 reinterpret_cast<CephContext *>(m_local_io_ctx.cct())->_conf.
-                     get_val<std::string>("admin_socket"));
-  f->dump_string("remote_cluster_admin_socket",
-                 reinterpret_cast<CephContext *>(m_remote_io_ctx.cct())->_conf.
-                     get_val<std::string>("admin_socket"));
+  if (m_local_rados) {
+    auto cct = reinterpret_cast<CephContext *>(m_local_rados->cct());
+    f->dump_string("local_cluster_admin_socket",
+                   cct->_conf.get_val<std::string>("admin_socket"));
+  }
+  if (m_remote_rados) {
+    auto cct = reinterpret_cast<CephContext *>(m_remote_rados->cct());
+    f->dump_string("remote_cluster_admin_socket",
+                   cct->_conf.get_val<std::string>("admin_socket"));
+  }
 
   if (m_image_sync_throttler) {
     f->open_object_section("sync_throttler");
@@ -789,7 +797,9 @@ void PoolReplayer<I>::print_status(Formatter *f) {
     f->close_section(); // deletion_throttler
   }
 
-  m_default_namespace_replayer->print_status(f);
+  if (m_default_namespace_replayer) {
+    m_default_namespace_replayer->print_status(f);
+  }
 
   f->open_array_section("namespaces");
   for (auto &it : m_namespace_replayers) {
