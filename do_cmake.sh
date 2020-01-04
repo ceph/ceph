@@ -16,8 +16,9 @@ if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
       fedora)
-          if [ "$VERSION_ID" -ge "29" ] ; then
-              PYBUILD="3.7"
+          PYBUILD="3.7"
+          if [ "$VERSION_ID" -ge "32" ] ; then
+              PYBUILD="3.8"
           fi
           ;;
       rhel|centos)
