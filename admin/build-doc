@@ -20,8 +20,7 @@ if command -v dpkg >/dev/null; then
         exit 1
     fi
 elif command -v yum >/dev/null; then
-    python_package="python$(rpm --eval '%{python3_pkgversion}')"
-    for package in "$python_package"-devel "$python_package"-pip "$python_package"-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel "$python_package"-Cython graphviz; do
+    for package in ant ditaa doxgen libxslt-devel libxml2-devel graphviz python3-devel python3-pip python3-virtualenv python3-Cython; do
 	if ! rpm -q --whatprovides $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
