@@ -3743,7 +3743,6 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
 
   if (list_context->pos.is_min()) {
-    list_context->starting_pg_num = 0;
     list_context->sort_bitwise = sort_bitwise;
     list_context->starting_pg_num = pg_num;
   }
