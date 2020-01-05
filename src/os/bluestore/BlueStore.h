@@ -3207,7 +3207,7 @@ private:
     PExtentVector& extents) override {
     return allocate_bluefs_freespace(min_size, size, &extents);
   };
-  size_t available_freespace(uint64_t alloc_size) override;
+  uint64_t available_freespace(uint64_t alloc_size) override;
   inline bool _use_rotational_settings();
 
 public:

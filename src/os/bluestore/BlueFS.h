@@ -72,7 +72,7 @@ public:
    * @params
    * alloc_size - allocation unit size to check
    */
-  virtual size_t available_freespace(uint64_t alloc_size) = 0;
+  virtual uint64_t available_freespace(uint64_t alloc_size) = 0;
 };
 
 class BlueFSVolumeSelector {
