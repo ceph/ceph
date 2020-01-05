@@ -90,7 +90,7 @@ Socket::read_exactly(size_t bytes) {
     if (bytes == 0) {
       return seastar::make_ready_future<seastar::temporary_buffer<char>>();
     }
-    return in.read_exactly(bytes).then([this](auto buf) {
+    return in.read_exactly(bytes).then([](auto buf) {
       if (buf.empty()) {
         throw std::system_error(make_error_code(error::read_eof));
       }

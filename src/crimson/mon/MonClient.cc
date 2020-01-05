@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
 #include "MonClient.h"
 
 #include <random>
@@ -988,10 +990,10 @@ seastar::future<> Client::reopen_session(int rank)
       found->reset();
       auto ret = seastar::do_with(
 	std::move(pending_conns),
-	[this](auto &pending_conns) {
+	[](auto &pending_conns) {
 	  return seastar::parallel_for_each(
 	    pending_conns,
-	    [this] (auto &conn) {
+	    [] (auto &conn) {
 	      if (!conn) {
 		return seastar::now();
 	      } else {
