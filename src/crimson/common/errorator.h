@@ -79,8 +79,8 @@ public:
 template <class ErrorT, ErrorT ErrorV>
 struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
   unthrowable_wrapper(const unthrowable_wrapper&) = delete;
-  static const unthrowable_wrapper instance;
   [[nodiscard]] static const auto& make() {
+    static constexpr unthrowable_wrapper instance{};
     return instance;
   }
 
@@ -118,13 +118,11 @@ private:
     return carrier_instance;
   }
   static const auto& from_exception_ptr(std::exception_ptr) {
-    return instance;
+    return make();
   }
 
   friend class error_t<unthrowable_wrapper<ErrorT, ErrorV>>;
 };
-template <class ErrorT, ErrorT ErrorV>
-const inline unthrowable_wrapper<ErrorT, ErrorV> unthrowable_wrapper<ErrorT, ErrorV>::instance{};
 
 template <class ErrorT, ErrorT ErrorV>
 std::exception_ptr unthrowable_wrapper<ErrorT, ErrorV>::carrier_instance = \
@@ -481,7 +479,7 @@ private:
       return this->then_wrapped(
         [ valfunc = std::forward<ValueFuncT>(valfunc),
           errfunc = std::forward<ErrorVisitorT>(errfunc)
-        ] (auto&& future) mutable [[gnu::always_inline]] noexcept {
+        ] (auto&& future) mutable noexcept [[gnu::always_inline]] {
           if (__builtin_expect(future.failed(), false)) {
             return _safe_then_handle_errors<futurator_t>(
               std::move(future), std::forward<ErrorVisitorT>(errfunc));
@@ -530,7 +528,7 @@ private:
 
       return this->then_wrapped(
 	[ func = std::forward<FuncT>(func)
-	] (auto&& future) mutable [[gnu::always_inline]] noexcept {
+	] (auto&& future) mutable noexcept [[gnu::always_inline]] {
 	  return futurator_t::apply(std::forward<FuncT>(func)).safe_then(
 	    [future = std::forward<decltype(future)>(future)]() mutable {
 	      return std::move(future);
@@ -574,7 +572,7 @@ private:
         typename return_errorator_t::template futurize<::seastar::future<ValuesT...>>;
       return this->then_wrapped(
         [ errfunc = std::forward<ErrorVisitorT>(errfunc)
-        ] (auto&& future) mutable [[gnu::always_inline]] noexcept {
+        ] (auto&& future) mutable noexcept [[gnu::always_inline]] {
           if (__builtin_expect(future.failed(), false)) {
             return _safe_then_handle_errors<futurator_t>(
               std::move(future), std::forward<ErrorVisitorT>(errfunc));
