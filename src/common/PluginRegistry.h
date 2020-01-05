@@ -19,6 +19,7 @@
 #define CEPH_COMMON_PLUGINREGISTRY_H
 
 #include <map>
+#include <string>
 #include "common/ceph_mutex.h"
 
 class CephContext;
