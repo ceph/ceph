@@ -1770,13 +1770,14 @@ int RGWPutObj_ObjStore_S3::get_params()
 
     if (copy_source_range) {
       string range = copy_source_range;
-      pos = range.find("=");
-      if (pos == std::string::npos) {
+      pos = range.find("bytes=");
+      if (pos == std::string::npos || pos != 0) {
         ret = -EINVAL;
         ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
-      range = range.substr(pos + 1);
+      /* 6 is the length of "bytes=" */
+      range = range.substr(pos + 6);
       pos = range.find("-");
       if (pos == std::string::npos) {
         ret = -EINVAL;
@@ -1785,8 +1786,20 @@ int RGWPutObj_ObjStore_S3::get_params()
       }
       string first = range.substr(0, pos);
       string last = range.substr(pos + 1);
+      if (first.find_first_not_of("0123456789") != std::string::npos || last.find_first_not_of("0123456789") != std::string::npos)
+      {
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format not an integer" << dendl;
+        ret = -EINVAL;
+        return ret;
+      }
       copy_source_range_fst = strtoull(first.c_str(), NULL, 10);
       copy_source_range_lst = strtoull(last.c_str(), NULL, 10);
+      if (copy_source_range_fst > copy_source_range_lst)
+      {
+        ret = -ERANGE;
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format first number bigger than second" << dendl;
+        return ret;
+      }
     }
 
   } /* copy_source */
