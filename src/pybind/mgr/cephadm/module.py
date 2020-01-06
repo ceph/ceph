@@ -1148,6 +1148,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         Adjust the number of cluster managers.
         """
+        if not spec.placement.hosts and not spec.placement.label:
+            # Improve Error message. Point to parse_host_spec examples
+            raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
+
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mon').load()
         return self._update_mons(spec)
 

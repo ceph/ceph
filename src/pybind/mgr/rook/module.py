@@ -338,8 +338,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def update_mons(self, spec):
-        if spec.placement.nodes:
-            raise RuntimeError("Host list is not supported by rook.")
+        # type: (orchestrator.StatefulServiceSpec) -> RookCompletion
+        if spec.placement.hosts or spec.placement.label:
+            raise RuntimeError("Host list or label is not supported by rook.")
 
         return write_completion(
             lambda: self.rook_cluster.update_mon_count(spec.placement.count),
