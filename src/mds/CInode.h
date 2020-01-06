@@ -347,6 +347,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     ceph_assert(num_caps_wanted == 0);
     ceph_assert(num_subtree_roots == 0);
     ceph_assert(num_exporting_dirs == 0);
+    ceph_assert(batch_ops.empty());
   }
 
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
