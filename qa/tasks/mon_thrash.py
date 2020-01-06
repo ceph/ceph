@@ -329,7 +329,7 @@ class MonitorThrasher(Thrasher):
             if self.scrub:
                 self.log('triggering scrub')
                 try:
-                    self.manager.raw_cluster_cmd('scrub')
+                    self.manager.raw_cluster_cmd('mon', 'scrub')
                 except Exception:
                     log.exception("Saw exception while triggering scrub")
 
