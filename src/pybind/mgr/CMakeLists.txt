@@ -15,6 +15,7 @@ install(DIRECTORY
   DESTINATION ${CEPH_INSTALL_DATADIR}
   REGEX "CMakeLists.txt" EXCLUDE
   REGEX "\\.gitignore" EXCLUDE
+  REGEX ".*\\.pyi" EXCLUDE
   REGEX "hello/.*" EXCLUDE
   REGEX "tests/.*" EXCLUDE
   REGEX "osd_perf_query/.*" EXCLUDE

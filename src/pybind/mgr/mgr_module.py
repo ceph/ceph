@@ -223,7 +223,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
         try:
             first_take = [s for s in rule['steps'] if s['op'] == 'take'][0]
         except IndexError:
-            self.log.warn("CRUSH rule '{0}' has no 'take' step".format(
+            logging.warning("CRUSH rule '{0}' has no 'take' step".format(
                 rule_name))
             return None
         else:
