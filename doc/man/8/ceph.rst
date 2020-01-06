@@ -55,8 +55,6 @@ Synopsis
 
 | **ceph** **report** { *<tags>* [ *<tags>...* ] }
 
-| **ceph** **scrub**
-
 | **ceph** **status**
 
 | **ceph** **sync** **force** {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
@@ -1484,16 +1482,6 @@ Reports full status of cluster, optional title tag strings.
 Usage::
 
 	ceph report {<tags> [<tags>...]}
-
-
-scrub
------
-
-Scrubs the monitor stores.
-
-Usage::
-
-	ceph scrub
 
 
 status
