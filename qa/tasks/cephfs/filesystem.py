@@ -25,6 +25,30 @@ log = logging.getLogger(__name__)
 DAEMON_WAIT_TIMEOUT = 120
 ROOT_INO = 1
 
+class FileLayout(object):
+    def __init__(self, pool=None, pool_namespace=None, stripe_unit=None, stripe_count=None, object_size=None):
+        self.pool = pool
+        self.pool_namespace = pool_namespace
+        self.stripe_unit = stripe_unit
+        self.stripe_count = stripe_count
+        self.object_size = object_size
+
+    @classmethod
+    def load_from_ceph(layout_str):
+        # TODO
+        pass
+
+    def items(self):
+        if self.pool is not None:
+            yield ("pool", self.pool)
+        if self.pool_namespace:
+            yield ("pool_namespace", self.pool_namespace)
+        if self.stripe_unit is not None:
+            yield ("stripe_unit", self.stripe_unit)
+        if self.stripe_count is not None:
+            yield ("stripe_count", self.stripe_count)
+        if self.object_size is not None:
+            yield ("object_size", self.stripe_size)
 
 class ObjectNotFound(Exception):
     def __init__(self, object_name):
@@ -561,7 +585,10 @@ class Filesystem(MDSCluster):
                     'osd', 'pool', 'create',
                     data_pool_name, self.pgs_per_fs_pool.__str__())
             self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                             self.name, self.metadata_pool_name, data_pool_name)
+                                             self.name,
+                                             self.metadata_pool_name,
+                                             data_pool_name,
+                                             "--force")
         self.check_pool_application(self.metadata_pool_name)
         self.check_pool_application(data_pool_name)
         # Turn off spurious standby count warnings from modifying max_mds in tests.
@@ -630,8 +657,13 @@ class Filesystem(MDSCluster):
     def get_var(self, var, status=None):
         return self.get_mds_map(status=status)[var]
 
-    def add_data_pool(self, name):
-        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.pgs_per_fs_pool.__str__())
+    def set_dir_layout(self, mount, path, layout):
+        for name, value in layout.items():
+            mount.run_shell(args=["setfattr", "-n", "ceph.dir.layout."+name, "-v", str(value), path])
+
+    def add_data_pool(self, name, create=True):
+        if create:
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.pgs_per_fs_pool.__str__())
         self.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', self.name, name)
         self.get_pool_names(refresh = True)
         for poolid, fs_name in self.data_pools.items():
