@@ -8,9 +8,6 @@ Contributing to Ceph: A Guide for Developers
 
 .. note:: You may also be interested in the :doc:`/dev/internals` documentation.
 
-.. contents::
-   :depth: 3
-
 Introduction
 ============
 
