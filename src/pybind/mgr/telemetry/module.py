@@ -386,10 +386,9 @@ class Module(MgrModule):
                 rep['host_id'] = anon_host
 
             # anonymize device id
-            (vendor, model, serial) = devid.split('_')
             anon_devid = self.get_store('devid-id/%s' % devid)
             if not anon_devid:
-                anon_devid = '%s_%s_%s' % (vendor, model, uuid.uuid1())
+                anon_devid = f"{devid.rsplit('_', 1)[0]}_{uuid.uuid1()}"
                 self.set_store('devid-id/%s' % devid, anon_devid)
             self.log.info('devid %s / %s, host %s / %s' % (devid, anon_devid,
                                                            host, anon_host))
@@ -515,7 +514,7 @@ class Module(MgrModule):
             for osd in osd_map['osds']:
                 if osd['up'] and not cluster_network:
                     front_ip = osd['public_addrs']['addrvec'][0]['addr'].split(':')[0]
-                    back_ip = osd['public_addrs']['addrvec'][0]['addr'].split(':')[0]
+                    back_ip = osd['cluster_addrs']['addrvec'][0]['addr'].split(':')[0]
                     if front_ip != back_ip:
                         cluster_network = True
             report['osd'] = {
@@ -609,7 +608,7 @@ class Module(MgrModule):
 
             report['usage'] = {
                 'pools': len(df['pools']),
-                'pg_num:': num_pg,
+                'pg_num': num_pg,
                 'total_used_bytes': df['stats']['total_used_bytes'],
                 'total_bytes': df['stats']['total_bytes'],
                 'total_avail_bytes': df['stats']['total_avail_bytes']
