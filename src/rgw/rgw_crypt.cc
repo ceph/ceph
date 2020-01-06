@@ -1032,58 +1032,65 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
     boost::string_view req_sse =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
-      if (req_sse != "aws:kms") {
-        ldout(s->cct, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
-                         << dendl;
-        s->err.message = "Server Side Encryption with KMS managed key requires "
-                         "HTTP header x-amz-server-side-encryption : aws:kms";
-        return -EINVAL;
-      }
+
       if (s->cct->_conf->rgw_crypt_require_ssl &&
           !rgw_transport_is_secure(s->cct, *s->info.env)) {
         ldout(s->cct, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
-      boost::string_view key_id =
+
+      if (req_sse == "aws:kms") {
+	boost::string_view key_id =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
-      if (key_id.empty()) {
-        ldout(s->cct, 5) << "ERROR: not provide a valid key id" << dendl;
-        s->err.message = "Server Side Encryption with KMS managed key requires "
-                         "HTTP header x-amz-server-side-encryption-aws-kms-key-id";
-        return -ERR_INVALID_ACCESS_KEY;
-      }
-      /* try to retrieve actual key */
-      std::string key_selector = create_random_key_selector(s->cct);
-      std::string actual_key;
-      res = get_actual_key_from_kms(s->cct, key_id, key_selector, actual_key);
-      if (res != 0) {
-        ldout(s->cct, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
-        s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id.to_string();
-        return res;
-      }
-      if (actual_key.size() != AES_256_KEYSIZE) {
-        ldout(s->cct, 5) << "ERROR: key obtained from key_id:" <<
+	if (key_id.empty()) {
+	  ldout(s->cct, 5) << "ERROR: not provide a valid key id" << dendl;
+	  s->err.message = "Server Side Encryption with KMS managed key requires "
+	    "HTTP header x-amz-server-side-encryption-aws-kms-key-id";
+	  return -ERR_INVALID_ACCESS_KEY;
+	}
+	/* try to retrieve actual key */
+	std::string key_selector = create_random_key_selector(s->cct);
+	std::string actual_key;
+	res = get_actual_key_from_kms(s->cct, key_id, key_selector, actual_key);
+	if (res != 0) {
+	  ldout(s->cct, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+	  s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id.to_string();
+	  return res;
+	}
+	if (actual_key.size() != AES_256_KEYSIZE) {
+	  ldout(s->cct, 5) << "ERROR: key obtained from key_id:" <<
             key_id << " is not 256 bit size" << dendl;
-        s->err.message = "KMS provided an invalid key for the given kms-keyid.";
-        return -ERR_INVALID_ACCESS_KEY;
-      }
-      set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS");
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
+	  s->err.message = "KMS provided an invalid key for the given kms-keyid.";
+	  return -ERR_INVALID_ACCESS_KEY;
+	}
+	set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS");
+	set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
+	set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
 
-      if (block_crypt) {
-        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
-        aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
-        *block_crypt = std::move(aes);
-      }
-      actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
+	if (block_crypt) {
+	  auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
+	  aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
+	  *block_crypt = std::move(aes);
+	}
+	actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
 
-      crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
-      crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id.to_string();
-      return 0;
+	crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
+	crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id.to_string();
+	return 0;
+      } else if (req_sse == "AES256") {
+	/* if a default encryption key was provided, we will use it for SSE-S3 */
+      } else {
+        ldout(s->cct, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
+                         << dendl;
+        s->err.message = "Server Side Encryption with KMS managed key requires "
+	  "HTTP header x-amz-server-side-encryption : aws:kms or AES256";
+        return -EINVAL;
+      }
     } else {
+      /* x-amz-server-side-encryption not present or empty */
       boost::string_view key_id =
-          get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
+	get_crypt_attribute(s->info.env, parts,
+			    X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
       if (!key_id.empty()) {
         ldout(s->cct, 5) << "ERROR: SSE-KMS encryption request is missing the header "
                          << "x-amz-server-side-encryption"
