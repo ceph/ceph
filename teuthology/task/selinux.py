@@ -122,6 +122,9 @@ class SELinux(Task):
             'tcontext=system_u:system_r:nrpe_t:s0',
             'comm="updatedb"',
             'comm="smartd"',
+            'comm="rhsmcertd-worke"',
+            'comm="setroubleshootd"',
+            'comm="rpm"',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
