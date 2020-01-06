@@ -1285,6 +1285,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_mds(self, spec):
         if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:
             raise RuntimeError("must specify at least %d hosts" % spec.placement.count)
+        # ensure mds_join_fs is set for these daemons
+        ret, out, err = self.mon_command({
+            'prefix': 'config set',
+            'who': 'mds.' + spec.name,
+            'name': 'mds_join_fs',
+            'value': spec.name,
+        })
         return self._get_services('mds').then(lambda ds: self._add_mds(ds, spec))
 
     def _add_mds(self, daemons, spec):

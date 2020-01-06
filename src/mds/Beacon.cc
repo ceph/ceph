@@ -204,9 +204,9 @@ bool Beacon::_send()
       want_state,
       last_seq,
       CEPH_FEATURES_SUPPORTED_DEFAULT);
-
   beacon->set_health(health);
   beacon->set_compat(compat);
+  beacon->set_fs(g_conf().get_val<std::string>("mds_join_fs"));
   // piggyback the sys info on beacon msg
   if (want_state == MDSMap::STATE_BOOT) {
     map<string, string> sys_info;

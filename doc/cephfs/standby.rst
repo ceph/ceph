@@ -26,6 +26,10 @@ A daemon has a *name* that is set statically by the administrator
 when the daemon is first configured.  Typical configurations
 use the hostname where the daemon runs as the daemon name.
 
+A ceph-mds daemons can be assigned to a particular file system by
+setting the `mds_join_fs` configuration option to the file system
+name.
+
 Each time a daemon starts up, it is also assigned a *GID*, which
 is unique to this particular process lifetime of the daemon.  The
 GID is an integer.
