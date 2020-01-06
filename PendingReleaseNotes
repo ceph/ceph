@@ -282,3 +282,6 @@
   would not allow a pool to ever have completely balanced PGs.  For example, if
   crush requires 1 replica on each of 3 racks, but there are fewer OSDs in 1 of
   the racks.  In those cases, the configuration value can be increased.
+
+* MDS daemons can now be assigned to manage a particular file system via the
+  new ``mds_join_fs`` option.

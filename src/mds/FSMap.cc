@@ -56,6 +56,10 @@ void FSMap::dump(Formatter *f) const
     f->open_object_section("info");
     info.dump(f);
     f->dump_int("epoch", standby_epochs.at(gid));
+    auto p = standby_daemon_fscid.find(gid);
+    if (p != standby_daemon_fscid.end()) {
+      f->dump_int("fscid", p->second);
+    }
     f->close_section();
   }
   f->close_section();
@@ -79,6 +83,7 @@ FSMap &FSMap::operator=(const FSMap &rhs)
   mds_roles = rhs.mds_roles;
   standby_daemons = rhs.standby_daemons;
   standby_epochs = rhs.standby_epochs;
+  standby_daemon_fscid = rhs.standby_daemon_fscid;
 
   filesystems.clear();
   for (const auto &i : rhs.filesystems) {
@@ -132,7 +137,12 @@ void FSMap::print(ostream& out) const
   }
 
   for (const auto& p : standby_daemons) {
-    out << p.second << std::endl;
+    out << p.second;
+    auto q = standby_daemon_fscid.find(p.first);
+    if (q != standby_daemon_fscid.end()) {
+      out << " (" << q->second << ")";
+    }
+    out << std::endl;
   }
 }
 
@@ -472,7 +482,7 @@ void FSMap::update_compat(const CompatSet &c)
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(7, 6, bl);
+  ENCODE_START(8, 6, bl);
   encode(epoch, bl);
   encode(next_filesystem_id, bl);
   encode(legacy_client_fscid, bl);
@@ -488,6 +498,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
   encode(standby_daemons, bl, features);
   encode(standby_epochs, bl);
   encode(ever_enabled_multiple, bl);
+  encode(standby_daemon_fscid, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -497,7 +508,7 @@ void FSMap::decode(bufferlist::const_iterator& p)
   // MDSMonitor to store an FSMap instead of an MDSMap was
   // 5, so anything older than 6 is decoded as an MDSMap,
   // and anything newer is decoded as an FSMap.
-  DECODE_START_LEGACY_COMPAT_LEN_16(7, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(8, 4, 4, p);
   if (struct_v < 6) {
     // Because the mon used to store an MDSMap where we now
     // store an FSMap, FSMap knows how to decode the legacy
@@ -672,6 +683,9 @@ void FSMap::decode(bufferlist::const_iterator& p)
     if (struct_v >= 7) {
       decode(ever_enabled_multiple, p);
     }
+    if (struct_v >= 8) {
+      decode(standby_daemon_fscid, p);
+    }
   }
 
   DECODE_FINISH(p);
@@ -761,13 +775,19 @@ std::map<mds_gid_t, MDSMap::mds_info_t> FSMap::get_mds_info() const
   return result;
 }
 
-mds_gid_t FSMap::get_available_standby() const
+mds_gid_t FSMap::get_available_standby(fs_cluster_id_t fscid) const
 {
   for (const auto& [gid, info] : standby_daemons) {
     ceph_assert(info.rank == MDS_RANK_NONE);
     ceph_assert(info.state == MDSMap::STATE_STANDBY);
 
     if (info.laggy() || info.is_frozen()) {
+      continue;
+    }
+
+    auto p = standby_daemon_fscid.find(gid);
+    if (p != standby_daemon_fscid.end() &&
+	p->second != fscid) {
       continue;
     }
 
@@ -824,7 +844,7 @@ mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name) co
     }
   }
 
-  return get_available_standby();
+  return get_available_standby(role.fscid);
 }
 
 void FSMap::sanity() const
@@ -928,6 +948,7 @@ void FSMap::promote(
   if (!is_standby_replay) {
     standby_daemons.erase(standby_gid);
     standby_epochs.erase(standby_gid);
+    standby_daemon_fscid.erase(standby_gid);
   }
 
   // Indicate that Filesystem has been modified
@@ -954,6 +975,7 @@ void FSMap::assign_standby_replay(
   // Remove from the list of standbys
   standby_daemons.erase(standby_gid);
   standby_epochs.erase(standby_gid);
+  standby_daemon_fscid.erase(standby_gid);
 
   // Indicate that Filesystem has been modified
   fs->mds_map.epoch = epoch;
@@ -964,6 +986,7 @@ void FSMap::erase(mds_gid_t who, epoch_t blacklist_epoch)
   if (mds_roles.at(who) == FS_CLUSTER_ID_NONE) {
     standby_daemons.erase(who);
     standby_epochs.erase(who);
+    standby_daemon_fscid.erase(who);
   } else {
     auto &fs = filesystems.at(mds_roles.at(who));
     const auto &info = fs->mds_map.mds_info.at(who);
@@ -1026,6 +1049,18 @@ void FSMap::insert(const MDSMap::mds_info_t &new_info)
   mds_roles[new_info.global_id] = FS_CLUSTER_ID_NONE;
   standby_daemons[new_info.global_id] = new_info;
   standby_epochs[new_info.global_id] = epoch;
+}
+
+void FSMap::adjust_standby_fscid(mds_gid_t standby_gid,
+				 fs_cluster_id_t fscid)
+{
+  standby_daemon_fscid.at(standby_gid) = fscid;
+}
+
+void FSMap::clear_standby_fscid(mds_gid_t standby_gid)
+{
+  auto count = standby_daemon_fscid.erase(standby_gid);
+  ceph_assert(count);
 }
 
 std::vector<mds_gid_t> FSMap::stop(mds_gid_t who)

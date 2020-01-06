@@ -99,7 +99,8 @@ public:
       ever_enabled_multiple(rhs.ever_enabled_multiple),
       mds_roles(rhs.mds_roles),
       standby_daemons(rhs.standby_daemons),
-      standby_epochs(rhs.standby_epochs)
+      standby_epochs(rhs.standby_epochs),
+      standby_daemon_fscid(rhs.standby_daemon_fscid)
   {
     filesystems.clear();
     for (const auto &i : rhs.filesystems) {
@@ -147,7 +148,7 @@ public:
    */
   std::map<mds_gid_t, MDSMap::mds_info_t> get_mds_info() const;
 
-  mds_gid_t get_available_standby() const;
+  mds_gid_t get_available_standby(fs_cluster_id_t fscid) const;
 
   /**
    * Resolve daemon name to GID
@@ -179,6 +180,13 @@ public:
    * Insert a new MDS daemon, as a standby
    */
   void insert(const MDSMap::mds_info_t &new_info);
+
+  /**
+   * Adjust an MDS daemon's fscid
+   */
+  void adjust_standby_fscid(mds_gid_t standby_gid,
+			    fs_cluster_id_t fscid);
+  void clear_standby_fscid(mds_gid_t standby_gid);
 
   /**
    * Assign an MDS cluster standby replay rank to a standby daemon
@@ -240,6 +248,11 @@ public:
   void erase_filesystem(fs_cluster_id_t fscid)
   {
     filesystems.erase(fscid);
+    for (auto& p : standby_daemon_fscid) {
+      if (p.second == fscid) {
+	p.second = FS_CLUSTER_ID_NONE;
+      }
+    }
   }
 
   /**
@@ -406,6 +419,9 @@ protected:
   // For MDS daemons not yet assigned to a Filesystem
   std::map<mds_gid_t, MDSMap::mds_info_t> standby_daemons;
   std::map<mds_gid_t, epoch_t> standby_epochs;
+
+  // Missing entry implies no preference for a fs; NONE means assign to no fs
+  std::map<mds_gid_t, fs_cluster_id_t> standby_daemon_fscid;
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 
