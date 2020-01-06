@@ -44,11 +44,10 @@ class TestStrays(CephFSTestCase):
             size = {size}
             file_count = {file_count}
             os.mkdir(os.path.join(mount_path, subdir))
-            for i in xrange(0, file_count):
+            for i in range(0, file_count):
                 filename = "{{0}}_{{1}}.bin".format(i, size)
-                f = open(os.path.join(mount_path, subdir, filename), 'w')
-                f.write(size * 'x')
-                f.close()
+                with open(os.path.join(mount_path, subdir, filename), 'w') as f:
+                    f.write(size * 'x')
         """.format(
             mount_path=self.mount_a.mountpoint,
             size=1024,
@@ -151,12 +150,11 @@ class TestStrays(CephFSTestCase):
             size_unit = {size_unit}
             file_multiplier = {file_multiplier}
             os.mkdir(os.path.join(mount_path, subdir))
-            for i in xrange(0, file_multiplier):
-                for size in xrange(0, {size_range}*size_unit, size_unit):
+            for i in range(0, file_multiplier):
+                for size in range(0, {size_range}*size_unit, size_unit):
                     filename = "{{0}}_{{1}}.bin".format(i, size / size_unit)
-                    f = open(os.path.join(mount_path, subdir, filename), 'w')
-                    f.write(size * 'x')
-                    f.close()
+                    with open(os.path.join(mount_path, subdir, filename), 'w') as f:
+                        f.write(size * 'x')
         """.format(
             mount_path=self.mount_a.mountpoint,
             size_unit=size_unit,
@@ -835,7 +833,8 @@ class TestStrays(CephFSTestCase):
                 path = os.path.join("{path}", "subdir")
                 os.mkdir(path)
                 for n in range(0, {file_count}):
-                    open(os.path.join(path, "%s" % n), 'w').write("%s" % n)
+                    with open(os.path.join(path, "%s" % n), 'w') as f:
+                        f.write(str(n))
                 """.format(
             path=self.mount_a.mountpoint,
             file_count=LOW_LIMIT+1
@@ -852,7 +851,8 @@ class TestStrays(CephFSTestCase):
             path = os.path.join("{path}", "subdir2")
             os.mkdir(path)
             for n in range(0, {file_count}):
-                open(os.path.join(path, "%s" % n), 'w').write("%s" % n)
+                with open(os.path.join(path, "%s" % n), 'w') as f:
+                    f.write(str(n))
             dfd = os.open(path, os.O_DIRECTORY)
             os.fsync(dfd)
             """.format(
@@ -875,7 +875,8 @@ class TestStrays(CephFSTestCase):
             import os
             path = os.path.join("{path}", "subdir2")
             for n in range({file_count}, ({file_count}*3)//2):
-                open(os.path.join(path, "%s" % n), 'w').write("%s" % n)
+                with open(os.path.join(path, "%s" % n), 'w') as f:
+                    f.write(str(n))
             """.format(
         path=self.mount_a.mountpoint,
         file_count=LOW_LIMIT
@@ -890,9 +891,8 @@ class TestStrays(CephFSTestCase):
                 os.mkdir(path)
                 for n in range({file_count}):
                     fpath = os.path.join(path, "%s" % n)
-                    f = open(fpath, 'w')
-                    f.write("%s" % n)
-                    f.close()
+                    with open(fpath, 'w') as f:
+                        f.write(str(n))
                     os.unlink(fpath)
                 """.format(
             path=self.mount_a.mountpoint,
@@ -915,9 +915,8 @@ class TestStrays(CephFSTestCase):
             os.mkdir(path)
             for n in range({file_count}):
                 fpath = os.path.join(path, "%s" % n)
-                f = open(fpath, 'w')
-                f.write("%s" % n)
-                f.close()
+                with open(fpath, 'w') as f:
+                    f.write(str(n))
                 os.unlink(fpath)
             """.format(
         path=self.mount_a.mountpoint,
