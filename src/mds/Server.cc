@@ -2185,7 +2185,7 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
     DirStat ds;
     ds.frag = dir->get_frag();
     ds.auth = dir->get_dir_auth().first;
-    if (dir->is_auth())
+    if (dir->is_auth() && !mdcache->forward_all_reqs_to_auth())
       dir->get_dist_spec(ds.dist, whoami);
 
     dir->encode_dirstat(bl, session->info, ds);
@@ -4492,7 +4492,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   DirStat ds;
   ds.frag = dir->get_frag();
   ds.auth = dir->get_dir_auth().first;
-  if (dir->is_auth())
+  if (dir->is_auth() && !mdcache->forward_all_reqs_to_auth())
     dir->get_dist_spec(ds.dist, mds->get_nodeid());
 
   dir->encode_dirstat(dirbl, mdr->session->info, ds);
