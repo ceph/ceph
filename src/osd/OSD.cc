@@ -9585,19 +9585,6 @@ void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
       evt->get_epoch_sent()));
 }
 
-void OSD::enqueue_peering_evt_front(spg_t pgid, PGPeeringEventRef evt)
-{
-  dout(15) << __func__ << " " << pgid << " " << evt->get_desc() << dendl;
-  op_shardedwq.queue_front(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGPeeringItem(pgid, evt)),
-      10,
-      cct->_conf->osd_peering_op_priority,
-      utime_t(),
-      0,
-      evt->get_epoch_sent()));
-}
-
 /*
  * NOTE: dequeue called in worker thread, with pg lock
  */

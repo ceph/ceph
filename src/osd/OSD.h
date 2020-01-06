@@ -1673,9 +1673,6 @@ protected:
   void enqueue_peering_evt(
     spg_t pgid,
     PGPeeringEventRef ref);
-  void enqueue_peering_evt_front(
-    spg_t pgid,
-    PGPeeringEventRef ref);
   void dequeue_peering_evt(
     OSDShard *sdata,
     PG *pg,
