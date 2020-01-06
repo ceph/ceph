@@ -50,15 +50,6 @@ function install_one() {
     esac
 }
 
-function install_cmake3_on_centos7 {
-    source /etc/os-release
-    local MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
-    sudo yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
-    sudo yum install --nogpgcheck -y epel-release
-    sudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
-    sudo yum install -y cmake3
-}
-
 function install_cmake3_on_xenial {
     install_pkg_on_ubuntu \
 	ceph-cmake \
