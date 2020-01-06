@@ -85,7 +85,8 @@ class Monitoring(object):
 
     port_map = {
         "prometheus": 9095,  # Avoid default 9090, due to conflict with cockpit UI
-        "node-exporter": 9100
+        "node-exporter": 9100,
+        "grafana": 3000,
     }
 
     components = {
@@ -97,12 +98,12 @@ class Monitoring(object):
                 "args": [
                     "--config.file=/etc/prometheus/prometheus.yml",
                     "--storage.tsdb.path=/prometheus",
-                    "--web.listen-address=:{}".format(port_map['prometheus'])
+                    "--web.listen-address=:{}".format(port_map['prometheus']),
                 ]
             },
             "config-json": [
-                "prometheus.yml"
-            ]
+                "prometheus.yml",
+            ],
         },
         "node-exporter": {
             "image": {
@@ -110,9 +111,23 @@ class Monitoring(object):
                 "cpus": "1",
                 "memory": "1GB",
                 "args": [
-                    "--no-collector.timex"
-                ]
+                    "--no-collector.timex",
+                ],
             }
+        },
+        "grafana": {
+            "image": {
+                "image": "pcuzner/ceph-grafana-el8:latest",
+                "cpus": "2",
+                "memory": "4GB",
+                "args": [],
+            },
+            "config-json": [
+                "grafana.ini",
+                "provisioning/datasources/ceph-dashboard.yml",
+                "certs/cert_file",
+                "certs/cert_key",
+            ],
         }
     }
 
@@ -780,6 +795,13 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'alerting'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'grafana':
+            data_dir_root = get_data_dir(fsid, daemon_type, daemon_id)
+            config_dir = 'etc/grafana'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
 
         # populate the config directory for the component from the config-json
         for fname in required_config:
@@ -921,6 +943,10 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
             mounts['/proc'] = '/host/proc:ro'
             mounts['/sys'] = '/host/sys:ro'
             mounts['/'] = '/rootfs:ro'
+        elif daemon_type == "grafana":
+            mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
+            mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
+            mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
 
     return mounts
 
@@ -1808,17 +1834,21 @@ def command_deploy():
         elif args.image == DEFAULT_IMAGE:
             raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
-        if daemon_type == 'prometheus':
-            if not args.config_json:
-                raise Error("config-json parameter is needed when deploying prometheus service")
+        if daemon_type in ['prometheus', 'grafana'] and not args.config_json:
+                raise Error("config-json parameter is needed when deploying {} service".format(daemon_type))
 
+        if daemon_type == 'prometheus':
             uid, gid = extract_uid_gid(file_path='/etc/prometheus')
         elif daemon_type == 'node-exporter':
             uid, gid = 65534, 65534
-
+        elif daemon_type == 'grafana':
+            uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
+        else:
+            raise Error("{} not implemented yet".format(daemon_type))
+        
         # Monitoring metadata is nested dicts, so asking mypy to ignore
-        p = Monitoring.components[daemon_type]  # type: ignore
-        metadata = p.get('image', dict())  # type: ignore
+        m = Monitoring.components[daemon_type]  # type: ignore
+        metadata = m.get('image', dict())  # type: ignore
         monitoring_args = [
             '--user',
             str(uid),
@@ -1827,7 +1857,6 @@ def command_deploy():
             '--memory',
             metadata.get('memory', '4GB')  # type: ignore
         ]
-
 
         c = get_container(args.fsid, daemon_type, daemon_id, container_args=monitoring_args)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
