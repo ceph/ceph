@@ -1,0 +1,8 @@
+tasks:
+- clock:
+- install:
+    install_ceph_packages: false
+- exec:
+    skuba_mgmt_host.0:
+      - zypper --non-interactive install skuba kubernetes-client
+- caasp:
