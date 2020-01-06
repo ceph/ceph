@@ -304,14 +304,17 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def add_mds(self, spec):
+        # type: (orchestrator.StatelessServiceSpec) -> RookCompletion
         return self._service_add_decorate('MDS', spec,
                                        self.rook_cluster.add_filesystem)
 
     def add_rgw(self, spec):
+        # type: (orchestrator.RGWSpec) -> RookCompletion
         return self._service_add_decorate('RGW', spec,
                                        self.rook_cluster.add_objectstore)
 
     def add_nfs(self, spec):
+        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
         return self._service_add_decorate("NFS", spec,
                                           self.rook_cluster.add_nfsgw)
 
@@ -349,6 +352,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def update_mds(self, spec):
+        # type: (orchestrator.StatelessServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
             lambda: self.rook_cluster.update_mds_count(spec.name, num),
@@ -357,6 +361,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def update_nfs(self, spec):
+        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
             lambda: self.rook_cluster.update_nfs_count(spec.name, num),
