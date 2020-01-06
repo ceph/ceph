@@ -856,6 +856,16 @@ def get_device_vgs(device, name_prefix=''):
     return [VolumeGroup(**vg) for vg in vgs]
 
 
+def get_device_lvs(device, name_prefix=''):
+    stdout, stderr, returncode = process.call(
+        ['pvs', '--noheadings', '--readonly', '--units=g', '--separator=";"',
+         '-o', LV_FIELDS, device],
+        verbose_on_failure=False
+    )
+    lvs = _output_parser(stdout, LV_FIELDS)
+    return [Volume(**lv) for lv in lvs]
+
+
 
 #################################
 #

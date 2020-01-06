@@ -80,10 +80,10 @@ class Device(object):
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
+        self.vgs = []
         self.lvs = []
         self.vg_name = None
         self.lv_name = None
-        self.pvs_api = []
         self.disk_api = {}
         self.blkid_api = {}
         self.sys_api = {}
@@ -231,23 +231,17 @@ class Device(object):
             # here, because most likely, we need to use VGs from this PV.
             self._is_lvm_member = False
             for path in self._get_pv_paths():
-                # check if there was a pv created with the
-                # name of device
-                pvs = lvm.PVolumes().filter(pv_name=path)
-                has_vgs = [pv.vg_name for pv in pvs if pv.vg_name]
-                if has_vgs:
-                    self.vgs = list(set(has_vgs))
+                vgs = lvm.get_device_vgs(path)
+                if vgs:
+                    self.vgs.extend(vgs)
                     # a pv can only be in one vg, so this should be safe
-                    self.vg_name = has_vgs[0]
+                    # FIXME: While the above assumption holds, sda1 and sda2
+                    # can each host a PV and VG. I think the vg_name property is
+                    # actually unused (not 100% sure) and can simply be removed
+                    self.vg_name = vgs[0]
                     self._is_lvm_member = True
-                    self.pvs_api = pvs
-                    for pv in pvs:
-                        if pv.vg_name and pv.lv_uuid:
-                            lv = lvm.get_lv(vg_name=pv.vg_name, lv_uuid=pv.lv_uuid)
-                            if lv:
-                                self.lvs.append(lv)
-                else:
-                    self.vgs = []
+
+                    self.lvs.extend(lvm.get_device_lvs(path))
         return self._is_lvm_member
 
     def _get_pv_paths(self):
@@ -394,6 +388,9 @@ class Device(object):
             rejected.append('Insufficient space (<5GB)')
         if self.is_ceph_disk_member:
             rejected.append("Used by ceph-disk")
+        available_vgs = [vg for vg in self.vgs if vg.free >= 5368709120]
+        if self.vgs and not available_vgs:
+            rejected.append('Insufficient space (<5GB)')
 
         return len(rejected) == 0, rejected
 
