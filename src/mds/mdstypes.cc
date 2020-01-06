@@ -434,6 +434,7 @@ void feature_bitset_t::decode(bufferlist::const_iterator &p) {
 void feature_bitset_t::print(ostream& out) const
 {
   std::ios_base::fmtflags f(out.flags());
+  out << "0x";
   for (int i = _vec.size() - 1; i >= 0; --i)
     out << std::setfill('0') << std::setw(sizeof(block_type) * 2)
         << std::hex << _vec[i];
