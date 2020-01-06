@@ -97,7 +97,7 @@ class XFSTestsDev(CephFSTestCase):
 
         distro = get_system_type(self.mount_a.client_remote,
                                  distro=True).lower()
-        if distro in ['redhatenterpriseserver', 'fedora', 'centos']:
+        if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora', 'centos'):
             deps = """acl attr automake bc dbench dump e2fsprogs fio \
             gawk gcc indent libtool lvm2 make psmisc quota sed \
             xfsdump xfsprogs \
