@@ -2411,7 +2411,7 @@ struct osd_stat_t {
       }
     }
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f, bool with_net = true) const;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::const_iterator &bl);
   static void generate_test_instances(std::list<osd_stat_t*>& o);
