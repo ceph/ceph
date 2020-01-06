@@ -1616,8 +1616,8 @@ server list`` on the teuthology machine, but the target VM hostnames (e.g.
 ``target149202171058.teuthology``) are resolvable within the teuthology
 cluster.
 
-Running Integration Tests using Teuthology
-==========================================
+Running Tests using Teuthology
+==============================
 
 Getting binaries
 ----------------
@@ -1768,11 +1768,11 @@ https://github.com/ceph/ceph-ci/branches.
 .. _Pulpito: http://pulpito.front.sepia.ceph.com/
 .. _Shaman: https://shaman.ceph.com/builds/ceph/
 
-Running tests from `qa/` locally
-===================================
+Running Tests Locally
+=====================
 
 How to run s3-tests locally
--------------------------------------
+---------------------------
 
 RGW code can be tested by building Ceph locally from source, starting a vstart
 cluster, and running the "s3-tests" suite against it.
@@ -1812,11 +1812,11 @@ To run the s3tests suite do the following::
 
 
 Running test using vstart_runner.py
---------------------------------------
+-----------------------------------
 CephFS and Ceph Manager code is be tested using `vstart_runner.py`_.
 
 Running your first test
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
 The Python tests in Ceph repository can be executed on your local machine
 using `vstart_runner.py`_. To do that, you'd need `teuthology`_ installed::
 
@@ -1883,7 +1883,7 @@ vstart_runner.py can take the following options -
           functionality within a virtual machine.
 
 Internal working of vstart_runner.py -
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 vstart_runner.py primarily does three things -
 
 * collects and runs the tests
