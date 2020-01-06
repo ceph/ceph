@@ -3719,7 +3719,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 
   mdr->getattr_caps = mask;
 
-  if (!mdr->is_batch_head && mdr->is_batch_op()) {
+  if (mdr->snapid == CEPH_NOSNAP && !mdr->is_batch_head && mdr->is_batch_op()) {
     if (!is_lookup) {
       auto em = ref->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
       if (em.second) {
@@ -3733,15 +3733,16 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
       CDentry* dn = mdr->dn[0].back();
       auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
       if (em.second) {
-        em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr, mdcache);
+	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr, mdcache);
+	mdr->pin(dn);
       } else {
 	dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);
 	return;
       }
     }
+    mdr->is_batch_head = true;
   }
-  mdr->is_batch_head = true;
 
   /*
    * if client currently holds the EXCL cap on a field, do not rdlock
