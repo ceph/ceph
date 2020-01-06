@@ -18,7 +18,7 @@ Both of these files must be present on the host where the Ceph MON resides.
 
    Alternatively, you may copy the conf file. But the method which generates
    the minimal config is usually sufficient. For more information, see
-   `boostrap options in ceph-conf page`_.
+   :ref:`bootstrap-options`.
 
 #. Ensure that the conf has appropriate permissions::
 
@@ -56,7 +56,7 @@ Mounting CephFS
 To FUSE-mount the Ceph file system, use the ``ceph-fuse`` command::
 
     mkdir /mnt/mycephfs
-    ceph-fuse -id foo /mnt/mycephfs
+    ceph-fuse --id foo /mnt/mycephfs
 
 Option ``-id`` passes the name of the CephX user whose keyring we intend to
 use for mounting CephFS. In the above command, it's ``foo``. You can also use
@@ -98,8 +98,7 @@ Use ``umount`` to unmount CephFS like any other FS::
 Persistent Mounts
 -----------------
 
-To mount CephFS in your file systems table as a file system in user space, add
-the following to ``/etc/fstab``::
+To mount CephFS as a file system in user space, add the following to ``/etc/fstab``::
 
        #DEVICE PATH       TYPE      OPTIONS
        none    /mnt/mycephfs  fuse.ceph ceph.id={user-ID}[,ceph.conf={path/to/conf.conf}],_netdev,defaults  0 0
@@ -109,23 +108,24 @@ For example::
        none    /mnt/mycephfs  fuse.ceph ceph.id=myuser,_netdev,defaults  0 0
        none    /mnt/mycephfs  fuse.ceph ceph.id=myuser,ceph.conf=/etc/ceph/foo.conf,_netdev,defaults  0 0
 
-Ensure you use the ID (e.g., ``admin``, not ``client.admin``). You can pass
+Ensure you use the ID (e.g., ``myuser``, not ``client.myuser``). You can pass
 any valid ``ceph-fuse`` option to the command line this way.
+
+To mount a subdirectory of the CephFS, add the following to ``/etc/fstab``::
+
+       none    /mnt/mycephfs  fuse.ceph ceph.id=myuser,ceph.client_mountpoint=/path/to/dir,_netdev,defaults  0 0
 
 ``ceph-fuse@.service`` and ``ceph-fuse.target`` systemd units are available.
 As usual, these unit files declare the default dependencies and recommended
-execution context for ``ceph-fuse``. For example, after making the fstab entry
-shown above, ``ceph-fuse`` run following commands::
+execution context for ``ceph-fuse``. After making the fstab entry shown above,
+run following commands::
 
-    systemctl start ceph-fuse@-mnt-mycephfs.service
+    systemctl start ceph-fuse@/mnt/mycephfs.service
+    systemctl enable ceph-fuse.target
     systemctl enable ceph-fuse@-mnt-mycephfs.service
 
-See `User Management`_ for details on CephX user management and mount.ceph_
+See :ref:`User Management <user-management>` for details on CephX user management and `ceph-fuse`_
 manual for more options it can take. For troubleshooting, see
-:ref:`kernel_mount_debugging`.
+:ref:`ceph_fuse_debugging`.
 
-.. _ceph-fuse: ../../man/8/ceph-fuse/
-.. _fstab: ../fstab/#fuse
-.. _User Management: ../../rados/operations/user-management/
-.. _mount.ceph: ../../man/8/mount.ceph/
-.. _boostrap options in ceph-conf page: ../../rados/configuration/ceph-conf/#bootstrap-options
+.. _ceph-fuse: ../../man/8/ceph-fuse/#options
