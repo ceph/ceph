@@ -48,21 +48,21 @@ public:
       librados::IoCtx& local_io_ctx,
       librados::IoCtx& remote_io_ctx,
       InstanceWatcher<ImageCtxT>* instance_watcher,
-      const std::string& remote_image_id,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
       ::journal::CacheManagerHandler* cache_manager_handler,
       ProgressContext* progress_ctx,
       ImageCtxT** local_image_ctx,
       std::string* local_image_id,
+      std::string* remote_image_id,
       std::string* remote_mirror_uuid,
       Journaler** remote_journaler,
       bool* do_resync,
       Context* on_finish) {
     return new BootstrapRequest(
-      threads, local_io_ctx, remote_io_ctx, instance_watcher, remote_image_id,
-      global_image_id, local_mirror_uuid,  cache_manager_handler, progress_ctx,
-      local_image_ctx, local_image_id, remote_mirror_uuid, remote_journaler,
+      threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
+      local_mirror_uuid,  cache_manager_handler, progress_ctx, local_image_ctx,
+      local_image_id, remote_image_id, remote_mirror_uuid, remote_journaler,
       do_resync, on_finish);
   }
 
@@ -71,13 +71,13 @@ public:
       librados::IoCtx& local_io_ctx,
       librados::IoCtx& remote_io_ctx,
       InstanceWatcher<ImageCtxT>* instance_watcher,
-      const std::string& remote_image_id,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
       ::journal::CacheManagerHandler* cache_manager_handler,
       ProgressContext* progress_ctx,
       ImageCtxT** local_image_ctx,
       std::string* local_image_id,
+      std::string* remote_image_id,
       std::string* remote_mirror_uuid,
       Journaler** remote_journaler,
       bool* do_resync,
@@ -144,13 +144,13 @@ private:
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
-  std::string m_remote_image_id;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
   ProgressContext *m_progress_ctx;
   ImageCtxT **m_local_image_ctx;
   std::string* m_local_image_id;
+  std::string* m_remote_image_id;
   std::string* m_remote_mirror_uuid;
   Journaler** m_remote_journaler;
   bool *m_do_resync;
