@@ -352,10 +352,10 @@ void ImageReplayer<I>::bootstrap() {
       ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
   auto request = image_replayer::BootstrapRequest<I>::create(
       m_threads, m_local_io_ctx, m_remote_image.io_ctx, m_instance_watcher,
-      m_remote_image.image_id, m_global_image_id, m_local_mirror_uuid,
-      m_cache_manager_handler, &m_progress_cxt, &m_local_image_ctx,
-      &m_local_image_id, &m_remote_image.mirror_uuid, &m_remote_journaler,
-      &m_resync_requested, ctx);
+      m_global_image_id, m_local_mirror_uuid, m_cache_manager_handler,
+      &m_progress_cxt, &m_local_image_ctx, &m_local_image_id,
+      &m_remote_image.image_id, &m_remote_image.mirror_uuid,
+      &m_remote_journaler, &m_resync_requested, ctx);
 
   request->get();
   m_bootstrap_request = request;

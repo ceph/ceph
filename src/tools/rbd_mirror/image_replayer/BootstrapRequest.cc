@@ -49,13 +49,13 @@ BootstrapRequest<I>::BootstrapRequest(
     librados::IoCtx& local_io_ctx,
     librados::IoCtx& remote_io_ctx,
     InstanceWatcher<I>* instance_watcher,
-    const std::string& remote_image_id,
     const std::string& global_image_id,
     const std::string& local_mirror_uuid,
     ::journal::CacheManagerHandler* cache_manager_handler,
     ProgressContext* progress_ctx,
     I** local_image_ctx,
     std::string* local_image_id,
+    std::string* remote_image_id,
     std::string* remote_mirror_uuid,
     Journaler** remote_journaler,
     bool* do_resync,
@@ -66,13 +66,13 @@ BootstrapRequest<I>::BootstrapRequest(
     m_local_io_ctx(local_io_ctx),
     m_remote_io_ctx(remote_io_ctx),
     m_instance_watcher(instance_watcher),
-    m_remote_image_id(remote_image_id),
     m_global_image_id(global_image_id),
     m_local_mirror_uuid(local_mirror_uuid),
     m_cache_manager_handler(cache_manager_handler),
     m_progress_ctx(progress_ctx),
     m_local_image_ctx(local_image_ctx),
     m_local_image_id(local_image_id),
+    m_remote_image_id(remote_image_id),
     m_remote_mirror_uuid(remote_mirror_uuid),
     m_remote_journaler(remote_journaler),
     m_do_resync(do_resync),
@@ -173,7 +173,7 @@ void BootstrapRequest<I>::prepare_remote_image() {
   auto req = image_replayer::PrepareRemoteImageRequest<I>::create(
     m_threads, m_remote_io_ctx, m_global_image_id, m_local_mirror_uuid,
     *m_local_image_id, journal_settings, m_cache_manager_handler,
-    m_remote_mirror_uuid, &m_remote_image_id, m_remote_journaler,
+    m_remote_mirror_uuid, m_remote_image_id, m_remote_journaler,
     &m_client_state, &m_client_meta, ctx);
   req->send();
 }
@@ -191,7 +191,7 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
     dout(10) << "remote image does not exist" << dendl;
 
     // TODO need to support multiple remote images
-    if (m_remote_image_id.empty() && !m_local_image_id->empty() &&
+    if (m_remote_image_id->empty() && !m_local_image_id->empty() &&
         m_local_image_tag_owner == *m_remote_mirror_uuid) {
       // local image exists and is non-primary and linked to the missing
       // remote image
@@ -219,7 +219,7 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::open_remote_image() {
-  dout(15) << "remote_image_id=" << m_remote_image_id << dendl;
+  dout(15) << "remote_image_id=" << *m_remote_image_id << dendl;
 
   update_progress("OPEN_REMOTE_IMAGE");
 
@@ -227,7 +227,7 @@ void BootstrapRequest<I>::open_remote_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_remote_image>(
       this);
   OpenImageRequest<I> *request = OpenImageRequest<I>::create(
-    m_remote_io_ctx, &m_remote_image_ctx, m_remote_image_id, false,
+    m_remote_io_ctx, &m_remote_image_ctx, *m_remote_image_id, false,
     ctx);
   request->send();
 }
