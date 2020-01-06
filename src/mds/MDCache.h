@@ -194,6 +194,9 @@ class MDCache {
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
 
+  bool forward_all_reqs_to_auth() const { 
+    return forward_all_requests_to_auth;
+  }
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
   }
@@ -1277,7 +1280,7 @@ class MDCache {
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;
-
+  bool forward_all_requests_to_auth;
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
 
   // File size recovery
