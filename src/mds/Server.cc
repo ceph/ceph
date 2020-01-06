@@ -541,8 +541,9 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 	stringstream ss;
 	ss << "missing required features '" << missing_features << "'";
 	send_reject_message(ss.str());
-	mds->clog->warn() << "client session lacks required features '"
-			  << missing_features << "' denied (" << session->info.inst << ")";
+	mds->clog->warn() << "client session (" << session->info.inst
+                          << ") lacks required features " << missing_features
+                          << "; client supports " << client_metadata.features;
 	session->clear();
 	break;
       }
