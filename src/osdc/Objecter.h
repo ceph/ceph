@@ -1105,6 +1105,21 @@ struct ObjectOperation {
     encode(src, osd_op.indata);
     encode(src_oloc, osd_op.indata);
   }
+  void copy_from2(object_t src, snapid_t snapid, object_locator_t src_oloc,
+		 version_t src_version, unsigned flags,
+		 uint32_t truncate_seq, uint64_t truncate_size,
+		 unsigned src_fadvise_flags) {
+    using ceph::encode;
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM2);
+    osd_op.op.copy_from.snapid = snapid;
+    osd_op.op.copy_from.src_version = src_version;
+    osd_op.op.copy_from.flags = flags;
+    osd_op.op.copy_from.src_fadvise_flags = src_fadvise_flags;
+    encode(src, osd_op.indata);
+    encode(src_oloc, osd_op.indata);
+    encode(truncate_seq, osd_op.indata);
+    encode(truncate_size, osd_op.indata);
+  }
 
   /**
    * writeback content to backing tier

@@ -5687,6 +5687,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_UNDIRTY:
     case CEPH_OSD_OP_COPY_FROM:  // we handle user_version update explicitly
+    case CEPH_OSD_OP_COPY_FROM2:
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
@@ -7684,6 +7685,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_COPY_FROM:
+    case CEPH_OSD_OP_COPY_FROM2:
       ++ctx->num_write;
       result = 0;
       {
@@ -7694,12 +7696,20 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bool have_truncate = false;
 	snapid_t src_snapid = (uint64_t)op.copy_from.snapid;
 	version_t src_version = op.copy_from.src_version;
+
+	if ((op.op == CEPH_OSD_OP_COPY_FROM2) &&
+	    (op.copy_from.flags & ~CEPH_OSD_COPY_FROM_FLAGS)) {
+	  dout(20) << "invalid copy-from2 flags 0x"
+		  << std::hex << (int)op.copy_from.flags << std::dec << dendl;
+	  result = -EINVAL;
+	  break;
+	}
 	try {
 	  decode(src_name, bp);
 	  decode(src_oloc, bp);
 	  // check if client sent us truncate_seq and truncate_size
-	  if ((op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ) &&
-	      !bp.end()) {
+	  if ((op.op == CEPH_OSD_OP_COPY_FROM2) &&
+	      (op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ)) {
 	    decode(truncate_seq, bp);
 	    decode(truncate_size, bp);
 	    have_truncate = true;
