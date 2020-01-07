@@ -3731,13 +3731,13 @@ void BlueStore::Collection::split_cache(
       ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
 			    << dendl;
 
-      onode_map.cache->_rm(p->second);
       p = onode_map.onode_map.erase(p);
-
       o->c = dest;
-      dest->onode_map.cache->_add(o, 1);
       dest->onode_map.onode_map[o->oid] = o;
-
+      if (dest->cache != cache) {
+        onode_map.cache->_rm(p->second);
+        dest->onode_map.cache->_add(o, 1);
+      }
       // move over shared blobs and buffers.  cover shared blobs from
       // both extent map and spanning blob map (the full extent map
       // may not be faulted in)
