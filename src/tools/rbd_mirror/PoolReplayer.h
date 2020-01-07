@@ -64,6 +64,7 @@ public:
   void restart();
   void flush();
   void release_leader();
+  void reopen_logs();
 
 private:
   /**
