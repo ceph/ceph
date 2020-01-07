@@ -1465,17 +1465,17 @@ public:
               }
             }
           }
-        }
-        while ((int)num_spawned() > spawn_window) {
-          set_status() << "num_spawned() > spawn_window";
-          yield wait_for_child();
-          int ret;
-          while (collect(&ret, lease_stack.get())) {
-            if (ret < 0) {
-              tn->log(10, "a sync operation returned error");
-              /* we have reported this error */
+          while ((int)num_spawned() > spawn_window) {
+            set_status() << "num_spawned() > spawn_window";
+            yield wait_for_child();
+            int ret;
+            while (collect(&ret, lease_stack.get())) {
+              if (ret < 0) {
+                tn->log(10, "a sync operation returned error");
+                /* we have reported this error */
+              }
+              /* not waiting for child here */
             }
-            /* not waiting for child here */
           }
         }
 
