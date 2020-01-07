@@ -134,7 +134,8 @@ int main(int argc, char* argv[])
   using crimson::common::sharded_conf;
   using crimson::common::sharded_perf_coll;
   try {
-    return app.run_deprecated(app_args.size(), const_cast<char**>(app_args.data()), [&] {
+    return app.run_deprecated(app_args.size(), const_cast<char**>(app_args.data()),
+      [&, &ceph_args=ceph_args] {
       auto& config = app.configuration();
       return seastar::async([&] {
 	if (config.count("debug")) {

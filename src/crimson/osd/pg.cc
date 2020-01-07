@@ -683,7 +683,7 @@ PG::get_locked_obc(
       auto &[head_obc, head_existed] = p;
       if (oid.is_head()) {
 	if (head_existed) {
-	  return head_obc->get_lock_type(op, type).then([head_obc] {
+	  return head_obc->get_lock_type(op, type).then([head_obc=head_obc] {
 	    ceph_assert(head_obc->loaded);
 	    return load_obc_ertr::make_ready_future<ObjectContextRef>(head_obc);
 	  });
@@ -693,14 +693,14 @@ PG::get_locked_obc(
 	}
       } else {
 	return head_obc->get_lock_type(op, RWState::RWREAD).then(
-	  [this, head_obc, op, oid, type] {
+	  [this, head_obc=head_obc, op, oid, type] {
 	    ceph_assert(head_obc->loaded);
 	    return get_or_load_clone_obc(oid, head_obc);
-	  }).safe_then([this, head_obc, op, oid, type](auto p) {
+	  }).safe_then([this, head_obc=head_obc, op, oid, type](auto p) {
 	      auto &[obc, existed] = p;
 	      if (existed) {
 		return load_obc_ertr::future<>(
-		  obc->get_lock_type(op, type)).safe_then([obc] {
+		  obc->get_lock_type(op, type)).safe_then([obc=obc] {
 		  ceph_assert(obc->loaded);
 		  return load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
 		});
@@ -708,7 +708,7 @@ PG::get_locked_obc(
 		obc->degrade_excl_to(type);
 		return load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
 	      }
-	  }).safe_then([head_obc](auto obc) {
+	  }).safe_then([head_obc=head_obc](auto obc) {
 	    head_obc->put_lock_type(RWState::RWREAD);
 	    return load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
 	  });
