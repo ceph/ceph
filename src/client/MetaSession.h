@@ -25,6 +25,7 @@ struct MetaSession {
   uint64_t cap_renew_seq = 0;
   entity_addrvec_t addrs;
   feature_bitset_t mds_features;
+  interval_set<inodeno_t> delegated_inos;
 
   enum {
     STATE_NEW, // Unused
@@ -61,6 +62,18 @@ struct MetaSession {
   }
 
   const char *get_state_name() const;
+
+  inodeno_t take_delegated_ino() {
+    inodeno_t ino = delegated_inos.range_start();
+    delegated_inos.erase(ino);
+    return ino;
+  }
+  void add_delegated_inos(const interval_set<inodeno_t>& inos) {
+    delegated_inos.insert(inos);
+  }
+  void clear_delegated_inos() {
+    delegated_inos.clear();
+  }
 
   void dump(Formatter *f, bool cap_dump=false) const;
 

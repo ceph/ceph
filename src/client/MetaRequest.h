@@ -73,6 +73,8 @@ public:
   list<ceph::condition_variable*> waitfor_safe;
 
   InodeRef target;
+  inodeno_t created_ino;
+
   UserPerm perms;
 
   explicit MetaRequest(int op) :
