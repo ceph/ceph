@@ -594,6 +594,9 @@ public:
     /// Uses osdmap to update structures for now down sources
     void check_recovery_sources(const OSDMapRef& osdmap);
 
+    /// Remove stray from recovery sources
+    void remove_stray_recovery_sources(pg_shard_t stray);
+
     /// Call when hoid is no longer missing in acting set
     void recovered(const hobject_t &hoid) {
       needs_recovery_map.erase(hoid);
