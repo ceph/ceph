@@ -19,6 +19,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "mon/health_check.h"
+#include <time.h>
 #include <algorithm>
 
 #include "global/global_init.h"
@@ -53,9 +54,10 @@ void usage()
   cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
   cout << "   --upmap-max <max-count> set max upmap entries to calculate [default: 10]" << std::endl;
   cout << "   --upmap-deviation <max-deviation>" << std::endl;
-  cout << "                           max deviation from target [default: 1]" << std::endl;
+  cout << "                           max deviation from target [default: 5]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
   cout << "   --upmap-save            write modified OSDMap with upmap changes" << std::endl;
+  cout << "   --upmap-active          Act like an active balancer, keep applying changes until balanced" << std::endl;
   cout << "   --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported" << std::endl;
   cout << "   --tree                  displays a tree of the map" << std::endl;
   cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
@@ -143,11 +145,11 @@ int main(int argc, const char **argv)
   bool health = false;
   std::string upmap_file = "-";
   int upmap_max = 10;
-  int upmap_deviation = 1;
+  int upmap_deviation = 5;
+  bool upmap_active = false;
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
-  bool debug = false;
 
   std::string val;
   std::ostringstream err;
@@ -185,10 +187,10 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
+    } else if (ceph_argparse_flag(args, i, "--upmap-active", (char*)NULL)) {
+      upmap_active = true;
     } else if (ceph_argparse_flag(args, i, "--health", (char*)NULL)) {
       health = true;
-    } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
-      debug = true;
     } else if (ceph_argparse_flag(args, i, "--with-default-pool", (char*)NULL)) {
       createpool = true;
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
@@ -382,9 +384,8 @@ int main(int argc, const char **argv)
     cout << "upmap, max-count " << upmap_max
 	 << ", max deviation " << upmap_deviation
 	 << std::endl;
-    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
-    pending_inc.fsid = osdmap.get_fsid();
     vector<int64_t> pools;
+    set<int64_t> upmap_pool_nums;
     for (auto& s : upmap_pools) {
       int64_t p = osdmap.lookup_pg_pool_name(s);
       if (p < 0) {
@@ -392,6 +393,7 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       pools.push_back(p);
+      upmap_pool_nums.insert(p);
     }
     if (!pools.empty()) {
       cout << " limiting to pools " << upmap_pools << " (" << pools << ")"
@@ -406,68 +408,79 @@ int main(int argc, const char **argv)
       cout << "No pools available" << std::endl;
       goto skip_upmap;
     }
-    if (debug) {
+    int rounds = 0;
+    struct timespec round_start;
+    int r = clock_gettime(CLOCK_MONOTONIC, &round_start);
+    assert(r == 0);
+    do {
+      std::random_device rd;
+      std::shuffle(pools.begin(), pools.end(), std::mt19937{rd()});
       cout << "pools ";
       for (auto& i: pools)
         cout << osdmap.get_pool_name(i) << " ";
       cout << std::endl;
-    }
-    map< int, set<int64_t> > pools_by_rule;
-    for (auto&i: pools) {
-      const string& pool_name = osdmap.get_pool_name(i);
-      const pg_pool_t *p = osdmap.get_pg_pool(i);
-      const int rule = p->get_crush_rule();
-      if (!osdmap.crush->rule_exists(rule)) {
-	cout << " pool " << pool_name << " does not exist" << std::endl;
-	continue;
+      OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+      pending_inc.fsid = osdmap.get_fsid();
+      int total_did = 0;
+      int left = upmap_max;
+      struct timespec begin, end;
+      r = clock_gettime(CLOCK_MONOTONIC, &begin);
+      assert(r == 0);
+      for (auto& i: pools) {
+        set<int64_t> one_pool;
+        one_pool.insert(i);
+        int did = osdmap.calc_pg_upmaps(
+          g_ceph_context, upmap_deviation,
+          left, one_pool,
+          &pending_inc);
+        total_did += did;
+        left -= did;
+        if (left <= 0)
+          break;
       }
-      if (p->get_pg_num() > p->get_pg_num_target()) {
-	cout << "pool " << pool_name << " has pending PG(s) for merging, skipping for now" << std::endl;
-	continue;
+      r = clock_gettime(CLOCK_MONOTONIC, &end);
+      assert(r == 0);
+      cout << "prepared " << total_did << "/" << upmap_max  << " changes" << std::endl;
+      float elapsed_time = (end.tv_sec - begin.tv_sec) + 1.0e-9*(end.tv_nsec - begin.tv_nsec);
+      if (upmap_active)
+        cout << "Time elapsed " << elapsed_time << " secs" << std::endl;
+      if (total_did > 0) {
+        print_inc_upmaps(pending_inc, upmap_fd);
+        if (upmap_save || upmap_active) {
+	  int r = osdmap.apply_incremental(pending_inc);
+	  ceph_assert(r == 0);
+	  if (upmap_save)
+	    modified = true;
+        }
+      } else {
+        cout << "Unable to find further optimization, "
+	     << "or distribution is already perfect"
+	     << std::endl;
+        if (upmap_active) {
+          map<int,set<pg_t>> pgs_by_osd;
+          for (auto& i : osdmap.get_pools()) {
+            if (!upmap_pool_nums.empty() && !upmap_pool_nums.count(i.first))
+              continue;
+            for (unsigned ps = 0; ps < i.second.get_pg_num(); ++ps) {
+              pg_t pg(ps, i.first);
+              vector<int> up;
+              osdmap.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+              //ldout(cct, 20) << __func__ << " " << pg << " up " << up << dendl;
+              for (auto osd : up) {
+                if (osd != CRUSH_ITEM_NONE)
+                  pgs_by_osd[osd].insert(pg);
+              }
+            }
+          }
+          for (auto& i : pgs_by_osd)
+            cout << "osd." << i.first << " pgs " << i.second.size() << std::endl;
+          float elapsed_time = (end.tv_sec - round_start.tv_sec) + 1.0e-9*(end.tv_nsec - round_start.tv_nsec);
+          cout << "Total time elapsed " << elapsed_time << " secs, " << rounds << " rounds" << std::endl;
+        }
+        break;
       }
-      if (debug) {
-        cout << "pool " << i << " rule " << rule << std::endl;
-      }
-      pools_by_rule[rule].emplace(i);
-    }
-    vector<int> rules;
-    for (auto& r: pools_by_rule)
-      rules.push_back(r.first);
-    std::random_device rd;
-    std::shuffle(rules.begin(), rules.end(), std::mt19937{rd()});
-    if (debug) {
-      for (auto& r: rules)
-        cout << "rule: " << r << " " << pools_by_rule[r] << std::endl;
-    }
-    int total_did = 0;
-    int available = upmap_max;
-    for (auto& r: rules) {
-      // Assume all PGs are active+clean
-      // available = upmap_max - (num_pg - num_pg_active_clean)
-      int did = osdmap.calc_pg_upmaps(
-        g_ceph_context, upmap_deviation,
-        available, pools_by_rule[r],
-        &pending_inc);
-      cout << "prepared " << did << " changes for pools(s) ";
-      for (auto i: pools_by_rule[r])
-        cout << osdmap.get_pool_name(i) << " ";
-      cout << std::endl;
-      total_did += did;
-    }
-    cout << "prepared " << total_did << " changes in total" << std::endl;
-    if (total_did > 0) {
-      print_inc_upmaps(pending_inc, upmap_fd);
-      if (upmap_save) {
-	int r = osdmap.apply_incremental(pending_inc);
-	ceph_assert(r == 0);
-	modified = true;
-      }
-    } else {
-      cout << "Unable to find further optimization, "
-	   << "or pool(s) pg_num is decreasing, "
-	   << "or distribution is already perfect"
-	   << std::endl;
-    }
+      ++rounds;
+    } while(upmap_active);
   }
 skip_upmap:
   if (upmap_file != "-") {

@@ -313,7 +313,7 @@ class Module(MgrModule):
         {
             'name': 'upmap_max_deviation',
             'type': 'int',
-            'default': 1,
+            'default': 5,
             'min': 1,
             'desc': 'deviation below which no optimization is attempted',
             'long_desc': 'If the number of PGs are within this count then no optimization is attempted',
@@ -979,14 +979,17 @@ class Module(MgrModule):
             detail = 'No pools available'
             self.log.info(detail)
             return -errno.ENOENT, detail
+        # shuffle pool list so they all get equal (in)attention
+        random.shuffle(pools)
+        self.log.info('pools %s' % pools)
 
+        adjusted_pools = []
         inc = plan.inc
         total_did = 0
         left = max_optimizations
         pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
                                if p['pg_num'] > p['pg_num_target']]
         crush_rule_by_pool_name = dict((p['pool_name'], p['crush_rule']) for p in osdmap_dump.get('pools', []))
-        pools_by_crush_rule = {} # group pools by crush_rule
         for pool in pools:
             if pool not in crush_rule_by_pool_name:
                 self.log.info('pool %s does not exist' % pool)
@@ -994,36 +997,36 @@ class Module(MgrModule):
             if pool in pools_with_pg_merge:
                 self.log.info('pool %s has pending PG(s) for merging, skipping for now' % pool)
                 continue
-            crush_rule = crush_rule_by_pool_name[pool]
-            if crush_rule not in pools_by_crush_rule:
-                pools_by_crush_rule[crush_rule] = []
-            pools_by_crush_rule[crush_rule].append(pool)
-        classified_pools = list(pools_by_crush_rule.values())
+            adjusted_pools.append(pool)
         # shuffle so all pools get equal (in)attention
-        random.shuffle(classified_pools)
-        for it in classified_pools:
-            pool_dump = osdmap_dump.get('pools', [])
+        random.shuffle(adjusted_pools)
+        pool_dump = osdmap_dump.get('pools', [])
+        for pool in adjusted_pools:
             num_pg = 0
             for p in pool_dump:
-                if p['pool_name'] in it:
-                    num_pg += p['pg_num']
+                if p['pool_name'] == pool:
+                    num_pg = p['pg_num']
+                    pool_id = p['pool']
+                    break
 
             # note that here we deliberately exclude any scrubbing pgs too
             # since scrubbing activities have significant impacts on performance
-            pool_ids = list(p['pool'] for p in pool_dump if p['pool_name'] in it)
             num_pg_active_clean = 0
             for p in plan.pg_status.get('pgs_by_pool_state', []):
-                if len(pool_ids) and p['pool_id'] not in pool_ids:
+                pgs_pool_id = p['pool_id']
+                if pgs_pool_id != pool_id:
                     continue
                 for s in p['pg_state_counts']:
                     if s['state_name'] == 'active+clean':
                         num_pg_active_clean += s['count']
                         break
-            available = max_optimizations - (num_pg - num_pg_active_clean)
-            did = plan.osdmap.calc_pg_upmaps(inc, max_deviation, available, it)
-            self.log.info('prepared %d changes for pool(s) %s' % (did, it))
+            available = left - (num_pg - num_pg_active_clean)
+            did = plan.osdmap.calc_pg_upmaps(inc, max_deviation, available, [pool])
             total_did += did
-        self.log.info('prepared %d changes in total' % total_did)
+            left -= did
+            if left <= 0:
+                break
+        self.log.info('prepared %d/%d changes' % (total_did, max_optimizations))
         if total_did == 0:
             return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or pool(s) pg_num is decreasing, ' \
