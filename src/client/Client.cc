@@ -1187,7 +1187,9 @@ void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
 /*
  * insert results from readdir or lssnap into the metadata cache.
  */
-void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri) {
+void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri)
+{
+  ceph_assert(diri);
 
   auto& reply = request->reply;
   ConnectionRef con = request->reply->get_connection();
@@ -1207,7 +1209,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
   if (!p.end()) {
     // snapdir?
     if (request->head.op == CEPH_MDS_OP_LSSNAP) {
-      ceph_assert(diri);
       diri = open_snapdir(diri);
     }
 
@@ -1344,6 +1345,31 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
     if (dir->is_empty())
       close_dir(dir);
+  }
+}
+
+void Client::parse_create_reply_extra(MetaRequest *request, MetaSession *session)
+{
+  auto p = request->reply->get_extra_bl().cbegin();
+  if (!p.end()) {
+    if (session->mds_features.test(CEPHFS_FEATURE_DELEG_INO)) {
+      struct openc_response_t ocres;
+
+      decode(ocres, p);
+      request->created_ino = ocres.created_ino;
+      /*
+       * The userland cephfs client doesn't have a way to do an async create
+       * (yet), so just discard delegated_inos for now. Eventually we should
+       * store them and use them in create calls, even if they are synchronous,
+       * if only for testing purposes.
+       */
+      ldout(cct, 10) << __func__ << " delegated_inos: " << ocres.delegated_inos << dendl;
+      session->add_delegated_inos(ocres.delegated_inos);
+    } else {
+      // u64 containing number of created ino
+      decode(request->created_ino, p);
+    }
+    ldout(cct, 10) << __func__ << " created ino " << request->created_ino << dendl;
   }
 }
 
@@ -1500,15 +1526,20 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     }
   }
 
-  if (in) {
+  if (reply->get_extra_bl().length() > 0) {
     if (op == CEPH_MDS_OP_READDIR ||
 	op == CEPH_MDS_OP_LSSNAP) {
       insert_readdir_results(request, session, in);
-    } else if (op == CEPH_MDS_OP_LOOKUPNAME) {
+    } else if (op == CEPH_MDS_OP_CREATE) {
+      parse_create_reply_extra(request, session);
+    }
+  }
+
+  if (in) {
+    if (op == CEPH_MDS_OP_LOOKUPNAME) {
       // hack: return parent inode instead
       in = diri;
     }
-
     if (request->dentry() == NULL && in != request->inode()) {
       // pin the target inode if its parent dentry is not pinned
       request->set_other_inode(in);
@@ -1679,46 +1710,21 @@ void Client::dump_mds_requests(Formatter *f)
 }
 
 int Client::verify_reply_trace(int r, MetaSession *session,
-			       MetaRequest *request, const MConstRef<MClientReply>& reply,
-			       InodeRef *ptarget, bool *pcreated,
-			       const UserPerm& perms)
+			       MetaRequest *request,
+			       InodeRef *ptarget, bool *pcreated)
 {
   // check whether this request actually did the create, and set created flag
-  bufferlist extra_bl;
-  inodeno_t created_ino;
-  bool got_created_ino = false;
-  ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
-
-  extra_bl = reply->get_extra_bl();
-  if (extra_bl.length() >= 8) {
-    if (session->mds_features.test(CEPHFS_FEATURE_DELEG_INO)) {
-     struct openc_response_t	ocres;
-
-     decode(ocres, extra_bl);
-     created_ino = ocres.created_ino;
-     /*
-      * The userland cephfs client doesn't have a way to do an async create
-      * (yet), so just discard delegated_inos for now. Eventually we should
-      * store them and use them in create calls, even if they are synchronous,
-      * if only for testing purposes.
-      */
-     ldout(cct, 10) << "delegated_inos: " << ocres.delegated_inos << dendl;
-    } else {
-     // u64 containing number of created ino
-     decode(created_ino, extra_bl);
-    }
-    ldout(cct, 10) << "make_request created ino " << created_ino << dendl;
-    got_created_ino = true;
-  }
+  const auto& created_ino = request->created_ino;
 
   if (pcreated)
-    *pcreated = got_created_ino;
+    *pcreated = created_ino;
 
   if (request->target) {
     *ptarget = request->target;
     ldout(cct, 20) << "make_request target is " << *ptarget->get() << dendl;
   } else {
-    if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
+    ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
+    if (created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
       (*ptarget) = p->second;
       ldout(cct, 20) << "make_request created, target is " << *ptarget->get() << dendl;
     } else {
@@ -1728,14 +1734,13 @@ int Client::verify_reply_trace(int r, MetaSession *session,
       InodeRef target;
       Dentry *d = request->dentry();
       if (d) {
-	if (d->dir) {
+	Inode *diri = request->inode();
+	if (diri) {
 	  ldout(cct, 10) << "make_request got traceless reply, looking up #"
-			 << d->dir->parent_inode->ino << "/" << d->name
-			 << " got_ino " << got_created_ino
+			 << diri->ino << "/" << d->name
 			 << " ino " << created_ino
 			 << dendl;
-	  r = _do_lookup(d->dir->parent_inode, d, request->regetattr_mask,
-			 &target, perms);
+	  r = _do_lookup(diri, d, request->regetattr_mask, &target, request->perms);
 	} else {
 	  // if the dentry is not linked, just do our best. see #5021.
 	  ceph_abort_msg("how did this happen?  i want logs!");
@@ -1744,13 +1749,12 @@ int Client::verify_reply_trace(int r, MetaSession *session,
 	Inode *in = request->inode();
 	ldout(cct, 10) << "make_request got traceless reply, forcing getattr on #"
 		       << in->ino << dendl;
-	r = _getattr(in, request->regetattr_mask, perms, true);
+	r = _getattr(in, request->regetattr_mask, request->perms, true);
 	target = in;
       }
       if (r >= 0) {
 	// verify ino returned in reply and trace_dist are the same
-	if (got_created_ino &&
-	    created_ino.val != target->ino.val) {
+	if (created_ino && created_ino.val != target->ino.val) {
 	  ldout(cct, 5) << "create got ino " << created_ino << " but then failed on lookup; EINTR?" << dendl;
 	  r = -CEPHFS_EINTR;
 	}
@@ -1921,7 +1925,7 @@ int Client::make_request(MetaRequest *request,
   request->dispatch_cond = 0;
   
   if (r >= 0 && ptarget)
-    r = verify_reply_trace(r, session, request, reply, ptarget, pcreated, perms);
+    r = verify_reply_trace(r, session, request, ptarget, pcreated);
 
   if (pdirbl)
     *pdirbl = reply->get_extra_bl();
@@ -2985,6 +2989,7 @@ void Client::send_reconnect(MetaSession *session)
   session->readonly = false;
 
   session->release.reset();
+  session->clear_delegated_inos();
 
   // reset my cap seq number
   session->seq = 0;

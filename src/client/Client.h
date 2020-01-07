@@ -753,6 +753,7 @@ public:
 
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
   void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
+  void parse_create_reply_extra(MetaRequest *request, MetaSession *session);
   Inode* insert_trace(MetaRequest *request, MetaSession *session);
   void update_inode_file_size(Inode *in, int issued, uint64_t size,
 			      uint64_t truncate_seq, uint64_t truncate_size);
@@ -893,9 +894,7 @@ protected:
   void unregister_request(MetaRequest *request);
 
   int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
-			 const MConstRef<MClientReply>& reply,
-			 InodeRef *ptarget, bool *pcreated,
-			 const UserPerm& perms);
+			 InodeRef *ptarget, bool *pcreated);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
   int encode_inode_release(Inode *in, MetaRequest *req,
 			   mds_rank_t mds, int drop,
