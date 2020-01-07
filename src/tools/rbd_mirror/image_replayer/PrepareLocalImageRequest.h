@@ -59,10 +59,13 @@ private:
    * GET_LOCAL_IMAGE_NAME
    *    |
    *    v
-   * GET_MIRROR_STATE
+   * GET_MIRROR_IMAGE
    *    |
-   *    v
-   * <finish>
+   *    | (journal)
+   *    \-----------> GET_TAG_OWNER
+   *                      |
+   *                      v
+   *                  <finish>
 
    * @endverbatim
    */
@@ -83,8 +86,8 @@ private:
   void get_local_image_name();
   void handle_get_local_image_name(int r);
 
-  void get_mirror_state();
-  void handle_get_mirror_state(int r);
+  void get_mirror_image();
+  void handle_get_mirror_image(int r);
 
   void get_tag_owner();
   void handle_get_tag_owner(int r);

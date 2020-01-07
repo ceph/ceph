@@ -101,9 +101,11 @@ public:
   }
 
   void expect_mirror_image_get(librados::IoCtx &io_ctx,
+                               cls::rbd::MirrorImageMode mode,
                                cls::rbd::MirrorImageState state,
                                const std::string &global_id, int r) {
     cls::rbd::MirrorImage mirror_image;
+    mirror_image.mode = mode;
     mirror_image.state = state;
     mirror_image.global_image_id = global_id;
 
@@ -137,6 +139,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, Success) {
                              0);
   expect_dir_get_name(m_local_io_ctx, "local image name", 0);
   expect_mirror_image_get(m_local_io_ctx,
+                          cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
                           "global image id", 0);
 
@@ -212,7 +215,9 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageError) {
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
                              0);
   expect_dir_get_name(m_local_io_ctx, "local image name", 0);
-  expect_mirror_image_get(m_local_io_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLED,
+  expect_mirror_image_get(m_local_io_ctx,
+                          cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                          cls::rbd::MIRROR_IMAGE_STATE_DISABLED,
                           "", -EINVAL);
 
   std::string local_image_id;
@@ -238,6 +243,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, TagOwnerError) {
                              0);
   expect_dir_get_name(m_local_io_ctx, "local image name", 0);
   expect_mirror_image_get(m_local_io_ctx,
+                          cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
                           "global image id", 0);
 
