@@ -97,9 +97,8 @@ class CephFSTestCase(CephTestCase):
 
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
-        self.mds_cluster.mds_stop()
-        self.mds_cluster.mds_fail()
         self.mds_cluster.delete_all_filesystems()
+        self.mds_cluster.mds_restart() # to reset any run-time configs, etc.
         self.fs = None # is now invalid!
         self.recovery_fs = None
 
@@ -130,7 +129,6 @@ class CephFSTestCase(CephTestCase):
 
         if self.REQUIRE_FILESYSTEM:
             self.fs = self.mds_cluster.newfs(create=True)
-            self.fs.mds_restart()
 
             # In case some test messed with auth caps, reset them
             for client_id in client_mount_ids:
@@ -140,7 +138,7 @@ class CephFSTestCase(CephTestCase):
                     'mon', 'allow r',
                     'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
 
-            # wait for mds restart to complete...
+            # wait for ranks to become active
             self.fs.wait_for_daemons()
 
             # Mount the requested number of clients
