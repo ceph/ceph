@@ -1344,11 +1344,6 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
 # Later, these can be easily merged with get_api_* methods
 #
 ###########################################################
-
-PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
-VG_FIELDS = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
-LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
-
 def get_pvs(fields=PV_FIELDS, sep='";"', filters=''):
     args = ['pvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
             filters, '-o', fields]
