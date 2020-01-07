@@ -91,27 +91,27 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
     return;
   }
 
-  get_mirror_state();
+  get_mirror_image();
 }
 
 template <typename I>
-void PrepareLocalImageRequest<I>::get_mirror_state() {
+void PrepareLocalImageRequest<I>::get_mirror_image() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_get_start(&op, *m_local_image_id);
 
   m_out_bl.clear();
-  librados::AioCompletion *aio_comp = create_rados_callback<
+  auto aio_comp = create_rados_callback<
     PrepareLocalImageRequest<I>,
-    &PrepareLocalImageRequest<I>::handle_get_mirror_state>(this);
+    &PrepareLocalImageRequest<I>::handle_get_mirror_image>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
   ceph_assert(r == 0);
   aio_comp->release();
 }
 
 template <typename I>
-void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
+void PrepareLocalImageRequest<I>::handle_get_mirror_image(int r) {
   dout(10) << ": r=" << r << dendl;
 
   cls::rbd::MirrorImage mirror_image;
@@ -131,7 +131,18 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
   // delete a partially formed image
   // (e.g. MIRROR_IMAGE_STATE_CREATING/DELETING)
 
-  get_tag_owner();
+  switch (mirror_image.mode) {
+  case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
+    get_tag_owner();
+    break;
+  case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
+    // TODO
+  default:
+    derr << "unsupported mirror image mode " << mirror_image.mode << " "
+         << "for image " << m_global_image_id << dendl;
+    finish(-EOPNOTSUPP);
+    break;
+  }
 }
 
 template <typename I>
