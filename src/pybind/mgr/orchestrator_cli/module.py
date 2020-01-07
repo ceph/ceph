@@ -623,8 +623,9 @@ Usage:
         'Update the number of monitor instances')
     def _update_mons(self, num=None, hosts=[], label=None):
 
-        placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
-        if not hosts and not label:
+        if hosts or label:
+            placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
+        else:
             # Improve Error message. Point to parse_host_spec examples
             raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
             # TODO: Scaling without a HostSpec doesn't work right now.
