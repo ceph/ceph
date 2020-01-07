@@ -212,7 +212,6 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int is_connected() override { return connected; }
 
   virtual ssize_t read(char* buf, size_t len) override;
-  virtual ssize_t zero_copy_read(bufferptr &data) override;
   virtual ssize_t send(bufferlist &bl, bool more) override;
   virtual void shutdown() override;
   virtual void close() override;
@@ -339,7 +338,6 @@ class RDMAStack : public NetworkStack {
  public:
   explicit RDMAStack(CephContext *cct, const string &t);
   virtual ~RDMAStack();
-  virtual bool support_zero_copy_read() const override { return false; }
   virtual bool nonblock_connect_need_writable_event() const override { return false; }
 
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;

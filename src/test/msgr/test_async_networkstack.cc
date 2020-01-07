@@ -853,11 +853,7 @@ class StressFactory {
       while (true) {
         char buf[4096];
         bufferptr data;
-        if (factory->zero_copy_read) {
-          r = socket.zero_copy_read(data);
-        } else {
-          r = socket.read(buf, sizeof(buf));
-        }
+        r = socket.read(buf, sizeof(buf));
         ASSERT_TRUE(r == -EAGAIN || (r >= 0 && (size_t)r <= sizeof(buf)));
         if (r == 0) {
           ASSERT_TRUE(buffers.empty());
@@ -865,11 +861,7 @@ class StressFactory {
           return ;
         } else if (r == -EAGAIN)
           break;
-        if (factory->zero_copy_read) {
-          buffers.emplace_back(data.c_str(), 0, data.length());
-        } else {
-          buffers.emplace_back(buf, 0, r);
-        }
+        buffers.emplace_back(buf, 0, r);
         std::cerr << " server " << this << " receive " << r << " content: " << std::endl;
       }
       if (!buffers.empty() && !write_enabled)
@@ -961,14 +953,12 @@ class StressFactory {
   atomic_int message_count, message_left;
   entity_addr_t bind_addr;
   std::atomic_bool already_bind = {false};
-  bool zero_copy_read;
   SocketOptions options;
 
   explicit StressFactory(const std::shared_ptr<NetworkStack> &s, const string &addr,
-                         size_t cli, size_t qd, size_t mc, size_t l, bool zero_copy)
+                         size_t cli, size_t qd, size_t mc, size_t l)
       : stack(s), rs(128), client_num(cli), queue_depth(qd),
-        max_message_length(l), message_count(mc), message_left(mc),
-        zero_copy_read(zero_copy) {
+        max_message_length(l), message_count(mc), message_left(mc) {
     bind_addr.parse(addr.c_str());
     rs.prepare(100);
   }
@@ -1054,8 +1044,7 @@ class StressFactory {
 };
 
 TEST_P(NetworkWorkerTest, StressTest) {
-  StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024,
-                        strncmp(GetParam(), "dpdk", 4) == 0);
+  StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024);
   StressFactory *f = &factory;
   exec_events([f](Worker *worker) mutable {
     f->start(worker);

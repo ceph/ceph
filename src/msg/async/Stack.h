@@ -28,7 +28,6 @@ class ConnectedSocketImpl {
   virtual ~ConnectedSocketImpl() {}
   virtual int is_connected() = 0;
   virtual ssize_t read(char*, size_t) = 0;
-  virtual ssize_t zero_copy_read(bufferptr&) = 0;
   virtual ssize_t send(bufferlist &bl, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
@@ -93,12 +92,6 @@ class ConnectedSocket {
   /// Copy an object returning data sent from the remote endpoint.
   ssize_t read(char* buf, size_t len) {
     return _csi->read(buf, len);
-  }
-  /// Gets the input stream.
-  ///
-  /// Gets an object returning data sent from the remote endpoint.
-  ssize_t zero_copy_read(bufferptr &data) {
-    return _csi->zero_copy_read(data);
   }
   /// Gets the output stream.
   ///
@@ -325,8 +318,6 @@ class NetworkStack {
 
   static Worker* create_worker(
           CephContext *c, const string &t, unsigned i);
-  // backend need to override this method if supports zero copy read
-  virtual bool support_zero_copy_read() const { return false; }
   // backend need to override this method if backend doesn't support shared
   // listen table.
   // For example, posix backend has in kernel global listen table. If one

@@ -97,7 +97,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return len - left ? len - left : -EAGAIN;
   }
 
-  virtual ssize_t zero_copy_read(bufferptr &data) override {
+private:
+  ssize_t zero_copy_read(bufferptr &data) {
     auto err = _conn.get_errno();
     if (err <= 0)
       return err;
@@ -171,6 +172,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
       return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
     }
   }
+
+public:
   virtual void shutdown() override {
     _conn.close_write();
   }
@@ -250,7 +253,6 @@ class DPDKStack : public NetworkStack {
   explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {
     funcs.resize(cct->_conf->ms_async_max_op_threads);
   }
-  virtual bool support_zero_copy_read() const override { return true; }
   virtual bool support_local_listen_table() const override { return true; }
 
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
