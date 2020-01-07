@@ -67,9 +67,9 @@ function TEST_balancer() {
     ceph balancer pool add $TEST_POOL1 || return 1
     ceph balancer pool add $TEST_POOL2 || return 1
     ceph balancer pool ls || return 1
-    eval POOL=$(ceph balancer pool ls | jq '.[0]')
+    eval POOL=$(ceph balancer pool ls | jq 'sort | .[0]')
     test "$POOL" = "$TEST_POOL1" || return 1
-    eval POOL=$(ceph balancer pool ls | jq '.[1]')
+    eval POOL=$(ceph balancer pool ls | jq 'sort | .[1]')
     test "$POOL" = "$TEST_POOL2" || return 1
     ceph balancer pool rm $TEST_POOL1 || return 1
     ceph balancer pool rm $TEST_POOL2 || return 1
@@ -141,6 +141,7 @@ function TEST_balancer2() {
     done
 
     ceph osd set-require-min-compat-client luminous
+    ceph config set mgr mgr/balancer/upmap_max_deviation 1
     ceph balancer mode upmap || return 1
     ceph balancer on || return 1
     ceph config set mgr mgr/balancer/sleep_interval 5
@@ -195,17 +196,20 @@ function TEST_balancer2() {
     sleep 30
     ceph osd df
 
-    # FINAL_PER_OSD2 should distribute evenly
+    # We should be with plue or minus 1 of FINAL_PER_OSD2
+    # This is because here each pool is balanced independently
+    MIN=$(expr $FINAL_PER_OSD2 - 1)
+    MAX=$(expr $FINAL_PER_OSD2 + 1)
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[0].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[1].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[2].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[3].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[4].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
 
     teardown $dir || return 1
 }
