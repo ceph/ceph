@@ -1495,12 +1495,12 @@ void PGMap::decode(bufferlist::const_iterator &bl)
   calc_stats();
 }
 
-void PGMap::dump(ceph::Formatter *f) const
+void PGMap::dump(ceph::Formatter *f, bool with_net) const
 {
   dump_basic(f);
   dump_pg_stats(f, false);
   dump_pool_stats(f);
-  dump_osd_stats(f);
+  dump_osd_stats(f, with_net);
 }
 
 void PGMap::dump_basic(ceph::Formatter *f) const
