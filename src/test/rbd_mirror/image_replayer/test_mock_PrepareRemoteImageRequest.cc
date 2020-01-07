@@ -196,10 +196,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   C_SaferCond ctx;
   auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_local_io_ctx,
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id", {},
+                                                   "local image id",
                                                    nullptr, &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -247,10 +248,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   C_SaferCond ctx;
   auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_local_io_ctx,
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id", {},
+                                                   "local image id",
                                                    nullptr, &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -280,10 +282,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorUuidError) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   C_SaferCond ctx;
   auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_local_io_ctx,
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "", {}, nullptr,
+                                                   "", nullptr,
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -312,10 +315,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorImageIdError) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   C_SaferCond ctx;
   auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_local_io_ctx,
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "", {}, nullptr,
+                                                   "", nullptr,
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -348,10 +352,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorModeError) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   C_SaferCond ctx;
   auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_local_io_ctx,
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "", {}, nullptr,
+                                                   "", nullptr,
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -389,10 +394,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetClientError) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   C_SaferCond ctx;
   auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_local_io_ctx,
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id", {},
+                                                   "local image id",
                                                    nullptr, &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -438,10 +444,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, RegisterClientError) {
   librbd::journal::MirrorPeerClientMeta client_meta;
   C_SaferCond ctx;
   auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_local_io_ctx,
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id", {},
+                                                   "local image id",
                                                    nullptr, &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,

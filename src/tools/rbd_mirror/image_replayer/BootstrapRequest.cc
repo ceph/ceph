@@ -161,18 +161,13 @@ void BootstrapRequest<I>::prepare_remote_image() {
   dout(10) << dendl;
   update_progress("PREPARE_REMOTE_IMAGE");
 
-  auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
-  ::journal::Settings journal_settings;
-  journal_settings.commit_interval = cct->_conf.get_val<double>(
-    "rbd_mirror_journal_commit_age");
-
   ceph_assert(*m_remote_journaler == nullptr);
 
   Context *ctx = create_context_callback<
     BootstrapRequest, &BootstrapRequest<I>::handle_prepare_remote_image>(this);
   auto req = image_replayer::PrepareRemoteImageRequest<I>::create(
-    m_threads, m_remote_io_ctx, m_global_image_id, m_local_mirror_uuid,
-    *m_local_image_id, journal_settings, m_cache_manager_handler,
+    m_threads, m_local_io_ctx, m_remote_io_ctx, m_global_image_id,
+    m_local_mirror_uuid, *m_local_image_id, m_cache_manager_handler,
     m_remote_mirror_uuid, m_remote_image_id, m_remote_journaler,
     &m_client_state, &m_client_meta, ctx);
   req->send();
