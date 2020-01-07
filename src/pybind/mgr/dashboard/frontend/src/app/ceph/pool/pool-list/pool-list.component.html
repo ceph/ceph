@@ -10,6 +10,8 @@
               [data]="pools"
               [columns]="columns"
               selectionType="single"
+              [hasDetails]="true"
+              (setExpandedRow)="setExpandedRow($event)"
               (updateSelection)="updateSelection($event)">
       <cd-table-actions id="pool-list-actions"
                         class="table-actions"
@@ -19,9 +21,9 @@
       </cd-table-actions>
       <cd-pool-details cdTableDetail
                        id="pool-list-details"
-                       [selection]="selection"
+                       [selection]="expandedRow"
                        [permissions]="permissions"
-                       [cacheTiers]="selectionCacheTiers">
+                       [cacheTiers]="cacheTiers">
       </cd-pool-details>
     </cd-table>
 

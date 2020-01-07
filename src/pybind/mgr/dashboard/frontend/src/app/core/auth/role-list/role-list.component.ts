@@ -6,6 +6,7 @@ import { forkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '../../../shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -29,7 +30,7 @@ const BASE_URL = 'user-management/roles';
   styleUrls: ['./role-list.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RoleListComponent implements OnInit {
+export class RoleListComponent extends ListWithDetails implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   columns: CdTableColumn[];
@@ -50,6 +51,7 @@ export class RoleListComponent implements OnInit {
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',

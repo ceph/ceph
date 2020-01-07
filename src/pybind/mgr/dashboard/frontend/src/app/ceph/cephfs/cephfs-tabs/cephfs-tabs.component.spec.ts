@@ -11,7 +11,6 @@ import { of } from 'rxjs';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsClientsComponent } from '../cephfs-clients/cephfs-clients.component';
 import { CephfsDetailComponent } from '../cephfs-detail/cephfs-detail.component';
@@ -49,24 +48,22 @@ describe('CephfsTabsComponent', () => {
     };
   };
 
-  const setSelection = (selection: object[]) => {
-    component.selection.selected = selection;
+  const setSelection = (selection: any) => {
+    component.selection = selection;
     component.ngOnChanges();
   };
 
   const selectFs = (id: number, name: string) => {
-    setSelection([
-      {
-        id,
-        mdsmap: {
-          info: {
-            something: {
-              name
-            }
+    setSelection({
+      id,
+      mdsmap: {
+        info: {
+          something: {
+            name
           }
         }
       }
-    ]);
+    });
   };
 
   const updateData = () => {
@@ -101,7 +98,7 @@ describe('CephfsTabsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(CephfsTabsComponent);
     component = fixture.componentInstance;
-    component.selection = new CdTableSelection();
+    component.selection = undefined;
     data = {
       standbys: 'b',
       pools: [{}, {}],
@@ -126,14 +123,12 @@ describe('CephfsTabsComponent', () => {
   });
 
   it('should resist invalid mds info', () => {
-    setSelection([
-      {
-        id: 3,
-        mdsmap: {
-          info: {}
-        }
+    setSelection({
+      id: 3,
+      mdsmap: {
+        info: {}
       }
-    ]);
+    });
     expect(component.grafanaId).toBe(undefined);
   });
 
@@ -212,7 +207,7 @@ describe('CephfsTabsComponent', () => {
     });
 
     it('should should unsubscribe on deselect', () => {
-      setSelection([]);
+      setSelection(undefined);
       expect(old.unsubscribed).toBe(true);
       expect(getReload()).toBe(undefined); // Cleared timer subscription
     });

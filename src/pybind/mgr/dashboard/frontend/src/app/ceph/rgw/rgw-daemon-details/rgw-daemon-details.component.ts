@@ -3,7 +3,6 @@ import { Component, Input, OnChanges } from '@angular/core';
 import * as _ from 'lodash';
 
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
@@ -18,7 +17,7 @@ export class RgwDaemonDetailsComponent implements OnChanges {
   grafanaPermission: Permission;
 
   @Input()
-  selection: CdTableSelection;
+  selection: any;
 
   constructor(
     private rgwDaemonService: RgwDaemonService,
@@ -29,8 +28,8 @@ export class RgwDaemonDetailsComponent implements OnChanges {
 
   ngOnChanges() {
     // Get the service id of the first selected row.
-    if (this.selection.hasSelection) {
-      this.serviceId = this.selection.first().id;
+    if (this.selection) {
+      this.serviceId = this.selection.id;
     }
   }
 
