@@ -155,11 +155,16 @@ template <typename I>
 void PrepareRemoteImageRequest<I>::get_client() {
   dout(10) << dendl;
 
+  auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
+  ::journal::Settings journal_settings;
+  journal_settings.commit_interval = cct->_conf.get_val<double>(
+    "rbd_mirror_journal_commit_age");
+
   ceph_assert(*m_remote_journaler == nullptr);
   *m_remote_journaler = new Journaler(m_threads->work_queue, m_threads->timer,
                                       &m_threads->timer_lock, m_remote_io_ctx,
                                       *m_remote_image_id, m_local_mirror_uuid,
-                                      m_journal_settings,
+                                      journal_settings,
                                       m_cache_manager_handler);
 
   Context *ctx = create_async_context_callback(

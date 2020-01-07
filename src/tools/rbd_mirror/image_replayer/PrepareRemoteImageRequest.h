@@ -12,7 +12,6 @@
 #include <string>
 
 namespace journal { class Journaler; }
-namespace journal { class Settings; }
 namespace journal { struct CacheManagerHandler; }
 namespace librbd { struct ImageCtx; }
 namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
@@ -35,11 +34,11 @@ public:
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
 
   static PrepareRemoteImageRequest *create(Threads<ImageCtxT> *threads,
+                                           librados::IoCtx &local_io_ctx,
                                            librados::IoCtx &remote_io_ctx,
                                            const std::string &global_image_id,
                                            const std::string &local_mirror_uuid,
                                            const std::string &local_image_id,
-                                           const ::journal::Settings &settings,
                                            ::journal::CacheManagerHandler *cache_manager_handler,
                                            std::string *remote_mirror_uuid,
                                            std::string *remote_image_id,
@@ -47,21 +46,20 @@ public:
                                            cls::journal::ClientState *client_state,
                                            MirrorPeerClientMeta *client_meta,
                                            Context *on_finish) {
-    return new PrepareRemoteImageRequest(threads, remote_io_ctx,
+    return new PrepareRemoteImageRequest(threads, local_io_ctx, remote_io_ctx,
                                          global_image_id, local_mirror_uuid,
-                                         local_image_id, settings,
-                                         cache_manager_handler,
-                                         remote_mirror_uuid,
-                                         remote_image_id, remote_journaler,
-                                         client_state, client_meta, on_finish);
+                                         local_image_id, cache_manager_handler,
+                                         remote_mirror_uuid, remote_image_id,
+                                         remote_journaler, client_state,
+                                         client_meta, on_finish);
   }
 
   PrepareRemoteImageRequest(Threads<ImageCtxT> *threads,
+                            librados::IoCtx &local_io_ctx,
                             librados::IoCtx &remote_io_ctx,
                             const std::string &global_image_id,
                             const std::string &local_mirror_uuid,
                             const std::string &local_image_id,
-                            const ::journal::Settings &journal_settings,
                             ::journal::CacheManagerHandler *cache_manager_handler,
                             std::string *remote_mirror_uuid,
                             std::string *remote_image_id,
@@ -69,10 +67,11 @@ public:
                             cls::journal::ClientState *client_state,
                             MirrorPeerClientMeta *client_meta,
                             Context *on_finish)
-    : m_threads(threads), m_remote_io_ctx(remote_io_ctx),
+    : m_threads(threads),
+      m_local_io_ctx(local_io_ctx),
+      m_remote_io_ctx(remote_io_ctx),
       m_global_image_id(global_image_id),
       m_local_mirror_uuid(local_mirror_uuid), m_local_image_id(local_image_id),
-      m_journal_settings(journal_settings),
       m_cache_manager_handler(cache_manager_handler),
       m_remote_mirror_uuid(remote_mirror_uuid),
       m_remote_image_id(remote_image_id),
@@ -110,11 +109,11 @@ private:
    */
 
   Threads<ImageCtxT> *m_threads;
+  librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
   std::string m_local_image_id;
-  ::journal::Settings m_journal_settings;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
   std::string *m_remote_mirror_uuid;
   std::string *m_remote_image_id;
