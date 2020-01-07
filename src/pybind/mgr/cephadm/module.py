@@ -301,7 +301,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         path = self.get_ceph_option('cephadm_path')
         try:
-            with open(path, 'r') as f:
+            with open(path, 'rb') as f:
                 self._cephadm = f.read()
         except (IOError, TypeError) as e:
             raise RuntimeError("unable to read cephadm at '%s': %s" % (
@@ -634,20 +634,24 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             if self.mode == 'root':
                 self.log.debug('args: %s' % (' '.join(final_args)))
                 self.log.debug('stdin: %s' % stdin)
-                script = 'injected_argv = ' + json.dumps(final_args) + '\n'
-                if stdin:
-                    script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-                script += self._cephadm
+                #script = b''
+                #if stdin:
+                #    script += b'injected_stdin = ' + json.dumps(stdin).encode('utf-8') + b'\n'
+                script = self._cephadm
                 python = connr.choose_python()
                 if not python:
                     raise RuntimeError(
                         'unable to find python on %s (tried %s in %s)' % (
                             host, remotes.PYTHONS, remotes.PATH))
                 try:
+                    # https://stackoverflow.com/questions/20276105
+                    loader = 'from tempfile import NamedTemporaryFile as T; import sys; t = T(); ' \
+                             't.write(sys.stdin.buffer.read()); t.flush(); sys.path.insert(0, t.name); ' \
+                             'import cephadm; cephadm.main(); t.close()'
                     out, err, code = remoto.process.check(
                         conn,
-                        [python, '-u'],
-                        stdin=script.encode('utf-8'))
+                        [python, '-u', '-c', loader] + final_args,
+                        stdin=script)
                 except RuntimeError as e:
                     if error_ok:
                         return '', str(e), 1

@@ -49,7 +49,7 @@ import tempfile
 import time
 import errno
 try:
-    from typing import Dict, List, Tuple, Optional, Union
+    from typing import Dict, List, Tuple, Optional, Union, Any
 except ImportError:
     pass
 import uuid
@@ -67,6 +67,8 @@ if sys.version_info >= (3, 2):
     from configparser import ConfigParser
 else:
     from ConfigParser import SafeConfigParser
+
+logger = logging.getLogger('cephadm')
 
 container_path = None
 
@@ -2631,8 +2633,9 @@ def _get_parser():
     return parser
 
 
-if __name__ == "__main__":
+def main():
     # allow argv to be injected
+    global args
     try:
         av = injected_argv # type: ignore
     except NameError:
@@ -2644,7 +2647,6 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger('cephadm')
 
     # root?
     if os.geteuid() != 0:
@@ -2678,3 +2680,8 @@ if __name__ == "__main__":
     if not r:
         r = 0
     sys.exit(r)
+
+
+if __name__ == "__main__":
+    args = object()  # type: Any
+    main()

@@ -26,7 +26,7 @@ The ``cephadm`` utility is used to bootstrap a new Ceph Cluster.
 
 Use curl to fetch the standalone script::
 
-  [monitor 1] # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/cephadm/cephadm
+  [monitor 1] # curl --silent --remote-name --location http://whatever.ceph.com/whatever/cephadm
   [monitor 1] # chmod +x cephadm
   
 You can also get the utility by installing a package provided by

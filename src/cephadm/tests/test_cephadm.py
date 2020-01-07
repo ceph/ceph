@@ -1,17 +1,10 @@
 import argparse
 import mock
 import os
-import sys
 import unittest
 
 import pytest
-
-if sys.version_info >= (3, 3):
-    from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm').load_module()
-else:
-    import imp
-    cd = imp.load_source('cephadm', 'cephadm')
+import cephadm as cd
 
 class TestCephAdm(unittest.TestCase):
     def test_is_fsid(self):
