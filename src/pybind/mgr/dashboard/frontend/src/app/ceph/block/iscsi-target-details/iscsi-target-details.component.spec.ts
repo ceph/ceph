@@ -5,7 +5,6 @@ import * as _ from 'lodash';
 
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details.component';
 
@@ -42,37 +41,35 @@ describe('IscsiTargetDetailsComponent', () => {
       backstores: ['backstore:1', 'backstore:2'],
       default_backstore: 'backstore:1'
     };
-    component.selection = new CdTableSelection();
-    component.selection.selected = [
-      {
-        target_iqn: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw',
-        portals: [{ host: 'node1', ip: '192.168.100.201' }],
-        disks: [
-          {
-            pool: 'rbd',
-            image: 'disk_1',
-            backstore: 'backstore:1',
-            controls: { hw_max_sectors: 1 }
+    component.selection = undefined;
+    component.selection = {
+      target_iqn: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw',
+      portals: [{ host: 'node1', ip: '192.168.100.201' }],
+      disks: [
+        {
+          pool: 'rbd',
+          image: 'disk_1',
+          backstore: 'backstore:1',
+          controls: { hw_max_sectors: 1 }
+        }
+      ],
+      clients: [
+        {
+          client_iqn: 'iqn.1994-05.com.redhat:rh7-client',
+          luns: [{ pool: 'rbd', image: 'disk_1' }],
+          auth: {
+            user: 'myiscsiusername'
+          },
+          info: {
+            alias: 'myhost',
+            ip_address: ['192.168.200.1'],
+            state: { LOGGED_IN: ['node1'] }
           }
-        ],
-        clients: [
-          {
-            client_iqn: 'iqn.1994-05.com.redhat:rh7-client',
-            luns: [{ pool: 'rbd', image: 'disk_1' }],
-            auth: {
-              user: 'myiscsiusername'
-            },
-            info: {
-              alias: 'myhost',
-              ip_address: ['192.168.200.1'],
-              state: { LOGGED_IN: ['node1'] }
-            }
-          }
-        ],
-        groups: [],
-        target_controls: { dataout_timeout: 2 }
-      }
-    ];
+        }
+      ],
+      groups: [],
+      target_controls: { dataout_timeout: 2 }
+    };
 
     fixture.detectChanges();
   });

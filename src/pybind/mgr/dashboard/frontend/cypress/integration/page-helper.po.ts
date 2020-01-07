@@ -185,15 +185,15 @@ export abstract class PageHelper {
     }
   }
 
-  /**
-   * This was adapted for octopus, because row expansion doesn't exist in octopus.
-   * By changing the method code, we prevent making more changes in the actual
-   * test files.
-   */
   getExpandCollapseElement(content?: string) {
-    return this.getFirstTableCell(content);
-  }
+    this.waitDataTableToLoad();
 
+    if (content) {
+      return cy.contains('.datatable-body-row', content).find('.tc_expand-collapse');
+    } else {
+      return cy.get('.tc_expand-collapse').first();
+    }
+  }
   /**
    * Gets column headers of table
    */

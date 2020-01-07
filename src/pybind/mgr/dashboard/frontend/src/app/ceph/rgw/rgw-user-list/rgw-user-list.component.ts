@@ -5,6 +5,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -26,7 +27,7 @@ const BASE_URL = 'rgw/user';
   styleUrls: ['./rgw-user-list.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RgwUserListComponent {
+export class RgwUserListComponent extends ListWithDetails {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   permission: Permission;
@@ -46,6 +47,7 @@ export class RgwUserListComponent {
     public actionLabels: ActionLabelsI18n,
     private ngZone: NgZone
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {

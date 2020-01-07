@@ -6,6 +6,8 @@
               columnMode="flex"
               (fetchData)="getHosts($event)"
               selectionType="single"
+              [hasDetails]="true"
+              (setExpandedRow)="setExpandedRow($event)"
               (updateSelection)="updateSelection($event)">
       <div class="table-actions btn-toolbar">
         <cd-table-actions [permission]="permissions.hosts"
@@ -31,7 +33,7 @@
       </ng-template>
       <cd-host-details cdTableDetail
                        [permissions]="permissions"
-                       [selection]="selection">
+                       [selection]="expandedRow">
       </cd-host-details>
     </cd-table>
   </tab>

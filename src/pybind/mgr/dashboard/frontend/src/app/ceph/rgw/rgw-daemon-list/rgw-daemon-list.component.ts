@@ -3,9 +3,9 @@ import { Component } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -15,10 +15,9 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   templateUrl: './rgw-daemon-list.component.html',
   styleUrls: ['./rgw-daemon-list.component.scss']
 })
-export class RgwDaemonListComponent {
+export class RgwDaemonListComponent extends ListWithDetails {
   columns: CdTableColumn[] = [];
   daemons: object[] = [];
-  selection: CdTableSelection = new CdTableSelection();
   grafanaPermission: Permission;
 
   constructor(
@@ -27,6 +26,7 @@ export class RgwDaemonListComponent {
     cephShortVersionPipe: CephShortVersionPipe,
     private i18n: I18n
   ) {
+    super();
     this.grafanaPermission = this.authStorageService.getPermissions().grafana;
     this.columns = [
       {
@@ -57,9 +57,5 @@ export class RgwDaemonListComponent {
         context.error();
       }
     );
-  }
-
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
   }
 }

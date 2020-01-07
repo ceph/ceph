@@ -63,6 +63,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   mapTpl: TemplateRef<any>;
   @ViewChild('truncateTpl', { static: true })
   truncateTpl: TemplateRef<any>;
+  @ViewChild('rowDetailsTpl', { static: true })
+  rowDetailsTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -94,6 +96,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Page size to show. Set to 0 to show unlimited number of rows.
   @Input()
   limit? = 10;
+  // Has the row details?
+  @Input()
+  hasDetails = false;
 
   /**
    * Auto reload time in ms - per default every 5s
@@ -120,6 +125,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // By default selected item details will be updated on table refresh, if data has changed
   @Input()
   updateSelectionOnRefresh: 'always' | 'never' | 'onChange' = 'onChange';
+  // By default expanded item details will be updated on table refresh, if data has changed
+  @Input()
+  updateExpandedOnRefresh: 'always' | 'never' | 'onChange' = 'onChange';
 
   @Input()
   autoSave = true;
@@ -159,6 +167,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Output()
   updateSelection = new EventEmitter();
 
+  @Output()
+  setExpandedRow = new EventEmitter();
+
   /**
    * This should be defined if you need access to the applied column filters.
    *
@@ -173,6 +184,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    * Use this variable to access the selected row(s).
    */
   selection = new CdTableSelection();
+
+  /**
+   * Use this variable to access the expanded row
+   */
+  expanded: any = undefined;
 
   tableColumns: CdTableColumn[];
   icons = Icons;
@@ -239,6 +255,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         this.identifier = this.columns[0].prop + '';
       }
     }
+
     this.initUserConfig();
     this.columns.forEach((c) => {
       if (c.cellTransformation) {
@@ -252,6 +269,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       }
     });
 
+    this.initExpandCollapseColumn(); // If rows have details, add a column to expand or collapse the rows
     this.initCheckboxColumn();
     this.filterHiddenColumns();
     this.initColumnFilters();
@@ -367,6 +385,25 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         canAutoResize: false,
         cellClass: 'cd-datatable-checkbox',
         width: 30
+      });
+    }
+  }
+
+  /**
+   * Add a column to expand and collapse the table row if it 'hasDetails'
+   */
+  initExpandCollapseColumn() {
+    if (this.hasDetails) {
+      this.columns.unshift({
+        prop: undefined,
+        resizeable: false,
+        sortable: false,
+        draggable: false,
+        isHidden: false,
+        canAutoResize: false,
+        cellClass: 'cd-datatable-expand-collapse',
+        width: 40,
+        cellTemplate: this.rowDetailsTpl
       });
     }
   }
@@ -587,6 +624,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.updateFilter();
     this.reset();
     this.updateSelected();
+    this.updateExpanded();
   }
 
   /**
@@ -624,6 +662,22 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     this.selection.selected = newSelected;
     this.onSelect(this.selection);
+  }
+
+  updateExpanded() {
+    if (_.isUndefined(this.expanded) || this.updateExpandedOnRefresh === 'never') {
+      return;
+    }
+
+    const expandedId = this.expanded[this.identifier];
+    const newExpanded = _.find(this.data, (row) => expandedId === row[this.identifier]);
+
+    if (this.updateExpandedOnRefresh === 'onChange' && _.isEqual(this.expanded, newExpanded)) {
+      return;
+    }
+
+    this.expanded = newExpanded;
+    this.setExpandedRow.emit(newExpanded);
   }
 
   onSelect($event: any) {
@@ -750,5 +804,19 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         clickable: !_.isUndefined(this.selectionType)
       };
     };
+  }
+
+  toggleExpandRow(row: any, isExpanded: boolean) {
+    if (!isExpanded) {
+      // If current row isn't expanded, collapse others
+      this.expanded = row;
+      this.table.rowDetail.collapseAllRows();
+      this.setExpandedRow.emit(row);
+    } else {
+      // If all rows are closed, emit undefined
+      this.expanded = undefined;
+      this.setExpandedRow.emit(undefined);
+    }
+    this.table.rowDetail.toggleExpandRow(row);
   }
 }

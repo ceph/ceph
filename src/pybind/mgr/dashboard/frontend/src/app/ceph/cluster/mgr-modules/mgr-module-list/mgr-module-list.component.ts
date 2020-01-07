@@ -5,6 +5,7 @@ import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { timer as observableTimer } from 'rxjs';
 
 import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
+import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
@@ -21,7 +22,7 @@ import { NotificationService } from '../../../../shared/services/notification.se
   templateUrl: './mgr-module-list.component.html',
   styleUrls: ['./mgr-module-list.component.scss']
 })
-export class MgrModuleListComponent {
+export class MgrModuleListComponent extends ListWithDetails {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   @BlockUI()
@@ -39,6 +40,7 @@ export class MgrModuleListComponent {
     private notificationService: NotificationService,
     private i18n: I18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().configOpt;
     this.columns = [
       {

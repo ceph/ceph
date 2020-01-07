@@ -6,6 +6,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Observable, Subscriber } from 'rxjs';
 
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
+import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import {
   ActionLabelsI18n,
@@ -32,7 +33,7 @@ const BASE_URL = 'monitoring/silence';
   templateUrl: './silence-list.component.html',
   styleUrls: ['./silence-list.component.scss']
 })
-export class SilenceListComponent {
+export class SilenceListComponent extends ListWithDetails {
   silences: AlertmanagerSilence[] = [];
   columns: CdTableColumn[];
   tableActions: CdTableAction[];
@@ -57,6 +58,7 @@ export class SilenceListComponent {
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().prometheus;
     const selectionExpired = (selection: CdTableSelection) =>
       selection.first() && selection.first().status && selection.first().status.state === 'expired';
