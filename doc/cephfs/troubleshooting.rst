@@ -187,3 +187,24 @@ Dynamic Debugging
 You can enable dynamic debug against the CephFS module.
 
 Please see: https://github.com/ceph/ceph/blob/master/src/script/kcon_all.sh
+
+Reporting Issues
+================
+
+If you have identified a specific issue, please report it with as much
+information as possible. Especially important information:
+
+* Ceph versions installed on client and server
+* Whether you are using the kernel or fuse client
+* If you are using the kernel client, what kernel version?
+* How many clients are in play, doing what kind of workload?
+* If a system is 'stuck', is that affecting all clients or just one?
+* Any ceph health messages
+* Any backtraces in the ceph logs from crashes
+
+If you are satisfied that you have found a bug, please file it on `the bug
+tracker`. For more general queries, please write to the `ceph-users mailing
+list`.
+
+.. _the bug tracker: http://tracker.ceph.com
+.. _ceph-users mailing list:  http://lists.ceph.com/listinfo.cgi/ceph-users-ceph.com/
