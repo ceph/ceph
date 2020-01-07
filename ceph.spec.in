@@ -277,18 +277,20 @@ BuildRequires:	lz4-devel >= 1.7
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
-%if 0%{?fedora} || 0%{?rhel} == 7
 BuildRequires:	libtool-ltdl-devel
-BuildRequires:	python%{python3_pkgversion}-cherrypy
-BuildRequires:	python%{python3_pkgversion}-jwt
-BuildRequires:	python%{python3_pkgversion}-routes
-BuildRequires:	python%{python3_pkgversion}-werkzeug
 BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-devel
+%ifarch x86_64
 BuildRequires:	xmlsec1-nss
+%endif
 BuildRequires:	xmlsec1-openssl
 BuildRequires:	xmlsec1-openssl-devel
+BuildRequires:	python%{python3_pkgversion}-jwt
+BuildRequires:	python%{python3_pkgversion}-werkzeug
 BuildRequires:  python%{python3_pkgversion}-pyOpenSSL
+%if 0%{?fedora} || 0%{?rhel} == 7
+BuildRequires:	python%{python3_pkgversion}-cherrypy
+BuildRequires:	python%{python3_pkgversion}-routes
 %endif
 %endif
 %if 0%{?suse_version}
