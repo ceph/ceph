@@ -98,7 +98,57 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_image_id(int r) {
     return;
   }
 
-  get_client();
+  get_mirror_image();
+}
+
+template <typename I>
+void PrepareRemoteImageRequest<I>::get_mirror_image() {
+  dout(10) << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::mirror_image_get_start(&op, *m_remote_image_id);
+
+  auto aio_comp = create_rados_callback<
+    PrepareRemoteImageRequest<I>,
+    &PrepareRemoteImageRequest<I>::handle_get_mirror_image>(this);
+  m_out_bl.clear();
+  int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void PrepareRemoteImageRequest<I>::handle_get_mirror_image(int r) {
+  dout(10) << "r=" << r << dendl;
+  cls::rbd::MirrorImage mirror_image;
+  if (r == 0) {
+    auto iter = m_out_bl.cbegin();
+    r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
+  }
+
+  if (r == -ENOENT) {
+    dout(10) << "image " << m_global_image_id << " not mirrored" << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
+    derr << "failed to retrieve mirror image details for image "
+         << m_global_image_id << ": " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  switch (mirror_image.mode) {
+  case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
+    get_client();
+    break;
+  case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
+    // TODO
+  default:
+    derr << "unsupported mirror image mode " << mirror_image.mode << " "
+         << "for image " << m_global_image_id << dendl;
+    finish(-EOPNOTSUPP);
+    break;
+  }
 }
 
 template <typename I>

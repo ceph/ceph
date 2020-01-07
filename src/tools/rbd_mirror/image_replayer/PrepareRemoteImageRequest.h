@@ -95,13 +95,16 @@ private:
    * GET_REMOTE_IMAGE_ID
    *    |
    *    v
-   * GET_CLIENT
+   * GET_REMOTE_MIRROR_IMAGE
    *    |
-   *    v (skip if not needed)
-   * REGISTER_CLIENT
-   *    |
-   *    v
-   * <finish>
+   *    | (journal)
+   *    \-----------> GET_CLIENT
+   *                      |
+   *                      v (skip if not needed)
+   *                  REGISTER_CLIENT
+   *                      |
+   *                      v
+   *                  <finish>
 
    * @endverbatim
    */
@@ -128,6 +131,9 @@ private:
 
   void get_remote_image_id();
   void handle_get_remote_image_id(int r);
+
+  void get_mirror_image();
+  void handle_get_mirror_image(int r);
 
   void get_client();
   void handle_get_client(int r);

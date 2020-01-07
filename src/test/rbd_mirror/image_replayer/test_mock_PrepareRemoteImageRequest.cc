@@ -122,6 +122,23 @@ public:
                       Return(r)));
   }
 
+  void expect_get_mirror_mode(librados::IoCtx &io_ctx,
+                              cls::rbd::MirrorImageMode mode, int r) {
+    cls::rbd::MirrorImage mirror_image;
+    mirror_image.mode = mode;
+
+    bufferlist bl;
+    encode(mirror_image, bl);
+
+    EXPECT_CALL(get_mock_io_ctx(io_ctx),
+                exec(RBD_MIRRORING, _, StrEq("rbd"),
+                     StrEq("mirror_image_get"), _, _, _))
+      .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
+                                          *out_bl = bl;
+                                        })),
+                      Return(r)));
+  }
+
   void expect_journaler_get_client(::journal::MockJournaler &mock_journaler,
                                    const std::string &client_id,
                                    cls::journal::Client &client, int r) {
@@ -156,6 +173,9 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
+
+  expect_get_mirror_mode(m_remote_io_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                         0);
 
   EXPECT_CALL(mock_remote_journaler, construct());
 
@@ -204,6 +224,9 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
+
+  expect_get_mirror_mode(m_remote_io_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                         0);
 
   EXPECT_CALL(mock_remote_journaler, construct());
 
@@ -305,6 +328,41 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorImageIdError) {
   ASSERT_TRUE(remote_journaler == nullptr);
 }
 
+TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorModeError) {
+  journal::MockJournaler mock_remote_journaler;
+  MockThreads mock_threads(m_threads);
+
+  InSequence seq;
+  expect_mirror_uuid_get(m_remote_io_ctx, "remote mirror uuid", 0);
+  MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
+  expect_get_mirror_image_id(mock_get_mirror_image_id_request,
+                             "remote image id", 0);
+
+  expect_get_mirror_mode(m_remote_io_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                         -EINVAL);
+
+  std::string remote_mirror_uuid;
+  std::string remote_image_id;
+  journal::MockJournalerProxy *remote_journaler = nullptr;
+  cls::journal::ClientState client_state;
+  librbd::journal::MirrorPeerClientMeta client_meta;
+  C_SaferCond ctx;
+  auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
+                                                   m_remote_io_ctx,
+                                                   "global image id",
+                                                   "local mirror uuid",
+                                                   "", {}, nullptr,
+                                                   &remote_mirror_uuid,
+                                                   &remote_image_id,
+                                                   &remote_journaler,
+                                                   &client_state, &client_meta,
+                                                   &ctx);
+  req->send();
+
+  ASSERT_EQ(-EINVAL, ctx.wait());
+  ASSERT_TRUE(remote_journaler == nullptr);
+}
+
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetClientError) {
   journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
@@ -314,6 +372,9 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetClientError) {
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
+
+  expect_get_mirror_mode(m_remote_io_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                         0);
 
   EXPECT_CALL(mock_remote_journaler, construct());
 
@@ -354,6 +415,9 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, RegisterClientError) {
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
+
+  expect_get_mirror_mode(m_remote_io_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                         0);
 
   EXPECT_CALL(mock_remote_journaler, construct());
 
