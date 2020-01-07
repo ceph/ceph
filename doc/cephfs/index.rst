@@ -50,9 +50,11 @@ file system if the back-end deployment technology supports it (see
 as needed </cephfs/add-remove-mds>`.
 
 Finally, to mount CephFS on your client nodes, setup a :doc:`FUSE mount
-</cephfs/fuse>` or :doc:`kernel mount </cephfs/kernel>`. Additionally, a
-command-line shell utility is available for interactive access or scripting via
-the :doc:`cephfs-shell </cephfs/cephfs-shell>`.
+</cephfs/mount-using-fuse>` or :doc:`kernel mount
+</cephfs/mount-using-kernel-driver>`.
+
+Additionally, a command-line shell utility is available for interactive
+access or scripting via the :doc:`cephfs-shell </cephfs/cephfs-shell>`.
 
 
 .. raw:: html
@@ -103,8 +105,8 @@ Mounting CephFS
 
     Client Configuration Settings <client-config-ref>
     Client authentication <client-auth>
-    Mount CephFS using Kernel Driver <kernel>
-    Mount CephFS using FUSE <fuse>
+    Mount CephFS using Kernel Driver <mount-using-kernel>
+    Mount CephFS using FUSE <mount-using-fuse>
     Use the CephFS Shell <cephfs-shell>
     Supported Features of Kernel Driver <kernel-features>
     Manual: ceph-fuse <../../man/8/ceph-fuse>
