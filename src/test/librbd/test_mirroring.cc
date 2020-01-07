@@ -20,6 +20,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Namespace.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -1268,11 +1269,37 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer3_uuid));
 
+  ASSERT_EQ(0, librbd::api::Namespace<>::create(m_ioctx, "ns1"));
+  librados::IoCtx ns_ioctx;
+  ns_ioctx.dup(m_ioctx);
+  ns_ioctx.set_namespace("ns1");
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(ns_ioctx, RBD_MIRROR_MODE_IMAGE));
+  ASSERT_EQ(0, m_rbd.create2(ns_ioctx, image_name.c_str(), 4096, features,
+                             &order));
+
+  librbd::Image ns_image;
+  ASSERT_EQ(0, m_rbd.open(ns_ioctx, ns_image, image_name.c_str()));
+  ASSERT_EQ(0, ns_image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  uint64_t ns_snap_id;
+  ASSERT_EQ(0, ns_image.mirror_image_create_snapshot(&ns_snap_id));
+  ASSERT_EQ(0, ns_image.snap_get_mirror_primary_namespace(
+              ns_snap_id, &mirror_snap, sizeof(mirror_snap)));
+  ASSERT_EQ(3U, mirror_snap.mirror_peer_uuids.size());
+  ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
+  ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
+  ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer3_uuid));
+  
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer3_uuid));
 
   ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
                                                        sizeof(mirror_snap)));
   ASSERT_EQ(1U, mirror_snap.mirror_peer_uuids.size());
+  ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
+
+  ASSERT_EQ(0, ns_image.snap_get_mirror_primary_namespace(
+              ns_snap_id, &mirror_snap, sizeof(mirror_snap)));
+  ASSERT_EQ(2U, mirror_snap.mirror_peer_uuids.size());
+  ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
 
   C_SaferCond cond2;
@@ -1287,6 +1314,11 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ictx = nullptr;
   ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+
+  ASSERT_EQ(0, ns_image.close());
+  ASSERT_EQ(0, m_rbd.remove(ns_ioctx, image_name.c_str()));
+  ASSERT_EQ(0, librbd::api::Namespace<>::remove(m_ioctx, "ns1"));
+
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer1_uuid));
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer2_uuid));
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
