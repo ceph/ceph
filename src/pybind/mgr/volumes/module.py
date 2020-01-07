@@ -201,8 +201,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return handler(inbuf, cmd)
 
     def _cmd_fs_volume_create(self, inbuf, cmd):
-        # TODO: validate name against any rules for pool/fs names
-        # (...are there any?)
         vol_id = cmd['name']
         return self.vc.create_volume(vol_id)
 
