@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <signal.h>
+
 #include <boost/range/adaptor/map.hpp>
 
 #include "common/Formatter.h"
@@ -498,10 +500,26 @@ Mirror::~Mirror()
 
 void Mirror::handle_signal(int signum)
 {
-  m_stopping = true;
-  {
-    std::lock_guard l{m_lock};
+  dout(20) << signum << dendl;
+
+  std::lock_guard l{m_lock};
+
+  switch (signum) {
+  case SIGHUP:
+    for (auto &it : m_pool_replayers) {
+      it.second->reopen_logs();
+    }
+    g_ceph_context->reopen_logs();
+    break;
+
+  case SIGINT:
+  case SIGTERM:
+    m_stopping = true;
     m_cond.notify_all();
+    break;
+
+  default:
+    ceph_abort_msgf("unexpected signal %d", signum);
   }
 }
 
