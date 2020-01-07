@@ -1258,13 +1258,11 @@ class CephFSShell(Cmd):
                 max_bytes = to_bytes(str(args.max_bytes))
                 try:
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
-                                    max_bytes, len(max_bytes),
-                                    os.XATTR_CREATE)
+                                    max_bytes, os.XATTR_CREATE)
                     poutput('max_bytes set to %d' % args.max_bytes)
                 except libcephfs.Error:
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
-                                    max_bytes, len(max_bytes),
-                                    os.XATTR_REPLACE)
+                                    max_bytes, os.XATTR_REPLACE)
                     perror('max_bytes reset to %d' % args.max_bytes)
                     self.exit_code = 1
 
@@ -1272,31 +1270,27 @@ class CephFSShell(Cmd):
                 max_files = to_bytes(str(args.max_files))
                 try:
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
-                                    max_files, len(max_files),
-                                    os.XATTR_CREATE)
+                                    max_files, os.XATTR_CREATE)
                     poutput('max_files set to %d' % args.max_files)
                 except libcephfs.Error:
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
-                                    max_files, len(max_files),
-                                    os.XATTR_REPLACE)
+                                    max_files, os.XATTR_REPLACE)
                     perror('max_files reset to %d' % args.max_files)
                     self.exit_code = 1
         elif args.op == 'get':
             max_bytes = '0'
             max_files = '0'
             try:
-                max_bytes = cephfs.getxattr(args.path,
-                                            'ceph.quota.max_bytes')
-                poutput('max_bytes: %s' % max_bytes)
+                max_bytes = cephfs.getxattr(args.path, 'ceph.quota.max_bytes')
+                poutput('max_bytes: {}'.format(max_bytes.decode('utf-8')))
             except libcephfs.Error:
                 perror('max_bytes is not set')
                 self.exit_code = 1
                 pass
 
             try:
-                max_files = cephfs.getxattr(args.path,
-                                            'ceph.quota.max_files')
-                poutput('max_files: %s' % max_files)
+                max_files = cephfs.getxattr(args.path, 'ceph.quota.max_files')
+                poutput('max_files: {}'.format(max_files.decode('utf-8')))
             except libcephfs.Error:
                 perror('max_files is not set')
                 self.exit_code = 1
