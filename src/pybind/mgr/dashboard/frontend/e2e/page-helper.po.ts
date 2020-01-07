@@ -99,6 +99,15 @@ export abstract class PageHelper {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
+  getFirstExpandCollapseElement(): ElementFinder {
+    return element.all(by.className('tc_expand-collapse')).first();
+  }
+
+  getExpandCollapseElement(content: string): ElementFinder {
+    const tableRow = element(by.cssContainingText('.datatable-body-row', content));
+    return tableRow.element(by.className('tc_expand-collapse'));
+  }
+
   getTableRow(content: string) {
     return element(by.cssContainingText('.datatable-body-row', content));
   }

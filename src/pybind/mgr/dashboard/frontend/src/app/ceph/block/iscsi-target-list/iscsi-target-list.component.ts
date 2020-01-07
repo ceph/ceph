@@ -6,6 +6,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -31,7 +32,7 @@ import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-mo
   styleUrls: ['./iscsi-target-list.component.scss'],
   providers: [TaskListService]
 })
-export class IscsiTargetListComponent implements OnInit, OnDestroy {
+export class IscsiTargetListComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
@@ -69,6 +70,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().iscsi;
 
     this.tableActions = [

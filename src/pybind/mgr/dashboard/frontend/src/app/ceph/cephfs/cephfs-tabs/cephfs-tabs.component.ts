@@ -5,7 +5,6 @@ import { Subscription, timer } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
@@ -16,8 +15,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 })
 export class CephfsTabsComponent implements OnChanges, OnDestroy {
   @Input()
-  selection: CdTableSelection;
-  selectedItem: any;
+  selection: any;
 
   // Grafana tab
   grafanaId: any;
@@ -54,13 +52,12 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
   }
 
   ngOnChanges() {
-    this.selectedItem = this.selection.first();
-    if (!this.selectedItem) {
+    if (!this.selection) {
       this.unsubscribeInterval();
       return;
     }
-    if (this.selectedItem.id !== this.id) {
-      this.setupSelected(this.selectedItem.id, this.selectedItem.mdsmap.info);
+    if (this.selection.id !== this.id) {
+      this.setupSelected(this.selection.id, this.selection.mdsmap.info);
     }
   }
 

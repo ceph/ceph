@@ -3,6 +3,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -18,7 +19,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   templateUrl: './configuration.component.html',
   styleUrls: ['./configuration.component.scss']
 })
-export class ConfigurationComponent implements OnInit {
+export class ConfigurationComponent extends ListWithDetails implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   data: any[] = [];
@@ -91,6 +92,7 @@ export class ConfigurationComponent implements OnInit {
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().configOpt;
     const getConfigOptUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;

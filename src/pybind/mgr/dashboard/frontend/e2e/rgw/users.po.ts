@@ -60,7 +60,7 @@ export class UsersPageHelper extends PageHelper {
     const editbutton = element(by.cssContainingText('button', 'Edit User'));
     await editbutton.click();
     // Click the user and check its details table for updated content
-    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
+    await this.waitClickableAndClick(this.getExpandCollapseElement(name));
     await expect($('.active.tab-pane').getText()).toMatch(new_fullname); // check full name was changed
     await expect($('.active.tab-pane').getText()).toMatch(new_email); // check email was changed
     await expect($('.active.tab-pane').getText()).toMatch(new_maxbuckets); // check max buckets was changed

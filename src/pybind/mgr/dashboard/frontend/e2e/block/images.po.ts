@@ -48,7 +48,7 @@ export class ImagesPageHelper extends PageHelper {
 
     await element(by.cssContainingText('button', 'Edit RBD')).click();
     await this.navigateTo();
-    await this.waitClickableAndClick(this.getFirstTableCellWithText(newName));
+    await this.waitClickableAndClick(this.getExpandCollapseElement(newName));
     await expect(
       element.all(by.css('.table.table-striped.table-bordered')).first().getText()
     ).toMatch(newSize);
