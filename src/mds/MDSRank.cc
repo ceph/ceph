@@ -1968,8 +1968,6 @@ void MDSRank::active_start()
 
   mdcache->clean_open_file_lists();
   mdcache->export_remaining_imported_caps();
-  finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
-  mdcache->start_files_to_recover();
 
   mdcache->reissue_all_caps();
 
