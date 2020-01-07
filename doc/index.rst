@@ -2,6 +2,225 @@
  Welcome to Ceph
 =================
 
+Ceph is a storage platform. 
+
+Ceph makes possible object storage, block storage, and file storage. It can be used to build cloud infrastructure and web-scale object storage. 
+
+The procedure on this page explains how to set up a three-node Ceph cluster, the most basic of setups.  
+
+Basic Three-Node Installation Procedure
+=======================================
+.. highlight:: console 
+
+
+Installing the First Node
+-------------------------
+
+#. Install a recent, supported Linux distribution on a computer.
+#. Install docker. On Fedora or Centos::
+
+   $ sudo dnf install docker 
+
+  on Ubuntu or Debian::
+
+   $ sudo apt install docker.io
+
+#. Fetch the cephadm utility from github to the computer that will be the Ceph manager::
+
+   $ curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/cephadm/cephadm
+
+#. Make the cephadm utility executable::
+
+   $ sudo chmod +x cephadm
+
+#. Find the ip address of the node that will become the first Ceph monitor::
+
+   $ ip addr
+
+#. Using the ip address that you discovered in the step immediately prior to this step, run the following command::
+
+   $ sudo ./cephadm bootstrap --mon-ip 192.168.1.101 --output-config ceph.conf --output-keyring ceph.keyring --output-pub-ssh-key ceph.pub 
+   
+  The output of a successful execution of this command is shown here::
+
+   INFO:root:Cluster fsid: 335b6dac-064c-11ea-8243-48f17fe53909
+   INFO:ceph-daemon:Verifying we can ping mon IP 192.168.1.101...
+   INFO:ceph-daemon:Pulling latest ceph/daemon-base:latest-master-devel container...
+   INFO:ceph-daemon:Extracting ceph user uid/gid from container image...
+   INFO:ceph-daemon:Creating initial keys...
+   INFO:ceph-daemon:Creating initial monmap...
+   INFO:ceph-daemon:Creating mon...
+   INFO:ceph-daemon:Waiting for mon to start...
+   INFO:ceph-daemon:Assimilating anything we can from ceph.conf...
+   INFO:ceph-daemon:Generating new minimal ceph.conf...
+   INFO:ceph-daemon:Restarting the monitor...
+   INFO:ceph-daemon:Creating mgr...
+   INFO:ceph-daemon:Creating crash agent...
+   Created symlink /etc/systemd/system/ceph-335b6dac-064c-11ea-8243-48f17fe53909.target.wants/
+   ceph-335b6dac-064c-11ea-8243-48f17fe53909-crash.service → /etc/systemd/system/ceph-335b6dac-
+   064c-11ea-8243-48f17fe53909-crash.service.
+   INFO:ceph-daemon:Wrote keyring to ceph.keyring
+   INFO:ceph-daemon:Wrote config to ceph.conf
+   INFO:ceph-daemon:Waiting for mgr to start...
+   INFO:ceph-daemon:mgr is still not available yet, waiting...
+   INFO:ceph-daemon:mgr is still not available yet, waiting...
+   INFO:ceph-daemon:Generating ssh key...
+   INFO:ceph-daemon:Wrote public SSH key to to ceph.pub
+   INFO:ceph-daemon:Adding key to root@localhost's authorized_keys...
+   INFO:ceph-daemon:Enabling ssh module...
+   INFO:ceph-daemon:Setting orchestrator backend to ssh...
+   INFO:ceph-daemon:Adding host 192-168-1-101.tpgi.com.au...
+   INFO:ceph-daemon:Enabling the dashboard module...
+   INFO:ceph-daemon:Waiting for the module to be available...
+   INFO:ceph-daemon:Generating a dashboard self-signed certificate...
+   INFO:ceph-daemon:Creating initial admin user...
+   INFO:ceph-daemon:Fetching dashboard port number...
+   INFO:ceph-daemon:Ceph Dashboard is now available at:
+   URL: https://192-168-1-101.tpgi.com.au:8443/
+   User: admin
+   Password: oflamlrtna
+   INFO:ceph-daemon:You can access the Ceph CLI with:
+   sudo ./ceph-daemon shell -c ceph.conf -k ceph.keyring
+   INFO:ceph-daemon:Bootstrap complete.
+
+
+Second Node
+-----------
+
+#. Install a recent, supported Linux distribution on a second computer.
+#. Install docker. On Fedora or Centos::
+
+   $ sudo dnf install docker 
+
+  on Ubuntu or Debian::
+
+   $ sudo apt install docker.io
+
+#. Turn on ssh on node 2:::
+
+    $ sudo systemctl start sshd
+    $ sudo systemctl enable sshd
+#. Create a file on node 2 that will hold the ceph public key::
+
+    $ sudo mkdir -p /root/.ssh
+    $ sudo touch /root/.ssh/authorized_keys
+#. Copy the public key from node 1 to node 2::
+    
+    [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring
+    [ceph: root@node 1] $ ceph orchestrator host add 192.168.1.102 
+
+Third Node
+----------
+#. Install a recent, supported Linux distribution on a third computer.
+
+#. Install docker. On Fedora or Centos::
+
+   $ sudo dnf install docker 
+
+  on Ubuntu or Debian::
+
+   $ sudo apt install docker.io
+
+#. Turn on ssh on node 3::
+
+    $ sudo systemctl start sshd
+    $ sudo systemctl enable sshd
+#. Create a file on node 3 that will hold the ceph public key::
+
+    $ sudo mkdir -p /root/.ssh
+    $ sudo touch /root/.ssh/authorized_keys
+
+#. Copy the public key from node 1 to node 3::
+
+    [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring
+    [ceph: root@node 1] $ ceph orchestrator host add 192.168.1.103
+
+#. On node 1, issue the command that adds node 3 to the cluster::
+
+    [node 1] $ sudo ceph orchestrator host add 192.168.1.103
+
+
+Creating Two More Monitors
+--------------------------
+
+#. Set up a Ceph monitor on node 2 by issuing the following command on node 1.  ::
+
+   [node 1] $ sudo ceph orchestrator mon update 2 192.168.1.102:192.168.1.0/24
+   [sudo] password for user:
+   ["(Re)deployed mon 192.168.1.102 on host '192.168.1.102'"]
+   [user@192-168-1-101 ~] $ \ 
+#. Set up a Ceph monitor on node 3 by issuing the following command on node 1::
+
+   [node 1] $ sudo ceph orchestrator mon update 3 192.168.1.103:192.168.1.0/24
+   [sudo] password for user:
+   ["(Re)deployed mon 192.168.1.103 on host '192.168.1.103'"]
+   [user@192-168-1-101 ~]$
+
+
+Creating OSDs
+-------------
+
+Creating an OSD on the First Node
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#. Use a command of the following form to create an OSD on node 1::
+
+   [node 1@192-168-1-101]$ sudo ceph orchestrator osd create 192-168-1-101:/dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928343
+   ["Created osd(s) on host '192-168-1-101'"]
+   [node 1@192-168-1-101]$
+
+
+Creating an OSD on the Second Node
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#. Use a command of the following form ON NODE 1 to create an OSD on node 2::
+
+   [node 1@192-168-1-101]$ sudo ceph orchestrator osd create 192-168-1-102:/dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928383
+   ["Created osd(s) on host '192-168-1-102'"]
+   [node 1@192-168-1-101]$
+
+
+Creating an OSD on the Third Node
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#. Use a command of the following form ON NODE 1 to create an OSD on node 3::
+
+   [node 1@192-168-1-101]$ sudo ceph orchestrator osd create 192-168-1-103:/dev//dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928384
+   ["Created osd(s) on host '192-168-1-103'"]
+   [node 1@192-168-1-101]$
+
+
+Confirming Successful Installation
+----------------------------------
+
+#. Run the following command on node 1 in order to enter the Ceph shell::
+
+   [node 1]$ sudo cephadm shell --config ceph.conf --keyring ceph.keyring
+#. From within the Ceph shell, run "ceph status". Confirm that the following exist:
+
+  1) a cluster
+  2) three monitors
+  3) 3 osds 
+
+  ::
+
+   [ceph: root@192-168-1-101 /]# ceph status
+   cluster:
+   id: 335b6dac-064c-11ea-8243-48f17fe53909
+   health: HEALTH_OK
+   services:
+   mon: 3 daemons, quorum 192-168-1-101,192.168.1.102,192.168.1.103 (age 29h)
+   mgr: 192-168-1-101(active, since 2d)
+   osd: 3 osds: 3 up (since 67s), 3 in (since 67s)
+   data:
+   pools: 0 pools, 0 pgs
+   objects: 0 objects, 0 B
+   usage: 3.0 GiB used, 82 GiB / 85 GiB avail
+   pgs:
+   [ceph: root@192-168-1-101 /]#
+
+
+
 Ceph uniquely delivers **object, block, and file storage in one unified
 system**.
 
