@@ -691,9 +691,6 @@ public:
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
-  /// final pg_num values for recently deleted pools
-  map<int64_t,int> deleted_pool_pg_nums;
-
   OSDMapRef try_get_map(epoch_t e);
   OSDMapRef get_map(epoch_t e) {
     OSDMapRef ret(try_get_map(e));
@@ -723,14 +720,6 @@ public:
   }
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
-
-  /// get last pg_num before a pool was deleted (if any)
-  int get_deleted_pool_pg_num(int64_t pool);
-
-  void store_deleted_pool_pg_num(int64_t pool, int pg_num) {
-    std::lock_guard l(map_cache_lock);
-    deleted_pool_pg_nums[pool] = pg_num;
-  }
 
   /// identify split child pgids over a osdmap interval
   void identify_splits_and_merges(
