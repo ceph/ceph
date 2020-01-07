@@ -2,57 +2,33 @@
  Mount CephFS using FUSE
 ========================
 
-Prerequisite
-------------
-Before mounting CephFS, ensure that the client host (where CephFS has to be
-mounted and used) has a copy of the Ceph configuration file (i.e.
-``ceph.conf``) and a keyring of the CephX user that has CAPS for the Ceph MDS.
-Both of these files must be present on the host where the Ceph MON resides.
+`ceph-fuse`_ is an alternate way of mounting CephFS, although it mounts it
+in userspace. Therefore, performance of FUSE can be relatively lower but FUSE
+clients can be more manageable, especially while upgrading CephFS.
 
-#. Generate a minimal conf for the client host. The conf file should be
-   placed at ``/etc/ceph``::
+Prerequisites
+=============
 
-    # on client host
-    mkdir /etc/ceph
-    ssh {user}@{mon-host} "sudo ceph config generate-minimal-conf" | sudo tee /etc/ceph/ceph.conf
+Complete General Prerequisites
+------------------------------
+Go through the prerequisites required by both, kernel as well as FUSE mounts,
+in `Mount CephFS: Prerequisites`_ page.
 
-   Alternatively, you may copy the conf file. But the method which generates
-   the minimal config is usually sufficient. For more information, see
-   :ref:`bootstrap-options`.
+``fuse.conf`` option
+--------------------
 
-#. Ensure that the conf has appropriate permissions::
-
-    chmod 644 /etc/ceph/ceph.conf
-
-#. Create the CephX user and get its secret key::
-
-    ssh {user}@{mon-host} "sudo ceph fs authorize cephfs client.foo / rw" | sudo tee /etc/ceph/ceph.client.foo.keyring
-
-   In above command, replace ``cephfs`` with the name of your CephFS, ``foo``
-   by the name you want for your CephX user and ``/`` by the path within your
-   CephFS for which you want to allow access to the client host and ``rw``
-   stands for both read and write permissions. Alternatively, you may copy the
-   Ceph keyring from the MON host to client host at ``/etc/ceph`` but creating
-   a keyring specific to the client host is better. While creating a CephX
-   keyring/client, using same client name across multiple machines is perfectly
-   fine.
-
-.. note:: If you get 2 prompts for password while running above any of 2 above
-   command, run ``sudo ls`` (or any other trivial command with sudo)
-   immediately before these commands.
-
-#. Ensure that the keyring has appropriate permissions::
-
-    chmod 600 /etc/ceph/ceph.client.foo.keyring
+#. If you are mounting Ceph with FUSE not as superuser/root user/system admin
+   you would need to add the option ``user_allow_other`` to ``/etc/fuse.conf``
+   (under no section in the conf).
 
 Synopsis
---------
+========
 In general, the command to mount CephFS via FUSE looks like this::
 
     ceph-fuse {mountpoint} {options}
 
 Mounting CephFS
----------------
+===============
 To FUSE-mount the Ceph file system, use the ``ceph-fuse`` command::
 
     mkdir /mnt/mycephfs
@@ -86,7 +62,7 @@ If you have more than one FS on your Ceph cluster, use the option
 You may also add a ``client_mds_namespace`` setting to your ``ceph.conf``
 
 Unmounting CephFS
------------------
+=================
 
 Use ``umount`` to unmount CephFS like any other FS::
 
@@ -96,7 +72,7 @@ Use ``umount`` to unmount CephFS like any other FS::
    executing this command.
 
 Persistent Mounts
------------------
+=================
 
 To mount CephFS as a file system in user space, add the following to ``/etc/fstab``::
 
@@ -129,3 +105,4 @@ manual for more options it can take. For troubleshooting, see
 :ref:`ceph_fuse_debugging`.
 
 .. _ceph-fuse: ../../man/8/ceph-fuse/#options
+.. _Mount CephFS\: Prerequisites: ../mount-prerequisites

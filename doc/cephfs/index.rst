@@ -44,17 +44,20 @@ For most deployments of Ceph, setting up a CephFS file system is as simple as:
 
     ceph fs volume create <fs name>
 
-The Ceph `Orchestrator`_  will automatically create and configure MDS for your
-file system if the back-end deployment technology supports it (see
-`Orchestrator deployment table`_). Otherwise, please :doc:`deploy MDS manually
-as needed </cephfs/add-remove-mds>`.
+The Ceph `Orchestrator`_  will automatically create and configure MDS for
+your file system if the back-end deployment technology supports it (see
+`Orchestrator deployment table`_). Otherwise, please `deploy MDS manually
+as needed`_.
 
-Finally, to mount CephFS on your client nodes, setup a :doc:`FUSE mount
-</cephfs/mount-using-fuse>` or :doc:`kernel mount
-</cephfs/mount-using-kernel-driver>`.
+Finally, to mount CephFS on your client nodes, see `Mount CephFS:
+Prerequisites`_ page. Additionally, a command-line shell utility is available
+for interactive access or scripting via the `cephfs-shell`_.
 
-Additionally, a command-line shell utility is available for interactive
-access or scripting via the :doc:`cephfs-shell </cephfs/cephfs-shell>`.
+.. _Orchestrator: ../mgr/orchestrator_cli
+.. _deploy MDS manually as needed: add-remove-mds
+.. _Orchestrator deployment table: ../mgr/orchestrator_cli/#current-implementation-status
+.. _Mount CephFS\: Prerequisites: mount-prerequisites
+.. _cephfs-shell: cephfs-shell
 
 
 .. raw:: html
@@ -72,7 +75,6 @@ Administration
    :maxdepth: 1
    :hidden:
 
-    Deployment best practices <best-practices>
     Create a CephFS file system <createfs>
     Administrative commands <administration>
 	Provision/Add/Remove MDS(s) <add-remove-mds>
@@ -105,7 +107,8 @@ Mounting CephFS
 
     Client Configuration Settings <client-config-ref>
     Client authentication <client-auth>
-    Mount CephFS using Kernel Driver <mount-using-kernel>
+    Mount CephFS: Prerequisites <mount-prerequisites>
+    Mount CephFS using Kernel Driver <mount-using-kernel-driver>
     Mount CephFS using FUSE <mount-using-fuse>
     Use the CephFS Shell <cephfs-shell>
     Supported Features of Kernel Driver <kernel-features>
@@ -202,7 +205,3 @@ Additional Details
 
     Experimental Features <experimental-features>
     Using Ceph with Hadoop <hadoop>
-
-
-.. _Orchestrator: ../mgr/orchestrator_cli
-.. _Orchestrator deployment table: ..//mgr/orchestrator_cli/#current-implementation-status
