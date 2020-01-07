@@ -815,6 +815,7 @@ class TestSplitNameParser(object):
 class TestIsLV(object):
 
     def test_is_not_an_lv(self, monkeypatch):
+        monkeypatch.setattr(api.process, 'call', lambda x, **kw: ('', '', 0))
         monkeypatch.setattr(api, 'dmsetup_splitname', lambda x, **kw: {})
         assert api.is_lv('/dev/sda1', lvs=[]) is False
 
