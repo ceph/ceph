@@ -666,6 +666,8 @@ class OSDThrasher(Thrasher):
         Increase the size of the pool
         """
         pool = self.ceph_manager.get_pool()
+        if pool is None:
+            return
         self.log("Growing pool %s" % (pool,))
         if self.ceph_manager.expand_pool(pool,
                                          self.config.get('pool_grow_by', 10),
@@ -677,6 +679,8 @@ class OSDThrasher(Thrasher):
         Decrease the size of the pool
         """
         pool = self.ceph_manager.get_pool()
+        if pool is None:
+            return
         _ = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Shrinking pool %s" % (pool,))
         if self.ceph_manager.contract_pool(
@@ -1877,7 +1881,8 @@ class CephManager:
         Pick a random pool
         """
         with self.lock:
-            return random.choice(self.pools.keys())
+            if self.pools:
+                return random.choice(self.pools.keys())
 
     def get_pool_pg_num(self, pool_name):
         """
