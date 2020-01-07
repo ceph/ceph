@@ -3417,7 +3417,7 @@ int process_pg_map_command(
 
   string omap_stats_note =
       "\n* NOTE: Omap statistics are gathered during deep scrub and "
-      "may be inaccurate soon afterwards depending on utilisation. See "
+      "may be inaccurate soon afterwards depending on utilization. See "
       "http://docs.ceph.com/docs/master/dev/placement-group/#omap-statistics "
       "for further details.\n";
   bool omap_stats_note_required = false;
