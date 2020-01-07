@@ -8091,10 +8091,11 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
   map<string, bufferlist> updates;
   uint32_t count = 0;
+  int pos = -1;
   while (count < num_entries && !candidates.empty()) {
     r = 0;
     // select the next one
-    int pos = candidates.begin()->second;
+    pos = candidates.begin()->second;
     const string& name = vcurrents[pos]->first;
     struct rgw_bucket_dir_entry& dirent = vcurrents[pos]->second;
 
@@ -8164,9 +8165,8 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
       count << ", which is truncated" << dendl;
   }
 
-  if (!m.empty()) {
-    *last_entry = m.rbegin()->first;
-  }
+  if (pos >= 0)
+    *last_entry = std::move((--vcurrents[pos])->first);
 
   return 0;
 }
