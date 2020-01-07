@@ -622,15 +622,10 @@ Usage:
         "name=label,type=CephString,req=false",
         'Update the number of monitor instances')
     def _update_mons(self, num=None, hosts=[], label=None):
-
-        if hosts or label:
-            placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
-        else:
+        if not num and not hosts and not label:
             # Improve Error message. Point to parse_host_spec examples
-            raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
-            # TODO: Scaling without a HostSpec doesn't work right now.
-            # we need network autodetection for that.
-            # placement = orchestrator.PlacementSpec(count=num)
+            raise orchestrator.OrchestratorValidationError("Mons need a placement spec. (num, host, network, name(opt))")
+        placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
         spec = orchestrator.StatefulServiceSpec(placement=placement)
