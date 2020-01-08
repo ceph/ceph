@@ -291,14 +291,6 @@ void PrepareReplayRequest<I>::handle_get_remote_tags(int r) {
 }
 
 template <typename I>
-void PrepareReplayRequest<I>::finish(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  m_on_finish->complete(r);
-  delete this;
-}
-
-template <typename I>
 void PrepareReplayRequest<I>::update_progress(const std::string &description) {
   dout(10) << description << dendl;
 

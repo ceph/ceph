@@ -170,14 +170,6 @@ void CreateLocalImageRequest<I>::handle_update_client_image(int r) {
 }
 
 template <typename I>
-void CreateLocalImageRequest<I>::finish(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  m_on_finish->complete(r);
-  delete this;
-}
-
-template <typename I>
 void CreateLocalImageRequest<I>::update_progress(
     const std::string& description) {
   dout(15) << description << dendl;

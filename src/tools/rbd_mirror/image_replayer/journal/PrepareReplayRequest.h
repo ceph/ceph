@@ -9,6 +9,7 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/Types.h"
+#include "tools/rbd_mirror/BaseRequest.h"
 #include <list>
 #include <string>
 
@@ -24,7 +25,7 @@ namespace image_replayer {
 namespace journal {
 
 template <typename ImageCtxT>
-class PrepareReplayRequest {
+class PrepareReplayRequest : public BaseRequest {
 public:
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::Journaler Journaler;
@@ -50,15 +51,16 @@ public:
       const std::string& remote_mirror_uuid,
       MirrorPeerClientMeta* client_meta, ProgressContext* progress_ctx,
       bool* resync_requested, bool* syncing, Context* on_finish)
-    : m_local_image_ctx(local_image_ctx), m_remote_journaler(remote_journaler),
+    : BaseRequest(on_finish),
+      m_local_image_ctx(local_image_ctx), m_remote_journaler(remote_journaler),
       m_remote_promotion_state(remote_promotion_state),
       m_local_mirror_uuid(local_mirror_uuid),
       m_remote_mirror_uuid(remote_mirror_uuid), m_client_meta(client_meta),
       m_progress_ctx(progress_ctx), m_resync_requested(resync_requested),
-      m_syncing(syncing), m_on_finish(on_finish) {
+      m_syncing(syncing) {
   }
 
-  void send();
+  void send() override;
 
 private:
   /**
@@ -91,7 +93,6 @@ private:
   ProgressContext* m_progress_ctx;
   bool* m_resync_requested;
   bool* m_syncing;
-  Context* m_on_finish;
 
   uint64_t m_local_tag_tid = 0;
   librbd::journal::TagData m_local_tag_data;
@@ -109,7 +110,6 @@ private:
   void get_remote_tags();
   void handle_get_remote_tags(int r);
 
-  void finish(int r);
   void update_progress(const std::string& description);
 
 };
