@@ -9,6 +9,9 @@
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
+#include "tools/rbd_mirror/image_replayer/journal/CreateLocalImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/PrepareReplayRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/journal/SyncPointHandler.h"
 
 #define dout_context g_ceph_context
@@ -73,6 +76,55 @@ image_sync::SyncPointHandler* StateBuilder<I>::create_sync_point_handler() {
 
   this->m_sync_point_handler = SyncPointHandler<I>::create(this);
   return this->m_sync_point_handler;
+}
+
+template <typename I>
+BaseRequest* StateBuilder<I>::create_local_image_request(
+    Threads<I>* threads,
+    librados::IoCtx& local_io_ctx,
+    I* remote_image_ctx,
+    const std::string& global_image_id,
+    ProgressContext* progress_ctx,
+    Context* on_finish) {
+  return CreateLocalImageRequest<I>::create(
+    threads, local_io_ctx, remote_image_ctx, remote_journaler,
+    this->global_image_id, this->remote_mirror_uuid, &remote_client_meta,
+    progress_ctx, &this->local_image_id, on_finish);
+}
+
+template <typename I>
+BaseRequest* StateBuilder<I>::create_prepare_replay_request(
+    const std::string& local_mirror_uuid,
+    librbd::mirror::PromotionState remote_promotion_state,
+    ProgressContext* progress_ctx,
+    bool* resync_requested,
+    bool* syncing,
+    Context* on_finish) {
+  return PrepareReplayRequest<I>::create(
+    this->local_image_ctx,
+    remote_journaler,
+    remote_promotion_state,
+    local_mirror_uuid,
+    this->remote_mirror_uuid,
+    &remote_client_meta,
+    progress_ctx,
+    resync_requested,
+    syncing,
+    on_finish);
+}
+
+template <typename I>
+image_replayer::Replayer* StateBuilder<I>::create_replayer(
+   Threads<I>* threads,
+    const std::string& local_mirror_uuid,
+    ReplayerListener* replayer_listener) {
+  return Replayer<I>::create(
+    &this->local_image_ctx,
+    remote_journaler,
+    local_mirror_uuid,
+    this->remote_mirror_uuid,
+    replayer_listener,
+    threads);
 }
 
 template <typename I>
