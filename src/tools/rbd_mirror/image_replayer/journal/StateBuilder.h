@@ -19,6 +19,8 @@ namespace mirror {
 namespace image_replayer {
 namespace journal {
 
+template <typename> class SyncPointHandler;
+
 template <typename ImageCtxT>
 class StateBuilder : public image_replayer::StateBuilder<ImageCtxT> {
 public:
@@ -41,12 +43,16 @@ public:
 
   cls::rbd::MirrorImageMode get_mirror_image_mode() const override;
 
+  image_sync::SyncPointHandler* create_sync_point_handler() override;
+
   std::string local_tag_owner;
 
   Journaler* remote_journaler = nullptr;
   cls::journal::ClientState remote_client_state =
     cls::journal::CLIENT_STATE_CONNECTED;
   librbd::journal::MirrorPeerClientMeta remote_client_meta;
+
+  SyncPointHandler<ImageCtxT>* sync_point_handler = nullptr;
 
 private:
 
