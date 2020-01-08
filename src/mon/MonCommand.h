@@ -35,7 +35,7 @@ struct MonCommand {
   // in --help output.
   static const uint64_t FLAG_TELL       = (FLAG_NOFORWARD | FLAG_HIDDEN);
 
-  bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
+  bool has_flag(uint64_t flag) const { return (flags & flag) == flag; }
   void set_flag(uint64_t flag) { flags |= flag; }
   void unset_flag(uint64_t flag) { flags &= ~flag; }
 
