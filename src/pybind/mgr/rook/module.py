@@ -370,7 +370,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def create_osds(self, drive_group):
-        # type: (DriveGroupSpec) -> RookCompletion
+        # type: (List[DriveGroupSpec]) -> RookCompletion
 
         targets = []  # type: List[str]
         if drive_group.data_devices:
