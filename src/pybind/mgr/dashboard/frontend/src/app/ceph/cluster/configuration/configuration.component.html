@@ -1,6 +1,7 @@
-<cd-table [data]="data | filter:filters"
+<cd-table [data]="data"
           (fetchData)="getConfigurationList($event)"
           [columns]="columns"
+          [extraFilterableColumns]="filters"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"
@@ -8,29 +9,6 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <div class="table-filters form-inline">
-    <div class="form-group filter"
-         *ngFor="let filter of filters">
-      <label class="col-form-label">{{ filter.label }}: </label>
-      <select class="form-control custom-select"
-              [(ngModel)]="filter.value"
-              (ngModelChange)="updateFilter()">
-        <option *ngFor="let opt of filter.options">{{ opt }}</option>
-      </select>
-    </div>
-
-    <div class="widget-toolbar tc_refreshBtn">
-      <button type="button"
-              title="Reset filters"
-              class="btn btn-light"
-              (click)="resetFilter()">
-        <span [ngClass]="[icons.stack]">
-          <i [ngClass]="[icons.filter, icons.stack2x]"></i>
-          <i [ngClass]="[icons.destroy, icons.stack1x]"></i>
-        </span>
-      </button>
-    </div>
-  </div>
   <cd-configuration-details cdTableDetail
                             [selection]="selection">
   </cd-configuration-details>
