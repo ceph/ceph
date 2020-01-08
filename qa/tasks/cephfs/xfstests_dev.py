@@ -119,6 +119,8 @@ class XFSTestsDev(CephFSTestCase):
             libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
             uuid-runtime python sqlite3""".split()
 
+            if version >= 19:
+                deps[deps.index('python')] ='python2'
             args = ['sudo', 'apt-get', 'install', '-y'] + deps
         else:
             raise RuntimeError('expected a yum based or a apt based system')
