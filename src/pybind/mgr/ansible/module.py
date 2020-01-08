@@ -348,30 +348,33 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return op
 
-    def create_osds(self, drive_group):
+    def create_osds(self, drive_groups):
         """Create one or more OSDs within a single Drive Group.
         If no host provided the operation affects all the host in the OSDS role
 
 
-        :param drive_group: (ceph.deployment.drive_group.DriveGroupSpec),
+        :param drive_groups: (ceph.deployment.drive_group.DriveGroupSpec),
                             Drive group with the specification of drives to use
         """
 
         # Transform drive group specification to Ansible playbook parameters
-        host, osd_spec = dg_2_ansible(drive_group)
+        ops = []
+        for drive_group in drive_groups:
+            host, osd_spec = dg_2_ansible(drive_group)
 
-        # Create a new read completion object for execute the playbook
-        op = playbook_operation(client=self.ar_client,
-                                playbook=ADD_OSD_PLAYBOOK,
-                                result_pattern="",
-                                params=osd_spec,
-                                querystr_dict={"limit": host},
-                                output_wizard=ProcessPlaybookResult(self.ar_client),
-                                event_filter_list=["playbook_on_stats"])
+            # Create a new read completion object for execute the playbook
+            op = playbook_operation(client=self.ar_client,
+                                    playbook=ADD_OSD_PLAYBOOK,
+                                    result_pattern="",
+                                    params=osd_spec,
+                                    querystr_dict={"limit": host},
+                                    output_wizard=ProcessPlaybookResult(self.ar_client),
+                                    event_filter_list=["playbook_on_stats"])
 
-        self._launch_operation(op)
+            self._launch_operation(op)
+            ops.append(op)
 
-        return op
+        return ops
 
     def remove_osds(self, osd_ids, destroy=False):
         """Remove osd's.

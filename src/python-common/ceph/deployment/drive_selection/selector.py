@@ -103,9 +103,15 @@ class DriveSelection(object):
 
         return a sorted(by path) list of devices
         """
-        if not device_filter and not self.spec.data_devices.paths:
+
+        if not device_filter:
             logger.debug('device_filter is None')
             return []
+
+        if not self.spec.data_devices:
+            logger.debug('data_devices is None')
+            return []
+
         devices = list()  # type: List[Device]
         for _filter in FilterGenerator(device_filter):
             if not _filter.is_matchable:
