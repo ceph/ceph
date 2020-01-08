@@ -66,7 +66,10 @@ def get_clone_source(clone_subvolume):
 
 def handle_clone_pending(volume_client, volname, index, groupname, subvolname, should_cancel):
     try:
-        next_state = OpSm.get_next_state("clone", "pending", 0)
+        if should_cancel():
+            next_state = OpSm.get_next_state("clone", "pending", -errno.EINTR)
+        else:
+            next_state = OpSm.get_next_state("clone", "pending", 0)
     except OpSmException as oe:
         raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
@@ -91,7 +94,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
         try:
             with fs_handle.opendir(src_root_path) as dir_handle:
                 d = fs_handle.readdir(dir_handle)
-                while d:
+                while d and not should_cancel():
                     if d.d_name not in (b".", b".."):
                         log.debug("d={0}".format(d))
                         d_full_src = os.path.join(src_root_path, d.d_name)
@@ -139,6 +142,8 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
             if not e.args[0] == errno.ENOENT:
                 raise VolumeException(-e.args[0], e.args[1])
     cptree(source_path, dst_path)
+    if should_cancel():
+        raise VolumeException(-errno.EINTR, "clone operation interrupted")
 
 def do_clone(volume_client, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(volume_client, volname) as fs_handle:
@@ -155,7 +160,7 @@ def handle_clone_in_progress(volume_client, volname, index, groupname, subvolnam
         next_state = OpSm.get_next_state("clone", "in-progress", 0)
     except VolumeException as ve:
         # jump to failed state
-        next_state = OpSm.get_next_state("clone", "in-progress", -1)
+        next_state = OpSm.get_next_state("clone", "in-progress", ve.errno)
     except OpSmException as oe:
         raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
