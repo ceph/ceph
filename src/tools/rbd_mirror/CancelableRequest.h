@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_RBD_MIRROR_BASE_REQUEST_H
-#define CEPH_RBD_MIRROR_BASE_REQUEST_H
+#ifndef CEPH_RBD_MIRROR_CANCELABLE_REQUEST_H
+#define CEPH_RBD_MIRROR_CANCELABLE_REQUEST_H
 
 #include "common/RefCountedObj.h"
 #include "include/Context.h"
@@ -10,9 +10,10 @@
 namespace rbd {
 namespace mirror {
 
-class BaseRequest : public RefCountedObject {
+class CancelableRequest : public RefCountedObject {
 public:
-  BaseRequest(const std::string& name, CephContext *cct, Context *on_finish)
+  CancelableRequest(const std::string& name, CephContext *cct,
+                    Context *on_finish)
     : RefCountedObject(cct), m_name(name), m_cct(cct),
       m_on_finish(on_finish) {
   }
@@ -40,4 +41,4 @@ private:
 } // namespace mirror
 } // namespace rbd
 
-#endif // CEPH_RBD_MIRROR_BASE_REQUEST_H
+#endif // CEPH_RBD_MIRROR_CANCELABLE_REQUEST_H

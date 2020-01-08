@@ -62,8 +62,9 @@ BootstrapRequest<I>::BootstrapRequest(
     Journaler** remote_journaler,
     bool* do_resync,
     Context* on_finish)
-  : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
-		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
+  : CancelableRequest("rbd::mirror::image_replayer::BootstrapRequest",
+		      reinterpret_cast<CephContext*>(local_io_ctx.cct()),
+                      on_finish),
     m_threads(threads),
     m_local_io_ctx(local_io_ctx),
     m_remote_io_ctx(remote_io_ctx),
