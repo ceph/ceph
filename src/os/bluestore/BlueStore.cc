@@ -620,7 +620,7 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
       << " cache_private " << int(b.cache_private)
       << " " << BlueStore::Buffer::get_state_name(b.state);
   if (b.flags)
-    out << " " << BlueStore::Buffer::get_flag_name(b.flags);
+    out << " flags " << BlueStore::Buffer::get_flags_string(b.flags);
   return out << ")";
 }
 
@@ -1165,7 +1165,7 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
       BlueStore::Buffer *b = &*i;
       ceph_assert(b->is_clean());
       dout(20) << __func__ << " rm " << *b << dendl;
-      b->space->_rm_buffer(this, b);
+      b->space->_rm_buffer(b);
     }
     num = lru.size();
   }
@@ -1442,7 +1442,7 @@ public:
         // adjust evict size before buffer goes invalid
         to_evict_bytes -= b->length;
         evicted += b->length;
-        b->space->_rm_buffer(this, b);
+        b->space->_rm_buffer(b);
       }
 
       if (evicted > 0) {
@@ -1457,7 +1457,7 @@ public:
         BlueStore::Buffer *b = &*warm_out.rbegin();
         ceph_assert(b->is_empty());
         dout(20) << __func__ << " buffer_warm_out rm " << *b << dendl;
-        b->space->_rm_buffer(this, b);
+        b->space->_rm_buffer(b);
       }
     }
     num = hot.size() + warm_in.size();
@@ -1539,57 +1539,19 @@ BlueStore::BufferCacheShard *BlueStore::BufferCacheShard::create(
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.BufferSpace(" << this << " in " << cache << ") "
 
-void BlueStore::BufferSpace::_add_writing(BlueStore::Buffer* b)
+void BlueStore::BufferSpace::claim_all(BlueStore::BufferSpace& from)
 {
-  if (writing.empty() || writing.rbegin()->seq <= b->seq) {
-    writing.push_back(*b);
-  } else {
-    auto it = writing.begin();
-    while (it->seq < b->seq) {
-      ++it;
-    }
-
-    ceph_assert(it->seq >= b->seq);
-    // note that this will insert b before it
-    // hence the order is maintained
-    writing.insert(it, *b);
-  }
-}
-
-void BlueStore::BufferSpace::claim_all(BufferCacheShard* cache,
-  BlueStore::BufferSpace& from)
-{
-  while (!from.writing.empty()) {
-    auto &b = from.writing.front();
-    from.writing.pop_front();
-    b.space = this;
-    _add_writing(&b);
-    ldout(cache->cct, 20) << __func__ << " writing " << b << dendl;
-  }
   for (auto it = from.buffer_map.begin(); it != from.buffer_map.end(); ++it) {
     it->second->space = this;
     ldout(cache->cct, 20) << __func__ << " bufmap " << *it->second << dendl;
-    buffer_map[it->first].swap(it->second);
+    buffer_map[it->first] = it->second;
   }
   from.buffer_map.clear();
 }
 
-void BlueStore::BufferSpace::claim(BufferCacheShard* cache,
-  BlueStore::BufferSpace& from,
+void BlueStore::BufferSpace::claim(BlueStore::BufferSpace& from,
   const bluestore_blob_t& blob)
 {
-  auto it = from.writing.begin();
-  while (it != from.writing.end()) {
-    Buffer& b = *it;
-    if (blob.has_pextent(b.p_offset, b.length, true)) {
-      it = from.writing.erase(it);
-      b.space = this;
-      _add_writing(&b);
-      ldout(cache->cct, 20) << __func__ << " take writing " << b << dendl;
-    } else {
-      ++it;
-    }
-  }
   blob.map(0, std::numeric_limits<uint64_t>::max(),
     [&](uint64_t p_offset, uint64_t len) {
       auto it = from._data_lower_bound(p_offset);
@@ -1601,35 +1563,38 @@ void BlueStore::BufferSpace::claim(BufferCacheShard* cache,
                               << std::dec << dendl;
         ceph_assert(it->first + it->second->length <= p_end);
         it->second->space = this;
-        buffer_map[it->first].swap(it->second);
+        buffer_map[it->first] = it->second;
         it = from.buffer_map.erase(it);
       }
       return 0;
     });
 }
 
-void BlueStore::BufferSpace::clear(BufferCacheShard* cache)
+void BlueStore::BufferSpace::clear()
 {
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << " " << buffer_map.empty() << dendl;
   while (!buffer_map.empty()) {
     auto it = buffer_map.begin();
-    ldout(cache->cct, 20) << __func__ << " " << it->first <<" " << it->second.get() << dendl;
-    _rm_buffer(cache, buffer_map.begin());
+    ldout(cache->cct, 20) << __func__ << " " << it->first <<" " << it->second << dendl;
+    _rm_buffer(buffer_map.begin());
   }
 }
 
 
-void BlueStore::BufferSpace::_add_buffer(BufferCacheShard* cache,
-  Buffer* b, int level, Buffer* near) {
+void BlueStore::BufferSpace::_add_buffer(Buffer* b,
+                                         int level,
+                                         Buffer* near) {
   cache->_audit("_add_buffer start");
 
   ldout(cache->cct, 20) << __func__ << " " << *b << dendl;
 
-  buffer_map[b->p_offset].reset(b);
+  auto r = buffer_map.emplace(b->p_offset, b);
+  // we expect no previous entry in the map
+  // otherwise one can leak a previous buffer
+  ceph_assert(r.second);
   if (b->is_writing()) {
     b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
-    _add_writing(b);
   }
   else {
     b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
@@ -1639,25 +1604,26 @@ void BlueStore::BufferSpace::_add_buffer(BufferCacheShard* cache,
 }
 
 BlueStore::buffer_map_t::iterator
-BlueStore::BufferSpace::_rm_buffer(BufferCacheShard* cache,
-  buffer_map_t::iterator p) {
+BlueStore::BufferSpace::_rm_buffer(buffer_map_t::iterator p) {
   ceph_assert(p != buffer_map.end());
   cache->_audit("_rm_buffer start");
+  Buffer* b = p->second;
   ldout(cache->cct, 20) << __func__ << " "
-                        << *(p->second) << dendl;
+                        << *b << dendl;
 
-  if (p->second->is_writing()) {
-    writing.erase(writing.iterator_to(*p->second));
+  if (!b->is_writing()) {
+    cache->_rm(b);
+    p = buffer_map.erase_and_dispose(p);
   } else {
-    cache->_rm(p->second.get());
+    // postpone delete till writing is completed
+    b->flags |= Buffer::FLAG_PENDING_DELETE;
+    p = buffer_map.erase(p);
   }
-  p = buffer_map.erase(p);
   cache->_audit("_rm_buffer end");
   return p;
 }
 
-
-int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint64_t p_offset, uint32_t length)
+int BlueStore::BufferSpace::_discard(uint64_t p_offset, uint32_t length)
 {
   // note: we already hold cache->lock
   ldout(cache->cct, 20) << __func__ << std::hex << " 0x" << p_offset << "~" << length
@@ -1667,7 +1633,7 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint64_t p_offset,
   auto i = _data_lower_bound(p_offset);
   uint64_t end = p_offset + length;
   while (i != buffer_map.end()) {
-    Buffer *b = i->second.get();
+    Buffer *b = i->second;
     ldout(cache->cct, 20) << __func__ << " found " << *b << dendl;
     if (b->p_offset >= end) {
       break;
@@ -1685,9 +1651,9 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint64_t p_offset,
 	  bl.substr_of(b->data, b->length - tail, tail);
 	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
 	  nb->maybe_rebuild();
-	  _add_buffer(cache, nb, 0, b);
+	  _add_buffer(nb, 0, b);
 	} else {
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail),
+	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail),
 		      0, b);
 	}
 	if (!b->is_writing()) {
@@ -1710,7 +1676,7 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint64_t p_offset,
     }
     if (b->end() <= end) {
       // drop entire buffer
-      i = _rm_buffer(cache, i);
+      i = _rm_buffer(i);
       continue;
     }
     // drop front
@@ -1720,11 +1686,11 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint64_t p_offset,
       bl.substr_of(b->data, b->length - keep, keep);
       Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
       nb->maybe_rebuild();
-      _add_buffer(cache, nb, 0, b);
+      _add_buffer(nb, 0, b);
     } else {
-      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep), 0, b);
+      _add_buffer(new Buffer(this, b->state, b->seq, end, keep), 0, b);
     }
-    _rm_buffer(cache, i);
+    _rm_buffer(i);
     cache->_audit("discard end 2");
     break;
   }
@@ -1732,7 +1698,6 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint64_t p_offset,
 }
 
 int BlueStore::BufferSpace::read(
-  BufferCacheShard* cache, 
   uint64_t x_offset,
   uint64_t p_offset,
   uint32_t length,
@@ -1752,7 +1717,7 @@ int BlueStore::BufferSpace::read(
     for (auto i = _data_lower_bound(p_offset);
          i != buffer_map.end() && p_offset < end && i->first < end;
          ++i) {
-      Buffer *b = i->second.get();
+      Buffer *b = i->second;
       ceph_assert(b->end() > p_offset);
 
       bool val = b->is_writing();
@@ -1835,36 +1800,25 @@ int BlueStore::BufferSpace::read(
   return 0;
 }
 
-void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint64_t seq)
+void BlueStore::BufferSpace::_finish_write(Buffer* b)
 {
-  auto i = writing.begin();
-  while (i != writing.end()) {
-    if (i->seq > seq) {
-      break;
-    }
-    if (i->seq < seq) {
-      ++i;
-      continue;
-    }
+  ceph_assert(b->is_writing());
 
-    Buffer *b = &*i;
-    ceph_assert(b->is_writing());
-
-    if (b->flags & Buffer::FLAG_NOCACHE) {
-      writing.erase(i++);
-      ldout(cache->cct, 20) << __func__ << " discard " << *b << dendl;
-      buffer_map.erase(b->p_offset);
-    } else {
-      b->state = Buffer::STATE_CLEAN;
-      writing.erase(i++);
-      b->maybe_rebuild();
-      b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-      cache->_add(b, 1, nullptr);
-      ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
-    }
+  if (b->flags & Buffer::FLAG_PENDING_DELETE) {
+    ldout(cache->cct, 20) << __func__ << " discarded " << *b << dendl;
+    delete b;
+  } else if (b->flags & Buffer::FLAG_NOCACHE) {
+    ldout(cache->cct, 20) << __func__ << " discard " << *b << dendl;
+    auto it = buffer_map.find(b->p_offset);
+    ceph_assert(it != buffer_map.end());
+    buffer_map.erase_and_dispose(it);
+  }  else {
+    b->state = Buffer::STATE_CLEAN;
+    b->maybe_rebuild();
+    b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+    cache->_add(b, 1, nullptr);
+    ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
   }
-  cache->_trim();
-  cache->_audit("finish_write end");
 }
 
 // OnodeSpace
@@ -2018,25 +1972,7 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::BufferSpaceBase* b)
 BlueStore::BufferSpaceBase::~BufferSpaceBase()
 {
   if (coll) {
-    bc.clear(coll->cache);
-  }
-}
-
-void BlueStore::BufferSpaceBase::finish_write(uint64_t seq)
-{
-  while (true) {
-    BufferCacheShard* cache = coll->cache;
-    std::lock_guard l(cache->lock);
-    if (coll->cache != cache) {
-      auto cct = coll->store->cct;
-      dout(20) << __func__
-        << " raced with sb cache update, was " << cache
-        << ", now " << coll->cache << ", retrying"
-        << dendl;
-      continue;
-    }
-    bc._finish_write(cache, seq);
-    break;
+    bc.clear();
   }
 }
 
@@ -2209,7 +2145,7 @@ void BlueStore::Blob::make_blob_shared(Collection* coll, uint64_t sbid)
 
   // update shared blob
   _shared_blob = new SharedBlob(sbid, coll);
-  _shared_blob->bc.claim(_shared_blob->get_cache(), old_bc->bc, blob);
+  _shared_blob->bc.claim(old_bc->bc, blob);
   _shared_blob->loaded = true;
   _shared_blob->persistent = new bluestore_shared_blob_t(sbid);
   coll->shared_blob_set.add(_shared_blob.get());
@@ -2235,7 +2171,7 @@ void BlueStore::Blob::make_blob_unshared(Collection* coll,
   bluestore_blob_t& blob = dirty_blob();
   blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
   _shared_bspace = bc;
-  _shared_bspace->bc.claim_all(_shared_bspace->get_cache(), old_sb->bc);
+  _shared_bspace->bc.claim_all(old_sb->bc);
 
   ldout(coll->store->cct, 20) << __func__ << " now " << *this << dendl;
 }
@@ -4066,11 +4002,12 @@ void BlueStore::Collection::split_cache(
 	dest->shared_blob_set.add(sb);
 	sb->update_collection(dest);
 	if (dest->cache != cache) {
-	  for (auto& i : sb->bc.buffer_map) {
+          sb->bc._update_cache(dest->cache);
+          for (auto& i : sb->bc.buffer_map) {
 	    if (!i.second->is_writing()) {
 	      ldout(store->cct, 20) << __func__ << "   moving " << *i.second
 				    << dendl;
-	      dest->cache->_move(cache, i.second.get());
+	      dest->cache->_move(cache, i.second);
 	    }
 	  }
 	}
@@ -4085,11 +4022,12 @@ void BlueStore::Collection::split_cache(
         ldout(store->cct, 20) << __func__ << "  moving " << bc << dendl;
         bc->update_collection(dest);
         if (dest->cache != cache) {
+          bc->bc._update_cache(dest->cache);
           for (auto& i : bc->bc.buffer_map) {
             if (!i.second->is_writing()) {
               ldout(store->cct, 20) << __func__ << "   moving " << *i.second
                 << dendl;
-              dest->cache->_move(cache, i.second.get());
+              dest->cache->_move(cache, i.second);
             }
           }
         }
@@ -9456,7 +9394,7 @@ int BlueStore::_prepare_read_ioc(
         br.r_off, br.r_len,
         [&](uint64_t x_offset, uint64_t p_offset, uint64_t length) {
           return bc->bc.read(
-            bc->get_cache(), x_offset, p_offset, length, read_cache_policy,
+            x_offset, p_offset, length, read_cache_policy,
             [&] (uint64_t x_offset,
                  uint64_t p_offset,
                  uint64_t length,
@@ -9583,7 +9521,7 @@ int BlueStore::_generate_read_result_bl(
             if (d.first != 0) {
               // d.first is a physical offset + 1 for chunk to cache
               // or 0 for one that is already in the cache.
-              bc->bc.did_read(bc->get_cache(), d.first - 1, d.second);
+              bc->bc.did_read(d.first - 1, d.second);
             }
           }
         }
@@ -9608,7 +9546,7 @@ int BlueStore::_generate_read_result_bl(
           // d.first is a physical offset + 1 for chunk from disk
           // or 0 for one that is already in the cache.
           if (buffered) {
-            bc->bc.did_read(bc->get_cache(), d.first - 1, data);
+            bc->bc.did_read(d.first - 1, data);
           }
           d.first = 0;
         }
@@ -11238,8 +11176,8 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 {
   dout(20) << __func__ << " txc " << txc
-	   << " onodes " << txc->onodes
-	   << " shared_blobs " << txc->shared_blobs
+           << " onodes " << txc->onodes
+           << " shared_blobs " << txc->shared_blobs
 	   << dendl;
 
   // finalize onodes
@@ -11490,13 +11428,17 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
 void BlueStore::_txc_finish(TransContext *txc)
 {
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes
-           << " blobs " << txc->blobs_written.size() << dendl;
+           << " bufs " << txc->bufs_written.size() << dendl;
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
-  for (auto& b : txc->blobs_written) {
-    b->buffer_space()->finish_write(txc->seq);
+  {
+    auto it = txc->bufs_written.begin();
+    auto end = txc->bufs_written.end();
+    while (it != end) {
+      it = (*it)->space->finish_write(it, end);
+    }
+    txc->bufs_written.clear();
   }
-  txc->blobs_written.clear();
 
   while (!txc->removed_collections.empty()) {
     _queue_reap_collection(txc->removed_collections.front());
@@ -12381,6 +12323,7 @@ int BlueStore::queue_transactions(
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
   }
+
   _txc_calc_cost(txc);
 
   _txc_write_nodes(txc, txc->t);
@@ -13974,8 +13917,7 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
     }
-    auto bc = b->buffer_space();
-    bc->bc.discard(bc->get_cache(), r);
+    b->buffer_space()->bc.discard(r);
 
     b->prune_tail(c.get());
 

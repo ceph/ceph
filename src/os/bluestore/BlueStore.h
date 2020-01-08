@@ -198,13 +198,21 @@ public:
     }
     enum {
       FLAG_NOCACHE = 1,  ///< trim when done WRITING (do not become CLEAN)
-      // NOTE: fix operator<< when you define a second flag
+      FLAG_PENDING_DELETE = 2,  ///< already removed, pending for write completion to delete
     };
-    static const char *get_flag_name(int s) {
-      switch (s) {
-      case FLAG_NOCACHE: return "nocache";
-      default: return "???";
+    static string get_flags_string(unsigned flags) {
+      string s;
+      if (flags & FLAG_NOCACHE) {
+        if (s.length())
+          s += '+';
+        s += "nocache";
       }
+      if (flags & FLAG_PENDING_DELETE) {
+        if (s.length())
+          s += '+';
+        s += "pending_delete";
+      }
+      return s;
     }
 
     BufferSpace *space;
@@ -217,7 +225,6 @@ public:
     ceph::buffer::list data;
 
     boost::intrusive::list_member_hook<> lru_item;
-    boost::intrusive::list_member_hook<> state_item;
 
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint32_t l,
 	   unsigned f = 0)
@@ -269,86 +276,113 @@ public:
 
   struct BufferCacheShard;
 
-  typedef mempool::bluestore_cache_meta::map<uint64_t, unique_ptr<Buffer>>
-    buffer_map_t;
+  struct buffer_map_t : public mempool::bluestore_cache_meta::map<uint64_t, Buffer*> {
+    buffer_map_t::iterator erase_and_dispose(buffer_map_t::iterator it) {
+      Buffer* b = it->second;
+      it = erase(it);
+      delete b;
+      return it;
+    }
+  };
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
-    enum {
-      BYPASS_CLEAN_CACHE = 0x1,  // bypass clean cache
-    };
+  private:
+    BufferCacheShard* cache = nullptr;
 
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-        Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::state_item> > state_list_t;
+    void _add_buffer(Buffer* b, int level, Buffer* near);
 
-    buffer_map_t buffer_map;
+    // return value is the highest cache_private of a trimmed buffer, or 0.
+    int _discard(uint64_t p_offset, uint32_t length);
 
-    // we use a bare intrusive list here instead of std::map because
-    // it uses less memory and we expect this to be very small (very
-    // few IOs in flight to the same Blob at the same time).
-    state_list_t writing;   ///< writing buffers, sorted by seq, ascending
-
-    ~BufferSpace() {
-      ceph_assert(buffer_map.empty());
-      ceph_assert(writing.empty());
-    }
-
-    void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near);
-    void _rm_buffer(BufferCacheShard* cache, Buffer *b) {
-      _rm_buffer(cache, buffer_map.find(b->p_offset));
-    }
-    buffer_map_t::iterator _rm_buffer(BufferCacheShard* cache,
-      buffer_map_t::iterator p);
+    buffer_map_t::iterator _rm_buffer(buffer_map_t::iterator p);
 
     buffer_map_t::iterator _data_lower_bound(
       uint64_t p_offset) {
       auto i = buffer_map.lower_bound(p_offset);
       if (i != buffer_map.begin()) {
-	--i;
-	if (i->first + i->second->length <= p_offset)
-	  ++i;
+        --i;
+        if (i->first + i->second->length <= p_offset)
+          ++i;
       }
       return i;
     }
+    void _finish_write(Buffer*);
 
-    void clear(BufferCacheShard* cache);
+    // cache lock to be acquired before
+    friend class LruBufferCacheShard;
+    friend class TwoQBufferCacheShard;
+    void _rm_buffer(Buffer* b) {
+      _rm_buffer(buffer_map.find(b->p_offset));
+    }
 
-    void discard(BufferCacheShard* cache, PExtentVector& pextents) {
+    friend BlueStore::Collection;
+    void _update_cache(BufferCacheShard* _cache) {
+      cache = _cache;
+    }
+
+  public:
+    enum {
+      BYPASS_CLEAN_CACHE = 0x1,  // bypass clean cache
+    };
+
+    buffer_map_t buffer_map;
+
+    BufferSpace(BufferCacheShard* _cache) : cache(_cache) {
+    }
+    ~BufferSpace() {
+      ceph_assert(buffer_map.empty());
+    }
+
+    void clear();
+
+    void discard(PExtentVector& pextents) {
       std::lock_guard l(cache->lock);
       for (auto& e : pextents) {
-        _discard(cache, e.offset, e.length);
+        _discard(e.offset, e.length);
       }
 
       cache->_trim();
     }
 
-    // return value is the highest cache_private of a trimmed buffer, or 0.
-    int _discard(BufferCacheShard* cache, uint64_t p_offset, uint32_t length);
+    template <class Iterator>
+    Iterator finish_write(Iterator cur, const Iterator& end) {
+      ceph_assert((*cur)->space == this);
+      while (cur != end) {
+        BufferCacheShard* c = cache;
+        std::lock_guard l(cache->lock);
+        if (c != cache) {
+          continue;
+        }
+        do {
+          _finish_write(*cur);
+          cur++;
+        } while (cur != end && (*cur)->space == this);
+        cache->_trim();
+        break;
+      }
+      return cur;
+    }
 
-    void write(BufferCacheShard* cache, uint64_t seq, uint64_t p_offset, ceph::buffer::list& bl,
+    Buffer* write(uint64_t seq, uint64_t p_offset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, p_offset, bl,
 			     flags);
-      b->cache_private = _discard(cache, p_offset, bl.length());
-      _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      b->cache_private = _discard(p_offset, bl.length());
+      _add_buffer(b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
       cache->_trim();
+      return b;
     }
-    void _finish_write(BufferCacheShard* cache, uint64_t seq);
-    void did_read(BufferCacheShard* cache, uint64_t p_offset, ceph::buffer::list& bl) {
+    void did_read(uint64_t p_offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, p_offset, bl);
-      b->cache_private = _discard(cache, p_offset, bl.length());
-      _add_buffer(cache, b, 1, nullptr);
+      b->cache_private = _discard(p_offset, bl.length());
+      _add_buffer(b, 1, nullptr);
       cache->_trim();
     }
 
-    int read(BufferCacheShard* cache,
-              uint64_t x_offset,
+    int read(uint64_t x_offset,
               uint64_t p_offset,
               uint32_t length,
               int flags,
@@ -357,8 +391,7 @@ public:
                 uint64_t p_offset,
                 uint32_t length,
                 ceph::buffer::list & bl)> f);
-
-    void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       std::lock_guard l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
@@ -370,13 +403,9 @@ public:
       f->close_section();
     }
 
-    void claim_all(BufferCacheShard* cache, BufferSpace& from);
-    void claim(BufferCacheShard* cache, BufferSpace& from,
+    void claim_all(BufferSpace& from);
+    void claim(BufferSpace& from,
       const bluestore_blob_t& blob);
-
-  private:
-    void _add_writing(Buffer* b);
-
   };
 
   struct SharedBlobSet;
@@ -402,7 +431,7 @@ public:
 
     BufferSpace bc;             ///< buffer cache
 
-    BufferSpaceBase(Collection* _coll) : coll(_coll) {
+    BufferSpaceBase(Collection* _coll) : coll(_coll), bc(_coll->cache) {
     }
     virtual ~BufferSpaceBase();
 
@@ -424,8 +453,6 @@ public:
     inline bool is_referenced() const {
       return nref != 0;
     }
-
-    void finish_write(uint64_t seq);
 
     virtual void dump(Formatter* f) const {
     }
@@ -625,9 +652,7 @@ public:
     bool can_split() const {
       auto bc = buffer_space();
       std::lock_guard l(bc->get_cache()->lock);
-      // splitting a BufferSpace writing list is too hard; don't try.
-      return bc->bc.writing.empty() &&
-             used_in_blob.can_split() &&
+      return used_in_blob.can_split() &&
              get_blob().can_split();
     }
 
@@ -1671,7 +1696,12 @@ public:
     std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
 
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::set<BlobRef> blobs_written;       ///< update these on io completion
+
+    // Hopefully 128 buffers are enough for most of writes
+    // hence preallocate them...
+    static const size_t NUM_FIXED_BUFS_WRITTEN = 128;
+    boost::container::small_vector<Buffer*, NUM_FIXED_BUFS_WRITTEN>
+      bufs_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
@@ -2592,11 +2622,10 @@ private:
     b->get_blob().map_bl(
       b_offs, bl,
       [&](uint64_t offset, ceph::buffer::list& sub_bl) {
-        bc->bc.write(bc->get_cache(), txc->seq, offset, sub_bl, flags);
+        Buffer* buf = bc->bc.write(txc->seq, offset, sub_bl, flags);
+        txc->bufs_written.push_back(buf);
         return 0;
       });
-
-    txc->blobs_written.insert(b);
   }
 
   int _collection_list(

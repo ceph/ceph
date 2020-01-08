@@ -592,26 +592,7 @@ public:
     return p->offset + x_off;
   }
 
-  bool has_pextent(uint64_t p_off, uint64_t len, bool assert_if_partial_overlap) const {
-    bool found = false;
-    for (auto& p : extents) {
-      if (!p.is_valid())
-        continue;
-      if (p.offset <= p_off) {
-        if (p.offset + p.length >= p_off + len) {
-          found = true;
-          break;
-        } else if (assert_if_partial_overlap) {
-          ceph_assert(p.offset + p.length <= p_off);
-        }
-      } else if (assert_if_partial_overlap) {
-        ceph_assert(p.offset >= p_off + len);
-      }
-    }
-    return found;
-  }
-
-  // validate whether or not the status of pextents within the given range
+    // validate whether or not the status of pextents within the given range
   // meets the requirement(allocated or unallocated).
   bool _validate_range(uint64_t b_off, uint64_t b_len,
                        bool require_allocated) const {

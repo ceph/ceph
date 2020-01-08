@@ -1201,7 +1201,7 @@ TEST(ExtentMap, split_blob)
   br1->get_ref(coll.get(), 0, 0x12000);
   bufferlist bl1;
   bl1.append_zero(0x12000);
-  bc.did_read(bcache, 0x100000, bl1);
+  bc.did_read(0x100000, bl1);
 
   BlueStore::BlobRef br2(new BlueStore::Blob(coll.get(),
     onode.bspace));
@@ -1211,7 +1211,7 @@ TEST(ExtentMap, split_blob)
   br2->get_ref(coll.get(), 0x10000, 0x10000);
   bufferlist bl2;
   bl2.append_zero(0x10000);
-  bc.did_read(bcache, 0x120000, bl2);
+  bc.did_read(0x120000, bl2);
 
   //ExtentMap:
   //0~12000
