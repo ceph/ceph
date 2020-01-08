@@ -1,12 +1,33 @@
 <div class="row">
-  <div class="col-sm-4">
-    <tree [tree]="tree"
-          (nodeSelected)="onNodeSelected($event)">
-      <ng-template let-node>
-        <span class="node-name"
-              [innerHTML]="node.value"></span>
-      </ng-template>
-    </tree>
+  <div class="col-sm-4 pr-0">
+    <div class="card">
+      <div class="card-header">
+        <button type="button"
+                [class.disabled]="loadingIndicator"
+                class="btn btn-light pull-right"
+                (click)="refreshAllDirectories()">
+          <i [ngClass]="[icons.large, icons.refresh]"
+             [class.fa-spin]="loadingIndicator"></i>
+        </button>
+      </div>
+      <div class="card-body">
+        <!--
+          ng2-tree can't be used here as it cannot handle the reloading of all nodes
+          without loosing all states of the current tree. The difference of both tree components is
+          that ng2-tree is defined and configured by each node where as angular-tree
+          is configured by a tree structure and consist of nodes that mainly hold data.
+          Angular-tree is a lot better for dynamically loaded trees. The downside is that it's not
+          possible to set individual icons for each node.
+        -->
+        <tree-root *ngIf="nodes"
+                   [nodes]="nodes"
+                   [options]="treeOptions">
+          <ng-template #loadingTemplate>
+            <i [ngClass]="[icons.spinner, icons.spin]"></i>
+          </ng-template>
+        </tree-root>
+      </div>
+    </div>
   </div>
   <!-- Selection details -->
   <div class="col-sm-8 metadata"
@@ -16,23 +37,25 @@
         {{ selectedDir.path }}
       </div>
       <div class="card-body">
-        <legend i18n>Quotas</legend>
-        <cd-table [data]="settings"
-                  [columns]="quota.columns"
-                  [limit]="0"
-                  [footer]="false"
-                  selectionType="single"
-                  (updateSelection)="quota.updateSelection($event)"
-                  [onlyActionHeader]="true"
-                  identifier="quotaKey"
-                  [forceIdentifier]="true"
-                  [toolHeader]="false">
-          <cd-table-actions class="only-table-actions"
-                            [permission]="permission"
-                            [selection]="quota.selection"
-                            [tableActions]="quota.tableActions">
-          </cd-table-actions>
-        </cd-table>
+        <ng-container *ngIf="selectedDir.path !== '/'">
+          <legend i18n>Quotas</legend>
+          <cd-table [data]="settings"
+                    [columns]="quota.columns"
+                    [limit]="0"
+                    [footer]="false"
+                    selectionType="single"
+                    (updateSelection)="quota.updateSelection($event)"
+                    [onlyActionHeader]="true"
+                    identifier="quotaKey"
+                    [forceIdentifier]="true"
+                    [toolHeader]="false">
+            <cd-table-actions class="only-table-actions"
+                              [permission]="permission"
+                              [selection]="quota.selection"
+                              [tableActions]="quota.tableActions">
+            </cd-table-actions>
+          </cd-table>
+        </ng-container>
 
         <legend i18n>Snapshots</legend>
         <cd-table [data]="selectedDir.snapshots"

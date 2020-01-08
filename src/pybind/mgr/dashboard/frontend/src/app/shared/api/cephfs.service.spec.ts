@@ -58,10 +58,10 @@ describe('CephfsService', () => {
 
   it('should call lsDir', () => {
     service.lsDir(1).subscribe();
-    const req = httpTesting.expectOne('api/cephfs/1/ls_dir?depth=2');
+    const req = httpTesting.expectOne('ui-api/cephfs/1/ls_dir?depth=2');
     expect(req.request.method).toBe('GET');
     service.lsDir(2, '/some/path').subscribe();
-    httpTesting.expectOne('api/cephfs/2/ls_dir?depth=2&path=%252Fsome%252Fpath');
+    httpTesting.expectOne('ui-api/cephfs/2/ls_dir?depth=2&path=%252Fsome%252Fpath');
   });
 
   it('should call mkSnapshot', () => {
