@@ -79,7 +79,7 @@ class DriveSelection(object):
     @staticmethod
     def _has_mandatory_idents(disk):
         # type: (Device) -> bool
-        """ Check for mandatory indentification fields
+        """ Check for mandatory identification fields
         """
         if disk.path:
             logger.debug("Found matching disk: {}".format(disk.path))
@@ -117,7 +117,7 @@ class DriveSelection(object):
             for disk in self.disks.devices:
                 logger.debug("Processing disk {}".format(disk.path))
 
-                # continue criterias
+                # continue criteria
                 assert _filter.matcher is not None
 
                 if not disk.available:
