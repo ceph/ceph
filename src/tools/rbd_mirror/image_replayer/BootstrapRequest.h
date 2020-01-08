@@ -12,7 +12,7 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/Types.h"
-#include "tools/rbd_mirror/BaseRequest.h"
+#include "tools/rbd_mirror/CancelableRequest.h"
 #include "tools/rbd_mirror/Types.h"
 #include <list>
 #include <string>
@@ -39,7 +39,7 @@ namespace image_replayer {
 namespace journal { template <typename> class StateBuilder; }
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class BootstrapRequest : public BaseRequest {
+class BootstrapRequest : public CancelableRequest {
 public:
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::Journaler Journaler;

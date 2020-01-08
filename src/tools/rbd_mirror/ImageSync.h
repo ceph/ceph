@@ -8,7 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Types.h"
 #include "common/ceph_mutex.h"
-#include "tools/rbd_mirror/BaseRequest.h"
+#include "tools/rbd_mirror/CancelableRequest.h"
 #include "tools/rbd_mirror/image_sync/Types.h"
 
 class Context;
@@ -27,7 +27,7 @@ template <typename> class Threads;
 namespace image_sync { struct SyncPointHandler; }
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class ImageSync : public BaseRequest {
+class ImageSync : public CancelableRequest {
 public:
   static ImageSync* create(
       Threads<ImageCtxT>* threads,

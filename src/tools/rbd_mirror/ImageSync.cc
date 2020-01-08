@@ -55,7 +55,8 @@ ImageSync<I>::ImageSync(
     InstanceWatcher<I> *instance_watcher,
     ProgressContext *progress_ctx,
     Context *on_finish)
-  : BaseRequest("rbd::mirror::ImageSync", local_image_ctx->cct, on_finish),
+  : CancelableRequest("rbd::mirror::ImageSync", local_image_ctx->cct,
+                      on_finish),
     m_threads(threads),
     m_local_image_ctx(local_image_ctx),
     m_remote_image_ctx(remote_image_ctx),
@@ -107,7 +108,7 @@ void ImageSync<I>::send_notify_sync_request() {
   m_lock.lock();
   if (m_canceled) {
     m_lock.unlock();
-    BaseRequest::finish(-ECANCELED);
+    CancelableRequest::finish(-ECANCELED);
     return;
   }
 
@@ -129,7 +130,7 @@ void ImageSync<I>::handle_notify_sync_request(int r) {
   m_lock.unlock();
 
   if (r < 0) {
-    BaseRequest::finish(r);
+    CancelableRequest::finish(r);
     return;
   }
 
@@ -456,7 +457,7 @@ void ImageSync<I>::finish(int r) {
   dout(20) << ": r=" << r << dendl;
 
   m_instance_watcher->notify_sync_complete(m_local_image_ctx->id);
-  BaseRequest::finish(r);
+  CancelableRequest::finish(r);
 }
 
 } // namespace mirror
