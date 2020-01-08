@@ -4,7 +4,9 @@
 #ifndef CEPH_RBD_MIRROR_IMAGE_REPLAYER_STATE_BUILDER_H
 #define CEPH_RBD_MIRROR_IMAGE_REPLAYER_STATE_BUILDER_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/mirror/Types.h"
 
 struct Context;
 namespace librbd { struct ImageCtx; }
@@ -12,9 +14,16 @@ namespace librbd { struct ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+struct BaseRequest;
+struct ProgressContext;
+template <typename> class Threads;
+
 namespace image_sync { struct SyncPointHandler; }
 
 namespace image_replayer {
+
+struct Replayer;
+struct ReplayerListener;
 
 template <typename ImageCtxT>
 class StateBuilder {
@@ -39,6 +48,27 @@ public:
 
   virtual image_sync::SyncPointHandler* create_sync_point_handler() = 0;
   void destroy_sync_point_handler();
+
+  virtual BaseRequest* create_local_image_request(
+      Threads<ImageCtxT>* threads,
+      librados::IoCtx& local_io_ctx,
+      ImageCtxT* remote_image_ctx,
+      const std::string& global_image_id,
+      ProgressContext* progress_ctx,
+      Context* on_finish) = 0;
+
+  virtual BaseRequest* create_prepare_replay_request(
+      const std::string& local_mirror_uuid,
+      librbd::mirror::PromotionState remote_promotion_state,
+      ProgressContext* progress_ctx,
+      bool* resync_requested,
+      bool* syncing,
+      Context* on_finish) = 0;
+
+  virtual Replayer* create_replayer(
+      Threads<ImageCtxT>* threads,
+      const std::string& local_mirror_uuid,
+      ReplayerListener* replayer_listener) = 0;
 
   std::string global_image_id;
 
