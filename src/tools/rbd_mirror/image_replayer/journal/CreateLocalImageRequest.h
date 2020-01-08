@@ -7,6 +7,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/BaseRequest.h"
 #include <string>
 
 struct Context;
@@ -22,7 +23,7 @@ namespace image_replayer {
 namespace journal {
 
 template <typename ImageCtxT>
-class CreateLocalImageRequest {
+class CreateLocalImageRequest : public BaseRequest {
 public:
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
@@ -49,13 +50,13 @@ public:
       const std::string& remote_mirror_uuid,
       MirrorPeerClientMeta* client_meta, ProgressContext* progress_ctx,
       std::string* local_image_id, Context* on_finish)
-    : m_threads(threads), m_local_io_ctx(local_io_ctx),
+    : BaseRequest(on_finish),
+      m_threads(threads), m_local_io_ctx(local_io_ctx),
       m_remote_image_ctx(remote_image_ctx),
       m_remote_journaler(remote_journaler),
       m_global_image_id(global_image_id),
       m_remote_mirror_uuid(remote_mirror_uuid), m_client_meta(client_meta),
-      m_progress_ctx(progress_ctx), m_local_image_id(local_image_id),
-      m_on_finish(on_finish) {
+      m_progress_ctx(progress_ctx), m_local_image_id(local_image_id) {
   }
 
   void send();
@@ -92,7 +93,6 @@ private:
   MirrorPeerClientMeta* m_client_meta;
   ProgressContext* m_progress_ctx;
   std::string* m_local_image_id;
-  Context* m_on_finish;
 
   void unregister_client();
   void handle_unregister_client(int r);
@@ -105,8 +105,6 @@ private:
 
   void update_client_image();
   void handle_update_client_image(int r);
-
-  void finish(int r);
 
   void update_progress(const std::string& description);
 
