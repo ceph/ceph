@@ -1087,6 +1087,7 @@ public:
     return *this;
   }
   bool empty() const {
+    //block_type is a uint64_t. If the vector is only composed of 0s, then it's still "empty"
     for (auto& v : _vec) {
       if (v)
 	return false;
