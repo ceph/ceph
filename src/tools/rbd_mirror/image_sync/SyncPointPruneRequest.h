@@ -4,8 +4,7 @@
 #ifndef RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_PRUNE_REQUEST_H
 #define RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_PRUNE_REQUEST_H
 
-#include "librbd/journal/Types.h"
-#include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/image_sync/Types.h"
 #include <list>
 #include <string>
 
@@ -21,23 +20,20 @@ namespace image_sync {
 template <typename ImageCtxT = librbd::ImageCtx>
 class SyncPointPruneRequest {
 public:
-  typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
-  typedef typename TypeTraits::Journaler Journaler;
-  typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
-  typedef librbd::journal::MirrorPeerSyncPoint MirrorPeerSyncPoint;
-
-  static SyncPointPruneRequest* create(ImageCtxT *remote_image_ctx,
-                                       bool sync_complete,
-                                       Journaler *journaler,
-                                       MirrorPeerClientMeta *client_meta,
-                                       Context *on_finish) {
-    return new SyncPointPruneRequest(remote_image_ctx, sync_complete, journaler,
-                                      client_meta, on_finish);
+  static SyncPointPruneRequest* create(
+      ImageCtxT *remote_image_ctx,
+      bool sync_complete,
+      SyncPointHandler* sync_point_handler,
+      Context *on_finish) {
+    return new SyncPointPruneRequest(remote_image_ctx, sync_complete,
+                                     sync_point_handler, on_finish);
   }
 
-  SyncPointPruneRequest(ImageCtxT *remote_image_ctx, bool sync_complete,
-                        Journaler *journaler, MirrorPeerClientMeta *client_meta,
-                        Context *on_finish);
+  SyncPointPruneRequest(
+      ImageCtxT *remote_image_ctx,
+      bool sync_complete,
+      SyncPointHandler* sync_point_handler,
+      Context *on_finish);
 
   void send();
 
@@ -66,11 +62,10 @@ private:
 
   ImageCtxT *m_remote_image_ctx;
   bool m_sync_complete;
-  Journaler *m_journaler;
-  MirrorPeerClientMeta *m_client_meta;
+  SyncPointHandler* m_sync_point_handler;
   Context *m_on_finish;
 
-  MirrorPeerClientMeta m_client_meta_copy;
+  SyncPoints m_sync_points_copy;
   std::list<std::string> m_snap_names;
 
   bool m_invalid_master_sync_point = false;
@@ -81,8 +76,8 @@ private:
   void send_refresh_image();
   void handle_refresh_image(int r);
 
-  void send_update_client();
-  void handle_update_client(int r);
+  void send_update_sync_points();
+  void handle_update_sync_points(int r);
 
   void finish(int r);
 };

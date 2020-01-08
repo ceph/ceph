@@ -28,6 +28,8 @@
 #include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/journal/CreateLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/journal/PrepareReplayRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/journal/SyncPointHandler.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -449,13 +451,17 @@ void BootstrapRequest<I>::image_sync() {
   dout(15) << dendl;
   ceph_assert(m_image_sync == nullptr);
 
+  // TODO temporary
+  m_state_builder = journal::StateBuilder<I>::create(m_global_image_id);
+  m_state_builder->remote_journaler = *m_remote_journaler;
+  m_state_builder->remote_client_meta = m_client_meta;
+  auto sync_point_handler = m_state_builder->create_sync_point_handler();
+
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
   m_image_sync = ImageSync<I>::create(
-    *m_local_image_ctx, m_remote_image_ctx, m_threads->timer,
-    &m_threads->timer_lock, m_local_mirror_uuid, *m_remote_journaler,
-    &m_client_meta, m_threads->work_queue, m_instance_watcher, ctx,
-    m_progress_ctx);
+    m_threads, *m_local_image_ctx, m_remote_image_ctx, m_local_mirror_uuid,
+    sync_point_handler, m_instance_watcher, m_progress_ctx, ctx);
   m_image_sync->get();
   locker.unlock();
 
@@ -471,6 +477,13 @@ void BootstrapRequest<I>::handle_image_sync(int r) {
     std::lock_guard locker{m_lock};
     m_image_sync->put();
     m_image_sync = nullptr;
+
+    m_state_builder->destroy_sync_point_handler();
+
+    // TODO
+    m_state_builder->remote_journaler = nullptr;
+    m_state_builder->destroy();
+    m_state_builder = nullptr;
   }
 
   if (r < 0) {
