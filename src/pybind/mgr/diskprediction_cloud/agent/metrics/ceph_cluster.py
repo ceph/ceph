@@ -89,7 +89,7 @@ class CephClusterAgent(MetricsAgent):
         else:
             c_data.fields['osd_bytes_used_percentage'] = 0.0000
 
-        pg_stats = obj_api.module.get('pg_dump').get('pg_stats', [])
+        pg_stats = obj_api.module.get('pg_stats').get('pg_stats', [])
         num_bytes = 0
         num_object = 0
         num_object_degraded = 0

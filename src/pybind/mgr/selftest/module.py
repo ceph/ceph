@@ -237,6 +237,8 @@ class Module(MgrModule):
                 "pg_status",
                 "pg_dump",
                 "df",
+                "pg_stats",
+                "pool_stats",
                 "osd_stats",
                 "health",
                 "mon_status",

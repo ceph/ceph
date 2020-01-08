@@ -191,10 +191,10 @@ class PgRecoveryEvent(Event):
     def evacuating_osds(self):
         return self. _evacuate_osds
 
-    def pg_update(self, pg_dump, log):
+    def pg_update(self, raw_pg_stats, log):
         # FIXME: O(pg_num) in python
         # FIXME: far more fields getting pythonized than we really care about
-        pg_to_state = dict([(p['pgid'], p) for p in pg_dump['pg_stats']])
+        pg_to_state = dict([(p['pgid'], p) for p in raw_pg_stats['pg_stats']])
 
         if self._original_bytes_recovered is None:
             self._original_bytes_recovered = {}
@@ -409,7 +409,7 @@ class Module(MgrModule):
             which_pgs=affected_pgs,
             evacuate_osds=[osd_id]
         )
-        ev.pg_update(self.get("pg_dump"), self.log)
+        ev.pg_update(self.get("pg_stats"), self.log)
         self._events[ev.id] = ev
 
     def _osd_in(self, osd_id):
@@ -454,7 +454,7 @@ class Module(MgrModule):
             ))
             self._osdmap_changed(old_osdmap, self._latest_osdmap)
         elif notify_type == "pg_summary":
-            data = self.get("pg_dump")
+            data = self.get("pg_stats")
             for ev_id, ev in self._events.items():
                 if isinstance(ev, PgRecoveryEvent):
                     ev.pg_update(data, self.log)
