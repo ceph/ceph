@@ -36,8 +36,26 @@ inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
 class AdminSocketHook {
 public:
-  // NOTE: the sync handler doesn't take an input buffer currently because
-  // no users need it yet.
+  /**
+   * @brief
+   * Handler for admin socket commands, synchronous version
+   *
+   * Executes action associated with admin command and returns byte-stream output @c out.
+   * There is no restriction on output. Each handler defines output semantics.
+   * Typically output is textual representation of some ceph's internals.
+   * Handler should use provided formatter @c f if structuralized output is being produced.
+   *
+   * @param command[in] String matching constant part of cmddesc in @ref AdminSocket::register_command
+   * @param cmdmap[in]  Parameters extracted from argument part of cmddesc in @ref AdminSocket::register_command
+   * @param f[in]       Formatter created according to requestor preference, used by `ceph --format`
+   * @param errss[out]  Error stream, should contain details in case of execution failure
+   * @param out[out]    Produced output
+   *
+   * @retval 0 Success, errss is ignored and does not contribute to output
+   * @retval <0 Error code, errss is prepended to @c out
+   *
+   * @note If @c out is empty, then admin socket will try to flush @c f to out.
+   */
   virtual int call(
     std::string_view command,
     const cmdmap_t& cmdmap,
@@ -45,6 +63,29 @@ public:
     std::ostream& errss,
     ceph::buffer::list& out) = 0;
 
+  /**
+   * @brief
+   * Handler for admin socket commands, asynchronous version
+   *
+   * Executes action associated with admin command and prepares byte-stream response.
+   * When processing is done @c on_finish must be called.
+   * There is no restriction on output. Each handler defines own output semantics.
+   * Typically output is textual representation of some ceph's internals.
+   * Input @c inbl can be passed, see ceph --in-file.
+   * Handler should use provided formatter @c f if structuralized output is being produced.
+   * on_finish handler has following parameters:
+   * - result code of handler (same as @ref AdminSocketHook::call)
+   * - error message, text
+   * - output
+   *
+   * @param[in] command String matching constant part of cmddesc in @ref AdminSocket::register_command
+   * @param[in] cmdmap  Parameters extracted from argument part of cmddesc in @ref AdminSocket::register_command
+   * @param[in] f       Formatter created according to requestor preference, used by `ceph --format`
+   * @param[in] inbl    Input content for handler
+   * @param[in] on_finish Function to call when processing is done
+   *
+   * @note If @c out is empty, then admin socket will try to flush @c f to out.
+   */
   virtual void call_async(
     std::string_view command,
     const cmdmap_t& cmdmap,
