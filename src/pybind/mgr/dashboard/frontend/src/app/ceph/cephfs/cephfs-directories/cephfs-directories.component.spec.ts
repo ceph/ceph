@@ -42,7 +42,6 @@ describe('CephfsDirectoriesComponent', () => {
   let maxValidator: jasmine.Spy;
   let minBinaryValidator: jasmine.Spy;
   let maxBinaryValidator: jasmine.Spy;
-  let originalDate: any;
   let modal: any;
 
   // Get's private attributes or functions
@@ -67,12 +66,11 @@ describe('CephfsDirectoriesComponent', () => {
     snapshots: (dirPath: string, howMany: number): CephfsSnapshot[] => {
       const name = 'someSnapshot';
       const snapshots = [];
+      const oneDay = 3600 * 24 * 1000;
       for (let i = 0; i < howMany; i++) {
         const snapName = `${name}${i + 1}`;
         const path = `${dirPath}/.snap/${snapName}`;
-        const created = new Date(
-          +new Date() - 3600 * 24 * 1000 * howMany * (howMany - i)
-        ).toString();
+        const created = new Date(+new Date() - oneDay * i).toString();
         snapshots.push({ name: snapName, path, created });
       }
       return snapshots;
@@ -147,7 +145,6 @@ describe('CephfsDirectoriesComponent', () => {
       modal = modalServiceShow(comp, init);
       return modal.ref;
     },
-    date: (arg: string) => (arg ? new originalDate(arg) : new Date('2022-02-22T00:00:00')),
     getControllerByPath: (path: string) => {
       return {
         expand: () => mockLib.expand(path),
@@ -357,8 +354,6 @@ describe('CephfsDirectoriesComponent', () => {
       deletedSnaps: [],
       updatedQuotas: {}
     };
-    originalDate = Date;
-    spyOn(global, 'Date').and.callFake(mockLib.date);
 
     cephfsService = TestBed.get(CephfsService);
     lsDirSpy = spyOn(cephfsService, 'lsDir').and.callFake(mockLib.lsDir);
