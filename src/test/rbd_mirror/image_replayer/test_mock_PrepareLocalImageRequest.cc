@@ -6,6 +6,8 @@
 #include "librbd/journal/TypeTraits.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -51,8 +53,36 @@ struct GetMirrorImageIdRequest<librbd::MockTestImageCtx> {
   MOCK_METHOD0(send, void());
 };
 
+template<>
+struct StateBuilder<librbd::MockTestImageCtx> {
+  virtual ~StateBuilder() {}
+};
+
 GetMirrorImageIdRequest<librbd::MockTestImageCtx>* GetMirrorImageIdRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
+namespace journal {
+
+template<>
+struct StateBuilder<librbd::MockTestImageCtx>
+  : public image_replayer::StateBuilder<librbd::MockTestImageCtx> {
+  static StateBuilder* s_instance;
+
+  std::string local_image_id;
+  std::string local_tag_owner;
+
+  static StateBuilder* create(const std::string&) {
+    ceph_assert(s_instance != nullptr);
+    return s_instance;
+  }
+
+  StateBuilder() {
+    s_instance = this;
+  }
+};
+
+StateBuilder<librbd::MockTestImageCtx>* StateBuilder<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+} // namespace journal
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd
@@ -77,6 +107,8 @@ class TestMockImageReplayerPrepareLocalImageRequest : public TestMockFixture {
 public:
   typedef PrepareLocalImageRequest<librbd::MockTestImageCtx> MockPrepareLocalImageRequest;
   typedef GetMirrorImageIdRequest<librbd::MockTestImageCtx> MockGetMirrorImageIdRequest;
+  typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
+  typedef journal::StateBuilder<librbd::MockTestImageCtx> MockJournalStateBuilder;
 
   void expect_get_mirror_image_id(MockGetMirrorImageIdRequest& mock_get_mirror_image_id_request,
                                   const std::string& image_id, int r) {
@@ -146,23 +178,25 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, Success) {
   librbd::MockJournal mock_journal;
   expect_get_tag_owner(mock_journal, "local image id", "remote mirror uuid", 0);
 
-  std::string local_image_id;
+  MockJournalStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
   std::string local_image_name;
-  std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
-                                                  &local_image_id,
                                                   &local_image_name,
-                                                  &tag_owner,
+                                                  &mock_state_builder,
                                                   m_threads->work_queue,
                                                   &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
-  ASSERT_EQ(std::string("local image id"), local_image_id);
+  ASSERT_TRUE(mock_state_builder != nullptr);
   ASSERT_EQ(std::string("local image name"), local_image_name);
-  ASSERT_EQ(std::string("remote mirror uuid"), tag_owner);
+  ASSERT_EQ(std::string("local image id"),
+            mock_journal_state_builder.local_image_id);
+  ASSERT_EQ(std::string("remote mirror uuid"),
+            mock_journal_state_builder.local_tag_owner);
 }
 
 TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageIdError) {
@@ -170,15 +204,14 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageIdError) {
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "", -EINVAL);
 
-  std::string local_image_id;
+  MockJournalStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
   std::string local_image_name;
-  std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
-                                                  &local_image_id,
                                                   &local_image_name,
-                                                  &tag_owner,
+                                                  &mock_state_builder,
                                                   m_threads->work_queue,
                                                   &ctx);
   req->send();
@@ -193,15 +226,14 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, DirGetNameError) {
                              0);
   expect_dir_get_name(m_local_io_ctx, "", -ENOENT);
 
-  std::string local_image_id;
+  MockJournalStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
   std::string local_image_name;
-  std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
-                                                  &local_image_id,
                                                   &local_image_name,
-                                                  &tag_owner,
+                                                  &mock_state_builder,
                                                   m_threads->work_queue,
                                                   &ctx);
   req->send();
@@ -220,15 +252,14 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageError) {
                           cls::rbd::MIRROR_IMAGE_STATE_DISABLED,
                           "", -EINVAL);
 
-  std::string local_image_id;
+  MockJournalStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
   std::string local_image_name;
-  std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
-                                                  &local_image_id,
                                                   &local_image_name,
-                                                  &tag_owner,
+                                                  &mock_state_builder,
                                                   m_threads->work_queue,
                                                   &ctx);
   req->send();
@@ -251,15 +282,14 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, TagOwnerError) {
   expect_get_tag_owner(mock_journal, "local image id", "remote mirror uuid",
                        -ENOENT);
 
-  std::string local_image_id;
+  MockJournalStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
   std::string local_image_name;
-  std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
-                                                  &local_image_id,
                                                   &local_image_name,
-                                                  &tag_owner,
+                                                  &mock_state_builder,
                                                   m_threads->work_queue,
                                                   &ctx);
   req->send();

@@ -61,7 +61,7 @@ public:
       bool* syncing,
       Context* on_finish) override;
 
-  Replayer* create_replayer(
+  image_replayer::Replayer* create_replayer(
       Threads<ImageCtxT>* threads,
       const std::string& local_mirror_uuid,
       ReplayerListener* replayer_listener) override;
