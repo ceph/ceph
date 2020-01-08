@@ -12,12 +12,15 @@
 #include "tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/journal/CreateLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/journal/PrepareReplayRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournal.h"
+#include "test/rbd_mirror/mock/image_sync/MockSyncPointHandler.h"
 
 namespace librbd {
 
@@ -99,13 +102,13 @@ struct ImageSync<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static ImageSync* create(
+      Threads<librbd::MockTestImageCtx>* threads,
       librbd::MockTestImageCtx *local_image_ctx,
       librbd::MockTestImageCtx *remote_image_ctx,
-      SafeTimer *timer, ceph::mutex *timer_lock,
-      const std::string &mirror_uuid, ::journal::MockJournaler *journaler,
-      librbd::journal::MirrorPeerClientMeta *client_meta, ContextWQ *work_queue,
+      const std::string &local_mirror_uuid,
+      image_sync::SyncPointHandler* sync_point_handler,
       InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
-      Context *on_finish, ProgressContext *progress_ctx) {
+      ProgressContext *progress_ctx, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -292,6 +295,16 @@ struct PrepareRemoteImageRequest<librbd::MockTestImageCtx> {
   MOCK_METHOD0(send, void());
 };
 
+template<>
+struct StateBuilder<librbd::MockTestImageCtx> {
+  virtual ~StateBuilder() {}
+
+  void destroy_sync_point_handler() {
+  }
+  void destroy() {
+  }
+};
+
 CloseImageRequest<librbd::MockTestImageCtx>*
   CloseImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 OpenImageRequest<librbd::MockTestImageCtx>*
@@ -376,10 +389,36 @@ struct PrepareReplayRequest<librbd::MockTestImageCtx> {
   MOCK_METHOD0(send, void());
 };
 
+template<>
+struct StateBuilder<librbd::MockTestImageCtx>
+  : image_replayer::StateBuilder<librbd::MockTestImageCtx>{
+  static StateBuilder* s_instance;
+
+  ::journal::MockJournaler* remote_journaler = nullptr;
+  librbd::journal::MirrorPeerClientMeta remote_client_meta;
+
+  image_sync::MockSyncPointHandler mock_sync_point_handler;
+
+  static StateBuilder* create(const std::string&) {
+    ceph_assert(s_instance != nullptr);
+    return s_instance;
+  }
+
+  image_sync::MockSyncPointHandler* create_sync_point_handler() {
+    return &mock_sync_point_handler;
+  }
+
+  StateBuilder() {
+    s_instance = this;
+  }
+};
+
 CreateLocalImageRequest<librbd::MockTestImageCtx>*
   CreateLocalImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 PrepareReplayRequest<librbd::MockTestImageCtx>*
   PrepareReplayRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+StateBuilder<librbd::MockTestImageCtx>*
+  StateBuilder<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace journal
 } // namespace image_replayer
@@ -419,6 +458,7 @@ public:
   typedef PrepareRemoteImageRequest<librbd::MockTestImageCtx> MockPrepareRemoteImageRequest;
   typedef journal::CreateLocalImageRequest<librbd::MockTestImageCtx> MockCreateLocalImageRequest;
   typedef journal::PrepareReplayRequest<librbd::MockTestImageCtx> MockPrepareReplayRequest;
+  typedef journal::StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
   typedef librbd::mirror::GetInfoRequest<librbd::MockTestImageCtx> MockGetMirrorInfoRequest;
   typedef std::list<cls::journal::Tag> Tags;
 
@@ -1047,6 +1087,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplaySyncing) {
   expect_prepare_replay(mock_prepare_replay_request, false, true, 0);
 
   // image sync
+  MockStateBuilder mock_state_builder;
   MockImageSync mock_image_sync;
   expect_image_sync(mock_image_sync, 0);
 
@@ -1167,6 +1208,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ImageSyncError) {
   expect_prepare_replay(mock_prepare_replay_request, false, true, 0);
 
   // image sync
+  MockStateBuilder mock_state_builder;
   MockImageSync mock_image_sync;
   expect_image_sync(mock_image_sync, -EINVAL);
 

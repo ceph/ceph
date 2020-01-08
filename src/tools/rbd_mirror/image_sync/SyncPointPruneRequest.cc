@@ -4,7 +4,6 @@
 #include "SyncPointPruneRequest.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
@@ -23,30 +22,32 @@ namespace image_sync {
 using librbd::util::create_context_callback;
 
 template <typename I>
-SyncPointPruneRequest<I>::SyncPointPruneRequest(I *remote_image_ctx,
-                                                bool sync_complete,
-                                                Journaler *journaler,
-                                                MirrorPeerClientMeta *client_meta,
-                                                Context *on_finish)
-  : m_remote_image_ctx(remote_image_ctx), m_sync_complete(sync_complete),
-    m_journaler(journaler), m_client_meta(client_meta), m_on_finish(on_finish),
-    m_client_meta_copy(*client_meta) {
+SyncPointPruneRequest<I>::SyncPointPruneRequest(
+    I *remote_image_ctx,
+    bool sync_complete,
+    SyncPointHandler* sync_point_handler,
+    Context *on_finish)
+  : m_remote_image_ctx(remote_image_ctx),
+    m_sync_complete(sync_complete),
+    m_sync_point_handler(sync_point_handler),
+    m_on_finish(on_finish) {
+  m_sync_points_copy = m_sync_point_handler->get_sync_points();
 }
 
 template <typename I>
 void SyncPointPruneRequest<I>::send() {
-  if (m_client_meta->sync_points.empty()) {
+  if (m_sync_points_copy.empty()) {
     send_remove_snap();
     return;
   }
 
   if (m_sync_complete) {
     // if sync is complete, we can remove the master sync point
-    auto it = m_client_meta_copy.sync_points.begin();
-    MirrorPeerSyncPoint &sync_point = *it;
+    auto it = m_sync_points_copy.begin();
+    auto& sync_point = *it;
 
     ++it;
-    if (it == m_client_meta_copy.sync_points.end() ||
+    if (it == m_sync_points_copy.end() ||
         it->from_snap_name != sync_point.snap_name) {
       m_snap_names.push_back(sync_point.snap_name);
     }
@@ -59,10 +60,10 @@ void SyncPointPruneRequest<I>::send() {
     // trim them off
     std::shared_lock image_locker{m_remote_image_ctx->image_lock};
     std::set<std::string> snap_names;
-    for (auto it = m_client_meta_copy.sync_points.rbegin();
-         it != m_client_meta_copy.sync_points.rend(); ++it) {
-      MirrorPeerSyncPoint &sync_point = *it;
-      if (&sync_point == &m_client_meta_copy.sync_points.front()) {
+    for (auto it = m_sync_points_copy.rbegin();
+         it != m_sync_points_copy.rend(); ++it) {
+      auto& sync_point = *it;
+      if (&sync_point == &m_sync_points_copy.front()) {
         if (m_remote_image_ctx->get_snap_id(
 	      cls::rbd::UserSnapshotNamespace(), sync_point.snap_name) ==
               CEPH_NOSNAP) {
@@ -83,8 +84,7 @@ void SyncPointPruneRequest<I>::send() {
         m_snap_names.push_back(sync_point.snap_name);
       }
 
-      MirrorPeerSyncPoint &front_sync_point =
-        m_client_meta_copy.sync_points.front();
+      auto& front_sync_point = m_sync_points_copy.front();
       if (!sync_point.from_snap_name.empty() &&
           snap_names.count(sync_point.from_snap_name) == 0 &&
           sync_point.from_snap_name != front_sync_point.snap_name) {
@@ -157,40 +157,35 @@ void SyncPointPruneRequest<I>::handle_refresh_image(int r) {
     return;
   }
 
-  send_update_client();
+  send_update_sync_points();
 }
 
 template <typename I>
-void SyncPointPruneRequest<I>::send_update_client() {
+void SyncPointPruneRequest<I>::send_update_sync_points() {
   dout(20) << dendl;
 
   if (m_sync_complete) {
-    m_client_meta_copy.sync_points.pop_front();
-    if (m_client_meta_copy.sync_points.empty()) {
-      m_client_meta_copy.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
-    }
+    m_sync_points_copy.pop_front();
   } else {
-    while (m_client_meta_copy.sync_points.size() > 1) {
-      m_client_meta_copy.sync_points.pop_back();
+    while (m_sync_points_copy.size() > 1) {
+      m_sync_points_copy.pop_back();
     }
     if (m_invalid_master_sync_point) {
       // all subsequent sync points would have been pruned
-      m_client_meta_copy.sync_points.clear();
+      m_sync_points_copy.clear();
     }
   }
 
-  bufferlist client_data_bl;
-  librbd::journal::ClientData client_data(m_client_meta_copy);
-  encode(client_data, client_data_bl);
-
-  Context *ctx = create_context_callback<
-    SyncPointPruneRequest<I>, &SyncPointPruneRequest<I>::handle_update_client>(
-      this);
-  m_journaler->update_client(client_data_bl, ctx);
+  auto ctx = create_context_callback<
+    SyncPointPruneRequest<I>,
+    &SyncPointPruneRequest<I>::handle_update_sync_points>(this);
+  m_sync_point_handler->update_sync_points(
+    m_sync_point_handler->get_snap_seqs(), m_sync_points_copy,
+    m_sync_complete, ctx);
 }
 
 template <typename I>
-void SyncPointPruneRequest<I>::handle_update_client(int r) {
+void SyncPointPruneRequest<I>::handle_update_sync_points(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
@@ -200,8 +195,6 @@ void SyncPointPruneRequest<I>::handle_update_client(int r) {
     return;
   }
 
-  // update provided meta structure to reflect reality
-  *m_client_meta = m_client_meta_copy;
   finish(0);
 }
 

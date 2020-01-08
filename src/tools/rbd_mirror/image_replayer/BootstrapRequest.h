@@ -35,6 +35,9 @@ template <typename> struct Threads;
 
 namespace image_replayer {
 
+// TODO
+namespace journal { template <typename> class StateBuilder; }
+
 template <typename ImageCtxT = librbd::ImageCtx>
 class BootstrapRequest : public BaseRequest {
 public:
@@ -174,6 +177,9 @@ private:
 
   bool m_syncing = false;
   ImageSync<ImageCtxT> *m_image_sync = nullptr;
+
+  // TODO temporary
+  journal::StateBuilder<ImageCtxT>* m_state_builder = nullptr;
 
   void prepare_local_image();
   void handle_prepare_local_image(int r);

@@ -7,15 +7,15 @@
 #include "common/debug.h"
 #include "common/Timer.h"
 #include "common/errno.h"
-#include "journal/Journaler.h"
 #include "librbd/DeepCopyRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
-#include "librbd/journal/Types.h"
+#include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.h"
 #include "tools/rbd_mirror/image_sync/SyncPointPruneRequest.h"
+#include "tools/rbd_mirror/image_sync/Types.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -46,22 +46,27 @@ public:
 };
 
 template <typename I>
-ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
-                        SafeTimer *timer, ceph::mutex *timer_lock,
-                        const std::string &mirror_uuid, Journaler *journaler,
-                        MirrorPeerClientMeta *client_meta,
-                        ContextWQ *work_queue,
-                        InstanceWatcher<I> *instance_watcher,
-                        Context *on_finish, ProgressContext *progress_ctx)
+ImageSync<I>::ImageSync(
+    Threads<I>* threads,
+    I *local_image_ctx,
+    I *remote_image_ctx,
+    const std::string &local_mirror_uuid,
+    image_sync::SyncPointHandler* sync_point_handler,
+    InstanceWatcher<I> *instance_watcher,
+    ProgressContext *progress_ctx,
+    Context *on_finish)
   : BaseRequest("rbd::mirror::ImageSync", local_image_ctx->cct, on_finish),
-    m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
-    m_timer(timer), m_timer_lock(timer_lock), m_mirror_uuid(mirror_uuid),
-    m_journaler(journaler), m_client_meta(client_meta),
-    m_work_queue(work_queue), m_instance_watcher(instance_watcher),
+    m_threads(threads),
+    m_local_image_ctx(local_image_ctx),
+    m_remote_image_ctx(remote_image_ctx),
+    m_local_mirror_uuid(local_mirror_uuid),
+    m_sync_point_handler(sync_point_handler),
+    m_instance_watcher(instance_watcher),
     m_progress_ctx(progress_ctx),
     m_lock(ceph::make_mutex(unique_lock_name("ImageSync::m_lock", this))),
-    m_update_sync_point_interval(m_local_image_ctx->cct->_conf.template get_val<double>(
-        "rbd_mirror_sync_point_update_age")), m_client_meta_copy(*client_meta) {
+    m_update_sync_point_interval(
+      m_local_image_ctx->cct->_conf.template get_val<double>(
+        "rbd_mirror_sync_point_update_age")) {
 }
 
 template <typename I>
@@ -107,7 +112,7 @@ void ImageSync<I>::send_notify_sync_request() {
   }
 
   Context *ctx = create_async_context_callback(
-    m_work_queue, create_context_callback<
+    m_threads->work_queue, create_context_callback<
       ImageSync<I>, &ImageSync<I>::handle_notify_sync_request>(this));
   m_instance_watcher->notify_sync_request(m_local_image_ctx->id, ctx);
   m_lock.unlock();
@@ -135,7 +140,7 @@ template <typename I>
 void ImageSync<I>::send_prune_catch_up_sync_point() {
   update_progress("PRUNE_CATCH_UP_SYNC_POINT");
 
-  if (m_client_meta->sync_points.empty()) {
+  if (m_sync_point_handler->get_sync_points().empty()) {
     send_create_sync_point();
     return;
   }
@@ -148,7 +153,7 @@ void ImageSync<I>::send_prune_catch_up_sync_point() {
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_prune_catch_up_sync_point>(this);
   SyncPointPruneRequest<I> *request = SyncPointPruneRequest<I>::create(
-    m_remote_image_ctx, false, m_journaler, m_client_meta, ctx);
+    m_remote_image_ctx, false, m_sync_point_handler, ctx);
   request->send();
 }
 
@@ -172,7 +177,7 @@ void ImageSync<I>::send_create_sync_point() {
 
   // TODO: when support for disconnecting laggy clients is added,
   //       re-connect and create catch-up sync point
-  if (m_client_meta->sync_points.size() > 0) {
+  if (!m_sync_point_handler->get_sync_points().empty()) {
     send_copy_image();
     return;
   }
@@ -182,7 +187,7 @@ void ImageSync<I>::send_create_sync_point() {
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_create_sync_point>(this);
   SyncPointCreateRequest<I> *request = SyncPointCreateRequest<I>::create(
-    m_remote_image_ctx, m_mirror_uuid, m_journaler, m_client_meta, ctx);
+    m_remote_image_ctx, m_local_mirror_uuid, m_sync_point_handler, ctx);
   request->send();
 }
 
@@ -206,10 +211,14 @@ void ImageSync<I>::send_copy_image() {
   librados::snap_t snap_id_end;
   librbd::deep_copy::ObjectNumber object_number;
   int r = 0;
+
+  m_snap_seqs_copy = m_sync_point_handler->get_snap_seqs();
+  m_sync_points_copy = m_sync_point_handler->get_sync_points();
+  ceph_assert(!m_sync_points_copy.empty());
+  auto &sync_point = m_sync_points_copy.front();
+
   {
     std::shared_lock image_locker{m_remote_image_ctx->image_lock};
-    ceph_assert(!m_client_meta->sync_points.empty());
-    auto &sync_point = m_client_meta->sync_points.front();
     snap_id_end = m_remote_image_ctx->get_snap_id(
 	cls::rbd::UserSnapshotNamespace(), sync_point.snap_name);
     if (snap_id_end == CEPH_NOSNAP) {
@@ -245,7 +254,7 @@ void ImageSync<I>::send_copy_image() {
   m_image_copy_prog_ctx = new ImageCopyProgressContext(this);
   m_image_copy_request = librbd::DeepCopyRequest<I>::create(
       m_remote_image_ctx, m_local_image_ctx, snap_id_start, snap_id_end,
-      false, object_number, m_work_queue, &m_client_meta->snap_seqs,
+      false, object_number, m_threads->work_queue, &m_snap_seqs_copy,
       m_image_copy_prog_ctx, ctx);
   m_image_copy_request->get();
   m_lock.unlock();
@@ -260,7 +269,7 @@ void ImageSync<I>::handle_copy_image(int r) {
   dout(10) << ": r=" << r << dendl;
 
   {
-    std::scoped_lock locker{*m_timer_lock, m_lock};
+    std::scoped_lock locker{m_threads->timer_lock, m_lock};
     m_image_copy_request->put();
     m_image_copy_request = nullptr;
     delete m_image_copy_prog_ctx;
@@ -270,7 +279,7 @@ void ImageSync<I>::handle_copy_image(int r) {
     }
 
     if (m_update_sync_ctx != nullptr) {
-      m_timer->cancel_event(m_update_sync_ctx);
+      m_threads->timer->cancel_event(m_update_sync_ctx);
       m_update_sync_ctx = nullptr;
     }
 
@@ -318,10 +327,10 @@ void ImageSync<I>::send_update_sync_point() {
     return;
   }
 
-  auto sync_point = &m_client_meta->sync_points.front();
+  ceph_assert(!m_sync_points_copy.empty());
+  auto sync_point = &m_sync_points_copy.front();
 
-  if (m_client_meta->sync_object_count == m_image_copy_object_count &&
-      sync_point->object_number &&
+  if (sync_point->object_number &&
       (m_image_copy_object_no - 1) == sync_point->object_number.get()) {
     // update sync point did not progress since last sync
     return;
@@ -329,23 +338,14 @@ void ImageSync<I>::send_update_sync_point() {
 
   m_updating_sync_point = true;
 
-  m_client_meta_copy = *m_client_meta;
-  m_client_meta->sync_object_count = m_image_copy_object_count;
   if (m_image_copy_object_no > 0) {
     sync_point->object_number = m_image_copy_object_no - 1;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": sync_point=" << *sync_point << dendl;
-
-  bufferlist client_data_bl;
-  librbd::journal::ClientData client_data(*m_client_meta);
-  encode(client_data, client_data_bl);
-
-  Context *ctx = create_context_callback<
-    ImageSync<I>, &ImageSync<I>::handle_update_sync_point>(
-      this);
-  m_journaler->update_client(client_data_bl, ctx);
+  auto ctx = create_context_callback<
+    ImageSync<I>, &ImageSync<I>::handle_update_sync_point>(this);
+  m_sync_point_handler->update_sync_points(m_snap_seqs_copy,
+                                           m_sync_points_copy, false, ctx);
 }
 
 template <typename I>
@@ -353,14 +353,8 @@ void ImageSync<I>::handle_update_sync_point(int r) {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": r=" << r << dendl;
 
-  if (r < 0) {
-    *m_client_meta = m_client_meta_copy;
-    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
-               << dendl;
-  }
-
   {
-    std::scoped_lock locker{*m_timer_lock, m_lock};
+    std::scoped_lock locker{m_threads->timer_lock, m_lock};
     m_updating_sync_point = false;
 
     if (m_image_copy_request != nullptr) {
@@ -369,8 +363,8 @@ void ImageSync<I>::handle_update_sync_point(int r) {
 	  std::lock_guard locker{m_lock};
           this->send_update_sync_point();
         });
-      m_timer->add_event_after(m_update_sync_point_interval,
-                               m_update_sync_ctx);
+      m_threads->timer->add_event_after(
+        m_update_sync_point_interval, m_update_sync_ctx);
       return;
     }
   }
@@ -387,25 +381,19 @@ void ImageSync<I>::send_flush_sync_point() {
 
   update_progress("FLUSH_SYNC_POINT");
 
-  m_client_meta_copy = *m_client_meta;
-  m_client_meta->sync_object_count = m_image_copy_object_count;
-  auto sync_point = &m_client_meta->sync_points.front();
+  ceph_assert(!m_sync_points_copy.empty());
+  auto sync_point = &m_sync_points_copy.front();
+
   if (m_image_copy_object_no > 0) {
     sync_point->object_number = m_image_copy_object_no - 1;
   } else {
     sync_point->object_number = boost::none;
   }
 
-  dout(10) << ": sync_point=" << *sync_point << dendl;
-
-  bufferlist client_data_bl;
-  librbd::journal::ClientData client_data(*m_client_meta);
-  encode(client_data, client_data_bl);
-
-  Context *ctx = create_context_callback<
-    ImageSync<I>, &ImageSync<I>::handle_flush_sync_point>(
-      this);
-  m_journaler->update_client(client_data_bl, ctx);
+  auto ctx = create_context_callback<
+    ImageSync<I>, &ImageSync<I>::handle_flush_sync_point>(this);
+  m_sync_point_handler->update_sync_points(m_snap_seqs_copy,
+                                           m_sync_points_copy, false, ctx);
 }
 
 template <typename I>
@@ -413,8 +401,6 @@ void ImageSync<I>::handle_flush_sync_point(int r) {
   dout(10) << ": r=" << r << dendl;
 
   if (r < 0) {
-    *m_client_meta = m_client_meta_copy;
-
     derr << ": failed to update client data: " << cpp_strerror(r)
          << dendl;
     finish(r);
@@ -433,7 +419,7 @@ void ImageSync<I>::send_prune_sync_points() {
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_prune_sync_points>(this);
   SyncPointPruneRequest<I> *request = SyncPointPruneRequest<I>::create(
-    m_remote_image_ctx, true, m_journaler, m_client_meta, ctx);
+    m_remote_image_ctx, true, m_sync_point_handler, ctx);
   request->send();
 }
 
@@ -448,7 +434,7 @@ void ImageSync<I>::handle_prune_sync_points(int r) {
     return;
   }
 
-  if (!m_client_meta->sync_points.empty()) {
+  if (!m_sync_point_handler->get_sync_points().empty()) {
     send_copy_image();
     return;
   }
