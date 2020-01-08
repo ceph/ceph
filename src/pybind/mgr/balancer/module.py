@@ -1,4 +1,3 @@
-
 """
 Balance PG distribution across OSDs.
 """
@@ -18,18 +17,19 @@ import datetime
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
 class MappingState:
-    def __init__(self, osdmap, pg_dump, desc=''):
+    def __init__(self, osdmap, raw_pg_stats, raw_pool_stats, desc=''):
         self.desc = desc
         self.osdmap = osdmap
         self.osdmap_dump = self.osdmap.dump()
         self.crush = osdmap.get_crush()
         self.crush_dump = self.crush.dump()
-        self.pg_dump = pg_dump
+        self.raw_pg_stats = raw_pg_stats
+        self.raw_pool_stats = raw_pool_stats
         self.pg_stat = {
-            i['pgid']: i['stat_sum'] for i in pg_dump.get('pg_stats', [])
+            i['pgid']: i['stat_sum'] for i in raw_pg_stats.get('pg_stats', [])
         }
         osd_poolids = [p['pool'] for p in self.osdmap_dump.get('pools', [])]
-        pg_poolids = [p['poolid'] for p in pg_dump.get('pool_stats', [])]
+        pg_poolids = [p['poolid'] for p in raw_pool_stats.get('pool_stats', [])]
         self.poolids = set(osd_poolids) & set(pg_poolids)
         self.pg_up = {}
         self.pg_up_by_poolid = {}
@@ -72,7 +72,8 @@ class MsPlan(Plan):
         self.inc.set_osd_reweights(self.osd_weights)
         self.inc.set_crush_compat_weight_set_weights(self.compat_ws)
         return MappingState(self.initial.osdmap.apply_incremental(self.inc),
-                            self.initial.pg_dump,
+                            self.initial.raw_pg_stats,
+                            self.initial.raw_pool_stats,
                             'plan %s final' % self.name)
 
     def dump(self):
@@ -450,7 +451,8 @@ class Module(MgrModule):
                     return (-errno.EPERM, '', warn)
             elif command['mode'] == 'crush-compat':
                 ms = MappingState(self.get_osdmap(),
-                                  self.get("pg_dump"),
+                                  self.get("pg_stats"),
+                                  self.get("pool_stats"),
                                   'initialize compat weight-set')
                 self.get_compat_weight_set_weights(ms) # ignore error
             self.set_module_option('mode', command['mode'])
@@ -527,7 +529,7 @@ class Module(MgrModule):
                     if option not in valid_pool_names:
                          return (-errno.EINVAL, '', 'option "%s" not a plan or a pool' % option)
                     pools.append(option)
-                    ms = MappingState(osdmap, self.get("pg_dump"), 'pool "%s"' % option)
+                    ms = MappingState(osdmap, self.get("pg_stats"), self.get("pool_stats"), 'pool "%s"' % option)
                 else:
                     pools = plan.pools
                     if plan.mode == 'upmap':
@@ -535,16 +537,18 @@ class Module(MgrModule):
                         # we use a basic version of Plan without keeping the obvious
                         # *redundant* MS member.
                         # Hence ms might not be accurate here since we are basically
-                        # using an old snapshotted osdmap vs a fresh copy of pg_dump.
+                        # using an old snapshotted osdmap vs a fresh copy of pg_stats.
                         # It should not be a big deal though..
                         ms = MappingState(plan.osdmap,
-                                          self.get("pg_dump"),
+                                          self.get("pg_stats"),
+                                          self.get("pool_stats"),
                                           'plan "%s"' % plan.name)
                     else:
                         ms = plan.final_state()
             else:
                 ms = MappingState(self.get_osdmap(),
-                                  self.get("pg_dump"),
+                                  self.get("pg_stats"),
+                                  self.get("pool_stats"),
                                   'current cluster')
             return (0, self.evaluate(ms, pools, verbose=verbose), '')
         elif command['prefix'] == 'balancer optimize':
@@ -693,14 +697,15 @@ class Module(MgrModule):
         if mode == 'upmap':
             # drop unnecessary MS member for upmap mode.
             # this way we could effectively eliminate the usage of a
-            # complete pg_dump, which can become horribly inefficient
+            # complete pg_stats, which can become horribly inefficient
             # as pg_num grows..
             plan = Plan(name, mode, osdmap, pools)
         else:
             plan = MsPlan(name,
                           mode,
                           MappingState(osdmap,
-                                       self.get("pg_dump"),
+                                       self.get("pg_stats"),
+                                       self.get("pool_stats"),
                                        'plan %s initial' % name),
                           pools)
         return plan
