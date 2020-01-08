@@ -194,7 +194,7 @@
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "CPU Utilisation",
+      "title": "CPU Utilization",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1095,7 +1095,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "$ceph_hosts Disk utilisation",
+      "title": "$ceph_hosts Disk utilization",
       "tooltip": {
         "shared": true,
         "sort": 2,
