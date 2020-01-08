@@ -10,6 +10,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/ProgressContext.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -30,8 +31,20 @@ void PrepareReplayRequest<I>::send() {
   *m_resync_requested = false;
   *m_syncing = false;
 
-  std::shared_lock image_locker(m_local_image_ctx->image_lock);
-  if (m_local_image_ctx->journal == nullptr) {
+  if (m_state_builder->local_image_id !=
+        m_state_builder->remote_client_meta.image_id) {
+    // somehow our local image has a different image id than the image id
+    // registered in the remote image
+    derr << "split-brain detected: local_image_id="
+         << m_state_builder->local_image_id << ", "
+         << "registered local_image_id="
+         << m_state_builder->remote_client_meta.image_id << dendl;
+    finish(-EEXIST);
+    return;
+  }
+
+  std::shared_lock image_locker(m_state_builder->local_image_ctx->image_lock);
+  if (m_state_builder->local_image_ctx->journal == nullptr) {
     image_locker.unlock();
 
     derr << "local image does not support journaling" << dendl;
@@ -39,7 +52,8 @@ void PrepareReplayRequest<I>::send() {
     return;
   }
 
-  int r = m_local_image_ctx->journal->is_resync_requested(m_resync_requested);
+  int r = m_state_builder->local_image_ctx->journal->is_resync_requested(
+    m_resync_requested);
   if (r < 0) {
     image_locker.unlock();
 
@@ -48,13 +62,13 @@ void PrepareReplayRequest<I>::send() {
     return;
   }
 
-  m_local_tag_tid = m_local_image_ctx->journal->get_tag_tid();
-  m_local_tag_data = m_local_image_ctx->journal->get_tag_data();
+  m_local_tag_tid = m_state_builder->local_image_ctx->journal->get_tag_tid();
+  m_local_tag_data = m_state_builder->local_image_ctx->journal->get_tag_data();
   dout(10) << "local tag=" << m_local_tag_tid << ", "
            << "local tag data=" << m_local_tag_data << dendl;
   image_locker.unlock();
 
-  if (m_local_tag_data.mirror_uuid != m_remote_mirror_uuid &&
+  if (m_local_tag_data.mirror_uuid != m_state_builder->remote_mirror_uuid &&
       m_remote_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY) {
     // if the local mirror is not linked to the (now) non-primary image,
     // stop the replay. Otherwise, we ignore that the remote is non-primary
@@ -68,9 +82,10 @@ void PrepareReplayRequest<I>::send() {
   if (*m_resync_requested) {
     finish(0);
     return;
-  } else if (m_client_meta->state ==
+  } else if (m_state_builder->remote_client_meta.state ==
                librbd::journal::MIRROR_PEER_STATE_SYNCING &&
-             m_local_tag_data.mirror_uuid == m_remote_mirror_uuid) {
+             m_local_tag_data.mirror_uuid ==
+               m_state_builder->remote_mirror_uuid) {
     // if the initial sync hasn't completed, we cannot replay
     *m_syncing = true;
     finish(0);
@@ -82,8 +97,9 @@ void PrepareReplayRequest<I>::send() {
 
 template <typename I>
 void PrepareReplayRequest<I>::update_client_state() {
-  if (m_client_meta->state != librbd::journal::MIRROR_PEER_STATE_SYNCING ||
-      m_local_tag_data.mirror_uuid == m_remote_mirror_uuid) {
+  if (m_state_builder->remote_client_meta.state !=
+        librbd::journal::MIRROR_PEER_STATE_SYNCING ||
+      m_local_tag_data.mirror_uuid == m_state_builder->remote_mirror_uuid) {
     get_remote_tag_class();
     return;
   }
@@ -94,7 +110,7 @@ void PrepareReplayRequest<I>::update_client_state() {
   dout(15) << dendl;
   update_progress("UPDATE_CLIENT_STATE");
 
-  librbd::journal::MirrorPeerClientMeta client_meta(*m_client_meta);
+  auto client_meta = m_state_builder->remote_client_meta;
   client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
 
   librbd::journal::ClientData client_data(client_meta);
@@ -104,7 +120,7 @@ void PrepareReplayRequest<I>::update_client_state() {
   auto ctx = create_context_callback<
     PrepareReplayRequest<I>,
     &PrepareReplayRequest<I>::handle_update_client_state>(this);
-  m_remote_journaler->update_client(data_bl, ctx);
+  m_state_builder->remote_journaler->update_client(data_bl, ctx);
 }
 
 template <typename I>
@@ -116,7 +132,8 @@ void PrepareReplayRequest<I>::handle_update_client_state(int r) {
     return;
   }
 
-  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+  m_state_builder->remote_client_meta.state =
+    librbd::journal::MIRROR_PEER_STATE_REPLAYING;
   get_remote_tag_class();
 }
 
@@ -128,8 +145,8 @@ void PrepareReplayRequest<I>::get_remote_tag_class() {
   auto ctx = create_context_callback<
     PrepareReplayRequest<I>,
     &PrepareReplayRequest<I>::handle_get_remote_tag_class>(this);
-  m_remote_journaler->get_client(librbd::Journal<>::IMAGE_CLIENT_ID, &m_client,
-                                 ctx);
+  m_state_builder->remote_journaler->get_client(
+    librbd::Journal<>::IMAGE_CLIENT_ID, &m_client, ctx);
 }
 
 template <typename I>
@@ -175,7 +192,8 @@ void PrepareReplayRequest<I>::get_remote_tags() {
   auto ctx = create_context_callback<
     PrepareReplayRequest<I>,
     &PrepareReplayRequest<I>::handle_get_remote_tags>(this);
-  m_remote_journaler->get_tags(m_remote_tag_class, &m_remote_tags, ctx);
+  m_state_builder->remote_journaler->get_tags(m_remote_tag_class,
+                                              &m_remote_tags, ctx);
 }
 
 template <typename I>
@@ -200,7 +218,8 @@ void PrepareReplayRequest<I>::handle_get_remote_tags(int r) {
   // decode the remote tags
   for (auto &remote_tag : m_remote_tags) {
     if (m_local_tag_data.predecessor.commit_valid &&
-        m_local_tag_data.predecessor.mirror_uuid == m_remote_mirror_uuid &&
+        m_local_tag_data.predecessor.mirror_uuid ==
+          m_state_builder->remote_mirror_uuid &&
         m_local_tag_data.predecessor.tag_tid > remote_tag.tid) {
       dout(10) << "skipping processed predecessor remote tag "
                << remote_tag.tid << dendl;
@@ -250,7 +269,8 @@ void PrepareReplayRequest<I>::handle_get_remote_tags(int r) {
           continue;
         }
 
-        if (m_local_tag_data.predecessor.mirror_uuid == m_remote_mirror_uuid &&
+        if (m_local_tag_data.predecessor.mirror_uuid ==
+              m_state_builder->remote_mirror_uuid &&
             remote_tag_data.predecessor.mirror_uuid ==
               librbd::Journal<>::LOCAL_MIRROR_UUID) {
           // remote demoted and local has matching event
@@ -277,7 +297,7 @@ void PrepareReplayRequest<I>::handle_get_remote_tags(int r) {
   }
 
   if (remote_tag_data_valid &&
-      m_local_tag_data.mirror_uuid == m_remote_mirror_uuid) {
+      m_local_tag_data.mirror_uuid == m_state_builder->remote_mirror_uuid) {
     dout(10) << "local image is in clean replay state" << dendl;
   } else if (reconnect_orphan) {
     dout(10) << "remote image was demoted/promoted" << dendl;

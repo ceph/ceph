@@ -7,14 +7,10 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
-#include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "librbd/journal/Types.h"
-#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/Types.h"
 #include "tools/rbd_mirror/CancelableRequest.h"
 #include "tools/rbd_mirror/Types.h"
-#include <list>
 #include <string>
 
 class Context;
@@ -35,15 +31,11 @@ template <typename> struct Threads;
 
 namespace image_replayer {
 
-// TODO
-namespace journal { template <typename> class StateBuilder; }
+template <typename> class StateBuilder;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class BootstrapRequest : public CancelableRequest {
 public:
-  typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
-  typedef typename TypeTraits::Journaler Journaler;
-  typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
   typedef rbd::mirror::ProgressContext ProgressContext;
 
   static BootstrapRequest* create(
@@ -55,17 +47,12 @@ public:
       const std::string& local_mirror_uuid,
       ::journal::CacheManagerHandler* cache_manager_handler,
       ProgressContext* progress_ctx,
-      ImageCtxT** local_image_ctx,
-      std::string* local_image_id,
-      std::string* remote_image_id,
-      std::string* remote_mirror_uuid,
-      Journaler** remote_journaler,
+      StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
-      local_mirror_uuid,  cache_manager_handler, progress_ctx, local_image_ctx,
-      local_image_id, remote_image_id, remote_mirror_uuid, remote_journaler,
+      local_mirror_uuid,  cache_manager_handler, progress_ctx, state_builder,
       do_resync, on_finish);
   }
 
@@ -78,11 +65,7 @@ public:
       const std::string& local_mirror_uuid,
       ::journal::CacheManagerHandler* cache_manager_handler,
       ProgressContext* progress_ctx,
-      ImageCtxT** local_image_ctx,
-      std::string* local_image_id,
-      std::string* remote_image_id,
-      std::string* remote_mirror_uuid,
-      Journaler** remote_journaler,
+      StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish);
   ~BootstrapRequest() override;
@@ -121,17 +104,14 @@ private:
    *              |                                     *   *
    *              |                                     *   *
    *              v                                     *   *
-   *           PREPARE_REPLAY * * * * * * * *           *   *
-   *              |                         *           *   *
-   *              |                         *           *   *
-   *              v (skip if not needed)    v           *   *
-   *           IMAGE_SYNC * * * * > CLOSE_LOCAL_IMAGE   *   *
-   *              |                         |           *   *
-   *              |                         |           *   *
-   *              \-----------------\ /-----/           *   *
-   *                                 |                  *   *
-   *                                 |                  *   *
-   *    /----------------------------/                  *   *
+   *           PREPARE_REPLAY * * * * * * * * * * * * * *   *
+   *              |                                     *   *
+   *              |                                     *   *
+   *              v (skip if not needed)                *   *
+   *           IMAGE_SYNC * * * * * * * * * * * * * * * *   *
+   *              |                                     *   *
+   *              |                                     *   *
+   *    /---------/                                     *   *
    *    |                                               *   *
    *    v                                               *   *
    * CLOSE_REMOTE_IMAGE < * * * * * * * * * * * * * * * *   *
@@ -141,8 +121,6 @@ private:
    *
    * @endverbatim
    */
-  typedef std::list<cls::journal::Tag> Tags;
-
   Threads<ImageCtxT>* m_threads;
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
@@ -151,11 +129,7 @@ private:
   std::string m_local_mirror_uuid;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
   ProgressContext *m_progress_ctx;
-  ImageCtxT **m_local_image_ctx;
-  std::string* m_local_image_id;
-  std::string* m_remote_image_id;
-  std::string* m_remote_mirror_uuid;
-  Journaler** m_remote_journaler;
+  StateBuilder<ImageCtxT>** m_state_builder;
   bool *m_do_resync;
 
   mutable ceph::mutex m_lock;
@@ -168,18 +142,10 @@ private:
   int m_ret_val = 0;
 
   std::string m_local_image_name;
-  std::string m_local_image_tag_owner;
   std::string m_prepare_local_image_name;
-
-  cls::journal::ClientState m_client_state =
-    cls::journal::CLIENT_STATE_DISCONNECTED;
-  librbd::journal::MirrorPeerClientMeta m_client_meta;
 
   bool m_syncing = false;
   ImageSync<ImageCtxT> *m_image_sync = nullptr;
-
-  // TODO temporary
-  journal::StateBuilder<ImageCtxT>* m_state_builder = nullptr;
 
   void prepare_local_image();
   void handle_prepare_local_image(int r);
@@ -204,9 +170,6 @@ private:
 
   void image_sync();
   void handle_image_sync(int r);
-
-  void close_local_image();
-  void handle_close_local_image(int r);
 
   void close_remote_image();
   void handle_close_remote_image(int r);

@@ -6,13 +6,8 @@
 
 #include "common/AsyncOpTracker.h"
 #include "common/ceph_mutex.h"
-#include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
-#include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "librbd/ImageCtx.h"
-#include "librbd/journal/Types.h"
-#include "librbd/journal/TypeTraits.h"
 #include "ProgressContext.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
@@ -21,18 +16,8 @@
 
 class AdminSocketHook;
 
-namespace journal {
-
-struct CacheManagerHandler;
-class Journaler;
-
-} // namespace journal
-
-namespace librbd {
-
-class ImageCtx;
-
-} // namespace librbd
+namespace journal { struct CacheManagerHandler; }
+namespace librbd { class ImageCtx; }
 
 namespace rbd {
 namespace mirror {
@@ -45,6 +30,7 @@ namespace image_replayer {
 
 class Replayer;
 template <typename> class BootstrapRequest;
+template <typename> class StateBuilder;
 
 } // namespace image_replayer
 
@@ -171,8 +157,6 @@ private:
   };
 
   struct RemoteImage {
-    std::string mirror_uuid;
-    std::string image_id;
     librados::IoCtx io_ctx;
     MirrorStatusUpdater<ImageCtxT>* mirror_status_updater = nullptr;
 
@@ -184,7 +168,6 @@ private:
   };
   struct ReplayerListener;
 
-  typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
   typedef boost::optional<cls::rbd::MirrorImageStatusState>
       OptionalMirrorImageStatusState;
@@ -213,7 +196,6 @@ private:
   Peers m_peers;
   RemoteImage m_remote_image;
 
-  std::string m_local_image_id;
   std::string m_local_image_name;
   std::string m_image_spec;
 
@@ -231,11 +213,7 @@ private:
   bool m_delete_requested = false;
   bool m_resync_requested = false;
 
-  ImageCtxT *m_local_image_ctx = nullptr;
-
-  decltype(ImageCtxT::journal) m_local_journal = nullptr;
-  Journaler* m_remote_journaler = nullptr;
-
+  image_replayer::StateBuilder<ImageCtxT>* m_state_builder = nullptr;
   image_replayer::Replayer* m_replayer = nullptr;
   ReplayerListener* m_replayer_listener = nullptr;
 

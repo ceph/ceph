@@ -87,9 +87,8 @@ BaseRequest* StateBuilder<I>::create_local_image_request(
     ProgressContext* progress_ctx,
     Context* on_finish) {
   return CreateLocalImageRequest<I>::create(
-    threads, local_io_ctx, remote_image_ctx, remote_journaler,
-    this->global_image_id, this->remote_mirror_uuid, &remote_client_meta,
-    progress_ctx, &this->local_image_id, on_finish);
+    threads, local_io_ctx, remote_image_ctx, this->global_image_id,
+    progress_ctx, this, on_finish);
 }
 
 template <typename I>
@@ -101,16 +100,8 @@ BaseRequest* StateBuilder<I>::create_prepare_replay_request(
     bool* syncing,
     Context* on_finish) {
   return PrepareReplayRequest<I>::create(
-    this->local_image_ctx,
-    remote_journaler,
-    remote_promotion_state,
-    local_mirror_uuid,
-    this->remote_mirror_uuid,
-    &remote_client_meta,
-    progress_ctx,
-    resync_requested,
-    syncing,
-    on_finish);
+    local_mirror_uuid, remote_promotion_state, progress_ctx, this,
+    resync_requested, syncing, on_finish);
 }
 
 template <typename I>
@@ -119,12 +110,7 @@ image_replayer::Replayer* StateBuilder<I>::create_replayer(
     const std::string& local_mirror_uuid,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(
-    &this->local_image_ctx,
-    remote_journaler,
-    local_mirror_uuid,
-    this->remote_mirror_uuid,
-    replayer_listener,
-    threads);
+    threads, local_mirror_uuid, this, replayer_listener);
 }
 
 template <typename I>
