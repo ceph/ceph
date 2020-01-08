@@ -112,7 +112,7 @@ describe('CephfsDirectoriesComponent', () => {
         mockLib.dir(path, 'b', 2)
       ];
     },
-    lsDir: (_id: number, path = '') => {
+    lsDir: (_id: number, path = ''): Observable<CephfsDir[]> => {
       // will return 2 levels deep
       let data = mockLib.lsSingleDir(path);
       const paths = data.map((dir) => dir.path);
@@ -121,7 +121,7 @@ describe('CephfsDirectoriesComponent', () => {
       });
       return of(data);
     },
-    mkSnapshot: (_id: any, path: string, name: string) => {
+    mkSnapshot: (_id: any, path: string, name: string): Observable<string> => {
       mockData.createdSnaps.push({
         name,
         path,
@@ -129,7 +129,7 @@ describe('CephfsDirectoriesComponent', () => {
       });
       return of(name);
     },
-    rmSnapshot: (_id: any, path: string, name: string) => {
+    rmSnapshot: (_id: any, path: string, name: string): Observable<string> => {
       mockData.deletedSnaps.push({
         name,
         path,
@@ -137,11 +137,11 @@ describe('CephfsDirectoriesComponent', () => {
       });
       return of(name);
     },
-    updateQuota: (_id: any, path: string, updated: CephfsQuotas) => {
+    updateQuota: (_id: any, path: string, updated: CephfsQuotas): Observable<string> => {
       mockData.updatedQuotas[path] = Object.assign(mockData.updatedQuotas[path] || {}, updated);
       return of('Response');
     },
-    modalShow: (comp: any, init: any) => {
+    modalShow: (comp: Type<any>, init: any): any => {
       modal = modalServiceShow(comp, init);
       return modal.ref;
     },
@@ -834,10 +834,7 @@ describe('CephfsDirectoriesComponent', () => {
   describe('table actions', () => {
     let actions: CdTableAction[];
 
-    const empty = (): CdTableSelection => {
-      const selection = new CdTableSelection();
-      return selection;
-    };
+    const empty = (): CdTableSelection => new CdTableSelection();
 
     const select = (value: number): CdTableSelection => {
       const selection = new CdTableSelection();
