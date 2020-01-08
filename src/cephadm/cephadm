@@ -1928,8 +1928,17 @@ def command_deploy():
         daemon_port = Monitoring.port_map[daemon_type]
         if port_in_use(daemon_port):
             raise Error("TCP Port '{}' required for {} is already in use".format(daemon_port, daemon_type))
-        elif args.image == DEFAULT_IMAGE:
-            raise Error("--image parameter must be supplied for {}".format(daemon_type))
+
+        # Monitoring metadata is nested dicts, so asking mypy to ignore
+        p = Monitoring.components[daemon_type]  # type: ignore
+        metadata = p.get('image', dict())  # type: ignore
+
+        # DEFAULT_IMAGE cannot be used for monitoring components
+        if args.image == DEFAULT_IMAGE:
+            if metadata.get('image') != '':
+                args.image = metadata['image']
+            else:
+                raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
         if daemon_type in ['prometheus', 'grafana'] and not args.config_json:
                 raise Error("config-json parameter is needed when deploying {} service".format(daemon_type))
