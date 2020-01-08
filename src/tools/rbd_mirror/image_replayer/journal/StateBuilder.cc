@@ -9,6 +9,7 @@
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
+#include "tools/rbd_mirror/image_replayer/journal/SyncPointHandler.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -64,6 +65,14 @@ bool StateBuilder<I>::is_linked() const {
 template <typename I>
 cls::rbd::MirrorImageMode StateBuilder<I>::get_mirror_image_mode() const {
   return cls::rbd::MIRROR_IMAGE_MODE_JOURNAL;
+}
+
+template <typename I>
+image_sync::SyncPointHandler* StateBuilder<I>::create_sync_point_handler() {
+  dout(10) << dendl;
+
+  this->m_sync_point_handler = SyncPointHandler<I>::create(this);
+  return this->m_sync_point_handler;
 }
 
 template <typename I>

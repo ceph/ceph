@@ -11,6 +11,9 @@ namespace librbd { struct ImageCtx; }
 
 namespace rbd {
 namespace mirror {
+
+namespace image_sync { struct SyncPointHandler; }
+
 namespace image_replayer {
 
 template <typename ImageCtxT>
@@ -34,6 +37,9 @@ public:
 
   virtual cls::rbd::MirrorImageMode get_mirror_image_mode() const = 0;
 
+  virtual image_sync::SyncPointHandler* create_sync_point_handler() = 0;
+  void destroy_sync_point_handler();
+
   std::string global_image_id;
 
   std::string local_image_id;
@@ -43,12 +49,13 @@ public:
   std::string remote_image_id;
 
 protected:
+  image_sync::SyncPointHandler* m_sync_point_handler = nullptr;
+
   StateBuilder(const std::string& global_image_id);
 
   void close_local_image(Context* on_finish);
 
 private:
-
   void handle_close_local_image(int r, Context* on_finish);
 };
 

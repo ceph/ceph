@@ -9,6 +9,7 @@
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
+#include "tools/rbd_mirror/image_sync/Types.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -30,6 +31,7 @@ StateBuilder<I>::StateBuilder(const std::string& global_image_id)
 template <typename I>
 StateBuilder<I>::~StateBuilder() {
   ceph_assert(local_image_ctx == nullptr);
+  ceph_assert(m_sync_point_handler == nullptr);
 }
 
 template <typename I>
@@ -59,6 +61,17 @@ void StateBuilder<I>::handle_close_local_image(int r, Context* on_finish) {
   }
 
   on_finish->complete(r);
+}
+
+template <typename I>
+void StateBuilder<I>::destroy_sync_point_handler() {
+  if (m_sync_point_handler == nullptr) {
+    return;
+  }
+
+  dout(15) << dendl;
+  m_sync_point_handler->destroy();
+  m_sync_point_handler = nullptr;
 }
 
 } // namespace image_replayer
