@@ -2603,20 +2603,32 @@ void KStore::_do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl, bool 
     return;
   }
  
-  map<uint64_t,bufferlist>::iterator p = o->pending_stripes.find(offset);
-  if (p == o->pending_stripes.end()) {
+  bool need_update_cache = false;
+  {
+    std::shared_lock l{o->stripes_lock};
+    map<uint64_t,bufferlist>::iterator p = o->pending_stripes.find(offset);
+    if (p != o->pending_stripes.end()) {
+      *pbl = p->second;
+    } else {
+      need_update_cache = true;
+    }
+  }
+
+  if (need_update_cache) {
     string key;
     get_data_key(o->onode.nid, offset, &key);
     db->get(PREFIX_DATA, key, pbl);
-    o->pending_stripes[offset] = *pbl;
-  } else {
-    *pbl = p->second;
+    {
+      std::unique_lock l{o->stripes_lock};
+      o->pending_stripes[offset] = *pbl;
+    }
   }
 }
 
 void KStore::_do_write_stripe(TransContext *txc, OnodeRef o,
 			      uint64_t offset, bufferlist& bl)
 {
+  std::unique_lock l{o->stripes_lock};
   o->pending_stripes[offset] = bl;
   string key;
   get_data_key(o->onode.nid, offset, &key);
@@ -2625,6 +2637,7 @@ void KStore::_do_write_stripe(TransContext *txc, OnodeRef o,
 
 void KStore::_do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset)
 {
+  std::unique_lock l{o->stripes_lock};
   o->pending_stripes.erase(offset);
   string key;
   get_data_key(o->onode.nid, offset, &key);

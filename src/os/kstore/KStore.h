@@ -75,6 +75,7 @@ public:
     uint64_t tail_offset;
     bufferlist tail_bl;
 
+    ceph::shared_mutex stripes_lock;
     map<uint64_t,bufferlist> pending_stripes;  ///< unwritten stripes
 
     Onode(CephContext* cct, const ghobject_t& o, const string& k)
@@ -84,7 +85,8 @@ public:
 	key(k),
 	dirty(false),
 	exists(false),
-        tail_offset(0) {
+        tail_offset(0),
+	stripes_lock("KStore::Onode::stripes_lock(" + stringify(this) + ")") {
     }
 
     void flush();
@@ -101,6 +103,7 @@ public:
       tail_bl.clear();
     }
     void clear_pending_stripes() {
+      std::unique_lock l{stripes_lock};
       pending_stripes.clear();
     }
   };
