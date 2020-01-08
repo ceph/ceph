@@ -353,28 +353,37 @@ class Module(MgrModule, orchestrator.Orchestrator):
         If no host provided the operation affects all the host in the OSDS role
 
 
-        :param drive_groups: (ceph.deployment.drive_group.DriveGroupSpec),
+        :param drive_groups: List[(ceph.deployment.drive_group.DriveGroupSpec)],
                             Drive group with the specification of drives to use
+
+        Caveat: Currently limited to a single DriveGroup.
+        The orchestrator_cli expects a single completion which
+        ideally represents a set of operations. This orchestrator
+        doesn't support this notion, yet. Hence it's only accepting
+        a single DriveGroup for now.
+            You can work around it by invoking:
+
+        $: ceph orchestrator osd create -i <dg.file>
+
+        multiple times. The drivegroup file must only contain one spec at a time.
         """
+        drive_group = drive_groups[0]
 
         # Transform drive group specification to Ansible playbook parameters
-        ops = []
-        for drive_group in drive_groups:
-            host, osd_spec = dg_2_ansible(drive_group)
+        host, osd_spec = dg_2_ansible(drive_group)
 
-            # Create a new read completion object for execute the playbook
-            op = playbook_operation(client=self.ar_client,
-                                    playbook=ADD_OSD_PLAYBOOK,
-                                    result_pattern="",
-                                    params=osd_spec,
-                                    querystr_dict={"limit": host},
-                                    output_wizard=ProcessPlaybookResult(self.ar_client),
-                                    event_filter_list=["playbook_on_stats"])
+        # Create a new read completion object for execute the playbook
+        op = playbook_operation(client=self.ar_client,
+                                playbook=ADD_OSD_PLAYBOOK,
+                                result_pattern="",
+                                params=osd_spec,
+                                querystr_dict={"limit": host},
+                                output_wizard=ProcessPlaybookResult(self.ar_client),
+                                event_filter_list=["playbook_on_stats"])
 
-            self._launch_operation(op)
-            ops.append(op)
+        self._launch_operation(op)
 
-        return ops
+        return op
 
     def remove_osds(self, osd_ids, destroy=False):
         """Remove osd's.
