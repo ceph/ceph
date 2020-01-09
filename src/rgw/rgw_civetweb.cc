@@ -15,15 +15,17 @@
 
 size_t RGWCivetWeb::write_data(const char *buf, const size_t len)
 {
+  size_t off = 0;
   auto to_sent = len;
   while (to_sent) {
-    const int ret = mg_write(conn, buf, len);
+    const int ret = mg_write(conn, buf + off, to_sent);
     if (ret < 0 || ! ret) {
       /* According to the documentation of mg_write() it always returns -1 on
        * error. The details aren't available, so we will just throw EIO. Same
        * goes to 0 that is associated with writing to a closed connection. */
       throw rgw::io::Exception(EIO, std::system_category());
     } else {
+      off += static_cast<size_t>(ret);
       to_sent -= static_cast<size_t>(ret);
     }
   }
