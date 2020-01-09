@@ -6408,26 +6408,39 @@ next:
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
-    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    bool bucket_initable = true;
+    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket,
+                      &attrs);
     if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+      if (yes_i_really_mean_it) {
+        bucket_initable = false;
+      } else {
+        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
+          "; if you want to cancel the reshard request nonetheless, please "
+          "use the --yes-i-really-mean-it option" << std::endl;
+        return -ret;
+      }
     }
 
-    RGWBucketReshard br(store, bucket_info, attrs, nullptr /* no callback */);
-    int ret = br.cancel();
-    if (ret < 0) {
-      if (ret == -EBUSY) {
-	cerr << "There is ongoing resharding, please retry after " <<
-	  store->ctx()->_conf.get_val<uint64_t>(
-	    "rgw_reshard_bucket_lock_duration") <<
-	  " seconds " << std::endl;
-      } else {
-	cerr << "Error canceling bucket " << bucket_name <<
-	  " resharding: " << cpp_strerror(-ret) << std::endl;
+    if (bucket_initable) {
+      // we did not encounter an error, so let's work with the bucket
+      RGWBucketReshard br(store, bucket_info, attrs,
+                          nullptr /* no callback */);
+      int ret = br.cancel();
+      if (ret < 0) {
+        if (ret == -EBUSY) {
+          cerr << "There is ongoing resharding, please retry after " <<
+            store->ctx()->_conf.get_val<uint64_t>(
+              "rgw_reshard_bucket_lock_duration") <<
+            " seconds " << std::endl;
+        } else {
+          cerr << "Error canceling bucket " << bucket_name <<
+            " resharding: " << cpp_strerror(-ret) << std::endl;
+        }
+        return ret;
       }
-      return ret;
     }
+
     RGWReshard reshard(store);
 
     cls_rgw_reshard_entry entry;
@@ -6437,10 +6450,11 @@ next:
 
     ret = reshard.remove(entry);
     if (ret < 0 && ret != -ENOENT) {
-      cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+      cerr << "Error in updating reshard log with bucket " <<
+        bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
-  }
+  } // OPT_RESHARD_CANCEL
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
     RGWBucketInfo bucket_info;
