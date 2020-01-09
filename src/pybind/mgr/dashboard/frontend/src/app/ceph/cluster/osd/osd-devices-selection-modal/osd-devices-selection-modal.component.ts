@@ -7,7 +7,7 @@ import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { InventoryDeviceFiltersChangeEvent } from '../../inventory/inventory-devices/inventory-device-filters-change-event.interface';
+import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 
 @Component({
@@ -17,7 +17,7 @@ import { InventoryDevice } from '../../inventory/inventory-devices/inventory-dev
 })
 export class OsdDevicesSelectionModalComponent {
   @Output()
-  submitAction = new EventEmitter<InventoryDeviceFiltersChangeEvent>();
+  submitAction = new EventEmitter<CdTableColumnFiltersChange>();
 
   icons = Icons;
   filterColumns: string[] = [];
@@ -28,12 +28,9 @@ export class OsdDevicesSelectionModalComponent {
   action: string;
 
   devices: InventoryDevice[] = [];
+  filteredDevices: InventoryDevice[] = [];
+  event: CdTableColumnFiltersChange;
   canSubmit = false;
-  filters = [];
-  filterInDevices: InventoryDevice[] = [];
-  filterOutDevices: InventoryDevice[] = [];
-
-  isFiltered = false;
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -48,30 +45,25 @@ export class OsdDevicesSelectionModalComponent {
     this.formGroup = this.formBuilder.group({});
   }
 
-  onFilterChange(event: InventoryDeviceFiltersChangeEvent) {
+  onFilterChange(event: CdTableColumnFiltersChange) {
     this.canSubmit = false;
-    this.filters = event.filters;
     if (_.isEmpty(event.filters)) {
       // filters are cleared
-      this.filterInDevices = [];
-      this.filterOutDevices = [];
+      this.filteredDevices = [];
+      this.event = undefined;
     } else {
       // at least one filter is required (except hostname)
-      const filters = this.filters.filter((filter) => {
+      const filters = event.filters.filter((filter) => {
         return filter.prop !== 'hostname';
       });
       this.canSubmit = !_.isEmpty(filters);
-      this.filterInDevices = event.filterInDevices;
-      this.filterOutDevices = event.filterOutDevices;
+      this.filteredDevices = event.data;
+      this.event = event;
     }
   }
 
   onSubmit() {
-    this.submitAction.emit({
-      filters: this.filters,
-      filterInDevices: this.filterInDevices,
-      filterOutDevices: this.filterOutDevices
-    });
+    this.submitAction.emit(this.event);
     this.bsModalRef.hide();
   }
 }

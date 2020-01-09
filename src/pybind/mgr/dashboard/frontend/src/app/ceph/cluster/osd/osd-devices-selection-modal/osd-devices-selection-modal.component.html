@@ -18,7 +18,7 @@
       <div class="modal-footer">
         <cd-submit-button (submitAction)="onSubmit()"
                           [form]="formGroup"
-                          [disabled]="!canSubmit || filterInDevices.length === 0">{{ action | titlecase }}</cd-submit-button>
+                          [disabled]="!canSubmit || filteredDevices.length === 0">{{ action | titlecase }}</cd-submit-button>
         <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
       </div>
     </form>

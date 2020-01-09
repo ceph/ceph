@@ -4,7 +4,7 @@ import * as _ from 'lodash';
 
 import { BsModalService, ModalOptions } from 'ngx-bootstrap/modal';
 import { Icons } from '../../../../shared/enum/icons.enum';
-import { InventoryDeviceFiltersChangeEvent } from '../../inventory/inventory-devices/inventory-device-filters-change-event.interface';
+import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { OsdDevicesSelectionModalComponent } from '../osd-devices-selection-modal/osd-devices-selection-modal.component';
 import { DevicesSelectionChangeEvent } from './devices-selection-change-event.interface';
@@ -55,8 +55,8 @@ export class OsdDevicesSelectionGroupsComponent {
       }
     };
     const modalRef = this.bsModalService.show(OsdDevicesSelectionModalComponent, options);
-    modalRef.content.submitAction.subscribe((result: InventoryDeviceFiltersChangeEvent) => {
-      this.devices = result.filterInDevices;
+    modalRef.content.submitAction.subscribe((result: CdTableColumnFiltersChange) => {
+      this.devices = result.data;
       this.appliedFilters = result.filters;
       const event = _.assign({ type: this.type }, result);
       this.selected.emit(event);
