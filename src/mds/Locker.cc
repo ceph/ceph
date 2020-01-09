@@ -2185,7 +2185,6 @@ Capability* Locker::issue_new_caps(CInode *in,
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   Session *session = mdr->session;
   bool new_inode = (mdr->alloc_ino || mdr->used_prealloc_ino);
-  bool is_new;
 
   // if replay, try to reconnect cap, and otherwise do nothing.
   if (new_inode && mdr->client_request->is_replay())
@@ -2203,16 +2202,14 @@ Capability* Locker::issue_new_caps(CInode *in,
     cap = in->add_client_cap(my_client, session, realm, new_inode);
     cap->set_wanted(my_want);
     cap->mark_new();
-    cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
-    is_new = true;
   } else {
-    is_new = false;
     // make sure it wants sufficient caps
     if (my_want & ~cap->wanted()) {
       // augment wanted caps for this client
       cap->set_wanted(cap->wanted() | my_want);
     }
   }
+  cap->inc_suppress(); // suppress file cap messages (we'll bundle with the request reply)
 
   if (in->is_auth()) {
     // [auth] twiddle mode?
@@ -2232,8 +2229,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   // re-issue whatever we can
   //cap->issue(cap->pending());
 
-  if (is_new)
-    cap->dec_suppress();
+  cap->dec_suppress();
 
   return cap;
 }
