@@ -2367,12 +2367,6 @@ void BlueFS::_pad_bl(bufferlist& bl)
   }
 }
 
-void BlueFS::flush_log()
-{
-  std::unique_lock l(lock);
-  flush_bdev();
-  _flush_and_sync_log(l);
-}
 
 int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
 				uint64_t want_seq,
