@@ -4,8 +4,6 @@ import os.path
 
 import time
 
-import cherrypy
-
 try:
     from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
 except ImportError:
@@ -64,7 +62,10 @@ def raise_if_no_orchestrator(method):
     def inner(self, *args, **kwargs):
         orch = OrchClient.instance()
         if not orch.available():
-            raise cherrypy.HTTPError(503)
+            raise DashboardException(code='orchestrator_status_unavailable',
+                                     msg='Orchestrator is unavailable',
+                                     component='orchestrator',
+                                     http_status_code=503)
         return method(self, *args, **kwargs)
     return inner
 
