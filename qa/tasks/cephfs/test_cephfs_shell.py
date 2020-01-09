@@ -178,64 +178,57 @@ class TestMkdir(TestCephFSShell):
 class TestRmdir(TestCephFSShell):
     dir_name = "test_dir"
 
-    def dir_deleted(self, msg, opt=" "):
-        self.run_cephfs_shell_cmd("rmdir"+ opt + self.dir_name)
-        self.assertFalse(path.exists(path.join(self.mount_a.mountpoint,
-                                               self.dir_name)), msg)
-
-    def dir_not_deleted(self, msg, opt=" "):
-        rmdir_output = self.get_cephfs_shell_cmd_error("rmdir" + opt + self.dir_name)
-        log.info("cephfs-shell rmdir output:\n{}".format(rmdir_output))
-        self.assertTrue(path.exists(path.join(self.mount_a.mountpoint,
-                                              self.dir_name)), msg)
+    def dir_does_not_exists(self):
+        """
+        Tests that directory does not exists
+        """
+        try:
+            self.mount_a.stat(self.dir_name)
+        except CommandFailedError as e:
+            if  e.exitstatus == 2:
+                return 0
+            raise
 
     def test_rmdir(self):
         """
         Test that rmdir deletes directory
         """
         self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
-        self.dir_deleted("test_dir is not deleted")
+        self.run_cephfs_shell_cmd("rmdir "+ self.dir_name)
+        self.dir_does_not_exists()
 
     def test_rmdir_non_existing_dir(self):
         """
-        Test that rmdir outputs error for non existing directory
+        Test that rmdir does not delete a non existing directory
         """
         rmdir_output = self.get_cephfs_shell_cmd_error("rmdir test_dir")
-        log.info("cephfs-shell rmdir output:\n{}".format(rmdir_output))
-        self.assertTrue(rmdir_output, "Something went wrong!! non existing dir deleted")
+        log.info("rmdir error output:\n{}".format(rmdir_output))
+        self.dir_does_not_exists()
 
-    def test_rmdir_non_empty_dir(self):
+    def test_rmdir_dir_with_file(self):
         """
-        Test that rmdir outputs error for non empty directory
+        Test that rmdir does not delete directory containing file
         """
         self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
         self.run_cephfs_shell_cmd("put - test_dir/dumpfile", stdin="Valid File")
-        self.dir_not_deleted("non-empty test_dir is deleted")
+        self.run_cephfs_shell_cmd("rmdir" + self.dir_name)
+        self.mount_a.stat(self.dir_name)
 
     def test_rmdir_existing_file(self):
         """
-        Test that rmdir outputs error on file
+        Test that rmdir does not delete a file
         """
         self.run_cephfs_shell_cmd("put - dumpfile", stdin="Valid File")
-        try:
-            self.run_cephfs_shell_cmd("rmdir dumpfile")
-        except Exception as e:
-            o = self.get_cephfs_shell_cmd_output("ls")
-            log.info("cephfs-shell output:\n{}".format(o))
-            log.info("cephfs-shell output Exception:\n{}".format(e))
-            """
-            self.assertTrue(path.exists(path.join(self.mount_a.mountpoint,
-                            "dumpfile")),
-                            "Something went wrong!! rmdir deleted a file")
-            """
+        self.run_cephfs_shell_cmd("rmdir dumpfile")
+        self.mount_a.stat("dumpfile")
 
     def test_rmdir_p(self):
         """
         Test that rmdir -p deletes all empty directories in the root directory passed
         """
         self.run_cephfs_shell_cmd("mkdir -p test_dir/t1/t2/t3")
-        self.dir_deleted("test_dir containing empty directories is not deleted",
-                         " -p ")
+        self.run_cephfs_shell_cmd("rmdir -p "+ self.dir_name)
+        self.dir_does_not_exists()
 
     def test_rmdir_p_valid_path(self):
         """
@@ -243,24 +236,24 @@ class TestRmdir(TestCephFSShell):
         """
         self.run_cephfs_shell_cmd("mkdir -p test_dir/t1/t2/t3")
         self.run_cephfs_shell_cmd("rmdir -p test_dir/t1/t2/t3")
-        self.assertFalse(path.exists(path.join(self.mount_a.mountpoint, self.dir_name)),
-                         "test_dir/t1/t2/t3 is not deleted")
+        self.dir_does_not_exists()
 
     def test_rmdir_p_non_existing_dir(self):
         """
-        Test that rmdir -p does not delete invalid directory
+        Test that rmdir -p does not delete an invalid directory
         """
         rmdir_output = self.get_cephfs_shell_cmd_error("rmdir -p test_dir")
-        log.info("cephfs-shell rmdir output:\n{}".format(rmdir_output))
-        self.assertTrue(rmdir_output, "Something went wrong!! non existing dir deleted")
+        log.info("rmdir error output:\n{}".format(rmdir_output))
+        self.dir_does_not_exists()
 
-    def test_rmdir_p_non_empty_dir(self):
+    def test_rmdir_p_dir_with_file(self):
         """
-        Test that rmdir -p outputs error for non empty directory
+        Test that rmdir -p does not delete the directory containing a file
         """
         self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
         self.run_cephfs_shell_cmd("put - test_dir/dumpfile", stdin="Valid File")
-        self.dir_not_deleted("non-empty test_dir is deleted with -p", " -p ")
+        self.run_cephfs_shell_cmd("rmdir -p " + self.dir_name)
+        self.mount_a.stat(self.dir_name)
 
 class TestGetAndPut(TestCephFSShell):
     # the 'put' command gets tested as well with the 'get' comamnd
