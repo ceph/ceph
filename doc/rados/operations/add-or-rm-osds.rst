@@ -144,6 +144,10 @@ need to be keep intact after the OSD is destroyed for replacement.
 
      while ! ceph osd safe-to-destroy osd.{id} ; do sleep 10 ; done
 
+#. Stop the OSD process. An OSD cannot be destroyed when not 'down'::
+
+     systemctl stop ceph-<cluster_fsid>@osd.<osd_id>.service
+
 #. Destroy the OSD first::
 
      ceph osd destroy {id} --yes-i-really-mean-it
