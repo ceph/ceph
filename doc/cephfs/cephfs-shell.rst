@@ -394,3 +394,50 @@ Usage:
 
 * dir_name - directory under which snapshot should be created or deleted
 
+setxattr
+--------
+
+Set extended attribute for a file
+
+Usage :
+
+     setxattr [-h] <path> <name> <value>
+
+*  path - Path to the file
+
+*  name - Extended attribute name to get or set
+
+*  value - Extended attribute value to be set
+
+Options:
+  -h, --help   Shows the help message
+
+getxattr
+--------
+
+Get extended attribute value for the name associated with the path
+
+Usage :
+
+     getxattr [-h] <path> <name>
+
+*  path - Path to the file
+
+*  name - Extended attribute name to get or set
+
+Options:
+  -h, --help   Shows the help message
+
+listxattr
+---------
+
+List extended attribute names associated with the path
+
+Usage :
+
+     listxattr [-h] <path>
+
+*  path - Path to the file
+
+Options:
+  -h, --help   Shows the help message
