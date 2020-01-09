@@ -96,7 +96,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             else:
                 for feature in features or [f.value for f in Features]:
                     enabled = mgr.get_module_option(self.OPTION_FMT.format(feature))
-                    msg += ["Feature '{}': '{}'".format(
+                    msg += ["Feature '{}': {}".format(
                         feature,
                         'enabled' if enabled else 'disabled')]
             return ret, '\n'.join(msg), ''
