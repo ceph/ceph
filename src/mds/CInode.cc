@@ -3262,7 +3262,8 @@ void CInode::adjust_num_caps_wanted(int d)
   ceph_assert(num_caps_wanted >= 0);
 }
 
-Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
+Capability *CInode::add_client_cap(client_t client, Session *session,
+				   SnapRealm *conrealm, bool new_inode)
 {
   ceph_assert(last == CEPH_NOSNAP);
   if (client_caps.empty()) {
@@ -3279,7 +3280,7 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
       parent->dir->adjust_num_inodes_with_caps(1);
   }
 
-  uint64_t cap_id = ++mdcache->last_cap_id;
+  uint64_t cap_id = new_inode ? 1 : ++mdcache->last_cap_id;
   auto ret = client_caps.emplace(std::piecewise_construct, std::forward_as_tuple(client),
                                  std::forward_as_tuple(this, session, cap_id));
   ceph_assert(ret.second == true);
