@@ -12,7 +12,7 @@ import re
 
 from nose.tools import eq_ as eq
 try:
-    from itertools import izip_longest as zip_longest
+    from itertools import izip_longest as zip_longest  # type: ignore
 except ImportError:
     from itertools import zip_longest
 
