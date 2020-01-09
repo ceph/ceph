@@ -122,9 +122,9 @@ void NetHandler::set_priority(int sd, int prio, int domain)
   if (prio < 0) {
     return;
   }
+  int r = -1;
 #ifdef IPTOS_CLASS_CS6
   int iptos = IPTOS_CLASS_CS6;
-  int r = -1;
   switch (domain) {
   case AF_INET:
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));

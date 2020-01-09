@@ -281,7 +281,11 @@ static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_ke
   }
 
   string obj_index_key;
-  encode_obj_index_key(key, &obj_index_key);
+  cls_rgw_obj_key tmp_key(key);
+  if (tmp_key.instance == "null") {
+    tmp_key.instance.clear();
+  }
+  encode_obj_versioned_data_key(tmp_key, &obj_index_key);
 
   rgw_bucket_dir_entry entry;
 
@@ -2964,11 +2968,9 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   CLS_LOG(10, "usage_iterate_range");
 
   map<string, bufferlist> keys;
-#define NUM_KEYS 32
   string filter_prefix;
   string start_key, end_key;
   bool by_user = !user.empty();
-  uint32_t i = 0;
   string user_key;
   bool truncated_status = false;
 
@@ -3002,12 +3004,11 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   if (iter == keys.end())
     return 0;
 
-  uint32_t num_keys = keys.size();
-
-  for (; iter != keys.end(); ++iter,++i) {
+  for (; iter != keys.end(); ++iter) {
     const string& key = iter->first;
     rgw_usage_log_entry e;
 
+    key_iter = key;
     if (!by_user && key.compare(end_key) >= 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
       *truncated = false;
@@ -3041,12 +3042,6 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
     ret = cb(hctx, key, e, param);
     if (ret < 0)
       return ret;
-
-
-    if (i == num_keys - 1) {
-      key_iter = key;
-      return 0;
-    }
   }
   return 0;
 }

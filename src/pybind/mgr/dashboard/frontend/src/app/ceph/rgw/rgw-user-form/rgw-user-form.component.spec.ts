@@ -57,17 +57,34 @@ describe('RgwUserFormComponent', () => {
       expect(rgwUserService.addS3Key).not.toHaveBeenCalled();
     });
 
-    it('should set key', () => {
+    it('should set user defined key', () => {
       const key = new RgwUserS3Key();
       key.user = 'test1:subuser2';
+      key.access_key = 'my-access-key';
+      key.secret_key = 'my-secret-key';
       component.setS3Key(key);
       expect(component.s3Keys.length).toBe(1);
       expect(component.s3Keys[0].user).toBe('test1:subuser2');
       expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
         subuser: 'subuser2',
         generate_key: 'false',
-        access_key: undefined,
-        secret_key: undefined
+        access_key: 'my-access-key',
+        secret_key: 'my-secret-key'
+      });
+    });
+
+    it('should set params for auto-generating key', () => {
+      const key = new RgwUserS3Key();
+      key.user = 'test1:subuser2';
+      key.generate_key = true;
+      key.access_key = 'my-access-key';
+      key.secret_key = 'my-secret-key';
+      component.setS3Key(key);
+      expect(component.s3Keys.length).toBe(1);
+      expect(component.s3Keys[0].user).toBe('test1:subuser2');
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
+        subuser: 'subuser2',
+        generate_key: 'true'
       });
     });
 

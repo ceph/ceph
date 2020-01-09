@@ -7,5 +7,6 @@ tasks:
 - print: "**** done rgw 9-workload"
 - swift:
     client.0:
+      force-branch: ceph-nautilus
       rgw_server: client.0
 - print: "**** done swift 9-workload"

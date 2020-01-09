@@ -29,13 +29,14 @@ namespace ceph { class Formatter; }
  * Random byte stream generator suitable for cryptographic use
  */
 class CryptoRandom {
-  const int fd;
- public:
+public:
   CryptoRandom(); // throws on failure
   ~CryptoRandom();
-
   /// copy up to 256 random bytes into the given buffer. throws on failure
   void get_bytes(char *buf, int len);
+private:
+  static int open_urandom();
+  const int fd;
 };
 
 /*

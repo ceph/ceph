@@ -6,27 +6,46 @@ import os
 import sys
 import logging
 
-import main
+from textwrap import dedent
 from ceph_volume import log, conf, configuration
 from ceph_volume import exceptions
 from ceph_volume import terminal
 
+# The ceph-volume-zfs specific code
+import ceph_volume_zfs.zfs
+from ceph_volume_zfs import devices
+# from ceph_volume_zfs.util import device
+from ceph_volume_zfs.devices import zfs
+
+# the supported actions
+from ceph_volume_zfs.devices.zfs import inventory
+from ceph_volume_zfs.devices.zfs import prepare
+from ceph_volume_zfs.devices.zfs import zap
+
+
 if __name__ == '__main__':
-    main.ZFSVOL()
+    zfs.ZFS()
 
 
-class ZFSVOL(object):
+class ZFS(object):
 
-    help_menu = 'Deploy OSDs with ZFS'
-    _help = """
-Use ZFS as the underlying technology for OSDs
+    # help info for subcommands
+    help = "Use ZFS as the underlying technology for OSDs"
 
---verbose   Increase the verbosity level
-    """
+    # help info for the plugin
+    help_menu = "Deploy OSDs with ZFS"
+    _help = dedent("""
+        Use ZFS as the underlying technology for OSDs
+
+        {sub_zfshelp}
+    """)
     name = 'zfs'
 
     def __init__(self, argv=None, parse=True):
-        self.mapper = {
+        self.zfs_mapper = {
+            'inventory': inventory.Inventory,
+            'prepare': prepare.Prepare,
+            'zap': zap.Zap,
         }
         if argv is None:
             self.argv = sys.argv
@@ -35,17 +54,9 @@ Use ZFS as the underlying technology for OSDs
         if parse:
             self.main(self.argv)
 
-    def help(self, warning=False):
-        if warning:
-            warning = 'See "ceph-volume zfs --help" for full list of options.'
-        else:
-            warning = ''
+    def print_help(self, warning=False):
         return self._help.format(
-            warning=warning,
-            log_path=conf.log_path,
-            ceph_path=self.stat_ceph_conf(),
-            sub_help=terminal.subhelp(self.mapper),
-            environ_vars=self.get_environ_vars()
+            sub_zfshelp=terminal.subhelp(self.zfs_mapper)
         )
 
     def get_environ_vars(self):
@@ -75,16 +86,18 @@ Use ZFS as the underlying technology for OSDs
         conf.log_path = os.getenv('CEPH_VOLUME_LOG_PATH', '/var/log/ceph')
 
     def _get_split_args(self):
-        subcommands = self.mapper.keys()
-        slice_on_index = len(self.argv) + 1
-        pruned_args = self.argv[1:]
+        subcommands = self.zfs_mapper.keys()
+        slice_on_index = len(self.argv)
+        pruned_args = self.argv
         for count, arg in enumerate(pruned_args):
             if arg in subcommands:
                 slice_on_index = count
                 break
         return pruned_args[:slice_on_index], pruned_args[slice_on_index:]
 
-    def main(self, argv):
+    def main(self, argv=None):
+        if argv is None:
+            return
         self.load_ceph_conf_path()
         # these need to be available for the help, which gets parsed super
         # early
@@ -93,13 +106,13 @@ Use ZFS as the underlying technology for OSDs
         main_args, subcommand_args = self._get_split_args()
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
-        if len(argv) <= 1:
-            print(self.help(warning=True))
+        if len(argv) < 1:
+            print(self.print_help(warning=True))
             return
         parser = argparse.ArgumentParser(
             prog='ceph-volume-zfs',
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=self.help(),
+            description=self.print_help(),
         )
         parser.add_argument(
             '--cluster',
@@ -136,4 +149,4 @@ Use ZFS as the underlying technology for OSDs
             logger.exception('ignoring inability to load ceph.conf')
             terminal.red(error)
         # dispatch to sub-commands
-        terminal.dispatch(self.mapper, subcommand_args)
+        terminal.dispatch(self.zfs_mapper, subcommand_args)

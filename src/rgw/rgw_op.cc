@@ -4910,10 +4910,11 @@ int RGWCopyObj::verify_permission()
                                                         RGW_PERM_WRITE)){
         return -EACCES;
       }
+    } else if (! dest_bucket_policy.verify_permission(this, *s->auth.identity, s->perm_mask,
+                                                      RGW_PERM_WRITE)) {
+      return -EACCES;
     }
-  } else if (! dest_bucket_policy.verify_permission(this, *s->auth.identity, s->perm_mask,
-                                                    RGW_PERM_WRITE)) {
-    return -EACCES;
+
   }
 
   op_ret = init_dest_policy();

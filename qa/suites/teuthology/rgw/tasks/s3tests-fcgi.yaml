@@ -12,7 +12,7 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
-      force-branch: master
+      force-branch: ceph-nautilus
 overrides:
   ceph:
     fs: xfs
