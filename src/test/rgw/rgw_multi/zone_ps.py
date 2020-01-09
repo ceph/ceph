@@ -1,5 +1,6 @@
 import logging
 import httplib
+import ssl
 import urllib
 import urlparse
 import hmac
@@ -130,22 +131,24 @@ class PSTopic:
         return self.send_request('GET', get_list=True)
 
 
-def delete_all_s3_topics(conn, region):
+def delete_all_s3_topics(zone, region):
     try:
+        conn = zone.secure_conn if zone.secure_conn is not None else zone.conn
+        protocol = 'https' if conn.is_secure else 'http'
         client = boto3.client('sns',
-                              endpoint_url='http://'+conn.host+':'+str(conn.port),
-                              aws_access_key_id=conn.aws_access_key_id,
-                              aws_secret_access_key=conn.aws_secret_access_key,
-                              region_name=region,
-                              config=Config(signature_version='s3'))
+                endpoint_url=protocol+'://'+conn.host+':'+str(conn.port),
+                aws_access_key_id=conn.aws_access_key_id,
+                aws_secret_access_key=conn.aws_secret_access_key,
+                region_name=region,
+                verify='./cert.pem',
+                config=Config(signature_version='s3'))
 
         topics = client.list_topics()['Topics']
         for topic in topics:
             print('topic cleanup, deleting: ' + topic['TopicArn'])
             assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
-    except:
-        print('failed to do topic cleanup. if there are topics '
-              'they may need to be manually deleted')
+    except Exception as err:
+        print 'failed to do topic cleanup: ' + str(err)
     
 
 class PSTopicS3:
@@ -163,12 +166,14 @@ class PSTopicS3:
         self.attributes = {}
         if endpoint_args is not None:
             self.attributes = {nvp[0] : nvp[1] for nvp in urlparse.parse_qsl(endpoint_args, keep_blank_values=True)}
-        self.client = boto3.client('sns',
-                                   endpoint_url='http://'+conn.host+':'+str(conn.port),
-                                   aws_access_key_id=conn.aws_access_key_id,
-                                   aws_secret_access_key=conn.aws_secret_access_key,
-                                   region_name=region,
-                                   config=Config(signature_version='s3'))
+            protocol = 'https' if conn.is_secure else 'http'
+            self.client = boto3.client('sns',
+                               endpoint_url=protocol+'://'+conn.host+':'+str(conn.port),
+                               aws_access_key_id=conn.aws_access_key_id,
+                               aws_secret_access_key=conn.aws_secret_access_key,
+                               region_name=region,
+                               verify='./cert.pem',
+                               config=Config(signature_version='s3'))
 
 
     def get_config(self):
@@ -188,9 +193,11 @@ class PSTopicS3:
                    'Date': string_date,
                    'Host': self.conn.host+':'+str(self.conn.port),
                    'Content-Type': content_type}
-        http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
-        if log.getEffectiveLevel() <= 10:
-            http_conn.set_debuglevel(5)
+        if self.conn.is_secure:
+            http_conn = httplib.HTTPSConnection(self.conn.host, self.conn.port, 
+                    context=ssl.create_default_context(cafile='./cert.pem'))
+        else:
+            http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
         http_conn.request(method, resource, body, headers)
         response = http_conn.getresponse()
         data = response.read()
@@ -212,7 +219,34 @@ class PSTopicS3:
     
     def get_list(self):
         """list all topics"""
-        return self.client.list_topics()
+        # note that boto3 supports list_topics(), however, the result only show ARNs
+        parameters = {'Action': 'ListTopics'}
+        body = urllib.urlencode(parameters)
+        string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
+        content_type = 'application/x-www-form-urlencoded; charset=utf-8'
+        resource = '/'
+        method = 'POST'
+        string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
+        log.debug('StringTosign: %s', string_to_sign) 
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+                                     string_to_sign.encode('utf-8'),
+                                     hashlib.sha1).digest())
+        headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
+                   'Date': string_date,
+                   'Host': self.conn.host+':'+str(self.conn.port),
+                   'Content-Type': content_type}
+        if self.conn.is_secure:
+            http_conn = httplib.HTTPSConnection(self.conn.host, self.conn.port, 
+                    context=ssl.create_default_context(cafile='./cert.pem'))
+        else:
+            http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
+        http_conn.request(method, resource, body, headers)
+        response = http_conn.getresponse()
+        data = response.read()
+        status = response.status
+        http_conn.close()
+        dict_response = xmltodict.parse(data)
+        return dict_response, status
 
 
 class PSNotification:
