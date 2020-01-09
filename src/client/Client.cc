@@ -1696,7 +1696,7 @@ int Client::verify_reply_trace(int r, MetaSession *session,
 			 << " got_ino " << got_created_ino
 			 << " ino " << created_ino
 			 << dendl;
-	  r = _do_lookup(d->dir->parent_inode, d->name, request->regetattr_mask,
+	  r = _do_lookup(d->dir->parent_inode, d, request->regetattr_mask,
 			 &target, perms);
 	} else {
 	  // if the dentry is not linked, just do our best. see #5021.
@@ -6704,16 +6704,17 @@ void Client::renew_caps(MetaSession *session)
 // ===============================================================
 // high level (POSIXy) interface
 
-int Client::_do_lookup(Inode *dir, const string& name, int mask,
+int Client::_do_lookup(Inode *dir, Dentry *dn, int mask,
 		       InodeRef *target, const UserPerm& perms)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
   MetaRequest *req = new MetaRequest(op);
   filepath path;
   dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
+  path.push_dentry(dn->name);
   req->set_filepath(path);
   req->set_inode(dir);
+  req->set_dentry(dn);
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
       mask |= DEBUG_GETATTR_CAPS;
   req->head.args.getattr.mask = mask;
@@ -6828,11 +6829,15 @@ relookup:
       ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
     }
   } else {
+    dir->open_dir();
+    dn = link(dir->dir, dname, nullptr, nullptr);
+
     // can we conclude ENOENT locally?
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true) &&
 	(dir->flags & I_COMPLETE)) {
       ldout(cct, 10) << __func__ << " concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
-      return -CEPHFS_ENOENT;
+      dn->cap_shared_gen = dir->shared_gen;
+      goto hit_dn;
     }
   }
 
@@ -6840,7 +6845,7 @@ relookup:
     r = 0;
     goto done;
   }
-  r = _do_lookup(dir, dname, mask, target, perms);
+  r = _do_lookup(dir, dn, mask, target, perms);
   did_lookup_request = true;
   if (r == 0) {
     /* complete lookup to get dentry for alternate_name */
