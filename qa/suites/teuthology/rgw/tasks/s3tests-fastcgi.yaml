@@ -1,5 +1,3 @@
-# for now, s3-tests requires py2
-os_type: ubuntu
 # this runs s3tests against rgw, using mod_fastcgi
 roles:
 - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
