@@ -140,14 +140,6 @@ class CloudKey:
 
         return r
 
-def append_query_arg(s, n, v):
-    if not v:
-        return s
-    nv = '{n}={v}'.format(n=n, v=v)
-    if not s:
-        return nv
-    return '{s}&{nv}'.format(s=s, nv=nv)
-
 
 class CloudZoneBucket:
     def __init__(self, zone_conn, target_path, name):

@@ -159,14 +159,6 @@ class StreamingHTTPServer:
         for worker in self.workers:
             worker.close()
             worker.join()
-    
-    def get_and_reset_events(self):
-        events = []
-        for worker in self.workers:
-            events += worker.get_events()
-            worker.reset_events()
-        return events
-
 
 # AMQP endpoint functions
 
@@ -918,7 +910,7 @@ def test_ps_s3_topic_with_secret_on_master():
     try:
         result = bad_topic_conf.set_config()
     except Exception as err:
-        print 'Error is expected: ' + str(err)
+        print('Error is expected: ' + str(err))
     else:
         assert False, 'user password configuration set allowed only over HTTPS'
     
@@ -1430,7 +1422,7 @@ def test_ps_s3_notification_push_amqp_on_master():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print 'average time for deletion + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for deletion + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
@@ -1589,9 +1581,9 @@ def test_ps_s3_notification_push_kafka_on_master():
     [thr.join() for thr in client_threads] 
 
     time_diff = time.time() - start_time
-    print 'average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
     keys = list(bucket.list())
     receiver.verify_s3_events(keys, exact_match=True)
@@ -1606,9 +1598,9 @@ def test_ps_s3_notification_push_kafka_on_master():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print 'average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
     receiver.verify_s3_events(keys, exact_match=True, deletions=True)
     
@@ -1684,10 +1676,10 @@ def kafka_security(security_type):
     [thr.join() for thr in client_threads] 
 
     time_diff = time.time() - start_time
-    print 'average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     try:
-        print 'wait for 5sec for the messages...'
+        print('wait for 5sec for the messages...')
         time.sleep(5)
         keys = list(bucket.list())
         receiver.verify_s3_events(keys, exact_match=True)
@@ -1702,9 +1694,9 @@ def kafka_security(security_type):
         [thr.join() for thr in client_threads] 
         
         time_diff = time.time() - start_time
-        print 'average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+        print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-        print 'wait for 5sec for the messages...'
+        print('wait for 5sec for the messages...')
         time.sleep(5)
         receiver.verify_s3_events(keys, exact_match=True, deletions=True)
     except Exception as err:
@@ -1780,7 +1772,7 @@ def test_ps_s3_notification_multi_delete_on_master():
     start_time = time.time()
     delete_all_objects(zones[0].conn, bucket_name)
     time_diff = time.time() - start_time
-    print 'average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
@@ -1864,7 +1856,7 @@ def test_ps_s3_notification_push_http_on_master():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print 'average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
