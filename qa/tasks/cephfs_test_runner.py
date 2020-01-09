@@ -22,7 +22,11 @@ class DecoratingLoader(loader.TestLoader):
 
     def _apply_params(self, obj):
         for k, v in self._params.items():
-            setattr(obj, k, v)
+            if obj.__class__ is type:
+                cls = obj
+            else:
+                cls = obj.__class__
+            setattr(cls, k, v)
 
     def loadTestsFromTestCase(self, testCaseClass):
         self._apply_params(testCaseClass)
