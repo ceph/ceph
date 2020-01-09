@@ -1,5 +1,3 @@
-# for now, s3-tests requires py2
-os_type: ubuntu
 overrides:
    rgw:
     ec-data-pool: true
