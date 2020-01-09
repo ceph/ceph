@@ -682,6 +682,38 @@ int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info) {
 }
 
 template <typename I>
+void Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
+                               ContextWQ *op_work_queue,
+                               const std::string &image_id,
+                               mirror_image_info_t *mirror_image_info,
+                               Context *on_finish) {
+  auto cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "pool_id=" << io_ctx.get_id() << ", image_id=" << image_id
+                 << dendl;
+
+  auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
+  auto req = mirror::GetInfoRequest<I>::create(io_ctx, op_work_queue, image_id,
+                                               &ctx->mirror_image,
+                                               &ctx->promotion_state, ctx);
+  req->send();
+}
+
+template <typename I>
+int Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
+                              ContextWQ *op_work_queue,
+                              const std::string &image_id,
+                              mirror_image_info_t *mirror_image_info) {
+  C_SaferCond ctx;
+  image_get_info(io_ctx, op_work_queue, image_id, mirror_image_info, &ctx);
+
+  int r = ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+template <typename I>
 void Mirror<I>::image_get_mode(I *ictx, mirror_image_mode_t *mode,
                                Context *on_finish) {
   CephContext *cct = ictx->cct;
@@ -1746,6 +1778,10 @@ int Mirror<I>::image_info_list(
       break;
     }
 
+    ThreadPool *thread_pool;
+    ContextWQ *op_work_queue;
+    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
     for (auto &it : images) {
       auto &image_id = it.first;
       auto &image = it.second;
@@ -1757,16 +1793,9 @@ int Mirror<I>::image_info_list(
       }
 
       // need to call get_info for every image to retrieve promotion state
-      // TODO: optimize
 
       mirror_image_info_t info;
-      I *image_ctx = I::create("", image_id, nullptr, io_ctx, true);
-      r = image_ctx->state->open(0);
-      if (r < 0) {
-        continue;
-      }
-      r = image_get_info(image_ctx, &info);
-      image_ctx->state->close();
+      r = image_get_info(io_ctx, op_work_queue, image_id, &info);
       if (r >= 0) {
         (*entries)[image_id] = {mode, info};
       }
