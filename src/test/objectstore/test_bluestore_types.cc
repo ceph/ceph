@@ -345,7 +345,7 @@ TEST(Blob, put_ref)
 
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
     BlueStore::Blob b(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
 
     cout << b << std::endl;
     b.dirty_blob().allocated_test(bluestore_pextent_t(0x40715000, 0x2000));
@@ -379,7 +379,7 @@ TEST(Blob, put_ref)
 
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(0, mas * 2));
@@ -400,7 +400,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(123, mas * 2));
@@ -424,7 +424,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(1, mas));
@@ -462,7 +462,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(1, mas));
@@ -503,7 +503,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(1, mas * 6));
@@ -535,7 +535,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(1, mas * 4));
@@ -573,7 +573,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(1, mas * 4));
@@ -628,7 +628,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(1, mas * 4));
@@ -683,7 +683,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(1, mas * 8));
@@ -726,7 +726,7 @@ TEST(Blob, put_ref)
   // verify csum chunk size if factored in properly
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.allocated_test(bluestore_pextent_t(0, mas*4));
@@ -744,7 +744,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(0x40101000, 0x4000));
     b.allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
@@ -766,7 +766,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(1, 0x5000));
     b.allocated_test(bluestore_pextent_t(2, 0x5000));
@@ -784,7 +784,7 @@ TEST(Blob, put_ref)
   }
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(1, 0x7000));
     b.allocated_test(bluestore_pextent_t(2, 0x7000));
@@ -813,7 +813,7 @@ TEST(Blob, put_ref)
 
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(1, 0x5000));
     b.allocated_test(bluestore_pextent_t(2, 0x7000));
@@ -957,7 +957,7 @@ TEST(Blob, legacy_decode)
   bufferlist bl, bl2;
   {
     BlueStore::Blob B(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
 
     B.dirty_blob().allocated_test(bluestore_pextent_t(0x1, 0x2000));
     B.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
@@ -997,9 +997,9 @@ TEST(Blob, legacy_decode)
     auto p2 = bl2.front().begin_deep();
 
     BlueStore::Blob Bres(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
     BlueStore::Blob Bres2(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get()));
+      new BlueStore::BufferSpace(coll.get()));
 
     uint64_t sbid, sbid2;
     Bres.decode(
@@ -1032,7 +1032,7 @@ TEST(ExtentMap, seek_lextent)
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
   BlueStore::ExtentMap em(&onode);
   BlueStore::BlobRef br(new BlueStore::Blob(coll.get(),
-    new BlueStore::BufferSpaceBase(coll.get())));
+    new BlueStore::BufferSpace(coll.get())));
 
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(100));
@@ -1084,7 +1084,7 @@ TEST(ExtentMap, has_any_lextents)
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
   BlueStore::ExtentMap em(&onode);
   BlueStore::BlobRef br(new BlueStore::Blob(coll.get(),
-    new BlueStore::BufferSpaceBase(coll.get())));
+    new BlueStore::BufferSpace(coll.get())));
 
   ASSERT_FALSE(em.has_any_lextents(0, 0));
   ASSERT_FALSE(em.has_any_lextents(0, 1000));
@@ -1135,11 +1135,11 @@ TEST(ExtentMap, compress_extent_map)
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
   BlueStore::ExtentMap em(&onode);
   BlueStore::BlobRef b1(new BlueStore::Blob(coll.get(),
-    new BlueStore::BufferSpaceBase(coll.get())));
+    new BlueStore::BufferSpace(coll.get())));
   BlueStore::BlobRef b2(new BlueStore::Blob(coll.get(),
-    new BlueStore::BufferSpaceBase(coll.get())));
+    new BlueStore::BufferSpace(coll.get())));
   BlueStore::BlobRef b3(new BlueStore::Blob(coll.get(),
-    new BlueStore::BufferSpaceBase(coll.get())));
+    new BlueStore::BufferSpace(coll.get())));
 
   em.add(0, 0, 100, b1);
   em.add(100, 0, 100, b2);
@@ -1195,7 +1195,7 @@ TEST(ExtentMap, split_blob)
   BlueStore::BlobRef br1(new BlueStore::Blob(coll.get(),
     onode.bspace));
 
-  BlueStore::BufferSpace& bc = onode.bspace->bc;
+  BlueStore::BufferSpace& bc = *(onode.bspace);
 
   br1->dirty_blob().allocated_test(bluestore_pextent_t(0x100000, 0x12000));
   br1->get_ref(coll.get(), 0, 0x12000);
@@ -1219,7 +1219,7 @@ TEST(ExtentMap, split_blob)
   em.add(0, 0, 0x12000, br1);
   em.add(0x30000, 0x10000, 0x10000, br2);
 
-  ASSERT_EQ(2, bc.buffer_map.size());
+  ASSERT_EQ(2, bc.get_buffer_map().size());
 
   em.split_blob(br1, 0x10000, 0x10000);
   {
@@ -1247,9 +1247,9 @@ TEST(ExtentMap, split_blob)
     ASSERT_EQ(1, pext2.size());
     ASSERT_EQ(pext2[0], bluestore_pextent_t(0x110000, 0x2000));
 
-    ASSERT_EQ(2, bc.buffer_map.size());
-    auto bc_it1 = bc.buffer_map.find(0x100000);
-    ASSERT_NE(bc.buffer_map.end(), bc_it1);
+    ASSERT_EQ(2, bc.get_buffer_map().size());
+    auto bc_it1 = bc.get_buffer_map().find(0x100000);
+    ASSERT_NE(bc.get_buffer_map().end(), bc_it1);
     ASSERT_EQ(0x100000, bc_it1->second->p_offset);
     ASSERT_EQ(0x12000, bc_it1->second->length);
   }
@@ -1267,9 +1267,9 @@ TEST(ExtentMap, split_blob)
     ASSERT_EQ(1, pext3.size());
     ASSERT_EQ(pext3[0], bluestore_pextent_t(0x120000, 0x10000));
 
-    ASSERT_EQ(2, bc.buffer_map.size());
-    auto bc_it2 = bc.buffer_map.find(0x120000);
-    ASSERT_NE(bc.buffer_map.end(), bc_it2);
+    ASSERT_EQ(2, bc.get_buffer_map().size());
+    auto bc_it2 = bc.get_buffer_map().find(0x120000);
+    ASSERT_NE(bc.get_buffer_map().end(), bc_it2);
     ASSERT_EQ(0x120000, bc_it2->second->p_offset);
     ASSERT_EQ(0x10000, bc_it2->second->length);
   }
@@ -1315,13 +1315,13 @@ TEST(GarbageCollector, BasicTest)
     BlueStore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b1(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b2(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b3(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b4(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     b1->dirty_blob().set_compressed(0x2000, 0x1000);
     b1->dirty_blob().allocated_test(bluestore_pextent_t(0, 0x1000));
     b2->dirty_blob().allocated_test(bluestore_pextent_t(1, 0x1000));
@@ -1381,13 +1381,13 @@ TEST(GarbageCollector, BasicTest)
     BlueStore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b1(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b2(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b3(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b4(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     b1->dirty_blob().set_compressed(0x40000, 0x20000);
     b1->dirty_blob().allocated_test(bluestore_pextent_t(0, 0x20000));
     b2->dirty_blob().allocated_test(bluestore_pextent_t(1, 0x10000));
@@ -1451,9 +1451,9 @@ TEST(GarbageCollector, BasicTest)
     BlueStore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b1(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b2(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     b1->dirty_blob().set_compressed(0x4000, 0x2000);
     b1->dirty_blob().allocated_test(bluestore_pextent_t(0, 0x2000));
     b2->dirty_blob().set_compressed(0x4000, 0x2000);
@@ -1504,15 +1504,15 @@ TEST(GarbageCollector, BasicTest)
     BlueStore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b0(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b1(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b2(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b3(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     BlueStore::BlobRef b4(new BlueStore::Blob(coll.get(),
-      new BlueStore::BufferSpaceBase(coll.get())));
+      new BlueStore::BufferSpace(coll.get())));
     b0->dirty_blob().set_compressed(0x2000, 0x1000);
     b0->dirty_blob().allocated_test(bluestore_pextent_t(0, 0x10000));
     b1->dirty_blob().set_compressed(0x20000, 0x10000);
