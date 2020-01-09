@@ -502,10 +502,10 @@ TEST(BlueFS, test_simple_compaction_sync) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
-	  fs.flush_log();
+	  fs.sync_metadata();
        }
        ASSERT_EQ(0, fs.rmdir(dir));
-       fs.flush_log();
+       fs.sync_metadata();
     }
   }
   fs.compact_log();
@@ -555,10 +555,10 @@ TEST(BlueFS, test_simple_compaction_async) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
-	  fs.flush_log();
+	  fs.sync_metadata();
        }
        ASSERT_EQ(0, fs.rmdir(dir));
-       fs.flush_log();
+       fs.sync_metadata();
     }
   }
   fs.compact_log();
