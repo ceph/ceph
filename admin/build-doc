@@ -20,7 +20,7 @@ if command -v dpkg >/dev/null; then
         exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in ant ditaa doxgen libxslt-devel libxml2-devel graphviz python3-devel python3-pip python3-virtualenv python3-Cython; do
+    for package in ant ditaa doxygen libxslt-devel libxml2-devel graphviz python3-devel python3-pip python3-virtualenv python3-Cython; do
 	if ! rpm -q --whatprovides $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
