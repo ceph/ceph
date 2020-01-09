@@ -383,6 +383,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       pg_map.dump_pool_stats(&f);
     });
     return f.get();
+  } else if (what == "pg_ready") {
+    PyEval_RestoreThread(tstate);
+    server.dump_pg_ready(&f);
+    return f.get();
   } else if (what == "osd_stats") {
     cluster_state.with_pgmap(
         [&f, &tstate](const PGMap &pg_map) {

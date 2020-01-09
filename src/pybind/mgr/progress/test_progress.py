@@ -21,7 +21,7 @@ class TestPgRecoveryEvent(object):
 
     def test_pg_update(self):
         # Test for a completed event when the pg states show active+clear
-        pg_dump = {
+        pg_stats = {
                 "pg_stats":[
         {
           "state": "active+clean",
@@ -77,7 +77,7 @@ class TestPgRecoveryEvent(object):
         ]
         }
 
-        self.test_event.pg_update(pg_dump, mock.Mock())
+        self.test_event.pg_update(pg_stats, True, mock.Mock())
         assert self.test_event._progress == 1.0
        
 class OSDMap: 
