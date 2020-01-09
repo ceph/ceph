@@ -22,7 +22,7 @@ class TestDashboard(MgrTestCase):
 
     def tearDown(self):
         self.mgr_cluster.mon_manager.raw_cluster_cmd("config", "set", "mgr",
-                                                     "mgr/dashboard/standby_behaviour",
+                                                     "mgr/dashboard/standby_behavior",
                                                      "redirect")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("config", "set", "mgr",
                                                      "mgr/dashboard/standby_error_status_code",
@@ -63,7 +63,7 @@ class TestDashboard(MgrTestCase):
 
     def test_standby_disable_redirect(self):
         self.mgr_cluster.mon_manager.raw_cluster_cmd("config", "set", "mgr",
-                                                     "mgr/dashboard/standby_behaviour",
+                                                     "mgr/dashboard/standby_behavior",
                                                      "error")
 
         original_active_id = self.mgr_cluster.get_active_id()

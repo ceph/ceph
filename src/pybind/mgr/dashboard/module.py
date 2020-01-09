@@ -257,7 +257,7 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='key_file', type='str', default=''),
         Option(name='crt_file', type='str', default=''),
         Option(name='ssl', type='bool', default=True),
-        Option(name='standby_behaviour', type='str', default='redirect',
+        Option(name='standby_behavior', type='str', default='redirect',
                enum_allowed=['redirect', 'error']),
         Option(name='standby_error_status_code', type='int', default=500,
                min=400, max=599)
@@ -453,7 +453,7 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
         class Root(object):
             @cherrypy.expose
             def default(self, *args, **kwargs):
-                if module.get_module_option('standby_behaviour', 'redirect') == 'redirect':
+                if module.get_module_option('standby_behavior', 'redirect') == 'redirect':
                     active_uri = module.get_active_uri()
                     if active_uri:
                         module.log.info("Redirecting to active '%s'", active_uri)

@@ -557,7 +557,7 @@ in order to manage silences.
 
    #. Recreate from expired silence
 
-   #. Update a silence (which will recreate and expire it (default Alertmanager behaviour))
+   #. Update a silence (which will recreate and expire it (default Alertmanager behavior))
 
    To use it, specify the host and port of the Alertmanager server::
 
@@ -817,21 +817,21 @@ Disable the redirection
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 If the dashboard is behind a load-balancing proxy like `HAProxy <https://www.haproxy.org/>`_
-you might want to disable the redirection behaviour to prevent situations that
+you might want to disable the redirection behavior to prevent situations that
 internal (unresolvable) URL's are published to the frontend client. Use the
 following command to get the dashboard to respond with a HTTP error (500 by default)
 instead of redirecting to the active dashboard::
 
-  $ ceph config set mgr mgr/dashboard/standby_behaviour "error"
+  $ ceph config set mgr mgr/dashboard/standby_behavior "error"
 
-To reset the setting to the default redirection behaviour, use the following command::
+To reset the setting to the default redirection behavior, use the following command::
 
-  $ ceph config set mgr mgr/dashboard/standby_behaviour "redirect"
+  $ ceph config set mgr mgr/dashboard/standby_behavior "redirect"
 
 Configure the error status code
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-When the redirection behaviour is disabled, then you want to customize the HTTP status
+When the redirection behavior is disabled, then you want to customize the HTTP status
 code of standby dashboards. To do so you need to run the command::
 
   $ ceph config set mgr mgr/dashboard/standby_error_status_code 503
@@ -848,7 +848,7 @@ If the dashboard fails over, the front-end client might receive a HTTP redirect
 the failover occurs during two HAProxy health checks. In this situation the
 previously active dashboard node will now respond with a 303 which points to
 the new active node. To prevent that situation you should consider to disable
-the redirection behaviour on standby nodes.
+the redirection behavior on standby nodes.
 
 ::
 
@@ -898,7 +898,7 @@ If enabled, the following parameters are logged per each request:
 * user - The name of the user, otherwise 'None'
 
 The logging of the request payload (the arguments and their values) is enabled
-by default. Execute the following command to disable this behaviour::
+by default. Execute the following command to disable this behavior::
 
   $ ceph dashboard set-audit-api-log-payload <true|false>
 
