@@ -2179,17 +2179,17 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
-				   Session *session,
-				   SnapRealm *realm,
-				   bool is_replay)
+				   MDRequestRef& mdr,
+				   SnapRealm *realm)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
+  Session *session = mdr->session;
+  bool new_inode = (mdr->alloc_ino || mdr->used_prealloc_ino);
   bool is_new;
 
   // if replay, try to reconnect cap, and otherwise do nothing.
-  if (is_replay)
+  if (mdr->client_request->is_replay())
     return mds->mdcache->try_reconnect_cap(in, session);
-
 
   // my needs
   ceph_assert(session->info.inst.name.is_client());
@@ -2200,7 +2200,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
-    cap = in->add_client_cap(my_client, session, realm);
+    cap = in->add_client_cap(my_client, session, realm, new_inode);
     cap->set_wanted(my_want);
     cap->mark_new();
     cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)

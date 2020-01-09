@@ -4151,7 +4151,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (cur->is_file() || cur->is_dir()) {
     if (mdr->snapid == CEPH_NOSNAP) {
       // register new cap
-      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, 0, req->is_replay());
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr, nullptr);
       if (cap)
 	dout(12) << "open issued caps " << ccap_string(cap->pending())
 		 << " for " << req->get_source()
@@ -4344,7 +4344,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   in->first = dn->first;
 
   // do the open
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr, realm);
   in->authlock.set_state(LOCK_EXCL);
   in->xattrlock.set_state(LOCK_EXCL);
 
@@ -4994,7 +4994,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   dout(10) << "do_open_truncate " << *in << dendl;
 
   SnapRealm *realm = in->find_snaprealm();
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr, realm);
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
@@ -5952,7 +5952,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (S_ISREG(newi->inode.mode)) {
     // issue a cap on the file
     int cmode = CEPH_FILE_MODE_RDWR;
-    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
     if (cap) {
       cap->set_wanted(0);
 
@@ -6052,7 +6052,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   
   // issue a cap on the directory
   int cmode = CEPH_FILE_MODE_RDWR;
-  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
   if (cap) {
     cap->set_wanted(0);
 
