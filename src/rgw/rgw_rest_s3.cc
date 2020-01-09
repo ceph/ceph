@@ -766,7 +766,12 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      s->formatter->dump_string("Prefix", pref_iter->first);
+      if (encode_key) {
+        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
+      } else {
+        s->formatter->dump_string("Prefix", pref_iter->first);
+      }
+
       s->formatter->close_section();
       }
     }
@@ -775,6 +780,10 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 void RGWListBucket_ObjStore_S3::send_versioned_response()
 {
   s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
+  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
+    s->formatter->dump_string("EncodingType", "url");
+    encode_key = true;
+  }
   RGWListBucket_ObjStore_S3::send_common_versioned_response();
   s->formatter->dump_string("KeyMarker", marker.name);
   s->formatter->dump_string("VersionIdMarker", marker.instance);
@@ -786,12 +795,6 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     else {
       s->formatter->dump_string("NextVersionIdMarker", next_marker.instance);
     }
-  }
-
-  bool encode_key = false;
-  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
-    s->formatter->dump_string("EncodingType", "url");
-    encode_key = true;
   }
 
   if (op_ret >= 0) {
@@ -873,7 +876,11 @@ void RGWListBucket_ObjStore_S3::send_common_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      s->formatter->dump_string("Prefix", pref_iter->first);
+      if (encode_key) {
+        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
+      } else {
+        s->formatter->dump_string("Prefix", pref_iter->first);
+      }
       s->formatter->close_section();
       }
     }
@@ -899,12 +906,11 @@ void RGWListBucket_ObjStore_S3::send_response()
   }
 
   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
-  RGWListBucket_ObjStore_S3::send_common_response();
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
+  RGWListBucket_ObjStore_S3::send_common_response();
     if (op_ret >= 0) {
       vector<rgw_bucket_dir_entry>::iterator iter;
       for (iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -953,7 +959,6 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
     s->formatter->dump_string("NextVersionIdContinuationToken", next_marker.instance);
   }
 
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
@@ -1018,7 +1023,12 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      s->formatter->dump_string("Prefix", pref_iter->first);
+      if (encode_key) {
+        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
+      } else {
+        s->formatter->dump_string("Prefix", pref_iter->first);
+      }
+
       s->formatter->dump_int("KeyCount",objs.size());
       if (start_after_exist) {
         s->formatter->dump_string("StartAfter", startAfter);
@@ -1052,13 +1062,12 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   }
 
   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
-
-  RGWListBucket_ObjStore_S3::send_common_response();
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
+
+  RGWListBucket_ObjStore_S3::send_common_response();
   if (op_ret >= 0) {
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
