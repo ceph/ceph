@@ -13,6 +13,7 @@ require {
 	type urandom_device_t;
 	type setfiles_t;
 	type nvme_device_t;
+	type targetd_etc_rw_t;
 	type httpd_config_t;
 	type proc_kcore_t;
 	type amqp_port_t;
@@ -159,6 +160,8 @@ allow init_t ceph_t:process2 { nnp_transition nosuid_transition };
 allow ceph_t httpd_config_t:dir search;
 
 allow ceph_t proc_kcore_t:file getattr;
+
+allow ceph_t targetd_etc_rw_t:dir { getattr search };
 
 fsadm_manage_pid(ceph_t)
 
