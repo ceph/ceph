@@ -1,5 +1,5 @@
-import { InventoryDeviceFiltersChangeEvent } from '../../inventory/inventory-devices/inventory-device-filters-change-event.interface';
+import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 
-export interface DevicesSelectionChangeEvent extends InventoryDeviceFiltersChangeEvent {
+export interface DevicesSelectionChangeEvent extends CdTableColumnFiltersChange {
   type: string;
 }
