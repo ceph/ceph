@@ -1476,11 +1476,11 @@ def exec_test():
 
         if hasattr(fn, 'is_for_teuthology') and getattr(fn, 'is_for_teuthology') is True:
             drop_test = True
-            log.warn("Dropping test because long running: ".format(method.id()))
+            log.warn("Dropping test because long running: {method_id}".format(method_id=method.id()))
 
         if getattr(fn, "needs_trimming", False) is True:
             drop_test = (os.getuid() != 0)
-            log.warn("Dropping test because client trim unavailable: ".format(method.id()))
+            log.warn("Dropping test because client trim unavailable: {method_id}".format(method_id=method.id()))
 
         if drop_test:
             # Don't drop the test if it was explicitly requested in arguments
