@@ -174,6 +174,7 @@ public:
 
   void log_access_denied(std::shared_ptr<CommandContext>& cmdctx,
                          MgrSession* session, std::stringstream& ss);
+  void dump_pg_ready(ceph::Formatter *f);
 };
 
 #endif
