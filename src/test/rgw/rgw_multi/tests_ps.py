@@ -382,12 +382,16 @@ kafka_server = 'localhost'
 
 class KafkaReceiver(object):
     """class for receiving and storing messages on a topic from the kafka broker"""
-    def __init__(self, topic):
+    def __init__(self, topic, security_type):
         from kafka import KafkaConsumer
         remaining_retries = 10
+        port = 9092
+        if security_type != 'PLAINTEXT':
+            security_type = 'SSL'
+            port = 9093
         while remaining_retries > 0:
             try:
-                self.consumer = KafkaConsumer(topic, bootstrap_servers = kafka_server)
+                self.consumer = KafkaConsumer(topic, bootstrap_servers = kafka_server+':'+str(port), security_protocol=security_type)
                 print('Kafka consumer created on topic: '+topic)
                 break
             except Exception as error:
@@ -414,10 +418,10 @@ def kafka_receiver_thread_runner(receiver):
     try:
         log.info('Kafka receiver started')
         print('Kafka receiver started')
-        for msg in receiver.consumer:
-            if receiver.stop:
-                break
-            receiver.events.append(json.loads(msg.value))
+        while not receiver.stop:
+            for msg in receiver.consumer:
+                receiver.events.append(json.loads(msg.value))
+            timer.sleep(0.1)
         log.info('Kafka receiver ended')
         print('Kafka receiver ended')
     except Exception as error:
@@ -425,9 +429,9 @@ def kafka_receiver_thread_runner(receiver):
         print('Kafka receiver ended unexpectedly: ' + str(error))
 
 
-def create_kafka_receiver_thread(topic):
+def create_kafka_receiver_thread(topic, security_type='PLAINTEXT'):
     """create kafka receiver and thread"""
-    receiver = KafkaReceiver(topic)
+    receiver = KafkaReceiver(topic, security_type)
     task = threading.Thread(target=kafka_receiver_thread_runner, args=(receiver,))
     task.daemon = True
     return task, receiver
@@ -435,16 +439,39 @@ def create_kafka_receiver_thread(topic):
 def stop_kafka_receiver(receiver, task):
     """stop the receiver thread and wait for it to finis"""
     receiver.stop = True
-    task.join(5)
+    task.join(1)
     try:
         receiver.consumer.close()
     except Exception as error:
         log.info('failed to gracefuly stop Kafka receiver: %s', str(error))
 
 
+# follow the instruction here to create and sign a broker certificate:
+# https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka
+
+# the generated broker certificate should be stored in the java keystore for the use of the server
+# assuming the jks files were copied to $KAFKA_DIR and broker name is "localhost"
+# following lines must be added to $KAFKA_DIR/config/server.properties
+# listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094
+# sasl.enabled.mechanisms=PLAIN
+# ssl.keystore.location = $KAFKA_DIR/server.keystore.jks
+# ssl.keystore.password = abcdefgh
+# ssl.key.password = abcdefgh
+# ssl.truststore.location = $KAFKA_DIR/server.truststore.jks
+# ssl.truststore.password = abcdefgh
+
+# notes:
+# (1) we dont test client authentication, hence, no need to generate client keys
+# (2) our client is not using the keystore, and the "rootCA.crt" file generated in the process above
+# should be copied to: $KAFKA_DIR
+
 def init_kafka():
     """ start kafka/zookeeper """
-    KAFKA_DIR = os.environ['KAFKA_DIR']
+    try:
+        KAFKA_DIR = os.environ['KAFKA_DIR']
+    except:
+        KAFKA_DIR = ''
+
     if KAFKA_DIR == '':
         log.info('KAFKA_DIR must be set to where kafka is installed')
         print('KAFKA_DIR must be set to where kafka is installed')
@@ -468,10 +495,13 @@ def init_kafka():
     print('Starting kafka...')
     kafka_log = open('./kafka.log', 'w')
     try:
+        kafka_env = os.environ.copy()
+        kafka_env['KAFKA_OPTS']='-Djava.security.auth.login.config='+KAFKA_DIR+'config/kafka_server_jaas.conf'
         kafka_proc = subprocess.Popen([
             KAFKA_DIR+'bin/kafka-server-start.sh', 
             KAFKA_DIR+'config/server.properties'], 
-            stdout=kafka_log)
+            stdout=kafka_log,
+            env=kafka_env)
     except Exception as error:
         log.info('failed to execute kafka: %s', str(error))
         print('failed to execute kafka: %s' % str(error))
@@ -495,8 +525,18 @@ def clean_kafka(kafka_proc, zk_proc, kafka_log):
     """ stop kafka/zookeeper """
     try:
         kafka_log.close()
+        print('Shutdown Kafka...')
         kafka_proc.terminate()
+        time.sleep(5)
+        if kafka_proc.poll() is None:
+            print('Failed to shutdown Kafka... killing')
+            kafka_proc.kill()
+        print('Shutdown zookeeper...')
         zk_proc.terminate()
+        time.sleep(5)
+        if zk_proc.poll() is None:
+            print('Failed to shutdown zookeeper... killing')
+            zk_proc.kill()
     except:
         log.info('kafka/zookeeper already terminated')
 
@@ -766,8 +806,9 @@ def test_ps_s3_notification():
     # delete the bucket
     zones[0].delete_bucket(bucket_name)
 
+
 def test_ps_s3_topic_on_master():
-    """ test s3 notification set/get/delete on master """
+    """ test s3 topics set/get/delete on master """
     zones, _  = init_env(require_ps=False)
     realm = get_realm()
     zonegroup = realm.master_zonegroup()
@@ -775,7 +816,7 @@ def test_ps_s3_topic_on_master():
     topic_name = bucket_name + TOPIC_SUFFIX
 
     # clean all topics
-    delete_all_s3_topics(zones[0].conn, zonegroup.name)
+    delete_all_s3_topics(zones[0], zonegroup.name)
    
     # create s3 topics
     endpoint_address = 'amqp://127.0.0.1:7001'
@@ -814,8 +855,9 @@ def test_ps_s3_topic_on_master():
     assert_equal(status, 404)
 
     # get the remaining 2 topics
-    result = topic_conf1.get_list()
-    assert_equal(len(result['Topics']), 2)
+    result, status = topic_conf1.get_list()
+    assert_equal(status, 200)
+    assert_equal(len(result['ListTopicsResponse']['ListTopicsResult']['Topics']['member']), 2)
     
     # delete topics
     result = topic_conf2.del_config()
@@ -826,8 +868,58 @@ def test_ps_s3_topic_on_master():
     # assert_equal(status, 200)
 
     # get topic list, make sure it is empty
-    result = topic_conf1.get_list()
-    assert_equal(len(result['Topics']), 0)
+    result, status = topic_conf1.get_list()
+    assert_equal(result['ListTopicsResponse']['ListTopicsResult']['Topics'], None)
+
+
+def test_ps_s3_topic_with_secret_on_master():
+    """ test s3 topics with secret set/get/delete on master """
+    zones, _  = init_env(require_ps=False)
+    if zones[0].secure_conn is None:
+        return SkipTest('secure connection is needed to test topic with secrets')
+
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # clean all topics
+    delete_all_s3_topics(zones[0], zonegroup.name)
+   
+    # create s3 topics
+    endpoint_address = 'amqp://user:password@127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    bad_topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    try:
+        result = bad_topic_conf.set_config()
+    except Exception as err:
+        print 'Error is expected: ' + str(err)
+    else:
+        assert False, 'user password configuration set allowed only over HTTPS'
+    
+    topic_conf = PSTopicS3(zones[0].secure_conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    assert_equal(topic_arn,
+                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name)
+
+    _, status = bad_topic_conf.get_config()
+    assert_equal(status/100, 4)
+
+    # get topic
+    result, status = topic_conf.get_config()
+    assert_equal(status, 200)
+    assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
+    assert_equal(endpoint_address, result['GetTopicResponse']['GetTopicResult']['Topic']['EndPoint']['EndpointAddress'])
+    
+    _, status = bad_topic_conf.get_config()
+    assert_equal(status/100, 4)
+    
+    _, status = topic_conf.get_list()
+    assert_equal(status/100, 2)
+
+    # delete topics
+    result = topic_conf.del_config()
 
 
 def test_ps_s3_notification_on_master():
@@ -1503,6 +1595,112 @@ def test_ps_s3_notification_push_kafka_on_master():
     zones[0].delete_bucket(bucket_name)
     stop_kafka_receiver(receiver, task)
     clean_kafka(kafka_proc, zk_proc, kafka_log)
+
+
+def kafka_security(security_type):
+    """ test pushing kafka s3 notification on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    zones, _  = init_env(require_ps=False)
+    if security_type == 'SSL_SASL' and zones[0].secure_conn is None:
+        return SkipTest("secure connection is needed to test SASL_SSL security")
+    kafka_proc, zk_proc, kafka_log = init_kafka()
+    if kafka_proc is None or zk_proc is None:
+        return SkipTest('end2end kafka tests require kafka/zookeeper installed')
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    # name is constant for manual testing
+    topic_name = bucket_name+'_topic'
+    # create consumer on the topic
+    task, receiver = create_kafka_receiver_thread(topic_name)
+    task.start()
+
+    # create s3 topic
+    if security_type == 'SSL_SASL':
+        endpoint_address = 'kafka://alice:alice-secret@' + kafka_server + ':9094'
+    else:
+        # ssl only
+        endpoint_address = 'kafka://' + kafka_server + ':9093'
+
+    KAFKA_DIR = os.environ['KAFKA_DIR']
+
+    # without acks from broker, with root CA
+    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=none&use-ssl=true&ca-location='+KAFKA_DIR+'rootCA.crt'
+
+    if security_type == 'SSL_SASL':
+        topic_conf = PSTopicS3(zones[0].secure_conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    else:
+        topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    s3_notification_conf.set_config()
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    time_diff = time.time() - start_time
+    print 'average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    try:
+        print 'wait for 5sec for the messages...'
+        time.sleep(5)
+        keys = list(bucket.list())
+        receiver.verify_s3_events(keys, exact_match=True)
+
+        # delete objects from the bucket
+        client_threads = []
+        start_time = time.time()
+        for key in bucket.list():
+            thr = threading.Thread(target = key.delete, args=())
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads] 
+        
+        time_diff = time.time() - start_time
+        print 'average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+        print 'wait for 5sec for the messages...'
+        time.sleep(5)
+        receiver.verify_s3_events(keys, exact_match=True, deletions=True)
+    except Exception as err:
+        assert False, str(err)
+    finally: 
+        # cleanup
+        s3_notification_conf.del_config()
+        topic_conf.del_config()
+        # delete the bucket
+        for key in bucket.list():
+            key.delete()
+        zones[0].delete_bucket(bucket_name)
+        stop_kafka_receiver(receiver, task)
+        clean_kafka(kafka_proc, zk_proc, kafka_log)
+
+
+def test_ps_s3_notification_push_kafka_security_ssl():
+    kafka_security('SSL')
+
+def test_ps_s3_notification_push_kafka_security_ssl_sasl():
+    kafka_security('SSL_SASL')
 
 
 def test_ps_s3_notification_push_http_on_master():

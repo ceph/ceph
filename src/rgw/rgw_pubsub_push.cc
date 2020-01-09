@@ -220,7 +220,7 @@ private:
     const std::string topic;
     amqp::connection_ptr_t conn;
     const std::string message;
-    const ack_level_t ack_level; // TODO not used for now
+    [[maybe_unused]] const ack_level_t ack_level; // TODO not used for now
 
   public:
     AckPublishCR(CephContext* cct,
@@ -415,6 +415,7 @@ static const std::string AMQP_1_0("1-0");
 static const std::string AMQP_SCHEMA("amqp");
 #endif	// ifdef WITH_RADOSGW_AMQP_ENDPOINT
 
+
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 class RGWPubSubKafkaEndpoint : public RGWPubSubEndpoint {
 private:
@@ -423,11 +424,57 @@ private:
     Broker,
   };
   CephContext* const cct;
-  const std::string endpoint;
   const std::string topic;
   kafka::connection_ptr_t conn;
-  ack_level_t ack_level;
-  std::string str_ack_level;
+  const ack_level_t ack_level;
+
+  static bool get_verify_ssl(const RGWHTTPArgs& args) {
+    bool exists;
+    auto str_verify_ssl = args.get("verify-ssl", &exists);
+    if (!exists) {
+      // verify server certificate by default
+      return true;
+    }
+    boost::algorithm::to_lower(str_verify_ssl);
+    if (str_verify_ssl == "true") {
+      return true;
+    }
+    if (str_verify_ssl == "false") {
+      return false;
+    }
+    throw configuration_error("'verify-ssl' must be true/false, not: " + str_verify_ssl);
+  }
+
+  static bool get_use_ssl(const RGWHTTPArgs& args) {
+    bool exists;
+    auto str_use_ssl = args.get("use-ssl", &exists);
+    if (!exists) {
+      // by default ssl not used
+      return false;
+    }
+    boost::algorithm::to_lower(str_use_ssl);
+    if (str_use_ssl == "true") {
+      return true;
+    }
+    if (str_use_ssl == "false") {
+      return false;
+    }
+    throw configuration_error("'use-ssl' must be true/false, not: " + str_use_ssl);
+  }
+
+  static ack_level_t get_ack_level(const RGWHTTPArgs& args) {
+    bool exists;
+    // get ack level
+    const auto str_ack_level = args.get("kafka-ack-level", &exists);
+    if (!exists || str_ack_level == "broker") {
+      // "broker" is default
+      return ack_level_t::Broker;
+    }
+    if (str_ack_level == "none") {
+      return ack_level_t::None;
+    }
+    throw configuration_error("Kafka: invalid kafka-ack-level: " + str_ack_level);
+  }
 
   // NoAckPublishCR implements async kafka publishing via coroutine
   // This coroutine ends when it send the message and does not wait for an ack
@@ -524,22 +571,11 @@ public:
       const RGWHTTPArgs& args,
       CephContext* _cct) : 
         cct(_cct),
-        endpoint(_endpoint), 
         topic(_topic),
-        conn(kafka::connect(endpoint)) {
+        conn(kafka::connect(_endpoint, get_use_ssl(args), get_verify_ssl(args), args.get_optional("ca-location"))) ,
+        ack_level(get_ack_level(args)) {
     if (!conn) { 
-      throw configuration_error("Kafka: failed to create connection to: " + endpoint);
-    }
-    bool exists;
-    // get ack level
-    str_ack_level = args.get("kafka-ack-level", &exists);
-    if (!exists || str_ack_level == "broker") {
-      // "broker" is default
-      ack_level = ack_level_t::Broker;
-    } else if (str_ack_level == "none") {
-      ack_level = ack_level_t::None;
-    } else {
-      throw configuration_error("Kafka: invalid kafka-ack-level: " + str_ack_level);
+      throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
     }
   }
 
@@ -638,9 +674,8 @@ public:
 
   std::string to_str() const override {
     std::string str("Kafka Endpoint");
-    str += "\nURI: " + endpoint;
+    str += kafka::to_string(conn);
     str += "\nTopic: " + topic;
-    str += "\nAck Level: " + str_ack_level;
     return str;
   }
 };
