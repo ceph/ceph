@@ -357,7 +357,7 @@ class UserTest(DashboardTestCase):
         user = self._get('/api/user/user1')
         self.assertStatus(200)
         self.assertIsNotNone(user['pwdExpirationDate'])
-        self.assertGreater(user['pwdExpirationDate'], future_date_1)
+        self.assertGreaterEqual(user['pwdExpirationDate'], future_date_1)
         self.assertLess(user['pwdExpirationDate'], future_date_2)
 
         self._delete('/api/user/user1')
