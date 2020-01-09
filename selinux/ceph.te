@@ -21,7 +21,7 @@ require {
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
 	class dir { add_name create getattr open read remove_name rmdir search write };
-	class file { create getattr open read rename unlink write };
+	class file { create getattr open read rename unlink write ioctl };
 	class blk_file { getattr ioctl open read write };
 	class capability2 block_suspend;
 	class process2 { nnp_transition nosuid_transition };
@@ -143,7 +143,7 @@ allow ceph_t sysfs_t:file { read getattr open };
 allow ceph_t sysfs_t:lnk_file { read getattr };
 
 allow ceph_t configfs_t:dir { add_name create getattr open read remove_name rmdir search write };
-allow ceph_t configfs_t:file { getattr open read write };
+allow ceph_t configfs_t:file { getattr open read write ioctl };
 allow ceph_t configfs_t:lnk_file { create getattr read unlink };
 
 
