@@ -299,20 +299,19 @@ void ImageSync<I>::handle_copy_image_update_progress(uint64_t object_no,
   int percent = 100 * object_no / object_count;
   update_progress("COPY_IMAGE " + stringify(percent) + "%");
 
-  std::lock_guard locker{m_lock};
+  std::scoped_lock locker{*m_timer_lock, m_lock};
   m_image_copy_object_no = object_no;
   m_image_copy_object_count = object_count;
 
-  if (m_update_sync_ctx == nullptr && !m_updating_sync_point) {
+  if (!m_updating_sync_point) {
     send_update_sync_point();
   }
 }
 
 template <typename I>
 void ImageSync<I>::send_update_sync_point() {
+  ceph_assert(ceph_mutex_is_locked(*m_timer_lock));
   ceph_assert(ceph_mutex_is_locked(m_lock));
-
-  m_update_sync_ctx = nullptr;
 
   if (m_canceled) {
     return;
@@ -325,6 +324,11 @@ void ImageSync<I>::send_update_sync_point() {
       (m_image_copy_object_no - 1) == sync_point->object_number.get()) {
     // update sync point did not progress since last sync
     return;
+  }
+
+  if (m_update_sync_ctx != nullptr) {
+    m_timer->cancel_event(m_update_sync_ctx);
+    m_update_sync_ctx = nullptr;
   }
 
   m_updating_sync_point = true;
@@ -367,6 +371,7 @@ void ImageSync<I>::handle_update_sync_point(int r) {
       m_update_sync_ctx = new LambdaContext(
         [this](int r) {
 	  std::lock_guard locker{m_lock};
+          m_update_sync_ctx = nullptr;
           this->send_update_sync_point();
         });
       m_timer->add_event_after(m_update_sync_point_interval,
