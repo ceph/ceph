@@ -2188,7 +2188,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   bool is_new;
 
   // if replay, try to reconnect cap, and otherwise do nothing.
-  if (mdr->client_request->is_replay())
+  if (new_inode && mdr->client_request->is_replay())
     return mds->mdcache->try_reconnect_cap(in, session);
 
   // my needs
