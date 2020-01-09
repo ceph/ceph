@@ -58,7 +58,7 @@ class CephFSTestCase(CephTestCase):
     # requires REQUIRE_FILESYSTEM = True
     REQUIRE_RECOVERY_FILESYSTEM = False
 
-    LOAD_SETTINGS = []
+    LOAD_SETTINGS = [] # type: ignore
 
     def setUp(self):
         super(CephFSTestCase, self).setUp()
