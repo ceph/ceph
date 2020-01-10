@@ -105,6 +105,8 @@ public:
    */
   std::string_view scrub_summary();
 
+  bool is_scrubbing() const { return !inode_stack.empty(); }
+
   MDCache *mdcache;
 
 protected:
