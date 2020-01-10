@@ -392,7 +392,7 @@ private:
     kv_stop = false;
   }
 
-  void _do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl);
+  void _do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl, bool do_cache);
   void _do_write_stripe(TransContext *txc, OnodeRef o,
 			uint64_t offset, bufferlist& bl);
   void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
@@ -478,6 +478,7 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
+    bool do_cache,
     uint32_t op_flags = 0);
 
   using ObjectStore::fiemap;
