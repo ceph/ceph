@@ -5,7 +5,7 @@
 #    pip-compile --output-file=requirements3.txt
 #
 ansible==2.8.2
-apache-libcloud==2.6.0
+apache-libcloud==2.8.0
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0
 atomicwrites==1.1.5       # via pytest
