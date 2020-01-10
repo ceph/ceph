@@ -71,6 +71,10 @@ For CentOS 7, perform the following steps:
      gpgkey=https://download.ceph.com/keys/release.asc
      EOM
 
+#. You may need to install python setuptools required by ceph-deploy:
+
+	sudo yum install python-setuptools
+	
 #. Update your repository and install ``ceph-deploy``::
 
 	sudo yum update
