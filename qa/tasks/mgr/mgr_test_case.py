@@ -49,11 +49,13 @@ class MgrCluster(CephCluster):
                                              module, key
                                          ), val)
 
-    def set_module_localized_conf(self, module, mgr_id, key, val):
-        self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
-                                         "mgr/{0}/{1}/{2}".format(
-                                             module, mgr_id, key
-                                         ), val)
+    def set_module_localized_conf(self, module, mgr_id, key, val, force):
+        cmd = ["config", "set", "mgr",
+               "/".join(["mgr", module, mgr_id, key]),
+               val]
+        if force:
+            cmd.append("--force")
+        self.mon_manager.raw_cluster_cmd(*cmd)
 
 
 class MgrTestCase(CephTestCase):
@@ -199,7 +201,8 @@ class MgrTestCase(CephTestCase):
             ))
             cls.mgr_cluster.set_module_localized_conf(module_name, mgr_id,
                                                       config_name,
-                                                      str(assign_port))
+                                                      str(assign_port),
+                                                      force=True)
             assign_port += 1
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
