@@ -2417,6 +2417,7 @@ struct osd_stat_t {
     }
   }
   void dump(ceph::Formatter *f, bool with_net = true) const;
+  void dump_ping_time(ceph::Formatter *f) const;
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   static void generate_test_instances(std::list<osd_stat_t*>& o);

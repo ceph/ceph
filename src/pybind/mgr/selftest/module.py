@@ -242,6 +242,7 @@ class Module(MgrModule):
                 "pg_stats",
                 "pool_stats",
                 "osd_stats",
+                "osd_ping_times",
                 "health",
                 "mon_status",
                 "mgr_map"

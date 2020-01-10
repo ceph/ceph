@@ -444,6 +444,7 @@ public:
   void dump_pg_stats(ceph::Formatter *f, bool brief) const;
   void dump_pool_stats(ceph::Formatter *f) const;
   void dump_osd_stats(ceph::Formatter *f, bool with_net = true) const;
+  void dump_osd_ping_times(ceph::Formatter *f) const;
   void dump_delta(ceph::Formatter *f) const;
   void dump_filtered_pg_stats(ceph::Formatter *f, std::set<pg_t>& pgs) const;
   void dump_pool_stats_full(const OSDMap &osd_map, std::stringstream *ss,
