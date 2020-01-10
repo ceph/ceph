@@ -106,7 +106,7 @@ To upgrade monitors, perform the following steps:
 
 #. Restart each monitor. For Ubuntu distributions, use::
 
-	sudo restart ceph-mon id={hostname}
+	sudo systemctl restart ceph-mon@{hostname}.service
 
    For CentOS/Red Hat/Debian distributions, use::
 
@@ -150,11 +150,11 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
 
 #. Restart the OSD, where ``N`` is the OSD number. For Ubuntu, use::
 
-	sudo restart ceph-osd id=N
+	sudo systemctl restart ceph-osd@{N}.service
 
-   For multiple OSDs on a host, you may restart all of them with Upstart. ::
+   For multiple OSDs on a host, you may restart all of them with systemd. ::
 
-	sudo restart ceph-osd-all
+	sudo systemctl restart ceph-osd
 
    For CentOS/Red Hat/Debian distributions, use::
 
@@ -195,7 +195,7 @@ To upgrade a Ceph Metadata Server, perform the following steps:
 
 #. Restart the metadata server. For Ubuntu, use::
 
-	sudo restart ceph-mds id={hostname}
+	sudo systemctl restart ceph-mds@{hostname}.service
 
    For CentOS/Red Hat/Debian distributions, use::
 
