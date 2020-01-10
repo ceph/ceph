@@ -98,6 +98,7 @@ def merge_dicts(*args):
 
 
 def get_default_addr():
+    # type: () -> str
     def is_ipv6_enabled():
         try:
             sock = socket.socket(socket.AF_INET6)
@@ -119,6 +120,7 @@ class ServerConfigException(Exception):
     pass
 
 def verify_cacrt(cert_fname):
+    # type: (str) -> None
     """Basic validation of a ca cert"""
 
     if not cert_fname:
@@ -139,6 +141,7 @@ def verify_cacrt(cert_fname):
 
 
 def verify_tls_files(cert_fname, pkey_fname):
+    # type: (str, str) -> None
     """Basic checks for TLS certificate and key files
 
     Do some validations to the private key and certificate:
