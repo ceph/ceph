@@ -6255,12 +6255,12 @@ next:
     formatter->open_array_section("objects");
 
     constexpr uint32_t NUM_ENTRIES = 1000;
-    uint16_t attempt = 1;
+    uint16_t expansion_factor = 1;
     while (is_truncated) {
       map<string, rgw_bucket_dir_entry> result;
       int r =
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
-				       prefix, NUM_ENTRIES, true, attempt,
+				       prefix, NUM_ENTRIES, true, expansion_factor,
 				       result, &is_truncated, &marker,
 				       bucket_object_check_filter);
       if (r < 0 && r != -ENOENT) {
@@ -6270,9 +6270,10 @@ next:
       }
 
       if (result.size() < NUM_ENTRIES / 8) {
-	++attempt;
-      } else if (result.size() > NUM_ENTRIES * 7 / 8 && attempt > 1) {
-	--attempt;
+	++expansion_factor;
+      } else if (result.size() > NUM_ENTRIES * 7 / 8 &&
+		 expansion_factor > 1) {
+	--expansion_factor;
       }
 
       map<string, rgw_bucket_dir_entry>::iterator iter;

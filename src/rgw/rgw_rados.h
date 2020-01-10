@@ -2211,7 +2211,7 @@ public:
 			      const string& prefix,
 			      const uint32_t num_entries,
 			      const bool list_versions,
-			      const uint16_t attempt, // 0 means ignore
+			      const uint16_t exp_factor, // 0 means ignore
 			      map<string, rgw_bucket_dir_entry>& m,
 			      bool *is_truncated,
 			      rgw_obj_index_key *last_entry,
