@@ -425,6 +425,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
+    dout(20) << "updating existing DaemonState for " << key << dendl;
     daemon = daemon_state.get(key);
   }
   if (m->service_daemon && !daemon) {
@@ -435,12 +436,16 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     daemon_state.insert(daemon);
   }
   if (daemon) {
-    dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
+    if (m->service_daemon) {
+      // update the metadata through the daemon state index to
+      // ensure it's kept up-to-date
+      daemon_state.update_metadata(daemon, m->daemon_metadata);
+    }
+
     std::lock_guard l(daemon->lock);
     daemon->perf_counters.clear();
 
     if (m->service_daemon) {
-      daemon->set_metadata(m->daemon_metadata);
       daemon->service_status = m->daemon_status;
 
       utime_t now = ceph_clock_now();
@@ -2694,7 +2699,10 @@ void DaemonServer::got_service_map()
     });
 
   // cull missing daemons, populate new ones
+  std::set<std::string> types;
   for (auto& p : pending_service_map.services) {
+    types.insert(p.first);
+
     std::set<std::string> names;
     for (auto& q : p.second.daemons) {
       names.insert(q.first);
@@ -2710,6 +2718,7 @@ void DaemonServer::got_service_map()
     }
     daemon_state.cull(p.first, names);
   }
+  daemon_state.cull_services(types);
 }
 
 void DaemonServer::got_mgr_map()
