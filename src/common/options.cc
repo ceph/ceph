@@ -4638,6 +4638,14 @@ std::vector<Option> get_global_options() {
     .set_default(65536)
     .set_description(""),
 
+    Option("kstore_cache_trim_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_description("How frequently we trim the kstore cache"),
+
+    Option("kstore_onode_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_description("How many kstore onode cached per collection"),
+
     // ---------------------
     // filestore
 

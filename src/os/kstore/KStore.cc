@@ -531,7 +531,9 @@ int KStore::OnodeHashLRU::trim(int max)
   dout(20) << __func__ << " max " << max
 	   << " size " << onode_map.size() << dendl;
   int trimmed = 0;
-  int num = onode_map.size() - max;
+
+  
+  int num = onode_map.size() - std::max(max, 0);
   if (onode_map.size() == 0 || num <= 0)
     return 0; // don't even try
 
@@ -659,7 +661,8 @@ KStore::KStore(CephContext *cct, const string& path)
     finisher(cct),
     kv_sync_thread(this),
     kv_stop(false),
-    logger(nullptr)
+    logger(nullptr),
+    mempool_thread(this)
 {
   _init_logger();
 }
@@ -1027,6 +1030,7 @@ int KStore::mount()
 
   finisher.start();
   kv_sync_thread.create("kstore_kv_sync");
+  mempool_thread.init();
 
   mounted = true;
   return 0;
@@ -1049,6 +1053,8 @@ int KStore::umount()
   _reap_collections();
   coll_map.clear();
 
+  dout(20) << __func__ << " stopping mempool thread" << dendl;
+  mempool_thread.shutdown();
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
   dout(20) << __func__ << " draining finisher" << dendl;
@@ -3424,3 +3430,27 @@ int KStore::_merge_collection(TransContext *txc,
 }
 
 // ===========================================
+// MempoolThread
+
+void *KStore::MempoolThread::entry()
+{
+  std::unique_lock l(lock);
+  while (!stop) {
+    _trim_cache();
+    auto wait = ceph::make_timespan(store->cct->_conf.get_val<double>("kstore_cache_trim_interval"));
+    cond.wait_for(l, wait);
+  }
+  stop = false;
+  return nullptr;
+}
+
+void KStore::MempoolThread::_trim_cache()
+{
+    // for c in store->collections c.lru_cache.trim()
+    vector<coll_t> colls;
+    store->list_collections(colls);
+    for (auto& c:colls) {
+      auto _cr = store->open_collection(c);
+      dynamic_pointer_cast<KStore::Collection>(_cr)->onode_map.trim(store->cct->_conf.get_val<Option::size_t>("kstore_onode_cache_size"));
+    }
+}

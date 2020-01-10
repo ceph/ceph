@@ -320,6 +320,31 @@ public:
     }
   };
 
+  struct MempoolThread : public Thread {
+    KStore *store{nullptr};
+    
+    ceph::condition_variable cond;
+    ceph::mutex lock = ceph::make_mutex("KStore::MempoolThread::lock");
+    bool stop{false};
+
+    explicit MempoolThread(KStore *s):store(s){}
+    void *entry() override;
+    void init() {
+      ceph_assert(stop==false);
+      create("kstore_mempool");
+    }
+
+    void shutdown() {
+      lock.lock();
+      stop = true;
+      cond.notify_all();
+      lock.unlock();
+      join();
+    }
+
+    void _trim_cache();
+  };
+
   // --------------------------------------------------------
   // members
 private:
@@ -353,6 +378,9 @@ private:
   PerfCounters *logger;
   std::mutex reap_lock;
   list<CollectionRef> removed_collections;
+
+  //mempool thread
+  MempoolThread mempool_thread;
 
 
   // --------------------------------------------------------
