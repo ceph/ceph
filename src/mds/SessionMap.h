@@ -16,7 +16,6 @@
 #define CEPH_MDS_SESSIONMAP_H
 
 #include <set>
-using std::set;
 
 #include "include/unordered_map.h"
 
@@ -29,13 +28,12 @@ using std::set;
 #include "common/perf_counters.h"
 #include "common/DecayCounter.h"
 
-class CInode;
-struct MDRequestImpl;
-
 #include "CInode.h"
 #include "Capability.h"
 #include "MDSContext.h"
 #include "msg/Message.h"
+
+struct MDRequestImpl;
 
 enum {
   l_mdssm_first = 5500,
@@ -49,6 +47,8 @@ enum {
   l_mdssm_avg_session_uptime,
   l_mdssm_last,
 };
+
+class CInode;
 
 /* 
  * session
@@ -74,7 +74,6 @@ public:
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
 
-
   enum {
     STATE_CLOSED = 0,
     STATE_OPENING = 1,   // journaling open
@@ -83,6 +82,28 @@ public:
     STATE_STALE = 4,
     STATE_KILLING = 5
   };
+
+  Session() = delete;
+  Session(ConnectionRef con) :
+    item_session_list(this),
+    requests(member_offset(MDRequestImpl, item_session_request)),
+    recall_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
+    release_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
+    recall_caps_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
+    recall_caps_throttle2o(0.5),
+    session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
+    birth_time(clock::now())
+  {
+    set_connection(std::move(con));
+  }
+  ~Session() override {
+    if (state == STATE_CLOSED) {
+      item_session_list.remove_myself();
+    } else {
+      ceph_assert(!item_session_list.is_on_list());
+    }
+    preopen_out_queue.clear();
+  }
 
   static std::string_view get_state_name(int s) {
     switch (s) {
@@ -97,49 +118,6 @@ public:
   }
 
   void dump(Formatter *f) const;
-
-private:
-  int state = STATE_CLOSED;
-  bool reconnecting = false;
-  uint64_t state_seq = 0;
-  int importing_count = 0;
-  friend class SessionMap;
-
-  // Human (friendly) name is soft state generated from client metadata
-  void _update_human_name();
-  std::string human_name;
-
-  // Versions in this session was projected: used to verify
-  // that appropriate mark_dirty calls follow.
-  std::deque<version_t> projected;
-
-  // request load average for this session
-  DecayCounter load_avg;
-
-  // Ephemeral state for tracking progress of capability recalls
-  // caps being recalled recently by this session; used for Beacon warnings
-  DecayCounter recall_caps;
-  // caps that have been released
-  DecayCounter release_caps;
-  // throttle on caps recalled
-  DecayCounter recall_caps_throttle;
-  // second order throttle that prevents recalling too quickly
-  DecayCounter recall_caps_throttle2o;
-  // New limit in SESSION_RECALL
-  uint32_t recall_limit = 0;
-
-  // session caps liveness
-  DecayCounter session_cache_liveness;
-
-  // session start time -- used to track average session time
-  // note that this is initialized in the constructor rather
-  // than at the time of adding a session to the sessionmap
-  // as journal replay of sessionmap will not call add_session().
-  time birth_time;
-
-public:
-  Session *reclaiming_from = nullptr;
-
   void push_pv(version_t pv)
   {
     ceph_assert(projected.empty() || projected.back() != pv);
@@ -174,24 +152,7 @@ public:
 
   const std::string& get_human_name() const {return human_name;}
 
-  session_info_t info;                         ///< durable bits
-
-  MDSAuthCaps auth_caps;
-
-protected:
-  ConnectionRef connection;
-public:
-  xlist<Session*>::item item_session_list;
-
-  list<ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
-
-  /* This is mutable to allow get_request_count to be const. elist does not
-   * support const iterators yet.
-   */
-  mutable elist<MDRequestImpl*> requests;
   size_t get_request_count() const;
-
-  interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
 
   void notify_cap_release(size_t n_caps);
   uint64_t notify_recall_sent(size_t new_limit);
@@ -278,18 +239,6 @@ public:
     return birth_time;
   }
 
-  // -- caps --
-private:
-  uint32_t cap_gen = 0;
-  version_t cap_push_seq = 0;        // cap push seq #
-  map<version_t, MDSContext::vec > waitfor_flush; // flush session messages
-
-public:
-  xlist<Capability*> caps;     // inodes with caps; front=most recently used
-  xlist<ClientLease*> leases;  // metadata leases to clients
-  time last_cap_renew = clock::zero();
-  time last_seen = clock::zero();
-
   void inc_cap_gen() { ++cap_gen; }
   uint32_t get_cap_gen() const { return cap_gen; }
 
@@ -330,18 +279,6 @@ public:
     return !waitfor_flush.empty();
   }
 
-  // -- leases --
-  uint32_t lease_seq = 0;
-
-  // -- completed requests --
-private:
-  // Has completed_requests been modified since the last time we
-  // wrote this session out?
-  bool completed_requests_dirty = false;
-
-  unsigned num_trim_flushes_warnings = 0;
-  unsigned num_trim_requests_warnings = 0;
-public:
   void add_completed_request(ceph_tid_t t, inodeno_t created) {
     info.completed_requests[t] = created;
     completed_requests_dirty = true;
@@ -415,29 +352,6 @@ public:
   int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
 		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
-  Session() = delete;
-  Session(ConnectionRef con) :
-    recall_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
-    release_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
-    recall_caps_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
-    recall_caps_throttle2o(0.5),
-    session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
-    birth_time(clock::now()),
-    auth_caps(g_ceph_context),
-    item_session_list(this),
-    requests(member_offset(MDRequestImpl, item_session_request))
-  {
-    set_connection(std::move(con));
-  }
-  ~Session() override {
-    if (state == STATE_CLOSED) {
-      item_session_list.remove_myself();
-    } else {
-      ceph_assert(!item_session_list.is_on_list());
-    }
-    preopen_out_queue.clear();
-  }
-
   void set_connection(ConnectionRef con) {
     connection = std::move(con);
     auto& c = connection;
@@ -458,23 +372,90 @@ public:
     cap_push_seq = 0;
     last_cap_renew = clock::zero();
   }
+
+  Session *reclaiming_from = nullptr;
+  session_info_t info;                         ///< durable bits
+  MDSAuthCaps auth_caps;
+
+  xlist<Session*>::item item_session_list;
+
+  list<ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
+
+  /* This is mutable to allow get_request_count to be const. elist does not
+   * support const iterators yet.
+   */
+  mutable elist<MDRequestImpl*> requests;
+
+  interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
+
+  xlist<Capability*> caps;     // inodes with caps; front=most recently used
+  xlist<ClientLease*> leases;  // metadata leases to clients
+  time last_cap_renew = clock::zero();
+  time last_seen = clock::zero();
+
+  // -- leases --
+  uint32_t lease_seq = 0;
+
+protected:
+  ConnectionRef connection;
+
+private:
+  friend class SessionMap;
+
+  // Human (friendly) name is soft state generated from client metadata
+  void _update_human_name();
+
+  int state = STATE_CLOSED;
+  bool reconnecting = false;
+  uint64_t state_seq = 0;
+  int importing_count = 0;
+
+  std::string human_name;
+
+  // Versions in this session was projected: used to verify
+  // that appropriate mark_dirty calls follow.
+  std::deque<version_t> projected;
+
+  // request load average for this session
+  DecayCounter load_avg;
+
+  // Ephemeral state for tracking progress of capability recalls
+  // caps being recalled recently by this session; used for Beacon warnings
+  DecayCounter recall_caps;  // caps that have been released
+  DecayCounter release_caps;
+  // throttle on caps recalled
+  DecayCounter recall_caps_throttle;
+  // second order throttle that prevents recalling too quickly
+  DecayCounter recall_caps_throttle2o;
+  // New limit in SESSION_RECALL
+  uint32_t recall_limit = 0;
+
+  // session caps liveness
+  DecayCounter session_cache_liveness;
+
+  // session start time -- used to track average session time
+  // note that this is initialized in the constructor rather
+  // than at the time of adding a session to the sessionmap
+  // as journal replay of sessionmap will not call add_session().
+  time birth_time;
+
+  // -- caps --
+  uint32_t cap_gen = 0;
+  version_t cap_push_seq = 0;        // cap push seq #
+  map<version_t, MDSContext::vec > waitfor_flush; // flush session messages
+
+  // Has completed_requests been modified since the last time we
+  // wrote this session out?
+  bool completed_requests_dirty = false;
+
+  unsigned num_trim_flushes_warnings = 0;
+  unsigned num_trim_requests_warnings = 0;
 };
 
 class SessionFilter
 {
-protected:
-  // First is whether to filter, second is filter value
-  std::pair<bool, bool> reconnecting;
-
 public:
-  std::map<std::string, std::string> metadata;
-  std::string auth_name;
-  std::string state;
-  int64_t id;
-
-  SessionFilter()
-    : reconnecting(false, false), id(0)
-  {}
+  SessionFilter() : reconnecting(false, false) {}
 
   bool match(
       const Session &session,
@@ -485,6 +466,14 @@ public:
     reconnecting.first = true;
     reconnecting.second = v;
   }
+
+  std::map<std::string, std::string> metadata;
+  std::string auth_name;
+  std::string state;
+  int64_t id = 0;
+protected:
+  // First is whether to filter, second is filter value
+  std::pair<bool, bool> reconnecting;
 };
 
 /*
@@ -502,17 +491,8 @@ public:
   using clock = Session::clock;
   using time = Session::time;
 
-protected:
-  version_t version;
-  ceph::unordered_map<entity_name_t, Session*> session_map;
-  PerfCounters *logger;
-
-  // total request load avg
-  double decay_rate;
-  DecayCounter total_load_avg;
-
-public:
-  mds_rank_t rank;
+  SessionMapStore(): total_load_avg(decay_rate) {}
+  virtual ~SessionMapStore() {};
 
   version_t get_version() const {return version;}
 
@@ -552,26 +532,20 @@ public:
     session_map.clear();
   }
 
-  SessionMapStore()
-    : version(0), logger(nullptr),
-      decay_rate(g_conf().get_val<double>("mds_request_load_average_decay_rate")),
-      total_load_avg(decay_rate), rank(MDS_RANK_NONE) {
-  }
-  virtual ~SessionMapStore() {};
+  mds_rank_t rank = MDS_RANK_NONE;
+
+protected:
+  version_t version = 0;
+  ceph::unordered_map<entity_name_t, Session*> session_map;
+  PerfCounters *logger =nullptr;
+
+  // total request load avg
+  double decay_rate = g_conf().get_val<double>("mds_request_load_average_decay_rate");
+  DecayCounter total_load_avg;
 };
 
 class SessionMap : public SessionMapStore {
 public:
-  MDSRank *mds;
-
-protected:
-  version_t projected = 0, committing = 0, committed = 0;
-public:
-  map<int,xlist<Session*>* > by_state;
-  uint64_t set_state(Session *session, int state);
-  map<version_t, MDSContext::vec > commit_waiters;
-  void update_average_session_age();
-
   SessionMap() = delete;
   explicit SessionMap(MDSRank *m) : mds(m) {}
 
@@ -586,6 +560,9 @@ public:
 
     delete logger;
   }
+
+  uint64_t set_state(Session *session, int state);
+  void update_average_session_age();
 
   void register_perfcounters();
 
@@ -703,10 +680,6 @@ public:
   void wipe();
   void wipe_ino_prealloc();
 
-  // -- loading, saving --
-  inodeno_t ino;
-  MDSContext::vec waiting_for_load;
-
   object_t get_object_name() const;
 
   void load(MDSContext *onload);
@@ -724,13 +697,6 @@ public:
 
   void save(MDSContext *onsave, version_t needv=0);
   void _save_finish(version_t v);
-
-protected:
-  std::set<entity_name_t> dirty_sessions;
-  std::set<entity_name_t> null_sessions;
-  bool loaded_legacy = false;
-  void _mark_dirty(Session *session, bool may_save);
-public:
 
   /**
    * Advance the version, and mark this session
@@ -785,9 +751,26 @@ public:
   void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                      MDSGatherBuilder *gather_bld);
 
-private:
-  time avg_birth_time = clock::zero();
+  void hit_session(Session *session);
+  void handle_conf_change(const std::set <std::string> &changed);
 
+  MDSRank *mds;
+  map<int,xlist<Session*>* > by_state;
+  map<version_t, MDSContext::vec > commit_waiters;
+
+  // -- loading, saving --
+  inodeno_t ino;
+  MDSContext::vec waiting_for_load;
+
+protected:
+  void _mark_dirty(Session *session, bool may_save);
+
+  version_t projected = 0, committing = 0, committed = 0;
+  std::set<entity_name_t> dirty_sessions;
+  std::set<entity_name_t> null_sessions;
+  bool loaded_legacy = false;
+
+private:
   uint64_t get_session_count_in_state(int state) {
     return !is_any_state(state) ? 0 : by_state[state]->size();
   }
@@ -812,12 +795,8 @@ private:
     }
   }
 
-public:
-  void hit_session(Session *session);
-  void handle_conf_change(const std::set <std::string> &changed);
+  time avg_birth_time = clock::zero();
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);
-
-
 #endif
