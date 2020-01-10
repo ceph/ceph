@@ -328,7 +328,8 @@ private:
     auto duration = std::chrono::duration<double>(now-recall_start).count();
 
     MDSGatherBuilder *gather = new MDSGatherBuilder(g_ceph_context);
-    auto [throttled, count] = server->recall_client_state(gather, Server::RecallFlags::STEADY);
+    auto flags = Server::RecallFlags::STEADY|Server::RecallFlags::TRIM;
+    auto [throttled, count] = server->recall_client_state(gather, flags);
     dout(10) << __func__
              << (throttled ? " (throttled)" : "")
              << " recalled " << count << " caps" << dendl;
@@ -818,6 +819,8 @@ void MDSRankDispatcher::shutdown()
   stopping = true;
 
   dout(1) << __func__ << ": shutting down rank " << whoami << dendl;
+
+  g_conf().remove_observer(this);
 
   timer.shutdown();
 
@@ -2752,39 +2755,18 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
 {
   // Dump sessions, decorated with recovery/replay status
   f->open_array_section("sessions");
-  const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
-  for (auto& p : session_map) {
-    if (!p.first.is_client()) {
+  for (auto& [name, s] : sessionmap.get_sessions()) {
+    if (!name.is_client()) {
       continue;
     }
-
-    Session *s = p.second;
 
     if (!filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
       continue;
     }
 
-    f->open_object_section("session");
-    f->dump_int("id", p.first.num());
-
-    f->dump_int("num_leases", s->leases.size());
-    f->dump_int("num_caps", s->caps.size());
-
-    f->dump_string("state", s->get_state_name());
-    if (s->is_open() || s->is_stale()) {
-      f->dump_unsigned("request_load_avg", s->get_load_avg());
-    }
-    f->dump_float("uptime", s->get_session_uptime());
-    f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
-    f->dump_unsigned("completed_requests", s->get_num_completed_requests());
-    f->dump_bool("reconnecting", server->waiting_for_reconnect(p.first.num()));
-    f->dump_stream("inst") << s->info.inst;
-    f->open_object_section("client_metadata");
-    s->info.client_metadata.dump(f);
-    f->close_section(); // client_metadata
-    f->close_section(); //session
+    f->dump_object("session", *s);
   }
-  f->close_section(); //sessions
+  f->close_section(); // sessions
 }
 
 void MDSRank::command_scrub_start(Formatter *f,
@@ -3475,7 +3457,9 @@ MDSRankDispatcher::MDSRankDispatcher(
     Context *suicide_hook_)
   : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
       msgr, monc_, respawn_hook_, suicide_hook_)
-{}
+{
+  g_conf().add_observer(this);
+}
 
 bool MDSRankDispatcher::handle_command(
   const cmdmap_t &cmdmap,
@@ -3599,3 +3583,83 @@ epoch_t MDSRank::get_osd_epoch() const
   return objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));  
 }
 
+const char** MDSRankDispatcher::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "clog_to_graylog",
+    "clog_to_graylog_host",
+    "clog_to_graylog_port",
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
+    "fsid",
+    "host",
+    "mds_bal_fragment_dirs",
+    "mds_bal_fragment_interval",
+    "mds_cache_memory_limit",
+    "mds_cache_mid",
+    "mds_cache_reservation",
+    "mds_cache_size",
+    "mds_cache_trim_decay_rate",
+    "mds_cap_revoke_eviction_timeout",
+    "mds_dump_cache_threshold_file",
+    "mds_dump_cache_threshold_formatter",
+    "mds_enable_op_tracker",
+    "mds_health_cache_threshold",
+    "mds_inject_migrator_session_race",
+    "mds_log_pause",
+    "mds_max_export_size",
+    "mds_max_purge_files",
+    "mds_max_purge_ops",
+    "mds_max_purge_ops_per_pg",
+    "mds_op_complaint_time",
+    "mds_op_history_duration",
+    "mds_op_history_size",
+    "mds_op_log_threshold",
+    "mds_recall_max_decay_rate",
+    "mds_recall_warning_decay_rate",
+    "mds_request_load_average_decay_rate",
+    "mds_session_cache_liveness_decay_rate",
+    NULL
+  };
+  return KEYS;
+}
+
+void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed)
+{
+  // XXX with or without mds_lock!
+
+  if (changed.count("mds_op_complaint_time") || changed.count("mds_op_log_threshold")) {
+    op_tracker.set_complaint_and_threshold(conf->mds_op_complaint_time, conf->mds_op_log_threshold);
+  }
+  if (changed.count("mds_op_history_size") || changed.count("mds_op_history_duration")) {
+    op_tracker.set_history_size_and_duration(conf->mds_op_history_size, conf->mds_op_history_duration);
+  }
+  if (changed.count("mds_enable_op_tracker")) {
+    op_tracker.set_tracking(conf->mds_enable_op_tracker);
+  }
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility") ||
+      changed.count("clog_to_graylog") ||
+      changed.count("clog_to_graylog_host") ||
+      changed.count("clog_to_graylog_port") ||
+      changed.count("host") ||
+      changed.count("fsid")) {
+    update_log_config();
+  }
+
+  finisher->queue(new FunctionContext([this, changed](int r) {
+    std::scoped_lock lock(mds_lock);
+
+    if (changed.count("mds_log_pause") && !g_conf()->mds_log_pause) {
+      mdlog->kick_submitter();
+    }
+    sessionmap.handle_conf_change(changed);
+    server->handle_conf_change(changed);
+    mdcache->handle_conf_change(changed, *mdsmap);
+    purge_queue.handle_conf_change(changed, *mdsmap);
+  }));
+}

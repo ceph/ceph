@@ -7730,6 +7730,18 @@ std::vector<Option> get_mds_options() {
     .set_default(60.0)
     .set_description("decay rate for warning on slow session cap recall"),
 
+    Option("mds_session_cache_liveness_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .add_see_also("mds_session_cache_liveness_magnitude")
+    .set_default(5_min)
+    .set_description("decay rate for session liveness leading to preemptive cap recall")
+    .set_long_description("This determines how long a session needs to be quiescent before the MDS begins preemptively recalling capabilities. The default of 5 minutes will cause 10 halvings of the decay counter after 1 hour, or 1/1024. The default magnitude of 10 (1^10 or 1024) is chosen so that the MDS considers a previously chatty session (approximately) to be quiescent after 1 hour."),
+
+    Option("mds_session_cache_liveness_magnitude", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .add_see_also("mds_session_cache_liveness_decay_rate")
+    .set_default(10)
+    .set_description("decay magnitude for preemptively recalling caps on quiet client")
+    .set_long_description("This is the order of magnitude difference (in base 2) of the internal liveness decay counter and the number of capabilities the session holds. When this difference occurs, the MDS treats the session as quiescent and begins recalling capabilities."),
+
     Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(30)
     .set_description(""),

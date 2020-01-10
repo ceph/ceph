@@ -337,110 +337,6 @@ void MDSDaemon::clean_up_admin_socket()
   asok_hook = NULL;
 }
 
-const char** MDSDaemon::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    "mds_op_complaint_time", "mds_op_log_threshold",
-    "mds_op_history_size", "mds_op_history_duration",
-    "mds_enable_op_tracker",
-    "mds_log_pause",
-    // clog & admin clog
-    "clog_to_monitors",
-    "clog_to_syslog",
-    "clog_to_syslog_facility",
-    "clog_to_syslog_level",
-    "clog_to_graylog",
-    "clog_to_graylog_host",
-    "clog_to_graylog_port",
-    // MDCache
-    "mds_cache_size",
-    "mds_cache_memory_limit",
-    "mds_cache_reservation",
-    "mds_health_cache_threshold",
-    "mds_cache_mid",
-    "mds_dump_cache_threshold_formatter",
-    "mds_cache_trim_decay_rate",
-    "mds_dump_cache_threshold_file",
-    // MDBalancer
-    "mds_bal_fragment_dirs",
-    "mds_bal_fragment_interval",
-    // PurgeQueue
-    "mds_max_purge_ops",
-    "mds_max_purge_ops_per_pg",
-    "mds_max_purge_files",
-    // Migrator
-    "mds_max_export_size",
-    "mds_inject_migrator_session_race",
-    "host",
-    "fsid",
-    "mds_cap_revoke_eviction_timeout",
-    // SessionMap
-    "mds_request_load_average_decay_rate",
-    "mds_recall_max_decay_rate",
-    NULL
-  };
-  return KEYS;
-}
-
-void MDSDaemon::handle_conf_change(const ConfigProxy& conf,
-			     const std::set <std::string> &changed)
-{
-  // We may be called within mds_lock (via `tell`) or outwith the
-  // lock (via admin socket `config set`), so handle either case.
-  const bool initially_locked = mds_lock.is_locked_by_me();
-  if (!initially_locked) {
-    mds_lock.Lock();
-  }
-
-  if (changed.count("mds_op_complaint_time") ||
-      changed.count("mds_op_log_threshold")) {
-    if (mds_rank) {
-      mds_rank->op_tracker.set_complaint_and_threshold(conf->mds_op_complaint_time,
-                                             conf->mds_op_log_threshold);
-    }
-  }
-  if (changed.count("mds_op_history_size") ||
-      changed.count("mds_op_history_duration")) {
-    if (mds_rank) {
-      mds_rank->op_tracker.set_history_size_and_duration(conf->mds_op_history_size,
-                                               conf->mds_op_history_duration);
-    }
-  }
-  if (changed.count("mds_enable_op_tracker")) {
-    if (mds_rank) {
-      mds_rank->op_tracker.set_tracking(conf->mds_enable_op_tracker);
-    }
-  }
-  if (changed.count("clog_to_monitors") ||
-      changed.count("clog_to_syslog") ||
-      changed.count("clog_to_syslog_level") ||
-      changed.count("clog_to_syslog_facility") ||
-      changed.count("clog_to_graylog") ||
-      changed.count("clog_to_graylog_host") ||
-      changed.count("clog_to_graylog_port") ||
-      changed.count("host") ||
-      changed.count("fsid")) {
-    if (mds_rank) {
-      mds_rank->update_log_config();
-    }
-  }
-
-  if (!g_conf()->mds_log_pause && changed.count("mds_log_pause")) {
-    if (mds_rank) {
-      mds_rank->mdlog->kick_submitter();
-    }
-  }
-
-  if (mds_rank) {
-    mds_rank->handle_conf_change(conf, changed);
-  }
-
-  if (!initially_locked) {
-    mds_lock.Unlock();
-  }
-}
-
-
 int MDSDaemon::init()
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
@@ -532,7 +428,6 @@ int MDSDaemon::init()
   // Set up admin socket before taking mds_lock, so that ordering
   // is consistent (later we take mds_lock within asok callbacks)
   set_up_admin_socket();
-  g_conf().add_observer(this);
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
@@ -1042,14 +937,6 @@ void MDSDaemon::suicide()
     tick_event = 0;
   }
 
-  //because add_observer is called after set_up_admin_socket
-  //so we can use asok_hook to avoid assert in the remove_observer
-  if (asok_hook != NULL) {
-    mds_lock.Unlock();
-    g_conf().remove_observer(this);
-    mds_lock.Lock();
-  }
-
   clean_up_admin_socket();
 
   // Inform MDS we are going away, then shut down beacon
@@ -1340,9 +1227,6 @@ void MDSDaemon::ms_handle_accept(Connection *con)
   // request to open a session (initial state of Session is `closed`)
   if (!s) {
     s = new Session(con);
-    s->info.auth_name = con->get_peer_entity_name();
-    s->info.inst.addr = con->get_peer_socket_addr();
-    s->info.inst.name = n;
     dout(10) << " new session " << s << " for " << s->info.inst
 	     << " con " << con << dendl;
     con->set_priv(RefCountedPtr{s, false});

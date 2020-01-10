@@ -1082,8 +1082,7 @@ void Server::evict_cap_revoke_non_responders() {
   }
 }
 
-void Server::handle_conf_change(const ConfigProxy& conf,
-                                const std::set <std::string> &changed) {
+void Server::handle_conf_change(const std::set<std::string>& changed) {
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
@@ -1209,6 +1208,7 @@ void Server::reconnect_clients(MDSContext *reconnect_done_)
   for (auto session : sessions) {
     if (session->is_open()) {
       client_reconnect_gather.insert(session->get_client());
+      session->set_reconnecting(true);
       session->last_cap_renew = now;
     }
   }
@@ -1358,6 +1358,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
 
     // remove from gather set
     client_reconnect_gather.erase(from);
+    session->set_reconnecting(false);
     if (client_reconnect_gather.empty())
       reconnect_gather_finish();
   }
@@ -1563,27 +1564,31 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, RecallFlags flags)
 {
   const auto now = clock::now();
-  const bool steady = flags&RecallFlags::STEADY;
-  const bool enforce_max = flags&RecallFlags::ENFORCE_MAX;
+  const bool steady = !!(flags&RecallFlags::STEADY);
+  const bool enforce_max = !!(flags&RecallFlags::ENFORCE_MAX);
+  const bool enforce_liveness = !!(flags&RecallFlags::ENFORCE_LIVENESS);
+  const bool trim = !!(flags&RecallFlags::TRIM);
 
   const auto max_caps_per_client = g_conf().get_val<uint64_t>("mds_max_caps_per_client");
   const auto min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
   const auto recall_global_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_global_max_decay_threshold");
   const auto recall_max_caps = g_conf().get_val<Option::size_t>("mds_recall_max_caps");
   const auto recall_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_max_decay_threshold");
+  const auto cache_liveness_magnitude = g_conf().get_val<Option::size_t>("mds_session_cache_liveness_magnitude");
 
   dout(7) << __func__ << ":"
            << " min=" << min_caps_per_client
            << " max=" << max_caps_per_client
            << " total=" << Capability::count()
-           << " flags=0x" << std::hex << flags
+           << " flags=" << flags
            << dendl;
 
   /* trim caps of sessions with the most caps first */
   std::multimap<uint64_t, Session*> caps_session;
-  auto f = [&caps_session, enforce_max, max_caps_per_client](auto& s) {
+  auto f = [&caps_session, enforce_max, enforce_liveness, trim, max_caps_per_client, cache_liveness_magnitude](auto& s) {
     auto num_caps = s->caps.size();
-    if (!enforce_max || num_caps > max_caps_per_client) {
+    auto cache_liveness = s->get_session_cache_liveness();
+    if (trim || (enforce_max && num_caps > max_caps_per_client) || (enforce_liveness && cache_liveness < (num_caps>>cache_liveness_magnitude))) {
       caps_session.emplace(std::piecewise_construct, std::forward_as_tuple(num_caps), std::forward_as_tuple(s));
     }
   };

@@ -651,9 +651,7 @@ void PurgeQueue::update_op_limit(const MDSMap &mds_map)
   }
 }
 
-void PurgeQueue::handle_conf_change(const ConfigProxy& conf,
-			     const std::set <std::string> &changed,
-                             const MDSMap &mds_map)
+void PurgeQueue::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
   if (changed.count("mds_max_purge_ops")
       || changed.count("mds_max_purge_ops_per_pg")) {
@@ -664,7 +662,7 @@ void PurgeQueue::handle_conf_change(const ConfigProxy& conf,
       // We might have gone from zero to a finite limit, so
       // might need to kick off consume.
       dout(4) << "maybe start work again (max_purge_files="
-              << conf->mds_max_purge_files << dendl;
+              << g_conf()->mds_max_purge_files << dendl;
       finisher.queue(new FunctionContext([this](int r){
         std::lock_guard l(lock);
         _consume();

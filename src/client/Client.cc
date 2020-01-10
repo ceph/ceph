@@ -6341,7 +6341,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 	ldout(cct, 20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
 		       << " vs lease_gen " << dn->lease_gen << dendl;
       }
-      // dir lease?
+      // dir shared caps?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
 	if (dn->cap_shared_gen == dir->shared_gen &&
 	    (!dn->inode || dn->inode->caps_issued_mask(mask, true)))

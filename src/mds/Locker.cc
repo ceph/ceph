@@ -3041,14 +3041,14 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
       if (dn) {
 	ClientLease *l = dn->get_client_lease(client);
 	if (l) {
-	  dout(10) << "process_cap_release removing lease on " << *dn << dendl;
+	  dout(10) << __func__ << " removing lease on " << *dn << dendl;
 	  dn->remove_client_lease(l, this);
 	} else {
-	  dout(7) << "process_cap_release client." << client
+	  dout(7) << __func__ << " client." << client
 		  << " doesn't have lease on " << *dn << dendl;
 	}
       } else {
-	dout(7) << "process_cap_release client." << client << " released lease on dn "
+	dout(7) << __func__ << " client." << client << " released lease on dn "
 		<< dir->dirfrag() << "/" << dname << " which dne" << dendl;
       }
     }
@@ -3058,7 +3058,7 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
   if (!cap)
     return;
 
-  dout(10) << "process_cap_release client." << client << " " << ccap_string(caps) << " on " << *in
+  dout(10) << __func__ << " client." << client << " " << ccap_string(caps) << " on " << *in
 	   << (mdr ? "" : " (DEFERRED, no mdr)")
 	   << dendl;
     

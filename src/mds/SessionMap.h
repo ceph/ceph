@@ -96,8 +96,11 @@ public:
     }
   }
 
+  void dump(Formatter *f) const;
+
 private:
   int state = STATE_CLOSED;
+  bool reconnecting = false;
   uint64_t state_seq = 0;
   int importing_count = 0;
   friend class SessionMap;
@@ -124,6 +127,9 @@ private:
   DecayCounter recall_caps_throttle2o;
   // New limit in SESSION_RECALL
   uint32_t recall_limit = 0;
+
+  // session caps liveness
+  DecayCounter session_cache_liveness;
 
   // session start time -- used to track average session time
   // note that this is initialized in the constructor rather
@@ -155,6 +161,9 @@ public:
       state_seq++;
     }
   }
+
+  void set_reconnecting(bool s) { reconnecting = s; }
+
   void decode(bufferlist::const_iterator &p);
   template<typename T>
   void set_client_metadata(T&& meta)
@@ -172,13 +181,15 @@ public:
 protected:
   ConnectionRef connection;
 public:
-  entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
   list<Message::ref> preopen_out_queue;  ///< messages for client, queued before they connect
 
-  elist<MDRequestImpl*> requests;
-  size_t get_request_count();
+  /* This is mutable to allow get_request_count to be const. elist does not
+   * support const iterators yet.
+   */
+  mutable elist<MDRequestImpl*> requests;
+  size_t get_request_count() const;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
 
@@ -195,6 +206,9 @@ public:
   }
   auto get_release_caps() const {
     return release_caps.get();
+  }
+  auto get_session_cache_liveness() const {
+    return session_cache_liveness.get();
   }
 
   inodeno_t next_ino() const {
@@ -298,14 +312,17 @@ public:
   }
 
   void touch_cap(Capability *cap) {
+    session_cache_liveness.hit(1.0);
     caps.push_front(&cap->item_session_caps);
   }
 
   void touch_cap_bottom(Capability *cap) {
+    session_cache_liveness.hit(1.0);
     caps.push_back(&cap->item_session_caps);
   }
 
   void touch_lease(ClientLease *r) {
+    session_cache_liveness.hit(1.0);
     leases.push_back(&r->item_session_lease);
   }
 
@@ -404,6 +421,7 @@ public:
     release_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
     recall_caps_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
     recall_caps_throttle2o(0.5),
+    session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
     birth_time(clock::now()),
     auth_caps(g_ceph_context),
     item_session_list(this),
@@ -422,8 +440,11 @@ public:
 
   void set_connection(ConnectionRef con) {
     connection = std::move(con);
-    if (connection) {
-      socket_addr = connection->get_peer_socket_addr();
+    auto& c = connection;
+    if (c) {
+      info.auth_name = c->get_peer_entity_name();
+      info.inst.addr = c->get_peer_socket_addr();
+      info.inst.name = entity_name_t(c->get_peer_type(), c->get_peer_global_id());
     }
   }
   const ConnectionRef& get_connection() const {
@@ -596,14 +617,13 @@ public:
   // sessions
   void decode_legacy(bufferlist::const_iterator& blp) override;
   bool empty() const { return session_map.empty(); }
-  const ceph::unordered_map<entity_name_t, Session*>& get_sessions() const
-  {
+  const auto& get_sessions() const {
     return session_map;
   }
 
   bool is_any_state(int state) const {
-    map<int,xlist<Session*>* >::const_iterator p = by_state.find(state);
-    if (p == by_state.end() || p->second->empty())
+    auto it = by_state.find(state);
+    if (it == by_state.end() || it->second->empty())
       return false;
     return true;
   }
@@ -794,8 +814,7 @@ private:
 
 public:
   void hit_session(Session *session);
-  void handle_conf_change(const ConfigProxy &conf,
-                          const std::set <std::string> &changed);
+  void handle_conf_change(const std::set <std::string> &changed);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);
