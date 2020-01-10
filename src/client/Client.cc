@@ -10489,10 +10489,10 @@ int Client::ll_lazyio(Fh *fh, int enable)
   return _lazyio(fh, enable);
 }
 
-int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
+int Client::lazyio_propagate(int fd, loff_t offset, size_t count)
 {
   std::lock_guard l(client_lock);
-  ldout(cct, 3) << "op: client->lazyio_propogate(" << fd
+  ldout(cct, 3) << "op: client->lazyio_propagate(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
   Fh *f = get_filehandle(fd);
@@ -10517,8 +10517,11 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   Inode *in = f->inode.get();
   
   _fsync(f, true);
-  if (_release(in))
-    check_caps(in, 0);
+  if (_release(in)) {
+    int r =_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+    if (r < 0) 
+      return r;
+  }
   return 0;
 }
 
