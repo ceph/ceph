@@ -306,6 +306,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
     {RBD_IMAGE_OPTION_DATA_POOL, STR},
     {RBD_IMAGE_OPTION_FLATTEN, UINT64},
+    {RBD_IMAGE_OPTION_CLONE_FORMAT, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -334,6 +335,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return "data_pool";
     case RBD_IMAGE_OPTION_FLATTEN:
       return "flatten";
+    case RBD_IMAGE_OPTION_CLONE_FORMAT:
+      return "clone_format";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -750,9 +753,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     CephContext *cct = (CephContext *)io_ctx.cct();
-    uint64_t flatten;
-    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+    uint64_t option;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &option) == 0) {
       lderr(cct) << "create does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+    if (opts.get(RBD_IMAGE_OPTION_CLONE_FORMAT, &option) == 0) {
+      lderr(cct) << "create does not support 'clone_format' image option"
+                 << dendl;
       return -EINVAL;
     }
 
@@ -1317,9 +1325,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
-    uint64_t flatten;
-    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+    uint64_t option;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &option) == 0) {
       lderr(cct) << "copy does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+    if (opts.get(RBD_IMAGE_OPTION_CLONE_FORMAT, &option) == 0) {
+      lderr(cct) << "copy does not support 'clone_format' image option"
+                 << dendl;
       return -EINVAL;
     }
 
