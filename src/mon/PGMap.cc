@@ -1609,6 +1609,18 @@ void PGMap::dump_osd_stats(ceph::Formatter *f, bool with_net) const
   f->close_section();
 }
 
+void PGMap::dump_osd_ping_times(ceph::Formatter *f) const
+{
+  f->open_array_section("osd_ping_times");
+  for (auto& [osd, stat] : osd_stat) {
+    f->open_object_section("osd_ping_time");
+    f->dump_int("osd", osd);
+    stat.dump_ping_time(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
 void PGMap::dump_pg_stats_plain(
   ostream& ss,
   const mempool::pgmap::unordered_map<pg_t, pg_stat_t>& pg_stats,
