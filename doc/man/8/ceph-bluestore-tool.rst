@@ -48,7 +48,7 @@ Commands
 
 :command:`bluefs-export`
 
-   Export the contents of BlueFS (i.e., rocksdb files) to an output directory.
+   Export the contents of BlueFS (i.e., RocksDB files) to an output directory.
 
 :command:`bluefs-bdev-sizes` --path *osd path*
 
@@ -56,7 +56,13 @@ Commands
 
 :command:`bluefs-bdev-expand` --path *osd path*
 
-   Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space.
+   Instruct BlueFS to check the size of its block devices and, if they have
+   expanded, make use of the additional space. Please note that only the new
+   files created by BlueFS will be allocated on the preferred block device if
+   it has enough free space, and the existing files that have spilled over to
+   the slow device will be gradually removed when RocksDB performs compaction.
+   In other words, if there is any data spilled over to the slow device, it
+   will be moved to the fast device over time.
 
 :command:`bluefs-bdev-new-wal` --path *osd path* --dev-target *new-device*
 
