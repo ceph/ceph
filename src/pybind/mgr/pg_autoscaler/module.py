@@ -303,7 +303,7 @@ class PgAutoscaler(MgrModule):
             final_ratio = max(capacity_ratio, target_ratio)
 
             # So what proportion of pg allowance should we be using?
-            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / raw_used_rate * bias
+            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / p['size'] * bias
 
             final_pg_target = max(p['options'].get('pg_num_min', PG_NUM_MIN),
                                   nearest_power_of_two(pool_pg_target))
