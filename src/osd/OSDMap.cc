@@ -3983,8 +3983,6 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
     f->dump_int("osd_up_since", last_up_change.to_msec() / 1000);
     f->dump_int("num_in_osds", get_num_in_osds());
     f->dump_int("osd_in_since", last_in_change.to_msec() / 1000);
-    f->dump_bool("full", test_flag(CEPH_OSDMAP_FULL));
-    f->dump_bool("nearfull", test_flag(CEPH_OSDMAP_NEARFULL));
     f->dump_unsigned("num_remapped_pgs", get_num_pg_temp());
   } else {
     utime_t now = ceph_clock_now();
