@@ -510,7 +510,8 @@ namespace rgw {
 	if (pos > 1) {
 	  path += "/";
 	} else {
-	  if (!omit_bucket && (path.front() != '/')) // pretty-print
+	  if (!omit_bucket &&
+	      ((path.length() == 0) || (path.front() != '/')))
 	    path += "/";
 	}
 	path += *s;
