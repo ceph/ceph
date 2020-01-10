@@ -4,6 +4,7 @@
 #include "mdstypes.h"
 #include "MDSContext.h"
 #include "common/Formatter.h"
+#include "common/StackStringStream.h"
 
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 
@@ -431,6 +432,12 @@ void feature_bitset_t::decode(bufferlist::const_iterator &p) {
   }
 }
 
+void feature_bitset_t::dump(Formatter *f) const {
+  CachedStackStringStream css;
+  print(*css);
+  f->dump_string("feature_bits", css->strv());
+}
+
 void feature_bitset_t::print(ostream& out) const
 {
   std::ios_base::fmtflags f(out.flags());
@@ -441,28 +448,59 @@ void feature_bitset_t::print(ostream& out) const
 }
 
 /*
+ * metric_spec_t
+ */
+void metric_spec_t::encode(bufferlist& bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(metric_flags, bl);
+  ENCODE_FINISH(bl);
+}
+
+void metric_spec_t::decode(bufferlist::const_iterator &p) {
+  using ceph::decode;
+  DECODE_START(1, p);
+  decode(metric_flags, p);
+  DECODE_FINISH(p);
+}
+
+void metric_spec_t::dump(Formatter *f) const {
+  f->dump_object("metric_flags", metric_flags);
+}
+
+void metric_spec_t::print(ostream& out) const
+{
+  out << "{metric_flags: '" << metric_flags << "'}";
+}
+
+/*
  * client_metadata_t
  */
 void client_metadata_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(kv_map, bl);
   encode(features, bl);
+  encode(metric_spec, bl);
   ENCODE_FINISH(bl);
 }
 
 void client_metadata_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(2, p);
+  DECODE_START(3, p);
   decode(kv_map, p);
   if (struct_v >= 2)
     decode(features, p);
+  if (struct_v >= 3) {
+    decode(metric_spec, p);
+  }
   DECODE_FINISH(p);
 }
 
 void client_metadata_t::dump(Formatter *f) const
 {
-  f->dump_stream("features") << features;
+  f->dump_object("client_features", features);
+  f->dump_object("metric_spec", metric_spec);
   for (const auto& [name, val] : kv_map)
     f->dump_string(name.c_str(), val);
 }
