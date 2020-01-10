@@ -138,3 +138,7 @@
 * The MGR now accepts 'profile rbd' and 'profile rbd-read-only' user caps.
   These caps can be used to provide users access to MGR-based RBD functionality
   such as 'rbd perf image iostat' an 'rbd perf image iotop'.
+
+* Bucket notifications now support Kafka endpoints. This require librdkafka of version 0.9.2 and up.
+  Note that Ubuntu 16.04.6 LTS (Xenial Xerus) has an older version of librdkafka, and would
+  require an update to the library.
