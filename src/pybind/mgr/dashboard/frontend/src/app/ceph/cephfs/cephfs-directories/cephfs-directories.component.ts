@@ -32,7 +32,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 
 class QuotaSetting {
   row: {
-    // Shows quota that is used for current directory
+    // Used in quota table
     name: string;
     value: number | string;
     originPath: string;
@@ -95,6 +95,11 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   ngOnInit() {
     this.permission = this.authStorageService.getPermissions().cephfs;
+    this.setUpQuotaTable();
+    this.setUpSnapshotTable();
+  }
+
+  private setUpQuotaTable() {
     this.quota = {
       columns: [
         {
@@ -146,6 +151,9 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         }
       ]
     };
+  }
+
+  private setUpSnapshotTable() {
     this.snapshot = {
       columns: [
         {
@@ -334,12 +342,28 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     };
   }
 
+  /**
+   * Get the node where the quota limit originates from in the current node
+   *
+   * Example as it's a recursive method:
+   *
+   * |  Path + Value | Call depth |       useOrigin?      | Output |
+   * |:-------------:|:----------:|:---------------------:|:------:|
+   * | /a/b/c/d (15) |     1st    | 2nd (5) < 15 => false |  /a/b  |
+   * | /a/b/c (20)   |     2nd    | 3rd (5) < 20 => false |  /a/b  |
+   * | /a/b (5)      |     3rd    |  4th (10) < 5 => true |  /a/b  |
+   * | /a (10)       |     4th    |       10 => true      |   /a   |
+   *
+   */
   private getOrigin(tree: Tree, quotaSetting: string): Tree {
     if (tree.parent.value !== '/') {
       const current = this.getQuotaFromTree(tree, quotaSetting);
+
+      // Get the next used quota and node above the current one (until it hits the root directory)
       const originTree = this.getOrigin(tree.parent, quotaSetting);
       const inherited = this.getQuotaFromTree(originTree, quotaSetting);
 
+      // Select if the current quota is in use or the above
       const useOrigin = current === 0 || (inherited !== 0 && inherited < current);
       return useOrigin ? originTree : tree;
     }
