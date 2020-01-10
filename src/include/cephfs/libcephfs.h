@@ -615,7 +615,7 @@ int64_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dir
  * @param cmount the ceph mount handle to use for performing the seekdir.
  * @param dirp the directory stream pointer to move.
  * @param offset the position to move the directory stream to.  This offset should be
- *        a value returned by seekdir.  Note that this value does not refer to the nth
+ *        a value returned by telldir.  Note that this value does not refer to the nth
  *        entry in a directory, and can not be manipulated with plus or minus.
  */
 void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, int64_t offset);
