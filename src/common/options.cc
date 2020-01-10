@@ -8303,7 +8303,8 @@ std::vector<Option> get_mds_client_options() {
 
     Option("fuse_default_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description("pass default_permisions to FUSE on mount"),
+    .set_description("pass default_permisions to FUSE on mount")
+    .set_flag(Option::FLAG_STARTUP),
 
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
