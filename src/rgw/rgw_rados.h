@@ -1384,7 +1384,7 @@ public:
 			      const string& delimiter,
 			      const uint32_t num_entries,
 			      const bool list_versions,
-			      const uint16_t attempt, // 0 means ignore
+			      const uint16_t exp_factor, // 0 means ignore
 			      ent_map_t& m,
 			      bool* is_truncated,
 			      bool* cls_filtered,

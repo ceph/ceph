@@ -1818,8 +1818,10 @@ int RGWRados::Bucket::List::list_objects_ordered(
     for (auto eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
       rgw_bucket_dir_entry& entry = eiter->second;
       rgw_obj_index_key index_key = entry.key;
-
       rgw_obj_key obj(index_key);
+
+      ldout(cct, 20) << "RGWRados::Bucket::List::" << __func__ <<
+	" considering entry " << entry.key << dendl;
 
       /* note that parse_raw_oid() here will not set the correct
        * object's instance, as rgw_obj_index_key encodes that
@@ -1834,12 +1836,12 @@ int RGWRados::Bucket::List::list_objects_ordered(
         continue;
       }
 
-      bool check_ns = (obj.ns == params.ns);
+      bool matched_ns = (obj.ns == params.ns);
       if (!params.list_versions && !entry.is_visible()) {
         continue;
       }
 
-      if (params.enforce_ns && !check_ns) {
+      if (params.enforce_ns && !matched_ns) {
         if (!params.ns.empty()) {
           /* we've iterated past the namespace we're searching -- done now */
           truncated = false;
@@ -8171,7 +8173,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      const string& delimiter,
 				      const uint32_t num_entries,
 				      const bool list_versions,
-				      const uint16_t attempt,
+				      const uint16_t expansion_factor,
 				      ent_map_t& m,
 				      bool* is_truncated,
 				      bool* cls_filtered,
@@ -8179,13 +8181,18 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
                                       optional_yield y,
 				      check_filter_t force_check_filter)
 {
+  /* expansion_factor allows the number of entries to read to grow
+   * exponentially; this is used when earlier reads are producing too
+   * few results, perhaps due to filtering or to a series of
+   * namespaced entries */
+
   ldout(cct, 10) << "RGWRados::" << __func__ << ": " << bucket_info.bucket <<
     " start_after=\"" << start_after.name <<
     "[" << start_after.instance <<
     "]\", prefix=\"" << prefix <<
     "\" num_entries=" << num_entries <<
     ", list_versions=" << list_versions <<
-    ", attempt=" << attempt << dendl;
+    ", expansion_factor=" << expansion_factor << dendl;
 
   RGWSI_RADOS::Pool index_pool;
   // key   - oid (for different shards if there is any)
@@ -8200,14 +8207,14 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
   const uint32_t shard_count = oids.size();
   uint32_t num_entries_per_shard;
-  if (attempt == 0) {
+  if (expansion_factor == 0) {
     num_entries_per_shard =
       calc_ordered_bucket_list_per_shard(num_entries, shard_count);
-  } else if (attempt <= 11) {
+  } else if (expansion_factor <= 11) {
     // we'll max out the exponential multiplication factor at 1024 (2<<10)
     num_entries_per_shard =
       std::min(num_entries,
-	       (uint32_t(1 << (attempt - 1)) *
+	       (uint32_t(1 << (expansion_factor - 1)) *
 		calc_ordered_bucket_list_per_shard(num_entries, shard_count)));
   } else {
     num_entries_per_shard = num_entries;
@@ -8228,21 +8235,6 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   if (r < 0) {
     return r;
   }
-
-  auto result_info =
-    [](const map<int, struct rgw_cls_list_ret>& m) -> std::string {
-      std::stringstream out;
-      out << "{ size:" << m.size() << ", entries:[";
-      for (const auto& i : m) {
-	out << " { " << i.first << ", " << i.second.dir.m.size() << " },";
-      }
-      out << "] }";
-      return out.str();
-    };
-
-  ldout(cct, 20) << "RGWRados::" << __func__ <<
-    " CLSRGWIssueBucketList() result=" <<
-    result_info(list_results) << dendl;
 
   // create a list of iterators that are used to iterate each shard
   vector<RGWRados::ent_map_t::iterator> vcurrents;
