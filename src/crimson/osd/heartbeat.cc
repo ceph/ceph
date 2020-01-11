@@ -139,7 +139,7 @@ seastar::future<Heartbeat::osds_t> Heartbeat::remove_down_peers()
       if (extra >= 0) {
         extras.push_back(extra);
       }
-      return extras;
+      return std::move(extras);
     });
 }
 
