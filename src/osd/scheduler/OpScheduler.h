@@ -66,7 +66,7 @@ OpSchedulerRef make_scheduler(CephContext *cct);
  * OpQueue based implementations.
  */
 template <typename T>
-class ClassedOpQueueScheduler : public OpScheduler {
+class ClassedOpQueueScheduler final : public OpScheduler {
   unsigned cutoff;
   T queue;
 
