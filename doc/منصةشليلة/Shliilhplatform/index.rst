@@ -1,11 +1,11 @@
 =================
- Welcome to Ceph
+ منصة شليلة 
 =================
 
 Ceph uniquely delivers **object, block, and file storage in one unified
 system**.
 
-.. raw:: html
+منصة شليلة:: html
 
 	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
 	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Ceph Object Store</h3>
