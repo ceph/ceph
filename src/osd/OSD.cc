@@ -585,6 +585,7 @@ void OSDService::agent_entry()
       agent_valid_iterator = true;
     }
     PGRef pg = *agent_queue_pos;
+    agent_queue_pos++;
     dout(10) << "high_count " << flush_mode_high_count
 	     << " agent_ops " << agent_ops
 	     << " flush_quota " << agent_flush_quota << dendl;
