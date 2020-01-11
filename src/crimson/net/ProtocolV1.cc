@@ -441,7 +441,7 @@ seastar::future<stop_t> ProtocolV1::send_connect_reply_ready(
       } else {
         return socket->flush();
       }
-    }).then([this] {
+    }).then([] {
       return stop_t::yes;
     });
 }

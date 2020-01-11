@@ -67,7 +67,7 @@ PGBackend::load_metadata(const hobject_t& oid)
   return store->get_attrs(
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, shard}).safe_then(
-      [oid, this](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
+      [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
 	loaded_object_md_t::ref ret(new loaded_object_md_t());
 	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
 	  bufferlist bl;
@@ -100,7 +100,7 @@ PGBackend::load_metadata(const hobject_t& oid)
 
 	return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
 	  std::move(ret));
-      }, crimson::ct_error::enoent::handle([oid, this] {
+      }, crimson::ct_error::enoent::handle([oid] {
 	logger().debug(
 	  "load_metadata: object {} doesn't exist, returning empty metadata",
 	  oid);
@@ -360,7 +360,7 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
                              gstart,
                              ghobject_t::get_max(),
                              limit)
-    .then([this](std::vector<ghobject_t> gobjects, ghobject_t next) {
+    .then([](std::vector<ghobject_t> gobjects, ghobject_t next) {
       std::vector<hobject_t> objects;
       boost::copy(gobjects |
         boost::adaptors::filtered([](const ghobject_t& o) {
