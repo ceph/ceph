@@ -13,7 +13,7 @@ Collection::~Collection() = default;
 
 Collection::ObjectRef Collection::create_object() const
 {
-  return new crimson::os::Object{};
+  return new crimson::os::Object;
 }
 
 Collection::ObjectRef Collection::get_object(ghobject_t oid)
