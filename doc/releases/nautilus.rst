@@ -190,7 +190,7 @@ Changelog
 * ceph-volume: use the OSD identifier when reporting success (`pr#29769 <https://github.com/ceph/ceph/pull/29769>`_, Alfredo Deza)
 * ceph-volume: zap always skips block.db, leaves them around (`issue#40664 <http://tracker.ceph.com/issues/40664>`_, `pr#30307 <https://github.com/ceph/ceph/pull/30307>`_, Alfredo Deza)
 * tools: ceph.in: do not preload ASan unless necessary (`pr#31676 <https://github.com/ceph/ceph/pull/31676>`_, Kefu Chai)
-* * build/ops: ceph.spec.in: reserve 2500MB per build job (`pr#30370 <https://github.com/ceph/ceph/pull/30370>`_, Dan van der Ster)
+* build/ops: ceph.spec.in: reserve 2500MB per build job (`pr#30370 <https://github.com/ceph/ceph/pull/30370>`_, Dan van der Ster)
 * tools: ceph_volume_client: convert string to bytes object (`issue#39405 <http://tracker.ceph.com/issues/39405>`_, `issue#40369 <http://tracker.ceph.com/issues/40369>`_, `issue#39510 <http://tracker.ceph.com/issues/39510>`_, `issue#40800 <http://tracker.ceph.com/issues/40800>`_, `issue#40460 <http://tracker.ceph.com/issues/40460>`_, `pr#30030 <https://github.com/ceph/ceph/pull/30030>`_, Rishabh Dave)
 * cephfs-shell: Convert paths type from string to bytes (`pr#30057 <https://github.com/ceph/ceph/pull/30057>`_, Varsha Rao)
 * cephfs: Allow mount.ceph to get mount info from ceph configs and keyrings (`pr#30521 <https://github.com/ceph/ceph/pull/30521>`_, Jeff Layton)
