@@ -105,7 +105,7 @@ struct io_queue_t {
   virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
 };
 
-struct aio_queue_t : public io_queue_t {
+struct aio_queue_t final : public io_queue_t {
   int max_iodepth;
 #if defined(HAVE_LIBAIO)
   io_context_t ctx;
