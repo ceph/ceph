@@ -447,10 +447,10 @@ PGBackend::get_attr_errorator::future<ceph::bufferptr> PGBackend::getxattr(
 
 static seastar::future<crimson::os::FuturizedStore::omap_values_t>
 maybe_get_omap_vals_by_keys(
-  auto& store,
-  const auto& coll,
-  const auto& oi,
-  const auto& keys_to_get)
+  crimson::os::FuturizedStore* store,
+  const crimson::os::CollectionRef& coll,
+  const object_info_t& oi,
+  const std::set<std::string>& keys_to_get)
 {
   if (oi.is_omap()) {
     return store->omap_get_values(coll, ghobject_t{oi.soid}, keys_to_get);
@@ -462,10 +462,10 @@ maybe_get_omap_vals_by_keys(
 
 static seastar::future<bool, crimson::os::FuturizedStore::omap_values_t>
 maybe_get_omap_vals(
-  auto& store,
-  const auto& coll,
-  const auto& oi,
-  const auto& start_after)
+  crimson::os::FuturizedStore* store,
+  const crimson::os::CollectionRef& coll,
+  const object_info_t& oi,
+  const std::string& start_after)
 {
   if (oi.is_omap()) {
     return store->omap_get_values(coll, ghobject_t{oi.soid}, start_after);
