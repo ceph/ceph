@@ -118,9 +118,9 @@ struct AsyncCreateStat {
 #define I_SNAPDIR_OPEN		(1 << 2)
 #define I_KICK_FLUSH		(1 << 3)
 #define I_ERROR_FILELOCK	(1 << 4)
+#define I_ASYNC_CREATING	(1 << 5)
 
 static const int FMODE_WAIT_BIAS = 1000;
-
 
 struct Inode {
   Client *client;
