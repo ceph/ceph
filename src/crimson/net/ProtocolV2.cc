@@ -917,7 +917,7 @@ void ProtocolV2::execute_connecting()
             abort_protocol();
           }
           if (socket) {
-            (void) with_gate(pending_dispatch, [this, sock = std::move(socket)] () mutable {
+            (void) with_gate(pending_dispatch, [sock = std::move(socket)] () mutable {
               return sock->close().then([sock = std::move(sock)] {});
             });
           }
@@ -928,7 +928,7 @@ void ProtocolV2::execute_connecting()
           if (unlikely(state != state_t::CONNECTING)) {
             logger().debug("{} triggered {} during Socket::connect()",
                            conn, get_state_name(state));
-            return sock->close().then([this, sock = std::move(sock)] {
+            return sock->close().then([sock = std::move(sock)] {
               abort_protocol();
             });
           }
@@ -1129,7 +1129,7 @@ ProtocolV2::send_wait()
 {
   auto wait = WaitFrame::Encode();
   logger().debug("{} WRITE WaitFrame", conn);
-  return write_frame(wait).then([this] {
+  return write_frame(wait).then([] {
     return next_step_t::wait;
   });
 }
@@ -1319,7 +1319,7 @@ ProtocolV2::server_connect()
       auto ident_missing_features = IdentMissingFeaturesFrame::Encode(feat_missing);
       logger().warn("{} WRITE IdentMissingFeaturesFrame: features={} (peer missing)",
                     conn, feat_missing);
-      return write_frame(ident_missing_features).then([this] {
+      return write_frame(ident_missing_features).then([] {
         return next_step_t::wait;
       });
     }
@@ -1791,7 +1791,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       }
 
       if (socket) {
-        (void) with_gate(pending_dispatch, [this, sock = std::move(socket)] () mutable {
+        (void) with_gate(pending_dispatch, [sock = std::move(socket)] () mutable {
           return sock->close().then([sock = std::move(sock)] {});
         });
       }
