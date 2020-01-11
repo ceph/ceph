@@ -1721,6 +1721,9 @@ int Client::verify_reply_trace(int r, MetaSession *session,
 
   if (request->target) {
     *ptarget = request->target;
+    if (created_ino && request->get_op() == CEPH_MDS_OP_CREATE)
+      update_async_create_stat(request, session);
+
     ldout(cct, 20) << "make_request target is " << *ptarget->get() << dendl;
   } else {
     ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
@@ -1908,6 +1911,10 @@ int Client::make_request(MetaRequest *request,
       put_request(request);
     } else {
       ceph_assert(request->async);
+      if (ptarget)
+	*ptarget = request->target;
+      if (pcreated)
+	*pcreated = request->created_ino;
       put_request(request);
       r = 0;
     }
@@ -2400,6 +2407,8 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   } else {
     if (request->async) {
       r->set_async_op();
+      if (request->target)
+	r->head.ino = request->target->ino;
     }
     encode_cap_releases(request, mds);
     if (drop_cap_releases) // we haven't send cap reconnect yet, drop cap releases
@@ -2989,6 +2998,8 @@ void Client::send_reconnect(MetaSession *session)
   session->readonly = false;
 
   session->release.reset();
+  session->clear_delegated_inos();
+
   session->clear_delegated_inos();
 
   // reset my cap seq number
@@ -4284,6 +4295,11 @@ void Client::check_cap_issue(Inode *in, unsigned issued)
     if (in->is_dir())
       clear_dir_complete_and_ordered(in, true);
   }
+
+  if (in->is_dir() &&
+      (issued & CEPH_CAP_DIR_CREATE) &&
+      !(had & CEPH_CAP_DIR_CREATE))
+    in->async_create_stat.reset();
 }
 
 void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id,
@@ -12986,6 +13002,130 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
   return r;
 }
 
+void Client::_async_create_cb(MetaRequest *req, MetaSession *session, int err)
+{
+  Inode *diri = req->inode();
+  Dentry *dn = req->dentry();
+  unsigned want = CEPH_CAP_FILE_EXCL | CEPH_CAP_DIR_CREATE;
+
+  if (req->async) {
+    InodeRef &in = req->target;
+    if (err < 0) {
+      lderr(cct) << "got error " << cpp_strerror(err) << " for async create tid "
+		 << req->tid << " " << diri->ino  << " " << dn->name << dendl;
+      diri->set_async_err(err);
+      in->set_async_err(err);
+    }
+    put_cap_ref(diri, want);
+    return;
+  }
+
+  Cap *auth_cap = diri->auth_cap;
+  if (!auth_cap || auth_cap->session != session)
+    return;
+  if ((diri->caps_issued() & want) != want)
+    return;
+
+  // We have CEPH_CAP_FILE_EXCL, which implies CEPH_CAP_FILE_SHARED.
+  if (dn->cap_shared_gen != diri->shared_gen ||
+      dn->inode)
+    return;
+
+  if (session->delegated_inos.empty())
+    return;
+
+  if (!diri->async_create_stat)
+    return;
+
+  auto& open_args = req->head.args.open;
+
+  InodeStat st;
+  st.layout = diri->async_create_stat->layout;
+  if (open_args.stripe_unit)
+    st.layout.stripe_unit = open_args.stripe_unit;
+  if (open_args.stripe_count)
+    st.layout.stripe_count = open_args.stripe_count;
+  if (open_args.object_size)
+    st.layout.object_size = open_args.object_size;
+  if ((__s32)open_args.pool >= 0)
+    st.layout.pool_id = open_args.pool;
+  if (!st.layout.is_valid())
+    return;
+
+  st.vino.ino = session->take_delegated_ino();
+  st.vino.snapid = CEPH_NOSNAP;
+  st.version = 1;
+  st.xattr_version = 1;
+
+  st.cap.wanted = ceph_caps_for_mode(ceph_flags_to_mode(open_args.flags));
+  st.cap.caps = st.cap.wanted | CEPH_CAP_ANY_RD;
+  st.cap.realm = diri->snaprealm->ino;
+  st.cap.cap_id = 1;
+  st.cap.seq = 0;
+  st.cap.mseq = 0;
+  st.cap.flags = CEPH_CAP_FLAG_AUTH;
+
+  st.ctime = st.btime = st.mtime = st.atime = req->op_stamp;
+  // only allow writing to the first object before writeable range is persistent
+  st.max_size = st.layout.stripe_unit;
+  st.truncate_size = -1ull;
+  st.truncate_seq = 1;
+  st.mode = open_args.mode | S_IFREG;
+  st.uid = req->head.caller_uid;
+  st.gid = (diri->mode & S_ISGID) ? diri->gid : req->head.caller_gid;
+  st.xattrbl = req->data;
+  st.inline_version = CEPH_INLINE_NONE;
+
+  Inode *in = add_update_inode(&st, req->sent_stamp, session, req->perms);
+  req->target = in;
+  req->created_ino = in->ino;
+
+  diri->mtime = req->op_stamp;
+  diri->dirstat.nfiles++;
+  diri->dir_ordered_count++;
+  clear_dir_complete_and_ordered(diri, false);
+  Dir *dir = diri->open_dir();
+  dn = link(dir, dn->name, in, dn);
+  dn->primary_link = true;
+
+  get_cap_ref(diri, want);
+  req->async = true;
+  req->resend_mds = session->mds_num;
+  uint32_t orig_flags = req->head.args.open.flags;
+  req->head.args.open.flags = orig_flags | CEPH_O_EXCL;
+  register_unsafe_request(req, session);
+  ldout(cct, 10) << __func__ << " succeed" <<  dendl;
+}
+
+void Client::update_async_create_stat(MetaRequest *req, MetaSession *session)
+{
+  Inode *diri = req->inode();
+  if (!diri->auth_cap ||
+      !(diri->auth_cap->issued & CEPH_CAP_DIR_CREATE) ||
+      diri->auth_cap->session != session)
+    return;
+
+  InodeRef& in = req->target;
+  if (!in)
+    return;
+
+  auto& async_create_stat = diri->async_create_stat;
+  if (!async_create_stat)
+    async_create_stat = std::make_unique<AsyncCreateStat>();
+
+  file_layout_t& layout = async_create_stat->layout;
+
+  auto& open_args = req->head.args.open;
+  if (!open_args.stripe_unit)
+    layout.stripe_unit = in->layout.stripe_unit;
+  if (!open_args.stripe_count)
+    layout.stripe_count = in->layout.stripe_count;
+  if (!open_args.object_size)
+    layout.object_size = in->layout.object_size;
+  if ((__s32)open_args.pool == -1)
+    layout.pool_id = in->layout.pool_id;
+}
+
 int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 		    InodeRef *inp, Fh **fhp, int stripe_unit, int stripe_count,
 		    int object_size, const char *data_pool, bool *created,
@@ -13054,6 +13194,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   if (res < 0)
     goto fail;
   req->set_dentry(de);
+
+  req->async_dirop_cb = &Client::_async_create_cb;
 
   res = make_request(req, perms, inp, created);
   if (res < 0) {
@@ -13381,8 +13523,8 @@ void Client::_async_unlink_cb(MetaRequest *req, MetaSession *session, int err)
   unlink(dn, true, true);  // keep dir, dentry
 
   get_cap_ref(diri, want);
-  req->resend_mds = session->mds_num;
   req->async = true;
+  req->resend_mds = session->mds_num;
   register_unsafe_request(req, session);
   ldout(cct, 10) << __func__ << " succeed" <<  dendl;
 }
