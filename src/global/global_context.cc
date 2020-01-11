@@ -12,10 +12,13 @@
  *
  */
 
-#include "common/ceph_context.h"
 #include "global/global_context.h"
 
 #include <string.h>
+#include "common/ceph_context.h"
+#ifdef WITH_SEASTAR
+#include "crimson/common/config_proxy.h"
+#endif
 
 
 /*
@@ -24,7 +27,7 @@
 CephContext *g_ceph_context = NULL;
 ConfigProxy& g_conf() {
 #ifdef WITH_SEASTAR
-  return ceph::common::local_conf();
+  return crimson::common::local_conf();
 #else
   return g_ceph_context->_conf;
 #endif
