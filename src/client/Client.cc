@@ -1770,6 +1770,33 @@ int Client::verify_reply_trace(int r, MetaSession *session,
   return r;
 }
 
+bool Client::wait_for_async_dirop(MetaRequest *req)
+{
+  bool waited = false;
+
+  Inode *in = nullptr;
+  if (req->inode() && (req->inode()->flags & I_ASYNC_CREATING))
+    in = req->inode();
+  else if (req->old_inode() && (req->old_inode()->flags & I_ASYNC_CREATING))
+    in = req->old_inode();
+  else if (req->other_inode() && (req->other_inode()->flags & I_ASYNC_CREATING))
+    in = req->other_inode();
+
+  if (in) {
+    ldout(cct, 10) << __func__ << " inode 0x" << in->ino
+		   << " is being async created, waiting" << dendl;
+    ceph_assert(!in->unsafe_ops.empty());
+    MetaRequest *req = in->unsafe_ops.back();
+    ceph_assert(req->get_op() == CEPH_MDS_OP_CREATE);
+
+    req->get();
+    wait_on_list(req->waitfor_safe);
+    put_request(req);
+    waited = true;
+  }
+
+  return waited;
+}
 
 /**
  * make a request
@@ -1832,6 +1859,9 @@ int Client::make_request(MetaRequest *request,
       request->abort(-CEPHFS_EBLOCKLISTED);
       break;
     }
+
+    if (wait_for_async_dirop(request))
+      continue;
 
     // choose mds
     Inode *hash_diri = NULL;
@@ -2000,19 +2030,29 @@ void Client::unregister_request(MetaRequest *req)
 void Client::put_request(MetaRequest *request)
 {
   if (request->_put()) {
-    int op = -1;
-    if (request->success)
-      op = request->get_op();
-    InodeRef other_in;
-    request->take_other_inode(&other_in);
+    InodeRef to_trim, to_check;
+
+    if (request->success) {
+      switch(request->get_op()) {
+	case CEPH_MDS_OP_RMDIR:
+	case CEPH_MDS_OP_RENAME:
+	case CEPH_MDS_OP_RMSNAP:
+	  request->take_other_inode(&to_trim);
+	  break;
+	case CEPH_MDS_OP_CREATE:
+	  if (request->async)
+	    request->target.swap(to_check);
+	  break;
+	default:
+	  break;
+      }
+    }
     delete request;
 
-    if (other_in &&
-	(op == CEPH_MDS_OP_RMDIR ||
-	 op == CEPH_MDS_OP_RENAME ||
-	 op == CEPH_MDS_OP_RMSNAP)) {
-      _try_to_trim_inode(other_in.get(), false);
-    }
+    if (to_trim)
+      _try_to_trim_inode(to_trim.get(), false);
+    if (to_check)
+      check_caps(to_check.get(), 0);
   }
 }
 
@@ -3150,7 +3190,7 @@ void Client::wait_unsafe_requests()
        p != last_unsafe_reqs.end();
        ++p) {
     MetaRequest *req = *p;
-    if (req->unsafe_item.is_on_list())
+    while (req->unsafe_item.is_on_list())
       wait_on_list(req->waitfor_safe);
     put_request(req);
   }
@@ -3835,7 +3875,10 @@ void Client::check_caps(Inode *in, unsigned flags)
 	   << dendl;
 
   if (in->snapid != CEPH_NOSNAP)
-    return; //snap caps last forever, can't write
+    return; // snap caps last forever, can't write
+
+  if (in->flags & I_ASYNC_CREATING)
+    return; // this function will be called when request finishes
 
   if (in->caps.empty())
     return;   // guard if at end of func
@@ -10515,21 +10558,24 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
   
-  if (!syncdataonly && in->dirty_caps) {
-    check_caps(in, CHECK_CAPS_SYNCHRONOUS);
-    if (in->flushing_caps)
-      flush_tid = last_flush_tid;
-  } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
+  if (!syncdataonly) {
+    if (!in->unsafe_ops.empty()) {
+      flush_mdlog_sync();
 
-  if (!syncdataonly && !in->unsafe_ops.empty()) {
-    flush_mdlog_sync();
+      MetaRequest *req = in->unsafe_ops.back();
+      ldout(cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
 
-    MetaRequest *req = in->unsafe_ops.back();
-    ldout(cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
+      req->get();
+      while (req->unsafe_item.is_on_list())
+	wait_on_list(req->waitfor_safe);
+      put_request(req);
+    }
 
-    req->get();
-    wait_on_list(req->waitfor_safe);
-    put_request(req);
+    if (in->dirty_caps) {
+      check_caps(in, CHECK_CAPS_SYNCHRONOUS);
+      if (in->flushing_caps)
+	flush_tid = last_flush_tid;
+    } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
   }
 
   if (nullptr != object_cacher_completion) { // wait on a real reply instead of guessing
@@ -13017,6 +13063,8 @@ void Client::_async_create_cb(MetaRequest *req, MetaSession *session, int err)
       in->set_async_err(err);
     }
     put_cap_ref(diri, want);
+    in->flags &= ~I_ASYNC_CREATING;
+    signal_cond_list(req->waitfor_safe);
     return;
   }
 
@@ -13077,6 +13125,7 @@ void Client::_async_create_cb(MetaRequest *req, MetaSession *session, int err)
   st.inline_version = CEPH_INLINE_NONE;
 
   Inode *in = add_update_inode(&st, req->sent_stamp, session, req->perms);
+  in->flags |= I_ASYNC_CREATING;
   req->target = in;
   req->created_ino = in->ino;
 

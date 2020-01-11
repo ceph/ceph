@@ -893,6 +893,7 @@ protected:
   void register_unsafe_request(MetaRequest *request, MetaSession *session);
   void unregister_request(MetaRequest *request);
 
+  bool wait_for_async_dirop(MetaRequest *req);
   int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
 			 InodeRef *ptarget, bool *pcreated);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
