@@ -43,8 +43,7 @@ if(HAS_VTA)
   set_source_files_properties(osdcap.cc
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
-add_library(osd STATIC ${osd_srcs}
-  $<TARGET_OBJECTS:global_common_objs>)
+add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
   PUBLIC dmclock::dmclock
   PRIVATE os heap_profiler cpu_profiler ${CMAKE_DL_LIBS})
