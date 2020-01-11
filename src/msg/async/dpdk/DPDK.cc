@@ -1096,6 +1096,16 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(
   head->pkt_len = p.len();
   head->nb_segs = total_nsegs;
 
+  // Message amaller than minimum frame len maybe dropped by driver, so add padding to
+  // last_seg before sending.
+  if (head->pkt_len < ETHER_MIN_LEN - ETHER_CRC_LEN) {
+    char *appended = rte_pktmbuf_mtod_offset(last_seg, char *, last_seg->data_len);
+    uint16_t to_add = ETHER_MIN_LEN - ETHER_CRC_LEN - head->pkt_len;
+    memset(appended, 0, to_add);
+    last_seg->data_len += to_add;
+    head->pkt_len  += to_add;
+  }
+
   set_cluster_offload_info(p, qp, head);
 
   //
@@ -1206,6 +1216,16 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_copy(Packet&& p, DPDKQ
   //
   head->pkt_len = p.len();
   head->nb_segs = nsegs;
+
+  // Message smaller than minimum frame len maybe dropped by the driver,
+  // so add padding to current mbuf before sending.
+  if (head->pkt_len < ETHER_MIN_LEN - ETHER_CRC_LEN) {
+    char *appended = rte_pktmbuf_mtod_offset(head, char *, head->data_len);
+    uint16_t to_add = ETHER_MIN_LEN - ETHER_CRC_LEN - head->pkt_len;
+    memset(appended, 0, to_add);
+    head->data_len += to_add;
+    head->pkt_len  += to_add;
+  }
 
   copy_packet_to_cluster(p, head);
   set_cluster_offload_info(p, qp, head);
