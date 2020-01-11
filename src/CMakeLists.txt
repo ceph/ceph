@@ -300,6 +300,7 @@ endif()
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
+  global/global_context.cc
   xxHash/xxhash.c
   log/Log.cc
   mon/MonCap.cc
@@ -342,7 +343,6 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
   json_spirit erasure_code arch crc32

@@ -73,6 +73,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
+  ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc
@@ -96,8 +97,7 @@ add_library(crimson-common STATIC
   $<TARGET_OBJECTS:crimson-auth>
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:crimson-crush>
-  $<TARGET_OBJECTS:global_common_objs>)
+  $<TARGET_OBJECTS:crimson-crush>)
 
 target_compile_definitions(crimson-common PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
