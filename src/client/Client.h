@@ -1257,6 +1257,8 @@ private:
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
 	      const char *data_pool, bool *created, const UserPerm &perms);
+  void _async_create_cb(MetaRequest *req, MetaSession *session, int err);
+  void update_async_create_stat(MetaRequest* req, MetaSession *session);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
