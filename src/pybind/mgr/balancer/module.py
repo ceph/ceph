@@ -753,7 +753,7 @@ class Module(MgrModule):
     def do_upmap(self, plan):
         self.log.info('do_upmap')
         max_iterations = int(self.get_config('upmap_max_iterations', 10))
-        max_deviation = int(self.get_config('upmap_max_deviation', 1))
+        max_deviation = int(self.get_config('upmap_max_deviation', 5))
 
         ms = plan.initial
         if len(plan.pools):

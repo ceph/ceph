@@ -121,6 +121,8 @@ function TEST_balancer2() {
     CEPH_ARGS+="--debug_osd=20 "
     setup $dir || return 1
     run_mon $dir a || return 1
+    # Must do this before starting ceph-mgr
+    ceph config-key set mgr/balancer/upmap_max_deviation 1
     run_mgr $dir x || return 1
     for i in $(seq 0 $(expr $OSDS - 1))
     do
