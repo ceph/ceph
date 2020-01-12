@@ -486,7 +486,11 @@ endif(WITH_BABELTRACE)
 
 option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
-option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
+if(CMAKE_BUILD_TYPE STREQUAL Debug)
+  option(PG_DEBUG_REFS "PG Ref debugging is enabled" ON)
+else()
+  option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
+endif()
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 set(UNIT_TESTS_BUILT ${WITH_TESTS})

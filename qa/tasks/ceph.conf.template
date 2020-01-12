@@ -52,6 +52,7 @@
 	osd debug shutdown = true
         osd debug op order = true
         osd debug verify stray on activate = true
+	osd shutdown pgref assert = true
 
 	osd open classes on start = true
         osd debug pg log writeout = true
