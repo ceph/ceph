@@ -481,7 +481,7 @@ private:
       return this->then_wrapped(
         [ valfunc = std::forward<ValueFuncT>(valfunc),
           errfunc = std::forward<ErrorVisitorT>(errfunc)
-        ] (auto&& future) mutable noexcept [[gnu::always_inline]] {
+        ] (auto&& future) mutable noexcept {
           if (__builtin_expect(future.failed(), false)) {
             return _safe_then_handle_errors<futurator_t>(
               std::move(future), std::forward<ErrorVisitorT>(errfunc));
@@ -530,7 +530,7 @@ private:
 
       return this->then_wrapped(
 	[ func = std::forward<FuncT>(func)
-	] (auto&& future) mutable noexcept [[gnu::always_inline]] {
+	] (auto&& future) mutable noexcept {
 	  return futurator_t::apply(std::forward<FuncT>(func)).safe_then(
 	    [future = std::forward<decltype(future)>(future)]() mutable {
 	      return std::move(future);
@@ -574,7 +574,7 @@ private:
         typename return_errorator_t::template futurize<::seastar::future<ValuesT...>>;
       return this->then_wrapped(
         [ errfunc = std::forward<ErrorVisitorT>(errfunc)
-        ] (auto&& future) mutable noexcept [[gnu::always_inline]] {
+        ] (auto&& future) mutable noexcept {
           if (__builtin_expect(future.failed(), false)) {
             return _safe_then_handle_errors<futurator_t>(
               std::move(future), std::forward<ErrorVisitorT>(errfunc));
