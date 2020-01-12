@@ -468,6 +468,10 @@ void Replayer<I>::handle_wait_for_event_replay(int r) {
 template <typename I>
 void Replayer<I>::close_local_image() {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  if (m_state_builder->local_image_ctx == nullptr) {
+    stop_remote_journaler_replay();
+    return;
+  }
 
   dout(10) << dendl;
   if (m_local_journal_listener != nullptr) {
