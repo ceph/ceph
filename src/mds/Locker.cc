@@ -2186,8 +2186,8 @@ Capability* Locker::issue_new_caps(CInode *in,
   Session *session = mdr->session;
   bool new_inode = (mdr->alloc_ino || mdr->used_prealloc_ino);
 
-  // if replay, try to reconnect cap, and otherwise do nothing.
-  if (new_inode && mdr->client_request->is_replay())
+  // if replay or async, try to reconnect cap, and otherwise do nothing.
+  if (new_inode && mdr->client_request->is_queued_for_replay())
     return mds->mdcache->try_reconnect_cap(in, session);
 
   // my needs
