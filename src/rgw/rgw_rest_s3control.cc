@@ -212,3 +212,96 @@ void RGWGetAccountPublicAccessBlock::send_response()
   access_conf.dump_xml(s->formatter);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
+
+RGWOpType RGWDeleteAccountPublicAccessBlock::get_type()
+{
+  return RGW_OP_DELETE_ACCOUNT_PUBLIC_ACCESS_BLOCK;
+}
+
+int RGWDeleteAccountPublicAccessBlock::get_params()
+{
+  if (auto it = s->info.x_meta_map.find(AMZ_ACCOUNT_ID_ATTR);
+      it != s->info.x_meta_map.end()) {
+    const auto& account_name = it->second;
+    if (account_name.empty()) {
+      ldpp_dout(this, 5) << "ERROR: empty account name"
+                         << dendl;
+      return -EINVAL;
+    }
+
+    if (account_name != s->user->user_id.tenant) {
+      ldpp_dout(this, 5) << __func__ << "ERROR: Account ID doesn't match the tenant" << dendl;
+      return -EINVAL;
+    }
+  }
+
+
+  return 0;
+}
+int RGWDeleteAccountPublicAccessBlock::check_caps(RGWUserCaps& caps)
+{
+  return caps.check_cap("user-policy", RGW_CAP_WRITE);
+}
+
+int RGWDeleteAccountPublicAccessBlock::verify_permission()
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if(int ret = check_caps(s->user->caps); ret == 0) {
+    return ret;
+  }
+  // TODO implement x-amz-account-id stuff here
+  return 0;
+}
+
+
+void RGWDeleteAccountPublicAccessBlock::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+
+  auto svc = store->getRados()->pctl->svc;
+  auto obj_ctx = svc->sysobj->init_obj_ctx();
+  const auto& account_name = s->user->user_id.tenant;
+
+  map<string, bufferlist> attrs;
+  bufferlist bl;
+  op_ret = rgw_get_system_obj(obj_ctx, svc->zone->get_zone_params().user_uid_pool,
+                              account_name, bl, nullptr,
+                              nullptr, null_yield,
+                              &attrs);
+
+  if (op_ret == -ENOENT) {
+    // object doesn't exist, so deletion is successful
+    op_ret = 0;
+    return;
+  }
+
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << __func__ << " getting account sys obj. returned r=" << op_ret << dendl;
+    return;
+  }
+
+  attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
+  op_ret = rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().user_uid_pool,
+                              account_name,
+                              bl, false,
+                              nullptr, real_time(), null_yield,
+                              &attrs);
+
+
+}
+
+void RGWDeleteAccountPublicAccessBlock::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}

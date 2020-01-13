@@ -89,3 +89,15 @@ public:
   void execute() override;
   void send_response() override;
 };
+
+
+class RGWDeleteAccountPublicAccessBlock : public RGWRESTOp {
+public:
+  int check_caps(RGWUserCaps& caps) override;
+  int verify_permission() override;
+  const char* name() const override { return "get_account_public_access_block";}
+  int get_params();
+  RGWOpType get_type() override;
+  void execute() override;
+  void send_response() override;
+};
