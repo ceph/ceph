@@ -255,6 +255,7 @@ export class PoolFormComponent implements OnInit {
     this.data.pgs = this.form.getValue('pgNum');
     this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
+    this.rulesChange();
   }
 
   private setAvailableApps(apps: string[] = this.data.applications.default) {
