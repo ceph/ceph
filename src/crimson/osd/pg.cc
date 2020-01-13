@@ -243,10 +243,12 @@ void PG::prepare_write(pg_info_t &info,
 		       ceph::os::Transaction &t)
 {
   std::map<string,bufferlist> km;
+  std::string key_to_remove;
   if (dirty_big_info || dirty_info) {
     int ret = prepare_info_keymap(
       shard_services.get_cct(),
       &km,
+      &key_to_remove,
       get_osdmap_epoch(),
       info,
       last_written_info,
@@ -263,6 +265,9 @@ void PG::prepare_write(pg_info_t &info,
     peering_state.get_pool().info.require_rollback());
   if (!km.empty()) {
     t.omap_setkeys(coll, pgmeta_oid, km);
+  }
+  if (!key_to_remove.empty()) {
+    t.omap_rmkey(coll, pgmeta_oid, key_to_remove);
   }
 }
 

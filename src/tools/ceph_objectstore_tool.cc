@@ -577,16 +577,21 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
   map<string,bufferlist> km;
+  string key_to_remove;
   pg_info_t last_written_info;
   int ret = prepare_info_keymap(
     g_ceph_context,
-    &km, epoch,
+    &km, &key_to_remove,
+    epoch,
     info,
     last_written_info,
     past_intervals,
     true, true, false);
   if (ret) cerr << "Failed to write info" << std::endl;
   t.omap_setkeys(coll, pgmeta_oid, km);
+  if (!key_to_remove.empty()) {
+    t.omap_rmkey(coll, pgmeta_oid, key_to_remove);
+  }
   return ret;
 }
 

@@ -949,10 +949,12 @@ void PG::prepare_write(
   info.stats.stats.add(unstable_stats);
   unstable_stats.clear();
   map<string,bufferlist> km;
+  string key_to_remove;
   if (dirty_big_info || dirty_info) {
     int ret = prepare_info_keymap(
       cct,
       &km,
+      &key_to_remove,
       get_osdmap_epoch(),
       info,
       last_written_info,
@@ -968,6 +970,8 @@ void PG::prepare_write(
     t, &km, coll, pgmeta_oid, pool.info.require_rollback());
   if (!km.empty())
     t.omap_setkeys(coll, pgmeta_oid, km);
+  if (!key_to_remove.empty())
+    t.omap_rmkey(coll, pgmeta_oid, key_to_remove);
 }
 
 #pragma GCC diagnostic ignored "-Wpragmas"
