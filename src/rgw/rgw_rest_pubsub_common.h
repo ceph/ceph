@@ -18,6 +18,7 @@ protected:
   std::string topic_name;
   rgw_pubsub_sub_dest dest;
   std::string topic_arn;
+  std::string opaque_data;
   
   virtual int get_params() = 0;
 
