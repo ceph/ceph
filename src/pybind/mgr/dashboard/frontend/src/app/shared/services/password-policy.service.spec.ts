@@ -49,9 +49,9 @@ describe('PasswordPolicyService', () => {
 
   it('should not get help text', () => {
     let helpText = '';
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: false
+        pwd_policy_enabled: false
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));
@@ -61,14 +61,17 @@ describe('PasswordPolicyService', () => {
   it('should get help text chk_length', () => {
     let helpText = '';
     const expectedHelpText = helpTextHelper.get('chk_length');
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: true,
-        PWD_POLICY_MIN_LENGTH: 10,
-        PWD_POLICY_CHECK_LENGTH_ENABLED: true,
-        PWD_POLICY_CHECK_OLDPWD_ENABLED: false,
-        PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED: false,
-        PWD_POLICY_CHECK_COMPLEXITY_ENABLED: false
+        user_pwd_expiration_warning_1: 10,
+        user_pwd_expiration_warning_2: 5,
+        user_pwd_expiration_span: 90,
+        pwd_policy_enabled: true,
+        pwd_policy_min_length: 10,
+        pwd_policy_check_length_enabled: true,
+        pwd_policy_check_oldpwd_enabled: false,
+        pwd_policy_check_sequential_chars_enabled: false,
+        pwd_policy_check_complexity_enabled: false
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));
@@ -78,13 +81,13 @@ describe('PasswordPolicyService', () => {
   it('should get help text chk_oldpwd', () => {
     let helpText = '';
     const expectedHelpText = helpTextHelper.get('chk_oldpwd');
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: true,
-        PWD_POLICY_CHECK_OLDPWD_ENABLED: true,
-        PWD_POLICY_CHECK_USERNAME_ENABLED: false,
-        PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED: false,
-        PWD_POLICY_CHECK_COMPLEXITY_ENABLED: false
+        pwd_policy_enabled: true,
+        pwd_policy_check_oldpwd_enabled: true,
+        pwd_policy_check_username_enabled: false,
+        pwd_policy_check_exclusion_list_enabled: false,
+        pwd_policy_check_complexity_enabled: false
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));
@@ -94,12 +97,12 @@ describe('PasswordPolicyService', () => {
   it('should get help text chk_username', () => {
     let helpText = '';
     const expectedHelpText = helpTextHelper.get('chk_username');
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: true,
-        PWD_POLICY_CHECK_OLDPWD_ENABLED: false,
-        PWD_POLICY_CHECK_USERNAME_ENABLED: true,
-        PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED: false
+        pwd_policy_enabled: true,
+        pwd_policy_check_oldpwd_enabled: false,
+        pwd_policy_check_username_enabled: true,
+        pwd_policy_check_exclusion_list_enabled: false
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));
@@ -109,12 +112,12 @@ describe('PasswordPolicyService', () => {
   it('should get help text chk_exclusion_list', () => {
     let helpText = '';
     const expectedHelpText = helpTextHelper.get('chk_exclusion_list');
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: true,
-        PWD_POLICY_CHECK_USERNAME_ENABLED: false,
-        PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED: true,
-        PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED: false
+        pwd_policy_enabled: true,
+        pwd_policy_check_username_enabled: false,
+        pwd_policy_check_exclusion_list_enabled: true,
+        pwd_policy_check_repetitive_chars_enabled: false
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));
@@ -124,14 +127,15 @@ describe('PasswordPolicyService', () => {
   it('should get help text chk_repetitive', () => {
     let helpText = '';
     const expectedHelpText = helpTextHelper.get('chk_repetitive');
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: true,
-        PWD_POLICY_CHECK_OLDPWD_ENABLED: false,
-        PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED: false,
-        PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED: true,
-        PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED: false,
-        PWD_POLICY_CHECK_COMPLEXITY_ENABLED: false
+        user_pwd_expiration_warning_1: 10,
+        pwd_policy_enabled: true,
+        pwd_policy_check_oldpwd_enabled: false,
+        pwd_policy_check_exclusion_list_enabled: false,
+        pwd_policy_check_repetitive_chars_enabled: true,
+        pwd_policy_check_sequential_chars_enabled: false,
+        pwd_policy_check_complexity_enabled: false
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));
@@ -141,17 +145,17 @@ describe('PasswordPolicyService', () => {
   it('should get help text chk_sequential', () => {
     let helpText = '';
     const expectedHelpText = helpTextHelper.get('chk_sequential');
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: true,
-        PWD_POLICY_MIN_LENGTH: 8,
-        PWD_POLICY_CHECK_LENGTH_ENABLED: false,
-        PWD_POLICY_CHECK_OLDPWD_ENABLED: false,
-        PWD_POLICY_CHECK_USERNAME_ENABLED: false,
-        PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED: false,
-        PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED: false,
-        PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED: true,
-        PWD_POLICY_CHECK_COMPLEXITY_ENABLED: false
+        pwd_policy_enabled: true,
+        pwd_policy_min_length: 8,
+        pwd_policy_check_length_enabled: false,
+        pwd_policy_check_oldpwd_enabled: false,
+        pwd_policy_check_username_enabled: false,
+        pwd_policy_check_exclusion_list_enabled: false,
+        pwd_policy_check_repetitive_chars_enabled: false,
+        pwd_policy_check_sequential_chars_enabled: true,
+        pwd_policy_check_complexity_enabled: false
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));
@@ -161,17 +165,17 @@ describe('PasswordPolicyService', () => {
   it('should get help text chk_complexity', () => {
     let helpText = '';
     const expectedHelpText = helpTextHelper.get('chk_complexity');
-    spyOn(settingsService, 'getValues').and.returnValue(
+    spyOn(settingsService, 'getStandardSettings').and.returnValue(
       observableOf({
-        PWD_POLICY_ENABLED: true,
-        PWD_POLICY_MIN_LENGTH: 8,
-        PWD_POLICY_CHECK_LENGTH_ENABLED: false,
-        PWD_POLICY_CHECK_OLDPWD_ENABLED: false,
-        PWD_POLICY_CHECK_USERNAME_ENABLED: false,
-        PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED: false,
-        PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED: false,
-        PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED: false,
-        PWD_POLICY_CHECK_COMPLEXITY_ENABLED: true
+        pwd_policy_enabled: true,
+        pwd_policy_min_length: 8,
+        pwd_policy_check_length_enabled: false,
+        pwd_policy_check_oldpwd_enabled: false,
+        pwd_policy_check_username_enabled: false,
+        pwd_policy_check_exclusion_list_enabled: false,
+        pwd_policy_check_repetitive_chars_enabled: false,
+        pwd_policy_check_sequential_chars_enabled: false,
+        pwd_policy_check_complexity_enabled: true
       })
     );
     service.getHelpText().subscribe((text) => (helpText = text));

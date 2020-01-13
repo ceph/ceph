@@ -176,18 +176,17 @@ describe('UserFormComponent', () => {
         }
       }
     ];
-    const pwdExpirationSettings = {
-      user_pwd_expiration_warning_1: 10,
-      user_pwd_expiration_warning_2: 5,
-      user_pwd_expiration_span: 90
-    };
 
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
       spyOn(TestBed.get(RoleService), 'list').and.callFake(() => of(roles));
       setUrl('/user-management/users/edit/user1');
-      spyOn(TestBed.get(SettingsService), 'pwdExpirationSettings').and.callFake(() =>
-        of(pwdExpirationSettings)
+      spyOn(TestBed.get(SettingsService), 'getStandardSettings').and.callFake(() =>
+        of({
+          user_pwd_expiration_warning_1: 10,
+          user_pwd_expiration_warning_2: 5,
+          user_pwd_expiration_span: 90
+        })
       );
       component.ngOnInit();
       const req = httpTesting.expectOne('api/role');

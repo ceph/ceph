@@ -418,7 +418,7 @@ class UserTest(DashboardTestCase):
         self._delete('/api/user/user1')
         self._ceph_cmd(['dashboard', 'set-user-pwd-expiration-span', '0'])
 
-   def test_pwd_update_required(self):
+    def test_pwd_update_required(self):
         self._create_user(username='user1',
                           password='mypassword10#',
                           name='My Name',

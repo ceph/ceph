@@ -676,6 +676,9 @@ Ceph Dashboard supports managing multiple user accounts. Each user account
 consists of a username, a password (stored in encrypted form using ``bcrypt``),
 an optional name, and an optional email address.
 
+If a new user is created via Web UI, it is possible to set an option that this
+user must assign a new password when they log in for the first time.
+
 User accounts are stored in MON's configuration database, and are globally
 shared across all ceph-mgr instances.
 

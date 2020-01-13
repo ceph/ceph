@@ -5,7 +5,6 @@ import * as _ from 'lodash';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-import { CdPwdExpirationSettings } from '../models/cd-pwd-expiration-settings';
 import { ApiModule } from './api.module';
 
 class SettingResponse {
@@ -74,7 +73,7 @@ export class SettingsService {
     return this.http.get(`api/grafana/validation/${uid}`);
   }
 
-  pwdExpirationSettings(): Observable<CdPwdExpirationSettings> {
-    return this.http.get<CdPwdExpirationSettings>('ui-api/standard_settings');
+  getStandardSettings(): Observable<{ [key: string]: any }> {
+    return this.http.get('ui-api/standard_settings');
   }
 }
