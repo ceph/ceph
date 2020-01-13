@@ -24,4 +24,3 @@ tasks:
 - rgw-multisite-tests:
     config:
       reconfigure_delay: 60
-- radosgw_admin_rest: [c2.client.0]
