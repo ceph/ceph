@@ -70,24 +70,14 @@ class Activate(object):
         self.args = None
 
     @decorators.needs_root
-    def activate(self, devices, tmpfs, systemd,
-                 only_osd_id=None,
-                 only_osd_fsid=None):
+    def activate(self, devices, tmpfs, systemd):
         """
         :param args: The parsed arguments coming from the CLI
         """
-        if devices:
-            found = direct_report(devices)
-        else:
-            found = direct_report(None)
+        assert devices
+        found = direct_report(devices)
 
         for osd_id, meta in found.items():
-            if only_osd_id and only_osd_fsid and \
-               (only_osd_id != osd_id or only_osd_fsid != meta['osd_uuid']):
-                logger.debug('ignoring osd.%d uuid %s cluster %s' % (
-                    osd_id, meta['osd_uuid'], meta['ceph_fsid']))
-                continue
-
             logger.info('Activating osd.%s uuid %s cluster %s' % (
                     osd_id, meta['osd_uuid'], meta['ceph_fsid']))
             activate_bluestore(meta,
@@ -112,23 +102,9 @@ class Activate(object):
         )
 
         parser.add_argument(
-            '--osd-id',
-            help='The ID of the OSD, usually an integer, like 0'
-        )
-        parser.add_argument(
-            '--osd-fsid',
-            help='The UUID of the OSD'
-        )
-        parser.add_argument(
             '--device',
-            nargs='*',
+            nargs='+',
             help='The device(s) for the OSD to start')
-        parser.add_argument(
-            '--all',
-            dest='activate_all',
-            action='store_true',
-            help='Activate all OSDs found in the system',
-        )
         parser.add_argument(
             '--no-systemd',
             dest='no_systemd',
@@ -144,14 +120,9 @@ class Activate(object):
             return
         args = parser.parse_args(self.argv)
         self.args = args
-        if not args.device and not args.activate_all and not (args.osd_id and args.osd_fsid):
-            terminal.error('must specify one of --device, --activate-all, or --osd-id and --osd-fsid')
-            raise SystemExit(1)
         if not args.no_systemd:
             terminal.error('systemd support not yet implemented')
             raise SystemExit(1)
         self.activate(args.device,
                       tmpfs=not args.no_tmpfs,
-                      systemd=not self.args.no_systemd,
-                      only_osd_id=args.osd_id,
-                      only_osd_fsid=args.osd_fsid)
+                      systemd=not self.args.no_systemd)
