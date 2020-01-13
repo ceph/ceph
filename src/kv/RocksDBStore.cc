@@ -1226,7 +1226,7 @@ void RocksDBStore::compact_thread_entry()
   std::unique_lock l{compact_queue_lock};
   dout(10) << __func__ << " enter" << dendl;
   while (!compact_queue_stop) {
-    while (!compact_queue.empty()) {
+    if (!compact_queue.empty()) {
       pair<string,string> range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
