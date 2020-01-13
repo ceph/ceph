@@ -43,7 +43,7 @@ if [ -z "$PYTHON_KLUDGE" ]; then
     which python3 && PYTHONS="$PYTHONS python3"
     which python2 && PYTHONS="$PYTHONS python2"
     echo "PYTHONS $PYTHONS"
-    if [ -z $PYTHONS ]; then
+    if [ -z "$PYTHONS" ]; then
 	echo "No PYTHONS found!"
 	exit 1
     fi
