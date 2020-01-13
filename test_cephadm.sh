@@ -47,18 +47,18 @@ chmod 644 k c
 cp c c.mon
 echo "public addrv = [v2:$ip:3301,v1:$ip:6790]" >> c.mon
 $CEPHADM $A \
-	 --image $image \
-	 deploy --name mon.b \
-	 --fsid $fsid \
-	 --keyring /var/lib/ceph/$fsid/mon.a/keyring \
-	 --config c.mon
+     --image $image \
+     deploy --name mon.b \
+     --fsid $fsid \
+     --keyring /var/lib/ceph/$fsid/mon.a/keyring \
+     --config c.mon
 rm c.mon
 
 # mgr.b
 bin/ceph -c c -k k auth get-or-create mgr.y \
-	 mon 'allow profile mgr' \
-	 osd 'allow *' \
-	 mds 'allow *' > k-mgr.y
+    mon 'allow profile mgr' \
+    osd 'allow *' \
+    mds 'allow *' > k-mgr.y
 $CEPHADM $A \
     --image $image \
     deploy --name mgr.y \
@@ -69,16 +69,16 @@ $CEPHADM $A \
 # mds.{k,j}
 for id in k j; do
     bin/ceph -c c -k k auth get-or-create mds.$id \
-	     mon 'allow profile mds' \
-	     mgr 'allow profile mds' \
-	     osd 'allow *' \
-	     mds 'allow *' > k-mds.$id
+        mon 'allow profile mds' \
+        mgr 'allow profile mds' \
+        osd 'allow *' \
+        mds 'allow *' > k-mds.$id
     $CEPHADM $A \
-	--image $image \
-	deploy --name mds.$id \
-	--fsid $fsid \
-	--keyring k-mds.$id \
-	--config c
+        --image $image \
+        deploy --name mds.$id \
+        --fsid $fsid \
+        --keyring k-mds.$id \
+        --config c
 done
 
 # add osd.{1,2,..}
