@@ -2,6 +2,10 @@ meta:
 - desc: install ceph/nautilus latest
 tasks:
 - install:
+    exclude_packages:
+      - ceph-mgr-cephadm
+      - cephadm
+      - libcephfs-dev
     branch: nautilus
 - print: "**** done install nautilus"
 - ceph:
