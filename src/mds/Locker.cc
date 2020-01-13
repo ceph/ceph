@@ -5297,8 +5297,8 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	    << " xlocker_issued=" << gcap_string(xlocker_issued)
 	    << dendl;
     if (!((loner_wanted|loner_issued) & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
-	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
-	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
+	(other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
+	(in->is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
       // we should lose it.
       //  loner  other   want
@@ -5326,9 +5326,10 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   else if (lock->get_state() != LOCK_EXCL &&
 	   !lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
-	    (in->inode.is_dir() && !in->has_subtree_or_exporting_dirfrag())) &&
-	   in->get_target_loner() >= 0) {
+	   in->get_target_loner() >= 0 &&
+	   (in->is_dir() ?
+	    !in->has_subtree_or_exporting_dirfrag() :
+	    (wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_excl(lock, need_issue);

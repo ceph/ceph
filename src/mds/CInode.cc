@@ -3096,8 +3096,9 @@ client_t CInode::calc_ideal_loner()
   client_t loner = -1;
   for (const auto &p : client_caps) {
     if (!p.second.is_stale() &&
-	((p.second.wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD)) ||
-	 (inode.is_dir() && !has_subtree_root_dirfrag()))) {
+	(is_dir() ?
+	 !has_subtree_or_exporting_dirfrag() :
+	 (p.second.wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_RD)))) {
       if (n)
 	return -1;
       n++;
