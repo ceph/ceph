@@ -3138,6 +3138,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   in->inode.mode = mode;
 
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;

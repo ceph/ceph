@@ -56,6 +56,7 @@ static std::string asok_connect(const std::string &path, int *fd)
   }
 
   struct sockaddr_un address;
+  // FIPS zeroization audit 20191115: this memset is fine.
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path), "%s", path.c_str());

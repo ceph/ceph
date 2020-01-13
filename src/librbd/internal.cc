@@ -149,6 +149,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     uint32_t hi = bid >> 32;
     uint32_t lo = bid & 0xFFFFFFFF;
     uint32_t extra = rand() % 0xFFFFFFFF;
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&ondisk, 0, sizeof(ondisk));
 
     memcpy(&ondisk.text, RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));

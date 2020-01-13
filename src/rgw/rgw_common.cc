@@ -475,24 +475,28 @@ static bool check_gmt_end(const char *s)
 
 static bool parse_rfc850(const char *s, struct tm *t)
 {
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(t, 0, sizeof(*t));
   return check_gmt_end(strptime(s, "%A, %d-%b-%y %H:%M:%S ", t));
 }
 
 static bool parse_asctime(const char *s, struct tm *t)
 {
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(t, 0, sizeof(*t));
   return check_str_end(strptime(s, "%a %b %d %H:%M:%S %Y", t));
 }
 
 static bool parse_rfc1123(const char *s, struct tm *t)
 {
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(t, 0, sizeof(*t));
   return check_gmt_end(strptime(s, "%a, %d %b %Y %H:%M:%S ", t));
 }
 
 static bool parse_rfc1123_alt(const char *s, struct tm *t)
 {
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(t, 0, sizeof(*t));
   return check_str_end(strptime(s, "%a, %d %b %Y %H:%M:%S %z", t));
 }
@@ -504,6 +508,7 @@ bool parse_rfc2616(const char *s, struct tm *t)
 
 bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_format)
 {
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(t, 0, sizeof(*t));
   const char *p;
 
@@ -1445,6 +1450,7 @@ class HexTable
 
 public:
   HexTable() {
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(table, -1, sizeof(table));
     int i;
     for (i = '0'; i<='9'; i++)
