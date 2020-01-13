@@ -6840,6 +6840,7 @@ void OSDOp::clear_data(vector<OSDOp>& ops)
 int prepare_info_keymap(
   CephContext* cct,
   map<string,bufferlist> *km,
+  string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,
   pg_info_t &last_written_info,
@@ -6885,6 +6886,10 @@ int prepare_info_keymap(
       }
       *_dout << dendl;
     }
+  } else if (info.last_update <= last_written_info.last_update) {
+    // clean up any potentially stale fastinfo key resulting from last_update
+    // not moving forwards (e.g., a backwards jump during peering)
+    *key_to_remove = fastinfo_key;
   }
 
   last_written_info = info;
