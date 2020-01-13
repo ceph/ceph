@@ -36,29 +36,29 @@ struct ReplayerListener;
 
 namespace journal {
 
-template <typename I> class EventPreprocessor;
-template <typename I> class ReplayStatusFormatter;
+template <typename> class EventPreprocessor;
+template <typename> class ReplayStatusFormatter;
+template <typename> class StateBuilder;
 
 template <typename ImageCtxT>
 class Replayer : public image_replayer::Replayer {
 public:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
 
-  static Replayer* create(ImageCtxT** local_image_ctx,
-                          Journaler* remote_journaler,
-                          const std::string& local_mirror_uuid,
-                          const std::string& remote_mirror_uuid,
-                          ReplayerListener* replayer_listener,
-                          Threads<ImageCtxT>* threads) {
-    return new Replayer(local_image_ctx, remote_journaler, local_mirror_uuid,
-                        remote_mirror_uuid, replayer_listener, threads);
+  static Replayer* create(
+      Threads<ImageCtxT>* threads,
+      const std::string& local_mirror_uuid,
+      StateBuilder<ImageCtxT>* state_builder,
+      ReplayerListener* replayer_listener) {
+    return new Replayer(threads, local_mirror_uuid, state_builder,
+                        replayer_listener);
   }
 
   Replayer(
-      ImageCtxT** local_image_ctx, Journaler* remote_journaler,
+      Threads<ImageCtxT>* threads,
       const std::string& local_mirror_uuid,
-      const std::string& remote_mirror_uuid,
-      ReplayerListener* replayer_listener, Threads<ImageCtxT>* threads);
+      StateBuilder<ImageCtxT>* state_builder,
+      ReplayerListener* replayer_listener);
   ~Replayer();
 
   void destroy() override {
@@ -156,9 +156,6 @@ private:
    *    v (skip if not started)
    * STOP_REMOTE_JOURNALER_REPLAY
    *    |
-   *    v (skip if not initialized)
-   * SHUT_DOWN_REMOTE_JOURNALER
-   *    |
    *    v
    * WAIT_FOR_IN_FLIGHT_OPS
    *    |
@@ -182,12 +179,10 @@ private:
   struct RemoteReplayHandler;
   struct LocalJournalListener;
 
-  ImageCtxT** m_local_image_ctx;
-  Journaler* m_remote_journaler;
-  std::string m_local_mirror_uuid;
-  std::string m_remote_mirror_uuid;
-  ReplayerListener* m_replayer_listener;
   Threads<ImageCtxT>* m_threads;
+  std::string m_local_mirror_uuid;
+  StateBuilder<ImageCtxT>* m_state_builder;
+  ReplayerListener* m_replayer_listener;
 
   mutable ceph::mutex m_lock;
 
@@ -202,7 +197,6 @@ private:
   ceph::ref_t<typename std::remove_pointer<decltype(ImageCtxT::journal)>::type>
     m_local_journal;
   RemoteJournalerListener* m_remote_listener = nullptr;
-  librbd::journal::MirrorPeerClientMeta m_remote_client_meta;
 
   librbd::journal::Replay<ImageCtxT>* m_local_journal_replay = nullptr;
   EventPreprocessor<ImageCtxT>* m_event_preprocessor = nullptr;
@@ -258,9 +252,6 @@ private:
 
   void stop_remote_journaler_replay();
   void handle_stop_remote_journaler_replay(int r);
-
-  void shut_down_remote_journaler();
-  void handle_shut_down_remote_journaler(int r);
 
   void wait_for_in_flight_ops();
   void handle_wait_for_in_flight_ops(int r);

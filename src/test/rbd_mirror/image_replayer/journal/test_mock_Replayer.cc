@@ -11,6 +11,7 @@
 #include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/journal/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/journal/ReplayStatusFormatter.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/rbd_mirror/mock/MockContextWQ.h"
@@ -209,6 +210,22 @@ struct ReplayStatusFormatter<librbd::MockTestImageCtx> {
   MOCK_METHOD2(get_or_send_update, bool(std::string *description, Context *on_finish));
 };
 
+template<>
+struct StateBuilder<librbd::MockTestImageCtx> {
+  StateBuilder(librbd::MockTestImageCtx& local_image_ctx,
+               ::journal::MockJournaler& remote_journaler,
+               const librbd::journal::MirrorPeerClientMeta& remote_client_meta)
+    : local_image_ctx(&local_image_ctx),
+      remote_journaler(&remote_journaler),
+      remote_client_meta(remote_client_meta) {
+  }
+
+  librbd::MockTestImageCtx* local_image_ctx;
+  std::string remote_mirror_uuid = "remote mirror uuid";
+  ::journal::MockJournaler* remote_journaler = nullptr;
+  librbd::journal::MirrorPeerClientMeta remote_client_meta;
+};
+
 EventPreprocessor<librbd::MockTestImageCtx>* EventPreprocessor<librbd::MockTestImageCtx>::s_instance = nullptr;
 ReplayStatusFormatter<librbd::MockTestImageCtx>* ReplayStatusFormatter<librbd::MockTestImageCtx>::s_instance = nullptr;
 
@@ -241,6 +258,7 @@ public:
   typedef Replayer<librbd::MockTestImageCtx> MockReplayer;
   typedef EventPreprocessor<librbd::MockTestImageCtx> MockEventPreprocessor;
   typedef ReplayStatusFormatter<librbd::MockTestImageCtx> MockReplayStatusFormatter;
+  typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
   typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
   typedef librbd::journal::Replay<librbd::MockTestImageCtx> MockReplay;
@@ -288,11 +306,6 @@ public:
   void expect_stop_replay(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, stop_replay(_))
       .WillOnce(CompleteContext(r));
-  }
-
-  void expect_shut_down(::journal::MockJournaler &mock_journaler, int r) {
-    EXPECT_CALL(mock_journaler, shut_down(_))
-      .WillOnce(CompleteContext(m_threads->work_queue, r));
   }
 
   void expect_shut_down(MockReplay &mock_replay, bool cancel_ops, int r) {
@@ -496,7 +509,6 @@ public:
     expect_send(mock_close_image_request, 0);
     expect_stop_replay(mock_remote_journaler, 0);
     EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-    expect_shut_down(mock_remote_journaler, 0);
 
     C_SaferCond shutdown_ctx;
     mock_replayer.shut_down(&shutdown_ctx);
@@ -515,13 +527,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitShutDown) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -545,22 +559,23 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitShutDown) {
                                         mock_local_journal,
                                         mock_remote_journaler,
                                         mock_local_journal_replay));
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitNoLocalJournal) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
 
   mock_local_image_ctx.journal = nullptr;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -572,20 +587,21 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitNoLocalJournal) {
   C_SaferCond init_ctx;
   mock_replayer.init(&init_ctx);
   ASSERT_EQ(-EINVAL, init_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitRemoteJournalerError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -594,25 +610,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitRemoteJournalerError) {
   expect_init(mock_remote_journaler, -EINVAL);
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond init_ctx;
   mock_replayer.init(&init_ctx);
   ASSERT_EQ(-EINVAL, init_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitRemoteJournalerGetClientError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -625,25 +641,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitRemoteJournalerGetClientError) 
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond init_ctx;
   mock_replayer.init(&init_ctx);
   ASSERT_EQ(-EINVAL, init_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitLocalJournalStartExternalReplayError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -657,25 +673,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitLocalJournalStartExternalReplay
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond init_ctx;
   mock_replayer.init(&init_ctx);
   ASSERT_EQ(-EINVAL, init_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitIsPromoted) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -703,12 +719,10 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitIsPromoted) {
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
   ASSERT_EQ(0, shutdown_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnected) {
@@ -718,13 +732,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnected) {
   mock_local_image_ctx.config.set_val("rbd_mirroring_resync_after_disconnect",
                                       "false");
 
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -740,13 +756,11 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnected) {
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond init_ctx;
   mock_replayer.init(&init_ctx);
   ASSERT_EQ(-ENOTCONN, init_ctx.wait());
   ASSERT_FALSE(mock_replayer.is_resync_requested());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnectedResync) {
@@ -756,13 +770,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnectedResync) {
   mock_local_image_ctx.config.set_val("rbd_mirroring_resync_after_disconnect",
                                       "true");
 
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -778,26 +794,26 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitDisconnectedResync) {
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond init_ctx;
   mock_replayer.init(&init_ctx);
   ASSERT_EQ(-ENOTCONN, init_ctx.wait());
   ASSERT_TRUE(mock_replayer.is_resync_requested());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequested) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -826,25 +842,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequested) {
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
   ASSERT_EQ(0, shutdown_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequestedError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -874,25 +890,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitResyncRequestedError) {
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
   ASSERT_EQ(0, shutdown_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, ShutDownLocalJournalReplayError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -919,25 +935,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, ShutDownLocalJournalReplayError) {
   expect_send(mock_close_image_request, 0);
   expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, -EPERM);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
   ASSERT_EQ(-EINVAL, shutdown_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, CloseLocalImageError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -964,25 +980,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, CloseLocalImageError) {
   expect_send(mock_close_image_request, -EINVAL);
   expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, -EPERM);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
   ASSERT_EQ(-EINVAL, shutdown_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, StopRemoteJournalerError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1009,70 +1025,25 @@ TEST_F(TestMockImageReplayerJournalReplayer, StopRemoteJournalerError) {
   expect_send(mock_close_image_request, 0);
   expect_stop_replay(mock_remote_journaler, -EPERM);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
   ASSERT_EQ(-EPERM, shutdown_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
-}
-
-TEST_F(TestMockImageReplayerJournalReplayer, ShutDownRemoteJournalerError) {
-  librbd::MockTestJournal mock_local_journal;
-  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
-                                                mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
-  ::journal::MockJournaler mock_remote_journaler;
-  MockReplayerListener mock_replayer_listener;
-  MockThreads mock_threads{m_threads};
-  MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
-
-  expect_work_queue_repeatedly(mock_threads);
-
-  InSequence seq;
-
-  MockReplay mock_local_journal_replay;
-  MockEventPreprocessor mock_event_preprocessor;
-  MockReplayStatusFormatter mock_replay_status_formatter;
-  librbd::journal::Listener* local_journal_listener = nullptr;
-  ::journal::ReplayHandler* remote_replay_handler = nullptr;
-  ::journal::JournalMetadataListener* remote_journaler_listener = nullptr;
-  ASSERT_EQ(0, init_entry_replayer(mock_replayer, mock_threads,
-                                   mock_replayer_listener, mock_local_journal,
-                                   mock_remote_journaler,
-                                   mock_local_journal_replay,
-                                   &local_journal_listener,
-                                   &remote_replay_handler,
-                                   &remote_journaler_listener));
-
-  expect_shut_down(mock_local_journal_replay, true, 0);
-  EXPECT_CALL(mock_local_journal, remove_listener(_));
-  EXPECT_CALL(mock_local_journal, stop_external_replay());
-  MockCloseImageRequest mock_close_image_request;
-  expect_send(mock_close_image_request, 0);
-  expect_stop_replay(mock_remote_journaler, 0);
-  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, -EPERM);
-
-  C_SaferCond shutdown_ctx;
-  mock_replayer.shut_down(&shutdown_ctx);
-  ASSERT_EQ(-EPERM, shutdown_ctx.wait());
-  ASSERT_EQ(nullptr, mock_local_image_ctx_ptr);
 }
 
 TEST_F(TestMockImageReplayerJournalReplayer, Replay) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);
@@ -1141,13 +1112,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, DecodeError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);
@@ -1208,13 +1181,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, DelayedReplay) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);
@@ -1319,13 +1294,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayNoMemoryError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1362,13 +1339,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, LocalJournalForcePromoted) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1402,13 +1381,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, LocalJournalResyncRequested) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1444,16 +1425,18 @@ TEST_F(TestMockImageReplayerJournalReplayer, RemoteJournalDisconnected) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   mock_local_image_ctx.config.set_val("rbd_mirroring_resync_after_disconnect",
                                       "true");
 
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1497,13 +1480,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, Flush) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1540,13 +1525,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, FlushError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1582,13 +1569,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, FlushCommitPositionError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   expect_work_queue_repeatedly(mock_threads);
 
@@ -1626,14 +1615,18 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushShutDownError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
+  ::journal::MockReplayEntry mock_replay_entry;
+  expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_work_queue_repeatedly(mock_threads);
 
   InSequence seq;
@@ -1652,7 +1645,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushShutDownError) {
                                    &remote_replay_handler,
                                    &remote_journaler_listener));
 
-  ::journal::MockReplayEntry mock_replay_entry;
   expect_try_pop_front(mock_remote_journaler, 1, true);
   expect_shut_down(mock_local_journal_replay, false, -EINVAL);
   EXPECT_CALL(mock_local_journal, stop_external_replay());
@@ -1667,7 +1659,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushShutDownError) {
   expect_send(mock_close_image_request, 0);
   expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
@@ -1678,14 +1669,18 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushStartError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
+  ::journal::MockReplayEntry mock_replay_entry;
+  expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_work_queue_repeatedly(mock_threads);
 
   InSequence seq;
@@ -1704,7 +1699,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushStartError) {
                                    &remote_replay_handler,
                                    &remote_journaler_listener));
 
-  ::journal::MockReplayEntry mock_replay_entry;
   expect_try_pop_front(mock_remote_journaler, 1, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
   EXPECT_CALL(mock_local_journal, stop_external_replay());
@@ -1720,7 +1714,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushStartError) {
   expect_send(mock_close_image_request, 0);
   expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
@@ -1731,14 +1724,18 @@ TEST_F(TestMockImageReplayerJournalReplayer, GetTagError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
+  ::journal::MockReplayEntry mock_replay_entry;
+  expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_work_queue_repeatedly(mock_threads);
 
   InSequence seq;
@@ -1761,7 +1758,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, GetTagError) {
     {1, 0, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
                             librbd::Journal<>::LOCAL_MIRROR_UUID,
                             true, 0, 0})};
-  ::journal::MockReplayEntry mock_replay_entry;
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
   EXPECT_CALL(mock_local_journal, stop_external_replay());
@@ -1784,13 +1780,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, AllocateTagDemotion) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);
@@ -1846,16 +1844,19 @@ TEST_F(TestMockImageReplayerJournalReplayer, AllocateTagError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);
+  expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
 
   InSequence seq;
@@ -1903,13 +1904,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, PreprocessError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);
@@ -1965,13 +1968,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, ProcessError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);
@@ -2033,13 +2038,15 @@ TEST_F(TestMockImageReplayerJournalReplayer, ImageNameUpdated) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
                                                 mock_local_journal};
-  librbd::MockTestImageCtx* mock_local_image_ctx_ptr = &mock_local_image_ctx;
   ::journal::MockJournaler mock_remote_journaler;
   MockReplayerListener mock_replayer_listener;
   MockThreads mock_threads{m_threads};
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
   MockReplayer mock_replayer{
-    &mock_local_image_ctx_ptr, &mock_remote_journaler, "local mirror uuid",
-    "remote mirror uuid", &mock_replayer_listener, &mock_threads};
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
 
   ::journal::MockReplayEntry mock_replay_entry;
   expect_work_queue_repeatedly(mock_threads);

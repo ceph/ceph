@@ -9,8 +9,10 @@
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/image_replayer/CreateImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -28,7 +30,7 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 void CreateLocalImageRequest<I>::send() {
-  *m_local_image_id = "";
+  m_state_builder->local_image_id = "";
   unregister_client();
 }
 
@@ -40,7 +42,7 @@ void CreateLocalImageRequest<I>::unregister_client() {
   auto ctx = create_context_callback<
     CreateLocalImageRequest<I>,
     &CreateLocalImageRequest<I>::handle_unregister_client>(this);
-  m_remote_journaler->unregister_client(ctx);
+  m_state_builder->remote_journaler->unregister_client(ctx);
 }
 
 template <typename I>
@@ -53,18 +55,20 @@ void CreateLocalImageRequest<I>::handle_unregister_client(int r) {
     return;
   }
 
-  *m_client_meta = librbd::journal::MirrorPeerClientMeta{""};
+  m_state_builder->remote_client_meta = {};
   register_client();
 }
 
 template <typename I>
 void CreateLocalImageRequest<I>::register_client() {
-  ceph_assert(m_local_image_id->empty());
-  *m_local_image_id = librbd::util::generate_image_id<I>(m_local_io_ctx);
-  dout(10) << "local_image_id=" << *m_local_image_id << dendl;
+  ceph_assert(m_state_builder->local_image_id.empty());
+  m_state_builder->local_image_id =
+    librbd::util::generate_image_id<I>(m_local_io_ctx);
+  dout(10) << "local_image_id=" << m_state_builder->local_image_id << dendl;
   update_progress("REGISTER_CLIENT");
 
-  librbd::journal::MirrorPeerClientMeta client_meta{*m_local_image_id};
+  librbd::journal::MirrorPeerClientMeta client_meta{
+    m_state_builder->local_image_id};
   client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
 
   librbd::journal::ClientData client_data{client_meta};
@@ -74,7 +78,7 @@ void CreateLocalImageRequest<I>::register_client() {
   auto ctx = create_context_callback<
     CreateLocalImageRequest<I>,
     &CreateLocalImageRequest<I>::handle_register_client>(this);
-  m_remote_journaler->register_client(client_data_bl, ctx);
+  m_state_builder->remote_journaler->register_client(client_data_bl, ctx);
 }
 
 template <typename I>
@@ -88,15 +92,17 @@ void CreateLocalImageRequest<I>::handle_register_client(int r) {
     return;
   }
 
-  *m_client_meta = librbd::journal::MirrorPeerClientMeta{*m_local_image_id};
-  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
+  m_state_builder->remote_client_state = cls::journal::CLIENT_STATE_CONNECTED;
+  m_state_builder->remote_client_meta = {m_state_builder->local_image_id};
+  m_state_builder->remote_client_meta.state =
+    librbd::journal::MIRROR_PEER_STATE_SYNCING;
 
   create_local_image();
 }
 
 template <typename I>
 void CreateLocalImageRequest<I>::create_local_image() {
-  dout(10) << "local_image_id=" << *m_local_image_id << dendl;
+  dout(10) << "local_image_id=" << m_state_builder->local_image_id << dendl;
   update_progress("CREATE_LOCAL_IMAGE");
 
   m_remote_image_ctx->image_lock.lock_shared();
@@ -107,8 +113,9 @@ void CreateLocalImageRequest<I>::create_local_image() {
     CreateLocalImageRequest<I>,
     &CreateLocalImageRequest<I>::handle_create_local_image>(this);
   auto request = CreateImageRequest<I>::create(
-    m_threads, m_local_io_ctx, m_global_image_id, m_remote_mirror_uuid,
-    image_name, *m_local_image_id, m_remote_image_ctx, ctx);
+    m_threads, m_local_io_ctx, m_global_image_id,
+    m_state_builder->remote_mirror_uuid, image_name,
+    m_state_builder->local_image_id, m_remote_image_ctx, ctx);
   request->send();
 }
 template <typename I>
@@ -116,8 +123,9 @@ void CreateLocalImageRequest<I>::handle_create_local_image(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r == -EBADF) {
-    dout(5) << "image id " << *m_local_image_id << " already in-use" << dendl;
-    *m_local_image_id = "";
+    dout(5) << "image id " << m_state_builder->local_image_id << " "
+            << "already in-use" << dendl;
+    m_state_builder->local_image_id = "";
     update_client_image();
     return;
   } else if (r < 0) {
@@ -135,13 +143,15 @@ void CreateLocalImageRequest<I>::handle_create_local_image(int r) {
 
 template <typename I>
 void CreateLocalImageRequest<I>::update_client_image() {
-  ceph_assert(m_local_image_id->empty());
-  *m_local_image_id = librbd::util::generate_image_id<I>(m_local_io_ctx);
+  ceph_assert(m_state_builder->local_image_id.empty());
+  m_state_builder->local_image_id =
+    librbd::util::generate_image_id<I>(m_local_io_ctx);
 
-  dout(10) << "local_image_id=" << *m_local_image_id << dendl;
+  dout(10) << "local_image_id=" << m_state_builder->local_image_id << dendl;
   update_progress("UPDATE_CLIENT_IMAGE");
 
-  librbd::journal::MirrorPeerClientMeta client_meta{*m_local_image_id};
+  librbd::journal::MirrorPeerClientMeta client_meta{
+    m_state_builder->local_image_id};
   client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
 
   librbd::journal::ClientData client_data(client_meta);
@@ -151,7 +161,7 @@ void CreateLocalImageRequest<I>::update_client_image() {
   auto ctx = create_context_callback<
     CreateLocalImageRequest<I>,
     &CreateLocalImageRequest<I>::handle_update_client_image>(this);
-  m_remote_journaler->update_client(data_bl, ctx);
+  m_state_builder->remote_journaler->update_client(data_bl, ctx);
 }
 
 template <typename I>
@@ -164,17 +174,10 @@ void CreateLocalImageRequest<I>::handle_update_client_image(int r) {
     return;
   }
 
-  *m_client_meta = librbd::journal::MirrorPeerClientMeta{*m_local_image_id};
-  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
+  m_state_builder->remote_client_meta = {m_state_builder->local_image_id};
+  m_state_builder->remote_client_meta.state =
+    librbd::journal::MIRROR_PEER_STATE_SYNCING;
   create_local_image();
-}
-
-template <typename I>
-void CreateLocalImageRequest<I>::finish(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  m_on_finish->complete(r);
-  delete this;
 }
 
 template <typename I>

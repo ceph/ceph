@@ -11,6 +11,7 @@
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 #include <type_traits>
 
 #define dout_context g_ceph_context
@@ -41,14 +42,14 @@ void PrepareLocalImageRequest<I>::get_local_image_id() {
     PrepareLocalImageRequest<I>,
     &PrepareLocalImageRequest<I>::handle_get_local_image_id>(this);
   auto req = GetMirrorImageIdRequest<I>::create(m_io_ctx, m_global_image_id,
-                                                m_local_image_id, ctx);
+                                                &m_local_image_id, ctx);
   req->send();
 }
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_local_image_id(int r) {
   dout(10) << "r=" << r << ", "
-           << "local_image_id=" << *m_local_image_id << dendl;
+           << "local_image_id=" << m_local_image_id << dendl;
 
   if (r < 0) {
     finish(r);
@@ -63,7 +64,7 @@ void PrepareLocalImageRequest<I>::get_local_image_name() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::dir_get_name_start(&op, *m_local_image_id);
+  librbd::cls_client::dir_get_name_start(&op, m_local_image_id);
 
   m_out_bl.clear();
   librados::AioCompletion *aio_comp = create_rados_callback<
@@ -91,27 +92,27 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
     return;
   }
 
-  get_mirror_state();
+  get_mirror_image();
 }
 
 template <typename I>
-void PrepareLocalImageRequest<I>::get_mirror_state() {
+void PrepareLocalImageRequest<I>::get_mirror_image() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_image_get_start(&op, *m_local_image_id);
+  librbd::cls_client::mirror_image_get_start(&op, m_local_image_id);
 
   m_out_bl.clear();
-  librados::AioCompletion *aio_comp = create_rados_callback<
+  auto aio_comp = create_rados_callback<
     PrepareLocalImageRequest<I>,
-    &PrepareLocalImageRequest<I>::handle_get_mirror_state>(this);
+    &PrepareLocalImageRequest<I>::handle_get_mirror_image>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
   ceph_assert(r == 0);
   aio_comp->release();
 }
 
 template <typename I>
-void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
+void PrepareLocalImageRequest<I>::handle_get_mirror_image(int r) {
   dout(10) << ": r=" << r << dendl;
 
   cls::rbd::MirrorImage mirror_image;
@@ -131,7 +132,18 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
   // delete a partially formed image
   // (e.g. MIRROR_IMAGE_STATE_CREATING/DELETING)
 
-  get_tag_owner();
+  switch (mirror_image.mode) {
+  case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
+    get_tag_owner();
+    break;
+  case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
+    // TODO
+  default:
+    derr << "unsupported mirror image mode " << mirror_image.mode << " "
+         << "for image " << m_global_image_id << dendl;
+    finish(-EOPNOTSUPP);
+    break;
+  }
 }
 
 template <typename I>
@@ -146,14 +158,14 @@ void PrepareLocalImageRequest<I>::get_tag_owner() {
   Context *ctx = create_context_callback<
     PrepareLocalImageRequest<I>,
     &PrepareLocalImageRequest<I>::handle_get_tag_owner>(this);
-  Journal::get_tag_owner(m_io_ctx, *m_local_image_id, m_tag_owner,
+  Journal::get_tag_owner(m_io_ctx, m_local_image_id, &m_local_tag_owner,
                          m_work_queue, ctx);
 }
 
 template <typename I>
 void PrepareLocalImageRequest<I>::handle_get_tag_owner(int r) {
   dout(10) << "r=" << r << ", "
-           << "tag_owner=" << *m_tag_owner << dendl;
+           << "tag_owner=" << m_local_tag_owner << dendl;
 
   if (r < 0) {
     derr << "failed to retrieve journal tag owner: " << cpp_strerror(r)
@@ -161,6 +173,12 @@ void PrepareLocalImageRequest<I>::handle_get_tag_owner(int r) {
     finish(r);
     return;
   }
+
+  // journal-based local image exists
+  auto state_builder = journal::StateBuilder<I>::create(m_global_image_id);
+  state_builder->local_image_id = m_local_image_id;
+  state_builder->local_tag_owner = m_local_tag_owner;
+  *m_state_builder = state_builder;
 
   finish(0);
 }
