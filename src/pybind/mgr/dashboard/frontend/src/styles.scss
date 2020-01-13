@@ -87,6 +87,10 @@ option {
   display: flex;
   align-items: center;
 }
+.horizontal-align {
+  display: flex;
+  justify-content: center;
+}
 .loading {
   position: absolute;
   top: 50%;
