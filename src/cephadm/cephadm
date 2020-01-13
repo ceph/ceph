@@ -134,7 +134,7 @@ class Monitoring(object):
                 "certs/cert_key",
             ],
         }
-    }
+    }  # type: Dict[str, dict]
 
 def attempt_bind(s, address, port):
     # type (str) -> None
@@ -1929,9 +1929,8 @@ def command_deploy():
         if port_in_use(daemon_port):
             raise Error("TCP Port '{}' required for {} is already in use".format(daemon_port, daemon_type))
 
-        # Monitoring metadata is nested dicts, so asking mypy to ignore
-        p = Monitoring.components[daemon_type]  # type: ignore
-        metadata = p.get('image', dict())  # type: ignore
+        p = Monitoring.components[daemon_type]
+        metadata = p.get('image', dict())
 
         # DEFAULT_IMAGE cannot be used for monitoring components
         if args.image == DEFAULT_IMAGE:
