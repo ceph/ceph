@@ -6824,10 +6824,6 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
     std::string str = olh_ver->second.to_str();
     std::string err;
     link_epoch = strict_strtoll(str.c_str(), 10, &err);
-    if (!err.empty()) {
-      ldout(cct, 0) << "apply_olh_log failed to decode olh ver '" << str << "'" << dendl;
-      return -EINVAL;
-    }
   }
   auto olh_info = state.attrset.find(RGW_ATTR_OLH_INFO);
   if (olh_info != state.attrset.end()) {
