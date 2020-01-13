@@ -5,6 +5,10 @@ meta:
    upgrade the client node
 tasks:
 - install:
+    exclude_packages:
+      - ceph-mgr-cephadm
+      - cephadm
+      - libcephfs-dev
     branch: nautilus
 - print: "**** done installing nautilus"
 - ceph:
