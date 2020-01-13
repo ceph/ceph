@@ -87,6 +87,7 @@ target_link_libraries(ceph_test_rgw_obj
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
+install(TARGETS ceph_test_rgw_obj DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 set(test_rgw_crypto_srcs test_rgw_crypto.cc)
 add_executable(unittest_rgw_crypto
@@ -128,6 +129,7 @@ add_executable(ceph_test_rgw_throttle
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rgw_throttle ${rgw_libs}
   librados global ${UNITTEST_LIBS})
+install(TARGETS ceph_test_rgw_throttle DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)

@@ -7,3 +7,5 @@ tasks:
         - cls/test_cls_refcount.sh
         - cls/test_cls_rgw.sh
         - rgw/test_rgw_gc_log.sh
+        - rgw/test_rgw_obj.sh
+        - rgw/test_rgw_throttle.sh
