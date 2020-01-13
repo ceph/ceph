@@ -91,7 +91,7 @@ WRITE_CLASS_ENCODER(rgw_s3_filter)
 
 using OptionalFilter = std::optional<rgw_s3_filter>;
 
-class rgw_pubsub_topic_filter;
+struct rgw_pubsub_topic_filter;
 /* S3 notification configuration
  * based on: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTnotification.html
 <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -239,9 +239,12 @@ struct rgw_pubsub_s3_record {
   std::string bucket_id;
   // meta data
   std::map<std::string, std::string> x_meta_map;
+  // opaque data received from the topic
+  // could be used to identify the gateway
+  std::string opaque_data;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(eventVersion, bl);
     encode(eventSource, bl);
     encode(awsRegion, bl);
@@ -264,11 +267,12 @@ struct rgw_pubsub_s3_record {
     encode(id, bl);
     encode(bucket_id, bl);
     encode(x_meta_map, bl);
+    encode(opaque_data, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(eventVersion, bl);
     decode(eventSource, bl);
     decode(awsRegion, bl);
@@ -292,6 +296,9 @@ struct rgw_pubsub_s3_record {
     if (struct_v >= 2) {
         decode(bucket_id, bl);
         decode(x_meta_map, bl);
+    }
+    if (struct_v >= 3) {
+      decode(opaque_data, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -414,23 +421,28 @@ struct rgw_pubsub_topic {
   std::string name;
   rgw_pubsub_sub_dest dest;
   std::string arn;
+  std::string opaque_data;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(user, bl);
     encode(name, bl);
     encode(dest, bl);
     encode(arn, bl);
+    encode(opaque_data, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(user, bl);
     decode(name, bl);
     if (struct_v >= 2) {
       decode(dest, bl);
       decode(arn, bl);
+    }
+    if (struct_v >= 3) {
+      decode(opaque_data, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -720,7 +732,7 @@ public:
   // create a topic with push destination information and ARN
   // if the topic already exists the destination and ARN values may be updated (considered succsess)
   // return 0 on success, error code otherwise
-  int create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn);
+  int create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data);
   // remove a topic according to its name
   // if the topic does not exists it is a no-op (considered success)
   // return 0 on success, error code otherwise

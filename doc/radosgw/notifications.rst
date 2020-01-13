@@ -72,10 +72,13 @@ To update a topic, use the same command used for topic creation, with the topic 
    [&Attributes.entry.4.key=kafka-ack-level&Attributes.entry.4.value=none|broker]
    [&Attributes.entry.5.key=use-ssl&Attributes.entry.5.value=true|false]
    [&Attributes.entry.6.key=ca-location&Attributes.entry.6.value=<file path>]
+   [&Attributes.entry.7.key=OpaqueData&Attributes.entry.7.value=<opaque data>]
 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
+- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic
+
 - HTTP endpoint 
 
  - URI: ``http[s]://<fqdn>[:<port]``
@@ -158,6 +161,7 @@ Response will have the following format:
                     <EndpointTopic></EndpointTopic>
                 </EndPoint>
                 <TopicArn></TopicArn>
+                <OpaqueData></OpaqueData>
             </Topic>
         </GetTopicResult>
         <ResponseMetadata>
@@ -219,6 +223,7 @@ Response will have the following format:
                         <EndpointTopic></EndpointTopic>
                     </EndPoint>
                     <TopicArn></TopicArn>
+                    <OpaqueData></OpaqueData>
                 </member>
             </Topics>
         </ListTopicsResult>
@@ -287,6 +292,7 @@ pushed or pulled using the pubsub sync module.
                }
            },
            "eventId":"",
+           "opaqueData":"",
        }
    ]}
 
@@ -309,6 +315,7 @@ pushed or pulled using the pubsub sync module.
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API) 
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
+- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic (an extension to the S3 notification API)
 
 .. _PubSub Module : ../pubsub-module
 .. _S3 Notification Compatibility: ../s3-notification-compatibility

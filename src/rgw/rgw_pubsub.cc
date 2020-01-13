@@ -276,6 +276,7 @@ void rgw_pubsub_s3_record::dump(Formatter *f) const {
     }
   }
   encode_json("eventId", id, f);
+  encode_json("opaqueData", opaque_data, f);
 }
 
 void rgw_pubsub_event::dump(Formatter *f) const
@@ -293,6 +294,7 @@ void rgw_pubsub_topic::dump(Formatter *f) const
   encode_json("name", name, f);
   encode_json("dest", dest, f);
   encode_json("arn", arn, f);
+  encode_json("opaqueData", opaque_data, f);
 }
 
 void rgw_pubsub_topic::dump_xml(Formatter *f) const
@@ -301,6 +303,7 @@ void rgw_pubsub_topic::dump_xml(Formatter *f) const
   encode_xml("Name", name, f);
   encode_xml("EndPoint", dest, f);
   encode_xml("TopicArn", arn, f);
+  encode_xml("OpaqueData", opaque_data, f);
 }
 
 void encode_json(const char *name, const rgw::notify::EventTypeList& l, Formatter *f)
@@ -556,10 +559,10 @@ int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
 }
 
 int RGWUserPubSub::create_topic(const string& name) {
-  return create_topic(name, rgw_pubsub_sub_dest(), "");
+  return create_topic(name, rgw_pubsub_sub_dest(), "", "");
 }
 
-int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn) {
+int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data) {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_user_topics topics;
 
@@ -575,6 +578,7 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& d
   new_topic.topic.name = name;
   new_topic.topic.dest = dest;
   new_topic.topic.arn = arn;
+  new_topic.topic.opaque_data = opaque_data;
 
   ret = write_user_topics(topics, &objv_tracker);
   if (ret < 0) {

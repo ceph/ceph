@@ -153,12 +153,12 @@ def delete_all_s3_topics(zone, region):
 
 class PSTopicS3:
     """class to set/list/get/delete a topic
-    POST ?Action=CreateTopic&Name=<topic name>&push-endpoint=<endpoint>&[<arg1>=<value1>...]]
+    POST ?Action=CreateTopic&Name=<topic name>[&OpaqueData=<data>[&push-endpoint=<endpoint>&[<arg1>=<value1>...]]]
     POST ?Action=ListTopics
     POST ?Action=GetTopic&TopicArn=<topic-arn>
     POST ?Action=DeleteTopic&TopicArn=<topic-arn>
     """
-    def __init__(self, conn, topic_name, region, endpoint_args=None):
+    def __init__(self, conn, topic_name, region, endpoint_args=None, opaque_data=None):
         self.conn = conn
         self.topic_name = topic_name.strip()
         assert self.topic_name
@@ -166,14 +166,16 @@ class PSTopicS3:
         self.attributes = {}
         if endpoint_args is not None:
             self.attributes = {nvp[0] : nvp[1] for nvp in urlparse.parse_qsl(endpoint_args, keep_blank_values=True)}
-            protocol = 'https' if conn.is_secure else 'http'
-            self.client = boto3.client('sns',
-                               endpoint_url=protocol+'://'+conn.host+':'+str(conn.port),
-                               aws_access_key_id=conn.aws_access_key_id,
-                               aws_secret_access_key=conn.aws_secret_access_key,
-                               region_name=region,
-                               verify='./cert.pem',
-                               config=Config(signature_version='s3'))
+        if opaque_data is not None:
+            self.attributes['OpaqueData'] = opaque_data
+        protocol = 'https' if conn.is_secure else 'http'
+        self.client = boto3.client('sns',
+                           endpoint_url=protocol+'://'+conn.host+':'+str(conn.port),
+                           aws_access_key_id=conn.aws_access_key_id,
+                           aws_secret_access_key=conn.aws_secret_access_key,
+                           region_name=region,
+                           verify='./cert.pem',
+                           config=Config(signature_version='s3'))
 
 
     def get_config(self):

@@ -148,10 +148,12 @@ using  PSSubConfigRef = std::shared_ptr<PSSubConfig>;
 struct PSTopicConfig {
   std::string name;
   std::set<std::string> subs;
+  std::string opaque_data;
 
   void dump(Formatter *f) const {
     encode_json("name", name, f);
     encode_json("subs", subs, f);
+    encode_json("opaque", opaque_data, f);
   }
 };
 
@@ -1149,6 +1151,7 @@ public:
         std::shared_ptr<PSTopicConfig> tc = std::make_shared<PSTopicConfig>();
         tc->name = info.name;
         tc->subs = user_topics.topics[info.name].subs;
+        tc->opaque_data = info.opaque_data;
         (*topics)->push_back(tc);
       }
 
@@ -1254,6 +1257,7 @@ public:
               // subscription was made by S3 compatible API
               ldout(sync_env->cct, 20) << "storing record for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
               record->configurationId = sub->sub_conf->s3_id;
+              record->opaque_data = (*titer)->opaque_data;
               yield call(PSSubscription::store_event_cr(sync_env, sub, record));
               if (retcode < 0) {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);

@@ -24,7 +24,7 @@ void populate_record_from_request(const req_state *s,
   record.userIdentity = s->user->user_id.id;    // user that triggered the change
   record.x_amz_request_id = s->req_id;          // request ID of the original change
   record.x_amz_id_2 = s->host_id;               // RGW on which the change was made
-  // configurationId is filled from subscription configuration
+  // configurationId is filled from notification configuration
   record.bucket_name = s->bucket_name;
   record.bucket_ownerIdentity = s->bucket_owner.get_id().id;
   record.bucket_arn = to_string(rgw::ARN(s->bucket));
@@ -40,6 +40,7 @@ void populate_record_from_request(const req_state *s,
   record.bucket_id = s->bucket.bucket_id;
   // pass meta data
   record.x_meta_map = s->info.x_meta_map;
+  // opaque data will be filled from topic configuration
 }
 
 bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, EventType event) {
@@ -81,6 +82,7 @@ int publish(const req_state* s,
         }
         event_should_be_handled = true;
         record.configurationId = topic_filter.s3_id;
+        record.opaque_data = topic_cfg.opaque_data;
         ldout(s->cct, 20) << "notification: '" << topic_filter.s3_id << 
             "' on topic: '" << topic_cfg.dest.arn_topic << 
             "' and bucket: '" << s->bucket.name << 
