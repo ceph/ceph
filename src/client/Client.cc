@@ -299,6 +299,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
+  async_dirop_mask = cct->_conf.get_val<uint64_t>("client_async_dirop_mask");
+
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
   caps_wanted_delay_min = cct->_conf.get_val<uint64_t>( "client_caps_wanted_delay_min");
@@ -13003,8 +13005,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     goto fail;
   req->set_dentry(de);
 
-  req->async_dirop_cb = &Client::_async_create_cb;
-
+  if (async_dirop_mask & ASYNC_CREATE)
+    req->async_dirop_cb = &Client::_async_create_cb;
   res = make_request(req, perms, inp, created);
   if (res < 0) {
     goto reply_error;
@@ -13360,7 +13362,8 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
   req->set_inode(dir);
 
-  req->async_dirop_cb = &Client::_async_unlink_cb;
+  if (async_dirop_mask & ASYNC_UNLINK)
+    req->async_dirop_cb = &Client::_async_unlink_cb;
   res = make_request(req, perm);
 
   trim_cache();
@@ -15429,6 +15432,7 @@ const char** Client::get_tracked_conf_keys() const
     "client_acl_type",
     "client_deleg_timeout",
     "client_deleg_break_on_open",
+    "client_async_dirop_mask",
     NULL
   };
   return keys;
@@ -15447,12 +15451,14 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
   }
-
   if (changed.count("client_caps_wanted_delay_min")) {
     caps_wanted_delay_min = cct->_conf.get_val<uint64_t>( "client_caps_wanted_delay_min");
   }
   if (changed.count("client_caps_wanted_delay_max")) {
     caps_wanted_delay_max = cct->_conf.get_val<uint64_t>( "client_caps_wanted_delay_max");
+  }
+  if (changed.count("client_async_dirop_mask")) {
+    async_dirop_mask = cct->_conf.get_val<uint64_t>("client_async_dirop_mask");
   }
 }
 

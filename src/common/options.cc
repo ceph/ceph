@@ -8792,6 +8792,11 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("client_async_dirop_mask", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(255)
+    .set_description("bit mask of enabled types of async dir operations. 1: unlink; 2: create"),
+
     Option("client_fs", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_STARTUP)
     .set_default("")
