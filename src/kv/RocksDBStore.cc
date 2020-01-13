@@ -667,10 +667,12 @@ void RocksDBStore::close()
   // stop compaction thread
   compact_queue_lock.lock();
   if (compact_thread.is_started()) {
+    dout(1) << __func__ << " waiting for compaction thread to stop" << dendl;
     compact_queue_stop = true;
     compact_queue_cond.notify_all();
     compact_queue_lock.unlock();
     compact_thread.join();
+    dout(1) << __func__ << " compaction thread to stopped" << dendl;    
   } else {
     compact_queue_lock.unlock();
   }
@@ -1222,6 +1224,7 @@ void RocksDBStore::compact()
 void RocksDBStore::compact_thread_entry()
 {
   std::unique_lock l{compact_queue_lock};
+  dout(10) << __func__ << " enter" << dendl;
   while (!compact_queue_stop) {
     while (!compact_queue.empty()) {
       pair<string,string> range = compact_queue.front();
@@ -1237,8 +1240,10 @@ void RocksDBStore::compact_thread_entry()
       l.lock();
       continue;
     }
+    dout(10) << __func__ << " waiting" << dendl;
     compact_queue_cond.wait(l);
   }
+  dout(10) << __func__ << " exit" << dendl;
 }
 
 void RocksDBStore::compact_range_async(const string& start, const string& end)
