@@ -30,7 +30,7 @@
                      [name]="field.name"
                      [formControlName]="field.name"
                      cdDimlessBinary>
-              <select *ngIf="field.name === 'select'"
+              <select *ngIf="field.type === 'select'"
                       class="form-control custom-select"
                       [id]="field.name"
                       [formControlName]="field.name">
@@ -43,7 +43,7 @@
                   {{ option.text }}
                 </option>
               </select>
-              <span *ngIf="formGroup.showError(field.name,formDir)"
+              <span *ngIf="formGroup.showError(field.name, formDir)"
                     class="invalid-feedback">
                 {{ getError(field) }}
               </span>
