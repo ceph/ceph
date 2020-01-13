@@ -79,11 +79,7 @@ void StandbyPyModules::start_one(PyModuleRef py_module)
 {
   std::lock_guard l(lock);
   const auto name = py_module->get_name();
-
-  ceph_assert(modules.count(name) == 0);
-
-  modules[name].reset(new StandbyPyModule(state, py_module, clog));
-  auto standby_module = modules.at(name).get();
+  auto standby_module = new StandbyPyModule(state, py_module, clog);
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
@@ -92,9 +88,12 @@ void StandbyPyModules::start_one(PyModuleRef py_module)
     if (r != 0) {
       derr << "Failed to run module in standby mode ('" << name << "')"
            << dendl;
-      std::lock_guard l(lock);
-      modules.erase(name);
+      delete standby_module;
     } else {
+      std::lock_guard l(lock);
+      auto em = modules.emplace(name, standby_module);
+      ceph_assert(em.second); // actually inserted
+
       dout(4) << "Starting thread for " << name << dendl;
       standby_module->thread.create(standby_module->get_thread_name());
     }
