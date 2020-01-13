@@ -108,6 +108,11 @@ build_dashboard_frontend() {
   tar cf dashboard_frontend.tar $outfile/src/pybind/mgr/dashboard/frontend/dist
 }
 
+generate_rook_ceph_client() {
+  $outfile/src/pybind/mgr/rook/generate_rook_ceph_client.sh
+  tar cf rook_ceph_client.tar $outfile/src/pybind/mgr/rook/rook_client/*.py
+}
+
 # clean out old cruft...
 echo "cleanup..."
 rm -f $outfile*
@@ -141,10 +146,12 @@ download_boost $boost_version 59c9b274bc451cf91a9ba1dd2c7fdcaf5d60b1b3aa83f2c9fa
                https://download.ceph.com/qa
 
 build_dashboard_frontend
+generate_rook_ceph_client
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar
 tar --concatenate -f $outfile.all.tar $outfile.tar
 tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
+tar --concatenate -f $outfile.all.tar rook_ceph_client.tar
 mv $outfile.all.tar $outfile.tar
 rm $outfile
 rm -f $outfile.version.tar
