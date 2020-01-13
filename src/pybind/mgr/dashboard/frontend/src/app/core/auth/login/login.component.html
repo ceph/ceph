@@ -1,79 +1,52 @@
-<div class="login"
-     *ngIf="isLoginActive || pwdUpdateRequired">
-  <header>
-    <nav class="navbar">
-      <a class="navbar-brand"></a>
-      <div class="form-inline">
-        <cd-language-selector></cd-language-selector>
-      </div>
-    </nav>
-  </header>
+<div *ngIf="isLoginActive">
+  <h1 i18n="The welcome message on the login page">Welcome to Ceph!</h1>
+  <form name="loginForm"
+        (ngSubmit)="login()"
+        #loginForm="ngForm"
+        novalidate>
 
-
-  <section>
-    <div class="container">
-      <div class="row full-height vertical-align">
-        <div class="col-sm-6 d-none d-sm-block">
-          <img src="assets/Ceph_Logo_Stacked_RGB_White_120411_fa_256x256.png"
-               alt="Ceph"
-               class="float-right img-fluid">
-        </div>
-
-        <div class="col-12 col-sm-6 col-xl-5">
-          <h1 i18n="The welcome message on the login page">Welcome to Ceph!</h1>
-          <form name="loginForm"
-                (ngSubmit)="login()"
-                #loginForm="ngForm"
-                *ngIf="!pwdUpdateRequired"
-                novalidate>
-
-            <!-- Username -->
-            <div class="form-group has-feedback">
-              <input name="username"
-                     [(ngModel)]="model.username"
-                     #username="ngModel"
-                     type="text"
-                     placeholder="Enter your username..."
-                     class="form-control"
-                     required
-                     autofocus>
-              <div class="invalid-feedback"
-                   *ngIf="(loginForm.submitted || username.dirty) && username.invalid"
-                   i18n>Username is required</div>
-            </div>
-
-            <!-- Password -->
-            <div class="form-group has-feedback">
-              <div class="input-group">
-                <input id="password"
-                       name="password"
-                       [(ngModel)]="model.password"
-                       #password="ngModel"
-                       type="password"
-                       placeholder="Enter your password..."
-                       class="form-control"
-                       required>
-                <span class="input-group-append">
-                  <button type="button"
-                          class="btn btn-outline-light btn-password"
-                          cdPasswordButton="password">
-                  </button>
-                </span>
-              </div>
-              <div class="invalid-feedback"
-                   *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
-                   i18n>Password is required</div>
-            </div>
-
-            <input type="submit"
-                   class="btn btn-secondary btn-block"
-                   [disabled]="loginForm.invalid"
-                   value="Login"
-                   i18n-value>
-          </form>
-          <cd-user-password-login-form *ngIf="pwdUpdateRequired"></cd-user-password-login-form>
-        </div>
-      </div>
+    <!-- Username -->
+    <div class="form-group has-feedback">
+      <input name="username"
+             [(ngModel)]="model.username"
+             #username="ngModel"
+             type="text"
+             placeholder="Enter your username..."
+             class="form-control"
+             required
+             autofocus>
+      <div class="invalid-feedback"
+           *ngIf="(loginForm.submitted || username.dirty) && username.invalid"
+           i18n>Username is required</div>
     </div>
-  </section>
+
+    <!-- Password -->
+    <div class="form-group has-feedback">
+      <div class="input-group">
+        <input id="password"
+               name="password"
+               [(ngModel)]="model.password"
+               #password="ngModel"
+               type="password"
+               placeholder="Enter your password..."
+               class="form-control"
+               required>
+        <span class="input-group-append">
+          <button type="button"
+                  class="btn btn-outline-light btn-password"
+                  cdPasswordButton="password">
+          </button>
+        </span>
+      </div>
+      <div class="invalid-feedback"
+           *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
+           i18n>Password is required</div>
+    </div>
+
+    <input type="submit"
+           class="btn btn-secondary btn-block"
+           [disabled]="loginForm.invalid"
+           value="Login"
+           i18n-value>
+  </form>
 </div>

@@ -145,6 +145,13 @@ describe('SettingsService', () => {
 
   it('should return the specified settings (2)', () => {
     service.getValues(['abc', 'xyz']).subscribe();
-    httpTesting.expectOne('api/settings?names=abc,xyz');
+    const req = httpTesting.expectOne('api/settings?names=abc,xyz');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should return standard settings', () => {
+    service.getStandardSettings().subscribe();
+    const req = httpTesting.expectOne('ui-api/standard_settings');
+    expect(req.request.method).toBe('GET');
   });
 });

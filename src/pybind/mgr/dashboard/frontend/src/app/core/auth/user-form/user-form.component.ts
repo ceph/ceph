@@ -124,7 +124,7 @@ export class UserFormComponent implements OnInit {
     }
     this.minDate = new Date();
 
-    const observables = [this.roleService.list(), this.settingsService.pwdExpirationSettings()];
+    const observables = [this.roleService.list(), this.settingsService.getStandardSettings()];
     observableForkJoin(observables).subscribe(
       (result: [UserFormRoleModel[], CdPwdExpirationSettings]) => {
         this.allRoles = _.map(result[0], (role) => {

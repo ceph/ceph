@@ -528,6 +528,7 @@ class AccessControlDB(object):
                 for user, _ in v1_db['users'].items():
                     v1_db['users'][user]['enabled'] = True
                     v1_db['users'][user]['pwdExpirationDate'] = None
+                    v1_db['users'][user]['pwdUpdateRequired'] = False
 
                 self.roles = {rn: Role.from_dict(r) for rn, r in v1_db.get('roles', {}).items()}
                 self.users = {un: User.from_dict(u, dict(self.roles, **SYSTEM_ROLES))

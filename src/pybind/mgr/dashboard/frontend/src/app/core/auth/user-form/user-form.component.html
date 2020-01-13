@@ -102,6 +102,7 @@
                   i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
+
         <!-- Password expiration date -->
         <div class="form-group row"
              *ngIf="!authStorageService.isSSO()">
@@ -215,10 +216,10 @@
           </div>
         </div>
 
-        <!-- Change Password -->
+        <!-- Force change password -->
         <div class="form-group row"
-             *ngIf="!isCurrentUser()">
-          <div class="offset-sm-3 col-sm-9">
+             *ngIf="!isCurrentUser() && !authStorageService.isSSO()">
+          <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"

@@ -40,7 +40,7 @@ describe('PwdExpirationNotificationComponent', () => {
       authStorageService = TestBed.get(AuthStorageService);
       settingsService = TestBed.get(SettingsService);
       spyOn(authStorageService, 'getPwdExpirationDate').and.returnValue(1645488000);
-      spyOn(settingsService, 'pwdExpirationSettings').and.returnValue(
+      spyOn(settingsService, 'getStandardSettings').and.returnValue(
         observableOf({
           user_pwd_expiration_warning_1: 10,
           user_pwd_expiration_warning_2: 5,
