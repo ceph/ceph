@@ -144,7 +144,9 @@ void Allocator::release(const PExtentVector& release_vec)
 {
   interval_set<uint64_t> release_set;
   for (auto e : release_vec) {
-    release_set.insert(e.offset, e.length);
+    if (e.is_valid()) {
+      release_set.insert(e.offset, e.length);
+    }
   }
   release(release_set);
 }
