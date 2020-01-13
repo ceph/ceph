@@ -77,7 +77,7 @@ CEPHADM="$SUDO $CEPHADM_BIN $CEPHADM_ARGS"
 # clean up previous run(s)?
 $CEPHADM rm-cluster --fsid $FSID --force
 $CEPHADM rm-cluster --fsid $FSID_LEGACY --force
-vgchange -an $OSD_VG_NAME || true
+$SUDO vgchange -an $OSD_VG_NAME || true
 loopdev=$($SUDO losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
 if ! [ "$loopdev" = "" ]; then
     $SUDO losetup -d $loopdev
