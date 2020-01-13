@@ -56,10 +56,11 @@ $CEPHADM $CEPHADM_ARGS \
 rm c.mon
 
 # mgr.b
-bin/ceph -c c -k k auth get-or-create mgr.y \
-    mon 'allow profile mgr' \
-    osd 'allow *' \
-    mds 'allow *' > k-mgr.y
+$CEPHADM $CEPHADM_ARGS shell --fsid $fsid --config c --keyring k -- \
+    ceph auth get-or-create mgr.y \
+        mon 'allow profile mgr' \
+        osd 'allow *' \
+        mds 'allow *' > k-mgr.y
 $CEPHADM $CEPHADM_ARGS \
     --image $image \
     deploy --name mgr.y \
@@ -69,11 +70,12 @@ $CEPHADM $CEPHADM_ARGS \
 
 # mds.{k,j}
 for id in k j; do
-    bin/ceph -c c -k k auth get-or-create mds.$id \
-        mon 'allow profile mds' \
-        mgr 'allow profile mds' \
-        osd 'allow *' \
-        mds 'allow *' > k-mds.$id
+    $CEPHADM $CEPHADM_ARGS shell --fsid $fsid --config c --keyring k -- \
+        ceph auth get-or-create mds.$id \
+            mon 'allow profile mds' \
+            mgr 'allow profile mds' \
+            osd 'allow *' \
+            mds 'allow *' > k-mds.$id
     $CEPHADM $CEPHADM_ARGS \
         --image $image \
         deploy --name mds.$id \
@@ -94,4 +96,4 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
 
-bin/ceph -c c -k k -s
+$CEPHADM $CEPHADM_ARGS shell --fsid $fsid --config c --keyring k -- ceph -s
