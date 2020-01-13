@@ -877,8 +877,9 @@ def get_config_and_both_keyrings():
             config = f.read()
         return (config, keyring, crash_keyring)
 
-def get_container_mounts(fsid, daemon_type, daemon_id):
-    # type: (str, str, Union[int, str, None]) -> Dict[str, str]
+def get_container_mounts(fsid, daemon_type, daemon_id,
+                         no_config=False):
+    # type: (str, str, Union[int, str, None], Optional[bool]) -> Dict[str, str]
     mounts = dict()
 
     if daemon_type in Ceph.daemons:
@@ -899,7 +900,8 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
         else:
             cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
         mounts[data_dir] = cdata_dir + ':z'
-        mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
+        if not no_config:
+            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
         if daemon_type == 'rbd-mirror':
             # rbd-mirror does not search for its keyring in a data directory
             mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.rbd-mirror.%s.keyring' % daemon_id
@@ -1861,7 +1863,8 @@ def command_shell():
     else:
         daemon_type = 'osd'  # get the most mounts
         daemon_id = None
-    mounts = get_container_mounts(args.fsid, daemon_type, daemon_id)
+    mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
+                                  no_config=True if args.config else False)
     if args.config:
         mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
     if args.keyring:
