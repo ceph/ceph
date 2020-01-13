@@ -424,6 +424,41 @@ class VolumeClient(object):
         return ret
 
     @connection_pool_wrap
+    def resize_subvolume(self, fs_handle, **kwargs):
+        ret        = 0, "", ""
+        subvolname = kwargs['sub_name']
+        newsize    = kwargs['new_size']
+        groupname  = kwargs['group_name']
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec(subvolname, groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found, create it with " \
+                        "'ceph fs subvolumegroup create' before creating or resizing subvolumes".format(groupname))
+                subvolpath = sv.get_subvolume_path(spec)
+                if not subvolpath:
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume '{0}' not found, create it with " \
+                        "'ceph fs subvolume create' before resizing subvolumes".format(subvolname))
+
+                try:
+                    newsize = int(newsize)
+                except ValueError:
+                    newsize = newsize.lower()
+                    nsize, usedbytes = sv.resize_infinite(subvolpath, newsize)
+                    ret = 0, json.dumps([{'bytes_used': usedbytes}, {'bytes_quota': nsize}, {'bytes_pcent': "undefined"}], indent=2), ""
+                else:
+                    noshrink = kwargs['no_shrink']
+                    nsize, usedbytes = sv.resize_subvolume(subvolpath, newsize, noshrink)
+                    ret = 0, json.dumps([{'bytes_used': usedbytes}, {'bytes_quota': nsize},
+                                         {'bytes_pcent': '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}], indent=2), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    @connection_pool_wrap
     def subvolume_getpath(self, fs_handle, **kwargs):
         ret        = None
         volname    = kwargs['vol_name']
