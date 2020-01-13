@@ -302,6 +302,10 @@ target_link_libraries(ceph_test_librgw_file_nfsns
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(ceph_test_librgw_file_nfsns spawn)
+endif()
+
 
 # ceph_test_librgw_file_aw (nfs write transaction [atomic write] tests)
 add_executable(ceph_test_librgw_file_aw
@@ -326,6 +330,9 @@ target_link_libraries(ceph_test_librgw_file_marker
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(ceph_test_librgw_file_marker spawn)
+endif()
 
 # ceph_test_rgw_token
 add_executable(ceph_test_rgw_token
