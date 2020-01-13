@@ -64,3 +64,6 @@
 [submodule "src/c-ares"]
 	path = src/c-ares
 	url = https://github.com/ceph/c-ares.git
+[submodule "src/spawn"]
+	path = src/spawn
+	url = https://github.com/ceph/spawn.git
