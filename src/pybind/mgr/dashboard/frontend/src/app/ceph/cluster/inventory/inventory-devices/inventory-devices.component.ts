@@ -99,7 +99,7 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
         customTemplateConfig: {
           map: {
             hdd: { value: 'HDD', class: 'badge-hdd' },
-            'ssd/nvme': { value: 'SSD', class: 'badge-ssd' }
+            ssd: { value: 'SSD', class: 'badge-ssd' }
           }
         }
       },
