@@ -512,6 +512,14 @@ public:
 
   auto get_caps_wanted_delay_min() const { return caps_wanted_delay_min; }
   auto get_caps_wanted_delay_max() const { return caps_wanted_delay_max; }
+  int get_caps_dirop_wanted() const {
+    int want = 0;
+    if (async_dirop_mask & ASYNC_CREATE)
+      want |= CEPH_CAP_DIR_CREATE;
+    if (async_dirop_mask & ASYNC_UNLINK)
+      want |= CEPH_CAP_DIR_UNLINK;
+    return want;
+  }
 
   snapid_t ll_get_snapid(Inode *in);
   vinodeno_t ll_get_vino(Inode *in) {
@@ -1530,6 +1538,12 @@ private:
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
+
+  unsigned async_dirop_mask = 0;
+  enum {
+    ASYNC_UNLINK = 1,
+    ASYNC_CREATE = 2,
+  };
 };
 
 /**
