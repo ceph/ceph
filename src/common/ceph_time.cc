@@ -95,7 +95,8 @@ namespace ceph {
 	   typename std::enable_if<Clock::is_steady>::type*>
   std::ostream& operator<<(std::ostream& m,
 			   const std::chrono::time_point<Clock>& t) {
-    return m << std::chrono::duration<double>(t.time_since_epoch()).count()
+    return m << std::fixed << std::chrono::duration<double>(
+		t.time_since_epoch()).count()
 	     << "s";
   }
 
