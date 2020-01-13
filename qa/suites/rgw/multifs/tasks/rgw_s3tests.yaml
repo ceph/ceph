@@ -6,7 +6,8 @@ tasks:
 - rgw: [client.0]
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      git_remote: git://github.com/theanalyst/
+      force-branch: public-access-qa
       rgw_server: client.0
 overrides:
   ceph:
