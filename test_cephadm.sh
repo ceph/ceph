@@ -14,10 +14,11 @@ OSD_LV_NAME=${SCRIPT_NAME%.*}
 
 CEPHADM=../src/cephadm/cephadm
 
-#A="-d"
+# add verbose logging
+#CEPHADM_ARGS="$CEPHADM_ARGS -v"
 
 # clean up previous run(s)?
-$CEPHADM $A rm-cluster --fsid $fsid --force
+$CEPHADM $CEPHADM_ARGS rm-cluster --fsid $fsid --force
 vgchange -an $OSD_VG_NAME || true
 loopdev=$(losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
 if ! [ "$loopdev" = "" ]; then
@@ -30,7 +31,7 @@ cat <<EOF > c
 	log to file = true
 EOF
 
-$CEPHADM $A \
+$CEPHADM $CEPHADM_ARGS \
     --image $image \
     bootstrap \
     --mon-id a \
@@ -46,7 +47,7 @@ chmod 644 k c
 # mon.b
 cp c c.mon
 echo "public addrv = [v2:$ip:3301,v1:$ip:6790]" >> c.mon
-$CEPHADM $A \
+$CEPHADM $CEPHADM_ARGS \
      --image $image \
      deploy --name mon.b \
      --fsid $fsid \
@@ -59,7 +60,7 @@ bin/ceph -c c -k k auth get-or-create mgr.y \
     mon 'allow profile mgr' \
     osd 'allow *' \
     mds 'allow *' > k-mgr.y
-$CEPHADM $A \
+$CEPHADM $CEPHADM_ARGS \
     --image $image \
     deploy --name mgr.y \
     --fsid $fsid \
@@ -73,7 +74,7 @@ for id in k j; do
         mgr 'allow profile mds' \
         osd 'allow *' \
         mds 'allow *' > k-mds.$id
-    $CEPHADM $A \
+    $CEPHADM $CEPHADM_ARGS \
         --image $image \
         deploy --name mds.$id \
         --fsid $fsid \
