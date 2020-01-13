@@ -150,11 +150,12 @@ To update a topic, use the same command used for topic creation, with the topic 
 
 ::
 
-   PUT /topics/<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker][&use-ssl=true|false][&ca-location=<file path>]]
+   PUT /topics/<topic-name>[?OpaqueData=<opaque data>][&push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker][&use-ssl=true|false][&ca-location=<file path>]]
 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
+- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic
 
 The endpoint URI may include parameters depending with the type of endpoint:
 
@@ -221,6 +222,7 @@ Response will have the following format (JSON):
                "push_endpoint_topic":""
            },
            "arn":""
+           "opaqueData":""
        },
        "subs":[]
    }             
@@ -502,6 +504,7 @@ the events will have an S3-compatible record format (JSON):
                }
            },
            "eventId":"",
+           "opaqueData":"",
        }
    ]}
 
@@ -524,6 +527,7 @@ the events will have an S3-compatible record format (JSON):
 - s3.object.metadata: not supported (an extension to the S3 notification API)
 - s3.object.tags: not supported (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
+- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic (an extension to the S3 notification API)
 
 In case that the subscription was not created via a non S3-compatible notification, 
 the events will have the following event format (JSON):

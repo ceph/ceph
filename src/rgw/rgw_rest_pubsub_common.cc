@@ -52,7 +52,7 @@ void RGWPSCreateTopicOp::execute() {
   }
 
   ups.emplace(store, s->owner.get_id());
-  op_ret = ups->create_topic(topic_name, dest, topic_arn);
+  op_ret = ups->create_topic(topic_name, dest, topic_arn, opaque_data);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;

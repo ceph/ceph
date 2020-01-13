@@ -112,10 +112,14 @@ Note that most of the API is not applicable to Ceph, and only the following acti
  - ``DeleteTopic``
  - ``ListTopics``
 
-We also extend it by: 
+We also have the following extensions to topic configuration: 
 
- - ``GetTopic`` - allowing for fetching a specific topic, instead of all user topics
- - In ``CreateTopic`` we allow setting endpoint attributes
+ - In ``GetTopic`` we allow fetching a specific topic, instead of all user topics
+ - In ``CreateTopic``
+
+  - we allow setting endpoint attributes
+  - we allow setting opaque data thta will be sent to the endpoint in the notification
+
 
 .. _AWS Simple Notification Service API: https://docs.aws.amazon.com/sns/latest/api/API_Operations.html
 .. _AWS S3 Bucket Notifications API: https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
