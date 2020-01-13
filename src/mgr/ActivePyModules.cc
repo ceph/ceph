@@ -446,10 +446,7 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   std::lock_guard l(lock);
 
   const auto name = py_module->get_name();
-  auto em = modules.emplace(name,
-      std::make_shared<ActivePyModule>(py_module, clog));
-  ceph_assert(em.second); // actually inserted
-  auto& active_module = em.first->second;
+  auto active_module = std::make_shared<ActivePyModule>(py_module, clog);
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
@@ -458,9 +455,11 @@ void ActivePyModules::start_one(PyModuleRef py_module)
     if (r != 0) {
       derr << "Failed to run module in active mode ('" << name << "')"
            << dendl;
-      std::lock_guard l(lock);
-      modules.erase(name);
     } else {
+      std::lock_guard l(lock);
+      auto em = modules.emplace(name, active_module);
+      ceph_assert(em.second); // actually inserted
+
       dout(4) << "Starting thread for " << name << dendl;
       active_module->thread.create(active_module->get_thread_name());
     }
