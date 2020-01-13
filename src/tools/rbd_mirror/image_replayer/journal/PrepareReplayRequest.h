@@ -7,8 +7,8 @@
 #include "include/int_types.h"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/Types.h"
-#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/Types.h"
+#include "tools/rbd_mirror/BaseRequest.h"
 #include <list>
 #include <string>
 
@@ -23,42 +23,42 @@ class ProgressContext;
 namespace image_replayer {
 namespace journal {
 
-template <typename ImageCtxT>
-class PrepareReplayRequest {
-public:
-  typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
-  typedef typename TypeTraits::Journaler Journaler;
-  typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
+template <typename> class StateBuilder;
 
+template <typename ImageCtxT>
+class PrepareReplayRequest : public BaseRequest {
+public:
   static PrepareReplayRequest* create(
-      ImageCtxT* local_image_ctx, Journaler* remote_journaler,
-      librbd::mirror::PromotionState remote_promotion_state,
       const std::string& local_mirror_uuid,
-      const std::string& remote_mirror_uuid,
-      MirrorPeerClientMeta* client_meta, ProgressContext* progress_ctx,
-      bool* resync_requested, bool* syncing, Context* on_finish) {
+      librbd::mirror::PromotionState remote_promotion_state,
+      ProgressContext* progress_ctx,
+      StateBuilder<ImageCtxT>* state_builder,
+      bool* resync_requested,
+      bool* syncing,
+      Context* on_finish) {
     return new PrepareReplayRequest(
-      local_image_ctx, remote_journaler, remote_promotion_state,
-      local_mirror_uuid, remote_mirror_uuid, client_meta, progress_ctx,
+      local_mirror_uuid, remote_promotion_state, progress_ctx, state_builder,
       resync_requested, syncing, on_finish);
   }
 
   PrepareReplayRequest(
-      ImageCtxT* local_image_ctx, Journaler* remote_journaler,
-      librbd::mirror::PromotionState remote_promotion_state,
       const std::string& local_mirror_uuid,
-      const std::string& remote_mirror_uuid,
-      MirrorPeerClientMeta* client_meta, ProgressContext* progress_ctx,
-      bool* resync_requested, bool* syncing, Context* on_finish)
-    : m_local_image_ctx(local_image_ctx), m_remote_journaler(remote_journaler),
-      m_remote_promotion_state(remote_promotion_state),
+      librbd::mirror::PromotionState remote_promotion_state,
+      ProgressContext* progress_ctx,
+      StateBuilder<ImageCtxT>* state_builder,
+      bool* resync_requested,
+      bool* syncing,
+      Context* on_finish)
+    : BaseRequest(on_finish),
       m_local_mirror_uuid(local_mirror_uuid),
-      m_remote_mirror_uuid(remote_mirror_uuid), m_client_meta(client_meta),
-      m_progress_ctx(progress_ctx), m_resync_requested(resync_requested),
-      m_syncing(syncing), m_on_finish(on_finish) {
+      m_remote_promotion_state(remote_promotion_state),
+      m_progress_ctx(progress_ctx),
+      m_state_builder(state_builder),
+      m_resync_requested(resync_requested),
+      m_syncing(syncing) {
   }
 
-  void send();
+  void send() override;
 
 private:
   /**
@@ -82,16 +82,12 @@ private:
    */
   typedef std::list<cls::journal::Tag> Tags;
 
-  ImageCtxT* m_local_image_ctx;
-  Journaler* m_remote_journaler;
-  librbd::mirror::PromotionState m_remote_promotion_state;
   std::string m_local_mirror_uuid;
-  std::string m_remote_mirror_uuid;
-  MirrorPeerClientMeta* m_client_meta;
+  librbd::mirror::PromotionState m_remote_promotion_state;
   ProgressContext* m_progress_ctx;
+  StateBuilder<ImageCtxT>* m_state_builder;
   bool* m_resync_requested;
   bool* m_syncing;
-  Context* m_on_finish;
 
   uint64_t m_local_tag_tid = 0;
   librbd::journal::TagData m_local_tag_data;
@@ -109,7 +105,6 @@ private:
   void get_remote_tags();
   void handle_get_remote_tags(int r);
 
-  void finish(int r);
   void update_progress(const std::string& description);
 
 };

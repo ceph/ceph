@@ -21,6 +21,7 @@
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Throttler.h"
+#include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
 void register_test_image_sync() {
 }
@@ -92,10 +93,20 @@ public:
     encode(client_data, client_data_bl);
 
     ASSERT_EQ(0, m_remote_journaler->register_client(client_data_bl));
+
+    m_state_builder = rbd::mirror::image_replayer::journal::StateBuilder<
+      librbd::ImageCtx>::create("global image id");
+    m_state_builder->remote_journaler = m_remote_journaler;
+    m_state_builder->remote_client_meta = m_client_meta;
+    m_sync_point_handler = m_state_builder->create_sync_point_handler();
   }
 
   void TearDown() override {
     m_instance_watcher->handle_release_leader();
+
+    m_state_builder->remote_journaler = nullptr;
+    m_state_builder->destroy_sync_point_handler();
+    m_state_builder->destroy();
 
     delete m_remote_journaler;
     delete m_instance_watcher;
@@ -119,10 +130,9 @@ public:
   }
 
   ImageSync<> *create_request(Context *ctx) {
-    return new ImageSync<>(m_local_image_ctx, m_remote_image_ctx,
-                           m_threads->timer, &m_threads->timer_lock,
-                           "mirror-uuid", m_remote_journaler, &m_client_meta,
-                           m_threads->work_queue, m_instance_watcher, ctx);
+    return new ImageSync<>(m_threads, m_local_image_ctx, m_remote_image_ctx,
+                           "mirror-uuid", m_sync_point_handler,
+                           m_instance_watcher, nullptr, ctx);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
@@ -131,6 +141,8 @@ public:
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   ::journal::Journaler *m_remote_journaler;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
+  rbd::mirror::image_replayer::journal::StateBuilder<librbd::ImageCtx>* m_state_builder = nullptr;
+  rbd::mirror::image_sync::SyncPointHandler* m_sync_point_handler = nullptr;
 };
 
 TEST_F(TestImageSync, Empty) {

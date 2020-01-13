@@ -5,11 +5,11 @@
 #include "include/uuid.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "tools/rbd_mirror/image_sync/Types.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -30,52 +30,49 @@ static const std::string SNAP_NAME_PREFIX(".rbd-mirror");
 using librbd::util::create_context_callback;
 
 template <typename I>
-SyncPointCreateRequest<I>::SyncPointCreateRequest(I *remote_image_ctx,
-                                                  const std::string &mirror_uuid,
-                                                  Journaler *journaler,
-                                                  MirrorPeerClientMeta *client_meta,
-                                                  Context *on_finish)
-  : m_remote_image_ctx(remote_image_ctx), m_mirror_uuid(mirror_uuid),
-    m_journaler(journaler), m_client_meta(client_meta), m_on_finish(on_finish),
-    m_client_meta_copy(*client_meta) {
-  ceph_assert(m_client_meta->sync_points.size() < 2);
+SyncPointCreateRequest<I>::SyncPointCreateRequest(
+    I *remote_image_ctx,
+    const std::string &local_mirror_uuid,
+    SyncPointHandler* sync_point_handler,
+    Context *on_finish)
+  : m_remote_image_ctx(remote_image_ctx),
+    m_local_mirror_uuid(local_mirror_uuid),
+    m_sync_point_handler(sync_point_handler),
+    m_on_finish(on_finish) {
+  m_sync_points_copy = m_sync_point_handler->get_sync_points();
+  ceph_assert(m_sync_points_copy.size() < 2);
 
   // initialize the updated client meta with the new sync point
-  m_client_meta_copy.sync_points.emplace_back();
-  if (m_client_meta_copy.sync_points.size() > 1) {
-    m_client_meta_copy.sync_points.back().from_snap_name =
-      m_client_meta_copy.sync_points.front().snap_name;
+  m_sync_points_copy.emplace_back();
+  if (m_sync_points_copy.size() > 1) {
+    m_sync_points_copy.back().from_snap_name =
+      m_sync_points_copy.front().snap_name;
   }
 }
 
 template <typename I>
 void SyncPointCreateRequest<I>::send() {
-  send_update_client();
+  send_update_sync_points();
 }
 
 template <typename I>
-void SyncPointCreateRequest<I>::send_update_client() {
+void SyncPointCreateRequest<I>::send_update_sync_points() {
   uuid_d uuid_gen;
   uuid_gen.generate_random();
 
-  MirrorPeerSyncPoint &sync_point = m_client_meta_copy.sync_points.back();
-  sync_point.snap_name = SNAP_NAME_PREFIX + "." + m_mirror_uuid + "." +
+  auto& sync_point = m_sync_points_copy.back();
+  sync_point.snap_name = SNAP_NAME_PREFIX + "." + m_local_mirror_uuid + "." +
                          uuid_gen.to_string();
 
-  dout(20) << ": sync_point=" << sync_point << dendl;
-
-  bufferlist client_data_bl;
-  librbd::journal::ClientData client_data(m_client_meta_copy);
-  encode(client_data, client_data_bl);
-
-  Context *ctx = create_context_callback<
-    SyncPointCreateRequest<I>, &SyncPointCreateRequest<I>::handle_update_client>(
-      this);
-  m_journaler->update_client(client_data_bl, ctx);
+  auto ctx = create_context_callback<
+    SyncPointCreateRequest<I>,
+    &SyncPointCreateRequest<I>::handle_update_sync_points>(this);
+  m_sync_point_handler->update_sync_points(
+    m_sync_point_handler->get_snap_seqs(), m_sync_points_copy, false, ctx);
 }
 
 template <typename I>
-void SyncPointCreateRequest<I>::handle_update_client(int r) {
+void SyncPointCreateRequest<I>::handle_update_sync_points(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
@@ -84,9 +81,6 @@ void SyncPointCreateRequest<I>::handle_update_client(int r) {
     finish(r);
     return;
   }
-
-  // update provided meta structure to reflect reality
-  *m_client_meta = m_client_meta_copy;
 
   send_refresh_image();
 }
@@ -118,7 +112,7 @@ template <typename I>
 void SyncPointCreateRequest<I>::send_create_snap() {
   dout(20) << dendl;
 
-  MirrorPeerSyncPoint &sync_point = m_client_meta_copy.sync_points.back();
+  auto& sync_point = m_sync_points_copy.back();
 
   Context *ctx = create_context_callback<
     SyncPointCreateRequest<I>, &SyncPointCreateRequest<I>::handle_create_snap>(
@@ -132,7 +126,7 @@ void SyncPointCreateRequest<I>::handle_create_snap(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r == -EEXIST) {
-    send_update_client();
+    send_update_sync_points();
     return;
   } else if (r < 0) {
     derr << ": failed to create snapshot: " << cpp_strerror(r) << dendl;

@@ -10,13 +10,11 @@
 #include "tools/rbd_mirror/MirrorStatusUpdater.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
-#include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/ReplayerListener.h"
+#include "tools/rbd_mirror/image_replayer/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
-#include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "test/rbd_mirror/test_mock_fixture.h"
-#include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/rbd_mirror/mock/MockContextWQ.h"
 #include "test/rbd_mirror/mock/MockSafeTimer.h"
@@ -33,14 +31,6 @@ struct MockTestImageCtx : public MockImageCtx {
 
 } // anonymous namespace
 
-namespace journal {
-
-template <>
-struct TypeTraits<MockTestImageCtx> {
-  typedef ::journal::MockJournalerProxy Journaler;
-};
-
-} // namespace journal
 } // namespace librbd
 
 namespace rbd {
@@ -103,8 +93,8 @@ namespace image_replayer {
 template<>
 struct BootstrapRequest<librbd::MockTestImageCtx> {
   static BootstrapRequest* s_instance;
-  librbd::MockTestImageCtx **image_ctx = nullptr;
-  std::string* local_image_id = nullptr;
+
+  StateBuilder<librbd::MockTestImageCtx>** state_builder = nullptr;
   bool *do_resync = nullptr;
   Context *on_finish = nullptr;
 
@@ -113,19 +103,14 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
       librados::IoCtx &local_io_ctx,
       librados::IoCtx &remote_io_ctx,
       rbd::mirror::InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
-      const std::string &remote_image_id,
       const std::string &global_image_id,
       const std::string &local_mirror_uuid,
       ::journal::CacheManagerHandler *cache_manager_handler,
       rbd::mirror::ProgressContext *progress_ctx,
-      librbd::MockTestImageCtx **local_image_ctx,
-      std::string* local_image_id,
-      std::string* remote_mirror_uuid,
-      ::journal::MockJournalerProxy** remote_journaler,
+      StateBuilder<librbd::MockTestImageCtx>** state_builder,
       bool *do_resync, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
-    s_instance->image_ctx = local_image_ctx;
-    s_instance->local_image_id = local_image_id;
+    s_instance->state_builder = state_builder;
     s_instance->do_resync = do_resync;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -159,60 +144,8 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
   MOCK_METHOD0(cancel, void());
 };
 
-template<>
-struct CloseImageRequest<librbd::MockTestImageCtx> {
-  static CloseImageRequest* s_instance;
-  librbd::MockTestImageCtx **image_ctx = nullptr;
-  Context *on_finish = nullptr;
-
-  static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
-                                   Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->image_ctx = image_ctx;
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  CloseImageRequest() {
-    ceph_assert(s_instance == nullptr);
-    s_instance = this;
-  }
-
-  ~CloseImageRequest() {
-    ceph_assert(s_instance == this);
-    s_instance = nullptr;
-  }
-
-  MOCK_METHOD0(send, void());
-};
-
-BootstrapRequest<librbd::MockTestImageCtx>* BootstrapRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-CloseImageRequest<librbd::MockTestImageCtx>* CloseImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-
-namespace journal {
-
-template <>
-struct Replayer<librbd::MockTestImageCtx> : public image_replayer::Replayer {
-  static Replayer* s_instance;
-  librbd::MockTestImageCtx** local_image_ctx;
+struct MockReplayer : public Replayer {
   image_replayer::ReplayerListener* replayer_listener;
-
-  static Replayer* create(librbd::MockTestImageCtx** local_image_ctx,
-                          ::journal::MockJournalerProxy* remote_journaler,
-                          const std::string& local_mirror_uuid,
-                          const std::string& remote_mirror_uuid,
-                          image_replayer::ReplayerListener* replayer_listener,
-                          Threads<librbd::MockTestImageCtx>* threads) {
-    ceph_assert(s_instance != nullptr);
-    ceph_assert(local_image_ctx != nullptr);
-    s_instance->local_image_ctx = local_image_ctx;
-    s_instance->replayer_listener = replayer_listener;
-    return s_instance;
-  }
-
-  Replayer() {
-    s_instance = this;
-  }
 
   MOCK_METHOD0(destroy, void());
 
@@ -228,9 +161,30 @@ struct Replayer<librbd::MockTestImageCtx> : public image_replayer::Replayer {
   MOCK_CONST_METHOD0(get_error_description, std::string());
 };
 
-Replayer<librbd::MockTestImageCtx>* Replayer<librbd::MockTestImageCtx>::s_instance = nullptr;
+template <>
+struct StateBuilder<librbd::MockTestImageCtx> {
+  static StateBuilder* s_instance;
 
-} // namespace journal
+  librbd::MockTestImageCtx* local_image_ctx = nullptr;
+  std::string local_image_id;
+  std::string remote_image_id;
+
+  void destroy() {
+  }
+
+  MOCK_METHOD1(close, void(Context*));
+  MOCK_METHOD3(create_replayer, Replayer*(Threads<librbd::MockTestImageCtx>*,
+                                          const std::string&,
+                                          ReplayerListener*));
+
+  StateBuilder() {
+    s_instance = this;
+  }
+};
+
+BootstrapRequest<librbd::MockTestImageCtx>* BootstrapRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+StateBuilder<librbd::MockTestImageCtx>* StateBuilder<librbd::MockTestImageCtx>::s_instance = nullptr;
+
 } // namespace image_replayer
 } // namespace mirror
 } // namespace rbd
@@ -258,8 +212,8 @@ public:
   typedef ImageDeleter<librbd::MockTestImageCtx> MockImageDeleter;
   typedef MirrorStatusUpdater<librbd::MockTestImageCtx> MockMirrorStatusUpdater;
   typedef image_replayer::BootstrapRequest<librbd::MockTestImageCtx> MockBootstrapRequest;
-  typedef image_replayer::CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
-  typedef image_replayer::journal::Replayer<librbd::MockTestImageCtx> MockJournalReplayer;
+  typedef image_replayer::StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
+  typedef image_replayer::MockReplayer MockReplayer;
   typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
   typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
 
@@ -320,53 +274,66 @@ public:
     return bl;
   }
 
-  void expect_send(MockBootstrapRequest &mock_bootstrap_request,
-                   librbd::MockTestImageCtx &mock_local_image_ctx,
+  void expect_send(MockBootstrapRequest& mock_bootstrap_request,
+                   MockStateBuilder& mock_state_builder,
+                   librbd::MockTestImageCtx& mock_local_image_ctx,
                    bool do_resync, int r) {
     EXPECT_CALL(mock_bootstrap_request, send())
-      .WillOnce(Invoke([&mock_bootstrap_request, &mock_local_image_ctx,
-                        do_resync, r]() {
+      .WillOnce(Invoke([this, &mock_bootstrap_request, &mock_state_builder,
+                        &mock_local_image_ctx, do_resync, r]() {
+            if (r == 0 || r == -ENOLINK) {
+              mock_state_builder.local_image_id = mock_local_image_ctx.id;
+              mock_state_builder.remote_image_id = m_remote_image_ctx->id;
+              *mock_bootstrap_request.state_builder = &mock_state_builder;
+            }
             if (r == 0) {
-              *mock_bootstrap_request.image_ctx = &mock_local_image_ctx;
+              mock_state_builder.local_image_ctx = &mock_local_image_ctx;
               *mock_bootstrap_request.do_resync = do_resync;
-            } else if (r == -ENOLINK) {
-              *mock_bootstrap_request.local_image_id = mock_local_image_ctx.id;
+            }
+            if (r < 0) {
+              mock_state_builder.remote_image_id = "";
             }
             mock_bootstrap_request.on_finish->complete(r);
           }));
   }
 
-  void expect_init(MockJournalReplayer& mock_journal_replayer, int r) {
-    EXPECT_CALL(mock_journal_replayer, init(_))
-      .WillOnce(Invoke([this, &mock_journal_replayer, r](Context* ctx) {
-                  if (r < 0) {
-                    *mock_journal_replayer.local_image_ctx = nullptr;
-                  }
+  void expect_create_replayer(MockStateBuilder& mock_state_builder,
+                              MockReplayer& mock_replayer) {
+    EXPECT_CALL(mock_state_builder, create_replayer(_, _, _))
+      .WillOnce(WithArg<2>(
+        Invoke([this, &mock_replayer]
+               (image_replayer::ReplayerListener* replayer_listener) {
+          mock_replayer.replayer_listener = replayer_listener;
+          return &mock_replayer;
+        })));
+  }
+
+  void expect_close(MockStateBuilder& mock_state_builder, int r) {
+    EXPECT_CALL(mock_state_builder, close(_))
+      .WillOnce(Invoke([this, r](Context* ctx) {
                   m_threads->work_queue->queue(ctx, r);
                 }));
   }
 
-  void expect_shut_down(MockJournalReplayer& mock_journal_replayer, int r) {
-    EXPECT_CALL(mock_journal_replayer, shut_down(_))
-      .WillOnce(Invoke([this, &mock_journal_replayer, r](Context* ctx) {
-                  *mock_journal_replayer.local_image_ctx = nullptr;
+  void expect_init(MockReplayer& mock_replayer, int r) {
+    EXPECT_CALL(mock_replayer, init(_))
+      .WillOnce(Invoke([this, &mock_replayer, r](Context* ctx) {
                   m_threads->work_queue->queue(ctx, r);
                 }));
-    EXPECT_CALL(mock_journal_replayer, destroy());
   }
 
-  void expect_get_replay_status(MockJournalReplayer& mock_journal_replayer) {
-    EXPECT_CALL(mock_journal_replayer, get_replay_status(_, _))
+  void expect_shut_down(MockReplayer& mock_replayer, int r) {
+    EXPECT_CALL(mock_replayer, shut_down(_))
+      .WillOnce(Invoke([this, &mock_replayer, r](Context* ctx) {
+                  m_threads->work_queue->queue(ctx, r);
+                }));
+    EXPECT_CALL(mock_replayer, destroy());
+  }
+
+  void expect_get_replay_status(MockReplayer& mock_replayer) {
+    EXPECT_CALL(mock_replayer, get_replay_status(_, _))
       .WillRepeatedly(DoAll(WithArg<1>(CompleteContext(-EEXIST)),
                             Return(true)));
-  }
-
-  void expect_send(MockCloseImageRequest &mock_close_image_request, int r) {
-    EXPECT_CALL(mock_close_image_request, send())
-      .WillOnce(Invoke([&mock_close_image_request, r]() {
-            *mock_close_image_request.image_ctx = nullptr;
-            mock_close_image_request.on_finish->complete(r);
-          }));
   }
 
   void expect_set_mirror_image_status_repeatedly() {
@@ -415,21 +382,24 @@ TEST_F(TestMockImageReplayer, StartStop) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
-  MockBootstrapRequest mock_bootstrap_request;
-  MockJournalReplayer mock_journal_replayer;
+  MockReplayer mock_replayer;
 
-  expect_get_replay_status(mock_journal_replayer);
+  expect_get_replay_status(mock_replayer);
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
-  expect_init(mock_journal_replayer, 0);
+  MockBootstrapRequest mock_bootstrap_request;
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, 0);
 
   create_image_replayer(mock_threads);
 
@@ -440,7 +410,8 @@ TEST_F(TestMockImageReplayer, StartStop) {
             m_image_replayer->get_health_state());
 
   // STOP
-  expect_shut_down(mock_journal_replayer, 0);
+  expect_shut_down(mock_replayer, 0);
+  expect_close(mock_state_builder, 0);
   expect_mirror_image_status_exists(false);
 
   C_SaferCond stop_ctx;
@@ -454,19 +425,20 @@ TEST_F(TestMockImageReplayer, LocalImagePrimary) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
+  MockBootstrapRequest mock_bootstrap_request;
 
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
 
-  MockBootstrapRequest mock_bootstrap_request;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, -ENOMSG);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, -ENOMSG);
 
   expect_mirror_image_status_exists(false);
 
@@ -481,7 +453,6 @@ TEST_F(TestMockImageReplayer, BootstrapRemoteDeleted) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
@@ -493,7 +464,11 @@ TEST_F(TestMockImageReplayer, BootstrapRemoteDeleted) {
   InSequence seq;
 
   MockBootstrapRequest mock_bootstrap_request;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, -ENOLINK);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, -ENOLINK);
+
+  expect_close(mock_state_builder, 0);
 
   expect_trash_move(mock_image_deleter, "global image id", false, 0);
   expect_mirror_image_status_exists(false);
@@ -509,7 +484,6 @@ TEST_F(TestMockImageReplayer, BootstrapResyncRequested) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
@@ -521,10 +495,11 @@ TEST_F(TestMockImageReplayer, BootstrapResyncRequested) {
   InSequence seq;
 
   MockBootstrapRequest mock_bootstrap_request;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, true, 0);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              true, 0);
 
-  MockCloseImageRequest mock_close_image_request;
-  expect_send(mock_close_image_request, 0);
+  expect_close(mock_state_builder, 0);
 
   expect_trash_move(mock_image_deleter, "global image id", true, 0);
   expect_mirror_image_status_exists(false);
@@ -540,7 +515,6 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
@@ -551,7 +525,9 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, -EINVAL);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, -EINVAL);
 
   expect_mirror_image_status_exists(false);
 
@@ -566,7 +542,6 @@ TEST_F(TestMockImageReplayer, BootstrapCancel) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
@@ -580,6 +555,7 @@ TEST_F(TestMockImageReplayer, BootstrapCancel) {
   create_image_replayer(mock_threads);
 
   MockBootstrapRequest mock_bootstrap_request;
+  MockStateBuilder mock_state_builder;
   EXPECT_CALL(mock_bootstrap_request, send())
     .WillOnce(Invoke([this, &mock_bootstrap_request]() {
         m_image_replayer->stop();
@@ -600,21 +576,24 @@ TEST_F(TestMockImageReplayer, StopError) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
   MockBootstrapRequest mock_bootstrap_request;
-  MockJournalReplayer mock_journal_replayer;
+  MockReplayer mock_replayer;
 
-  expect_get_replay_status(mock_journal_replayer);
+  expect_get_replay_status(mock_replayer);
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
-  expect_init(mock_journal_replayer, 0);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, 0);
 
   create_image_replayer(mock_threads);
 
@@ -624,7 +603,8 @@ TEST_F(TestMockImageReplayer, StopError) {
 
   // STOP (errors are ignored)
 
-  expect_shut_down(mock_journal_replayer, -EINVAL);
+  expect_shut_down(mock_replayer, -EINVAL);
+  expect_close(mock_state_builder, -EINVAL);
   expect_mirror_image_status_exists(false);
 
   C_SaferCond stop_ctx;
@@ -636,23 +616,28 @@ TEST_F(TestMockImageReplayer, ReplayerError) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
   MockBootstrapRequest mock_bootstrap_request;
-  MockJournalReplayer mock_journal_replayer;
+  MockReplayer mock_replayer;
 
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
-  expect_init(mock_journal_replayer, -EINVAL);
-  EXPECT_CALL(mock_journal_replayer, get_error_description())
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, -EINVAL);
+  EXPECT_CALL(mock_replayer, get_error_description())
     .WillOnce(Return("FAIL"));
-  EXPECT_CALL(mock_journal_replayer, destroy());
+
+  EXPECT_CALL(mock_replayer, destroy());
+  expect_close(mock_state_builder, -EINVAL);
 
   expect_mirror_image_status_exists(false);
   create_image_replayer(mock_threads);
@@ -667,21 +652,24 @@ TEST_F(TestMockImageReplayer, ReplayerResync) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
   MockBootstrapRequest mock_bootstrap_request;
-  MockJournalReplayer mock_journal_replayer;
+  MockReplayer mock_replayer;
 
-  expect_get_replay_status(mock_journal_replayer);
+  expect_get_replay_status(mock_replayer);
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
-  expect_init(mock_journal_replayer, 0);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, 0);
 
   create_image_replayer(mock_threads);
 
@@ -690,12 +678,13 @@ TEST_F(TestMockImageReplayer, ReplayerResync) {
   ASSERT_EQ(0, start_ctx.wait());
 
   // NOTIFY
-  EXPECT_CALL(mock_journal_replayer, is_resync_requested())
+  EXPECT_CALL(mock_replayer, is_resync_requested())
     .WillOnce(Return(true));
-  expect_shut_down(mock_journal_replayer, 0);
+  expect_shut_down(mock_replayer, 0);
+  expect_close(mock_state_builder, 0);
   expect_trash_move(mock_image_deleter, "global image id", true, 0);
   expect_mirror_image_status_exists(false);
-  mock_journal_replayer.replayer_listener->handle_notification();
+  mock_replayer.replayer_listener->handle_notification();
   ASSERT_FALSE(m_image_replayer->is_running());
 
   wait_for_stopped();
@@ -706,21 +695,24 @@ TEST_F(TestMockImageReplayer, ReplayerInterrupted) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
   MockBootstrapRequest mock_bootstrap_request;
-  MockJournalReplayer mock_journal_replayer;
+  MockReplayer mock_replayer;
 
-  expect_get_replay_status(mock_journal_replayer);
+  expect_get_replay_status(mock_replayer);
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
-  expect_init(mock_journal_replayer, 0);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, 0);
 
   create_image_replayer(mock_threads);
 
@@ -729,17 +721,18 @@ TEST_F(TestMockImageReplayer, ReplayerInterrupted) {
   ASSERT_EQ(0, start_ctx.wait());
 
   // NOTIFY
-  EXPECT_CALL(mock_journal_replayer, is_resync_requested())
+  EXPECT_CALL(mock_replayer, is_resync_requested())
     .WillOnce(Return(false));
-  EXPECT_CALL(mock_journal_replayer, is_replaying())
+  EXPECT_CALL(mock_replayer, is_replaying())
     .WillOnce(Return(false));
-  EXPECT_CALL(mock_journal_replayer, get_error_code())
+  EXPECT_CALL(mock_replayer, get_error_code())
     .WillOnce(Return(-EINVAL));
-  EXPECT_CALL(mock_journal_replayer, get_error_description())
+  EXPECT_CALL(mock_replayer, get_error_description())
     .WillOnce(Return("INVALID"));
-  expect_shut_down(mock_journal_replayer, 0);
+  expect_shut_down(mock_replayer, 0);
+  expect_close(mock_state_builder, 0);
   expect_mirror_image_status_exists(false);
-  mock_journal_replayer.replayer_listener->handle_notification();
+  mock_replayer.replayer_listener->handle_notification();
   ASSERT_FALSE(m_image_replayer->is_running());
 
   wait_for_stopped();
@@ -750,21 +743,24 @@ TEST_F(TestMockImageReplayer, ReplayerRenamed) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
   MockBootstrapRequest mock_bootstrap_request;
-  MockJournalReplayer mock_journal_replayer;
+  MockReplayer mock_replayer;
 
-  expect_get_replay_status(mock_journal_replayer);
+  expect_get_replay_status(mock_replayer);
   expect_set_mirror_image_status_repeatedly();
 
   InSequence seq;
-  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
-  expect_init(mock_journal_replayer, 0);
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, 0);
 
   create_image_replayer(mock_threads);
 
@@ -773,15 +769,16 @@ TEST_F(TestMockImageReplayer, ReplayerRenamed) {
   ASSERT_EQ(0, start_ctx.wait());
 
   // NOTIFY
-  EXPECT_CALL(mock_journal_replayer, is_resync_requested())
+  EXPECT_CALL(mock_replayer, is_resync_requested())
     .WillOnce(Return(false));
-  EXPECT_CALL(mock_journal_replayer, is_replaying())
+  EXPECT_CALL(mock_replayer, is_replaying())
     .WillOnce(Return(true));
   mock_local_image_ctx.name = "NEW NAME";
-  mock_journal_replayer.replayer_listener->handle_notification();
+  mock_replayer.replayer_listener->handle_notification();
 
   // STOP
-  expect_shut_down(mock_journal_replayer, 0);
+  expect_shut_down(mock_replayer, 0);
+  expect_close(mock_state_builder, 0);
   expect_mirror_image_status_exists(false);
 
   C_SaferCond stop_ctx;

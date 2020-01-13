@@ -6,6 +6,7 @@
 #include "common/Timer.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "librbd/Utils.h"
 #include "ImageReplayer.h"
 #include "InstanceReplayer.h"
