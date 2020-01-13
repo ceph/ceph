@@ -2,16 +2,28 @@
 #include "rgw_common.h"
 #include "rgw_op.h"
 #include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
+
+#include "rgw_tools.h"
+#include "rgw_zone.h"
+
+static constexpr auto AMZ_ACCOUNT_ID_ATTR = "x-amz-account-id";
 
 RGWOp* RGWHandler_S3AccountPublicAccessBlock::op_put()
 {
   return new RGWPutAccountPublicAccessBlock;
 }
 
+RGWOp* RGWHandler_S3AccountPublicAccessBlock::op_get()
+{
+  return new RGWGetAccountPublicAccessBlock;
+}
+
 int RGWPutAccountPublicAccessBlock::check_caps(RGWUserCaps& caps)
 {
   return caps.check_cap("user-policy", RGW_CAP_WRITE);
 }
+
 RGWOpType RGWPutAccountPublicAccessBlock::get_type()
 {
   return RGW_OP_PUT_ACCOUNT_PUBLIC_ACCESS_BLOCK;
@@ -75,7 +87,25 @@ void RGWPutAccountPublicAccessBlock::execute()
   bufferlist bl;
   access_conf.encode(bl);
 
-  // TODO implement write!
+  map<string, bufferlist> attrs;
+  attrs.emplace(RGW_ATTR_PUBLIC_ACCESS, std::move(bl));
+  if (const auto account_name = s->user->user_id.tenant;
+      ! account_name.empty()) {
+    auto svc = store->getRados()->pctl->svc;
+    auto obj_ctx = svc->sysobj->init_obj_ctx();
+
+    bufferlist empty_bl;
+    op_ret = rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().user_uid_pool,
+                                account_name,
+                                empty_bl, false,
+                                nullptr, real_time(), null_yield,
+                                &attrs);
+    return;
+  } else {
+    ldpp_dout(this, 5) << __func__ << "ERROR: empty account name" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
 }
 
 void RGWPutAccountPublicAccessBlock::send_response()
@@ -85,4 +115,100 @@ void RGWPutAccountPublicAccessBlock::send_response()
   }
   dump_errno(s);
   end_header(s);
+}
+
+int RGWGetAccountPublicAccessBlock::check_caps(RGWUserCaps& caps)
+{
+  return caps.check_cap("user-policy", RGW_CAP_READ);
+}
+
+RGWOpType RGWGetAccountPublicAccessBlock::get_type()
+{
+  return RGW_OP_GET_ACCOUNT_PUBLIC_ACCESS_BLOCK;
+}
+
+int RGWGetAccountPublicAccessBlock::get_params()
+{
+  if (auto it = s->info.x_meta_map.find(AMZ_ACCOUNT_ID_ATTR);
+      it != s->info.x_meta_map.end()) {
+    const auto& account_name = it->second;
+    if (account_name.empty()) {
+      ldpp_dout(this, 5) << "ERROR: empty account name"
+                         << dendl;
+      return -EINVAL;
+    }
+
+    if (account_name != s->user->user_id.tenant) {
+      ldpp_dout(this, 5) << __func__ << "ERROR: Account ID doesn't match the tenant" << dendl;
+      return -EINVAL;
+    }
+  }
+
+
+  return 0;
+}
+
+int RGWGetAccountPublicAccessBlock::verify_permission()
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if(int ret = check_caps(s->user->caps); ret == 0) {
+    return ret;
+  }
+  // TODO implement x-amz-account-id stuff here
+  return 0;
+}
+
+void RGWGetAccountPublicAccessBlock::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+
+  auto svc = store->getRados()->pctl->svc;
+  auto obj_ctx = svc->sysobj->init_obj_ctx();
+  const auto& account_name = s->user->user_id.tenant;
+
+  map<string, bufferlist> attrs;
+  bufferlist bl;
+  op_ret = rgw_get_system_obj(obj_ctx, svc->zone->get_zone_params().user_uid_pool,
+                              account_name, bl, nullptr,
+                              nullptr, null_yield,
+                              &attrs);
+
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << __func__ << " getting account sys obj. returned r=" << op_ret << dendl;
+    return;
+  }
+
+  if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+      aiter != attrs.end()) {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      access_conf.decode(iter);
+    } catch (const buffer::error& e) {
+      ldpp_dout(this, 0) << __func__ <<  "decode access_conf failed" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  } else {
+    ldpp_dout(this, 20) << "Can't find public access attr, returning the default" << dendl;
+  }
+}
+
+void RGWGetAccountPublicAccessBlock::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  access_conf.dump_xml(s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }

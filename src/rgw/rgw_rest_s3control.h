@@ -21,6 +21,7 @@
 class RGWHandler_S3AccountPublicAccessBlock : public RGWHandler_REST_S3 {
 protected:
   RGWOp *op_put() override;
+  RGWOp *op_get() override;
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_S3AccountPublicAccessBlock() override = default;
@@ -71,6 +72,18 @@ public:
   int check_caps(RGWUserCaps& caps) override;
   int verify_permission() override;
   const char* name() const override { return "put_account_public_access_block";}
+  int get_params();
+  RGWOpType get_type() override;
+  void execute() override;
+  void send_response() override;
+};
+
+class RGWGetAccountPublicAccessBlock : public RGWRESTOp {
+  PublicAccessBlockConfiguration access_conf;
+public:
+  int check_caps(RGWUserCaps& caps) override;
+  int verify_permission() override;
+  const char* name() const override { return "get_account_public_access_block";}
   int get_params();
   RGWOpType get_type() override;
   void execute() override;
