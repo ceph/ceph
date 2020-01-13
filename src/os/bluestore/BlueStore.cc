@@ -2196,8 +2196,7 @@ void BlueStore::Blob::prune_tail(Collection* coll)
   if (is_shared()) {
     return;
   }
-  if (get_blob().can_prune_tail()) {
-    dirty_blob().prune_tail();
+  if (dirty_blob().try_prune_tail()) {
     used_in_blob.prune_tail(get_blob().get_ondisk_length());
     dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
   }

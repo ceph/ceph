@@ -840,23 +840,24 @@ public:
   int verify_csum(uint64_t b_off, const ceph::buffer::list& bl, int* b_bad_off,
 		  uint64_t *bad_csum) const;
 
-  bool can_prune_tail() const {
-    return
-      extents.size() > 1 &&  // if it's all invalid it's not pruning.
+  bool try_prune_tail() {
+    bool res = false;
+    if (extents.size() > 1 &&  // if it's all invalid it's not pruning.
       !extents.back().is_valid() &&
-      !has_unused();
-  }
-  void prune_tail() {
-    const auto &p = extents.back();
-    logical_length -= p.length;
-    extents.pop_back();
-    if (has_csum()) {
-      ceph::buffer::ptr t;
-      t.swap(csum_data);
-      csum_data = ceph::buffer::ptr(t.c_str(),
-			    get_logical_length() / get_csum_chunk_size() *
-			    get_csum_value_size());
+      !has_unused()) {
+      const auto &p = extents.back();
+      logical_length -= p.length;
+      extents.pop_back();
+      if (has_csum()) {
+        ceph::buffer::ptr t;
+        t.swap(csum_data);
+        csum_data = ceph::buffer::ptr(t.c_str(),
+			      get_logical_length() / get_csum_chunk_size() *
+			      get_csum_value_size());
+      }
+      res = true;
     }
+    return res;
   }
   void add_tail(uint32_t new_len) {
     ceph_assert(is_mutable());
