@@ -10,13 +10,8 @@ tasks:
 - install:
     branch: nautilus
     exclude_packages:
-      - librados3
-      - ceph-mgr-dashboard
-      - ceph-mgr-diskprediction-local
-      - ceph-mgr-rook
       - ceph-mgr-cephadm
       - cephadm
-    extra_packages: ['librados2']
 - print: "**** done install nautilus"
 - ceph:
 - print: "**** done ceph"
