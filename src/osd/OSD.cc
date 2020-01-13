@@ -6001,11 +6001,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         ss << "ok";
     } else if (command == "rmomapkey") {
       string key;
-      set<string> keys;
       cmd_getval(service->cct, cmdmap, "key", key);
 
-      keys.insert(key);
-      t.omap_rmkeys(coll_t(pgid), ghobject_t(obj), keys);
+      t.omap_rmkey(coll_t(pgid), ghobject_t(obj), key);
       r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
         ss << "error=" << r;
