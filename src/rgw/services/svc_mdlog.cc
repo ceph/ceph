@@ -260,7 +260,7 @@ Cursor RGWSI_MDLog::find_oldest_period()
       RGWPeriod period;
       int r = period_puller->pull(predecessor, period);
       if (r < 0) {
-        return Cursor{r};
+        return cursor;
       }
       auto prev = period_history->insert(std::move(period));
       if (!prev) {
@@ -290,7 +290,6 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
     if (!cursor) {
       return cursor;
     }
-
     // write the initial history
     state.oldest_realm_epoch = cursor.get_epoch();
     state.oldest_period_id = cursor.get_period().get_id();
@@ -313,7 +312,20 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
   auto cursor = period_history->lookup(state.oldest_realm_epoch);
   if (cursor) {
     return cursor;
+  } else {
+    cursor = find_oldest_period();
+    state.oldest_realm_epoch = cursor.get_epoch();
+    state.oldest_period_id = cursor.get_period().get_id();
+    ldout(cct, 10) << "rewriting mdlog history" << dendl;
+    ret = write_history(state, &objv);
+    if (ret < 0 && ret != -ECANCELED) {
+    ldout(cct, 1) << "failed to write mdlog history: "
+          << cpp_strerror(ret) << dendl;
+    return Cursor{ret};
+    }
+    return cursor;
   }
+
   // pull the oldest period by id
   RGWPeriod period;
   ret = period_puller->pull(state.oldest_period_id, period);
