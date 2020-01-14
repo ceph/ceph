@@ -1,0 +1,9 @@
+tasks:
+        - deepsea.create_pools:
+                  iscsi-images:
+                  cephfs:
+                  rbd:
+                  openstack:
+        - deepsea.orch:
+                  stage: 4
+        - deepsea.validation:

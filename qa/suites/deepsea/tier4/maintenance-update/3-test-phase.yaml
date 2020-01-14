@@ -1,0 +1,13 @@
+tasks:
+        - exec:
+                  client.salt_master:
+                          - "ceph --version"
+                          - "ceph -s"
+        - deepsea.repository:
+                  patch: all
+        - deepsea.reboot:
+                  all:
+        - exec:
+                  client.salt_master:
+                          - "ceph -s"
+                          - "salt-run status.report 2>/dev/null"
