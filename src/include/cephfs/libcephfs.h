@@ -356,6 +356,16 @@ int ceph_release(struct ceph_mount_info *cmount);
 void ceph_shutdown(struct ceph_mount_info *cmount);
 
 /**
+ * Return associated client addresses
+ *
+ * @param cmount the mount handle
+ * @param addrs the output addresses
+ * @returns 0 on success, a negative error code on failure
+ * @note the returned addrs should be free by the caller
+ */
+int ceph_getaddrs(struct ceph_mount_info *cmount, char** addrs);
+
+/**
  * Get a global id for current instance
  *
  * The handle should not be mounted. This should be called on completion of
