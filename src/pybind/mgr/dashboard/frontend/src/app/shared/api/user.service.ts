@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { UserFormModel } from '../../core/auth/user-form/user-form.model';
@@ -38,5 +38,17 @@ export class UserService {
       old_password: oldPassword,
       new_password: newPassword
     });
+  }
+
+  validatePassword(password: string, username: string = null, oldPassword: string = null) {
+    let params = new HttpParams();
+    params = params.append('password', password);
+    if (username) {
+      params = params.append('username', username);
+    }
+    if (oldPassword) {
+      params = params.append('old_password', oldPassword);
+    }
+    return this.http.post('api/user/validate_password', null, { params });
   }
 }

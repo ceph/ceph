@@ -40,7 +40,7 @@
                  for="password">
           <ng-container i18n>Password</ng-container>
         <cd-helper class="text-pre"
-                   html="{{ requiredPasswordRulesMessage }}">
+                   html="{{ passwordPolicyHelpText }}">
         </cd-helper>
           </label>
           <div class="col-sm-9">
@@ -59,18 +59,19 @@
                 </button>
               </span>
             </div>
-            <div class="passwordStrengthLevel">
-              <div class="{{ passwordStrengthLevel }}"
+            <div class="password-strength-level">
+              <div class="{{ passwordStrengthLevelClass }}"
                    data-toggle="tooltip"
-                   title="{{ passwordStrengthDescription }}">
+                   title="{{ passwordValuation }}">
               </div>
             </div>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('password', formDir, 'required')"
                   i18n>This field is required.</span>
             <span class="invalid-feedback"
-                  *ngIf="userForm.showError('password', formDir, 'checkPassword')"
-                  i18n>Too weak</span>
+                  *ngIf="userForm.showError('password', formDir, 'passwordPolicy')">
+              {{ passwordValuation }}
+            </span>
           </div>
         </div>
 

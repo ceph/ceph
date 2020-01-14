@@ -913,20 +913,32 @@ def _set_func_permissions(func, permissions):
 
 
 def ReadPermission(func):  # noqa: N802
+    """
+    :raises PermissionNotValid: If the permission is missing.
+    """
     _set_func_permissions(func, Permission.READ)
     return func
 
 
 def CreatePermission(func):  # noqa: N802
+    """
+    :raises PermissionNotValid: If the permission is missing.
+    """
     _set_func_permissions(func, Permission.CREATE)
     return func
 
 
 def DeletePermission(func):  # noqa: N802
+    """
+    :raises PermissionNotValid: If the permission is missing.
+    """
     _set_func_permissions(func, Permission.DELETE)
     return func
 
 
 def UpdatePermission(func):  # noqa: N802
+    """
+    :raises PermissionNotValid: If the permission is missing.
+    """
     _set_func_permissions(func, Permission.UPDATE)
     return func
