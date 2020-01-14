@@ -743,7 +743,6 @@ public:
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< MNotifyRec >,
-      boost::statechart::transition< NeedActingChange, WaitActingChange >,
       boost::statechart::custom_reaction<SetForceRecovery>,
       boost::statechart::custom_reaction<UnsetForceRecovery>,
       boost::statechart::custom_reaction<SetForceBackfill>,
@@ -1253,6 +1252,7 @@ public:
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::custom_reaction< GotLog >,
       boost::statechart::custom_reaction< AdvMap >,
+      boost::statechart::transition< NeedActingChange, WaitActingChange >,
       boost::statechart::transition< IsIncomplete, Incomplete >
       > reactions;
     boost::statechart::result react(const AdvMap&);
