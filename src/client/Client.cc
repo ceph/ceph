@@ -9884,6 +9884,10 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
   int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
+
+  if (!(in.get()->is_dir()))
+    return -ENOTDIR;
+
   if (cwd != in)
     cwd.swap(in);
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
