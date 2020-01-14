@@ -362,6 +362,22 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
+  bool is_export_ephemeral_distributed_pinned = false;
+  bool is_export_ephemeral_random_pinned = false;
+
+  bool is_export_ephemeral_distributed_migrating = false;
+  bool is_export_ephemeral_random_migrating = false;
+
+  void finish_export_ephemeral_distributed_migration() {
+    is_export_ephemeral_distributed_migrating = false;
+    is_export_ephemeral_distributed_pinned = true;
+  }
+
+  void finish_export_ephemeral_random_migration() {
+    is_export_ephemeral_random_migrating = false;
+    is_export_ephemeral_random_pinned = true;
+  }
+
   std::string_view pin_name(int p) const override;
 
   std::ostream& print_db_line_prefix(std::ostream& out) override;
@@ -910,8 +926,14 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   }
 
   void maybe_export_pin(bool update=false);
+  void maybe_export_ephemeral_random_pin(bool update=false);
+  void maybe_export_ephemeral_distributed_pin(bool update=false);
   void set_export_pin(mds_rank_t rank);
+  void set_export_ephemeral_random_pin(double probablitiy=0);
+  void set_export_ephemeral_distributed_pin(bool val=false);
   mds_rank_t get_export_pin(bool inherit=true) const;
+  double get_export_ephemeral_random_pin(bool inherit=true) const;
+  bool get_export_ephemeral_distributed_pin() const;
   bool is_exportable(mds_rank_t dest) const;
 
   void print(std::ostream& out) override;
@@ -951,6 +973,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   // list item node for when we have unpropagated rstat data
   elist<CInode*>::item dirty_rstat_item;
+
+  elist<CInode*>::item ephemeral_pin_inode;
 
   mempool::mds_co::set<client_t> client_snap_caps;
   mempool::mds_co::compact_map<snapid_t, mempool::mds_co::set<client_t> > client_need_snapflush;
