@@ -180,8 +180,6 @@ for u in ceph-$FSID@mgr.y; do
     systemctl is-active $u
 done
 
-exit 0
-
 for f in `seq 1 30`; do
     if $CEPHADM shell --fsid $FSID \
 	     --config $CONFIG --keyring $KEYRING -- \
