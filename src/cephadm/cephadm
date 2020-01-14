@@ -2562,7 +2562,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--mgr-id',
         required=False,
-        help='mgr id (default: local hostname)')
+        help='mgr id (default: randomly generated)')
     parser_bootstrap.add_argument(
         '--fsid',
         help='cluster FSID')
