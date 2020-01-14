@@ -3,6 +3,7 @@ import { Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 
 import { UserService } from '../../../shared/api/user.service';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -13,7 +14,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { UserChangePasswordService } from '../../../shared/services/user-change-password.service';
+import { PasswordPolicyService } from '../../../shared/services/password-policy.service';
 
 @Component({
   selector: 'cd-user-password-form',
@@ -24,9 +25,9 @@ export class UserPasswordFormComponent {
   userForm: CdFormGroup;
   action: string;
   resource: string;
-  requiredPasswordRulesMessage: string;
-  passwordStrengthLevel: string;
-  passwordStrengthDescription: string;
+  passwordPolicyHelpText: string;
+  passwordStrengthLevelClass: string;
+  passwordValuation: string;
   icons = Icons;
 
   constructor(
@@ -37,7 +38,7 @@ export class UserPasswordFormComponent {
     private authStorageService: AuthStorageService,
     private formBuilder: CdFormBuilder,
     private router: Router,
-    private userChangePasswordService: UserChangePasswordService
+    private passwordPolicyService: PasswordPolicyService
   ) {
     this.action = this.actionLabels.CHANGE;
     this.resource = this.i18n('password');
@@ -45,7 +46,7 @@ export class UserPasswordFormComponent {
   }
 
   createForm() {
-    this.requiredPasswordRulesMessage = this.userChangePasswordService.getPasswordRulesMessage();
+    this.passwordPolicyHelpText = this.passwordPolicyService.getHelpText();
     this.userForm = this.formBuilder.group(
       {
         oldpassword: [
@@ -69,10 +70,19 @@ export class UserPasswordFormComponent {
                 this.userForm &&
                 this.userForm.getValue('oldpassword') === this.userForm.getValue('newpassword')
               );
-            }),
-            CdValidators.custom('checkPassword', () => {
-              return this.userForm && this.checkPassword(this.userForm.getValue('newpassword'));
             })
+          ],
+          [
+            CdValidators.passwordPolicy(
+              this.userService,
+              () => this.authStorageService.getUsername(),
+              (_valid: boolean, credits: number, valuation: string) => {
+                this.passwordStrengthLevelClass = this.passwordPolicyService.mapCreditsToCssClass(
+                  credits
+                );
+                this.passwordValuation = _.defaultTo(valuation, '');
+              }
+            )
           ]
         ],
         confirmnewpassword: [null, [Validators.required]]
@@ -81,14 +91,6 @@ export class UserPasswordFormComponent {
         validators: [CdValidators.match('newpassword', 'confirmnewpassword')]
       }
     );
-  }
-
-  checkPassword(password: string) {
-    [
-      this.passwordStrengthLevel,
-      this.passwordStrengthDescription
-    ] = this.userChangePasswordService.checkPasswordComplexity(password);
-    return password && this.passwordStrengthLevel === 'passwordStrengthLevel0';
   }
 
   onSubmit() {
