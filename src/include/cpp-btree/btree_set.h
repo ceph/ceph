@@ -44,35 +44,33 @@
 // reason, `insert()` and `erase()` return a valid iterator at the current
 // position.
 
-#ifndef ABSL_CONTAINER_BTREE_SET_H_
-#define ABSL_CONTAINER_BTREE_SET_H_
+#pragma once
 
-#include "absl/container/internal/btree.h"  // IWYU pragma: export
-#include "absl/container/internal/btree_container.h"  // IWYU pragma: export
+#include "btree.h"
+#include "btree_container.h"
 
-namespace absl {
-ABSL_NAMESPACE_BEGIN
+namespace btree {
 
-// absl::btree_set<>
+// btree::btree_set<>
 //
-// An `absl::btree_set<K>` is an ordered associative container of unique key
+// An `btree::btree_set<K>` is an ordered associative container of unique key
 // values designed to be a more efficient replacement for `std::set` (in most
 // cases).
 //
 // Keys are sorted using an (optional) comparison function, which defaults to
 // `std::less<K>`.
 //
-// An `absl::btree_set<K>` uses a default allocator of `std::allocator<K>` to
+// An `btree::btree_set<K>` uses a default allocator of `std::allocator<K>` to
 // allocate (and deallocate) nodes, and construct and destruct values within
 // those nodes. You may instead specify a custom allocator `A` (which in turn
 // requires specifying a custom comparator `C`) as in
-// `absl::btree_set<K, C, A>`.
+// `btree::btree_set<K, C, A>`.
 //
 template <typename Key, typename Compare = std::less<Key>,
           typename Alloc = std::allocator<Key>>
 class btree_set
-    : public container_internal::btree_set_container<
-          container_internal::btree<container_internal::set_params<
+    : public internal::btree_set_container<
+          internal::btree<internal::set_params<
               Key, Compare, Alloc, /*TargetNodeSize=*/256,
               /*Multi=*/false>>> {
   using Base = typename btree_set::btree_set_container;
@@ -85,37 +83,37 @@ class btree_set
   //
   // * Default constructor
   //
-  //   absl::btree_set<std::string> set1;
+  //   btree::btree_set<std::string> set1;
   //
   // * Initializer List constructor
   //
-  //   absl::btree_set<std::string> set2 =
+  //   btree::btree_set<std::string> set2 =
   //       {{"huey"}, {"dewey"}, {"louie"},};
   //
   // * Copy constructor
   //
-  //   absl::btree_set<std::string> set3(set2);
+  //   btree::btree_set<std::string> set3(set2);
   //
   // * Copy assignment operator
   //
-  //  absl::btree_set<std::string> set4;
+  //  btree::btree_set<std::string> set4;
   //  set4 = set3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   absl::btree_set<std::string> set5(std::move(set4));
+  //   btree::btree_set<std::string> set5(std::move(set4));
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   absl::btree_set<std::string> set6;
+  //   btree::btree_set<std::string> set6;
   //   set6 = std::move(set5);
   //
   // * Range constructor
   //
   //   std::vector<std::string> v = {"a", "b"};
-  //   absl::btree_set<std::string> set7(v.begin(), v.end());
+  //   btree::btree_set<std::string> set7(v.begin(), v.end());
   btree_set() {}
   using Base::Base;
 
@@ -253,29 +251,6 @@ class btree_set
   // invalidated.
   using Base::emplace_hint;
 
-  // btree_set::extract()
-  //
-  // Extracts the indicated element, erasing it in the process, and returns it
-  // as a C++17-compatible node handle. Overloads are listed below.
-  //
-  // node_type extract(const_iterator position):
-  //
-  //   Extracts the element at the indicated position and returns a node handle
-  //   owning that extracted data.
-  //
-  // template <typename K> node_type extract(const K& x):
-  //
-  //   Extracts the element with the key matching the passed key value and
-  //   returns a node handle owning that extracted data. If the `btree_set`
-  //   does not contain an element with a matching key, this function returns an
-  //   empty node handle.
-  //
-  // NOTE: In this context, `node_type` refers to the C++17 concept of a
-  // move-only type that owns and provides access to the elements in associative
-  // containers (https://en.cppreference.com/w/cpp/container/node_handle).
-  // It does NOT refer to the data layout of the underlying btree.
-  using Base::extract;
-
   // btree_set::merge()
   //
   // Extracts elements from a given `source` btree_set into this
@@ -352,15 +327,15 @@ class btree_set
   using Base::value_comp;
 };
 
-// absl::swap(absl::btree_set<>, absl::btree_set<>)
+// btree::swap(btree::btree_set<>, btree::btree_set<>)
 //
-// Swaps the contents of two `absl::btree_set` containers.
+// Swaps the contents of two `btree::btree_set` containers.
 template <typename K, typename C, typename A>
 void swap(btree_set<K, C, A> &x, btree_set<K, C, A> &y) {
   return x.swap(y);
 }
 
-// absl::erase_if(absl::btree_set<>, Pred)
+// btree::erase_if(btree::btree_set<>, Pred)
 //
 // Erases all elements that satisfy the predicate pred from the container.
 template <typename K, typename C, typename A, typename Pred>
@@ -374,27 +349,27 @@ void erase_if(btree_set<K, C, A> &set, Pred pred) {
   }
 }
 
-// absl::btree_multiset<>
+// btree::btree_multiset<>
 //
-// An `absl::btree_multiset<K>` is an ordered associative container of
+// An `btree::btree_multiset<K>` is an ordered associative container of
 // keys and associated values designed to be a more efficient replacement
-// for `std::multiset` (in most cases). Unlike `absl::btree_set`, a B-tree
+// for `std::multiset` (in most cases). Unlike `btree::btree_set`, a B-tree
 // multiset allows equivalent elements.
 //
 // Keys are sorted using an (optional) comparison function, which defaults to
 // `std::less<K>`.
 //
-// An `absl::btree_multiset<K>` uses a default allocator of `std::allocator<K>`
+// An `btree::btree_multiset<K>` uses a default allocator of `std::allocator<K>`
 // to allocate (and deallocate) nodes, and construct and destruct values within
 // those nodes. You may instead specify a custom allocator `A` (which in turn
 // requires specifying a custom comparator `C`) as in
-// `absl::btree_multiset<K, C, A>`.
+// `btree::btree_multiset<K, C, A>`.
 //
 template <typename Key, typename Compare = std::less<Key>,
           typename Alloc = std::allocator<Key>>
 class btree_multiset
-    : public container_internal::btree_multiset_container<
-          container_internal::btree<container_internal::set_params<
+    : public internal::btree_multiset_container<
+          internal::btree<internal::set_params<
               Key, Compare, Alloc, /*TargetNodeSize=*/256,
               /*Multi=*/true>>> {
   using Base = typename btree_multiset::btree_multiset_container;
@@ -407,37 +382,37 @@ class btree_multiset
   //
   // * Default constructor
   //
-  //   absl::btree_multiset<std::string> set1;
+  //   btree::btree_multiset<std::string> set1;
   //
   // * Initializer List constructor
   //
-  //   absl::btree_multiset<std::string> set2 =
+  //   btree::btree_multiset<std::string> set2 =
   //       {{"huey"}, {"dewey"}, {"louie"},};
   //
   // * Copy constructor
   //
-  //   absl::btree_multiset<std::string> set3(set2);
+  //   btree::btree_multiset<std::string> set3(set2);
   //
   // * Copy assignment operator
   //
-  //  absl::btree_multiset<std::string> set4;
+  //  btree::btree_multiset<std::string> set4;
   //  set4 = set3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   absl::btree_multiset<std::string> set5(std::move(set4));
+  //   btree::btree_multiset<std::string> set5(std::move(set4));
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   absl::btree_multiset<std::string> set6;
+  //   btree::btree_multiset<std::string> set6;
   //   set6 = std::move(set5);
   //
   // * Range constructor
   //
   //   std::vector<std::string> v = {"a", "b"};
-  //   absl::btree_multiset<std::string> set7(v.begin(), v.end());
+  //   btree::btree_multiset<std::string> set7(v.begin(), v.end());
   btree_multiset() {}
   using Base::Base;
 
@@ -655,15 +630,15 @@ class btree_multiset
   using Base::value_comp;
 };
 
-// absl::swap(absl::btree_multiset<>, absl::btree_multiset<>)
+// btree::swap(btree::btree_multiset<>, btree::btree_multiset<>)
 //
-// Swaps the contents of two `absl::btree_multiset` containers.
+// Swaps the contents of two `btree::btree_multiset` containers.
 template <typename K, typename C, typename A>
 void swap(btree_multiset<K, C, A> &x, btree_multiset<K, C, A> &y) {
   return x.swap(y);
 }
 
-// absl::erase_if(absl::btree_multiset<>, Pred)
+// btree::erase_if(btree::btree_multiset<>, Pred)
 //
 // Erases all elements that satisfy the predicate pred from the container.
 template <typename K, typename C, typename A, typename Pred>
@@ -677,7 +652,4 @@ void erase_if(btree_multiset<K, C, A> &set, Pred pred) {
   }
 }
 
-ABSL_NAMESPACE_END
-}  // namespace absl
-
-#endif  // ABSL_CONTAINER_BTREE_SET_H_
+}  // namespace btree
