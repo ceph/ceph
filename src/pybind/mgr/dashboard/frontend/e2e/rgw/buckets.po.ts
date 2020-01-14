@@ -11,6 +11,14 @@ export class BucketsPageHelper extends PageHelper {
   versioningStateEnabled = 'Enabled';
   versioningStateSuspended = 'Suspended';
 
+  private async selectOwner(owner: string) {
+    return this.selectOption('owner', owner);
+  }
+
+  private async selectPlacementTarget(placementTarget: string) {
+    return this.selectOption('placement-target', placementTarget);
+  }
+
   /**
    * TODO add check to verify the existance of the bucket!
    * TODO let it print a meaningful error message (for devs) if it does not exist!
@@ -21,15 +29,11 @@ export class BucketsPageHelper extends PageHelper {
     await element(by.id('bid')).sendKeys(name);
 
     // Select bucket owner
-    await element(by.id('owner')).click();
-    await element(by.cssContainingText('select[name=owner] option', owner)).click();
+    await this.selectOwner(owner);
     await expect(element(by.id('owner')).getAttribute('class')).toContain('ng-valid');
 
     // Select bucket placement target:
-    await element(by.id('owner')).click();
-    await element(
-      by.cssContainingText('select[name=placement-target] option', placementTarget)
-    ).click();
+    await this.selectPlacementTarget(placementTarget);
     await expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-valid');
 
     // Click the create button and wait for bucket to be made
@@ -50,8 +54,7 @@ export class BucketsPageHelper extends PageHelper {
     await expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
       'default-placement'
     );
-    await element(by.id('owner')).click(); // click owner dropdown menu
-    await element(by.cssContainingText('select[name=owner] option', new_owner)).click(); // select the new user
+    await this.selectOwner(new_owner);
 
     // Enable versioning
     await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
@@ -116,12 +119,11 @@ export class BucketsPageHelper extends PageHelper {
   async testInvalidCreate() {
     await this.navigateTo('create');
     const nameInputField = element(by.id('bid')); // Grabs name box field
-    const ownerDropDown = element(by.id('owner')); // Grab owner field
 
     // Gives an invalid name (too short), then waits for dashboard to determine validity
     await nameInputField.sendKeys('rq');
 
-    await ownerDropDown.click(); // To trigger a validation
+    await element(by.id('owner')).click(); // To trigger a validation
 
     await this.waitFn(async () => {
       // Waiting for website to decide if name is valid or not
@@ -138,14 +140,12 @@ export class BucketsPageHelper extends PageHelper {
     );
 
     // Test invalid owner input
-    await ownerDropDown.click(); // Clicks the Owner drop down on the Create Bucket page
     // select some valid option. The owner drop down error message will not appear unless a valid user was selected at
     // one point before the invalid placeholder user is selected.
-    await element(by.cssContainingText('select[name=owner] option', 'dev')).click();
+    await this.selectOwner('dev');
 
-    await ownerDropDown.click();
     // select the first option, which is invalid because it is a placeholder
-    await element(by.cssContainingText('select[name=owner] option', 'Select a user')).click();
+    await this.selectOwner('Select a user');
 
     await nameInputField.click();
 
@@ -158,15 +158,10 @@ export class BucketsPageHelper extends PageHelper {
     );
 
     // Check invalid placement target input
-    await ownerDropDown.click();
-    await element(by.cssContainingText('select[name=owner] option', 'dev')).click();
+    await this.selectOwner('dev');
     // The drop down error message will not appear unless a valid option is previsously selected.
-    await element(
-      by.cssContainingText('select[name=placement-target] option', 'default-placement')
-    ).click();
-    await element(
-      by.cssContainingText('select[name=placement-target] option', 'Select a placement target')
-    ).click();
+    await this.selectPlacementTarget('default-placement');
+    await this.selectPlacementTarget('Select a placement target');
     await nameInputField.click(); // Trigger validation
     await expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-invalid');
     await expect(element(by.css('#placement-target + .invalid-feedback')).getText()).toMatch(
@@ -196,11 +191,9 @@ export class BucketsPageHelper extends PageHelper {
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
-    const ownerDropDown = element(by.id('owner'));
-    await this.waitClickableAndClick(ownerDropDown);
 
     // select the first option, which is invalid because it is a placeholder
-    await element(by.cssContainingText('select[name=owner] option', 'Select a user')).click();
+    await this.selectOwner('Select a user');
 
     // Changes when updated to bootstrap 4 -> Error message takes a long time to appear unless another field
     // is clicked on. For that reason, I'm having the test click on the edit button before checking for errors
