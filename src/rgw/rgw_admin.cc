@@ -5318,20 +5318,24 @@ int main(int argc, const char **argv)
   } /* OPT_BUCKETS_LIST */
 
   if (opt_cmd == OPT_BUCKET_RADOS_LIST) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-
     RGWRadosList lister(store,
 			max_concurrent_ios, orphan_stale_secs, tenant);
-    ret = lister.run(bucket_name);
+    if (bucket_name.empty()) {
+      ret = lister.run();
+    } else {
+      ret = lister.run(bucket_name);
+    }
+
     if (ret < 0) {
-      cerr <<
+      std::cerr <<
 	"ERROR: bucket radoslist failed to finish before " <<
 	"encountering error: " << cpp_strerror(-ret) << std::endl;
-      cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
-	"BE USED TO MANUALLY DELETE ORPHANS" << std::endl;
+      std::cerr << "************************************"
+	"************************************" << std::endl;
+      std::cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
+	"BE USED IN DELETING ORPHANS" << std::endl;
+      std::cerr << "************************************"
+	"************************************" << std::endl;
       return -ret;
     }
   }

@@ -210,6 +210,14 @@ public:
 
 
 class RGWRadosList {
+
+  /*
+   * process_t describes how to process a irectory, we will either
+   * process the whole thing (entire_container == true) or a portion
+   * of it (entire_container == false). When we only process a
+   * portion, we will list the specific keys and/or specific lexical
+   * prefixes.
+   */
   struct process_t {
     bool entire_container;
     std::set<rgw_obj_key> filter_keys;
@@ -252,7 +260,6 @@ class RGWRadosList {
   int handle_stat_result(RGWRados::Object::Stat::Result& result,
 			 std::set<string>& obj_oids);
   int pop_and_handle_stat_op(RGWObjectCtx& obj_ctx,
-			     map<int, list<string> >& oids,
 			     std::deque<RGWRados::Object::Stat>& ops);
 
 public:
@@ -267,19 +274,16 @@ public:
     tenant_name(_tenant_name)
   {}
 
-#if 0
-  // possible future expansion -- have it find all bucket....
-  int RGWRadosList::build_buckets_instance_index();
-#endif
+  int process_bucket(const std::string& bucket_instance_id,
+		     const std::string& prefix,
+		     const std::set<rgw_obj_key>& entries_filter);
 
-  int build_linked_oids_for_bucket(const std::string& bucket_instance_id,
-				   const std::string& prefix,
-				   const std::set<rgw_obj_key>& entries_filter,
-				   std::map<int, list<string>>& oids);
+  int do_incomplete_multipart(RGWRados* store, RGWBucketInfo& bucket_info);
 
   int build_linked_oids_index();
 
   int run(const std::string& bucket_id);
+  int run();
 }; // class RGWRadosList
 
 #endif
