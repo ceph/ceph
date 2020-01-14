@@ -38,6 +38,8 @@ export class PoolPageHelper extends PageHelper {
     await nameInput.sendKeys(name);
     await this.selectOption('poolType', 'replicated');
 
+    await this.expectSelectOption('pgAutoscaleMode', 'on');
+    await this.selectOption('pgAutoscaleMode', 'off'); // To show pgNum field
     await $('input[name=pgNum]').sendKeys(
       protractor.Key.CONTROL,
       'a',
