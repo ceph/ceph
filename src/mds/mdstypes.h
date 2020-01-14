@@ -596,6 +596,9 @@ struct inode_t {
 
   mds_rank_t export_pin = MDS_RANK_NONE;
 
+  double export_ephemeral_random_pin = 0;
+  bool export_ephemeral_distributed_pin = false;
+
   // special stuff
   version_t version = 0;           // auth only
   version_t file_data_version = 0; // auth only
@@ -618,7 +621,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(15, 6, bl);
+  ENCODE_START(16, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -670,13 +673,16 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 
   encode(export_pin, bl);
 
+  encode(export_ephemeral_random_pin, bl);
+  encode(export_ephemeral_distributed_pin, bl);
+
   ENCODE_FINISH(bl);
 }
 
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -766,6 +772,14 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
     export_pin = MDS_RANK_NONE;
   }
 
+  if (struct_v >= 16) {
+    decode(export_ephemeral_random_pin, p);
+    decode(export_ephemeral_distributed_pin, p);
+  } else {
+    export_ephemeral_random_pin = 0;
+    export_ephemeral_distributed_pin = false;
+  }
+
   DECODE_FINISH(p);
 }
 
@@ -803,6 +817,8 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_unsigned("time_warp_seq", time_warp_seq);
   f->dump_unsigned("change_attr", change_attr);
   f->dump_int("export_pin", export_pin);
+  f->dump_int("export_ephemeral_random_pin", export_ephemeral_random_pin);
+  f->dump_int("export_ephemeral_distributed_pin", export_ephemeral_distributed_pin);
 
   f->open_array_section("client_ranges");
   for (const auto &p : client_ranges) {
