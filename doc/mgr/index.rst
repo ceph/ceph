@@ -29,6 +29,7 @@ sensible.
     Writing modules <modules>
     Writing orchestrator plugins <orchestrator_modules>
     Dashboard module <dashboard>
+    Alerts module <alerts>
     DiskPrediction module <diskprediction>
     Local pool module <localpool>
     RESTful module <restful>
