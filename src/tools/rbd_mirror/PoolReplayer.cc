@@ -254,6 +254,8 @@ bool PoolReplayer::is_running() const {
 
 void PoolReplayer::init()
 {
+  Mutex::Locker l(m_lock);
+
   assert(!m_pool_replayer_thread.is_started());
 
   // reset state
@@ -383,8 +385,6 @@ int PoolReplayer::init_rados(const std::string &cluster_name,
 			     const std::string &description,
 			     RadosRef *rados_ref,
                              bool strip_cluster_overrides) {
-  rados_ref->reset(new librados::Rados());
-
   // NOTE: manually bootstrap a CephContext here instead of via
   // the librados API to avoid mixing global singletons between
   // the librados shared library and the daemon
@@ -468,6 +468,8 @@ int PoolReplayer::init_rados(const std::string &cluster_name,
   cct->_conf->apply_changes(nullptr);
   cct->_conf->complain_about_parse_errors(cct);
 
+  rados_ref->reset(new librados::Rados());
+
   r = (*rados_ref)->init_with_context(cct);
   assert(r == 0);
   cct->put();
@@ -511,6 +513,18 @@ void PoolReplayer::run()
   }
 
   m_instance_replayer->stop();
+}
+
+void PoolReplayer::reopen_logs()
+{
+  Mutex::Locker l(m_lock);
+
+  if (m_local_rados) {
+    reinterpret_cast<CephContext *>(m_local_rados->cct())->reopen_logs();
+  }
+  if (m_remote_rados) {
+    reinterpret_cast<CephContext *>(m_remote_rados->cct())->reopen_logs();
+  }
 }
 
 void PoolReplayer::print_status(Formatter *f, stringstream *ss)
