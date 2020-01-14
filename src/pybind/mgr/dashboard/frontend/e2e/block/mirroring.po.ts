@@ -20,8 +20,7 @@ export class MirroringPageHelper extends PageHelper {
     await this.waitClickableAndClick(editModeButton);
     // Clicks the drop down in the edit pop-up, then clicks the Update button
     await this.waitVisibility($('.modal-content'));
-    await element(by.id('mirrorMode')).click(); // Mode select box
-    await element(by.cssContainingText('select[name=mirrorMode] option', option)).click();
+    await this.selectOption('mirrorMode', option);
 
     // Clicks update button and checks if the mode has been changed
     await element(by.cssContainingText('button', 'Update')).click();

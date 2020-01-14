@@ -36,11 +36,8 @@ export class PoolPageHelper extends PageHelper {
       return Promise.reject(`Placement groups ${placement_groups} are not a power of 2`);
     }
     await nameInput.sendKeys(name);
-    await element(by.cssContainingText('select[name=poolType] option', 'replicated')).click();
+    await this.selectOption('poolType', 'replicated');
 
-    await expect(element(by.css('select[name=poolType] option:checked')).getText()).toBe(
-      ' replicated '
-    );
     await $('input[name=pgNum]').sendKeys(
       protractor.Key.CONTROL,
       'a',
