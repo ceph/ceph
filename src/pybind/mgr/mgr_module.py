@@ -1318,6 +1318,17 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_osd_perf_counters(query_id)
 
+    def is_authorized(self, arguments):
+        """
+        Verifies that the current session caps permit executing the py service
+        or current module with the provided arguments. This provides a generic
+        way to allow modules to restrict by more fine-grained controls (e.g.
+        pools).
+
+        :param arguments: dict of key/value arguments to test
+        """
+        return self._ceph_is_authorized(arguments)
+
 
 class PersistentStoreDict(object):
     def __init__(self, mgr, prefix):

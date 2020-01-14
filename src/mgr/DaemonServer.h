@@ -83,8 +83,8 @@ protected:
   static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
                                            const std::vector<MonCommand> &commands);
   bool _allowed_command(
-    MgrSession *s, const string &module, const string &prefix,
-    const cmdmap_t& cmdmap,
+    MgrSession *s, const string &service, const string &module,
+    const string &prefix, const cmdmap_t& cmdmap,
     const map<string,string>& param_str_map,
     const MonCommand *this_cmd);
 
@@ -169,6 +169,9 @@ public:
                           const std::set <std::string> &changed) override;
 
   void schedule_tick(double delay_sec);
+
+  void log_access_denied(std::shared_ptr<CommandContext>& cmdctx,
+                         MgrSession* session, std::stringstream& ss);
 };
 
 #endif
