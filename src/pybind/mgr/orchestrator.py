@@ -650,7 +650,7 @@ def raise_if_exception(c):
         try:
             e = copy_to_this_subinterpreter(c.exception)
         except (KeyError, AttributeError):
-            raise Exception(str(c.exception))
+            raise Exception('{}: {}'.format(type(c.exception), c.exception))
         raise e
 
 
