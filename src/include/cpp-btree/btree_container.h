@@ -12,22 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
-#define ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
+#pragma once
 
 #include <algorithm>
 #include <initializer_list>
 #include <iterator>
+#include <type_traits>
 #include <utility>
 
-#include "absl/base/internal/throw_delegate.h"
-#include "absl/container/internal/btree.h"  // IWYU pragma: export
-#include "absl/container/internal/common.h"
-#include "absl/meta/type_traits.h"
+#include "btree.h"
 
-namespace absl {
-ABSL_NAMESPACE_BEGIN
-namespace container_internal {
+namespace btree::internal {
 
 // A common base class for btree_set, btree_map, btree_multiset, and
 // btree_multimap.
@@ -40,10 +35,14 @@ class btree_container {
   // `key_arg<K>` evaluates to `K` when the functors are transparent and to
   // `key_type` otherwise. It permits template argument deduction on `K` for the
   // transparent case.
+  template <class Compare>
+  using is_transparent_t = typename Compare::is_transparent;
   template <class K>
   using key_arg =
-      typename KeyArg<IsTransparent<typename Tree::key_compare>::value>::
-          template type<K, typename Tree::key_type>;
+    std::conditional_t<
+      std::experimental::is_detected_v<is_transparent_t, typename Tree::key_compare>,
+      K,
+      typename Tree::key_type>;
 
  public:
   using key_type = typename Tree::key_type;
@@ -61,7 +60,6 @@ class btree_container {
   using const_iterator = typename Tree::const_iterator;
   using reverse_iterator = typename Tree::reverse_iterator;
   using const_reverse_iterator = typename Tree::const_reverse_iterator;
-  using node_type = typename Tree::node_handle_type;
 
   // Constructors/assignments.
   btree_container() : tree_(key_compare(), allocator_type()) {}
@@ -139,23 +137,12 @@ class btree_container {
     return tree_.erase(iterator(first), iterator(last)).second;
   }
 
-  // Extract routines.
-  node_type extract(iterator position) {
-    // Use Move instead of Transfer, because the rebalancing code expects to
-    // have a valid object to scribble metadata bits on top of.
-    auto node = CommonAccess::Move<node_type>(get_allocator(), position.slot());
-    erase(position);
-    return node;
-  }
-  node_type extract(const_iterator position) {
-    return extract(iterator(position));
-  }
-
  public:
   // Utility routines.
   void clear() { tree_.clear(); }
   void swap(btree_container &x) { tree_.swap(x.tree_); }
   void verify() const { tree_.verify(); }
+  void dump(std::ostream &os) const { tree_.dump(os); }
 
   // Size routines.
   size_type size() const { return tree_.size(); }
@@ -194,18 +181,15 @@ class btree_container {
   key_compare key_comp() const { return tree_.key_comp(); }
   value_compare value_comp() const { return tree_.value_comp(); }
 
-  // Support absl::Hash.
-  template <typename State>
-  friend State AbslHashValue(State h, const btree_container &b) {
-    for (const auto &v : b) {
-      h = State::combine(std::move(h), v);
-    }
-    return State::combine(std::move(h), b.size());
-  }
-
  protected:
   Tree tree_;
 };
+
+template <typename T>
+inline std::ostream& operator<<(std::ostream &os, const btree_container<T> &b) {
+  b.dump(os);
+  return os;
+}
 
 // A common base class for btree_set and btree_map.
 template <typename Tree>
@@ -228,8 +212,6 @@ class btree_set_container : public btree_container<Tree> {
   using allocator_type = typename Tree::allocator_type;
   using iterator = typename Tree::iterator;
   using const_iterator = typename Tree::const_iterator;
-  using node_type = typename super_type::node_type;
-  using insert_return_type = InsertReturnType<iterator, node_type>;
 
   // Inherit constructors.
   using super_type::super_type;
@@ -294,27 +276,6 @@ class btree_set_container : public btree_container<Tree> {
   void insert(std::initializer_list<init_type> init) {
     this->tree_.insert_iterator_unique(init.begin(), init.end());
   }
-  insert_return_type insert(node_type &&node) {
-    if (!node) return {this->end(), false, node_type()};
-    std::pair<iterator, bool> res =
-        this->tree_.insert_unique(params_type::key(CommonAccess::GetSlot(node)),
-                                  CommonAccess::GetSlot(node));
-    if (res.second) {
-      CommonAccess::Destroy(&node);
-      return {res.first, true, node_type()};
-    } else {
-      return {res.first, false, std::move(node)};
-    }
-  }
-  iterator insert(const_iterator hint, node_type &&node) {
-    if (!node) return this->end();
-    std::pair<iterator, bool> res = this->tree_.insert_hint_unique(
-        iterator(hint), params_type::key(CommonAccess::GetSlot(node)),
-        CommonAccess::GetSlot(node));
-    if (res.second) CommonAccess::Destroy(&node);
-    return res.first;
-  }
-
   // Deletion routines.
   template <typename K = key_type>
   size_type erase(const key_arg<K> &key) {
@@ -322,26 +283,18 @@ class btree_set_container : public btree_container<Tree> {
   }
   using super_type::erase;
 
-  // Node extraction routines.
-  template <typename K = key_type>
-  node_type extract(const key_arg<K> &key) {
-    auto it = this->find(key);
-    return it == this->end() ? node_type() : extract(it);
-  }
-  using super_type::extract;
-
   // Merge routines.
   // Moves elements from `src` into `this`. If the element already exists in
   // `this`, it is left unmodified in `src`.
   template <
-      typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
-              std::is_same<value_type, typename T::value_type>,
-              std::is_same<allocator_type, typename T::allocator_type>,
-              std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
-          int> = 0>
+    typename T,
+    typename std::enable_if_t<
+      std::conjunction_v<
+        std::is_same<value_type, typename T::value_type>,
+        std::is_same<allocator_type, typename T::allocator_type>,
+        std::is_same<typename params_type::is_map_container,
+                     typename T::params_type::is_map_container>>,
+      int> = 0>
   void merge(btree_container<T> &src) {  // NOLINT
     for (auto src_it = src.begin(); src_it != src.end();) {
       if (insert(std::move(*src_it)).second) {
@@ -353,19 +306,20 @@ class btree_set_container : public btree_container<Tree> {
   }
 
   template <
-      typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
-              std::is_same<value_type, typename T::value_type>,
-              std::is_same<allocator_type, typename T::allocator_type>,
-              std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
-          int> = 0>
+    typename T,
+    typename std::enable_if_t<
+      std::conjunction_v<
+        std::is_same<value_type, typename T::value_type>,
+        std::is_same<allocator_type, typename T::allocator_type>,
+        std::is_same<typename params_type::is_map_container,
+                     typename T::params_type::is_map_container>>,
+      int> = 0>
   void merge(btree_container<T> &&src) {
     merge(src);
   }
 };
 
+// A common base class for btree_map and safe_btree_map.
 // Base class for btree_map.
 template <typename Tree>
 class btree_map_container : public btree_set_container<Tree> {
@@ -440,14 +394,14 @@ class btree_map_container : public btree_set_container<Tree> {
   mapped_type &at(const key_arg<K> &key) {
     auto it = this->find(key);
     if (it == this->end())
-      base_internal::ThrowStdOutOfRange("absl::btree_map::at");
+      throw std::out_of_range("btree_map::at");
     return it->second;
   }
   template <typename K = key_type>
   const mapped_type &at(const key_arg<K> &key) const {
     auto it = this->find(key);
     if (it == this->end())
-      base_internal::ThrowStdOutOfRange("absl::btree_map::at");
+      throw std::out_of_range("btree_map::at");
     return it->second;
   }
 };
@@ -528,17 +482,17 @@ class btree_multiset_container : public btree_container<Tree> {
   iterator insert(node_type &&node) {
     if (!node) return this->end();
     iterator res =
-        this->tree_.insert_multi(params_type::key(CommonAccess::GetSlot(node)),
-                                 CommonAccess::GetSlot(node));
-    CommonAccess::Destroy(&node);
+        this->tree_.insert_multi(params_type::key(node.slot()),
+                                 node.slot());
+    node.destroy();
     return res;
   }
   iterator insert(const_iterator hint, node_type &&node) {
     if (!node) return this->end();
     iterator res = this->tree_.insert_hint_multi(
         iterator(hint),
-        std::move(params_type::element(CommonAccess::GetSlot(node))));
-    CommonAccess::Destroy(&node);
+        std::move(params_type::element(node.slot())));
+    node.destroy();
     return res;
   }
 
@@ -549,24 +503,16 @@ class btree_multiset_container : public btree_container<Tree> {
   }
   using super_type::erase;
 
-  // Node extraction routines.
-  template <typename K = key_type>
-  node_type extract(const key_arg<K> &key) {
-    auto it = this->find(key);
-    return it == this->end() ? node_type() : extract(it);
-  }
-  using super_type::extract;
-
   // Merge routines.
   // Moves all elements from `src` into `this`.
   template <
       typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
+      typename std::enable_if_t<
+          std::conjunction_v<
               std::is_same<value_type, typename T::value_type>,
               std::is_same<allocator_type, typename T::allocator_type>,
               std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
+                           typename T::params_type::is_map_container>>,
           int> = 0>
   void merge(btree_container<T> &src) {  // NOLINT
     insert(std::make_move_iterator(src.begin()),
@@ -576,12 +522,12 @@ class btree_multiset_container : public btree_container<Tree> {
 
   template <
       typename T,
-      typename absl::enable_if_t<
-          absl::conjunction<
+      typename std::enable_if_t<
+          std::conjunction_v<
               std::is_same<value_type, typename T::value_type>,
               std::is_same<allocator_type, typename T::allocator_type>,
               std::is_same<typename params_type::is_map_container,
-                           typename T::params_type::is_map_container>>::value,
+                           typename T::params_type::is_map_container>>,
           int> = 0>
   void merge(btree_container<T> &&src) {
     merge(src);
@@ -601,9 +547,4 @@ class btree_multimap_container : public btree_multiset_container<Tree> {
   using super_type::super_type;
   btree_multimap_container() {}
 };
-
-}  // namespace container_internal
-ABSL_NAMESPACE_END
-}  // namespace absl
-
-#endif  // ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
+} // namespace btree::internal
