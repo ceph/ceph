@@ -186,7 +186,7 @@ public:
    */
   void adjust_standby_fscid(mds_gid_t standby_gid,
 			    fs_cluster_id_t fscid);
-  void clear_standby_fscid(mds_gid_t standby_gid);
+  std::size_t clear_standby_fscid(mds_gid_t standby_gid);
 
   /**
    * Assign an MDS cluster standby replay rank to a standby daemon

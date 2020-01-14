@@ -1057,10 +1057,10 @@ void FSMap::adjust_standby_fscid(mds_gid_t standby_gid,
   standby_daemon_fscid.at(standby_gid) = fscid;
 }
 
-void FSMap::clear_standby_fscid(mds_gid_t standby_gid)
+std::size_t FSMap::clear_standby_fscid(mds_gid_t standby_gid)
 {
   auto count = standby_daemon_fscid.erase(standby_gid);
-  ceph_assert(count);
+  return count;
 }
 
 std::vector<mds_gid_t> FSMap::stop(mds_gid_t who)
