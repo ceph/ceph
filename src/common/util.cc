@@ -13,7 +13,8 @@
  */
 
 #include <sys/utsname.h>
-#include <boost/lexical_cast.hpp>
+#include <fstream>
+#include <boost/algorithm/string.hpp>
 
 #include "include/compat.h"
 #include "include/util.h"
@@ -185,48 +186,36 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   }
 #else
   // memory
-  FILE *f = fopen(PROCPREFIX "/proc/meminfo", "r");
-  if (f) {
-    char buf[100];
-    while (!feof(f)) {
-      char *line = fgets(buf, sizeof(buf), f);
-      if (!line)
-	break;
-      char key[40];
-      long long value;
-      int r = sscanf(line, "%39s %lld", key, &value);
-      if (r == 2) {
-	if (strcmp(key, "MemTotal:") == 0)
-	  (*m)["mem_total_kb"] = boost::lexical_cast<string>(value);
-	else if (strcmp(key, "SwapTotal:") == 0)
-	  (*m)["mem_swap_kb"] = boost::lexical_cast<string>(value);
+  if (std::ifstream f{PROCPREFIX "/proc/meminfo"}; !f.fail()) {
+    for (std::string line; std::getline(f, line); ) {
+      std::vector<string> parts;
+      boost::split(parts, line, boost::is_any_of(":\t "), boost::token_compress_on);
+      if (parts.size() != 3) {
+	continue;
+      }
+      if (parts[0] == "MemTotal") {
+	(*m)["mem_total_kb"] = parts[1];
+      } else if (parts[0] == "SwapTotal") {
+	(*m)["mem_swap_kb"] = parts[1];
       }
     }
-    fclose(f);
   }
 
   // processor
-  f = fopen(PROCPREFIX "/proc/cpuinfo", "r");
-  if (f) {
-    char buf[1024];
-    while (!feof(f)) {
-      char *line = fgets(buf, sizeof(buf), f);
-      if (!line)
-	break;
-      if (strncmp(line, "model name", 10) == 0) {
-	char *c = strchr(buf, ':');
-	c++;
-	while (*c == ' ')
-	  ++c;
-	char *nl = c;
-	while (*nl != '\n')
-	  ++nl;
-	*nl = '\0';
-	(*m)["cpu"] = c;
+  if (std::ifstream f{PROCPREFIX "/proc/cpuinfo"}; !f.fail()) {
+    for (std::string line; std::getline(f, line); ) {
+      std::vector<string> parts;
+      boost::split(parts, line, boost::is_any_of(":"));
+      if (parts.size() != 2) {
+	continue;
+      }
+      boost::trim(parts[0]);
+      boost::trim(parts[1]);
+      if (parts[0] == "model name") {
+	(*m)["cpu"] = parts[1];
 	break;
       }
     }
-    fclose(f);
   }
 #endif
   // distro info
