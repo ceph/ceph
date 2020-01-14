@@ -526,7 +526,7 @@ cdef class LibCephFS(object):
 
             return decode_cstr(addrs)
         finally:
-            free(addrs)
+            ceph_buffer_free(addrs)
 
 
     def conf_read_file(self, conffile=None):
