@@ -55,13 +55,6 @@ if [ "$BASE_URL" == "" ]; then
     # Set SSL verify to False
     ./bin/ceph dashboard set-rgw-api-ssl-verify False
 
-    # Disable PG autoscaling for new pools. This is a temporary workaround.
-    # e2e tests for pools should be adapted to remove this workaround after
-    # these issues are resolved:
-    # - https://tracker.ceph.com/issues/38227
-    # - https://tracker.ceph.com/issues/42638
-    ./bin/ceph config set global osd_pool_default_pg_autoscale_mode off
-
     BASE_URL=$(./bin/ceph mgr services | jq -r .dashboard)
 fi
 
