@@ -748,12 +748,17 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
 
     if daemon_type in Ceph.daemons:
         r += [
+            '--setuser', 'ceph',
+            '--setgroup', 'ceph',
             '--default-log-to-file=false',
             '--default-log-to-stderr=true',
-            '--setuser', 'ceph',
-            '--setgroup', 'ceph'
+            '--default-log-stderr-prefix=debug\ ',
         ]
-
+        if daemon_type == 'mon':
+            r += [
+                '--default-mon-cluster-log-to-file=false',
+                '--default-mon-cluster-log-to-stderr=true',
+            ]
     elif daemon_type in Monitoring.components:
         component = Monitoring.components[daemon_type]  # type: ignore
         metadata = component.get('image', list())  # type: ignore
