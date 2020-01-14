@@ -106,7 +106,7 @@ seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
                            CEPH_ENTITY_TYPE_OSD),
         back_msgr.connect(osdmap->get_hb_back_addrs(peer).front(),
                           CEPH_ENTITY_TYPE_OSD))
-      .then([this, &info=peer_info->second] (auto xcon_front, auto xcon_back) {
+      .then([&info=peer_info->second] (auto xcon_front, auto xcon_back) {
         // sharded-messenger compatible mode
         info.con_front = xcon_front->release();
         info.con_back = xcon_back->release();
@@ -135,11 +135,11 @@ seastar::future<Heartbeat::osds_t> Heartbeat::remove_down_peers()
         return seastar::make_ready_future<osd_id_t>(-1);
       }
     }, osds_t{},
-    [this](osds_t&& extras, osd_id_t extra) {
+    [](osds_t&& extras, osd_id_t extra) {
       if (extra >= 0) {
         extras.push_back(extra);
       }
-      return extras;
+      return std::move(extras);
     });
 }
 

@@ -14,6 +14,7 @@
 
 #include "strtol.h"
 
+#include <algorithm>
 #include <climits>
 #include <limits>
 #include <cmath>
@@ -277,17 +278,17 @@ T strict_si_cast(std::string_view str, std::string *err)
     return 0;
   }
   using promoted_t = typename std::common_type<decltype(ll), T>::type;
-  if (static_cast<promoted_t>(ll) <
-      static_cast<promoted_t>(std::numeric_limits<T>::min()) / pow (10, m)) {
-    *err = "strict_sistrtoll: value seems to be too small";
+  auto v = static_cast<promoted_t>(ll);
+  auto coefficient = static_cast<promoted_t>(powl(10, m));
+  if (v != std::clamp(v,
+		      (static_cast<promoted_t>(std::numeric_limits<T>::min()) /
+		       coefficient),
+		      (static_cast<promoted_t>(std::numeric_limits<T>::max()) /
+		       coefficient))) {
+    *err = "strict_sistrtoll: value out of range";
     return 0;
   }
-  if (static_cast<promoted_t>(ll) >
-      static_cast<promoted_t>(std::numeric_limits<T>::max()) / pow (10, m)) {
-    *err = "strict_sistrtoll: value seems to be too large";
-    return 0;
-  }
-  return (ll * pow (10,  m));
+  return v * coefficient;
 }
 
 template int strict_si_cast<int>(std::string_view str, std::string *err);
