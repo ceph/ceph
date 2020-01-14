@@ -148,7 +148,7 @@ ec=0
 cephadm=0
 parallel=true
 hitset=""
-overwrite_conf=1
+overwrite_conf=0
 cephx=1 #turn cephx on by default
 gssapi_authx=0
 cache=""
@@ -196,13 +196,12 @@ usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
 usage=$usage"\t-n, --new\n"
-usage=$usage"\t-N, --not-new: reuse existing cluster config (default)\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
 usage=$usage"\t--redirect-output: only useful with nodaemon, directs output to log file\n"
 usage=$usage"\t--smallmds: limit mds cache memory limit\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
-usage=$usage"\t-k keep old configuration files\n"
+usage=$usage"\t-k keep old configuration files (default)\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t-g --gssapi enable Kerberos/GSSApi authentication\n"
@@ -270,9 +269,6 @@ case $1 in
             shift
         fi
         ;;
-    --not-new | -N )
-	new=0
-	;;
     --short )
         short=1
         ;;
@@ -385,7 +381,7 @@ case $1 in
             echo "cannot use old configuration: $conf_fn not readable." >&2
             exit
         fi
-        overwrite_conf=0
+        new=0
         ;;
     --memstore )
         objectstore="memstore"
@@ -453,8 +449,10 @@ if [ $kill_all -eq 1 ]; then
     $SUDO $INIT_CEPH stop
 fi
 
-if [ "$overwrite_conf" -eq 0 ]; then
-    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
+if [ "$new" -eq 0 ]; then
+    if [ -z "$CEPH_ASOK_DIR" ]; then
+        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
+    fi
     mkdir -p $CEPH_ASOK_DIR
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
@@ -469,24 +467,16 @@ if [ "$overwrite_conf" -eq 0 ]; then
     GANESHA=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_ganesha 2>/dev/null` && \
         GANESHA_DAEMON_NUM="$GANESHA"
 else
-    if [ "$new" -ne 0 ]; then
-        # only delete if -n
-        if [ -e "$conf_fn" ]; then
-            asok_dir=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
-            rm -- "$conf_fn"
-            if [ $asok_dir != /var/run/ceph ]; then
-                [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
-            fi
+    # only delete if -n
+    if [ -e "$conf_fn" ]; then
+        asok_dir=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
+        rm -- "$conf_fn"
+        if [ $asok_dir != /var/run/ceph ]; then
+            [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
         fi
-        if [ -z "$CEPH_ASOK_DIR" ]; then
-            CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
-        fi
-    else
-        if [ -z "$CEPH_ASOK_DIR" ]; then
-            CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
-        fi
-        # -k is implied... (doesn't make sense otherwise)
-        overwrite_conf=0
+    fi
+    if [ -z "$CEPH_ASOK_DIR" ]; then
+        CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
     fi
 fi
 
@@ -515,7 +505,7 @@ run() {
 }
 
 wconf() {
-    if [ "$overwrite_conf" -eq 1 ]; then
+    if [ "$new" -eq 1 -o "$overwrite_conf" -eq 1 ]; then
         cat >> "$conf_fn"
     fi
 }
