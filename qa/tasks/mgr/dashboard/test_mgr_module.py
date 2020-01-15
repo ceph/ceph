@@ -42,6 +42,7 @@ class MgrModuleTest(MgrModuleTestCase):
                 JObj(sub_elems={
                     'name': JLeaf(str),
                     'enabled': JLeaf(bool),
+                    'always_on': JLeaf(bool),
                     'options': JObj(
                         {},
                         allow_unknown=True,
@@ -75,6 +76,7 @@ class MgrModuleTest(MgrModuleTestCase):
                 JObj(sub_elems={
                     'name': JLeaf(str),
                     'enabled': JLeaf(bool),
+                    'always_on': JLeaf(bool),
                     'options': JObj(
                         {},
                         allow_unknown=True,

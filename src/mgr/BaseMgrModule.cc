@@ -562,7 +562,13 @@ ceph_get_version(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject *
-ceph_get_context(BaseMgrModule *self, PyObject *args)
+ceph_get_release_name(BaseMgrModule *self, PyObject *args)
+{
+  return PyString_FromString(ceph_release_to_str());
+}
+
+static PyObject *
+ceph_get_context(BaseMgrModule *self)
 {
   return self->py_modules->get_context();
 }
@@ -1092,8 +1098,11 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_cluster_log", (PyCFunction)ceph_cluster_log, METH_VARARGS,
    "Emit a cluster log message"},
 
-  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_VARARGS,
+  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_NOARGS,
    "Get the ceph version of this process"},
+
+  {"_ceph_get_release_name", (PyCFunction)ceph_get_release_name, METH_NOARGS,
+   "Get the ceph release name of this process"},
 
   {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
     "Get a CephContext* in a python capsule"},

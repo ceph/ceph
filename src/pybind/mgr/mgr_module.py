@@ -584,6 +584,15 @@ class MgrModule(ceph_module.BaseMgrModule):
     def version(self):
         return self._version
 
+    @property
+    def release_name(self):
+        """
+        Get the release name of the Ceph version, e.g. 'nautilus' or 'octopus'.
+        :return: Returns the release name of the Ceph version in lower case.
+        :rtype: str
+        """
+        return self._ceph_get_release_name()
+
     def get_context(self):
         """
         :return: a Python capsule containing a C++ CephContext pointer
