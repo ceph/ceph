@@ -245,7 +245,7 @@ class TestStrays(CephFSTestCase):
         elif throttle_type == self.FILES_THROTTLE:
             if files_high_water < mds_max_purge_files / 2:
                 raise RuntimeError("Files in flight high water is unexpectedly low ({0} / {1})".format(
-                    ops_high_water, mds_max_purge_files
+                    files_high_water, mds_max_purge_files
                 ))
 
         # Sanity check all MDC stray stats
