@@ -89,8 +89,7 @@ public:
 
   image_replayer::HealthState get_health_state() const;
 
-  void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx,
-                MirrorStatusUpdater<ImageCtxT>* remote_status_updater);
+  void add_peer(const Peer<ImageCtxT>& peer);
 
   inline int64_t get_local_pool_id() const {
     return m_local_io_ctx.get_id();
@@ -156,16 +155,6 @@ private:
     STATE_STOPPED,
   };
 
-  struct RemoteImage {
-    librados::IoCtx io_ctx;
-    MirrorStatusUpdater<ImageCtxT>* mirror_status_updater = nullptr;
-
-    RemoteImage() {
-    }
-    RemoteImage(const Peer<ImageCtxT>& peer)
-      : io_ctx(peer.io_ctx), mirror_status_updater(peer.mirror_status_updater) {
-    }
-  };
   struct ReplayerListener;
 
   typedef boost::optional<State> OptionalState;
@@ -194,7 +183,7 @@ private:
   journal::CacheManagerHandler *m_cache_manager_handler;
 
   Peers m_peers;
-  RemoteImage m_remote_image;
+  Peer<ImageCtxT> m_remote_image_peer;
 
   std::string m_local_image_name;
   std::string m_image_spec;

@@ -265,16 +265,13 @@ image_replayer::HealthState ImageReplayer<I>::get_health_state() const {
 }
 
 template <typename I>
-void ImageReplayer<I>::add_peer(
-    const std::string &peer_uuid, librados::IoCtx &io_ctx,
-    MirrorStatusUpdater<I>* remote_status_updater) {
-  dout(10) << "peer_uuid=" << &peer_uuid << ", "
-           << "remote_status_updater=" << remote_status_updater << dendl;
+void ImageReplayer<I>::add_peer(const Peer<I>& peer) {
+  dout(10) << "peer=" << peer << dendl;
 
   std::lock_guard locker{m_lock};
-  auto it = m_peers.find({peer_uuid});
+  auto it = m_peers.find(peer);
   if (it == m_peers.end()) {
-    m_peers.insert({peer_uuid, io_ctx, remote_status_updater});
+    m_peers.insert(peer);
   }
 }
 
@@ -342,7 +339,7 @@ void ImageReplayer<I>::bootstrap() {
 
   // TODO need to support multiple remote images
   ceph_assert(!m_peers.empty());
-  m_remote_image = {*m_peers.begin()};
+  m_remote_image_peer = *m_peers.begin();
 
   if (on_start_interrupted(m_lock)) {
     return;
@@ -352,8 +349,9 @@ void ImageReplayer<I>::bootstrap() {
   auto ctx = create_context_callback<
       ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
   auto request = image_replayer::BootstrapRequest<I>::create(
-      m_threads, m_local_io_ctx, m_remote_image.io_ctx, m_instance_watcher,
-      m_global_image_id, m_local_mirror_uuid, m_cache_manager_handler,
+      m_threads, m_local_io_ctx, m_remote_image_peer.io_ctx, m_instance_watcher,
+      m_global_image_id, m_local_mirror_uuid,
+      m_remote_image_peer.remote_pool_meta, m_cache_manager_handler,
       &m_progress_cxt, &m_state_builder, &m_resync_requested, ctx);
 
   request->get();
@@ -784,8 +782,8 @@ void ImageReplayer<I>::set_mirror_image_status_update(
   dout(15) << "status=" << status << dendl;
   m_local_status_updater->set_mirror_image_status(m_global_image_id, status,
                                                   force);
-  if (m_remote_image.mirror_status_updater != nullptr) {
-    m_remote_image.mirror_status_updater->set_mirror_image_status(
+  if (m_remote_image_peer.mirror_status_updater != nullptr) {
+    m_remote_image_peer.mirror_status_updater->set_mirror_image_status(
       m_global_image_id, status, force);
   }
 
@@ -896,13 +894,13 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     return;
   }
 
-  if (m_remote_image.mirror_status_updater != nullptr &&
-      m_remote_image.mirror_status_updater->exists(m_global_image_id)) {
+  if (m_remote_image_peer.mirror_status_updater != nullptr &&
+      m_remote_image_peer.mirror_status_updater->exists(m_global_image_id)) {
     dout(15) << "removing remote mirror image status" << dendl;
     auto ctx = new LambdaContext([this, r](int) {
         handle_shut_down(r);
       });
-    m_remote_image.mirror_status_updater->remove_mirror_image_status(
+    m_remote_image_peer.mirror_status_updater->remove_mirror_image_status(
       m_global_image_id, ctx);
     return;
   }
