@@ -179,7 +179,8 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
 int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                            const list<string>& endpoints, const string *ptier_type,
                            bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
-                           string *predirect_zone, RGWSyncModulesManager *sync_mgr)
+                           string *predirect_zone, std::optional<int> bucket_index_max_shards,
+                           RGWSyncModulesManager *sync_mgr)
 {
   auto& zone_id = zone_params.get_id();
   auto& zone_name = zone_params.get_name();
@@ -232,6 +233,10 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
 
   if (predirect_zone) {
     zone.redirect_zone = *predirect_zone;
+  }
+
+  if (bucket_index_max_shards) {
+    zone.bucket_index_max_shards = *bucket_index_max_shards;
   }
 
   for (auto add : sync_from) {

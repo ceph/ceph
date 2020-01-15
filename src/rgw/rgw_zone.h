@@ -799,8 +799,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int equals(const std::string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                const list<std::string>& endpoints, const std::string *ptier_type,
-               bool *psync_from_all, list<std::string>& sync_from, list<std::string>& sync_from_rm,
-               std::string *predirect_zone, RGWSyncModulesManager *sync_mgr);
+               bool *psync_from_all, list<std::string>& sync_from,
+               list<std::string>& sync_from_rm, std::string *predirect_zone,
+               std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   rgw_pool get_pool(CephContext *cct) const override;
