@@ -11,7 +11,7 @@ Which CephFS Client?
 
 The FUSE client is the most accessible and the easiest to upgrade to the
 version of Ceph used by the storage cluster, while the kernel client will
-often gives better performance.
+always gives better performance.
 
 When encountering bugs or performance issues, it is often instructive to
 try using the other client, in order to find out whether the bug was
@@ -21,20 +21,20 @@ General Pre-requisite for Mounting CephFS
 -----------------------------------------
 Before mounting CephFS, ensure that the client host (where CephFS has to be
 mounted and used) has a copy of the Ceph configuration file (i.e.
-``ceph.conf``) and a keyring of the CephX user that has CAPS for a Ceph MDS.
-Both of these files must already be present on the host where the Ceph MON
-resides.
+``ceph.conf``) and a keyring of the CephX user that has permission to access
+the MDS. Both of these files must already be present on the host where the
+Ceph MON resides.
 
 #. Generate a minimal conf file for the client host and place it at a
    standard location::
 
     # on client host
-    mkdir /etc/ceph
+    mkdir -p -m 755 /etc/ceph
     ssh {user}@{mon-host} "sudo ceph config generate-minimal-conf" | sudo tee /etc/ceph/ceph.conf
 
    Alternatively, you may copy the conf file. But the above method generates
    a conf with minimal details which is usually sufficient. For more
-   information, see :ref:`bootstrap-options`.
+   information, see `Client Authentication`_ and :ref:`bootstrap-options`.
 
 #. Ensure that the conf has appropriate permissions::
 
@@ -64,7 +64,7 @@ resides.
 .. note:: There might be few more prerequisites for kernel and FUSE mounts
    individually, please check respective mount documents.
 
-.. _client-auth: ../client-auth
+.. _Client Authentication: ../client-auth
 .. _cephfs-shell: ../cephfs-shell
 .. _using kernel: ../mount-using-kernel-driver
 .. _using FUSE: ../mount-using-fuse

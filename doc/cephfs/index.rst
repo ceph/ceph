@@ -106,7 +106,7 @@ Mounting CephFS
    :hidden:
 
     Client Configuration Settings <client-config-ref>
-    Client authentication <client-auth>
+    Client Authentication <client-auth>
     Mount CephFS: Prerequisites <mount-prerequisites>
     Mount CephFS using Kernel Driver <mount-using-kernel-driver>
     Mount CephFS using FUSE <mount-using-fuse>
