@@ -1577,8 +1577,19 @@ public:
     crush_init_workspace(crush, work);
     crush_choose_arg_map arg_map = choose_args_get_with_fallback(
       choose_args_index);
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
-			       weight.size(), work, arg_map.args);
+
+    // kludge to workaround an empty weight vector
+    int inline_weight;
+    int *pweight;
+    if (weight.empty()) {
+      pweight = &inline_weight;
+    } else {
+      pweight = &weight[0];
+    }
+
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
+			       pweight, weight.size(),
+			       work, arg_map.args);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
