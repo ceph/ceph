@@ -202,41 +202,41 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
-        return self.vc.create_volume(vol_id)
+        return self.vc.create_fs_volume(vol_id)
 
     def _cmd_fs_volume_rm(self, inbuf, cmd):
         vol_name = cmd['vol_name']
         confirm = cmd.get('yes-i-really-mean-it', None)
-        return self.vc.delete_volume(vol_name, confirm)
+        return self.vc.delete_fs_volume(vol_name, confirm)
 
     def _cmd_fs_volume_ls(self, inbuf, cmd):
-        return self.vc.list_volumes()
+        return self.vc.list_fs_volumes()
 
     def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
         return self.vc.create_subvolume_group(
-            None, vol_name=cmd['vol_name'], group_name=cmd['group_name'],
-            pool_layout=cmd.get('pool_layout', None), uid=cmd.get('uid', None),
-            gid=cmd.get('gid', None), mode=cmd.get('mode', '755'))
+            vol_name=cmd['vol_name'], group_name=cmd['group_name'],
+            pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
+            uid=cmd.get('uid', None), gid=cmd.get('gid', None))
 
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
-        return self.vc.remove_subvolume_group(None, vol_name=cmd['vol_name'],
+        return self.vc.remove_subvolume_group(vol_name=cmd['vol_name'],
                                               group_name=cmd['group_name'],
                                               force=cmd.get('force', False))
 
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
-        return self.vc.list_subvolume_groups(None, vol_name=cmd['vol_name'])
+        return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
 
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
-        return self.vc.create_subvolume(None, vol_name=cmd['vol_name'],
+        return self.vc.create_subvolume(vol_name=cmd['vol_name'],
                                         sub_name=cmd['sub_name'],
                                         group_name=cmd.get('group_name', None),
                                         size=cmd.get('size', None),
@@ -249,60 +249,58 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
-        return self.vc.remove_subvolume(None, vol_name=cmd['vol_name'],
+        return self.vc.remove_subvolume(vol_name=cmd['vol_name'],
                                         sub_name=cmd['sub_name'],
                                         group_name=cmd.get('group_name', None),
                                         force=cmd.get('force', False))
 
     def _cmd_fs_subvolume_ls(self, inbuf, cmd):
-        return self.vc.list_subvolumes(None, vol_name=cmd['vol_name'],
+        return self.vc.list_subvolumes(vol_name=cmd['vol_name'],
                                        group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolumegroup_getpath(self, inbuf, cmd):
         return self.vc.getpath_subvolume_group(
-                None, vol_name=cmd['vol_name'], group_name=cmd['group_name'])
+            vol_name=cmd['vol_name'], group_name=cmd['group_name'])
 
     def _cmd_fs_subvolume_getpath(self, inbuf, cmd):
-        return self.vc.subvolume_getpath(None, vol_name=cmd['vol_name'],
+        return self.vc.subvolume_getpath(vol_name=cmd['vol_name'],
                                          sub_name=cmd['sub_name'],
                                          group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
-        return self.vc.create_subvolume_group_snapshot(None, vol_name=cmd['vol_name'],
+        return self.vc.create_subvolume_group_snapshot(vol_name=cmd['vol_name'],
                                                        group_name=cmd['group_name'],
                                                        snap_name=cmd['snap_name'])
 
     def _cmd_fs_subvolumegroup_snapshot_rm(self, inbuf, cmd):
-        return self.vc.remove_subvolume_group_snapshot(None, vol_name=cmd['vol_name'],
+        return self.vc.remove_subvolume_group_snapshot(vol_name=cmd['vol_name'],
                                                        group_name=cmd['group_name'],
                                                        snap_name=cmd['snap_name'],
                                                        force=cmd.get('force', False))
 
     def _cmd_fs_subvolumegroup_snapshot_ls(self, inbuf, cmd):
-        return self.vc.list_subvolume_group_snapshots(None, vol_name=cmd['vol_name'],
+        return self.vc.list_subvolume_group_snapshots(vol_name=cmd['vol_name'],
                                                       group_name=cmd['group_name'])
 
     def _cmd_fs_subvolume_snapshot_create(self, inbuf, cmd):
-        return self.vc.create_subvolume_snapshot(None, vol_name=cmd['vol_name'],
+        return self.vc.create_subvolume_snapshot(vol_name=cmd['vol_name'],
                                                  sub_name=cmd['sub_name'],
                                                  snap_name=cmd['snap_name'],
                                                  group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolume_snapshot_rm(self, inbuf, cmd):
-        return self.vc.remove_subvolume_snapshot(None, vol_name=cmd['vol_name'],
+        return self.vc.remove_subvolume_snapshot(vol_name=cmd['vol_name'],
                                                  sub_name=cmd['sub_name'],
                                                  snap_name=cmd['snap_name'],
                                                  group_name=cmd.get('group_name', None),
                                                  force=cmd.get('force', False))
 
     def _cmd_fs_subvolume_snapshot_ls(self, inbuf, cmd):
-        return self.vc.list_subvolume_snapshots(None, vol_name=cmd['vol_name'],
+        return self.vc.list_subvolume_snapshots(vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
                                                 group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolume_resize(self, inbuf, cmd):
-        return self.vc.resize_subvolume(None, vol_name=cmd['vol_name'],
-                                        sub_name=cmd['sub_name'],
-                                        new_size=cmd['new_size'],
-                                        group_name=cmd.get('group_name', None),
+        return self.vc.resize_subvolume(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
+                                        new_size=cmd['new_size'], group_name=cmd.get('group_name', None),
                                         no_shrink=cmd.get('no_shrink', False))
