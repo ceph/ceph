@@ -160,14 +160,17 @@ class VolumeClient(object):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    remove_subvol(fs_handle, self.volspec, group, subvolname)
+                    remove_subvol(fs_handle, self.volspec, group, subvolname, force)
                     # kick the purge threads for async removal -- note that this
                     # assumes that the subvolume is moved to trash can.
                     # TODO: make purge queue as singleton so that trash can kicks
                     # the purge threads on dump.
                     self.purge_queue.queue_job(volname)
         except VolumeException as ve:
-            if not (ve.errno == -errno.ENOENT and force):
+            if ve.errno == -errno.EAGAIN:
+                ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
+                ret = self.volume_exception_to_retval(ve)
+            elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 

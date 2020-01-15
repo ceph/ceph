@@ -45,7 +45,7 @@ def create_clone(fs, vol_spec, group, subvolname, pool, source_volume, source_su
     subvolume = loaded_subvolumes.get_subvolume_object_max(fs, vol_spec, group, subvolname)
     subvolume.create_clone(pool, source_volume, source_subvolume, snapname)
 
-def remove_subvol(fs, vol_spec, group, subvolname):
+def remove_subvol(fs, vol_spec, group, subvolname, force=False):
     """
     remove a subvolume.
 
@@ -53,9 +53,11 @@ def remove_subvol(fs, vol_spec, group, subvolname):
     :param vol_spec: volume specification
     :param group: group object for the subvolume
     :param subvolname: subvolume name
+    :param force: force remove subvolumes
     :return: None
     """
-    with open_subvol(fs, vol_spec, group, subvolname) as subvolume:
+    nc_flag = True if not force else False
+    with open_subvol(fs, vol_spec, group, subvolname, need_complete=nc_flag) as subvolume:
         if subvolume.list_snapshots():
             raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(subvolname))
         subvolume.remove()
