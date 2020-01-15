@@ -8,7 +8,6 @@
 #include "common/debug.h"
 #include "mdstypes.h"
 
-
 inline ostream& operator<<(ostream& out, const ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
       << ", client: " << l.client << ", owner: " << l.owner
@@ -70,17 +69,9 @@ inline bool operator!=(const ceph_filelock& l, const ceph_filelock& r) {
 }
 
 class ceph_lock_state_t {
-  CephContext *cct;
-  int type;
 public:
   explicit ceph_lock_state_t(CephContext *cct_, int type_) : cct(cct_), type(type_) {}
   ~ceph_lock_state_t();
-  multimap<uint64_t, ceph_filelock> held_locks;    // current locks
-  multimap<uint64_t, ceph_filelock> waiting_locks; // locks waiting for other locks
-  // both of the above are keyed by starting offset
-  map<client_t, int> client_held_lock_counts;
-  map<client_t, int> client_waiting_lock_counts;
-
   /**
    * Check if a lock is on the waiting_locks list.
    *
@@ -130,6 +121,29 @@ public:
                    list<ceph_filelock>& activated_locks);
 
   bool remove_all_from(client_t client);
+
+  void encode(bufferlist& bl) const {
+    using ceph::encode;
+    encode(held_locks, bl);
+    encode(client_held_lock_counts, bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(held_locks, bl);
+    decode(client_held_lock_counts, bl);
+  }
+  bool empty() const {
+    return held_locks.empty() && waiting_locks.empty() &&
+	   client_held_lock_counts.empty() &&
+	   client_waiting_lock_counts.empty();
+  }
+
+  multimap<uint64_t, ceph_filelock> held_locks;    // current locks
+  multimap<uint64_t, ceph_filelock> waiting_locks; // locks waiting for other locks
+  // both of the above are keyed by starting offset
+  map<client_t, int> client_held_lock_counts;
+  map<client_t, int> client_waiting_lock_counts;
+
 private:
   static const unsigned MAX_DEADLK_DEPTH = 5;
 
@@ -249,25 +263,10 @@ private:
   ceph_filelock *contains_exclusive_lock(list<multimap<uint64_t,
                                          ceph_filelock>::iterator>& locks);
 
-public:
-  void encode(bufferlist& bl) const {
-    using ceph::encode;
-    encode(held_locks, bl);
-    encode(client_held_lock_counts, bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    using ceph::decode;
-    decode(held_locks, bl);
-    decode(client_held_lock_counts, bl);
-  }
-  bool empty() const {
-    return held_locks.empty() && waiting_locks.empty() &&
-	   client_held_lock_counts.empty() &&
-	   client_waiting_lock_counts.empty();
-  }
+  CephContext *cct;
+  int type;
 };
 WRITE_CLASS_ENCODER(ceph_lock_state_t)
-
 
 inline ostream& operator<<(ostream &out, const ceph_lock_state_t &l) {
   out << "ceph_lock_state_t. held_locks.size()=" << l.held_locks.size()
