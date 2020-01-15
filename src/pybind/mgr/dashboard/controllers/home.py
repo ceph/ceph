@@ -115,6 +115,11 @@ class HomeController(BaseController, LanguageMixin):
 
         base_dir = self._language_dir(langs)
         full_path = os.path.join(base_dir, path)
+
+        # Block uplevel attacks
+        if not os.path.normpath(full_path).startswith(os.path.normpath(base_dir)):
+            raise cherrypy.HTTPError(403)  # Forbidden
+
         logger.debug("serving static content: %s", full_path)
         if 'Vary' in cherrypy.response.headers:
             cherrypy.response.headers['Vary'] = "{}, Accept-Language"
