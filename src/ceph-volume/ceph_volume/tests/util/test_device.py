@@ -139,14 +139,14 @@ class TestDevice(object):
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries",
                              "disable_lvm_queries")
-    def test_is_ceph_disk_lsblk(self, monkeypatch):
+    def test_is_ceph_disk_lsblk(self, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "disable_kernel_queries",
                              "disable_lvm_queries")
-    def test_is_ceph_disk_blkid(self, monkeypatch):
+    def test_is_ceph_disk_blkid(self, monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
                             lambda path: {'PARTLABEL': ""})
         disk = device.Device("/dev/sda")
@@ -155,7 +155,7 @@ class TestDevice(object):
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries",
                              "disable_lvm_queries")
-    def test_is_ceph_disk_member_not_available_lsblk(self, monkeypatch):
+    def test_is_ceph_disk_member_not_available_lsblk(self, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
         assert not disk.available
@@ -164,7 +164,7 @@ class TestDevice(object):
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "disable_kernel_queries",
                              "disable_lvm_queries")
-    def test_is_ceph_disk_member_not_available_blkid(self, monkeypatch):
+    def test_is_ceph_disk_member_not_available_blkid(self, monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
                             lambda path: {'PARTLABEL': ""})
         disk = device.Device("/dev/sda")
@@ -172,10 +172,46 @@ class TestDevice(object):
         assert not disk.available
         assert "Used by ceph-disk" in disk.rejected_reasons
 
+    def test_reject_removable_device(self, device_info):
+        data = {"/dev/sdb": {"removable": 1}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sdb")
+        assert not disk.available
+
+    def test_accept_non_removable_device(self, device_info):
+        data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sdb")
+        assert disk.available
+
+    def test_reject_readonly_device(self, device_info):
+        data = {"/dev/cdrom": {"ro": 1}}
+        device_info(devices=data)
+        disk = device.Device("/dev/cdrom")
+        assert not disk.available
+
+    def test_reject_smaller_than_5gb(self, device_info):
+        data = {"/dev/sda": {"size": 5368709119}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sda")
+        assert not disk.available, 'too small device is available'
+
+    def test_accept_non_readonly_device(self, device_info):
+        data = {"/dev/sda": {"ro": 0, "size": 5368709120}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sda")
+        assert disk.available
+
+    def test_reject_bluestore_device(self, monkeypatch, patch_bluestore_label):
+        patch_bluestore_label.return_value = True
+        disk = device.Device("/dev/sda")
+        assert not disk.available
+        assert "Has BlueStore device label" in disk.rejected_reasons
+
     @pytest.mark.usefixtures("device_info_not_ceph_disk_member",
                              "disable_lvm_queries",
                              "disable_kernel_queries")
-    def test_is_not_ceph_disk_member_lsblk(self):
+    def test_is_not_ceph_disk_member_lsblk(self, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member is False
 
@@ -387,7 +423,7 @@ class TestCephDiskDevice(object):
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "disable_kernel_queries",
                              "disable_lvm_queries")
-    def test_is_member_blkid(self, monkeypatch):
+    def test_is_member_blkid(self, monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
                             lambda path: {'PARTLABEL': ""})
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
@@ -421,7 +457,7 @@ class TestCephDiskDevice(object):
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries",
                              "disable_lvm_queries")
-    def test_is_member_lsblk(self):
+    def test_is_member_lsblk(self, patch_bluestore_label):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.is_member is True

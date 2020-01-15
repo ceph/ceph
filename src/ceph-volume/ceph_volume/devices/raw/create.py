@@ -2,7 +2,6 @@ from __future__ import print_function
 from textwrap import dedent
 import logging
 from ceph_volume.util import system
-from ceph_volume.util.arg_validators import exclude_group_options
 from ceph_volume import decorators, terminal
 from .prepare import Prepare
 from .activate import Activate
@@ -76,7 +75,7 @@ class Create(object):
         if not self.args.bluestore:
             terminal.error('must specify --bluestore (currently the only supported backend)')
             raise SystemExit(1)
-        if not args.no_systemd:
+        if not self.args.no_systemd:
             terminal.error('systemd support not yet implemented')
             raise SystemExit(1)
         self.create(self.args)

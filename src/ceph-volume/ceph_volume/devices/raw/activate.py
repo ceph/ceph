@@ -3,12 +3,9 @@ import argparse
 import logging
 import os
 from textwrap import dedent
-from ceph_volume import process, conf, decorators, terminal, __release__, configuration
-from ceph_volume.util import system, disk
+from ceph_volume import process, conf, decorators, terminal
+from ceph_volume.util import system
 from ceph_volume.util import prepare as prepare_utils
-from ceph_volume.util import encryption as encryption_utils
-from ceph_volume.systemd import systemctl
-from ceph_volume.api import lvm as api
 from .list import direct_report
 
 
@@ -17,7 +14,6 @@ logger = logging.getLogger(__name__)
 def activate_bluestore(meta, tmpfs, systemd):
     # find the osd
     osd_id = meta['osd_id']
-    osd_fsid = meta['osd_uuid']
 
     # mount on tmpfs the osd directory
     osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)

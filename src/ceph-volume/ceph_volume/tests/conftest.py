@@ -1,5 +1,6 @@
 import os
 import pytest
+from mock.mock import patch, PropertyMock
 from ceph_volume.util import disk
 from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume.api import lvm as lvm_api
@@ -265,8 +266,16 @@ def device_info_not_ceph_disk_member(monkeypatch, request):
 
 
 @pytest.fixture
-def device_info(monkeypatch):
-    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None):
+def patch_bluestore_label():
+    with patch('ceph_volume.util.device.Device.has_bluestore_label',
+               new_callable=PropertyMock) as p:
+        p.return_value = False
+        yield p
+
+@pytest.fixture
+def device_info(monkeypatch, patch_bluestore_label):
+    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None,
+              has_bluestore_label=False):
         devices = devices if devices else {}
         lsblk = lsblk if lsblk else {}
         blkid = blkid if blkid else {}
