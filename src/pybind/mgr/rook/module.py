@@ -228,7 +228,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             devs = []
             for d in node_devs:
                 dev = inventory.Device(
-                    path=d['name'],
+                    path='/dev/' + d['name'],
                     sys_api=dict(
                         rotational='1' if d['rotational'] else '0',
                         size=d['size']
