@@ -141,7 +141,11 @@ SVER=${LVER%%.*}
 ./$VENV/bin/pip install --upgrade pip
 
 # Ensure setuptools is installed
-./$VENV/bin/pip install setuptools --upgrade
+if [ "$SVER" = "2" ]; then
+    ./$VENV/bin/pip install setuptools==44
+else
+    ./$VENV/bin/pip install setuptools --upgrade
+fi
 
 # Install all requirements
 ./$VENV/bin/pip install --upgrade -r requirements${SVER}.txt
