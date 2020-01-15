@@ -65,6 +65,9 @@ struct RemotePoolMeta {
   std::string mirror_peer_uuid;
 };
 
+std::ostream& operator<<(std::ostream& lhs,
+                         const RemotePoolMeta& remote_pool_meta);
+
 template <typename I>
 struct Peer {
   std::string peer_uuid;
