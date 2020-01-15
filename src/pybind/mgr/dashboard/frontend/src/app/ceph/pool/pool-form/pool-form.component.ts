@@ -5,8 +5,11 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { TabsetComponent } from 'ngx-bootstrap/tabs';
+import { TooltipDirective } from 'ngx-bootstrap/tooltip';
 import { Subscription } from 'rxjs';
 
+import { CrushRuleService } from '../../../shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -19,7 +22,7 @@ import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField
 } from '../../../shared/models/configuration';
-import { CrushRule } from '../../../shared/models/crush-rule';
+import { CrushRule, CrushRuleConfig } from '../../../shared/models/crush-rule';
 import { CrushStep } from '../../../shared/models/crush-step';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -29,6 +32,7 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormComponent } from '../erasure-code-profile-form/erasure-code-profile-form.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
@@ -48,6 +52,9 @@ interface FormFieldDescription {
   styleUrls: ['./pool-form.component.scss']
 })
 export class PoolFormComponent implements OnInit {
+  @ViewChild('crushInfoTabs', { static: false }) crushInfoTabs: TabsetComponent;
+  @ViewChild('crushDeletionBtn', { static: false }) crushDeletionBtn: TooltipDirective;
+
   permission: Permission;
   form: CdFormGroup;
   ecProfiles: ErasureCodeProfile[];
@@ -70,6 +77,7 @@ export class PoolFormComponent implements OnInit {
   resource: string;
   icons = Icons;
   pgAutoscaleModes: string[];
+  crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
 
   private modalSubscription: Subscription;
 
@@ -84,6 +92,7 @@ export class PoolFormComponent implements OnInit {
     private bsModalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
+    private crushRuleService: CrushRuleService,
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -196,13 +205,26 @@ export class PoolFormComponent implements OnInit {
     this.ecProfiles = ecProfiles;
   }
 
+  /**
+   * Used to update the crush rule or erasure code profile listings.
+   *
+   * If only one rule or profile exists it will be selected.
+   * If nothing exists null will be selected.
+   * If more than one rule or profile exists the listing will be enabled,
+   * otherwise disabled.
+   */
   private setListControlStatus(controlName: string, arr: any[]) {
     const control = this.form.get(controlName);
-    if (arr.length === 1) {
+    const value = control.value;
+    if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
       control.setValue(arr[0]);
+    } else if (arr.length === 0 && value) {
+      control.setValue(null);
     }
     if (arr.length <= 1) {
-      control.disable();
+      if (control.enabled) {
+        control.disable();
+      }
     } else if (control.disabled) {
       control.enable();
     }
@@ -229,7 +251,7 @@ export class PoolFormComponent implements OnInit {
       initialData: pool.configuration,
       sourceType: RbdConfigurationSourceField.pool
     });
-    this.rulesChange(pool.type);
+    this.poolTypeChange(pool.type);
     const rules = this.info.crush_rules_replicated.concat(this.info.crush_rules_erasure);
     const dataMap = {
       name: pool.pool_name,
@@ -300,10 +322,17 @@ export class PoolFormComponent implements OnInit {
 
   private listenToChangesDuringAdd() {
     this.form.get('poolType').valueChanges.subscribe((poolType) => {
-      this.rulesChange(poolType);
+      this.poolTypeChange(poolType);
     });
-    this.form.get('crushRule').valueChanges.subscribe(() => {
+    this.form.get('crushRule').valueChanges.subscribe((rule) => {
       // The crush rule can only be changed if type 'replicated' is set.
+      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen) {
+        this.crushDeletionBtn.hide();
+      }
+      if (!rule) {
+        return;
+      }
+      this.crushRuleIsUsedBy(rule.rule_name);
       this.replicatedRuleChange();
       this.pgCalc();
     });
@@ -328,7 +357,7 @@ export class PoolFormComponent implements OnInit {
     });
   }
 
-  private rulesChange(poolType: string) {
+  private poolTypeChange(poolType: string) {
     if (poolType === 'replicated') {
       this.setTypeBooleans(true, false);
     } else if (poolType === 'erasure') {
@@ -345,15 +374,8 @@ export class PoolFormComponent implements OnInit {
     if (this.editing) {
       return;
     }
-    const control = this.form.get('crushRule');
-    if (this.isReplicated && !control.value) {
-      if (rules.length === 1) {
-        control.setValue(rules[0]);
-        control.disable();
-      } else {
-        control.setValue(null);
-        control.enable();
-      }
+    if (this.isReplicated) {
+      this.setListControlStatus('crushRule', rules);
     }
     this.replicatedRuleChange();
     this.pgCalc();
@@ -546,6 +568,67 @@ export class PoolFormComponent implements OnInit {
           })
       }
     });
+  }
+
+  addCrushRule() {
+    if (this.crushDeletionBtn.isOpen) {
+      this.crushDeletionBtn.hide();
+    }
+    const modalRef = this.bsModalService.show(CrushRuleFormModalComponent);
+    modalRef.content.submitAction.subscribe((rule: CrushRuleConfig) => {
+      this.reloadCrushRules(rule.name);
+    });
+  }
+
+  private reloadCrushRules(ruleName?: string) {
+    if (this.modalSubscription) {
+      this.modalSubscription.unsubscribe();
+    }
+    this.poolService.getInfo().subscribe((info: PoolFormInfo) => {
+      this.initInfo(info);
+      this.poolTypeChange('replicated');
+      if (!ruleName) {
+        return;
+      }
+      const newRule = this.info.crush_rules_replicated.find((rule) => rule.rule_name === ruleName);
+      if (newRule) {
+        this.form.get('crushRule').setValue(newRule);
+      }
+    });
+  }
+
+  deleteCrushRule() {
+    const rule = this.form.getValue('crushRule');
+    if (!rule) {
+      return;
+    }
+    if (this.crushUsage) {
+      this.crushDeletionBtn.toggle();
+      this.data.crushInfo = true;
+      setTimeout(() => {
+        if (this.crushInfoTabs) {
+          this.crushInfoTabs.tabs[2].active = true;
+        }
+      }, 50);
+      return;
+    }
+    const name = rule.rule_name;
+    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadCrushRules());
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: this.i18n('crush rule'),
+        itemNames: [name],
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('crushRule/delete', { name: name }),
+            call: this.crushRuleService.delete(name)
+          })
+      }
+    });
+  }
+
+  crushRuleIsUsedBy(ruleName: string) {
+    this.crushUsage = ruleName ? this.info.used_rules[ruleName] : undefined;
   }
 
   submit() {

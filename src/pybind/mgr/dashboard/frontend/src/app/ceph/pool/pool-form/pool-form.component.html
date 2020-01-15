@@ -297,12 +297,30 @@
                       <i [ngClass]="[icons.questionCircle]"
                          aria-hidden="true"></i>
                     </button>
+                    <button class="btn btn-light"
+                            type="button"
+                            *ngIf="isReplicated && !editing"
+                            (click)="addCrushRule()">
+                      <i [ngClass]="[icons.add]"
+                         aria-hidden="true"></i>
+                    </button>
+                    <button class="btn btn-light"
+                            *ngIf="isReplicated && !editing"
+                            type="button"
+                            tooltip="This rule can't be deleted as it is in use."
+                            i18n-tooltip
+                            triggers=""
+                            #crushDeletionBtn="bs-tooltip"
+                            (click)="deleteCrushRule()">
+                      <i [ngClass]="[icons.trash]"
+                         aria-hidden="true"></i>
+                    </button>
                   </span>
                 </div>
                 <span class="form-text text-muted"
                       id="crush-info-block"
                       *ngIf="data.crushInfo && form.getValue('crushRule')">
-                  <tabset>
+                  <tabset #crushInfoTabs>
                     <tab i18n-heading
                          heading="Crush rule"
                          class="crush-rule-info">
@@ -320,8 +338,23 @@
                         </li>
                       </ol>
                     </tab>
+                    <tab i18n-heading
+                         heading="Used by pools"
+                         class="used-by-pools">
+                      <ng-template #ruleIsNotUsed>
+                        <span i18n>Rule is not in use.</span>
+                      </ng-template>
+                      <ul *ngIf="crushUsage; else ruleIsNotUsed">
+                        <li *ngFor="let pool of crushUsage">
+                          {{ pool }}
+                        </li>
+                      </ul>
+                    </tab>
                   </tabset>
                 </span>
+                <span class="invalid-feedback"
+                      *ngIf="form.showError('crushRule', formDir, 'required')"
+                      i18n>This field is required!</span>
                 <span class="invalid-feedback"
                       *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')"
                       i18n>The rule can't be used in the current cluster as it has
