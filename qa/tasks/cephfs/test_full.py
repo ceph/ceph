@@ -30,21 +30,10 @@ class FullnessTestCase(CephFSTestCase):
     def setUp(self):
         CephFSTestCase.setUp(self)
 
-        # These tests just use a single active MDS throughout, so remember its ID
-        # for use in mds_asok calls
-        self.active_mds_id = self.fs.get_active_names()[0]
+        mds_status = self.fs.rank_asok(["status"])
 
         # Capture the initial OSD map epoch for later use
-        self.initial_osd_epoch = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json").strip()
-        )['epoch']
-
-        # Check the initial barrier epoch on the MDS: this should be
-        # set to the latest map at MDS startup.  We do this check in
-        # setUp to get in there before subclasses might touch things
-        # in their own setUp functions.
-        self.assertGreaterEqual(self.fs.mds_asok(["status"], mds_id=self.active_mds_id)['osdmap_epoch_barrier'],
-                                self.initial_osd_epoch)
+        self.initial_osd_epoch = mds_status['osdmap_epoch_barrier']
 
     def test_barrier(self):
         """
