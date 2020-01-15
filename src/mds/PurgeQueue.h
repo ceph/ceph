@@ -152,7 +152,7 @@ public:
 
   void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
-protected:
+private:
   uint32_t _calculate_ops(const PurgeItem &item) const;
 
   bool _can_consume();
