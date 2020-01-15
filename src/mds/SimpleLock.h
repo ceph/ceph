@@ -24,26 +24,20 @@
 // -- lock types --
 // see CEPH_LOCK_*
 
-
-struct MutationImpl;
-typedef boost::intrusive_ptr<MutationImpl> MutationRef;
-
-struct MDLockCache;
-struct MDLockCacheItem;
-
 extern "C" {
 #include "locks.h"
 }
-
 
 #define CAP_ANY     0
 #define CAP_LONER   1
 #define CAP_XLOCKER 2
 
-struct LockType {
-  int type;
-  const sm_t *sm;
+struct MDLockCache;
+struct MDLockCacheItem;
+struct MutationImpl;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
+struct LockType {
   explicit LockType(int t) : type(t) {
     switch (type) {
     case CEPH_LOCK_DN:
@@ -71,13 +65,22 @@ struct LockType {
     }
   }
 
+  int type;
+  const sm_t *sm;
 };
 
 
 class SimpleLock {
 public:
-  LockType *type;
-  
+  // waiting
+  static const uint64_t WAIT_RD          = (1<<0);  // to read
+  static const uint64_t WAIT_WR          = (1<<1);  // to write
+  static const uint64_t WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
+  static const uint64_t WAIT_STABLE      = (1<<2);  // for a stable state
+  static const uint64_t WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
+  static const int WAIT_BITS        = 4;
+  static const uint64_t WAIT_ALL         = ((1<<WAIT_BITS)-1);
+
   static std::string_view get_state_name(int n) {
     switch (n) {
     case LOCK_UNDEF: return "UNDEF";
@@ -170,73 +173,11 @@ public:
     }
   }
 
-  // waiting
-  static const uint64_t WAIT_RD          = (1<<0);  // to read
-  static const uint64_t WAIT_WR          = (1<<1);  // to write
-  static const uint64_t WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
-  static const uint64_t WAIT_STABLE      = (1<<2);  // for a stable state
-  static const uint64_t WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
-  static const int WAIT_BITS        = 4;
-  static const uint64_t WAIT_ALL         = ((1<<WAIT_BITS)-1);
-
-
-protected:
-  // parent (what i lock)
-  MDSCacheObject *parent;
-
-  // lock state
-  __s16 state;
-  __s16 state_flags;
-
-  enum {
-    LEASED		= 1 << 0,
-    NEED_RECOVER	= 1 << 1,
-    CACHED		= 1 << 2,
-  };
-
-private:
-  int num_rdlock;
-
-  // XXX not in mempool
-  struct unstable_bits_t {
-    set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
-
-    // local state
-    int num_wrlock = 0, num_xlock = 0;
-    MutationRef xlock_by;
-    client_t xlock_by_client = -1;
-    client_t excl_client = -1;
-
-    elist<MDLockCacheItem*> lock_caches;
-
-    bool empty() {
-      return
-	gather_set.empty() &&
-	num_wrlock == 0 &&
-	num_xlock == 0 &&
-	xlock_by.get() == NULL &&
-	xlock_by_client == -1 &&
-	excl_client == -1 &&
-	lock_caches.empty();
-    }
-    unstable_bits_t();
-  };
-
-  mutable std::unique_ptr<unstable_bits_t> _unstable;
-
-  bool have_more() const { return _unstable ? true : false; }
-  unstable_bits_t *more() const {
-    if (!_unstable)
-      _unstable.reset(new unstable_bits_t);
-    return _unstable.get();
-  }
-  void try_clear_more() {
-    if (_unstable && _unstable->empty()) {
-      _unstable.reset();
-    }
-  }
-
-public:
+  SimpleLock(MDSCacheObject *o, LockType *lt) :
+    type(lt),
+    parent(o)
+  {}
+  virtual ~SimpleLock() {}
 
   client_t get_excl_client() const {
     return have_more() ? more()->excl_client : -1;
@@ -246,15 +187,6 @@ public:
       return;  // default is -1
     more()->excl_client = c;
   }
-
-  SimpleLock(MDSCacheObject *o, LockType *lt) :
-    type(lt),
-    parent(o), 
-    state(LOCK_SYNC),
-    state_flags(0),
-    num_rdlock(0)
-  {}
-  virtual ~SimpleLock() {}
 
   virtual bool is_scatterlock() const {
     return false;
@@ -268,40 +200,9 @@ public:
   int get_type() const { return type->type; }
   const sm_t* get_sm() const { return type->sm; }
 
-  int get_wait_shift() const {
-    switch (get_type()) {
-    case CEPH_LOCK_DN:       return 8;
-    case CEPH_LOCK_DVERSION: return 8 + 1*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IAUTH:    return 8 + 2*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ILINK:    return 8 + 3*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IDFT:     return 8 + 4*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IFILE:    return 8 + 5*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IVERSION: return 8 + 6*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IXATTR:   return 8 + 7*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ISNAP:    return 8 + 8*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_INEST:    return 8 + 9*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
-    default:
-      ceph_abort();
-    }
-  }
-
-  int get_cap_shift() const {
-    switch (get_type()) {
-    case CEPH_LOCK_IAUTH: return CEPH_CAP_SAUTH;
-    case CEPH_LOCK_ILINK: return CEPH_CAP_SLINK;
-    case CEPH_LOCK_IFILE: return CEPH_CAP_SFILE;
-    case CEPH_LOCK_IXATTR: return CEPH_CAP_SXATTR;
-    default: return 0;
-    }
-  }
-  int get_cap_mask() const {
-    switch (get_type()) {
-    case CEPH_LOCK_IFILE: return (1 << CEPH_CAP_FILE_BITS) - 1;
-    default: return (1 << CEPH_CAP_SIMPLE_BITS) - 1;
-    }
-  }
+  int get_wait_shift() const;
+  int get_cap_shift() const;
+  int get_cap_mask() const;
 
   void decode_locked_state(const bufferlist& bl) {
     parent->decode_lock_state(type->type, bl);
@@ -363,7 +264,6 @@ public:
     return get_sm()->states[state].next;
   }
 
-
   bool is_sync_and_unlocked() const {
     return
       get_state() == LOCK_SYNC &&
@@ -372,7 +272,6 @@ public:
       !is_wrlocked() &&
       !is_xlocked();
   }
-
 
   /*
   bool fw_rdlock_to_auth() {
@@ -410,8 +309,6 @@ public:
     if (have_more())
       more()->gather_set.erase(i);
   }
-
-
 
   virtual bool is_dirty() const { return false; }
   virtual bool is_stale() const { return false; }
@@ -605,7 +502,6 @@ public:
     set_state_rejoin(s, waiters, survivor);
   }
 
-
   // caps
   bool is_loner_mode() const {
     return get_sm()->states[state].loner;
@@ -630,7 +526,6 @@ public:
       return get_sm()->careful;
     return 0;
   }
-
 
   int gcaps_xlocker_mask(client_t client) const {
     if (client == get_xlock_by_client())
@@ -701,6 +596,65 @@ public:
     _print(out);
     out << ")";
   }
+
+  LockType *type;
+
+protected:
+  // parent (what i lock)
+  MDSCacheObject *parent;
+
+  // lock state
+  __s16 state = LOCK_SYNC;
+  __s16 state_flags = 0;
+
+  enum {
+    LEASED		= 1 << 0,
+    NEED_RECOVER	= 1 << 1,
+    CACHED		= 1 << 2,
+  };
+
+private:
+  // XXX not in mempool
+  struct unstable_bits_t {
+    unstable_bits_t();
+
+    bool empty() {
+      return
+	gather_set.empty() &&
+	num_wrlock == 0 &&
+	num_xlock == 0 &&
+	xlock_by.get() == NULL &&
+	xlock_by_client == -1 &&
+	excl_client == -1 &&
+	lock_caches.empty();
+    }
+
+    set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
+
+    // local state
+    int num_wrlock = 0, num_xlock = 0;
+    MutationRef xlock_by;
+    client_t xlock_by_client = -1;
+    client_t excl_client = -1;
+
+    elist<MDLockCacheItem*> lock_caches;
+  };
+
+  bool have_more() const { return _unstable ? true : false; }
+  unstable_bits_t *more() const {
+    if (!_unstable)
+      _unstable.reset(new unstable_bits_t);
+    return _unstable.get();
+  }
+  void try_clear_more() {
+    if (_unstable && _unstable->empty()) {
+      _unstable.reset();
+    }
+  }
+
+  int num_rdlock = 0;
+
+  mutable std::unique_ptr<unstable_bits_t> _unstable;
 };
 WRITE_CLASS_ENCODER(SimpleLock)
 
@@ -709,6 +663,4 @@ inline ostream& operator<<(ostream& out, const SimpleLock& l)
   l.print(out);
   return out;
 }
-
-
 #endif
