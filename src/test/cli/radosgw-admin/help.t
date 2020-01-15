@@ -245,6 +245,7 @@
                                set list of zones to sync from
      --sync-from-rm=[zone-name][,...]
                                remove zones from list of zones to sync from
+     --bucket-index-max-shards override a zone/zonegroup's default bucket index shard count
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state
