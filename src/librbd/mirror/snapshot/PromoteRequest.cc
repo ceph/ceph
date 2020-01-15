@@ -36,7 +36,7 @@ void PromoteRequest<I>::send() {
 template <typename I>
 void PromoteRequest<I>::refresh_image() {
   if (!m_image_ctx->state->is_refresh_required()) {
-    create_promote_snapshot();
+    handle_refresh_image(0);
     return;
   }
 
@@ -59,13 +59,19 @@ void PromoteRequest<I>::handle_refresh_image(int r) {
     return;
   }
 
-  if (!util::can_create_primary_snapshot(m_image_ctx, false, m_force,
+  if (!util::can_create_primary_snapshot(m_image_ctx, false, true,
                                          &m_rollback_snap_id)) {
     lderr(cct) << "cannot promote" << dendl;
     finish(-EINVAL);
     return;
   } else if (m_rollback_snap_id == CEPH_NOSNAP) {
     create_promote_snapshot();
+    return;
+  }
+
+  if (!m_force) {
+    lderr(cct) << "cannot promote: needs rollback and force not set" << dendl;
+    finish(-EINVAL);
     return;
   }
 
@@ -157,7 +163,7 @@ void PromoteRequest<I>::wait_update_notify() {
     finish(r);
     return;
   }
-  
+
   scheduler_unregister_update_watcher();
 }
 

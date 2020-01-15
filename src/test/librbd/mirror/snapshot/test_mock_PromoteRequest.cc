@@ -275,12 +275,12 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, Success) {
 
   expect_refresh_image(mock_image_ctx, true, 0);
   MockUtils mock_utils;
-  expect_can_create_primary_snapshot(mock_utils, force, CEPH_NOSNAP, true);
+  expect_can_create_primary_snapshot(mock_utils, true, CEPH_NOSNAP, true);
   MockCreatePrimaryRequest mock_create_primary_request;
   expect_create_promote_snapshot(mock_image_ctx, mock_create_primary_request,
                                  0);
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, false, &ctx);
+  auto req = new MockPromoteRequest(&mock_image_ctx, force, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -305,14 +305,14 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
 
   expect_refresh_image(mock_image_ctx, true, 0);
   MockUtils mock_utils;
-  expect_can_create_primary_snapshot(mock_utils, force, 123, true);
+  expect_can_create_primary_snapshot(mock_utils, true, 123, true);
   MockCreateNonPrimaryRequest mock_create_non_primary_request;
   expect_create_orphan_snapshot(mock_image_ctx, mock_create_non_primary_request,
                                 0);
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
-  
+
   SnapInfo snap_info = {"snap", cls::rbd::MirrorPrimarySnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
   expect_rollback(mock_image_ctx, 123, &snap_info, 0);
@@ -360,7 +360,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, ErrorCannotRollback) {
 
   expect_refresh_image(mock_image_ctx, true, 0);
   MockUtils mock_utils;
-  expect_can_create_primary_snapshot(mock_utils, force, CEPH_NOSNAP, false);
+  expect_can_create_primary_snapshot(mock_utils, true, CEPH_NOSNAP, false);
 
   C_SaferCond ctx;
   auto req = new MockPromoteRequest(&mock_image_ctx, force, &ctx);
