@@ -260,7 +260,12 @@ class TestCacheDrop(CephFSTestCase):
         self.assertEqual(result['flush_journal']['return_code'], 0)
         self.assertGreater(result['duration'], 5)
         self.assertLess(result['duration'], 120)
-        self.assertEqual(0, result['trim_cache']['trimmed'])
+        # Note: result['trim_cache']['trimmed'] may be >0 because dropping the
+        # cache now causes the Locker to drive eviction of stale clients (a
+        # stale session will be autoclosed at mdsmap['session_timeout']). The
+        # particular operation causing this is journal flush which causes the
+        # MDS to wait wait for cap revoke.
+        #self.assertEqual(0, result['trim_cache']['trimmed'])
         self.mount_a.kill_cleanup()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
@@ -278,7 +283,11 @@ class TestCacheDrop(CephFSTestCase):
         self.assertEqual(result['flush_journal']['return_code'], 0)
         self.assertGreater(result['duration'], 5)
         self.assertLess(result['duration'], 120)
-        self.assertEqual(0, result['trim_cache']['trimmed'])
+        # Note: result['trim_cache']['trimmed'] may be >0 because dropping the
+        # cache now causes the Locker to drive eviction of stale clients (a
+        # stale session will be autoclosed at mdsmap['session_timeout']). The
+        # particular operation causing this is journal flush which causes the
+        # MDS to wait wait for cap revoke.
         self.mount_a.kill_cleanup()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
