@@ -87,8 +87,8 @@ public:
       header.version = HEAD_VERSION;
       encode(metadata, payload);
       encode(supported_features, payload);
+      encode(metric_spec, payload);
     }
-    encode(metric_spec, payload);
   }
 private:
   template<class T, typename... Args>
