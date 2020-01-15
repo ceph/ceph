@@ -25,38 +25,7 @@
 #include "MDSContext.h"
 
 struct SnapRealm {
-protected:
-  // cache
-  mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
-  mutable snapid_t cached_last_created;  // max last_created over all past+present parents
-  mutable snapid_t cached_last_destroyed;
-  mutable set<snapid_t> cached_snaps;
-  mutable SnapContext cached_snap_context;
-  mutable bufferlist cached_snap_trace;
-
-  void check_cache() const;
-
 public:
-  // realm state
-  sr_t srnode;
-
-  // in-memory state
-  MDCache *mdcache;
-  CInode *inode;
-
-  mutable bool open = false;                        // set to true once all past_parents are opened
-  bool past_parents_dirty = false;
-  bool global;
-
-  SnapRealm *parent;
-  set<SnapRealm*> open_children;    // active children that are currently open
-  set<SnapRealm*> open_past_children;  // past children who has pinned me
-  map<inodeno_t, pair<SnapRealm*, set<snapid_t> > > open_past_parents;  // these are explicitly pinned.
-  unsigned num_open_past_parents;
-
-  elist<CInode*> inodes_with_caps;             // for efficient realm splits
-  map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
-
   SnapRealm(MDCache *c, CInode *in);
 
   bool exists(std::string_view name) const {
@@ -153,8 +122,41 @@ public:
       client_caps.erase(found);
     }
   }
+
+  // realm state
+  sr_t srnode;
+
+  // in-memory state
+  MDCache *mdcache;
+  CInode *inode;
+
+  bool past_parents_dirty = false;
+
+  SnapRealm *parent = nullptr;
+  set<SnapRealm*> open_children;    // active children that are currently open
+  set<SnapRealm*> open_past_children;  // past children who has pinned me
+
+  elist<CInode*> inodes_with_caps = 0;             // for efficient realm splits
+  map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
+
+protected:
+  void check_cache() const;
+
+private:
+  mutable bool open = false;                        // set to true once all past_parents are opened
+  bool global;
+
+  map<inodeno_t, pair<SnapRealm*, set<snapid_t> > > open_past_parents;  // these are explicitly pinned.
+  unsigned num_open_past_parents = 0;
+
+  // cache
+  mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
+  mutable snapid_t cached_last_created;  // max last_created over all past+present parents
+  mutable snapid_t cached_last_destroyed;
+  mutable set<snapid_t> cached_snaps;
+  mutable SnapContext cached_snap_context;
+  mutable bufferlist cached_snap_trace;
 };
 
 ostream& operator<<(ostream& out, const SnapRealm &realm);
-
 #endif
