@@ -497,6 +497,16 @@ bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
   return true;
 }
 
+void DaemonServer::update_task_status(DaemonKey key, const ref_t<MMgrReport>& m) {
+  dout(10) << "got task status from " << key << dendl;
+
+  auto p = pending_service_map.get_daemon(key.type, key.name);
+  if (!map_compare(p.first->task_status, *m->task_status)) {
+    p.first->task_status = *m->task_status;
+    pending_service_map_dirty = pending_service_map.epoch;
+  }
+}
+
 bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 {
   DaemonKey key;
@@ -601,24 +611,20 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
                  << " ignored " << daemon->ignored_mon_config << dendl;
       }
 
+      utime_t now = ceph_clock_now();
       if (daemon->service_daemon) {
-        utime_t now = ceph_clock_now();
         if (m->daemon_status) {
           daemon->service_status_stamp = now;
           daemon->service_status = *m->daemon_status;
         }
-        if (m->task_status && !map_compare(daemon->task_status, *m->task_status)) {
-          auto [d, added] = pending_service_map.get_daemon(m->service_name,
-							   m->daemon_name);
-	  if (!added) {
-            daemon->task_status = *m->task_status;
-            d->task_status = *m->task_status;
-            pending_service_map_dirty = pending_service_map.epoch;
-	  }
-        }
         daemon->last_service_beacon = now;
       } else if (m->daemon_status) {
         derr << "got status from non-daemon " << key << dendl;
+      }
+      // update task status
+      if (m->task_status) {
+        update_task_status(key, m);
+        daemon->last_service_beacon = now;
       }
       if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
         // only OSD and MON send health_checks to me now
