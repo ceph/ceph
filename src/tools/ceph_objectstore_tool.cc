@@ -577,16 +577,21 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
   map<string,bufferlist> km;
+  string key_to_remove;
   pg_info_t last_written_info;
   int ret = prepare_info_keymap(
     g_ceph_context,
-    &km, epoch,
+    &km, &key_to_remove,
+    epoch,
     info,
     last_written_info,
     past_intervals,
     true, true, false);
   if (ret) cerr << "Failed to write info" << std::endl;
   t.omap_setkeys(coll, pgmeta_oid, km);
+  if (!key_to_remove.empty()) {
+    t.omap_rmkey(coll, pgmeta_oid, key_to_remove);
+  }
   return ret;
 }
 
@@ -1972,9 +1977,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     cerr << "done, clearing removal flag" << std::endl;
 
   if (!dry_run) {
-    set<string> remove;
-    remove.insert("_remove");
-    t.omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
+    t.omap_rmkey(coll, pgid.make_pgmeta_oid(), "_remove");
     wait_until_done(&t, [&] {
       store->queue_transaction(ch, std::move(t));
       // make sure we flush onreadable items before mapper/driver are destroyed.
@@ -2395,9 +2398,6 @@ int do_rm_omap(ObjectStore *store, coll_t coll,
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
-  set<string> keys;
-
-  keys.insert(key);
 
   if (debug)
     cerr << "Rm_omap " << ghobj << std::endl;
@@ -2405,7 +2405,7 @@ int do_rm_omap(ObjectStore *store, coll_t coll,
   if (dry_run)
     return 0;
 
-  t->omap_rmkeys(coll, ghobj, keys);
+  t->omap_rmkey(coll, ghobj, key);
 
   auto ch = store->open_collection(coll);
   store->queue_transaction(ch, std::move(*t));

@@ -6229,6 +6229,7 @@ static const __u8 pg_compat_struct_v = 10;
 int prepare_info_keymap(
   CephContext* cct,
   map<string,bufferlist> *km,
+  string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,
   pg_info_t &last_written_info,

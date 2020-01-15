@@ -233,6 +233,44 @@ void PG::on_activate_complete()
   }
 }
 
+void PG::prepare_write(pg_info_t &info,
+		       pg_info_t &last_written_info,
+		       PastIntervals &past_intervals,
+		       PGLog &pglog,
+		       bool dirty_info,
+		       bool dirty_big_info,
+		       bool need_write_epoch,
+		       ceph::os::Transaction &t)
+{
+  std::map<string,bufferlist> km;
+  std::string key_to_remove;
+  if (dirty_big_info || dirty_info) {
+    int ret = prepare_info_keymap(
+      shard_services.get_cct(),
+      &km,
+      &key_to_remove,
+      get_osdmap_epoch(),
+      info,
+      last_written_info,
+      past_intervals,
+      dirty_big_info,
+      need_write_epoch,
+      true,
+      nullptr,
+      this);
+    ceph_assert(ret == 0);
+  }
+  pglog.write_log_and_missing(
+    t, &km, coll, pgmeta_oid,
+    peering_state.get_pool().info.require_rollback());
+  if (!km.empty()) {
+    t.omap_setkeys(coll, pgmeta_oid, km);
+  }
+  if (!key_to_remove.empty()) {
+    t.omap_rmkey(coll, pgmeta_oid, key_to_remove);
+  }
+}
+
 void PG::log_state_enter(const char *state) {
   logger().info("Entering state: {}", state);
 }
