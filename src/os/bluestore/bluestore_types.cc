@@ -27,6 +27,44 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 
+size_t get_squeezed_size(const PExtentArray& a)
+{
+  size_t size = 0;
+  for (auto& i : a) {
+    if (i == INVALID_OFFSET) {
+      break;
+    }
+    ++size;
+  }
+  return size;
+}
+
+uint64_t squeeze_extent(const bluestore_pextent_t& e)
+{
+
+  //ceph_assert(e.offset == INVALID_OFFSET || ctz(e.offset) >= MIN_ALLOC_SIZE_ORDER);
+  //ceph_assert(ctz(e.length) >= MIN_ALLOC_SIZE_ORDER);
+  //ceph_assert(clz(e.length) >= 64 - MIN_ALLOC_SIZE_ORDER * 2);
+
+  uint64_t v = (e.offset & ~MIN_ALLOC_SIZE_MASK) +
+    (e.length >> MIN_ALLOC_SIZE_ORDER);
+  return v;
+}
+
+bluestore_pextent_t unsqueeze_extent(uint64_t v)
+{
+  bluestore_pextent_t res;
+  res.length = v & MIN_ALLOC_SIZE_MASK;
+
+  res.offset = v - res.length;
+  if (res.offset == INVALID_OFFSET_SQUEEZED)
+    res.offset = INVALID_OFFSET;
+
+  res.length <<= MIN_ALLOC_SIZE_ORDER;
+
+  return res;
+}
+
 // bluestore_bdev_label_t
 
 void bluestore_bdev_label_t::encode(bufferlist& bl) const
@@ -630,6 +668,17 @@ void bluestore_pextent_t::generate_test_instances(list<bluestore_pextent_t*>& ls
 }
 
 // bluestore_blob_t
+bluestore_blob_t::bluestore_blob_t(uint32_t f) : flags(f)
+{
+  _squeezed_extents.fill(INVALID_OFFSET);
+  set_flag(FLAG_SHORT_EXTENTS_LIST);
+}
+bluestore_blob_t::~bluestore_blob_t() {
+  if (!has_short_extents_list()) {
+    _extents.~PExtentVector();
+  }
+}
+
 
 string bluestore_blob_t::get_flags_string(unsigned flags)
 {
@@ -654,6 +703,11 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "shared";
   }
+  if (flags & FLAG_SHORT_EXTENTS_LIST) {
+    if (s.length())
+      s += '+';
+    s += "squeezed";
+  }
 
   return s;
 }
@@ -666,9 +720,11 @@ size_t bluestore_blob_t::get_csum_value_size() const
 void bluestore_blob_t::dump(Formatter *f) const
 {
   f->open_array_section("extents");
-  for (auto& p : extents) {
-    f->dump_object("extent", p);
-  }
+  for_each_extent(true,
+    [&](const bluestore_pextent_t& p) {
+      f->dump_object("extent", p);
+      return 0;
+    });
   f->close_section();
   f->dump_unsigned("logical_length", logical_length);
   f->dump_unsigned("compressed_length", compressed_length);
@@ -696,13 +752,25 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->add_unused(8, 8);
   ls.back()->allocated_test(bluestore_pextent_t(0x40100000, 0x10000));
   ls.back()->allocated_test(
-    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
+    bluestore_pextent_t(INVALID_OFFSET, 0x1000));
   ls.back()->allocated_test(bluestore_pextent_t(0x40120000, 0x10000));
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
-  out << "blob(" << o.get_extents();
+  out << "blob([";
+  bool first = true;
+  o.for_each_extent(true,
+    [&](const bluestore_pextent_t& p) {
+      if (!first) {
+        out << ',';
+      } else {
+        first = false;
+      }
+      out << p;
+      return 0;
+    });
+  out << ']';
   if (o.is_compressed()) {
     out << " clen 0x" << std::hex
 	<< o.get_logical_length()
@@ -721,6 +789,219 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
     out << " unused=0x" << std::hex << o.unused << std::dec;
   out << ")";
   return out;
+}
+
+void bluestore_blob_t::bound_encode(size_t& p, uint64_t struct_v) const
+{
+  ceph_assert(struct_v == 1 || struct_v == 2);
+
+  if (has_short_extents_list()) {
+    denc(_squeezed_extents, p);
+  } else {
+    denc(_extents, p);
+  }
+  denc_varint(flags, p);
+  denc_varint_lowz(logical_length, p);
+  denc_varint_lowz(compressed_length, p);
+  denc(csum_type, p);
+  denc(csum_chunk_order, p);
+  denc_varint(csum_data.length(), p);
+  p += csum_data.length();
+  p += sizeof(unused_t);
+}
+
+void bluestore_blob_t::encode(bufferlist::contiguous_appender& p,
+                              uint64_t struct_v) const
+{
+  ceph_assert(struct_v == 1 || struct_v == 2);
+
+  if (has_short_extents_list()) {
+    denc(_squeezed_extents, p);
+  } else {
+    denc(_extents, p);
+  }
+  denc_varint(flags, p);
+  if (is_compressed()) {
+    denc_varint_lowz(logical_length, p);
+    denc_varint_lowz(compressed_length, p);
+  }
+  if (has_csum()) {
+    denc(csum_type, p);
+    denc(csum_chunk_order, p);
+    denc_varint(csum_data.length(), p);
+    memcpy(p.get_pos_add(csum_data.length()), csum_data.c_str(),
+      csum_data.length());
+  }
+  if (has_unused()) {
+    denc(unused, p);
+  }
+}
+
+void bluestore_blob_t::decode(bufferptr::const_iterator& p,
+                              uint64_t struct_v)
+{
+  ceph_assert(struct_v == 1 || struct_v == 2);
+  bool was_short = has_short_extents_list();
+
+  // we can't decode from squeezed format since flags aren't set
+  // at this point hence doing via PExtentVector
+  PExtentVector extents;
+  denc(extents, p);
+
+  denc_varint(flags, p);
+  if (is_compressed()) {
+    denc_varint_lowz(logical_length, p);
+    denc_varint_lowz(compressed_length, p);
+  }
+  if (has_csum()) {
+    denc(csum_type, p);
+    denc(csum_chunk_order, p);
+    int len;
+    denc_varint(len, p);
+    csum_data = p.get_ptr(len);
+    csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+  }
+  if (has_unused()) {
+    denc(unused, p);
+  }
+  // the code below additionally checks if obtained extents list
+  // can be preserved in the short mode. The rationale is to ensure
+  // correct handling after OSD upgrade -> downgrage -> upgrade procedure
+  // when FLAG_SHORT_EXTENTS_LIST might be out of sync.
+  //
+  bool done = false;
+  if (has_short_extents_list() && extents.size() <= MAX_SQUEEZED) {
+    if (!was_short) {
+      _extents.~PExtentVector();
+    }
+    size_t pos = 0;
+    done = true;
+    for (auto& e : extents) {
+      if (e.length < MAX_SQUEEZED_LEN) {
+        _squeezed_extents[pos++] = squeeze_extent(e);
+      } else {
+        done = false;
+        break;
+      }
+    }
+    while (done && pos < MAX_SQUEEZED) {
+      _squeezed_extents[pos++] = INVALID_OFFSET;
+    }
+  }
+  if (!done) {
+    if (was_short) {
+      new (&_extents) PExtentVector;
+    }
+    _extents.swap(extents);
+  }
+  // doing postponed length calculation
+  if (!is_compressed()) {
+    logical_length = get_ondisk_length();
+  }
+}
+
+uint64_t bluestore_blob_t::calc_offset(uint64_t x_off, uint64_t* plen) const
+{
+  if (has_short_extents_list()) {
+    for (auto i : _squeezed_extents) {
+      ceph_assert(i != INVALID_OFFSET);
+      bluestore_pextent_t p = unsqueeze_extent(i);
+      if (x_off >= p.length) {
+        x_off -= p.length;
+      } else {
+        if (plen)
+          *plen = p.length - x_off;
+        return p.offset + x_off;
+      }
+    }
+    ceph_abort_msg("calc_offset() reached the end, failed to find any pextent");
+  }
+  auto p = _extents.begin();
+  ceph_assert(p != _extents.end());
+  while (x_off >= p->length) {
+    x_off -= p->length;
+    ++p;
+    ceph_assert(p != _extents.end());
+  }
+  if (plen)
+    *plen = p->length - x_off;
+  return p->offset + x_off;
+}
+
+// validates whether or not the status of pextents within the given range
+// meets the requirement(allocated or unallocated).
+bool bluestore_blob_t::_validate_range(uint64_t b_off, uint64_t b_len,
+  bool require_allocated) const
+{
+  if (has_short_extents_list()) {
+    bool within = false;
+    for (auto i : _squeezed_extents) {
+      ceph_assert(i != INVALID_OFFSET);
+      bluestore_pextent_t p = unsqueeze_extent(i);
+      if (!within && b_off >= p.length) {
+        b_off -= p.length;
+      } else {
+        if (!within) {
+          within = true;
+          b_len += b_off;
+        }
+        if (b_len) {
+          if (require_allocated != p.is_valid()) {
+            return false;
+          }
+          if (p.length >= b_len) {
+            return true;
+          }
+          b_len -= p.length;
+        }
+      }
+    }
+    ceph_abort_msg("_validate_range() reached the end, failed to find any pextent");
+  }
+
+  auto p = _extents.begin();
+  ceph_assert(p != _extents.end());
+  while (b_off >= p->length) {
+    b_off -= p->length;
+    if (++p == _extents.end())
+      return false;    
+  }
+  b_len += b_off;
+  while (b_len) {
+    ceph_assert(p != _extents.end());
+    if (require_allocated != p->is_valid()) {
+      return false;
+    }
+
+    if (p->length >= b_len) {
+      return true;
+    }
+    b_len -= p->length;
+    if (++p == _extents.end())
+      return false;    
+  }
+  ceph_abort_msg("we should not get here");
+  return false;
+}
+
+uint32_t bluestore_blob_t::get_ondisk_length() const
+{
+  uint32_t len = 0;
+  if (has_short_extents_list()) {
+    for (auto i : _squeezed_extents) {
+      // skip tailing 'non-present' extents
+      if (i == INVALID_OFFSET) {
+        break;
+      }
+      bluestore_pextent_t p = unsqueeze_extent(i);
+      len += p.length;
+    }
+  } else {
+    for (auto& p : _extents) {
+      len += p.length;
+    }
+  }
+  return len;
 }
 
 void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
@@ -791,24 +1072,139 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     return 0;
 }
 
+
+bool bluestore_blob_t::try_prune_tail()
+{
+  bool res = false;
+  if (has_unused()) {
+    return res;
+  }
+
+  if (has_short_extents_list()) {
+    for (auto it = _squeezed_extents.rbegin(); it != _squeezed_extents.rend(); ++it) {
+      if (*it != INVALID_OFFSET) {
+        bluestore_pextent_t p = unsqueeze_extent(*it);
+        if (logical_length > p.length && // if it's all invalid it's not pruning.
+          !p.is_valid()) {
+          logical_length -= p.length;
+          *it = INVALID_OFFSET;
+          res = true;
+        }
+        break;
+      }
+    }
+  } else {
+    if (_extents.size() > 1 &&  // if it's all invalid it's not pruning.
+      !_extents.back().is_valid()) {
+      const auto& p = _extents.back();
+      logical_length -= p.length;
+      _extents.pop_back();
+      res = true;
+    }
+    //FIXME minor: switch to short?
+  }
+  if (res && has_csum()) {
+    bufferptr t;
+    t.swap(csum_data);
+    csum_data = bufferptr(t.c_str(),
+      get_logical_length() / get_csum_chunk_size() *
+      get_csum_value_size());
+  }
+  return res;
+}
+
+void bluestore_blob_t::add_tail(uint32_t new_len)
+{
+  ceph_assert(is_mutable());
+  ceph_assert(!has_unused());
+  ceph_assert(new_len > logical_length);
+
+  bool done = false;
+  auto l = new_len - logical_length;
+  if (has_short_extents_list()) {
+    auto size = get_squeezed_size(_squeezed_extents);
+
+    if (size > 0) {
+      bluestore_pextent_t p0 =
+        unsqueeze_extent(_squeezed_extents[size - 1]);
+      if (p0.offset == INVALID_OFFSET && p0.offset + l < MAX_SQUEEZED_LEN) {
+        p0.length += l;
+        _squeezed_extents[size - 1] = squeeze_extent(p0);
+        done = true;
+      }
+    }
+    if (!done && l < MAX_SQUEEZED_LEN && size < _squeezed_extents.size()) {
+      ceph_assert(ctz(l) >= MIN_ALLOC_SIZE_ORDER);
+      bluestore_pextent_t p(INVALID_OFFSET, l);
+      auto v = squeeze_extent(p);
+      _squeezed_extents[size] = v;
+      done = true;
+    } else {
+      unsqueeze_extents();
+    }
+  }
+  if (!done) {
+    if (!_extents.empty() && _extents.back().offset == INVALID_OFFSET) {
+      _extents.back().length += l;
+    } else {
+      _extents.emplace_back(
+        bluestore_pextent_t(
+          INVALID_OFFSET,
+          l));
+    }
+  }
+  logical_length = new_len;
+
+  if (has_csum()) {
+    bufferptr t;
+    t.swap(csum_data);
+    csum_data = buffer::create(
+      get_csum_value_size() * logical_length / get_csum_chunk_size());
+    csum_data.copy_in(0, t.length(), t.c_str());
+    csum_data.zero(t.length(), csum_data.length() - t.length());
+  }
+}
+
 void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const PExtentVector& allocs)
 {
-  if (extents.size() == 0) {
+  if (get_ondisk_length() == 0) {
     // if blob is compressed then logical length to be already configured
     // otherwise - to be unset.
     ceph_assert((is_compressed() && logical_length != 0) ||
       (!is_compressed() && logical_length == 0));
 
-    extents.reserve(allocs.size() + (b_off ? 1 : 0));
-    if (b_off) {
-      extents.emplace_back(
-        bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, b_off));
-
+    size_t expected_size = allocs.size() + (b_off ? 1 : 0);
+    bool can_use_short = false;
+    if (expected_size <= MAX_SQUEEZED && b_off < MAX_SQUEEZED_LEN) {
+      can_use_short = true;
+      for (auto& p : allocs) {
+        if (p.length >= MAX_SQUEEZED_LEN) {
+          can_use_short = false;
+          break;
+        }
+      }
     }
+
+    reset_extents(can_use_short);
     uint32_t new_len = b_off;
-    for (auto& a : allocs) {
-      extents.emplace_back(a.offset, a.length);
-      new_len += a.length;
+    size_t i = 0;
+    if (can_use_short) {
+      if (b_off) {
+        _squeezed_extents[i++] = squeeze_extent(bluestore_pextent_t(INVALID_OFFSET, b_off));
+      }
+      for (auto& p : allocs) {
+        _squeezed_extents[i++] = squeeze_extent(p);
+        new_len += p.length;
+      }
+    } else {
+      _extents.resize(expected_size);
+      if (b_off) {
+        _extents[i++] = bluestore_pextent_t(INVALID_OFFSET, b_off);
+      }
+      for (auto& a : allocs) {
+        _extents[i++] = bluestore_pextent_t(a.offset, a.length);
+        new_len += a.length;
+      }
     }
     if (!is_compressed()) {
       logical_length = new_len;
@@ -818,83 +1214,150 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const PExtentV
                               // compressed
     ceph_assert(b_off < logical_length);
     uint32_t cur_offs = 0;
-    auto start_it = extents.begin();
     size_t pos = 0;
-    while (true) {
-      ceph_assert(start_it != extents.end());
-      if (cur_offs + start_it->length > b_off) {
-	break;
-      }
-      cur_offs += start_it->length;
-      ++start_it;
-      ++pos;
-    }
-    uint32_t head = b_off - cur_offs;
+
     uint32_t end_off = b_off + length;
-    auto end_it = start_it;
+    bool found = false;
+    uint32_t head = 0;
+    uint32_t tail = 0;
 
-    while (true) {
-      ceph_assert(end_it != extents.end());
-      ceph_assert(!end_it->is_valid());
-      if (cur_offs + end_it->length >= end_off) {
-	break;
+    size_t expected_size = allocs.size();
+    for_each_extent(true,
+      [&] (const bluestore_pextent_t& p) {
+        if (found) {
+          expected_size++;
+        } else if (cur_offs + p.length <= b_off) {
+          cur_offs += p.length;
+          pos++;
+          expected_size++;
+        } else {
+          // single invalid pextent is expected
+          ceph_assert(cur_offs <= b_off);
+          ceph_assert(cur_offs + p.length >= end_off);
+          ceph_assert(!p.is_valid());
+          found = true;
+          head = b_off - cur_offs;
+          tail = cur_offs + p.length - end_off;
+          expected_size += head ? 1 : 0;
+          expected_size += tail ? 1 : 0;
+        }
+        return 0;
+      });
+
+      bool can_use_short = false;
+    if (has_short_extents_list() &&
+        expected_size <= MAX_SQUEEZED && b_off < MAX_SQUEEZED_LEN) {
+      can_use_short = true;
+      for (auto& p : allocs) {
+        if (p.length >= MAX_SQUEEZED_LEN) {
+          can_use_short = false;
+          break;
+        }
       }
-      cur_offs += end_it->length;
-      ++end_it;
     }
-    ceph_assert(cur_offs + end_it->length >= end_off);
-    uint32_t tail = cur_offs + end_it->length - end_off;
 
-    start_it = extents.erase(start_it, end_it + 1);
-    size_t count = allocs.size();
-    count += head ? 1 : 0;
-    count += tail ? 1 : 0;
-    extents.insert(start_it,
-                   count,
-                   bluestore_pextent_t(
-                     bluestore_pextent_t::INVALID_OFFSET, 0));
-   
-    // Workaround to resolve lack of proper iterator return in vector::insert
-    // Looks like some gcc/stl implementations still lack it despite c++11
-    // support claim
-    start_it = extents.begin() + pos;
+    if (found) {
+      size_t delta = allocs.size() + (tail ? 1 : 0) + (head ? 1 : 0) - 1;
+      auto pos0 = pos;
+      if (can_use_short) {
+        // we are already in short mode
+        if (head) {
+          _squeezed_extents[pos++] =
+            squeeze_extent(bluestore_pextent_t(INVALID_OFFSET, head));
+        }
 
-    if (head) {
-      start_it->length = head;
-      ++start_it;
+        // shift preserved extents right
+        for (size_t i = _squeezed_extents.size() - 1; i > pos0 + delta; i--) {
+          _squeezed_extents[i] = _squeezed_extents[i - delta];
+        }
+        for (auto& p : allocs) {
+          _squeezed_extents[pos++] = squeeze_extent(p);
+        }
+
+        if (tail) {
+          _squeezed_extents[pos++] =
+            squeeze_extent(bluestore_pextent_t(INVALID_OFFSET, tail));
+        }
+      } else {
+        if (has_short_extents_list()) {
+          unsqueeze_extents();
+        }
+        _extents.resize(expected_size);
+        if (head) {
+          _extents[pos++] = bluestore_pextent_t(INVALID_OFFSET, head);
+        }
+        // shift preserved extents right
+        for (size_t i = _extents.size() - 1; i > pos0 + delta; i--) {
+          _extents[i] = _extents[i - delta];
+        }
+        for (auto& p : allocs) {
+          _extents[pos++] = p;
+        }
+
+        if (tail) {
+          _extents[pos++] = bluestore_pextent_t(INVALID_OFFSET, tail);
+        }
+      }
+    } else {
+      // appeding more extents to existing one isn't implemented for now
+      ceph_assert(false);
     }
-    for(auto& e : allocs) {
-      *start_it = e;
-      ++start_it;
-    }
-    if (tail) {
-      start_it->length = tail;
-    } 
   }
 }
 
 // cut it out of extents
 struct vecbuilder {
+  size_t short_list_len = 0;
+  PExtentArray short_list;
   PExtentVector v;
-  uint64_t invalid = 0;
 
-  void add_invalid(uint64_t length) {
-    invalid += length;
+  vecbuilder() {
+    short_list.fill(INVALID_OFFSET);
   }
-  void flush() {
-    if (invalid) {
-      v.emplace_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
-        invalid));
 
-      invalid = 0;
+  bool has_short_list() const {
+    return v.empty();
+  }
+  void add_invalid(uint64_t length) {
+    if (!v.empty()) {
+      bluestore_pextent_t& p = v.back();
+      if (p.offset == INVALID_OFFSET) {
+        p.length += length;
+      } else {
+        v.emplace_back(INVALID_OFFSET, length);
+      }
+    } else if (short_list_len == 0) {
+      _add_new(INVALID_OFFSET, length);
+    } else {
+      bluestore_pextent_t p = unsqueeze_extent(short_list[short_list_len - 1]);
+      if (p.offset == INVALID_OFFSET && p.length + length < MAX_SQUEEZED_LEN) {
+        p.length += length;
+        short_list[short_list_len - 1] = squeeze_extent(p);
+      } else {
+        _add_new(INVALID_OFFSET, length);
+      }
     }
   }
   void add(uint64_t offset, uint64_t length) {
-    if (offset == bluestore_pextent_t::INVALID_OFFSET) {
+    if (offset == INVALID_OFFSET) {
       add_invalid(length);
+    } else {
+      _add_new(offset, length);
     }
-    else {
-      flush();
+  }
+private:
+  void _add_new(uint64_t offset, uint64_t length) {
+    if (v.empty() && length < MAX_SQUEEZED_LEN &&
+      short_list_len < short_list.size()) {
+      short_list[short_list_len++] =
+        squeeze_extent(bluestore_pextent_t(offset, length));
+    } else {
+      if (short_list_len) {
+        for (size_t i = 0; i < short_list_len; i++) {
+          v.emplace_back(unsqueeze_extent(short_list[i]));
+        }
+        short_list_len = 0;
+      }
       v.emplace_back(offset, length);
     }
   }
@@ -902,7 +1365,19 @@ struct vecbuilder {
 
 void bluestore_blob_t::allocated_test(const bluestore_pextent_t& alloc)
 {
-  extents.emplace_back(alloc);
+  bool done = false;
+  if (has_short_extents_list()) {
+    auto size = get_squeezed_size(_squeezed_extents);
+    if (size < _squeezed_extents.size() && alloc.length < MAX_SQUEEZED_LEN) {
+      _squeezed_extents[size] = squeeze_extent(alloc);
+      done = true;
+    } else {
+      unsqueeze_extents();
+    }
+  }
+  if (!done) {
+    _extents.emplace_back(alloc);
+  }
   if (!is_compressed()) {
     logical_length += alloc.length;
   }
@@ -915,132 +1390,184 @@ bool bluestore_blob_t::release_extents(bool all,
   // common case: all of it?
   if (all) {
     uint64_t pos = 0;
-    for (auto& e : extents) {
-      if (e.is_valid()) {
-	r->push_back(e);
-      }
-      pos += e.length;
-    }
+    for_each_extent(true,
+      [&](const bluestore_pextent_t& p) {
+        if (p.is_valid()) {
+          r->push_back(p);
+        }
+        pos += p.length;
+        return 0;
+      });
     ceph_assert(is_compressed() || get_logical_length() == pos);
-    extents.resize(1);
-    extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
-    extents[0].length = pos;
+
+    if (!has_short_extents_list()) {
+      _extents.~PExtentVector();
+      set_flag(FLAG_SHORT_EXTENTS_LIST);
+    }
+    _squeezed_extents.fill(INVALID_OFFSET);
+    _squeezed_extents[0] = squeeze_extent(bluestore_pextent_t(INVALID_OFFSET, pos));
     return true;
+  }
+  if (logical.empty()) {
+    return false;
   }
   // remove from pextents according to logical release list
   vecbuilder vb;
+
   auto loffs_it = logical.begin();
+  uint64_t loffs_cur = loffs_it->offset;
   auto lend = logical.end();
-  uint32_t pext_loffs_start = 0; //starting loffset of the current pextent
+
   uint32_t pext_loffs = 0; //current loffset
-  auto pext_it = extents.begin();
-  auto pext_end = extents.end();
-  while (pext_it != pext_end) {
-    if (loffs_it == lend ||
-        pext_loffs_start + pext_it->length <= loffs_it->offset) {
-      int delta0 = pext_loffs - pext_loffs_start;
-      ceph_assert(delta0 >= 0);
-      if ((uint32_t)delta0 < pext_it->length) {
-	vb.add(pext_it->offset + delta0, pext_it->length - delta0);
-      }
-      pext_loffs_start += pext_it->length;
-      pext_loffs = pext_loffs_start;
-      ++pext_it;
-    }
-    else {
-      //assert(pext_loffs == pext_loffs_start);
-      int delta0 = pext_loffs - pext_loffs_start;
-      ceph_assert(delta0 >= 0);
 
-      int delta = loffs_it->offset - pext_loffs;
-      ceph_assert(delta >= 0);
-      if (delta > 0) {
-	vb.add(pext_it->offset + delta0, delta);
-	pext_loffs += delta;
-      }
-
-      PExtentVector::iterator last_r = r->end();
-      if (r->begin() != last_r) {
-	--last_r;
-      }
-      uint32_t to_release = loffs_it->length;
-      do {
-	uint32_t to_release_part =
-	  std::min(pext_it->length - delta0 - delta, to_release);
-	auto o = pext_it->offset + delta0 + delta;
-	if (last_r != r->end() && last_r->offset + last_r->length == o) {
-	  last_r->length += to_release_part;
-	}
-	else {
-	  last_r = r->emplace(r->end(), o, to_release_part);
-	}
-	to_release -= to_release_part;
-	pext_loffs += to_release_part;
-	if (pext_loffs == pext_loffs_start + pext_it->length) {
-	  pext_loffs_start += pext_it->length;
-	  pext_loffs = pext_loffs_start;
-	  pext_it++;
-	  delta0 = delta = 0;
-	}
-      } while (to_release > 0 && pext_it != pext_end);
-      vb.add_invalid(loffs_it->length - to_release);
-      ++loffs_it;
-    }
+  PExtentVector::iterator last_r = r->end();
+  if (r->begin() != last_r) {
+    --last_r;
   }
-  vb.flush();
-  extents.swap(vb.v);
+  for_each_extent(true,
+    [&](const bluestore_pextent_t& p) {
+
+      uint32_t pext_loffs_start = pext_loffs; //starting loffset of the current pextent
+      uint32_t pext_len = p.length;
+      while (pext_len) {
+        int delta0 = pext_loffs - pext_loffs_start;
+        ceph_assert(delta0 >= 0);
+        ceph_assert(p.is_valid() || delta0 == 0);
+        if (loffs_it == lend || pext_loffs + pext_len <= loffs_cur) {
+          ceph_assert(p.is_valid() || delta0 == 0);
+          if (p.is_valid()) {
+            vb.add(p.offset + delta0, pext_len);
+          } else {
+            // we don't expect any release for invalid pextents
+            ceph_assert(delta0 == 0);
+            ceph_assert(pext_len == p.length);
+            vb.add_invalid(pext_len);
+          }
+          pext_loffs += pext_len;
+          pext_len = 0;
+        } else {
+          // we don't expect any release for invalid pextents
+          ceph_assert(p.is_valid());
+          int delta = loffs_cur - pext_loffs;
+          ceph_assert(delta >= 0);
+          if (delta > 0) {
+            vb.add(p.offset + delta0, delta);
+            pext_loffs += delta;
+            pext_len -= delta;
+          }
+
+          uint32_t log_len = loffs_it->length - (loffs_cur - loffs_it->offset);
+          ceph_assert(log_len);
+          uint32_t to_release = std::min(pext_len, log_len);
+          if (to_release) {
+            vb.add_invalid(to_release);
+
+            auto o = p.offset + delta0 + delta;
+            if (last_r != r->end() && last_r->offset + last_r->length == o) {
+              last_r->length += to_release;
+            } else {
+              last_r = r->emplace(r->end(), o, to_release);
+            }
+
+            pext_loffs += to_release;
+            pext_len -= to_release;
+            loffs_cur += to_release;
+            if (log_len == to_release) {
+              loffs_it++;
+              if (loffs_it != lend) {
+                loffs_cur = loffs_it->offset;
+              }
+            }
+          }
+        }
+      }
+      ceph_assert(pext_loffs == pext_loffs_start + p.length);
+      return 0;
+    });
+  reset_extents(vb.has_short_list());
+  if (vb.has_short_list()) {
+    _squeezed_extents.swap(vb.short_list);
+  } else {
+    _extents.swap(vb.v);
+  }
   return false;
 }
 
-void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb,
-  std::function<void(const PExtentVector&)> observer = nullptr)
+void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
 {
   size_t left = blob_offset;
   uint32_t llen_lb = 0;
   uint32_t llen_rb = 0;
   unsigned i = 0;
   PExtentVector to_split;
-  for (auto p = extents.begin(); p != extents.end(); ++p, ++i) {
-    if (p->length <= left) {
-      left -= p->length;
-      llen_lb += p->length;
-      continue;
-    }
-    if (left) {
-      if (p->is_valid()) {
-	to_split.emplace_back(bluestore_pextent_t(p->offset + left,
-	  p->length - left));
-      } else {
-        to_split.emplace_back(bluestore_pextent_t(
-	  bluestore_pextent_t::INVALID_OFFSET,
-	  p->length - left));
+  bool found = false;
+  bool can_use_short_list = true;
+  for_each_extent(true,
+    [&] (const bluestore_pextent_t& p) {
+      if (!found && p.length <= left) {
+        left -= p.length;
+        llen_lb += p.length;
+        ++i;
+        return 0;
       }
-      llen_rb += p->length - left;
-      llen_lb += left;
-      p->length = left;
-      ++i;
-      ++p;
+      found = true;
+      if (left) {
+        auto l = p.length - left;
+        can_use_short_list = can_use_short_list && (l < MAX_SQUEEZED_LEN);
+        if (p.is_valid()) {
+          to_split.emplace_back(bluestore_pextent_t(p.offset + left, l));
+        } else {
+          to_split.emplace_back(bluestore_pextent_t(INVALID_OFFSET, l));
+        }
+        llen_rb += p.length - left;
+        llen_lb += left;
+        _update_extent(i++, bluestore_pextent_t(p.offset, left));
+        left = 0;
+      } else {
+        llen_rb += p.length;
+        to_split.push_back(p);
+      }
+      return 0;
+    });
+
+  _prune_tailing_extents(i);
+  logical_length = llen_lb;
+  rb.logical_length = llen_rb;
+
+  if (!to_split.empty()) {
+    bool do_long = true;
+    if (rb.has_short_extents_list()) {
+      size_t sz = get_squeezed_size(rb._squeezed_extents);
+      if (sz + to_split.size() <= MAX_SQUEEZED && can_use_short_list) {
+        for (size_t i = 0; i < to_split.size(); i++) {
+          rb._squeezed_extents[sz + i] = squeeze_extent(to_split[i]);
+        }
+        rb.flags = flags;
+        rb.set_flag(FLAG_SHORT_EXTENTS_LIST); // for sure
+        do_long = false;
+      } else {
+        sz += to_split.size();
+        rb.unsqueeze_extents();
+      }
     }
-    while (p != extents.end()) {
-      llen_rb += p->length;
-      to_split.push_back(*p++);
+    if (do_long) {
+      if (rb._extents.empty()) {
+        rb._extents.swap(to_split);
+      } else {
+        rb._extents.insert(rb._extents.end(), to_split.begin(), to_split.end());
+      }
+      rb.flags = flags;
+      rb.clear_flag(FLAG_SHORT_EXTENTS_LIST); // for sure
     }
-    extents.resize(i);
-    logical_length = llen_lb;
-    rb.logical_length = llen_rb;
-    break;
-  }
-  if (!to_split.empty() ){
-    if (observer) {
-      observer(to_split);
-    }
-    if (rb.extents.empty()) {
-      rb.extents.swap(to_split);
+  } else {
+    bool is_short = rb.has_short_extents_list();
+    rb.flags = flags;
+    if (is_short) {
+      rb.set_flag(FLAG_SHORT_EXTENTS_LIST); // for sure
     } else {
-      rb.extents.insert(rb.extents.end(), to_split.begin(), to_split.end());
+      rb.clear_flag(FLAG_SHORT_EXTENTS_LIST); // for sure
     }
   }
-  rb.flags = flags;
 
   if (has_csum()) {
     rb.csum_type = csum_type;
@@ -1054,6 +1581,33 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb,
     rb.csum_data = bufferptr(old.c_str() + pos, old.length() - pos);
     csum_data = bufferptr(old.c_str(), pos);
   }
+}
+
+int bluestore_blob_t::for_each_extent(bool include_invalid,
+  std::function<int (const bluestore_pextent_t&)> fn) const
+{
+  if (has_short_extents_list()) {
+    for (auto& v : _squeezed_extents) {
+      if (v == INVALID_OFFSET) {
+        break;
+      }
+      bluestore_pextent_t e = unsqueeze_extent(v);
+      if (include_invalid || e.is_valid()) {
+        int r = fn(e);
+        if (r < 0)
+          return r;
+      }
+    }
+  } else {
+    for (auto& e : _extents) {
+      if (include_invalid || e.is_valid()) {
+        int r = fn(e);
+        if (r < 0)
+          return r;
+      }
+    }
+  }
+  return 0;
 }
 
 // bluestore_shared_blob_t

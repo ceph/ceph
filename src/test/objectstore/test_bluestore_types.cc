@@ -334,6 +334,158 @@ TEST(bluestore_blob_t, csum_bench)
   }
 }
 
+TEST(bluestore_blob_t, extents_op)
+{
+  {
+    bluestore_blob_t b;
+    b.allocated_test(bluestore_pextent_t(0x12000, 0x1000));
+    b.allocated_test(bluestore_pextent_t(0x13000, 0x1000));
+    b.allocated_test(bluestore_pextent_t(0x1f000, 0x1000));
+    b.allocated_test(bluestore_pextent_t(0x14000, 0x1000));
+
+    PExtentVector to_release;
+    PExtentVector logical;
+    logical.emplace_back(0x2000, 0x1000);
+    bool r = b.release_extents(false, logical, &to_release);
+    ASSERT_FALSE(r);
+    ASSERT_EQ(1u, to_release.size());
+    ASSERT_EQ(0x1f000, to_release[0].offset);
+    ASSERT_EQ(0x1000, to_release[0].length);
+
+    logical.clear();
+    logical.emplace_back(0x5000, 0x1000);
+    b.allocated(0x2000, 0x1000, logical);
+    std::cout << b << std::endl;
+
+    auto extents = b.get_extents();
+    ASSERT_EQ(4u, extents.size());
+    ASSERT_EQ(0x5000, extents[2].offset);
+    ASSERT_EQ(0x1000, extents[2].length);
+  }
+  {
+    bluestore_blob_t b;
+    b.allocated_test(bluestore_pextent_t(0x12000, 0x1000));
+    b.allocated_test(bluestore_pextent_t(0x13000, 0x1000));
+    b.allocated_test(bluestore_pextent_t(0x1f000, 0x3000));
+    b.allocated_test(bluestore_pextent_t(0x14000, 0x1000));
+
+    PExtentVector to_release;
+    PExtentVector logical;
+    logical.emplace_back(0x3000, 0x1000);
+    bool r = b.release_extents(false, logical, &to_release);
+    ASSERT_FALSE(r);
+    ASSERT_EQ(1u, to_release.size());
+    ASSERT_EQ(0x20000, to_release[0].offset);
+    ASSERT_EQ(0x1000, to_release[0].length);
+
+    logical.clear();
+    logical.emplace_back(0x5000, 0x1000);
+    b.allocated(0x3000, 0x1000, logical);
+    std::cout << b << std::endl;
+
+    auto extents = b.get_extents();
+    ASSERT_EQ(6u, extents.size());
+    ASSERT_EQ(0x1f000, extents[2].offset);
+    ASSERT_EQ(0x1000, extents[2].length);
+    ASSERT_EQ(0x5000, extents[3].offset);
+    ASSERT_EQ(0x1000, extents[3].length);
+    ASSERT_EQ(0x21000, extents[4].offset);
+    ASSERT_EQ(0x1000, extents[4].length);
+  }
+  {
+    bluestore_blob_t b;
+    b.allocated_test(bluestore_pextent_t(0x1f000, 0x3000));
+    b.allocated_test(bluestore_pextent_t(0x14000, 0x1000));
+
+    PExtentVector to_release;
+    PExtentVector logical;
+    logical.emplace_back(0x1000, 0x2000);
+    bool r = b.release_extents(false, logical, &to_release);
+    ASSERT_FALSE(r);
+    ASSERT_EQ(1u, to_release.size());
+    ASSERT_EQ(0x20000, to_release[0].offset);
+    ASSERT_EQ(0x2000, to_release[0].length);
+
+    logical.clear();
+    logical.emplace_back(0x5000, 0x1000);
+    b.allocated(0x1000, 0x1000, logical);
+    std::cout << b << std::endl;
+
+    auto extents = b.get_extents();
+    ASSERT_EQ(4u, extents.size());
+    ASSERT_EQ(0x1f000, extents[0].offset);
+    ASSERT_EQ(0x1000, extents[0].length);
+    ASSERT_EQ(0x5000, extents[1].offset);
+    ASSERT_EQ(0x1000, extents[1].length);
+    ASSERT_EQ(INVALID_OFFSET, extents[2].offset);
+    ASSERT_EQ(0x1000, extents[2].length);
+    ASSERT_EQ(0x14000, extents[3].offset);
+    ASSERT_EQ(0x1000, extents[3].length);
+  }
+  {
+    bluestore_blob_t b;
+    b.allocated_test(bluestore_pextent_t(INVALID_OFFSET, 0x9000));
+    b.allocated_test(bluestore_pextent_t(0x70000, 0x1000));
+
+    PExtentVector logical;
+
+    logical.emplace_back(0x71000, 0x1000);
+    b.allocated(0x5000, 0x1000, logical);
+    std::cout << b << std::endl;
+
+    auto extents = b.get_extents();
+    ASSERT_EQ(4u, extents.size());
+    ASSERT_EQ(INVALID_OFFSET, extents[0].offset);
+    ASSERT_EQ(0x5000, extents[0].length);
+    ASSERT_EQ(0x71000, extents[1].offset);
+    ASSERT_EQ(0x1000, extents[1].length);
+    ASSERT_EQ(INVALID_OFFSET, extents[2].offset);
+    ASSERT_EQ(0x3000, extents[2].length);
+    ASSERT_EQ(0x70000, extents[3].offset);
+    ASSERT_EQ(0x1000, extents[3].length);
+  }
+  {
+    bluestore_blob_t b;
+    b.allocated_test(bluestore_pextent_t(INVALID_OFFSET, 0x3000));
+    b.allocated_test(bluestore_pextent_t(0x684000, 0x2000));
+    b.allocated_test(bluestore_pextent_t(0x868000, 0x6000));
+
+    PExtentVector to_release;
+    PExtentVector logical;
+    logical.emplace_back(0xa000, 0x1000);
+    bool r = b.release_extents(false, logical, &to_release);
+    ASSERT_FALSE(r);
+    ASSERT_EQ(1u, to_release.size());
+    ASSERT_EQ(0x86d000, to_release[0].offset);
+    ASSERT_EQ(0x1000, to_release[0].length);
+
+    std::cout << b << std::endl;
+    auto extents = b.get_extents();
+    ASSERT_EQ(4u, extents.size());
+    ASSERT_EQ(INVALID_OFFSET, extents[0].offset);
+    ASSERT_EQ(0x3000, extents[0].length);
+    ASSERT_EQ(0x684000, extents[1].offset);
+    ASSERT_EQ(0x2000, extents[1].length);
+    ASSERT_EQ(0x868000, extents[2].offset);
+    ASSERT_EQ(0x5000, extents[2].length);
+    ASSERT_EQ(INVALID_OFFSET, extents[3].offset);
+    ASSERT_EQ(0x1000, extents[3].length);
+
+    b.add_tail(0xc000);
+    std::cout << b << std::endl;
+    extents = b.get_extents();
+    ASSERT_EQ(4u, extents.size());
+    ASSERT_EQ(INVALID_OFFSET, extents[0].offset);
+    ASSERT_EQ(0x3000, extents[0].length);
+    ASSERT_EQ(0x684000, extents[1].offset);
+    ASSERT_EQ(0x2000, extents[1].length);
+    ASSERT_EQ(0x868000, extents[2].offset);
+    ASSERT_EQ(0x5000, extents[2].length);
+    ASSERT_EQ(INVALID_OFFSET, extents[3].offset);
+    ASSERT_EQ(0x2000, extents[3].length);
+  }
+}
+
 TEST(Blob, put_ref)
 {
   {
@@ -350,7 +502,7 @@ TEST(Blob, put_ref)
     cout << b << std::endl;
     b.dirty_blob().allocated_test(bluestore_pextent_t(0x40715000, 0x2000));
     b.dirty_blob().allocated_test(
-      bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x8000));
+      bluestore_pextent_t(INVALID_OFFSET, 0x8000));
     b.dirty_blob().allocated_test(bluestore_pextent_t(0x4071f000, 0x5000));
     b.get_ref(coll.get(), 0, 0x1200);
     b.get_ref(coll.get(), 0xae00, 0x4200);
@@ -403,7 +555,7 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(123, mas * 2));
+    b.allocated_test(bluestore_pextent_t(0x123000, mas * 2));
     B.get_ref(coll.get(), 0, mas*2);
     ASSERT_EQ(mas * 2, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), 0, mas, &r));
@@ -416,7 +568,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(0u, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(123u, r[0].offset);
+    ASSERT_EQ(0x123000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
     ASSERT_FALSE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.get_extents()[0].is_valid());
@@ -427,10 +579,10 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(1, mas));
-    b.allocated_test(bluestore_pextent_t(2, mas));
-    b.allocated_test(bluestore_pextent_t(3, mas));
-    b.allocated_test(bluestore_pextent_t(4, mas));
+    b.allocated_test(bluestore_pextent_t(0x10000, mas));
+    b.allocated_test(bluestore_pextent_t(0x20000, mas));
+    b.allocated_test(bluestore_pextent_t(0x30000, mas));
+    b.allocated_test(bluestore_pextent_t(0x40000, mas));
     B.get_ref(coll.get(), 0, mas*4);
     ASSERT_EQ(mas * 4, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), mas, mas, &r));
@@ -449,15 +601,16 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(2u, r.size());
-    ASSERT_EQ(3u, r[0].offset);
+    ASSERT_EQ(0x30000, r[0].offset);
     ASSERT_EQ(mas, r[0].length);
-    ASSERT_EQ(4u, r[1].offset);
+    ASSERT_EQ(0x40000, r[1].offset);
     ASSERT_EQ(mas, r[1].length);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.is_allocated(mas*2, mas*2));
     ASSERT_TRUE(b.get_extents()[0].is_valid());
     ASSERT_TRUE(b.get_extents()[1].is_valid());
     ASSERT_FALSE(b.get_extents()[2].is_valid());
+    cout << b << std::endl;
     ASSERT_EQ(3u, b.get_extents().size());
   }
   {
@@ -465,12 +618,12 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(1, mas));
-    b.allocated_test(bluestore_pextent_t(2, mas));
-    b.allocated_test(bluestore_pextent_t(3, mas));
-    b.allocated_test(bluestore_pextent_t(4, mas));
-    b.allocated_test(bluestore_pextent_t(5, mas));
-    b.allocated_test(bluestore_pextent_t(6, mas));
+    b.allocated_test(bluestore_pextent_t(0x10000, mas));
+    b.allocated_test(bluestore_pextent_t(0x20000, mas));
+    b.allocated_test(bluestore_pextent_t(0x30000, mas));
+    b.allocated_test(bluestore_pextent_t(0x40000, mas));
+    b.allocated_test(bluestore_pextent_t(0x50000, mas));
+    b.allocated_test(bluestore_pextent_t(0x60000, mas));
     B.get_ref(coll.get(), 0, mas*6);
     ASSERT_EQ(mas * 6, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), mas, mas, &r));
@@ -487,9 +640,9 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 3, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(2u, r.size());
-    ASSERT_EQ(3u, r[0].offset);
+    ASSERT_EQ(0x30000, r[0].offset);
     ASSERT_EQ(mas, r[0].length);
-    ASSERT_EQ(4u, r[1].offset);
+    ASSERT_EQ(0x40000, r[1].offset);
     ASSERT_EQ(mas, r[1].length);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.is_allocated(mas*2, mas*2));
@@ -506,7 +659,7 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(1, mas * 6));
+    b.allocated_test(bluestore_pextent_t(0x10000, mas * 6));
     B.get_ref(coll.get(), 0, mas*6);
     ASSERT_EQ(mas * 6, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), mas, mas, &r));
@@ -523,7 +676,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 3, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x2001u, r[0].offset);
+    ASSERT_EQ(0x12000u, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.is_allocated(mas*2, mas*2));
@@ -538,9 +691,9 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(1, mas * 4));
-    b.allocated_test(bluestore_pextent_t(2, mas * 4));
-    b.allocated_test(bluestore_pextent_t(3, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x10000, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x20000, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x30000, mas * 4));
     B.get_ref(coll.get(), 0, mas*12);
     ASSERT_EQ(mas * 12, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), mas, mas, &r));
@@ -557,11 +710,11 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 3, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(3u, r.size());
-    ASSERT_EQ(0x2001u, r[0].offset);
+    ASSERT_EQ(0x12000u, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
-    ASSERT_EQ(0x2u, r[1].offset);
+    ASSERT_EQ(0x20000, r[1].offset);
     ASSERT_EQ(mas*4, r[1].length);
-    ASSERT_EQ(0x3u, r[2].offset);
+    ASSERT_EQ(0x30000, r[2].offset);
     ASSERT_EQ(mas*2, r[2].length);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.is_allocated(mas*2, mas*8));
@@ -576,9 +729,9 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(1, mas * 4));
-    b.allocated_test(bluestore_pextent_t(2, mas * 4));
-    b.allocated_test(bluestore_pextent_t(3, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x100000, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x120000, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x130000, mas * 4));
     B.get_ref(coll.get(), 0, mas*12);
     ASSERT_EQ(mas * 12, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), mas, mas, &r));
@@ -595,11 +748,11 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 3, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(3u, r.size());
-    ASSERT_EQ(0x2001u, r[0].offset);
+    ASSERT_EQ(0x102000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
-    ASSERT_EQ(0x2u, r[1].offset);
+    ASSERT_EQ(0x120000, r[1].offset);
     ASSERT_EQ(mas*4, r[1].length);
-    ASSERT_EQ(0x3u, r[2].offset);
+    ASSERT_EQ(0x130000, r[2].offset);
     ASSERT_EQ(mas*2, r[2].length);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.is_allocated(mas*2, mas*8));
@@ -612,7 +765,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 2, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x1u, r[0].offset);
+    ASSERT_EQ(0x100000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
     ASSERT_EQ(2u, b.get_extents().size());
     ASSERT_FALSE(b.get_extents()[0].is_valid());
@@ -621,7 +774,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 0, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x2003u, r[0].offset);
+    ASSERT_EQ(0x132000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
     ASSERT_EQ(1u, b.get_extents().size());
     ASSERT_FALSE(b.get_extents()[0].is_valid());
@@ -631,9 +784,9 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(1, mas * 4));
-    b.allocated_test(bluestore_pextent_t(2, mas * 4));
-    b.allocated_test(bluestore_pextent_t(3, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x10000, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x20000, mas * 4));
+    b.allocated_test(bluestore_pextent_t(0x30000, mas * 4));
     B.get_ref(coll.get(), 0, mas*12);
     ASSERT_EQ(mas * 12, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), mas, mas, &r));
@@ -650,11 +803,11 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 3, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(3u, r.size());
-    ASSERT_EQ(0x2001u, r[0].offset);
+    ASSERT_EQ(0x12000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
-    ASSERT_EQ(0x2u, r[1].offset);
+    ASSERT_EQ(0x20000, r[1].offset);
     ASSERT_EQ(mas*4, r[1].length);
-    ASSERT_EQ(0x3u, r[2].offset);
+    ASSERT_EQ(0x30000, r[2].offset);
     ASSERT_EQ(mas*2, r[2].length);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.is_allocated(mas*2, mas*8));
@@ -667,7 +820,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 1, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x2003u, r[0].offset);
+    ASSERT_EQ(0x32000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
     ASSERT_EQ(2u, b.get_extents().size());
     ASSERT_TRUE(b.get_extents()[0].is_valid());
@@ -676,7 +829,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 0, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x1u, r[0].offset);
+    ASSERT_EQ(0x10000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
     ASSERT_EQ(1u, b.get_extents().size());
     ASSERT_FALSE(b.get_extents()[0].is_valid());
@@ -686,7 +839,7 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
-    b.allocated_test(bluestore_pextent_t(1, mas * 8));
+    b.allocated_test(bluestore_pextent_t(0x10000, mas * 8));
     B.get_ref(coll.get(), 0, mas*8);
     ASSERT_EQ(mas * 8, B.get_referenced_bytes());
     ASSERT_FALSE(B.put_ref(coll.get(), 0, mas, &r));
@@ -707,7 +860,7 @@ TEST(Blob, put_ref)
     ASSERT_FALSE(B.put_ref(coll.get(), mas*3, mas*4, &r));
     ASSERT_EQ(mas * 1, B.get_referenced_bytes());
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x2001u, r[0].offset);
+    ASSERT_EQ(0x12000, r[0].offset);
     ASSERT_EQ(mas*6, r[0].length);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     ASSERT_FALSE(b.is_allocated(mas*2, mas*6));
@@ -718,7 +871,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas * 0, B.get_referenced_bytes());
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x1u, r[0].offset);
+    ASSERT_EQ(0x10000, r[0].offset);
     ASSERT_EQ(mas*2, r[0].length);
     ASSERT_EQ(1u, b.get_extents().size());
     ASSERT_FALSE(b.get_extents()[0].is_valid());
@@ -747,7 +900,7 @@ TEST(Blob, put_ref)
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(0x40101000, 0x4000));
-    b.allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
+    b.allocated_test(bluestore_pextent_t(INVALID_OFFSET,
 					    0x13000));
 
     b.allocated_test(bluestore_pextent_t(0x40118000, 0x7000));
@@ -768,8 +921,8 @@ TEST(Blob, put_ref)
     BlueStore::Blob B(coll.get(),
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
-    b.allocated_test(bluestore_pextent_t(1, 0x5000));
-    b.allocated_test(bluestore_pextent_t(2, 0x5000));
+    b.allocated_test(bluestore_pextent_t(0x10000, 0x5000));
+    b.allocated_test(bluestore_pextent_t(0x20000, 0x5000));
     B.get_ref(coll.get(), 0x0, 0xa000);
     ASSERT_EQ(0xa000u, B.get_referenced_bytes());
     cout << "before: " << B << std::endl;
@@ -779,15 +932,15 @@ TEST(Blob, put_ref)
     cout << "r " << r << std::endl;
     ASSERT_EQ(0x8000u, B.get_referenced_bytes());
     ASSERT_EQ(1u, r.size());
-    ASSERT_EQ(0x3002u, r[0].offset);
+    ASSERT_EQ(0x23000, r[0].offset);
     ASSERT_EQ(0x2000u, r[0].length);
   }
   {
     BlueStore::Blob B(coll.get(),
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
-    b.allocated_test(bluestore_pextent_t(1, 0x7000));
-    b.allocated_test(bluestore_pextent_t(2, 0x7000));
+    b.allocated_test(bluestore_pextent_t(0x10000, 0x7000));
+    b.allocated_test(bluestore_pextent_t(0x20000, 0x7000));
     B.get_ref(coll.get(), 0x0, 0xe000);
     ASSERT_EQ(0xe000u, B.get_referenced_bytes());
     cout << "before: " << B << std::endl;
@@ -798,9 +951,9 @@ TEST(Blob, put_ref)
     cout << "r " << r << std::endl;
     ASSERT_EQ(0x3000u, B.get_referenced_bytes());
     ASSERT_EQ(2u, r.size());
-    ASSERT_EQ(1u, r[0].offset);
+    ASSERT_EQ(0x10000, r[0].offset);
     ASSERT_EQ(0x7000u, r[0].length);
-    ASSERT_EQ(2u, r[1].offset);
+    ASSERT_EQ(0x20000, r[1].offset);
     ASSERT_EQ(0x3000u, r[1].length); // we have 0x1000 bytes less due to 
                                      // alignment caused by min_alloc_size = 0x2000
   }
@@ -815,8 +968,8 @@ TEST(Blob, put_ref)
     BlueStore::Blob B(coll.get(),
       new BlueStore::BufferSpace(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
-    b.allocated_test(bluestore_pextent_t(1, 0x5000));
-    b.allocated_test(bluestore_pextent_t(2, 0x7000));
+    b.allocated_test(bluestore_pextent_t(0x10000, 0x5000));
+    b.allocated_test(bluestore_pextent_t(0x20000, 0x7000));
     B.get_ref(coll.get(), 0x0, 0xc000);
     ASSERT_EQ(0xc000u, B.get_referenced_bytes());
     cout << "before: " << B << std::endl;
@@ -826,11 +979,11 @@ TEST(Blob, put_ref)
     cout << "r " << r << std::endl;
     ASSERT_EQ(0x2000u, B.get_referenced_bytes());
     ASSERT_EQ(2u, r.size());
-    ASSERT_EQ(0x4001u, r[0].offset);
+    ASSERT_EQ(0x14000, r[0].offset);
     ASSERT_EQ(0x1000u, r[0].length);
-    ASSERT_EQ(2u, r[1].offset);
+    ASSERT_EQ(0x20000, r[1].offset);
     ASSERT_EQ(0x7000u, r[1].length);
-    ASSERT_EQ(1u, b.get_extents()[0].offset);
+    ASSERT_EQ(0x10000, b.get_extents()[0].offset);
     ASSERT_EQ(0x4000u, b.get_extents()[0].length);
   }
 }
@@ -839,11 +992,11 @@ TEST(bluestore_blob_t, can_split)
 {
   bluestore_blob_t a;
   ASSERT_TRUE(a.can_split());
-  a.flags = bluestore_blob_t::FLAG_SHARED;
+  a.set_flag(bluestore_blob_t::FLAG_SHARED);
   ASSERT_FALSE(a.can_split());
-  a.flags = bluestore_blob_t::FLAG_COMPRESSED;
+  a.set_flag(bluestore_blob_t::FLAG_COMPRESSED);
   ASSERT_FALSE(a.can_split());
-  a.flags = bluestore_blob_t::FLAG_HAS_UNUSED;
+  a.set_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
   ASSERT_FALSE(a.can_split());
 }
 
@@ -851,7 +1004,9 @@ TEST(bluestore_blob_t, can_split_at)
 {
   bluestore_blob_t a;
   a.allocated_test(bluestore_pextent_t(0x10000, 0x2000));
+  std::cout << 1 << std::endl;
   a.allocated_test(bluestore_pextent_t(0x20000, 0x2000));
+  std::cout << 2 << std::endl;
   ASSERT_TRUE(a.can_split_at(0x1000));
   ASSERT_TRUE(a.can_split_at(0x1800));
   a.init_csum(Checksummer::CSUM_CRC32C, 12, 0x4000);
@@ -866,16 +1021,19 @@ TEST(bluestore_blob_t, prune_tail)
   bluestore_blob_t a;
   a.allocated_test(bluestore_pextent_t(0x10000, 0x2000));
   a.allocated_test(bluestore_pextent_t(0x20000, 0x2000));
+  ASSERT_EQ(2u, a.get_extents().size());
   ASSERT_FALSE(a.try_prune_tail());
   a.allocated_test(
-    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+    bluestore_pextent_t(INVALID_OFFSET, 0x2000));
+  ASSERT_EQ(3u, a.get_extents().size());
   ASSERT_TRUE(a.try_prune_tail());
+  ASSERT_EQ(2u, a.get_extents().size());
   ASSERT_FALSE(a.try_prune_tail());
   ASSERT_EQ(2u, a.get_extents().size());
   ASSERT_EQ(0x4000u, a.get_logical_length());
 
   a.allocated_test(
-    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+    bluestore_pextent_t(INVALID_OFFSET, 0x2000));
   a.init_csum(Checksummer::CSUM_CRC32C_8, 12, 0x6000);
   ASSERT_EQ(6u, a.csum_data.length());
   ASSERT_TRUE(a.try_prune_tail());
@@ -886,7 +1044,7 @@ TEST(bluestore_blob_t, prune_tail)
 
   bluestore_blob_t b;
   b.allocated_test(
-    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+    bluestore_pextent_t(INVALID_OFFSET, 0x2000));
   ASSERT_FALSE(a.try_prune_tail());
 }
 
@@ -957,7 +1115,7 @@ TEST(Blob, legacy_decode)
     BlueStore::Blob B(coll.get(),
       new BlueStore::BufferSpace(coll.get()));
 
-    B.dirty_blob().allocated_test(bluestore_pextent_t(0x1, 0x2000));
+    B.dirty_blob().allocated_test(bluestore_pextent_t(0x10000, 0x2000));
     B.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
     B.get_ref(coll.get(), 0, 0xff0);
     B.get_ref(coll.get(), 0x1fff, 1);
@@ -1000,12 +1158,14 @@ TEST(Blob, legacy_decode)
       new BlueStore::BufferSpace(coll.get()));
 
     uint64_t sbid, sbid2;
+    std::cout << 1 << std::endl;
     Bres.decode(
       coll.get(),
       p,
       1, /*struct_v*/
       &sbid,
       true);
+    std::cout << 2 << std::endl;
     Bres2.decode(
       coll.get(),
       p2,
@@ -1204,7 +1364,7 @@ TEST(ExtentMap, split_blob)
   BlueStore::BlobRef br2(new BlueStore::Blob(coll.get(),
     onode.bspace));
   br2->dirty_blob().allocated_test(
-    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x10000));
+    bluestore_pextent_t(INVALID_OFFSET, 0x10000));
   br2->dirty_blob().allocated_test(bluestore_pextent_t(0x120000, 0x10000));
   br2->get_ref(coll.get(), 0x10000, 0x10000);
   bufferlist bl2;

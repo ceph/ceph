@@ -2164,13 +2164,13 @@ void BlueStore::Blob::make_blob_shared(Collection* coll, uint64_t sbid)
   _shared_blob->loaded = true;
   _shared_blob->persistent = new bluestore_shared_blob_t(sbid);
   coll->shared_blob_set.add(_shared_blob.get());
-  for (auto p : blob.get_extents()) {
-    if (p.is_valid()) {
+  blob.for_each_extent(false,
+    [&] (const bluestore_pextent_t& p) {
       _shared_blob->get_ref(
         p.offset,
         p.length);
-    }
-  }
+      return 0;
+    });
   ldout(coll->store->cct, 20) << __func__ << " now " << *this << dendl;
 }
 
@@ -2248,6 +2248,7 @@ bool BlueStore::Blob::put_ref(
   if (!empty && logical.empty()) {
     return false;
   }
+  dout(20) << __func__ << logical << dendl;
 
   bluestore_blob_t& b = dirty_blob();
   return b.release_extents(empty, logical, r);
@@ -2345,7 +2346,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
     blob_offset,
     &(r->used_in_blob));
 
-  lb.split(blob_offset, rb, nullptr);
+  lb.split(blob_offset, rb);
 
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this
@@ -2487,11 +2488,11 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
       // bump the extent refs on the copied blob's extents
-      for (auto p : e.blob->get_blob().get_extents()) {
-        if (p.is_valid()) {
+      e.blob->get_blob().for_each_extent(false,
+        [&](const bluestore_pextent_t& p) {
           e.blob->shared_blob()->get_ref(p.offset, p.length);
-        }
-      }
+          return 0;
+        });
       txc->write_shared_blob(e.blob->shared_blob());
       dout(20) << __func__ << "    new " << *cb << dendl;
     }
@@ -6980,25 +6981,26 @@ int BlueStore::cold_close()
   }
 
 int _fsck_sum_extents(
-  const PExtentVector& extents,
-  bool compressed,
+  const bluestore_blob_t& blob,
   store_statfs_t& expected_statfs)
 {
-  for (auto e : extents) {
-    if (!e.is_valid())
-      continue;
-    expected_statfs.allocated += e.length;
-    if (compressed) {
-      expected_statfs.data_compressed_allocated += e.length;
-    }
-  }
+  auto compressed = blob.is_compressed();
+
+  blob.for_each_extent(false,
+    [&](const bluestore_pextent_t& e) {
+      expected_statfs.allocated += e.length;
+      if (compressed) {
+        expected_statfs.data_compressed_allocated += e.length;
+      }
+      return 0;
+    });
   return 0;
 }
 
-int BlueStore::_fsck_check_extents(
+int BlueStore::_fsck_check_extent(
   const coll_t& cid,
   const ghobject_t& oid,
-  const PExtentVector& extents,
+  const bluestore_pextent_t& e,
   bool compressed,
   mempool_dynamic_bitset &used_blocks,
   uint64_t granularity,
@@ -7006,44 +7008,41 @@ int BlueStore::_fsck_check_extents(
   store_statfs_t& expected_statfs,
   FSCKDepth depth)
 {
-  dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
-  int errors = 0;
-  for (auto e : extents) {
-    if (!e.is_valid())
-      continue;
-    expected_statfs.allocated += e.length;
-    if (compressed) {
-      expected_statfs.data_compressed_allocated += e.length;
-    }
-    if (depth != FSCK_SHALLOW) {
-      bool already = false;
-      apply_for_bitset_range(
-        e.offset, e.length, granularity, used_blocks,
-        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	  if (bs.test(pos)) {
-	    if (repairer) {
-	      repairer->note_misreference(
-	        pos * min_alloc_size, min_alloc_size, !already);
-	    }
-            if (!already) {
-              derr << "fsck error: " << oid << " extent " << e
-		   << " or a subset is already allocated (misreferenced)" << dendl;
-	      ++errors;
-	      already = true;
-	    }
-	  }
-	  else
-	    bs.set(pos);
-        });
-        if (repairer) {
-	  repairer->get_space_usage_tracker().set_used( e.offset, e.length, cid, oid);
-        }
+  dout(30) << __func__ << " oid " << oid << " extent " << e << dendl;
 
-      if (e.end() > bdev->get_size()) {
-        derr << "fsck error:  " << oid << " extent " << e
-	     << " past end of block device" << dendl;
-        ++errors;
+  int errors = 0;
+  expected_statfs.allocated += e.length;
+  if (compressed) {
+    expected_statfs.data_compressed_allocated += e.length;
+  }
+  if (depth != FSCK_SHALLOW) {
+    bool already = false;
+    apply_for_bitset_range(
+      e.offset, e.length, granularity, used_blocks,
+      [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	if (bs.test(pos)) {
+	  if (repairer) {
+	    repairer->note_misreference(
+	      pos * min_alloc_size, min_alloc_size, !already);
+	  }
+          if (!already) {
+            derr << "fsck error: " << oid << " extent " << e
+		  << " or a subset is already allocated (misreferenced)" << dendl;
+	    ++errors;
+	    already = true;
+	  }
+	}
+	else
+	  bs.set(pos);
+      });
+      if (repairer) {
+	repairer->get_space_usage_tracker().set_used( e.offset, e.length, cid, oid);
       }
+
+    if (e.end() > bdev->get_size()) {
+      derr << "fsck error:  " << oid << " extent " << e
+	    << " past end of block device" << dendl;
+      ++errors;
     }
   }
   return errors;
@@ -7313,28 +7312,32 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
       sbi.sb = sb;
       sbi.oids.push_back(oid);
       sbi.compressed = blob.is_compressed();
-      for (auto e : blob.get_extents()) {
-        if (e.is_valid()) {
+      blob.for_each_extent(false,
+        [&](const bluestore_pextent_t& e) {
           sbi.ref_map.get(e.offset, e.length);
-        }
-      }
+          return 0;
+        });
       if (sb_info_lock) {
         sb_info_lock->unlock();
       }
     } else if (depth != FSCK_SHALLOW) {
       ceph_assert(used_blocks);
-      errors += _fsck_check_extents(c->cid, oid, blob.get_extents(),
-        blob.is_compressed(),
-        *used_blocks,
-        fm->get_alloc_size(),
-        repairer,
-        *res_statfs,
-        depth);
+      bool compressed = blob.is_compressed();
+      blob.for_each_extent(false,
+        [&] (const bluestore_pextent_t& e) {
+          errors += _fsck_check_extent(c->cid,
+            oid,
+            e,
+            compressed,
+            *used_blocks,
+            fm->get_alloc_size(),
+            repairer,
+            *res_statfs,
+            depth);
+          return 0;
+        });
     } else {
-      errors += _fsck_sum_extents(
-        blob.get_extents(),
-        blob.is_compressed(),
-        *res_statfs);
+      errors += _fsck_sum_extents(blob, *res_statfs);
     }
   } // for (auto& i : ref_map)
 
@@ -8209,22 +8212,21 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  sbi.updated = true; // will update later in repair mode only!
 	  ++errors;
 	}
-	PExtentVector extents;
+        if (per_pool_stat_collection || repair) {
+          expected_statfs = &expected_pool_statfs[sbi.pool_id];
+        }
 	for (auto &r : shared_blob.ref_map.ref_map) {
-	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
-	}
-	if (per_pool_stat_collection || repair) {
-	  expected_statfs = &expected_pool_statfs[sbi.pool_id];
-	}
-	errors += _fsck_check_extents(sbi.cid,
-				      p->second.oids.front(),
-				      extents,
-				      p->second.compressed,
-				      used_blocks,
-				      fm->get_alloc_size(),
-				      repair ? &repairer : nullptr,
-				      *expected_statfs,
-                                      depth);
+          bluestore_pextent_t e(r.first, r.second.length);
+          errors += _fsck_check_extent(sbi.cid,
+            p->second.oids.front(),
+            e,
+            p->second.compressed,
+            used_blocks,
+            fm->get_alloc_size(),
+            repair ? &repairer : nullptr,
+            *expected_statfs,
+            depth);
+        }
 	sbi.passed = true;
       }
     }
@@ -8297,83 +8299,90 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	bool first_dump = true;
 	for(auto b : blobs) {
 	  bool broken_blob = false;
-	  auto& pextents = b->dirty_blob().dirty_extents();
-	  for (auto& e : pextents) {
-	    if (!e.is_valid()) {
-	      continue;
-	    }
-	    // for the sake of simplicity and proper shared blob handling
-	    // always rewrite the whole blob even when it's partially
-	    // misreferenced.
-	    if (misref_extents.intersects(e.offset, e.length)) {
-	      if (first_dump) {
-		first_dump = false;
-		_dump_onode<10>(cct, *o);
-	      }
-	      broken_blob = true;
-	      break;
-	    }
-	  }
+          size_t num_pextents = 0;
+	  b->get_blob().for_each_extent(true,
+            [&] (const bluestore_pextent_t& e) {
+              num_pextents++;
+              if (e.is_valid()) {
+                // for the sake of simplicity and proper shared blob handling
+                // always rewrite the whole blob even when it's partially
+                // misreferenced.
+                if (misref_extents.intersects(e.offset, e.length)) {
+                  if (first_dump) {
+                    first_dump = false;
+                    _dump_onode<10>(cct, *o);
+                  }
+                  broken_blob = true;
+                  return -1;
+                }
+              }
+              return 0;
+	    });
 	  if (!broken_blob)
 	    continue;
-	  bool compressed = b->get_blob().is_compressed();
+          bool compressed = b->get_blob().is_compressed();
           need_onode_update = true;
 	  dout(10) << __func__
 		    << " fix misreferences in oid:" << oid
 		    << " " << *b << dendl;
 	  uint64_t b_off = 0;
-	  PExtentVector pext_to_release;
-	  pext_to_release.reserve(pextents.size());
+	  PExtentVector new_extents;
+	  new_extents.reserve(num_pextents);
 	  // rewriting all valid pextents
-	  for (auto e = pextents.begin(); e != pextents.end();
-	         b_off += e->length, e++) {
-	    if (!e->is_valid()) {
-	      continue;
-	    }
-	    PExtentVector exts;
-	    int64_t alloc_len =
-              shared_alloc.a->allocate(e->length, min_alloc_size,
-				       0, 0, &exts);
-	    if (alloc_len < 0 || alloc_len < (int64_t)e->length) {
-	      derr << __func__
-	           << " failed to allocate 0x" << std::hex << e->length
-		   << " allocated 0x " << (alloc_len < 0 ? 0 : alloc_len)
-		   << " min_alloc_size 0x" << min_alloc_size
-		   << " available 0x " << shared_alloc.a->get_free()
-		   << std::dec << dendl;
-	      if (alloc_len > 0) {
-                shared_alloc.a->release(exts);
+          b->get_blob().for_each_extent(true,
+            [&](const bluestore_pextent_t& e) {
+	      if (!e.is_valid()) {
+                new_extents.emplace_back(e.offset, e.length);
+                b_off += e.length;
+                return 0;
 	      }
-	      bypass_rest = true;
-	      break;
-	    }
-            expected_statfs->allocated += e->length;
-	    if (compressed) {
-	      expected_statfs->data_compressed_allocated += e->length;
-	    }
+	      int64_t alloc_len = shared_alloc.a->allocate(e.length,
+	        min_alloc_size, 0, 0, &new_extents);
+	      if (alloc_len < 0 || alloc_len < (int64_t)e.length) {
+	        derr << __func__
+	             << " failed to allocate 0x" << std::hex << e.length
+		     << " allocated 0x " << (alloc_len < 0 ? 0 : alloc_len)
+		     << " min_alloc_size 0x" << min_alloc_size
+		     << " available 0x " << shared_alloc.a->get_free()
+		     << std::dec << dendl;
+	        bypass_rest = true;
+	        return -1;
+	      }
+              expected_statfs->allocated += e.length;
+	      if (compressed) {
+	        expected_statfs->data_compressed_allocated += e.length;
+	      }
 
-	    bufferlist bl;
-	    IOContext ioc(cct, NULL, true); // allow EIO
-	    r = bdev->read(e->offset, e->length, &bl, &ioc, false);
-	    if (r < 0) {
-	      derr << __func__ << " failed to read from 0x" << std::hex << e->offset
-		    <<"~" << e->length << std::dec << dendl;
-	      ceph_abort_msg("read failed, wtf");
-	    }
-	    pext_to_release.push_back(*e);
-	    e = pextents.erase(e);
-    	    e = pextents.insert(e, exts.begin(), exts.end());
-	    b->get_blob().map_bl(
-	      b_off, bl,
-	      [&](uint64_t offset, bufferlist& t) {
-		int r = bdev->write(offset, t, false);
-		ceph_assert(r == 0);
-	      });
-	    e += exts.size() - 1;
-            for (auto& p : exts) {
-	      fm->allocate(p.offset, p.length, txn);
-	    }
-	  } // for (auto e = pextents.begin(); e != pextents.end(); e++) {
+	      bufferlist bl;
+	      IOContext ioc(cct, NULL, true); // allow EIO
+	      r = bdev->read(e.offset, e.length, &bl, &ioc, false);
+	      if (r < 0) {
+	        derr << __func__ << " failed to read from 0x" << std::hex << e.offset
+		      <<"~" << e.length << std::dec << dendl;
+	        ceph_abort_msg("read failed, wtf");
+	      }
+
+	      bluestore_blob_t::map_bl(
+                new_extents, b_off, bl,
+	        [&](uint64_t offset, bufferlist& t) {
+		  int r = bdev->write(offset, t, false);
+                  if (r < 0) {
+                    derr << __func__ << " failed to write to 0x" << std::hex << offset
+                      << "~" << t.length() << std::dec << dendl;
+                    ceph_abort_msg("write failed, wtf");
+                  }
+                  return r;
+	        });
+              b_off += e.length;
+              return 0;
+          }); // b->get_blob().for_each_extent(true,
+
+          for (auto& p : new_extents) {
+            if (p.is_valid()) {
+              fm->allocate(p.offset, p.length, txn);
+            }
+          }
+          b->dirty_blob().swap_extents(new_extents);
 
 	  if (b->get_blob().is_shared()) {
             auto sb_it = sb_info.find(b->shared_blob()->get_sbid());
@@ -8394,12 +8403,16 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    sbi.ref_map.clear();
 	    
 	    // relying on blob's pextents to decide what to release.
-	    for (auto& p : pext_to_release) {
-	      to_release.union_insert(p.offset, p.length);
+	    for (auto& p : new_extents) {
+              if (p.is_valid()) {
+                to_release.union_insert(p.offset, p.length);
+              }
 	    }
 	  } else {
-	    for (auto& p : pext_to_release) {
-	      expected_statfs->allocated -= p.length;
+	    for (auto& p : new_extents) {
+              if (!p.is_valid())
+                continue;
+              expected_statfs->allocated -= p.length;
 	      if (compressed) {
 		expected_statfs->data_compressed_allocated -= p.length;
 	      }
@@ -8407,7 +8420,8 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    }
 	  }
 	  if (bypass_rest) {
-	    break;
+            shared_alloc.a->release(new_extents);
+            break;
 	  }
 	} // for(auto b : blobs) 
 	if (need_onode_update) {
@@ -8708,19 +8722,19 @@ void BlueStore::inject_false_free(coll_t cid, ghobject_t oid)
   bool injected = false;
   txn = db->get_transaction();
   auto& em = o->extent_map.extent_map;
-  std::vector<const PExtentVector*> v;
+  std::vector<PExtentVector> v;
   if (em.size()) {
-    v.push_back(&em.begin()->blob->get_blob().get_extents());
+    v.push_back(em.begin()->blob->get_blob().get_extents());
   }
   if (em.size() > 1) {
     auto it = em.end();
     --it;
-    v.push_back(&(it->blob->get_blob().get_extents()));
+    v.push_back((it->blob->get_blob().get_extents()));
   }
-  for (auto pext : v) {
-    if (pext->size()) {
-      auto p = pext->begin();
-      while (p != pext->end()) {
+  for (auto& pext : v) {
+    if (pext.size()) {
+      auto p = pext.begin();
+      while (p != pext.end()) {
 	if (p->is_valid()) {
 	  dout(20) << __func__ << " release 0x" << std::hex << p->offset
 	           << "~" << p->length << std::dec << dendl;
@@ -13013,6 +13027,7 @@ void BlueStore::_do_write_small(
 		[&](uint64_t offset, bufferlist& t) {
 		  bdev->aio_write(offset, t,
 				  &txc->ioc, wctx->buffered);
+                  return 0;
 		});
 	    }
 	  }
@@ -13844,6 +13859,7 @@ int BlueStore::_do_alloc_write(
 	  b_off, *l,
 	  [&](uint64_t offset, bufferlist& t) {
 	    bdev->aio_write(offset, t, &txc->ioc, false);
+            return 0;
 	  });
 	logger->inc(l_bluestore_write_new);
       }

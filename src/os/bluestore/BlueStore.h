@@ -2579,10 +2579,10 @@ public:
   };
 
 private:
-  int _fsck_check_extents(
+  int _fsck_check_extent(
     const coll_t& cid,
     const ghobject_t& oid,
-    const PExtentVector& extents,
+    const bluestore_pextent_t& e,
     bool compressed,
     mempool_dynamic_bitset &used_blocks,
     uint64_t granularity,

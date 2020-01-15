@@ -67,11 +67,11 @@ WRITE_CLASS_DENC(bluestore_cnode_t)
 
 std::ostream& operator<<(std::ostream& out, const bluestore_cnode_t& l);
 
+static const uint64_t INVALID_OFFSET = ~0ull;
+
 template <typename OFFS_TYPE, typename LEN_TYPE>
 struct bluestore_interval_t
 {
-  static const uint64_t INVALID_OFFSET = ~0ull;
-
   OFFS_TYPE offset = 0;
   LEN_TYPE length = 0;
 
@@ -113,6 +113,21 @@ std::ostream& operator<<(std::ostream& out, const bluestore_pextent_t& o);
 
 typedef mempool::bluestore_cache_other::vector<bluestore_pextent_t> PExtentVector;
 
+static const size_t MAX_SQUEEZED = sizeof(PExtentVector) / sizeof(uint64_t);
+static const uint64_t MIN_ALLOC_SIZE_ORDER = 12; // 4096
+static const uint64_t MIN_ALLOC_SIZE_MASK = (1ull << MIN_ALLOC_SIZE_ORDER) - 1;
+static const size_t MAX_SQUEEZED_LEN = 1ull << (2 * MIN_ALLOC_SIZE_ORDER);
+static const uint64_t INVALID_OFFSET_SQUEEZED =
+  INVALID_OFFSET & ~MIN_ALLOC_SIZE_MASK;
+typedef std::array<uint64_t, MAX_SQUEEZED> PExtentArray;
+
+extern size_t get_squeezed_size(const PExtentArray& a);
+extern uint64_t squeeze_extent(const bluestore_pextent_t& e);
+extern bluestore_pextent_t unsqueeze_extent(uint64_t v);
+
+// IMPORTANT!!
+// PExtentVector and PExtentArray encoding should be compatible
+// (given array size is enough to fit all the elements)
 template<>
 struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
@@ -142,6 +157,49 @@ struct denc_traits<PExtentVector> {
     v.resize(num);
     for (unsigned i=0; i<num; ++i) {
       denc(v[i], p);
+    }
+  }
+};
+
+template<>
+struct denc_traits<PExtentArray> {
+  static constexpr bool supported = true;
+  static constexpr bool bounded = false;
+  static constexpr bool featured = false;
+  static constexpr bool need_contiguous = true;
+  static void bound_encode(const PExtentArray& v, size_t& p) {
+    p += sizeof(uint32_t);
+    auto size = get_squeezed_size(v);
+    if (size) {
+      size_t per = 0;
+      bluestore_pextent_t dummy;
+      denc(dummy, per);
+      p += per * size;
+    }
+  }
+  static void encode(const PExtentArray& v,
+    bufferlist::contiguous_appender& p) {
+
+    // cut off tailing invalid extents
+    size_t size = get_squeezed_size(v);
+    denc_varint(size, p);
+    size_t pos = 0;
+    while (pos < size) {
+      bluestore_pextent_t ext = unsqueeze_extent(v[pos]);
+      denc(ext, p);
+      ++pos;
+    }
+  }
+  static void decode(PExtentArray& v, bufferptr::const_iterator& p) {
+    unsigned num;
+    denc_varint(num, p);
+    ceph_assert(num < v.size());
+    v.fill(INVALID_OFFSET);
+
+    for (unsigned i = 0; i < num; ++i) {
+      bluestore_pextent_t dummy;
+      denc(dummy, p);
+      v[i] = squeeze_extent(dummy);
     }
   }
 };
@@ -431,9 +489,62 @@ std::ostream& operator<<(std::ostream& out, const bluestore_blob_use_tracker_t& 
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
 private:
-  PExtentVector extents;              ///< raw data position on device
+  union {
+    PExtentVector _extents;              ///< raw data position on device
+    PExtentArray _squeezed_extents;
+  };
+
   uint32_t logical_length = 0;        ///< original length of data stored in the blob
   uint32_t compressed_length = 0;     ///< compressed length if any
+
+  static void unsqueeze_extents(const PExtentArray& a,
+                                PExtentVector& res) {
+    res.clear();
+    for (auto i : a) {
+      if (i == INVALID_OFFSET) {
+        break;
+      }
+      res.emplace_back(unsqueeze_extent(i));
+    }
+  }
+  void unsqueeze_extents() {
+    PExtentVector extents;
+    unsqueeze_extents(_squeezed_extents, extents);
+    new (&_extents) PExtentVector;
+    _extents.swap(extents);
+    clear_flag(FLAG_SHORT_EXTENTS_LIST);
+  }
+  void _update_extent(size_t idx, const bluestore_pextent_t& p) {
+    if (has_short_extents_list()) {
+      _squeezed_extents[idx] = squeeze_extent(p);
+    } else {
+      _extents[idx] = p;
+    }
+  }
+  void _prune_tailing_extents(size_t new_size) {
+    if (has_short_extents_list()) {
+      for (size_t i = new_size; i < _squeezed_extents.size(); i++) {
+        _squeezed_extents[i] = INVALID_OFFSET;
+      }
+    } else if (new_size < _extents.size()) {
+      _extents.resize(new_size);
+    }
+  }
+
+  void reset_extents(bool use_short) {
+    if (use_short) {
+      if (!has_short_extents_list()) {
+        _extents.~PExtentVector();
+        set_flag(FLAG_SHORT_EXTENTS_LIST);
+      }
+      _squeezed_extents.fill(INVALID_OFFSET);
+    } else {
+      if (has_short_extents_list()) {
+        clear_flag(FLAG_SHORT_EXTENTS_LIST);
+      }
+      new (&_extents) PExtentVector;
+    }
+  }
 
 public:
   enum {
@@ -442,6 +553,7 @@ public:
     FLAG_CSUM = 4,            ///< blob has checksums
     FLAG_HAS_UNUSED = 8,      ///< blob has unused std::map
     FLAG_SHARED = 16,         ///< blob is shared; see external SharedBlob
+    FLAG_SHORT_EXTENTS_LIST = 32, ///< blob has pextents which fit into _squeezed_extents
   };
   static std::string get_flags_string(unsigned flags);
 
@@ -455,71 +567,47 @@ public:
 
   ceph::buffer::ptr csum_data;                ///< opaque std::vector of csum data
 
-  bluestore_blob_t(uint32_t f = 0) : flags(f) {}
+  bluestore_blob_t(uint32_t f = 0);
+  ~bluestore_blob_t();
 
-  const PExtentVector& get_extents() const {
-    return extents;
+  bluestore_blob_t& operator=(const bluestore_blob_t& other) {
+    if (other.has_short_extents_list()) {
+      if (!has_short_extents_list()) {
+        _extents.~PExtentVector();
+      }
+      _squeezed_extents = other._squeezed_extents;
+    } else {
+      if (has_short_extents_list()) {
+        new (&_extents) PExtentVector;
+      }
+      _extents = other._extents;
+    }
+    logical_length = other.logical_length;
+    compressed_length = other.compressed_length;
+    flags = other.flags;
+    unused = other.unused;
+    csum_type = other.csum_type;
+    csum_chunk_order = other.csum_chunk_order;
+
+    csum_data = other.csum_data;
+    return *this;
   }
-  PExtentVector& dirty_extents() {
-    return extents;
+  // ineffective extent vector accessor intended mainly for testing purposed
+  PExtentVector get_extents() const {
+    PExtentVector res;
+    if (has_short_extents_list()) {
+      unsqueeze_extents(_squeezed_extents, res);
+    } else {
+      res = _extents;
+    }
+    return res;
   }
 
   DENC_HELPERS;
-  void bound_encode(size_t& p, uint64_t struct_v) const {
-    ceph_assert(struct_v == 1 || struct_v == 2);
-    denc(extents, p);
-    denc_varint(flags, p);
-    denc_varint_lowz(logical_length, p);
-    denc_varint_lowz(compressed_length, p);
-    denc(csum_type, p);
-    denc(csum_chunk_order, p);
-    denc_varint(csum_data.length(), p);
-    p += csum_data.length();
-    p += sizeof(unused_t);
-  }
+  void bound_encode(size_t& p, uint64_t struct_v) const;
 
-  void encode(ceph::buffer::list::contiguous_appender& p, uint64_t struct_v) const {
-    ceph_assert(struct_v == 1 || struct_v == 2);
-    denc(extents, p);
-    denc_varint(flags, p);
-    if (is_compressed()) {
-      denc_varint_lowz(logical_length, p);
-      denc_varint_lowz(compressed_length, p);
-    }
-    if (has_csum()) {
-      denc(csum_type, p);
-      denc(csum_chunk_order, p);
-      denc_varint(csum_data.length(), p);
-      memcpy(p.get_pos_add(csum_data.length()), csum_data.c_str(),
-	     csum_data.length());
-    }
-    if (has_unused()) {
-      denc(unused, p);
-    }
-  }
-
-  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v) {
-    ceph_assert(struct_v == 1 || struct_v == 2);
-    denc(extents, p);
-    denc_varint(flags, p);
-    if (is_compressed()) {
-      denc_varint_lowz(logical_length, p);
-      denc_varint_lowz(compressed_length, p);
-    } else {
-      logical_length = get_ondisk_length();
-    }
-    if (has_csum()) {
-      denc(csum_type, p);
-      denc(csum_chunk_order, p);
-      int len;
-      denc_varint(len, p);
-      csum_data = p.get_ptr(len);
-      csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
-    }
-    if (has_unused()) {
-      denc(unused, p);
-    }
-  }
+  void encode(ceph::buffer::list::contiguous_appender& p, uint64_t struct_v) const;
+  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v);
 
   bool can_split() const {
     return
@@ -567,6 +655,9 @@ public:
   bool is_shared() const {
     return has_flag(FLAG_SHARED);
   }
+  bool has_short_extents_list() const {
+    return has_flag(FLAG_SHORT_EXTENTS_LIST);
+  }
 
   /// return chunk (i.e. min readable block) size for the blob
   uint64_t get_chunk_size(uint64_t dev_block_size) const {
@@ -579,45 +670,12 @@ public:
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
   }
-  uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
-    auto p = extents.begin();
-    ceph_assert(p != extents.end());
-    while (x_off >= p->length) {
-      x_off -= p->length;
-      ++p;
-      ceph_assert(p != extents.end());
-    }
-    if (plen)
-      *plen = p->length - x_off;
-    return p->offset + x_off;
-  }
+  uint64_t calc_offset(uint64_t x_off, uint64_t* plen) const;
 
-    // validate whether or not the status of pextents within the given range
+  // validates whether or not the status of pextents within the given range
   // meets the requirement(allocated or unallocated).
   bool _validate_range(uint64_t b_off, uint64_t b_len,
-                       bool require_allocated) const {
-    auto p = extents.begin();
-    ceph_assert(p != extents.end());
-    while (b_off >= p->length) {
-      b_off -= p->length;
-      if (++p == extents.end())
-        return false;
-    }
-    b_len += b_off;
-    while (b_len) {
-      if (require_allocated != p->is_valid()) {
-        return false;
-      }
-      if (p->length >= b_len) {
-        return true;
-      }
-      b_len -= p->length;
-      if (++p == extents.end())
-        return false;
-    }
-    ceph_abort_msg("we should not get here");
-    return false;
-  }
+    bool require_allocated) const;
 
   /// return true if the entire range is allocated
   /// (mapped to extents on disk)
@@ -686,8 +744,10 @@ public:
     }
   }
 
+  int for_each_extent(bool include_invalid,
+    std::function<int(const bluestore_pextent_t&)> fn) const;
+
   // map_f_invoke templates intended to mask parameters which are not expected
-  // by the provided callback
   template<class F, typename std::enable_if<std::is_invocable_r_v<
     int,
     F,
@@ -729,61 +789,99 @@ public:
   template<class F>
   int map(uint64_t x_off, uint64_t x_len, F&& f) const {
     auto x_off0 = x_off;
-    auto p = extents.begin();
-    ceph_assert(p != extents.end());
+    bool found = false;
+    int r = for_each_extent(true,
+      [&](const bluestore_pextent_t& p) {
+        if (!found) {
+          if (x_off >= p.length) {
+            x_off -= p.length;
+          } else {
+            found = true;
+          }
+        }
+        if (found && x_len > 0) {
+          uint64_t l = std::min(p.length - x_off, x_len);
+          int r = map_f_invoke(x_off0, p, p.offset + x_off, l, f);
+          if (r < 0)
+            return r;
+          x_off = 0;
+          x_len -= l;
+          x_off0 += l;
+        }
+        return 0;
+      });
+    ceph_assert(found);
+    return r;
+  }
+
+  template<class F>
+  int map_bl(uint64_t x_off,
+              ceph::buffer::list& bl,
+              F&& f) const {
+    static_assert(std::is_invocable_v<F, uint64_t, ceph::buffer::list&>);
+
+    bool found = false;
+    bufferlist::iterator it = bl.begin();
+    uint64_t x_len = bl.length();
+
+    int r = for_each_extent(true,
+      [&](const bluestore_pextent_t& p) {
+        if (!found) {
+          if (x_off >= p.length) {
+            x_off -= p.length;
+          } else {
+            found = true;
+          }
+        }
+        if (found && x_len > 0) {
+          uint64_t l = std::min(p.length - x_off, x_len);
+          bufferlist t;
+          it.copy(l, t);
+          int r = f(p.offset + x_off, t);
+          if (r < 0)
+            return r;
+          x_off = 0;
+          x_len -= l;
+        }
+        return 0;
+      });
+    ceph_assert(found);
+    return r;
+  }
+
+  template<class F>
+  static int map_bl(const PExtentVector& extents,
+                      uint64_t x_off,
+                      bufferlist& bl,
+                      F&& f) {
+    static_assert(std::is_invocable_v<F, uint64_t, bufferlist&>);
+
+    auto p = extents.cbegin();
+    ceph_assert(p != extents.cend());
     while (x_off >= p->length) {
       x_off -= p->length;
       ++p;
-      ceph_assert(p != extents.end());
+      ceph_assert(p != extents.cend());
     }
-    while (x_len > 0 && p != extents.end()) {
+    ceph::buffer::list::iterator it = bl.begin();
+    uint64_t x_len = bl.length();
+    while (x_len > 0) {
+      ceph_assert(p != extents.cend());
       uint64_t l = std::min(p->length - x_off, x_len);
-      int r = map_f_invoke(x_off0, *p, p->offset + x_off, l, f);
-      if (r < 0)
+      ceph::buffer::list t;
+      it.copy(l, t);
+      int r = f(p->offset + x_off, t);
+      if (r < 0) {
         return r;
+      }
       x_off = 0;
       x_len -= l;
-      x_off0 += l;
       ++p;
     }
     return 0;
   }
 
-  template<class F>
-  void map_bl(uint64_t x_off,
-	      ceph::buffer::list& bl,
-	      F&& f) const {
-    static_assert(std::is_invocable_v<F, uint64_t, ceph::buffer::list&>);
-
-    auto p = extents.begin();
-    ceph_assert(p != extents.end());
-    while (x_off >= p->length) {
-      x_off -= p->length;
-      ++p;
-      ceph_assert(p != extents.end());
-    }
-    ceph::buffer::list::iterator it = bl.begin();
-    uint64_t x_len = bl.length();
-    while (x_len > 0) {
-      ceph_assert(p != extents.end());
-      uint64_t l = std::min(p->length - x_off, x_len);
-      ceph::buffer::list t;
-      it.copy(l, t);
-      f(p->offset + x_off, t);
-      x_off = 0;
-      x_len -= l;
-      ++p;
-    }
-  }
-
-  uint32_t get_ondisk_length() const {
-    uint32_t len = 0;
-    for (auto &p : extents) {
-      len += p.length;
-    }
-    return len;
-  }
-
+  uint32_t get_ondisk_length() const;
   uint32_t get_logical_length() const {
     return logical_length;
   }
@@ -840,43 +938,8 @@ public:
   int verify_csum(uint64_t b_off, const ceph::buffer::list& bl, int* b_bad_off,
 		  uint64_t *bad_csum) const;
 
-  bool try_prune_tail() {
-    bool res = false;
-    if (extents.size() > 1 &&  // if it's all invalid it's not pruning.
-      !extents.back().is_valid() &&
-      !has_unused()) {
-      const auto &p = extents.back();
-      logical_length -= p.length;
-      extents.pop_back();
-      if (has_csum()) {
-        ceph::buffer::ptr t;
-        t.swap(csum_data);
-        csum_data = ceph::buffer::ptr(t.c_str(),
-			      get_logical_length() / get_csum_chunk_size() *
-			      get_csum_value_size());
-      }
-      res = true;
-    }
-    return res;
-  }
-  void add_tail(uint32_t new_len) {
-    ceph_assert(is_mutable());
-    ceph_assert(!has_unused());
-    ceph_assert(new_len > logical_length);
-    extents.emplace_back(
-      bluestore_pextent_t(
-        bluestore_pextent_t::INVALID_OFFSET,
-        new_len - logical_length));
-    logical_length = new_len;
-    if (has_csum()) {
-      ceph::buffer::ptr t;
-      t.swap(csum_data);
-      csum_data = ceph::buffer::create(
-	get_csum_value_size() * logical_length / get_csum_chunk_size());
-      csum_data.copy_in(0, t.length(), t.c_str());
-      csum_data.zero(t.length(), csum_data.length() - t.length());
-    }
-  }
+  bool try_prune_tail();
+  void add_tail(uint32_t new_len);
   uint32_t get_release_size(uint32_t min_alloc_size) const {
     if (is_compressed()) {
       return get_logical_length();
@@ -888,8 +951,7 @@ public:
     return res;
   }
 
-  void split(uint32_t blob_offset, bluestore_blob_t& rb,
-    std::function<void(const PExtentVector&)> observer);
+  void split(uint32_t blob_offset, bluestore_blob_t& rb);
   void allocated(uint32_t b_off, uint32_t length, const PExtentVector& allocs);
   void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
 
@@ -903,6 +965,17 @@ public:
     bool all,
     const PExtentVector& logical,
     PExtentVector* r);
+
+  void swap_extents(PExtentVector& others) {
+    // For the sake of simplicity doing in a straightforward manner
+    // without trying to preserve short format if any.
+    // Good enough for now as the function has limited usage (fsck/repair only).
+    //
+    if (has_short_extents_list()) {
+      unsqueeze_extents();
+    }
+    _extents.swap(others);
+  }
 };
 WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
