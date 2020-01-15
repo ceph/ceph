@@ -35,19 +35,24 @@ DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
 log = logging.getLogger(__name__)
 
 # this is for cephadm clusters
-def shell(ctx, cluster_name, remote, args, **kwargs):
+def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
     testdir = teuthology.get_testdir(ctx)
+    extra_args = []
+    if name:
+        extra_args = ['-n', name]
+    else:
+        extra_args = ['-c', '{}/{}.conf'.format(testdir, cluster_name)]
     return remote.run(
         args=[
             'sudo',
             ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
             'shell',
-            '-c', '{}/{}.conf'.format(testdir, cluster_name),
+        ] + extra_args + [
             '-k', '{}/{}.keyring'.format(testdir, cluster_name),
             '--fsid', ctx.ceph[cluster_name].fsid,
             '--',
-            ] + args,
+        ] + args,
         **kwargs
     )
 
@@ -200,6 +205,8 @@ class OSDThrasher(Thrasher):
         self.logger.info(msg, *args, **kwargs)
 
     def cmd_exists_on_osds(self, cmd):
+        if self.ceph_manager.cephadm:
+            return True
         allremotes = self.ceph_manager.ctx.cluster.only(\
             teuthology.is_type('osd', self.cluster)).remotes.keys()
         allremotes = list(set(allremotes))
@@ -210,6 +217,21 @@ class OSDThrasher(Thrasher):
             if proc.exitstatus != 0:
                 return False;
         return True;
+
+    def run_ceph_objectstore_tool(self, remote, osd, cmd):
+        if self.ceph_manager.cephadm:
+            return shell(
+                self.ceph_manager.ctx, self.ceph_manager.cluster, remote,
+                args=['ceph-objectstore-tool'] + cmd,
+                name=osd,
+                wait=True, check_status=False,
+                stdout=StringIO(),
+                stderr=StringIO())
+        else:
+            return remote.run(
+                args=['sudo', 'adjust-ulimits', 'ceph-objectstore-tool'] + cmd,
+                wait=True, check_status=False, stdout=StringIO(),
+                stderr=StringIO())
 
     def kill_osd(self, osd=None, mark_down=False, mark_out=False):
         """
@@ -240,40 +262,29 @@ class OSDThrasher(Thrasher):
                     random.random() < self.chance_move_pg):
                 exp_osd = random.choice(self.dead_osds[:-1])
                 exp_remote = self.ceph_manager.find_remote('osd', exp_osd)
-            if ('keyvaluestore_backend' in
-                    self.ceph_manager.ctx.ceph[self.cluster].conf['osd']):
-                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
-                          "--data-path {fpath} --journal-path {jpath} "
-                          "--type keyvaluestore "
-                          "--log-file="
-                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
-                          format(fpath=FSPATH, jpath=JPATH))
-            else:
-                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
-                          "--data-path {fpath} --journal-path {jpath} "
-                          "--log-file="
-                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
-                          format(fpath=FSPATH, jpath=JPATH))
-            cmd = (prefix + "--op list-pgs").format(id=exp_osd)
+            prefix = ['--data-path', FSPATH.format(id=osd),
+                      '--journal-path', JPATH.format(id=osd),
+                      '--log-file=/var/log/ceph/objectstore_tool.$pid.log']
+            cmd = prefix + ['--op', 'list-pgs']
 
-            # ceph-objectstore-tool might be temporarily absent during an 
-            # upgrade - see http://tracker.ceph.com/issues/18014
-            with safe_while(sleep=15, tries=40, action="type ceph-objectstore-tool") as proceed:
-                while proceed():
-                    proc = exp_remote.run(args=['type', 'ceph-objectstore-tool'], 
-                               wait=True, check_status=False, stdout=StringIO(),
-                               stderr=StringIO())
-                    if proc.exitstatus == 0:
-                        break
-                    log.debug("ceph-objectstore-tool binary not present, trying again")
+            if not self.ceph_manager.cephadm:
+                # ceph-objectstore-tool might be temporarily absent during an
+                # upgrade - see http://tracker.ceph.com/issues/18014
+                with safe_while(sleep=15, tries=40, action="type ceph-objectstore-tool") as proceed:
+                    while proceed():
+                        proc = exp_remote.run(args=['type', 'ceph-objectstore-tool'],
+                                              wait=True, check_status=False, stdout=StringIO(),
+                                              stderr=StringIO())
+                        if proc.exitstatus == 0:
+                            break
+                        log.debug("ceph-objectstore-tool binary not present, trying again")
 
             # ceph-objectstore-tool might bogusly fail with "OSD has the store locked"
             # see http://tracker.ceph.com/issues/19556
             with safe_while(sleep=15, tries=40, action="ceph-objectstore-tool --op list-pgs") as proceed:
                 while proceed():
-                    proc = exp_remote.run(args=cmd, wait=True,
-                                          check_status=False,
-                                          stdout=StringIO(), stderr=StringIO())
+                    proc = self.run_ceph_objectstore_tool(
+                        exp_remote, 'osd.%s' % osd, cmd)
                     if proc.exitstatus == 0:
                         break
                     elif proc.exitstatus == 1 and proc.stderr == "OSD has the store locked":
@@ -288,25 +299,35 @@ class OSDThrasher(Thrasher):
                 self.log("No PGs found for osd.{osd}".format(osd=exp_osd))
                 return
             pg = random.choice(pgs)
-            exp_path = teuthology.get_testdir(self.ceph_manager.ctx)
-            exp_path = os.path.join(exp_path, '{0}.data'.format(self.cluster))
-            exp_path = os.path.join(exp_path,
+            #exp_path = teuthology.get_testdir(self.ceph_manager.ctx)
+            #exp_path = os.path.join(exp_path, '{0}.data'.format(self.cluster))
+            exp_path = os.path.join('/var/log/ceph', # available inside 'shell' container
                                     "exp.{pg}.{id}".format(
                                         pg=pg,
                                         id=exp_osd))
+            if self.ceph_manager.cephadm:
+                exp_host_path = os.path.join(
+                    '/var/log/ceph',
+                    self.ceph_manager.ctx.ceph[self.ceph_manager.cluster].fsid,
+                    "exp.{pg}.{id}".format(
+                        pg=pg,
+                        id=exp_osd))
+            else:
+                exp_host_path = exp_path
+
             # export
             # Can't use new export-remove op since this is part of upgrade testing
-            cmd = prefix + "--op export --pgid {pg} --file {file}"
-            cmd = cmd.format(id=exp_osd, pg=pg, file=exp_path)
-            proc = exp_remote.run(args=cmd)
+            cmd = prefix + ['--op', 'export', '--pgid', pg, '--file', exp_path]
+            proc = self.run_ceph_objectstore_tool(exp_remote, 'osd.%s' % osd,
+                                                  cmd)
             if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "export failure with status {ret}".
                                 format(ret=proc.exitstatus))
             # remove
-            cmd = prefix + "--force --op remove --pgid {pg}"
-            cmd = cmd.format(id=exp_osd, pg=pg)
-            proc = exp_remote.run(args=cmd)
+            cmd = prefix + ['--force', '--op', 'remove', '--pgid', pg]
+            proc = self.run_ceph_objectstore_tool(exp_remote, 'osd.%s' % osd,
+                                                  cmd)
             if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "remove failure with status {ret}".
@@ -314,9 +335,10 @@ class OSDThrasher(Thrasher):
             # If there are at least 2 dead osds we might move the pg
             if exp_osd != imp_osd:
                 # If pg isn't already on this osd, then we will move it there
-                cmd = (prefix + "--op list-pgs").format(id=imp_osd)
-                proc = imp_remote.run(args=cmd, wait=True,
-                                      check_status=False, stdout=StringIO())
+                cmd = prefix + ['--op', 'list-pgs']
+                proc = self.run_ceph_objectstore_tool(imp_remote,
+                                                      'osd.%s' % osd,
+                                                      cmd)
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
@@ -329,18 +351,21 @@ class OSDThrasher(Thrasher):
                         # Copy export file to the other machine
                         self.log("Transfer export file from {srem} to {trem}".
                                  format(srem=exp_remote, trem=imp_remote))
-                        tmpexport = Remote.get_file(exp_remote, exp_path)
-                        Remote.put_file(imp_remote, tmpexport, exp_path)
+                        tmpexport = Remote.get_file(exp_remote, exp_host_path)
+                        Remote.put_file(imp_remote, tmpexport, exp_host_path)
                         os.remove(tmpexport)
                 else:
                     # Can't move the pg after all
                     imp_osd = exp_osd
                     imp_remote = exp_remote
             # import
-            cmd = (prefix + "--op import --file {file}")
-            cmd = cmd.format(id=imp_osd, file=exp_path)
-            proc = imp_remote.run(args=cmd, wait=True, check_status=False,
-                                  stderr=StringIO())
+            cmd = ['--data-path', FSPATH.format(id=imp_osd),
+                   '--journal-path', JPATH.format(id=imp_osd),
+                   '--log-file',
+                   "/var/log/ceph/objectstore_tool.\\$pid.log",
+                   '--op', 'import', '--file', exp_path]
+            proc = self.run_ceph_objectstore_tool(
+                imp_remote, 'osd.%s' % imp_osd, cmd)
             if proc.exitstatus == 1:
                 bogosity = "The OSD you are using is older than the exported PG"
                 if bogosity in proc.stderr.getvalue():
@@ -362,24 +387,25 @@ class OSDThrasher(Thrasher):
                 raise Exception("ceph-objectstore-tool: "
                                 "import failure with status {ret}".
                                 format(ret=proc.exitstatus))
-            cmd = "rm -f {file}".format(file=exp_path)
+            cmd = "sudo rm -f {file}".format(file=exp_host_path)
             exp_remote.run(args=cmd)
             if imp_remote != exp_remote:
                 imp_remote.run(args=cmd)
 
             # apply low split settings to each pool
-            for pool in self.ceph_manager.list_pools():
-                no_sudo_prefix = prefix[5:]
-                cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
-                       "--filestore-split-multiple 1' sudo -E "
-                       + no_sudo_prefix + "--op apply-layout-settings --pool " + pool).format(id=osd)
-                proc = remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
-                output = proc.stderr.getvalue()
-                if 'Couldn\'t find pool' in output:
-                    continue
-                if proc.exitstatus:
-                    raise Exception("ceph-objectstore-tool apply-layout-settings"
-                                    " failed with {status}".format(status=proc.exitstatus))
+            if not self.ceph_manager.cephadm:
+                for pool in self.ceph_manager.list_pools():
+                    no_sudo_prefix = ' '.join(prefix[1:])
+                    cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
+                           "--filestore-split-multiple 1' sudo -E "
+                           + no_sudo_prefix + "--op apply-layout-settings --pool " + pool).format(id=osd)
+                    proc = remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
+                    output = proc.stderr.getvalue()
+                    if 'Couldn\'t find pool' in output:
+                        continue
+                    if proc.exitstatus:
+                        raise Exception("ceph-objectstore-tool apply-layout-settings"
+                                        " failed with {status}".format(status=proc.exitstatus))
 
 
     def blackhole_kill_osd(self, osd=None):
