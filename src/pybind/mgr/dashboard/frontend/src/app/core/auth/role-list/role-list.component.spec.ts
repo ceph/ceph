@@ -50,19 +50,19 @@ describe('RoleListComponent', () => {
 
     expect(tableActions).toEqual({
       'create,update,delete': {
-        actions: ['Create', 'Edit', 'Delete'],
+        actions: ['Create', 'Clone', 'Edit', 'Delete'],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,update': {
-        actions: ['Create', 'Edit'],
+        actions: ['Create', 'Clone', 'Edit'],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,delete': {
-        actions: ['Create', 'Delete'],
+        actions: ['Create', 'Clone', 'Delete'],
         primary: { multiple: 'Create', executing: 'Delete', single: 'Delete', no: 'Create' }
       },
       create: {
-        actions: ['Create'],
+        actions: ['Create', 'Clone'],
         primary: { multiple: 'Create', executing: 'Create', single: 'Create', no: 'Create' }
       },
       'update,delete': {
