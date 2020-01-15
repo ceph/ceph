@@ -87,7 +87,9 @@ enum {
 
   // How many items have been finished by PurgeQueue
   l_pq_executing_ops,
+  l_pq_executing_ops_high_water,
   l_pq_executing,
+  l_pq_executing_high_water,
   l_pq_executed,
   l_pq_last
 };
@@ -166,6 +168,9 @@ private:
   std::list<Context*> waiting_for_recovery;
 
   void _go_readonly(int r);
+
+  uint64_t ops_high_water = 0;
+  uint64_t files_high_water = 0;
 
 public:
   void init();
