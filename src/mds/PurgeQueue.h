@@ -102,7 +102,7 @@ enum {
  */
 class PurgeQueue
 {
-protected:
+private:
   CephContext *cct;
   const mds_rank_t rank;
   Mutex lock;
@@ -218,7 +218,6 @@ public:
       Context *on_error);
   ~PurgeQueue();
 };
-
 
 #endif
 
