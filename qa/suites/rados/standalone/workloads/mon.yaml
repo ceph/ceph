@@ -14,6 +14,9 @@ tasks:
     mon.a:
       - sysctl kernel.core_pattern
 - install:
+- exec:
+    mon.a:
+      - sysctl kernel.core_pattern
 - workunit:
     basedir: qa/standalone
     clients:
