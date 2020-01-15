@@ -40,3 +40,8 @@ add_library(RADOS_cls_version OBJECT cls/version.cc)
 add_library(RADOS_cls_rgw OBJECT cls/rgw.cc)
 add_library(RADOS_cls_lock OBJECT cls/lock.cc)
 add_library(RADOS_cls_log OBJECT cls/log.cc)
+add_library(RADOS_cls_otp OBJECT cls/otp.cc)
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(RADOS_cls_otp PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()

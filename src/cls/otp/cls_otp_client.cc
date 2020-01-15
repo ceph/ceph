@@ -17,8 +17,6 @@
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
  
-using namespace librados;
-
 #include "cls/otp/cls_otp_ops.h"
 #include "cls/otp/cls_otp_client.h"
 
@@ -27,6 +25,8 @@ using namespace librados;
 namespace rados {
   namespace cls {
     namespace otp {
+using namespace librados;
+
 
       void OTP::create(librados::ObjectWriteOperation *rados_op,
                        const otp_info_t& config) {
@@ -40,7 +40,8 @@ namespace rados {
       void OTP::set(librados::ObjectWriteOperation *rados_op,
                        const list<otp_info_t>& entries) {
         cls_otp_set_otp_op op;
-        op.entries = entries;
+	std::move(entries.begin(), entries.end(),
+		  std::back_inserter(op.entries));
         bufferlist in;
         encode(op, in);
         rados_op->exec("otp", "otp_set", in);
@@ -62,7 +63,6 @@ namespace rados {
         op.val = val;
 #define TOKEN_LEN 16
         op.token = gen_rand_alphanumeric(cct, TOKEN_LEN);
-        
         bufferlist in;
         bufferlist out;
         encode(op, in);
@@ -103,7 +103,8 @@ namespace rados {
         }
         cls_otp_get_otp_op op;
         if (ids) {
-          op.ids = *ids;
+	  std::move(ids->begin(), ids->end(),
+		    std::back_inserter(op.ids));
         }
         op.get_all = get_all;
         bufferlist in;
@@ -127,9 +128,10 @@ namespace rados {
 	  return -EBADMSG;
         }
 
-        *result = ret.found_entries;;
+	std::move(ret.found_entries.begin(), ret.found_entries.end(),
+		  std::back_inserter(*result));
 
-        return 0;
+	return 0;
       }
 
       int OTP::get(librados::ObjectReadOperation *op,
@@ -187,4 +189,3 @@ namespace rados {
     } // namespace otp
   } // namespace cls
 } // namespace rados
-
