@@ -1008,9 +1008,7 @@ static int os_unlink(const char *path)
   switch (f) {
   case FN_OBJECT_OMAP_VAL:
     {
-      set<string> keys;
-      keys.insert(key);
-      t.omap_rmkeys(cid, oid, keys);
+      t.omap_rmkey(cid, oid, key);
     }
     break;
 

@@ -1119,6 +1119,22 @@ public:
     data.ops = data.ops + 1;
   }
 
+  /// Remove key from oid omap
+  void omap_rmkey(
+    const coll_t &cid,             ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+    const std::string& key ///< [in] Keys to clear
+    ) {
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_RMKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    using ceph::encode;
+    encode((uint32_t)1, data_bl);
+    encode(key, data_bl);
+    data.ops = data.ops + 1;
+  }
+
   /// Remove keys from oid omap
   void omap_rmkeys(
     const coll_t &cid,             ///< [in] Collection containing oid
