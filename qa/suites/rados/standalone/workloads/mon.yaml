@@ -10,6 +10,9 @@ openstack:
       count: 3
       size: 10 # GB
 tasks:
+- exec:
+    mon.a:
+      - sysctl kernel.core_pattern
 - install:
 - workunit:
     basedir: qa/standalone
