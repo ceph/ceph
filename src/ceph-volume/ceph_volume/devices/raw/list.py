@@ -1,15 +1,9 @@
 from __future__ import print_function
 import argparse
-import base64
 import json
 import logging
-import os
 from textwrap import dedent
-from ceph_volume import decorators, terminal, conf, process
-from ceph_volume.api import lvm
-from ceph_volume.systemd import systemctl
-from ceph_volume.util import arg_validators, system, disk, encryption
-from ceph_volume.util.device import Device
+from ceph_volume import decorators, process
 
 
 logger = logging.getLogger(__name__)
