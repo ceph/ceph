@@ -53,6 +53,18 @@ std::ostream &operator<<(std::ostream &, const ImageId &image_id);
 
 typedef std::set<ImageId> ImageIds;
 
+struct RemotePoolMeta {
+  RemotePoolMeta() {}
+  RemotePoolMeta(const std::string& remote_mirror_uuid,
+                 const std::string& remote_mirror_peer_uuid)
+    : mirror_uuid(remote_mirror_uuid),
+      mirror_peer_uuid(remote_mirror_peer_uuid) {
+  }
+
+  std::string mirror_uuid;
+  std::string mirror_peer_uuid;
+};
+
 template <typename I>
 struct Peer {
   std::string peer_uuid;
