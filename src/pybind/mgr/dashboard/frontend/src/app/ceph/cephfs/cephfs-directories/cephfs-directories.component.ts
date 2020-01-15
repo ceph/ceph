@@ -373,7 +373,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
             })
           : undefined,
         fields: [this.getQuotaFormField(selection.row.name, key, value, nextMax.value)],
-        submitButtonText: 'Save',
+        submitButtonText: this.i18n('Save'),
         onSubmit: (values) => this.updateQuota(values)
       }
     });
