@@ -144,6 +144,24 @@ export abstract class PageHelper {
   }
 
   /**
+   * Helper method to select an option inside a select element.
+   * This method will also expect that the option was set.
+   */
+  async selectOption(selectionName: string, option: string) {
+    await element(by.cssContainingText(`select[name=${selectionName}] option`, option)).click();
+    return this.expectSelectOption(selectionName, option);
+  }
+
+  /**
+   * Helper method to expect a set option inside a select element.
+   */
+  async expectSelectOption(selectionName: string, option: string) {
+    return expect(
+      element(by.css(`select[name=${selectionName}] option:checked`)).getText()
+    ).toContain(option);
+  }
+
+  /**
    * Returns the cell with the content given in `content`. Will not return a rejected Promise if the
    * table cell hasn't been found. It behaves this way to enable to wait for
    * visibility/invisibility/presence of the returned element.
