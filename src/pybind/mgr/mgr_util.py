@@ -71,11 +71,11 @@ def format_units(n, width, colored, decimal):
         return formatted
 
 
-def format_dimless(n, width, colored=True):
+def format_dimless(n, width, colored=False):
     return format_units(n, width, colored, decimal=True)
 
 
-def format_bytes(n, width, colored=True):
+def format_bytes(n, width, colored=False):
     return format_units(n, width, colored, decimal=False)
 
 
