@@ -46,12 +46,13 @@ create(int initial_val, CrossProcessSem** res)
     int err = errno;
     return err;
   }
+  int ret = sem_init(&data->sem, 1, initial_val);
   #else
   // We can't use multiple processes on Windows for the time being.
   struct cross_process_sem_data_t *data = (cross_process_sem_data_t*)malloc(
     sizeof(cross_process_sem_data_t));
+  int ret = sem_init(&data->sem, 0, initial_val);
   #endif /* _WIN32 */
-  int ret = sem_init(&data->sem, 1, initial_val);
   if (ret) {
     return ret;
   }
