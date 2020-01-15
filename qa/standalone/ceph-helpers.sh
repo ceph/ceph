@@ -170,11 +170,11 @@ function teardown() {
     fi
     local cores="no"
     local pattern="$(sysctl -n $KERNCORE)"
+    local sysd_dir="/var/lib/systemd/coredump"
     # See if we have apport core handling
     if [ "${pattern:0:1}" = "|" ]; then
-      # TODO: Where can we get the dumps?
-      # Not sure where the dumps really are so this will look in the CWD
-      pattern=""
+      pattern="$sysd_dir/core.xxxx"
+      MOVECORE=yes
     fi
     # Local we start with core and teuthology ends with core
     if ls $(dirname "$pattern") | grep -q '^core\|core$' ; then
@@ -184,6 +184,9 @@ function teardown() {
 	    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'); do
 		mv $i /tmp/cores.$$
 	    done
+	elif [ -n "$MOVECORE" ]; then
+	    # Move cores to where Teuthology will archive it
+	    cp -r $sysd_dir $TESTDIR/archive
         fi
     fi
     if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
