@@ -15,6 +15,7 @@
 #include "global/global_context.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Namespace.h"
+#include "RemotePoolPoller.h"
 #include "ServiceDaemon.h"
 #include "Threads.h"
 
@@ -206,6 +207,21 @@ private:
 } // anonymous namespace
 
 template <typename I>
+struct PoolReplayer<I>::RemotePoolPollerListener
+  : public remote_pool_poller::Listener {
+
+  PoolReplayer<I>* m_pool_replayer;
+
+  RemotePoolPollerListener(PoolReplayer<I>* pool_replayer)
+    : m_pool_replayer(pool_replayer) {
+  }
+
+  void handle_updated(const RemotePoolMeta& remote_pool_meta) override {
+    m_pool_replayer->handle_remote_pool_meta_updated(remote_pool_meta);
+  }
+};
+
+template <typename I>
 PoolReplayer<I>::PoolReplayer(
     Threads<I> *threads, ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler, int64_t local_pool_id,
@@ -319,6 +335,32 @@ void PoolReplayer<I>::init(const std::string& site_name) {
   m_image_deletion_throttler.reset(
       Throttler<I>::create(cct, "rbd_mirror_concurrent_image_deletions"));
 
+  std::string local_fsid;
+  r = m_local_rados->cluster_fsid(&local_fsid);
+  if (r < 0) {
+    derr << "failed to retrieve local fsid: " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  m_remote_pool_poller_listener.reset(new RemotePoolPollerListener(this));
+  m_remote_pool_poller.reset(RemotePoolPoller<I>::create(
+    m_threads, m_remote_io_ctx, m_site_name, local_fsid,
+    *m_remote_pool_poller_listener));
+
+  C_SaferCond on_pool_poller_init;
+  m_remote_pool_poller->init(&on_pool_poller_init);
+  r = on_pool_poller_init.wait();
+  if (r < 0) {
+    derr << "failed to initialize remote pool poller: " << cpp_strerror(r)
+         << dendl;
+    m_callout_id = m_service_daemon->add_or_update_callout(
+      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+      "unable to initialize remote pool poller");
+    m_remote_pool_poller.reset();
+    return;
+  }
+  ceph_assert(!m_remote_pool_meta.mirror_uuid.empty());
+
   m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
       "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
       m_site_name, m_threads, m_image_sync_throttler.get(),
@@ -384,6 +426,14 @@ void PoolReplayer<I>::shut_down() {
     on_shut_down.wait();
   }
   m_default_namespace_replayer.reset();
+
+  if (m_remote_pool_poller) {
+    C_SaferCond ctx;
+    m_remote_pool_poller->shut_down(&ctx);
+    ctx.wait();
+  }
+  m_remote_pool_poller.reset();
+  m_remote_pool_poller_listener.reset();
 
   m_image_sync_throttler.reset();
   m_image_deletion_throttler.reset();
@@ -1022,6 +1072,22 @@ void PoolReplayer<I>::handle_instances_removed(
   for (auto &it : m_namespace_replayers) {
     it.second->handle_instances_removed(instance_ids);
   }
+}
+
+template <typename I>
+void PoolReplayer<I>::handle_remote_pool_meta_updated(
+    const RemotePoolMeta& remote_pool_meta) {
+  dout(5) << "remote_pool_meta=" << remote_pool_meta << dendl;
+
+  if (!m_default_namespace_replayer) {
+    m_remote_pool_meta = remote_pool_meta;
+    return;
+  }
+
+  derr << "remote pool metadata updated unexpectedly" << dendl;
+  std::unique_lock locker{m_lock};
+  m_stopping = true;
+  m_cond.notify_all();
 }
 
 } // namespace mirror
