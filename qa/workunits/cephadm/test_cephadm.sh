@@ -43,7 +43,7 @@ if [ -z "$PYTHON_KLUDGE" ]; then
     which python3 && PYTHONS="$PYTHONS python3"
     which python2 && PYTHONS="$PYTHONS python2"
     echo "PYTHONS $PYTHONS"
-    if [ -z $PYTHONS ]; then
+    if [ -z "$PYTHONS" ]; then
 	echo "No PYTHONS found!"
 	exit 1
     fi
@@ -77,7 +77,7 @@ CEPHADM="$SUDO $CEPHADM_BIN $CEPHADM_ARGS"
 # clean up previous run(s)?
 $CEPHADM rm-cluster --fsid $FSID --force
 $CEPHADM rm-cluster --fsid $FSID_LEGACY --force
-vgchange -an $OSD_VG_NAME || true
+$SUDO vgchange -an $OSD_VG_NAME || true
 loopdev=$($SUDO losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
 if ! [ "$loopdev" = "" ]; then
     $SUDO losetup -d $loopdev
