@@ -223,10 +223,10 @@ class TestCacheDrop(CephFSTestCase):
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
         self._setup()
         result = self._run_drop_cache_cmd()
-        self.assertTrue(result['client_recall']['return_code'] == 0)
-        self.assertTrue(result['flush_journal']['return_code'] == 0)
+        self.assertEqual(result['client_recall']['return_code'], 0)
+        self.assertEqual(result['flush_journal']['return_code'], 0)
         # It should take at least 1 second
-        self.assertTrue(result['duration'] > 1)
+        self.assertGreater(result['duration'], 1)
         self.assertGreaterEqual(result['trim_cache']['trimmed'], 1000-2*mds_min_caps_per_client)
 
     def test_drop_cache_command_timeout(self):
@@ -237,9 +237,9 @@ class TestCacheDrop(CephFSTestCase):
         """
         self._setup()
         result = self._run_drop_cache_cmd(timeout=10)
-        self.assertTrue(result['client_recall']['return_code'] == -errno.ETIMEDOUT)
-        self.assertTrue(result['flush_journal']['return_code'] == 0)
-        self.assertTrue(result['duration'] > 10)
+        self.assertEqual(result['client_recall']['return_code'], -errno.ETIMEDOUT)
+        self.assertEqual(result['flush_journal']['return_code'], 0)
+        self.assertGreater(result['duration'], 10)
         self.assertGreaterEqual(result['trim_cache']['trimmed'], 100) # we did something, right?
 
     def test_drop_cache_command_dead_timeout(self):
@@ -253,10 +253,10 @@ class TestCacheDrop(CephFSTestCase):
         # Note: recall is subject to the timeout. The journal flush will
         # be delayed due to the client being dead.
         result = self._run_drop_cache_cmd(timeout=5)
-        self.assertTrue(result['client_recall']['return_code'] == -errno.ETIMEDOUT)
-        self.assertTrue(result['flush_journal']['return_code'] == 0)
-        self.assertTrue(result['duration'] > 5)
-        self.assertTrue(result['duration'] < 120)
+        self.assertEqual(result['client_recall']['return_code'], -errno.ETIMEDOUT)
+        self.assertEqual(result['flush_journal']['return_code'], 0)
+        self.assertGreater(result['duration'], 5)
+        self.assertLess(result['duration'], 120)
         self.assertEqual(0, result['trim_cache']['trimmed'])
         self.mount_a.kill_cleanup()
         self.mount_a.mount()
@@ -271,10 +271,10 @@ class TestCacheDrop(CephFSTestCase):
         self._setup()
         self.mount_a.kill()
         result = self._run_drop_cache_cmd()
-        self.assertTrue(result['client_recall']['return_code'] == 0)
-        self.assertTrue(result['flush_journal']['return_code'] == 0)
-        self.assertTrue(result['duration'] > 5)
-        self.assertTrue(result['duration'] < 120)
+        self.assertEqual(result['client_recall']['return_code'], 0)
+        self.assertEqual(result['flush_journal']['return_code'], 0)
+        self.assertGreater(result['duration'], 5)
+        self.assertLess(result['duration'], 120)
         self.assertEqual(0, result['trim_cache']['trimmed'])
         self.mount_a.kill_cleanup()
         self.mount_a.mount()
