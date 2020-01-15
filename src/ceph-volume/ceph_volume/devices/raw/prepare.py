@@ -1,11 +1,9 @@
 from __future__ import print_function
-import argparse
 import json
 import logging
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
-from ceph_volume.util import encryption as encryption_utils
-from ceph_volume.util import system, disk
+from ceph_volume.util import system
 from ceph_volume import conf, decorators, terminal
 from ceph_volume.devices.lvm.common import rollback_osd
 from .common import create_parser
@@ -79,7 +77,6 @@ class Prepare(object):
     @decorators.needs_root
     def prepare(self):
         secrets = {'cephx_secret': prepare_utils.create_key()}
-        cluster_fsid = self.get_cluster_fsid()
         osd_fsid = self.args.osd_fsid or system.generate_uuid()
         crush_device_class = self.args.crush_device_class
         if crush_device_class:
