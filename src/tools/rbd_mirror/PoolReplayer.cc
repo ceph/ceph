@@ -362,8 +362,8 @@ void PoolReplayer<I>::init(const std::string& site_name) {
   ceph_assert(!m_remote_pool_meta.mirror_uuid.empty());
 
   m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
-      "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-      m_site_name, m_threads, m_image_sync_throttler.get(),
+      "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_site_name,
+      m_peer.uuid, m_remote_pool_meta, m_threads, m_image_sync_throttler.get(),
       m_image_deletion_throttler.get(), m_service_daemon,
       m_cache_manager_handler));
 
@@ -654,10 +654,10 @@ void PoolReplayer<I>::update_namespace_replayers() {
 
   for (auto &name : mirroring_namespaces) {
     auto namespace_replayer = NamespaceReplayer<I>::create(
-        name, m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-        m_site_name, m_threads, m_image_sync_throttler.get(),
-        m_image_deletion_throttler.get(), m_service_daemon,
-        m_cache_manager_handler);
+        name, m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_site_name,
+        m_peer.uuid, m_remote_pool_meta, m_threads,
+        m_image_sync_throttler.get(), m_image_deletion_throttler.get(),
+        m_service_daemon, m_cache_manager_handler);
     auto on_init = new LambdaContext(
         [this, namespace_replayer, name, &mirroring_namespaces,
          ctx=gather_ctx->new_sub()](int r) {

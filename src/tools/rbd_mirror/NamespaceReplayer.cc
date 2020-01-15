@@ -38,15 +38,17 @@ template <typename I>
 NamespaceReplayer<I>::NamespaceReplayer(
     const std::string &name,
     librados::IoCtx &local_io_ctx, librados::IoCtx &remote_io_ctx,
-    const std::string &local_mirror_uuid, const std::string &remote_mirror_uuid,
-    const std::string &local_site_name, Threads<I> *threads,
+    const std::string &local_mirror_uuid, const std::string &local_site_name,
+    const std::string& local_mirror_peer_uuid,
+    const RemotePoolMeta& remote_pool_meta, Threads<I> *threads,
     Throttler<I> *image_sync_throttler, Throttler<I> *image_deletion_throttler,
     ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler) :
   m_namespace_name(name),
   m_local_mirror_uuid(local_mirror_uuid),
-  m_remote_mirror_uuid(remote_mirror_uuid),
   m_local_site_name(local_site_name),
+  m_local_mirror_peer_uuid(local_mirror_peer_uuid),
+  m_remote_pool_meta(remote_pool_meta),
   m_threads(threads), m_image_sync_throttler(image_sync_throttler),
   m_image_deletion_throttler(image_deletion_throttler),
   m_service_daemon(service_daemon),
@@ -372,8 +374,9 @@ void NamespaceReplayer<I>::handle_init_instance_replayer(int r) {
     return;
   }
 
-  m_instance_replayer->add_peer(m_remote_mirror_uuid, m_remote_io_ctx,
-                                m_remote_status_updater.get());
+  m_instance_replayer->add_peer({m_local_mirror_peer_uuid, m_remote_io_ctx,
+                                 m_remote_pool_meta,
+                                 m_remote_status_updater.get()});
 
   init_instance_watcher();
 }
