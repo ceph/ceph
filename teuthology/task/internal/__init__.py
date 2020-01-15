@@ -416,6 +416,11 @@ def coredump(ctx, config):
                 '{adir}/coredump'.format(adir=archive_dir),
                 run.Raw('&&'),
                 'sudo', 'sysctl', '-w', 'kernel.core_pattern={adir}/coredump/%t.%p.core'.format(adir=archive_dir),
+		run.Raw('&&'),
+		'echo',
+		'kernel.core_pattern={adir}/coredump/%t.%p.core'.format(adir=archive_dir),
+		run.Raw('|'),
+		'sudo', 'tee', '-a', '/etc/sysctl.conf',
             ],
             wait=False,
         )
