@@ -9,5 +9,8 @@ overrides:
         mon osdmap full prune interval: 2
         mon osdmap full prune txsize: 2
 tasks:
+- exec:
+    mon.a:
+      - sysctl kernel.core_pattern
 - install:
 - ceph:
