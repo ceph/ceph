@@ -18,8 +18,7 @@ export class ImagesPageHelper extends PageHelper {
     await element(by.id('name')).sendKeys(name); // Enter in image name
 
     // Select image pool
-    await element(by.id('pool')).click();
-    await element(by.cssContainingText('select[name=pool] option', pool)).click();
+    await this.selectOption('pool', pool);
     await $(getPoolName).click();
     await expect(element(by.id('pool')).getAttribute('class')).toContain('ng-valid'); // check if selected
 
