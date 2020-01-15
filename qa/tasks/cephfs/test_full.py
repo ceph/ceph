@@ -91,7 +91,7 @@ class FullnessTestCase(CephFSTestCase):
         self.assertEqual(mount_b_epoch, mount_b_initial_epoch)
 
         # Set a barrier on the MDS
-        self.fs.mds_asok(["osdmap", "barrier", new_epoch.__str__()], mds_id=self.active_mds_id)
+        self.fs.rank_asok(["osdmap", "barrier", new_epoch.__str__()])
 
         # Do an operation on client B, witness that it ends up with
         # the latest OSD map from the barrier.  This shouldn't generate any
@@ -161,7 +161,7 @@ class FullnessTestCase(CephFSTestCase):
         # while in the full state.
         osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
         self.wait_until_true(
-            lambda: self.fs.mds_asok(['status'], mds_id=self.active_mds_id)['osdmap_epoch'] >= osd_epoch,
+            lambda: self.fs.rank_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
 
         if not self.data_only:
@@ -190,7 +190,7 @@ class FullnessTestCase(CephFSTestCase):
         # be applying the free space policy
         osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
         self.wait_until_true(
-            lambda: self.fs.mds_asok(['status'], mds_id=self.active_mds_id)['osdmap_epoch'] >= osd_epoch,
+            lambda: self.fs.rank_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
 
         # Now I should be able to write again
