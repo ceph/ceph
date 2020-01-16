@@ -464,6 +464,19 @@ struct pg_t {
   hobject_t get_hobj_start() const;
   hobject_t get_hobj_end(unsigned pg_num) const;
 
+  // strong ordering is supported
+  inline int compare(const pg_t& p) const noexcept {
+    if (auto delta = pool() - p.pool(); delta != 0) {
+      return delta;
+    } else if (ps() < p.ps()) {
+      return -1;
+    } else if (ps() > p.ps()) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 v = 1;
@@ -492,28 +505,22 @@ struct pg_t {
 WRITE_CLASS_ENCODER(pg_t)
 
 inline bool operator<(const pg_t& l, const pg_t& r) {
-  return l.pool() < r.pool() ||
-    (l.pool() == r.pool() && (l.ps() < r.ps()));
+  return l.compare(r) < 0;
 }
 inline bool operator<=(const pg_t& l, const pg_t& r) {
-  return l.pool() < r.pool() ||
-    (l.pool() == r.pool() && (l.ps() <= r.ps()));
+  return l.compare(r) <= 0;
 }
 inline bool operator==(const pg_t& l, const pg_t& r) {
-  return l.pool() == r.pool() &&
-    l.ps() == r.ps();
+  return l.compare(r) == 0;
 }
 inline bool operator!=(const pg_t& l, const pg_t& r) {
-  return l.pool() != r.pool() ||
-    l.ps() != r.ps();
+  return l.compare(r) != 0;
 }
 inline bool operator>(const pg_t& l, const pg_t& r) {
-  return l.pool() > r.pool() ||
-    (l.pool() == r.pool() && (l.ps() > r.ps()));
+  return l.compare(r) > 0;
 }
 inline bool operator>=(const pg_t& l, const pg_t& r) {
-  return l.pool() > r.pool() ||
-    (l.pool() == r.pool() && (l.ps() >= r.ps()));
+  return l.compare(r) >= 0;
 }
 
 std::ostream& operator<<(std::ostream& out, const pg_t &pg);
