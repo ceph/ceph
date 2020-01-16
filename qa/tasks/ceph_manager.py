@@ -361,8 +361,7 @@ class OSDThrasher(Thrasher):
             # import
             cmd = ['--data-path', FSPATH.format(id=imp_osd),
                    '--journal-path', JPATH.format(id=imp_osd),
-                   '--log-file',
-                   "/var/log/ceph/objectstore_tool.\\$pid.log",
+                   '--log-file=/var/log/ceph/objectstore_tool.$pid.log',
                    '--op', 'import', '--file', exp_path]
             proc = self.run_ceph_objectstore_tool(
                 imp_remote, 'osd.%s' % imp_osd, cmd)
