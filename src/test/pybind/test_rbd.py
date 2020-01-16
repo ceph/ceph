@@ -844,6 +844,12 @@ class TestImage(object):
         assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
         assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
 
+    def test_snap_exists(self):
+        self.image.create_snap('snap1')
+        eq(self.image.snap_exists('snap1'), True)
+        self.image.remove_snap('snap1')
+        eq(self.image.snap_exists('snap1'), False)
+
     def test_snap_timestamp(self):
         self.image.create_snap('snap1')
         eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
