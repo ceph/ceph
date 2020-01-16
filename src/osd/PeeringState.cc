@@ -4043,15 +4043,7 @@ void PeeringState::complete_write(eversion_t v, eversion_t lc)
 
 void PeeringState::calc_trim_to()
 {
-  size_t target = cct->_conf->osd_min_pg_log_entries;
-  if (is_degraded() ||
-      state_test(PG_STATE_RECOVERING |
-                 PG_STATE_RECOVERY_WAIT |
-                 PG_STATE_BACKFILLING |
-                 PG_STATE_BACKFILL_WAIT |
-                 PG_STATE_BACKFILL_TOOFULL)) {
-    target = pl->get_target_pg_log_entries();
-  }
+  size_t target = pl->get_target_pg_log_entries();
 
   eversion_t limit = std::min(
     min_last_complete_ondisk,
@@ -4085,15 +4077,8 @@ void PeeringState::calc_trim_to()
 
 void PeeringState::calc_trim_to_aggressive()
 {
-  size_t target = cct->_conf->osd_min_pg_log_entries;
-  if (is_degraded() ||
-      state_test(PG_STATE_RECOVERING |
-		 PG_STATE_RECOVERY_WAIT |
-		 PG_STATE_BACKFILLING |
-		 PG_STATE_BACKFILL_WAIT |
-		 PG_STATE_BACKFILL_TOOFULL)) {
-    target = pl->get_target_pg_log_entries();
-  }
+  size_t target = pl->get_target_pg_log_entries();
+
   // limit pg log trimming up to the can_rollback_to value
   eversion_t limit = std::min(
     pg_log.get_head(),
