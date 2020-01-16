@@ -400,6 +400,7 @@ public:
   uint64_t get_snap_trimq_size() const override {
     return snap_trimq.size();
   }
+  unsigned get_target_pg_log_entries() const override;
 
   void clear_publish_stats() override;
   void clear_primary_state() override;

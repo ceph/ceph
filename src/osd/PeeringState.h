@@ -281,6 +281,8 @@ public:
     virtual void queue_check_readable(epoch_t lpr, ceph::timespan delay) = 0;
     virtual void recheck_readable() = 0;
 
+    virtual unsigned get_target_pg_log_entries() const = 0;
+
     // ============ Flush state ==================
     /**
      * try_flush_or_schedule_async()

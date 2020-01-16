@@ -9400,6 +9400,26 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
   return true;
 }
 
+unsigned OSDService::get_target_pg_log_entries() const
+{
+  auto num_pgs = osd->get_num_pgs();
+  auto target = cct->_conf->osd_target_pg_log_entries_per_osd;
+  if (num_pgs > 0 && target > 0) {
+    // target an even spread of our budgeted log entries across all
+    // PGs.  note that while we only get to control the entry count
+    // for primary PGs, we'll normally be responsible for a mix of
+    // primary and replica PGs (for the same pool(s) even), so this
+    // will work out.
+    return std::max<unsigned>(
+      std::min<unsigned>(target / num_pgs,
+			 cct->_conf->osd_max_pg_log_entries),
+      cct->_conf->osd_min_pg_log_entries);
+  } else {
+    // fall back to a per-pg value.
+    return cct->_conf->osd_min_pg_log_entries;
+  }
+}
+
 void OSD::do_recovery(
   PG *pg, epoch_t queued, uint64_t reserved_pushes,
   ThreadPool::TPHandle &handle)

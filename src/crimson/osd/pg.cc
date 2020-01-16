@@ -194,6 +194,30 @@ void PG::recheck_readable()
   }
 }
 
+unsigned PG::get_target_pg_log_entries() const
+{
+  const unsigned num_pgs = shard_services.get_pg_num();
+  const unsigned target =
+    local_conf().get_val<uint64_t>("osd_target_pg_log_entries_per_osd");
+  const unsigned min_pg_log_entries =
+    local_conf().get_val<uint64_t>("osd_min_pg_log_entries");
+  if (num_pgs > 0 && target > 0) {
+    // target an even spread of our budgeted log entries across all
+    // PGs.  note that while we only get to control the entry count
+    // for primary PGs, we'll normally be responsible for a mix of
+    // primary and replica PGs (for the same pool(s) even), so this
+    // will work out.
+    const unsigned max_pg_log_entries =
+      local_conf().get_val<uint64_t>("osd_max_pg_log_entries");
+    return std::clamp(target / num_pgs,
+		      min_pg_log_entries,
+		      max_pg_log_entries);
+  } else {
+    // fall back to a per-pg value.
+    return min_pg_log_entries;
+  }
+}
+
 void PG::on_activate(interval_set<snapid_t>)
 {
   projected_last_update = peering_state.get_info().last_update;

@@ -240,6 +240,8 @@ public:
 			    ceph::timespan delay) final;
   void recheck_readable() final;
 
+  unsigned get_target_pg_log_entries() const final;
+
   void on_pool_change() final {
     // Not needed yet
   }
