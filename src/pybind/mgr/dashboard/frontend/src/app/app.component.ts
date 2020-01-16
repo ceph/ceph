@@ -32,6 +32,8 @@ export class AppComponent {
   // when the page is first loaded. This prevents that.
   sidebarAnimate = false;
 
+  isPwdDisplayed = false;
+
   constructor(
     private authStorageService: AuthStorageService,
     private router: Router,
@@ -44,6 +46,10 @@ export class AppComponent {
         this.sidebarAnimate = true;
         this.sidebarOpened = !this.sidebarOpened;
       }
+    });
+
+    this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
+      this.isPwdDisplayed = isDisplayed;
     });
   }
 
