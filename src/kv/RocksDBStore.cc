@@ -255,6 +255,9 @@ int RocksDBStore::ParseOptionsFromStringStatic(
   rocksdb::Options& opt,
   function<int(const string&, const string&, rocksdb::Options&)> interp)
 {
+  // keep aligned with func tryInterpret
+  const set<string> need_interp_keys = {"compaction_threads", "flusher_threads", "compact_on_mount", "disableWAL"};
+
   map<string, string> str_map;
   int r = get_str_map(opt_str, &str_map, ",\n;");
   if (r < 0)
@@ -265,7 +268,11 @@ int RocksDBStore::ParseOptionsFromStringStatic(
     rocksdb::Status status =
       rocksdb::GetOptionsFromString(opt, this_opt, &opt);
     if (!status.ok()) {
-      r = interp != nullptr ? interp(it->first, it->second, opt) : -1;
+      if (interp != nullptr) {
+	r = interp(it->first, it->second, opt);
+      } else if (!need_interp_keys.count(it->first)) {
+	r = -1;
+      }
       if (r < 0) {
         derr << status.ToString() << dendl;
         return -EINVAL;
