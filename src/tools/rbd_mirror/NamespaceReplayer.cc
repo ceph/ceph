@@ -38,7 +38,7 @@ template <typename I>
 NamespaceReplayer<I>::NamespaceReplayer(
     const std::string &name,
     librados::IoCtx &local_io_ctx, librados::IoCtx &remote_io_ctx,
-    const std::string &local_mirror_uuid, const std::string &local_site_name,
+    const std::string &local_mirror_uuid,
     const std::string& local_mirror_peer_uuid,
     const RemotePoolMeta& remote_pool_meta, Threads<I> *threads,
     Throttler<I> *image_sync_throttler, Throttler<I> *image_deletion_throttler,
@@ -46,7 +46,6 @@ NamespaceReplayer<I>::NamespaceReplayer(
     journal::CacheManagerHandler *cache_manager_handler) :
   m_namespace_name(name),
   m_local_mirror_uuid(local_mirror_uuid),
-  m_local_site_name(local_site_name),
   m_local_mirror_peer_uuid(local_mirror_peer_uuid),
   m_remote_pool_meta(remote_pool_meta),
   m_threads(threads), m_image_sync_throttler(image_sync_throttler),
@@ -265,7 +264,7 @@ void NamespaceReplayer<I>::init_local_status_updater() {
   ceph_assert(!m_local_status_updater);
 
   m_local_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_local_io_ctx, m_threads, "", ""));
+    m_local_io_ctx, m_threads, ""));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_local_status_updater>(this);
@@ -300,11 +299,6 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!m_remote_status_updater);
 
-  std::string local_site_name;
-  if (m_namespace_name.empty()) {
-    local_site_name = m_local_site_name;
-  }
-
   librados::Rados rados(m_local_io_ctx);
   std::string local_fsid;
   int r = rados.cluster_fsid(&local_fsid);
@@ -316,7 +310,7 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   }
 
   m_remote_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_remote_io_ctx, m_threads, local_site_name, local_fsid));
+    m_remote_io_ctx, m_threads, local_fsid));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_remote_status_updater>(this);

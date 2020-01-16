@@ -132,7 +132,6 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
       librados::IoCtx &local_ioctx,
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
-      const std::string &site_name,
       const std::string& local_mirror_peer_uuid,
       const RemotePoolMeta& remote_pool_meta,
       Threads<librbd::MockTestImageCtx> *threads,
