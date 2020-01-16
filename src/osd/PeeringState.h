@@ -1796,6 +1796,12 @@ public:
     bool async);
 
   /**
+   * retrieve the min last_backfill among backfill targets
+   */
+  hobject_t earliest_backfill() const;
+
+
+  /**
    * Updates local log/missing to reflect new oob log update from primary
    */
   void merge_new_log_entries(

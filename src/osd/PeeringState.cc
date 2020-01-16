@@ -258,6 +258,16 @@ void PeeringState::update_history(const pg_history_t& new_history)
   pl->on_info_history_change();
 }
 
+hobject_t PeeringState::earliest_backfill() const
+{
+  hobject_t e = hobject_t::get_max();
+  for (const pg_shard_t& bt : get_backfill_targets()) {
+    const pg_info_t &pi = get_peer_info(bt);
+    e = std::min(pi.last_backfill, e);
+  }
+  return e;
+}
+
 void PeeringState::purge_strays()
 {
   if (is_premerge()) {
