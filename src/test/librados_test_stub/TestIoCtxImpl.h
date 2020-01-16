@@ -146,6 +146,7 @@ public:
   virtual int set_alloc_hint(const std::string& oid,
                              uint64_t expected_object_size,
                              uint64_t expected_write_size,
+                             uint32_t flags,
                              const SnapContext &snapc);
   virtual void set_snap_read(snap_t seq);
   virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
