@@ -980,6 +980,26 @@ int RGWGetObj::verify_permission()
   return 0;
 }
 
+// cache the objects tags into the requests
+// use inside try/catch as "decode()" may throw
+void populate_tags_in_request(req_state* s, const std::map<std::string, bufferlist>& attrs) {
+  const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
+  if (attr_iter != attrs.end()) {
+    auto bliter = attr_iter->second.cbegin();
+    decode(s->tagset, bliter);
+  }
+}
+
+// cache the objects metadata into the request
+void populate_metadata_in_request(req_state* s, std::map<std::string, bufferlist>& attrs) {
+  for (auto& attr : attrs) {
+    if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
+      std::string_view key(attr.first);
+      key.remove_prefix(sizeof(RGW_ATTR_PREFIX)-1);
+      s->info.x_meta_map.emplace(key, attr.second.c_str());
+    }
+  }
+}
 
 int RGWOp::verify_op_mask()
 {
@@ -4819,6 +4839,15 @@ void RGWDeleteObj::execute()
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
       op_ret = 0;
     }
+
+    // cache the objects tags and metadata into the requests
+    // so it could be used in the notification mechanism
+    try {
+      populate_tags_in_request(s, attrs);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
+    }
+    populate_metadata_in_request(s, attrs);
   } else {
     op_ret = -EINVAL;
   }
@@ -5110,33 +5139,33 @@ void RGWCopyObj::execute()
   }
 
   op_ret = store->getRados()->copy_obj(obj_ctx,
-			   s->user->user_id,
-			   &s->info,
-			   source_zone,
-			   dst_obj,
-			   src_obj,
-			   dest_bucket_info,
-			   src_bucket_info,
-                           s->dest_placement,
-			   &src_mtime,
-			   &mtime,
-			   mod_ptr,
-			   unmod_ptr,
-                           high_precision_time,
-			   if_match,
-			   if_nomatch,
-			   attrs_mod,
-                           copy_if_newer,
-			   attrs, RGWObjCategory::Main,
-			   olh_epoch,
-			   (delete_at ? *delete_at : real_time()),
-			   (version_id.empty() ? NULL : &version_id),
-			   &s->req_id, /* use req_id as tag */
-			   &etag,
-			   copy_obj_progress_cb, (void *)this, 
-                           this,
-                           s->yield);
-  
+          s->user->user_id,
+          &s->info,
+          source_zone,
+          dst_obj,
+          src_obj,
+          dest_bucket_info,
+          src_bucket_info,
+          s->dest_placement,
+          &src_mtime,
+          &mtime,
+          mod_ptr,
+          unmod_ptr,
+          high_precision_time,
+          if_match,
+          if_nomatch,
+          attrs_mod,
+          copy_if_newer,
+          attrs, RGWObjCategory::Main,
+          olh_epoch,
+          (delete_at ? *delete_at : real_time()),
+          (version_id.empty() ? NULL : &version_id),
+          &s->req_id, /* use req_id as tag */
+          &etag,
+          copy_obj_progress_cb, (void *)this,
+            this,
+            s->yield);
+
   const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;

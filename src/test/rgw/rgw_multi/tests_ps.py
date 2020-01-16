@@ -20,10 +20,19 @@ from .tests import get_realm, \
     gen_bucket_name, \
     get_user, \
     get_tenant
-from .zone_ps import PSTopic, PSTopicS3, PSNotification, PSSubscription, PSNotificationS3, print_connection_info, delete_all_s3_topics
+from .zone_ps import PSTopic, \
+    PSTopicS3, \
+    PSNotification, \
+    PSSubscription, \
+    PSNotificationS3, \
+    print_connection_info, \
+    delete_all_s3_topics, \
+    put_object_tagging, \
+    get_object_tagging
 from multisite import User
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
+import boto.s3.tagging
 
 # configure logging for the tests module
 log = logging.getLogger(__name__)
@@ -2597,30 +2606,152 @@ def test_ps_s3_metadata_on_master():
     topic_arn = topic_conf.set_config()
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
+    meta_key = 'meta1'
+    meta_value = 'This is my metadata value'
+    meta_prefix = 'x-amz-meta-'
     topic_conf_list = [{'Id': notification_name,'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectCreated:*']
-                       }]
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+        'Filter': {
+            'Metadata': {
+                'FilterRules': [{'Name': meta_prefix+meta_key, 'Value': meta_value}]
+            }
+        }
+    }]
 
     s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
     # create objects in the bucket
-    key = bucket.new_key('foo')
-    key.set_metadata('meta1', 'This is my metadata value')
+    key_name = 'foo'
+    key = bucket.new_key(key_name)
+    key.set_metadata(meta_key, meta_value)
     key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-    keys = list(bucket.list())
+    
+    # create objects in the bucket using COPY
+    bucket.copy_key('copy_of_foo', bucket.name, key.name)
+    # create objects in the bucket using multi-part upload
+    fp = tempfile.TemporaryFile(mode='w')
+    fp.write('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+    fp.close()
+    uploader = bucket.initiate_multipart_upload('multipart_foo', 
+            metadata={meta_key: meta_value})
+    fp = tempfile.TemporaryFile(mode='r')
+    uploader.upload_part_from_file(fp, 1)
+    uploader.complete_upload()
+    fp.close()
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
-    receiver.verify_s3_events(keys, exact_match=True)
+    event_count = 0
+    for event in receiver.get_and_reset_events():
+        assert_equal(event['s3']['object']['metadata'][0]['key'], meta_prefix+meta_key)
+        assert_equal(event['s3']['object']['metadata'][0]['val'], meta_value)
+        event_count +=1
+
+    # only PUT and POST has the metadata value
+    assert_equal(event_count, 2)
+
+    # delete objects
+    for key in bucket.list():
+        key.delete()
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+    # check amqp receiver
+    event_count = 0
+    for event in receiver.get_and_reset_events():
+        assert_equal(event['s3']['object']['metadata'][0]['key'], meta_prefix+meta_key)
+        assert_equal(event['s3']['object']['metadata'][0]['val'], meta_value)
+        event_count +=1
+
+    # all 3 object has metadata when deleted
+    assert_equal(event_count, 3)
 
     # cleanup
     stop_amqp_receiver(receiver, task)
     s3_notification_conf.del_config()
     topic_conf.del_config()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    clean_rabbitmq(proc)
+
+
+def test_ps_s3_tags_on_master():
+    """ test s3 notification of tags on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    proc = init_rabbitmq()
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start amqp receiver
+    exchange = 'ex1'
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task.start()
+
+    # create s3 topic
+    endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+        'Filter': {
+            'Tags': {
+                'FilterRules': [{'Name': 'hello', 'Value': 'world'}]
+            }
+        }
+    }]
+
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket with tags
+    tags = 'hello=world&ka=boom'
+    key_name1 = 'key1'
+    put_object_tagging(zones[0].conn, bucket_name, key_name1, tags)
+    tags = 'foo=bar&ka=boom'
+    key_name2 = 'key2'
+    put_object_tagging(zones[0].conn, bucket_name, key_name2, tags)
+    key_name3 = 'key3'
+    key = bucket.new_key(key_name3)
+    key.set_contents_from_string('bar')
+    # create objects in the bucket using COPY
+    bucket.copy_key('copy_of_'+key_name1, bucket.name, key_name1)
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+    expected_tags = [{'val': 'world', 'key': 'hello'}, {'val': 'boom', 'key': 'ka'}]
+    # check amqp receiver
+    for event in receiver.get_and_reset_events():
+        obj_tags =  event['s3']['object']['tags']
+        assert_equal(obj_tags[0], expected_tags[0])
+
+    # delete the objects
     for key in bucket.list():
         key.delete()
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+    # check amqp receiver
+    for event in receiver.get_and_reset_events():
+        obj_tags =  event['s3']['object']['tags']
+        assert_equal(obj_tags[0], expected_tags[0])
+
+    # cleanup
+    stop_amqp_receiver(receiver, task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
     # delete the bucket
     zones[0].delete_bucket(bucket_name)
     clean_rabbitmq(proc)

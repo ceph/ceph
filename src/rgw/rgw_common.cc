@@ -435,7 +435,7 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 }
 
 void rgw_add_amz_meta_header(
-  std::map<std::string, std::string>& x_meta_map,
+  meta_map_t& x_meta_map,
   const std::string& k,
   const std::string& v)
 {

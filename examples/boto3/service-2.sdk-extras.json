@@ -96,7 +96,13 @@
                     "shape":"S3MetadataFilter",
                     "documentation":"<p/>",
                     "locationName":"S3Metadata"
+                },
+                "Tags":{
+                    "shape":"S3TagsFilter",
+                    "documentation":"<p/>",
+                    "locationName":"S3Tags"
                 }
+
             },
             "documentation":"<p>Specifies object key name filtering rules. For information about key name filtering, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html\">Configuring Event Notifications</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>"
         },
@@ -121,6 +127,17 @@
                 }
             },
             "documentation":"<p>A container for metadata filtering rules.</p>"
+        },
+        "S3TagsFilter":{
+            "type":"structure",
+            "members":{
+                "FilterRules":{
+                    "shape":"FilterRuleList",
+                    "documentation":"<p/>",
+                    "locationName":"FilterRule"
+                }
+            },
+            "documentation":"<p>A container for object tags filtering rules.</p>"
         }
     },
     "documentation":"<p/>"
