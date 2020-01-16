@@ -104,6 +104,7 @@ public:
     if (r >= 0) {
       add_pending(arg->id, c, oid);
     } else {
+      arg->put();
       c->release();
     }
     return r;
@@ -120,6 +121,7 @@ public:
     if (r >= 0) {
       add_pending(arg->id, c, oid);
     } else {
+      arg->put();
       c->release();
     }
     return r;
