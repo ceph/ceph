@@ -20,11 +20,38 @@ class SubvolumeBase(object):
 
     def __init__(self, fs, vol_spec, group, subvolname, legacy=False):
         self.fs = fs
+        self.cmode = None
+        self.user_id = None
+        self.group_id = None
         self.vol_spec = vol_spec
         self.group = group
         self.subvolname = subvolname
         self.legacy_mode = legacy
         self.load_config()
+
+    @property
+    def uid(self):
+        return self.user_id
+
+    @property
+    def gid(self):
+        return self.group_id
+
+    @property
+    def mode(self):
+        return self.cmode
+
+    @uid.setter
+    def uid(self, val):
+        self.user_id = val
+
+    @gid.setter
+    def gid(self, val):
+        self.group_id = val
+
+    @mode.setter
+    def mode(self, val):
+        self.cmode = val
 
     @property
     def base_path(self):
