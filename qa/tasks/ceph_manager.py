@@ -394,10 +394,11 @@ class OSDThrasher(Thrasher):
             # apply low split settings to each pool
             if not self.ceph_manager.cephadm:
                 for pool in self.ceph_manager.list_pools():
-                    no_sudo_prefix = ' '.join(prefix[1:])
                     cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
                            "--filestore-split-multiple 1' sudo -E "
-                           + no_sudo_prefix + "--op apply-layout-settings --pool " + pool).format(id=osd)
+                           + 'ceph-objectstore-tool '
+                           + ' '.join(prefix)
+                           + " --op apply-layout-settings --pool " + pool).format(id=osd)
                     proc = remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
                     output = proc.stderr.getvalue()
                     if 'Couldn\'t find pool' in output:
