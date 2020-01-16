@@ -270,6 +270,7 @@ Detailed under: `Bucket Operations`_.
       the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access),
       and will have to be deleted explicitly with the subscription deletion API
     - Filtering based on metadata (which is an extension to S3) is not supported, and such rules will be ignored
+    - Filtering based on tags (which is an extension to S3) is not supported, and such rules will be ignored
 
 
 Non S3-Compliant Notifications
@@ -496,7 +497,8 @@ the events will have an S3-compatible record format (JSON):
                    "eTag":"",
                    "versionId":"",
                    "sequencer":"",
-                   "metadata":[]
+                   "metadata":[],
+                   "tags":[]
                }
            },
            "eventId":"",
@@ -520,6 +522,7 @@ the events will have an S3-compatible record format (JSON):
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: not supported (an extension to the S3 notification API)
+- s3.object.tags: not supported (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
 
 In case that the subscription was not created via a non S3-compatible notification, 

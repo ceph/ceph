@@ -35,6 +35,10 @@ topic_conf_list = [{'Id': notification_id,
 			    'FilterRules': [{'Name': 'x-amz-meta-foo', 'Value': 'bar'},
                                             {'Name': 'x-amz-meta-hello', 'Value': 'world'}]
                          },
+                        'Tags': {
+			    'FilterRules': [{'Name': 'foo', 'Value': 'bar'},
+                                            {'Name': 'hello', 'Value': 'world'}]
+                         },
                          'Key': {
                              'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)'}]
                          }

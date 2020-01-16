@@ -18,7 +18,7 @@ user can only manage its own topics, and can only associate them with buckets it
 In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
 The notification may also filter out events based on prefix/suffix and/or regular expression matching of the keys. As well as,
-on the metadata attributes attached to the object.
+on the metadata attributes attached to the object, or the object tags.
 There can be multiple notifications for any specific topic, and the same topic could be used for multiple notifications.
 
 REST API has been defined to provide configuration and control interfaces for the bucket notification
@@ -283,7 +283,8 @@ pushed or pulled using the pubsub sync module.
                    "eTag":"",
                    "versionId":"",
                    "sequencer": "",
-                   "metadata":[]
+                   "metadata":[],
+                   "tags":[]
                }
            },
            "eventId":"",
@@ -308,6 +309,7 @@ pushed or pulled using the pubsub sync module.
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API) 
+- s3.object.tags: any tags set on the objcet (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
 
 .. _PubSub Module : ../pubsub-module
