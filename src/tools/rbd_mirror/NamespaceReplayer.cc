@@ -608,7 +608,8 @@ void NamespaceReplayer<I>::init_local_pool_watcher(Context *on_finish) {
   std::lock_guard locker{m_lock};
   ceph_assert(!m_local_pool_watcher);
   m_local_pool_watcher.reset(PoolWatcher<I>::create(
-      m_threads, m_local_io_ctx, m_local_pool_watcher_listener));
+      m_threads, m_local_io_ctx, m_local_mirror_uuid,
+      m_local_pool_watcher_listener));
 
   // ensure the initial set of local images is up-to-date
   // after acquiring the leader role
@@ -642,7 +643,8 @@ void NamespaceReplayer<I>::init_remote_pool_watcher(Context *on_finish) {
   std::lock_guard locker{m_lock};
   ceph_assert(!m_remote_pool_watcher);
   m_remote_pool_watcher.reset(PoolWatcher<I>::create(
-      m_threads, m_remote_io_ctx, m_remote_pool_watcher_listener));
+      m_threads, m_remote_io_ctx, m_remote_pool_meta.mirror_uuid,
+      m_remote_pool_watcher_listener));
 
   auto ctx = new LambdaContext([this, on_finish](int r) {
       handle_init_remote_pool_watcher(r, on_finish);

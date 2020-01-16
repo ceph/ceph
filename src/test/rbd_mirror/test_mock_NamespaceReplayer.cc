@@ -197,6 +197,7 @@ struct PoolWatcher<librbd::MockTestImageCtx> {
 
   static PoolWatcher *create(Threads<librbd::MockTestImageCtx> *threads,
                              librados::IoCtx &ioctx,
+                             const std::string& mirror_uuid,
                              pool_watcher::Listener& listener) {
     auto pool_id = ioctx.get_id();
     ceph_assert(s_instances.count(pool_id));

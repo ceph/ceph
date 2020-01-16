@@ -100,7 +100,7 @@ public:
     ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
     ioctx.application_enable("rbd", true);
 
-    m_pool_watcher.reset(new PoolWatcher<>(m_threads, ioctx,
+    m_pool_watcher.reset(new PoolWatcher<>(m_threads, ioctx, "mirror uuid",
                                            m_pool_watcher_listener));
 
     if (enable_mirroring) {
