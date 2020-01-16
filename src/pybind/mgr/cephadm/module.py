@@ -1319,7 +1319,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 for _inventory in inventory_list:
                     if _inventory.name == hostname:
                         return _inventory
-                    raise OrchestratorError("No inventory found for host: {}".format(hostname))
+                raise OrchestratorError("No inventory found for host: {}".format(hostname))
 
             cmds = []
             # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
@@ -2109,4 +2109,3 @@ class NodeAssignment(object):
             logger.info('Assigning nodes to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
             return None
-
