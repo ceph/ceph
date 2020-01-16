@@ -5296,6 +5296,16 @@ extern "C" int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
   return r;
 }
 
+extern "C" int rbd_snap_exists(rbd_image_t image, const char *snapname, bool *exists)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_exists_enter, ictx, ictx->name.c_str(), 
+             ictx->snap_name.c_str(), ictx->read_only, snapname);
+  int r = librbd::api::Snapshot<>::exists(ictx, cls::rbd::UserSnapshotNamespace(), snapname, exists);
+  tracepoint(librbd, snap_exists_exit, r, *exists);
+  return r;
+}
+
 extern "C" int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, struct timespec *timestamp)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
