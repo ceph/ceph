@@ -125,6 +125,7 @@ class SELinux(Task):
             'comm="rhsmcertd-worke"',
             'comm="setroubleshootd"',
             'comm="rpm"',
+            'tcontext=system_u:object_r:container_runtime_exec_t:s0',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
