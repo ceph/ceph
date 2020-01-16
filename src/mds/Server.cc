@@ -2435,10 +2435,14 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
   dout(7) << "dispatch_client_request " << *req << dendl;
 
-  if (mdcache->is_readonly() ||
-      (mdr->has_more() && mdr->more()->slave_error == -EROFS)) {
+  if (req->may_write() && mdcache->is_readonly()) {
     dout(10) << " read-only FS" << dendl;
     respond_to_request(mdr, -EROFS);
+    return;
+  }
+  if (mdr->has_more() && mdr->more()->slave_error) {
+    dout(10) << " got error from slaves" << dendl;
+    respond_to_request(mdr, mdr->more()->slave_error);
     return;
   }
   
