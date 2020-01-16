@@ -8,16 +8,17 @@
  * LGPL2.1 (see COPYING-LGPL2.1) or later
  */
 
+#include <gtest/gtest.h>
 #include <iostream>
 #include <memory>
-#include <gtest/gtest.h>
+#include <set>
 
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "include/stringify.h"
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-
-#include <set>
 
 std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
                               int num_host, int num_osd)
@@ -82,17 +83,35 @@ int get_num_dups(const vector<int>& v)
 {
   std::set<int> s;
   int dups = 0;
-  for (unsigned i=0; i<v.size(); ++i) {
-    if (s.count(v[i]))
+  for (auto n : v) {
+    if (s.count(n))
       ++dups;
-    else if (v[i] != CRUSH_ITEM_NONE)
-      s.insert(v[i]);
+    else if (n != CRUSH_ITEM_NONE)
+      s.insert(n);
   }
   return dups;
 }
 
-TEST(CRUSH, indep_toosmall) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 1, 3, 1));
+class CRUSHTest : public ::testing::Test
+{
+public:
+  void SetUp() final
+  {
+    CephInitParameters params(CEPH_ENTITY_TYPE_CLIENT);
+    cct = common_preinit(params, CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  }
+  void TearDown() final
+  {
+    cct->put();
+    cct = nullptr;
+  }
+protected:
+  CephContext *cct = nullptr;
+};
+
+TEST_F(CRUSHTest, indep_toosmall) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 1, 3, 1));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
@@ -110,8 +129,8 @@ TEST(CRUSH, indep_toosmall) {
   }
 }
 
-TEST(CRUSH, indep_basic) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_basic) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
@@ -129,8 +148,8 @@ TEST(CRUSH, indep_basic) {
   }
 }
 
-TEST(CRUSH, indep_out_alt) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_out_alt) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -155,8 +174,8 @@ TEST(CRUSH, indep_out_alt) {
   }
 }
 
-TEST(CRUSH, indep_out_contig) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_out_contig) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -181,8 +200,8 @@ TEST(CRUSH, indep_out_contig) {
 }
 
 
-TEST(CRUSH, indep_out_progressive) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_out_progressive) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   c->set_choose_total_tries(100);
   vector<__u32> tweight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
@@ -244,7 +263,7 @@ TEST(CRUSH, indep_out_progressive) {
 
 }
 
-TEST(CRUSH, straw_zero) {
+TEST_F(CRUSHTest, straw_zero) {
   // zero weight items should have no effect on placement.
 
   std::unique_ptr<CrushWrapper> c(new CrushWrapper);
@@ -298,7 +317,7 @@ TEST(CRUSH, straw_zero) {
   }
 }
 
-TEST(CRUSH, straw_same) {
+TEST_F(CRUSHTest, straw_same) {
   // items with the same weight should map about the same as items
   // with very similar weights.
   //
@@ -492,7 +511,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   return stddev;
 }
 
-TEST(CRUSH, straw2_stddev)
+TEST_F(CRUSHTest, straw2_stddev)
 {
   int n = 15;
   int weights[n];
@@ -509,7 +528,7 @@ TEST(CRUSH, straw2_stddev)
   }
 }
 
-TEST(CRUSH, straw2_reweight) {
+TEST_F(CRUSHTest, straw2_reweight) {
   // when we adjust the weight of an item in a straw2 bucket,
   // we should *only* see movement from or to that item, never
   // between other items.
