@@ -48,11 +48,4 @@ export class OrchestratorService {
       })
     );
   }
-
-  osdCreate(driveGroup: {}) {
-    const request = {
-      drive_group: driveGroup
-    };
-    return this.http.post(`${this.url}/osd`, request, { observe: 'response' });
-  }
 }

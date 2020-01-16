@@ -1,12 +1,15 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 
+import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
+import { OsdService } from '../../../../shared/api/osd.service';
+import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { DriveGroup } from '../osd-form/drive-group.model';
+import { FinishedTask } from '../../../../shared/models/finished-task';
+import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { DriveGroups } from '../osd-form/drive-groups.interface';
 
 @Component({
   selector: 'cd-osd-creation-preview-modal',
@@ -15,7 +18,7 @@ import { DriveGroup } from '../osd-form/drive-group.model';
 })
 export class OsdCreationPreviewModalComponent implements OnInit {
   @Input()
-  driveGroup: DriveGroup;
+  driveGroups: DriveGroups = {};
 
   @Output()
   submitAction = new EventEmitter();
@@ -27,9 +30,10 @@ export class OsdCreationPreviewModalComponent implements OnInit {
     public bsModalRef: BsModalRef,
     public actionLabels: ActionLabelsI18n,
     private formBuilder: CdFormBuilder,
-    private orchService: OrchestratorService
+    private osdService: OsdService,
+    private taskWrapper: TaskWrapperService
   ) {
-    this.action = actionLabels.ADD;
+    this.action = actionLabels.CREATE;
     this.createForm();
   }
 
@@ -40,15 +44,22 @@ export class OsdCreationPreviewModalComponent implements OnInit {
   }
 
   onSubmit() {
-    this.orchService.osdCreate(this.driveGroup.spec).subscribe(
-      undefined,
-      () => {
-        this.formGroup.setErrors({ cdSubmitButton: true });
-      },
-      () => {
-        this.submitAction.emit();
-        this.bsModalRef.hide();
-      }
-    );
+    this.taskWrapper
+      .wrapTaskAroundCall({
+        task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+          tracking_id: _.join(_.keys(this.driveGroups), ', ')
+        }),
+        call: this.osdService.create(this.driveGroups)
+      })
+      .subscribe(
+        undefined,
+        () => {
+          this.formGroup.setErrors({ cdSubmitButton: true });
+        },
+        () => {
+          this.submitAction.emit();
+          this.bsModalRef.hide();
+        }
+      );
   }
 }

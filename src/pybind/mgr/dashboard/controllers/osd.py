@@ -3,13 +3,18 @@ from __future__ import absolute_import
 import json
 import logging
 
+from ceph.deployment.drive_group import DriveGroupSpecs, DriveGroupValidationError
 from mgr_util import get_most_recent_rate
 
-from . import ApiController, RESTController, Endpoint, ReadPermission, UpdatePermission
+from . import ApiController, RESTController, Endpoint, Task
+from . import CreatePermission, ReadPermission, UpdatePermission
+from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
-from ..services.exception import handle_send_command_error
+from ..services.exception import handle_send_command_error, handle_orchestrator_error
+from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 try:
     from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
@@ -18,6 +23,10 @@ except ImportError:
 
 
 logger = logging.getLogger('controllers.osd')
+
+
+def osd_task(name, metadata, wait_for=2.0):
+    return Task("osd/{}".format(name), metadata, wait_for)
 
 
 @ApiController('/osd', Scope.OSD)
@@ -170,19 +179,46 @@ class Osd(RESTController):
             id=int(svc_id),
             yes_i_really_mean_it=True)
 
-    def create(self, uuid=None, svc_id=None):
+    def _create_bare(self, data):
+        """Create a OSD container that has no associated device.
+
+        :param data: contain attributes to create a bare OSD.
+        :    `uuid`: will be set automatically if the OSD starts up
+        :    `svc_id`: the ID is only used if a valid uuid is given.
         """
-        :param uuid: Will be set automatically if the OSD starts up.
-        :param id: The ID is only used if a valid uuid is given.
-        :return:
-        """
+        try:
+            uuid = data['uuid']
+            svc_id = int(data['svc_id'])
+        except (KeyError, ValueError) as e:
+            raise DashboardException(e, component='osd', http_status_code=400)
+
         result = CephService.send_command(
-            'mon', 'osd create', id=int(svc_id), uuid=uuid)
+            'mon', 'osd create', id=svc_id, uuid=uuid)
         return {
             'result': result,
-            'svc_id': int(svc_id),
+            'svc_id': svc_id,
             'uuid': uuid,
         }
+
+    @raise_if_no_orchestrator
+    @handle_orchestrator_error('osd')
+    def _create_with_drive_groups(self, drive_groups):
+        """Create OSDs with DriveGroups."""
+        orch = OrchClient.instance()
+        try:
+            orch.osds.create(DriveGroupSpecs(drive_groups).drive_groups)
+        except (ValueError, TypeError, DriveGroupValidationError) as e:
+            raise DashboardException(e, component='osd')
+
+    @CreatePermission
+    @osd_task('create', {'tracking_id': '{tracking_id}'})
+    def create(self, method, data, tracking_id):  # pylint: disable=W0622
+        if method == 'bare':
+            return self._create_bare(data)
+        if method == 'drive_groups':
+            return self._create_with_drive_groups(data)
+        raise DashboardException(
+            component='osd', http_status_code=400, msg='Unknown method: {}'.format(method))
 
     @RESTController.Resource('POST')
     def purge(self, svc_id):
