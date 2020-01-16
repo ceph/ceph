@@ -12,7 +12,7 @@ cd qemu
 if lsb_release -da 2>&1 | grep -iq 'bionic'; then
     # Bionic requires a matching test harness
     git checkout v2.11.0
-elif lsb_release -da 2>&1 | grep -iq 'xenial'; then
+elif lsb_release -da 2>&1 | grep -iqE '(xenial|linux release 8)'; then
     # Xenial requires a recent test harness
     git checkout v2.3.0
 else
@@ -36,7 +36,8 @@ else
     QEMU='/usr/libexec/qemu-kvm'
 
     # disable test 055 since qemu-kvm (RHEL/CentOS) doesn't support the
-    # required QMP commands
+    # required QMP commands under EL7 and Python 3 is not supported by
+    # the test under EL8
     testlist=$(echo ${testlist} | sed "s/ 055//g")
 fi
 ln -s $QEMU bin/qemu
