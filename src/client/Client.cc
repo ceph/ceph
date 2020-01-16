@@ -2500,7 +2500,9 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
     // some PGs were inaccessible.
     objecter->op_cancel_writes(-EBLACKLISTED);
 
-  } else if (blacklisted) {
+  } 
+
+  if (blacklisted) {
     // Handle case where we were blacklisted but no longer are
     blacklisted = objecter->with_osdmap([myaddrs](const OSDMap &o){
         return o.is_blacklisted(myaddrs);});
