@@ -51,10 +51,10 @@
 #include <cstring>
 #include <experimental/type_traits>
 #include <functional>
-#include <iosfwd>
 #include <iterator>
 #include <limits>
 #include <new>
+#include <ostream>
 #include <type_traits>
 #include <utility>
 
