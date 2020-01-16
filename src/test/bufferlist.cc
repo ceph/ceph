@@ -2905,6 +2905,35 @@ TEST(BufferList, TestSHA1) {
   }
 }
 
+TEST(BufferList, DanglingLastP) {
+  bufferlist bl;
+  {
+    // going with the unsharable buffer type to distinguish this problem
+    // from the generic crosstalk issue we had since the very beginning:
+    // https://gist.github.com/rzarzynski/aed18372e88aed392101adac3bd87bbc
+    bufferptr bp(buffer::create_unshareable(10));
+    bp.copy_in(0, 3, "XXX");
+    bl.push_back(std::move(bp));
+    EXPECT_EQ(0, ::memcmp("XXX", bl.c_str(), 3));
+
+    // let `copy_in` to set `last_p` member of bufferlist
+    bl.copy_in(0, 2, "AB");
+    EXPECT_EQ(0, ::memcmp("ABX", bl.c_str(), 3));
+  }
+
+  bufferlist empty;
+  // before the fix this would have left `last_p` unchanged leading to
+  // the dangerous dangling state – keep in mind that the initial,
+  // unsharable bptr will be freed.
+  bl = const_cast<const bufferlist&>(empty);
+  bl.append("123");
+
+  // we must continue from where the previous copy_in had finished.
+  // Otherwise `bl::copy_in` will call `seek()` and refresh `last_p`.
+  bl.copy_in(2, 1, "C");
+  EXPECT_EQ(0, ::memcmp("12C", bl.c_str(), 3));
+}
+
 TEST(BufferHash, all) {
   {
     bufferlist bl;
