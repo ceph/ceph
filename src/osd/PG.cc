@@ -849,6 +849,11 @@ void PG::publish_stats_to_osd()
   }
 }
 
+unsigned PG::get_target_pg_log_entries() const
+{
+  return osd->get_target_pg_log_entries();
+}
+
 void PG::clear_publish_stats()
 {
   dout(15) << "clear_stats" << dendl;

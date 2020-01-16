@@ -662,6 +662,9 @@ public:
 	return awaiting.second.get() == pg;
       });
   }
+
+  unsigned get_target_pg_log_entries() const;
+  
   // delayed pg activation
   void queue_for_recovery(PG *pg) {
     std::lock_guard l(recovery_lock);
