@@ -132,7 +132,7 @@ public:
     EXPECT_EQ(0, m_local_ioctx.create(RBD_MIRRORING, false));
 
     m_local_status_updater = rbd::mirror::MirrorStatusUpdater<>::create(
-      m_local_ioctx, m_threads.get(), "", "");
+      m_local_ioctx, m_threads.get(), "");
     C_SaferCond status_updater_ctx;
     m_local_status_updater->init(&status_updater_ctx);
     EXPECT_EQ(0, status_updater_ctx.wait());
