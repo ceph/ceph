@@ -13,9 +13,6 @@ the latest value and continue using it as long as they want.  This container
 is only appropriate for values that are updated a handful of times over their
 total lifetime.
 
-There is a prune() method to throw out old values, but it should only be used
-if the caller has some way of knowing all readers are done.
-
 */
 
 template<class T>
@@ -54,14 +51,6 @@ public:
     current = &history.back();
     return *current;
   }
-
-  void prune() {
-    // note: this is not necessarily thread-safe wrt readers
-    std::lock_guard l(lock);
-    while (history.size() > 1) {
-      history.pop_front();
-    }
-  }
 };
 
 template<class T>
@@ -93,11 +82,4 @@ public:
     return *current;
   }
 
-  void prune() {
-    // note: this is not necessarily thread-safe wrt readers
-    std::lock_guard l(lock);
-    while (history.size() > 1) {
-      history.pop_front();
-    }
-  }
 };
