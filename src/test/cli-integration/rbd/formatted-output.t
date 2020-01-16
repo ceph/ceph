@@ -61,7 +61,7 @@ For now, use a more inclusive regex.
   \tsnapshot_count: 1 (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
-  $ rbd info foo --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info foo --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -73,12 +73,10 @@ For now, use a more inclusive regex.
       "size": 1073741824, 
       "snapshot_count": 1
   }
-The version of xml_pp included in ubuntu precise always prints a 'warning'
-whenever it is run. grep -v to ignore it, but still work on other distros.
-  $ rbd info foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info foo --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>foo</name>
-    <id></id>
+    <id/>
     <size>1073741824</size>
     <objects>256</objects>
     <order>22</order>
@@ -95,7 +93,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 1 (esc)
   \tprotected: False (esc)
-  $ rbd info foo@snap --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info foo@snap --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -108,10 +106,10 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1073741824, 
       "snapshot_count": 1
   }
-  $ rbd info foo@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info foo@snap --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>foo</name>
-    <id></id>
+    <id/>
     <size>1073741824</size>
     <objects>256</objects>
     <order>22</order>
@@ -135,7 +133,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tcreate_timestamp:* (glob)
   \taccess_timestamp:* (glob)
   \tmodify_timestamp:* (glob)
-  $ rbd info bar --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info bar --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -159,7 +157,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1073741824, 
       "snapshot_count": 2
   }
-  $ rbd info bar --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info bar --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>bar</name>
     <id>*</id> (glob)
@@ -177,8 +175,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
@@ -198,7 +196,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \taccess_timestamp:* (glob)
   \tmodify_timestamp:* (glob)
   \tprotected: True (esc)
-  $ rbd info bar@snap --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info bar@snap --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -223,7 +221,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 536870912, 
       "snapshot_count": 2
   }
-  $ rbd info bar@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info bar@snap --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>bar</name>
     <id>*</id> (glob)
@@ -241,8 +239,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
@@ -263,7 +261,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \taccess_timestamp:* (glob)
   \tmodify_timestamp:* (glob)
   \tprotected: False (esc)
-  $ rbd info bar@snap2 --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info bar@snap2 --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -288,7 +286,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1073741824, 
       "snapshot_count": 2
   }
-  $ rbd info bar@snap2 --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info bar@snap2 --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>bar</name>
     <id>*</id> (glob)
@@ -306,8 +304,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
@@ -327,7 +325,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tcreate_timestamp:* (glob)
   \taccess_timestamp:* (glob)
   \tmodify_timestamp:* (glob)
-  $ rbd info baz --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info baz --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -347,7 +345,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 2147483648, 
       "snapshot_count": 0
   }
-  $ rbd info baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info baz --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>baz</name>
     <id>*</id> (glob)
@@ -361,8 +359,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <features>
       <feature>layering</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
@@ -374,7 +372,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tsnapshot_count: 0 (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
-  $ rbd info quux --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info quux --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -386,10 +384,10 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1048576, 
       "snapshot_count": 0
   }
-  $ rbd info quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info quux --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>quux</name>
-    <id></id>
+    <id/>
     <size>1048576</size>
     <objects>1</objects>
     <order>22</order>
@@ -412,7 +410,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tcreate_timestamp:* (glob)
   \taccess_timestamp:* (glob)
   \tmodify_timestamp:* (glob)
-  $ rbd info rbd_other/child --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info rbd_other/child --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -435,7 +433,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 536870912, 
       "snapshot_count": 1
   }
-  $ rbd info rbd_other/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info rbd_other/child --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>child</name>
     <id>*</id> (glob)
@@ -452,8 +450,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>object-map</feature>
       <feature>fast-diff</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
@@ -475,7 +473,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
   \toverlap: 512 MiB (esc)
-  $ rbd info rbd_other/child@snap --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info rbd_other/child@snap --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -508,7 +506,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 536870912, 
       "snapshot_count": 1
   }
-  $ rbd info rbd_other/child@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info rbd_other/child@snap --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>child</name>
     <id>*</id> (glob)
@@ -525,15 +523,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>object-map</feature>
       <feature>fast-diff</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
     <protected>false</protected>
     <parent>
       <pool>rbd</pool>
-      <pool_namespace></pool_namespace>
+      <pool_namespace/>
       <image>bar</image>
       <id>*</id> (glob)
       <snapshot>snap</snapshot>
@@ -555,7 +553,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tcreate_timestamp:* (glob)
   \taccess_timestamp:* (glob)
   \tmodify_timestamp:* (glob)
-  $ rbd info rbd_other/deep-flatten-child --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info rbd_other/deep-flatten-child --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -579,7 +577,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 536870912, 
       "snapshot_count": 1
   }
-  $ rbd info rbd_other/deep-flatten-child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info rbd_other/deep-flatten-child --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>deep-flatten-child</name>
     <id>*</id> (glob)
@@ -597,8 +595,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
@@ -618,7 +616,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \taccess_timestamp:* (glob)
   \tmodify_timestamp:* (glob)
   \tprotected: False (esc)
-  $ rbd info rbd_other/deep-flatten-child@snap --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd info rbd_other/deep-flatten-child@snap --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -643,7 +641,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 536870912, 
       "snapshot_count": 1
   }
-  $ rbd info rbd_other/deep-flatten-child@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info rbd_other/deep-flatten-child@snap --format xml | xmlstarlet format -s 2 -o || true
   <image>
     <name>deep-flatten-child</name>
     <id>*</id> (glob)
@@ -661,8 +659,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
-    <op_features></op_features>
-    <flags></flags>
+    <op_features/>
+    <flags/>
     <create_timestamp>*</create_timestamp> (glob)
     <access_timestamp>*</access_timestamp> (glob)
     <modify_timestamp>*</modify_timestamp> (glob)
@@ -674,7 +672,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   bar
   baz
   quuy
-  $ rbd list --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd list --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       "foo", 
       "quux", 
@@ -682,7 +680,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "baz", 
       "quuy"
   ]
-  $ rbd list --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd list --format xml | xmlstarlet format -s 2 -o || true
   <images>
     <name>foo</name>
     <name>quux</name>
@@ -700,7 +698,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   bar@snap2   1 GiB          2           
   baz         2 GiB          2      shr  
   quuy        2 GiB          2           
-  $ rbd list -l --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd list -l --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
           "format": 1, 
@@ -762,17 +760,17 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "size": 2147483648
       }
   ]
-  $ rbd list -l --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd list -l --format xml | xmlstarlet format -s 2 -o || true
   <images>
     <image>
       <image>foo</image>
-      <id></id>
+      <id/>
       <size>1073741824</size>
       <format>1</format>
     </image>
     <snapshot>
       <image>foo</image>
-      <id></id>
+      <id/>
       <snapshot>snap</snapshot>
       <snapshot_id>*</snapshot_id> (glob)
       <size>1073741824</size>
@@ -781,7 +779,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
     <image>
       <image>quux</image>
-      <id></id>
+      <id/>
       <size>1048576</size>
       <format>1</format>
       <lock_type>exclusive</lock_type>
@@ -827,12 +825,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd list rbd_other
   child
   deep-flatten-child
-  $ rbd list rbd_other --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd list rbd_other --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       "child", 
       "deep-flatten-child"
   ]
-  $ rbd list rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd list rbd_other --format xml | xmlstarlet format -s 2 -o || true
   <images>
     <name>child</name>
     <name>deep-flatten-child</name>
@@ -843,7 +841,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   child@snap              512 MiB rbd/bar@snap   2           
   deep-flatten-child      512 MiB                2           
   deep-flatten-child@snap 512 MiB                2           
-  $ rbd list rbd_other -l --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd list rbd_other -l --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
           "format": 2, 
@@ -882,7 +880,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "snapshot_id": * (glob)
       }
   ]
-  $ rbd list rbd_other -l --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd list rbd_other -l --format xml | xmlstarlet format -s 2 -o || true
   <images>
     <image>
       <image>child</image>
@@ -898,7 +896,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>536870912</size>
       <parent>
         <pool>rbd</pool>
-        <pool_namespace></pool_namespace>
+        <pool_namespace/>
         <image>bar</image>
         <snapshot>snap</snapshot>
       </parent>
@@ -922,15 +920,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </images>
   $ rbd lock list foo
-  $ rbd lock list foo --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd lock list foo --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   []
-  $ rbd lock list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  <locks></locks>
+  $ rbd lock list foo --format xml | xmlstarlet format -s 2 -o || true
+  <locks/>
   $ rbd lock list quux
   There is 1 exclusive lock on this image.
   Locker*ID*Address* (glob)
   client.* id * (glob)
-  $ rbd lock list quux --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd lock list quux --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
           "address": "*",  (glob)
@@ -938,7 +936,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "locker": "client.*" (glob)
       }
   ]
-  $ rbd lock list quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd lock list quux --format xml | xmlstarlet format -s 2 -o || true
   <locks>
     <lock>
       <id>id</id>
@@ -953,7 +951,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   client.*id[123].* (re)
   client.*id[123].* (re)
   client.*id[123].* (re)
-  $ rbd lock list baz --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd lock list baz --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
           "address": "*",  (glob)
@@ -971,7 +969,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "locker": "client.*" (glob)
       }
   ]
-  $ rbd lock list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd lock list baz --format xml | xmlstarlet format -s 2 -o || true
   <locks>
     <lock>
       <id>id*</id> (glob)
@@ -992,7 +990,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list foo
   SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*1 GiB* (glob)
-  $ rbd snap list foo --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd snap list foo --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
@@ -1002,21 +1000,21 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "timestamp": ""
       }
   ]
-  $ rbd snap list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd snap list foo --format xml | xmlstarlet format -s 2 -o || true
   <snapshots>
     <snapshot>
       <id>*</id> (glob)
       <name>snap</name>
       <size>1073741824</size>
       <protected>false</protected>
-      <timestamp></timestamp>
+      <timestamp/>
     </snapshot>
   </snapshots>
   $ rbd snap list bar
   SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*512 MiB*yes* (glob)
   *snap2*1 GiB* (glob)
-  $ rbd snap list bar --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd snap list bar --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
@@ -1033,7 +1031,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "timestamp": * (glob)
       }
   ]
-  $ rbd snap list bar --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd snap list bar --format xml | xmlstarlet format -s 2 -o || true
   <snapshots>
     <snapshot>
       <id>*</id> (glob)
@@ -1051,14 +1049,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd snap list baz
-  $ rbd snap list baz --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd snap list baz --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   []
-  $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  <snapshots></snapshots>
+  $ rbd snap list baz --format xml | xmlstarlet format -s 2 -o || true
+  <snapshots/>
   $ rbd snap list rbd_other/child
   SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*512 MiB* (glob)
-  $ rbd snap list rbd_other/child --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd snap list rbd_other/child --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
@@ -1068,7 +1066,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "timestamp": * (glob)
       }
   ]
-  $ rbd snap list rbd_other/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd snap list rbd_other/child --format xml | xmlstarlet format -s 2 -o || true
   <snapshots>
     <snapshot>
       <id>*</id> (glob)
@@ -1085,7 +1083,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   deep-flatten-child@snap     512 MiB   0 B 
   deep-flatten-child          512 MiB   0 B 
   <TOTAL>                       1 GiB 4 MiB 
-  $ rbd disk-usage --pool rbd_other --format json | python3 -mjson.tool | sed 's/,$/, /'
+  $ rbd disk-usage --pool rbd_other --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "images": [
           {
@@ -1120,7 +1118,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "total_provisioned_size": 1073741824, 
       "total_used_size": 4194304
   }
-  $ rbd disk-usage --pool rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd disk-usage --pool rbd_other --format xml | xmlstarlet format -s 2 -o || true
   <stats>
     <images>
       <image>
