@@ -302,49 +302,6 @@ and development clusters can run successfully with modest hardware.
    OS and the volume storage.
 
 
-Production Cluster Examples
-===========================
-
-Production clusters for petabyte scale data storage may also use commodity
-hardware, but should have considerably more memory, processing power and data
-storage to account for heavy traffic loads.
-
-Dell Example
-------------
-
-A recent (2012) Ceph cluster project is using two fairly robust hardware
-configurations for Ceph OSDs, and a lighter configuration for monitors.
-
-+----------------+----------------+------------------------------------+
-|  Configuration | Criteria       | Minimum Recommended                |
-+================+================+====================================+
-| Dell PE R510   | Processor      |  2x 64-bit quad-core Xeon CPUs     |
-|                +----------------+------------------------------------+
-|                | RAM            |  16 GB                             |
-|                +----------------+------------------------------------+
-|                | Volume Storage |  8x 2TB drives. 1 OS, 7 Storage    |
-|                +----------------+------------------------------------+
-|                | Client Network |  2x 1GB Ethernet NICs              |
-|                +----------------+------------------------------------+
-|                | OSD Network    |  2x 1GB Ethernet NICs              |
-|                +----------------+------------------------------------+
-|                | Mgmt. Network  |  2x 1GB Ethernet NICs              |
-+----------------+----------------+------------------------------------+
-| Dell PE R515   | Processor      |  1x hex-core Opteron CPU           |
-|                +----------------+------------------------------------+
-|                | RAM            |  16 GB                             |
-|                +----------------+------------------------------------+
-|                | Volume Storage |  12x 3TB drives. Storage           |
-|                +----------------+------------------------------------+
-|                | OS Storage     |  1x 500GB drive. Operating System. |
-|                +----------------+------------------------------------+
-|                | Client Network |  2x 1GB Ethernet NICs              |
-|                +----------------+------------------------------------+
-|                | OSD Network    |  2x 1GB Ethernet NICs              |
-|                +----------------+------------------------------------+
-|                | Mgmt. Network  |  2x 1GB Ethernet NICs              |
-+----------------+----------------+------------------------------------+
-
 
 
 
