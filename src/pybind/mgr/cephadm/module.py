@@ -86,12 +86,14 @@ class AsyncCompletion(orchestrator.Completion):
                  on_complete=None,  # type: Optional[Callable]
                  name=None,  # type: Optional[str]
                  many=False, # type: bool
+                 update_progress=False,  # type: bool
                  ):
 
         assert CephadmOrchestrator.instance is not None
         self.many = many
+        self.update_progress = update_progress
         if name is None and on_complete is not None:
-            name = on_complete.__name__
+            name = getattr(on_complete, '__name__', None)
         super(AsyncCompletion, self).__init__(_first_promise, value, on_complete, name)
 
     @property
@@ -109,6 +111,9 @@ class AsyncCompletion(orchestrator.Completion):
 
         def callback(result):
             try:
+                if self.update_progress:
+                    assert self.progress_reference
+                    self.progress_reference.progress = 1.0
                 self._on_complete_ = None
                 self._finalize(result)
             except Exception as e:
@@ -117,35 +122,40 @@ class AsyncCompletion(orchestrator.Completion):
         def error_callback(e):
             self.fail(e)
 
-        if six.PY3:
-            _callback = self._on_complete_
-        else:
-            def _callback(*args, **kwargs):
-                # Py2 only: _worker_pool doesn't call error_callback
-                try:
-                    return self._on_complete_(*args, **kwargs)
-                except Exception as e:
-                    self.fail(e)
-
         def run(value):
+            def do_work(*args, **kwargs):
+                assert self._on_complete_ is not None
+                try:
+                    res = self._on_complete_(*args, **kwargs)
+                    if self.update_progress and self.many:
+                        assert self.progress_reference
+                        self.progress_reference.progress += 1.0 / len(value)
+                    return res
+                except Exception as e:
+                    if six.PY3:
+                        raise
+                    else:
+                        # Py2 only: _worker_pool doesn't call error_callback
+                        self.fail(e)
+
             assert CephadmOrchestrator.instance
             if self.many:
                 if not value:
                     logger.info('calling map_async without values')
                     callback([])
                 if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.map_async(_callback, value,
+                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
                                                                     callback=callback,
                                                                     error_callback=error_callback)
                 else:
-                    CephadmOrchestrator.instance._worker_pool.map_async(_callback, value,
+                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
                                                                     callback=callback)
             else:
                 if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
+                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
                                                                       callback=callback, error_callback=error_callback)
                 else:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
+                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
                                                                       callback=callback)
             return self.ASYNC_RESULT
 
@@ -1212,17 +1222,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return self._create_daemon('mgr', name, host, keyring)
 
-    def update_mgrs(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
+    @with_services('mgr')
+    def update_mgrs(self, spec, services):
+        # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
-        return self._get_services('mgr').then(lambda daemons: self._update_mgrs(spec, daemons))
 
-    def _update_mgrs(self, spec, daemons):
-        # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
-        num_mgrs = len(daemons)
+        num_mgrs = len(services)
         if spec.count == num_mgrs:
             return orchestrator.Completion(value="The requested number of managers exist.")
 
@@ -1242,7 +1250,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
             for standby in mgr_map.get('standbys', []):
                 connected.append(standby.get('name', ''))
             to_remove_damons = []
-            for d in daemons:
+            for d in services:
                 if d.service_instance not in connected:
                     to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance),
                                              d.nodename))
@@ -1252,12 +1260,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             # otherwise, remove *any* mgr
             if num_to_remove > 0:
-                for d in daemons:
+                for d in services:
                     to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance), d.nodename))
                     num_to_remove -= 1
                     if num_to_remove == 0:
                         break
-            return self._remove_daemon(to_remove_damons)
+            c = self._remove_daemon(to_remove_damons)
+            c.add_progress('Removing MGRs', self)
+            c.update_progress = True
+            return c
 
         else:
             # we assume explicit placement by which there are the same number of
@@ -1269,11 +1280,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
                         len(spec.placement.hosts), num_new_mgrs))
 
             for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
+                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
             for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
+                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
             self.log.info("creating {} managers on hosts: '{}'".format(
@@ -1281,10 +1292,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             args = []
             for host_spec in spec.placement.hosts:
-                name = host_spec.name or self.get_unique_name(daemons)
+                name = host_spec.name or self.get_unique_name(services)
                 host = host_spec.hostname
                 args.append((host, name))
-        return self._create_mgr(args)
+            c = self._create_mgr(args)
+            c.add_progress('Creating MGRs', self)
+            c.update_progress = True
+            return c
 
     def add_mds(self, spec):
         if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:

@@ -273,7 +273,8 @@ class _Promise(object):
 
         :param value: new value.
         """
-        assert self._state in (self.INITIALIZED, self.RUNNING)
+        if self._state not in (self.INITIALIZED, self.RUNNING):
+            raise ValueError('finalize: {} already finished. {}'.format(repr(self), value))
 
         self._state = self.RUNNING
 
@@ -402,8 +403,7 @@ class ProgressReference(object):
 
     def __call__(self, arg):
         self._completion_has_result = True
-        if self.progress == 0.0:
-            self.progress = 0.5
+        self.progress = 1.0
         return arg
 
     @property
@@ -412,6 +412,7 @@ class ProgressReference(object):
 
     @progress.setter
     def progress(self, progress):
+        assert progress <= 1.0
         self._progress = progress
         try:
             if self.effective:
