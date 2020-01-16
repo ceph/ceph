@@ -97,6 +97,7 @@ struct MockImageCtx {
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
       enable_alloc_hint(image_ctx.enable_alloc_hint),
+      alloc_hint_flags(image_ctx.alloc_hint_flags),
       ignore_migrating(image_ctx.ignore_migrating),
       enable_sparse_copyup(image_ctx.enable_sparse_copyup),
       mtime_update_interval(image_ctx.mtime_update_interval),
@@ -303,6 +304,7 @@ struct MockImageCtx {
   bool non_blocking_aio;
   bool blkin_trace_all;
   bool enable_alloc_hint;
+  uint32_t alloc_hint_flags;
   bool ignore_migrating;
   bool enable_sparse_copyup;
   uint64_t mtime_update_interval;
