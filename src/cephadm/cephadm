@@ -1277,6 +1277,7 @@ def deploy_crash(fsid, uid, gid, config, keyring):
                 '\n'
                 '[Service]\n'
                 'Type=simple\n'
+                'ExecStartPre=-{container_path} rm ceph-{fsid}-crash\n'
                 'ExecStart={cmd}\n'
                 'ExecStop=-{container_path} stop ceph-{fsid}-crash\n'
                 'Restart=always\n'
