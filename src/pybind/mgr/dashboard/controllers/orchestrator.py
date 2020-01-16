@@ -4,11 +4,6 @@ import os.path
 
 import time
 
-try:
-    from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
-except ImportError:
-    pass
-
 from . import ApiController, Endpoint, ReadPermission, UpdatePermission
 from . import RESTController, Task
 from .. import mgr
@@ -121,15 +116,3 @@ class OrchestratorInventory(RESTController):
                 else:
                     device['osd_ids'] = []
         return inventory_hosts
-
-
-@ApiController('/orchestrator/osd', Scope.OSD)
-class OrchestratorOsd(RESTController):
-
-    @raise_if_no_orchestrator
-    def create(self, drive_group):
-        orch = OrchClient.instance()
-        try:
-            orch.osds.create(DriveGroupSpec.from_json(drive_group))
-        except (ValueError, TypeError, DriveGroupValidationError) as e:
-            raise DashboardException(e, component='osd')

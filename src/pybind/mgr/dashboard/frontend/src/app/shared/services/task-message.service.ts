@@ -166,6 +166,12 @@ export class TaskMessageService {
     'host/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.host(metadata)
     ),
+    // OSD tasks
+    'osd/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.i18n(`OSDs (DriveGroups: {{tracking_id}})`, {
+        tracking_id: metadata.tracking_id
+      })
+    ),
     // Pool tasks
     'pool/create': this.newTaskMessage(
       this.commonOperations.create,

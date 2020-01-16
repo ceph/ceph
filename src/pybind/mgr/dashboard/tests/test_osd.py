@@ -5,12 +5,14 @@ import uuid
 from contextlib import contextmanager
 
 try:
-    from mock import patch
+    import mock
 except ImportError:
-    from unittest.mock import patch
+    from unittest import mock
+from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec
 
 from . import ControllerTestCase
 from ..controllers.osd import Osd
+from ..tools import NotificationQueue, TaskManager
 from .. import mgr
 from .helper import update_dict
 
@@ -205,6 +207,12 @@ class OsdTest(ControllerTestCase):
     def setup_server(cls):
         Osd._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
         cls.setup_controllers([Osd])
+        NotificationQueue.start_queue()
+        TaskManager.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        NotificationQueue.stop()
 
     @contextmanager
     def _mock_osd_list(self, osd_stat_ids, osdmap_tree_node_ids, osdmap_ids):
@@ -221,10 +229,10 @@ class OsdTest(ControllerTestCase):
                 return {path: OsdHelper.gen_mgr_get_counter()}
             raise NotImplementedError()
 
-        with patch.object(Osd, 'get_osd_map', return_value=OsdHelper.gen_osdmap(osdmap_ids)):
-            with patch.object(mgr, 'get', side_effect=mgr_get_replacement):
-                with patch.object(mgr, 'get_counter', side_effect=mgr_get_counter_replacement):
-                    with patch.object(mgr, 'get_latest', return_value=1146609664):
+        with mock.patch.object(Osd, 'get_osd_map', return_value=OsdHelper.gen_osdmap(osdmap_ids)):
+            with mock.patch.object(mgr, 'get', side_effect=mgr_get_replacement):
+                with mock.patch.object(mgr, 'get_counter', side_effect=mgr_get_counter_replacement):
+                    with mock.patch.object(mgr, 'get_latest', return_value=1146609664):
                         yield
 
     def test_osd_list_aggregation(self):
@@ -241,3 +249,68 @@ class OsdTest(ControllerTestCase):
             self._get('/api/osd')
             self.assertEqual(len(self.json_body()), 2, 'It should display two OSDs without failure')
             self.assertStatus(200)
+
+    @mock.patch('dashboard.controllers.osd.CephService')
+    def test_osd_create_bare(self, ceph_service):
+        ceph_service.send_command.return_value = '5'
+        data = {
+            'method': 'bare',
+            'data': {
+                'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
+                'svc_id': 5
+            },
+            'tracking_id': 'bare-5'
+        }
+        self._task_post('/api/osd', data)
+        self.assertStatus(201)
+        ceph_service.send_command.assert_called()
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_osd_create_with_drive_groups(self, instance):
+        # without orchestrator service
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+
+        # Valid DriveGroups
+        data = {
+            'method': 'drive_groups',
+            'data': {
+                'all_hdd': {
+                    'host_pattern': '*',
+                    'data_devices': {
+                        'rotational': True
+                    }
+                },
+                'b_ssd': {
+                    'host_pattern': 'b',
+                    'data_devices': {
+                        'rotational': False
+                    }
+                }
+            },
+            'tracking_id': 'all_hdd, b_ssd'
+        }
+
+        # Without orchestrator service
+        fake_client.available.return_value = False
+        self._task_post('/api/osd', data)
+        self.assertStatus(503)
+
+        # With orchestrator service
+        fake_client.available.return_value = True
+        self._task_post('/api/osd', data)
+        self.assertStatus(201)
+        fake_client.osds.create.assert_called_with(
+            [DriveGroupSpec(host_pattern='*',
+                            name='all_hdd',
+                            data_devices=DeviceSelection(rotational=True)),
+             DriveGroupSpec(host_pattern='b',
+                            name='b_ssd',
+                            data_devices=DeviceSelection(rotational=False))])
+
+        # Invalid DriveGroups
+        data['data']['b'] = {
+            'host_pattern1': 'aa'
+        }
+        self._task_post('/api/osd', data)
+        self.assertStatus(400)
