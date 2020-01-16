@@ -2002,12 +2002,28 @@ def command_logs():
     # type: () -> None
     if not args.fsid:
         raise Error('must pass --fsid to specify cluster')
-    cmd = [str(container_path), 'logs'] # type: List[str]
-    if args.follow:
-        cmd.append('-f')
-    if args.tail:
-        cmd.append('--tail=' + str(args.tail))
-    cmd.append('ceph-%s-%s' % (args.fsid, args.name))
+
+    (daemon_type, daemon_id) = args.name.split('.', 1)
+    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+
+    cmd = []
+    if args.logger == 'journald':
+        cmd.extend([find_program('journalctl')])
+        cmd.append('--no-pager')
+        if args.follow:
+            cmd.append('-f')
+        if args.tail:
+            cmd.extend(['-n', args.tail])
+        cmd.extend(['-u', unit_name])
+    elif args.logger == 'docker' or args.logger == 'podman':
+        cmd.extend([str(container_path), 'logs'])
+        if args.follow:
+            cmd.append('-f')
+        if args.tail:
+            cmd.extend(['--tail', args.tail])
+        cmd.append('ceph-%s-%s' % (args.fsid, args.name))
+    else:
+        raise Error('logger type \'%s\' not recognized' % (args.logger))
 
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
@@ -2542,6 +2558,10 @@ def _get_parser():
     parser_logs.add_argument(
         '--tail',
         help='Output the specified number of lines at the end of the log')
+    parser_logs.add_argument(
+        '--logger',
+        default='journald',
+        help='Specifies the logger. Can be one of \'docker\', \'podman\', or \'journald\'')
 
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
