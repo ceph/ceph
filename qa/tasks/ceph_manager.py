@@ -1565,9 +1565,11 @@ class CephManager:
         if stdout is None:
             stdout = StringIO()
 
+        remote = self.find_remote(service_type, service_id)
+
         if self.cephadm:
             return shell(
-                self.ctx, self.cluster, self.controller,
+                self.ctx, self.cluster, remote,
                 args=[
                     'ceph', 'daemon', '%s.%s' % (service_type, service_id),
                 ] + command,
@@ -1577,7 +1579,6 @@ class CephManager:
             )
 
         testdir = teuthology.get_testdir(self.ctx)
-        remote = self.find_remote(service_type, service_id)
         args = [
             'sudo',
             'adjust-ulimits',
