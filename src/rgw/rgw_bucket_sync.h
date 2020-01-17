@@ -137,7 +137,7 @@ public:
    * pipe_rules: deal with a set of pipes that have common endpoints_pair
    */
   class pipe_rules {
-    std::vector<rgw_sync_bucket_pipe> pipes;
+    std::list<rgw_sync_bucket_pipe> pipes;
 
   public:
     using prefix_map_t = multimap<string, rgw_sync_bucket_pipe *>;
