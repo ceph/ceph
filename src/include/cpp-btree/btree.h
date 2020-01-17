@@ -51,7 +51,6 @@
 #include <cstring>
 #include <experimental/type_traits>
 #include <functional>
-#include <iosfwd>
 #include <iterator>
 #include <limits>
 #include <new>
@@ -1145,14 +1144,6 @@ class btree {
     return compare_result_as_less_than(key_comp()(x, y));
   }
 
-  // Dump the btree to the specified ostream. Requires that operator<< is
-  // defined for Key and Value.
-  void dump(std::ostream &os) const {
-    if (root() != NULL) {
-      internal_dump(os, root(), 0);
-    }
-  }
-
   // Verifies the structure of the btree.
   void verify() const;
 
@@ -1384,9 +1375,6 @@ class btree {
 
   // Deletes a node and all of its children.
   void internal_clear(node_type *node);
-
-  // Dumps a node and all of its children to the specified ostream.
-  void internal_dump(std::ostream &os, const node_type *node, int level) const;
 
   // Verifies the tree structure of node.
   int internal_verify(const node_type *node,
@@ -2523,23 +2511,6 @@ void btree<P>::internal_clear(node_type *node) {
     delete_internal_node(node);
   } else {
     delete_leaf_node(node);
-  }
-}
-
-template <typename P>
-void btree<P>::internal_dump(
-    std::ostream &os, const node_type *node, int level) const {
-  for (int i = 0; i < node->count(); ++i) {
-    if (!node->leaf()) {
-      internal_dump(os, node->child(i), level + 1);
-    }
-    for (int j = 0; j < level; ++j) {
-      os << "  ";
-    }
-    os << node->key(i) << " [" << level << "]\n";
-  }
-  if (!node->leaf()) {
-    internal_dump(os, node->child(node->count()), level + 1);
   }
 }
 
