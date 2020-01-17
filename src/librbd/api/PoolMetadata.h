@@ -4,6 +4,9 @@
 #ifndef CEPH_LIBRBD_API_POOL_METADATA_H
 #define CEPH_LIBRBD_API_POOL_METADATA_H
 
+#include <string>
+#include <cstdint>
+
 #include "include/buffer_fwd.h"
 #include "include/rados/librados_fwd.hpp"
 

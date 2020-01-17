@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <iosfwd>
 #include <functional>
+#include <cstdint>
+#include <ostream>
 
 namespace ceph {
   class Formatter;
