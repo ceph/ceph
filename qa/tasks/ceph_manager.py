@@ -262,9 +262,12 @@ class OSDThrasher(Thrasher):
                     random.random() < self.chance_move_pg):
                 exp_osd = random.choice(self.dead_osds[:-1])
                 exp_remote = self.ceph_manager.find_remote('osd', exp_osd)
-            prefix = ['--data-path', FSPATH.format(id=osd),
-                      '--journal-path', JPATH.format(id=osd),
-                      '--log-file=/var/log/ceph/objectstore_tool.$pid.log']
+            prefix = [
+                '--no-mon-config',
+                '--data-path', FSPATH.format(id=osd),
+                '--journal-path', JPATH.format(id=osd),
+                '--log-file=/var/log/ceph/objectstore_tool.$pid.log',
+            ]
             cmd = prefix + ['--op', 'list-pgs']
 
             if not self.ceph_manager.cephadm:
