@@ -30,10 +30,10 @@
 
 #include "include/CompatSet.h"
 #include "include/ceph_features.h"
+#include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "mds/mdstypes.h"
 
-class CephContext;
 class health_check_map_t;
 
 /**

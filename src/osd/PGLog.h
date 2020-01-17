@@ -18,6 +18,7 @@
 
 // re-include our assert to clobber boost's
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include <list>
@@ -36,8 +37,6 @@ constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS
                                               | PGLOG_INDEXED_CALLER_OPS 
                                               | PGLOG_INDEXED_EXTRA_CALLER_OPS 
                                               | PGLOG_INDEXED_DUPS;
-
-class CephContext;
 
 struct PGLog : DoutPrefixProvider {
   std::ostream& gen_prefix(std::ostream& out) const override {

@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "common/DecayCounter.h"
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "include/filepath.h"
 #include "include/elist.h"
@@ -60,8 +61,6 @@
 #include "MDSContext.h"
 #include "MDSMap.h"
 #include "Mutation.h"
-
-class PerfCounters;
 
 class MDSRank;
 class Session;

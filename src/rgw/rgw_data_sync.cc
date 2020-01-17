@@ -33,6 +33,7 @@
 #include "services/svc_sync_modules.h"
 #include "services/svc_datalog_rados.h"
 
+#include "include/common_fwd.h"
 #include "include/random.h"
 
 #include <boost/asio/yield.hpp>
@@ -269,7 +270,7 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
   bool *truncated;
 
   read_remote_data_log_response response;
-  std::optional<PerfGuard> timer;
+  std::optional<TOPNSPC::common::PerfGuard> timer;
 
 public:
   RGWReadRemoteDataLogShardCR(RGWDataSyncCtx *_sc, int _shard_id,

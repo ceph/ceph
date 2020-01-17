@@ -22,6 +22,8 @@
 #include "common/Timer.h"
 #include "common/TrackedOp.h"
 
+#include "include/common_fwd.h"
+
 #include "messages/MClientRequest.h"
 #include "messages/MCommand.h"
 #include "messages/MMDSMap.h"
@@ -136,7 +138,7 @@ class MDSRank {
     friend class C_ScrubExecAndReply;
     friend class C_ScrubControlExecAndReply;
 
-    class CephContext *cct;
+    CephContext *cct;
 
     MDSRank(
         mds_rank_t whoami_,

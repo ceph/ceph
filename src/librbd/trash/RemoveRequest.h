@@ -4,12 +4,12 @@
 #ifndef CEPH_LIBRBD_TRASH_REMOVE_REQUEST_H
 #define CEPH_LIBRBD_TRASH_REMOVE_REQUEST_H
 
+#include "include/common_fwd.h"
 #include "include/utime.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include <string>
 
-class CephContext;
 class Context;
 class ContextWQ;
 

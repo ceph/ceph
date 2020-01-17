@@ -22,6 +22,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "include/common_fwd.h"
 #include "include/mempool.h"
 #include "include/stringify.h"
 #include "common/admin_socket.h"
@@ -55,6 +56,7 @@ using ceph::HeartbeatMap;
 #include <pthread.h>
 
 #ifdef WITH_SEASTAR
+namespace crimson::common {
 CephContext::CephContext()
   : _conf{crimson::common::local_conf()},
     _perf_counters_collection{crimson::common::local_perf_coll()},
@@ -93,6 +95,7 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
   return _perf_counters_collection.get_perf_collection();
 }
 
+}
 #else  // WITH_SEASTAR
 namespace {
 
@@ -183,6 +186,7 @@ public:
 
 } // anonymous namespace
 
+namespace ceph::common {
 class CephContextServiceThread : public Thread
 {
 public:
@@ -244,7 +248,7 @@ private:
   bool _exit_thread;
   CephContext *_cct;
 };
-
+}
 
 /**
  * observe logging config changes
@@ -356,6 +360,7 @@ public:
 };
 
 
+namespace ceph::common {
 // cct config watcher
 class CephContextObs : public md_config_obs_t {
   CephContext *cct;
@@ -398,6 +403,26 @@ public:
     }
   }
 };
+// perfcounter hooks
+
+class CephContextHook : public AdminSocketHook {
+  CephContext *m_cct;
+
+public:
+  explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
+
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
+    try {
+      return m_cct->do_command(command, cmdmap, f, errss, &out);
+    } catch (const bad_cmd_get& e) {
+      return -EINVAL;
+    }
+  }
+};
+
 
 bool CephContext::check_experimental_feature_enabled(const std::string& feat)
 {
@@ -433,26 +458,6 @@ bool CephContext::check_experimental_feature_enabled(const std::string& feat,
   }
   return enabled;
 }
-
-// perfcounter hooks
-
-class CephContextHook : public AdminSocketHook {
-  CephContext *m_cct;
-
-public:
-  explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
-
-  int call(std::string_view command, const cmdmap_t& cmdmap,
-	   Formatter *f,
-	   std::ostream& errss,
-	   bufferlist& out) override {
-    try {
-      return m_cct->do_command(command, cmdmap, f, errss, &out);
-    } catch (const bad_cmd_get& e) {
-      return -EINVAL;
-    }
-  }
-};
 
 int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 			    Formatter *f,
@@ -785,14 +790,14 @@ void CephContext::put() {
 void CephContext::init_crypto()
 {
   if (_crypto_inited++ == 0) {
-    ceph::crypto::init();
+    TOPNSPC::crypto::init();
   }
 }
 
 void CephContext::shutdown_crypto()
 {
   if (--_crypto_inited == 0) {
-    ceph::crypto::shutdown(g_code_env == CODE_ENVIRONMENT_LIBRARY);
+    TOPNSPC::crypto::shutdown(g_code_env == CODE_ENVIRONMENT_LIBRARY);
   }
 }
 
@@ -982,5 +987,6 @@ void CephContext::notify_post_fork()
   ceph::spin_unlock(&_fork_watchers_lock);
   for (auto &&t : _fork_watchers)
     t->handle_post_fork();
+}
 }
 #endif	// WITH_SEASTAR

@@ -19,8 +19,7 @@
 #include "CephxProtocol.h"
 #include "CephxKeyServer.h"
 #include "common/ceph_mutex.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 struct KeyServerData {
   version_t version;

@@ -14,6 +14,7 @@
 #ifndef CEPH_OBJECTSTORE_H
 #define CEPH_OBJECTSTORE_H
 
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include "include/buffer.h"
 #include "include/types.h"
@@ -34,8 +35,6 @@
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif
-
-class CephContext;
 
 namespace ceph {
   class Formatter;

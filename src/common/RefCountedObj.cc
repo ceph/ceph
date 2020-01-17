@@ -8,6 +8,7 @@
 #include "common/dout.h"
 #include "common/valgrind.h"
 
+namespace TOPNSPC::common {
 RefCountedObject::~RefCountedObject()
 {
   ceph_assert(nref == 0);
@@ -37,4 +38,6 @@ void RefCountedObject::_get() const {
     lsubdout(cct, refs, 1) << "RefCountedObject::get " << this << " "
 	     << (v - 1) << " -> " << v << dendl;
   }
+}
+
 }

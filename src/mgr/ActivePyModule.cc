@@ -206,7 +206,7 @@ int ActivePyModule::handle_command(
   Gil gil(py_module->pMyThreadState, true);
 
   PyFormatter f;
-  cmdmap_dump(cmdmap, &f);
+  TOPNSPC::common::cmdmap_dump(cmdmap, &f);
   PyObject *py_cmd = f.get();
   string instr;
   inbuf.begin().copy(inbuf.length(), instr);

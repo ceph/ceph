@@ -31,6 +31,7 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, map)
+using namespace TOPNSPC::common;
 static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 			const MgrMap& mgrmap) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
