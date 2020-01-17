@@ -46,26 +46,30 @@ class RGWStore {
 
 class RGWUser {
   protected:
-    rgw_user user;
     RGWUserInfo info;
 
   public:
-    RGWUser() : user() {}
-    RGWUser(const rgw_user& _u) : user(_u) {}
-    RGWUser(const RGWUserInfo& _i) : user(_i.user_id), info(_i) {}
+    RGWUser() : info() {}
+    RGWUser(const rgw_user& _u) : info() { info.user_id = _u; }
+    RGWUser(const RGWUserInfo& _i) : info(_i) {}
     virtual ~RGWUser() = default;
 
     virtual int list_buckets(const string& marker, const string& end_marker,
 			     uint64_t max, bool need_stats, RGWBucketList& buckets) = 0;
     virtual RGWBucket* add_bucket(rgw_bucket& bucket, ceph::real_time creation_time) = 0;
     friend class RGWBucket;
-    virtual std::string& get_display_name() = 0;
+    virtual std::string& get_display_name() { return info.display_name; }
 
-    std::string& get_tenant() { return user.tenant; }
+    std::string& get_tenant() { return info.user_id.tenant; }
+    const rgw_user& get_id() const { return info.user_id; }
+    uint32_t get_type() const { return info.type; }
+    int32_t get_max_buckets() const { return info.max_buckets; }
+    const RGWUserCaps& get_caps() const { return info.caps; }
 
 
     /* xxx dang temporary; will be removed when User is complete */
-    rgw_user& get_user() { return user; }
+    rgw_user& get_user() { return info.user_id; }
+    RGWUserInfo& get_info() { return info; }
 };
 
 class RGWBucket {
@@ -181,12 +185,15 @@ class RGWRadosUser : public RGWUser {
   public:
     RGWRadosUser(RGWRadosStore *_st, const rgw_user& _u) : RGWUser(_u), store(_st) { }
     RGWRadosUser(RGWRadosStore *_st, const RGWUserInfo& _i) : RGWUser(_i), store(_st) { }
+    RGWRadosUser(RGWRadosStore *_st) : store(_st) { }
     RGWRadosUser() {}
 
     int list_buckets(const string& marker, const string& end_marker,
 				uint64_t max, bool need_stats, RGWBucketList& buckets);
     RGWBucket* add_bucket(rgw_bucket& bucket, ceph::real_time creation_time);
-    virtual std::string& get_display_name() override;
+
+    /* Placeholders */
+    int get_by_id(rgw_user id, optional_yield y);
 
     friend class RGWRadosBucket;
 };

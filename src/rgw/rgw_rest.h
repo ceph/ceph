@@ -534,7 +534,7 @@ public:
     flusher.init(s, this);
   }
   void send_response() override;
-  virtual int check_caps(RGWUserCaps& caps)
+  virtual int check_caps(const RGWUserCaps& caps)
     { return -EPERM; } /* should to be implemented! */
   int verify_permission() override;
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
@@ -569,7 +569,7 @@ public:
   int init_permissions(RGWOp* op) override;
   int read_permissions(RGWOp* op) override;
 
-  virtual RGWOp* get_op(rgw::sal::RGWRadosStore* store);
+  virtual RGWOp* get_op(void);
   virtual void put_op(RGWOp* op);
 };
 

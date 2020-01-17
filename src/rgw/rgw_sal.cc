@@ -36,8 +36,8 @@ int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
   bool is_truncated = false;
   int ret;
 
-  ret = store->ctl()->user->list_buckets(user, marker, end_marker, max, need_stats, &ulist,
-			       &is_truncated);
+  ret = store->ctl()->user->list_buckets(info.user_id, marker, end_marker, max,
+					 need_stats, &ulist, &is_truncated);
   if (ret < 0)
     return ret;
 
@@ -64,9 +64,10 @@ RGWBucket* RGWRadosUser::add_bucket(rgw_bucket& bucket,
   return NULL;
 }
 
-std::string& RGWRadosUser::get_display_name()
+int RGWRadosUser::get_by_id(rgw_user id, optional_yield y)
+
 {
-  return info.display_name;
+    return store->ctl()->user->get_info_by_uid(id, &info, y);
 }
 
 RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
@@ -176,7 +177,7 @@ int RGWRadosBucket::read_bucket_stats(optional_yield y)
 
 int RGWRadosBucket::sync_user_stats()
 {
-      return store->ctl()->bucket->sync_user_stats(user.user, info, &ent);
+      return store->ctl()->bucket->sync_user_stats(user.info.user_id, info, &ent);
 }
 
 int RGWRadosBucket::update_container_stats(void)

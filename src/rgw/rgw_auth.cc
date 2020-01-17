@@ -9,6 +9,7 @@
 #include "rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_keystone.h"
+#include "rgw_sal.h"
 
 #include "include/str_list.h"
 
@@ -37,15 +38,14 @@ transform_old_authinfo(const req_state* const s)
     const uint32_t type;
   public:
     DummyIdentityApplier(CephContext* const cct,
-                         const rgw_user& auth_id,
+                         const sal::RGWUser* user,
                          const int perm_mask,
-                         const bool is_admin,
-                         const uint32_t type)
+                         const bool is_admin)
       : cct(cct),
-        id(auth_id),
+        id(user->get_id()),
         perm_mask(perm_mask),
         is_admin(is_admin),
-        type(type) {
+        type(user->get_type()) {
     }
 
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
@@ -96,12 +96,11 @@ transform_old_authinfo(const req_state* const s)
 
   return std::unique_ptr<rgw::auth::Identity>(
         new DummyIdentityApplier(s->cct,
-                                 s->user->user_id,
+                                 s->user,
                                  s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
-                                 s->system_request,
-                                 s->user->type));
+                                 s->system_request));
 }
 
 } /* namespace auth */
@@ -285,7 +284,7 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
-      applier->load_acct_info(dpp, *s->user);
+      applier->load_acct_info(dpp, s->user->get_info());
       s->perm_mask = applier->get_perm_mask();
 
       /* This is the single place where we pass req_state as a pointer
@@ -676,7 +675,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   for (auto it : role_policies) {
     try {
       bufferlist bl = bufferlist::static_from_string(it);
-      const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+      const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
       s->iam_user_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
