@@ -99,6 +99,18 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     };
   }
 
+  struct pass_further {
+    decltype(auto) operator()(const unthrowable_wrapper& e) {
+      return e;
+    }
+  };
+
+  struct discard {
+    decltype(auto) operator()(const unthrowable_wrapper&) {
+    }
+  };
+
+
 private:
   // can be used only to initialize the `instance` member
   explicit unthrowable_wrapper() = default;
