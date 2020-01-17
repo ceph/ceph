@@ -635,6 +635,21 @@ private:
   template <typename T>
   using EnableIf = typename std::enable_if<contains_once_v<std::decay_t<T>>, Enabler>::type;
 
+  template <typename ErrorFunc>
+  struct all_same_way_t {
+    ErrorFunc func;
+    all_same_way_t(ErrorFunc &&error_func)
+      : func(std::forward<ErrorFunc>(error_func)) {}
+
+    template <typename ErrorT, EnableIf<ErrorT>...>
+    decltype(auto) operator()(ErrorT&& e) {
+      using decayed_t = std::decay_t<decltype(e)>;
+      auto&& handler =
+        decayed_t::error_t::handle(std::forward<ErrorFunc>(func));
+      return std::invoke(std::move(handler), std::forward<ErrorT>(e));
+    }
+  };
+
 public:
   // HACK: `errorated_future_marker` and `_future` is just a hack to
   // specialize `seastar::futurize` for category of class templates:
@@ -667,14 +682,7 @@ public:
 
   template <class ErrorFunc>
   static decltype(auto) all_same_way(ErrorFunc&& error_func) {
-    return [
-      error_func = std::forward<ErrorFunc>(error_func)
-    ] (auto&& e) mutable -> decltype(auto) {
-      using decayed_t = std::decay_t<decltype(e)>;
-      auto&& handler =
-        decayed_t::error_t::handle(std::forward<ErrorFunc>(error_func));
-      return std::invoke(std::move(handler), std::forward<decltype(e)>(e));
-    };
+    return all_same_way_t<ErrorFunc>{std::forward<ErrorFunc>(error_func)};
   };
 
   // get a new errorator by extending current one with new error
