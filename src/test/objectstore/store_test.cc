@@ -6545,6 +6545,7 @@ TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
 #if defined(WITH_BLUESTORE)
 void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
 {
+  sleep(5);
   uint64_t meta_allocated = mempool::bluestore_cache_meta::allocated_bytes();
   uint64_t onode_allocated = mempool::bluestore_cache_onode::allocated_bytes();
   uint64_t other_allocated = mempool::bluestore_cache_other::allocated_bytes();
