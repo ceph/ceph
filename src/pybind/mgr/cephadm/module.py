@@ -264,7 +264,7 @@ def with_services(service_type=None,
         return wrapper
     return decorator
 
-class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
+class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     _STORE_HOST_PREFIX = "host"
 
@@ -560,13 +560,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def serve(self):
         # type: () -> None
         self.log.info("serve starting")
-        orch_client = orchestrator.OrchestratorClientMixin()
-        orch_client.set_mgr(self.mgr)
         while self.run:
             while self.upgrade_state and not self.upgrade_state.get('paused'):
                 self.log.debug('Upgrade in progress, refreshing services')
                 completion = self._get_services()
-                orch_client._orchestrator_wait([completion])
+                self._orchestrator_wait([completion])
                 orchestrator.raise_if_exception(completion)
                 self.log.debug('services %s' % completion.result)
                 completion = self._do_upgrade(completion.result)
