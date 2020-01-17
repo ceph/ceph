@@ -26,11 +26,11 @@
 #include <thread>
 
 #include "include/buffer.h"
+#include "include/common_fwd.h"
 #include "common/ref.h"
 #include "common/cmdparse.h"
 
 class AdminSocket;
-class CephContext;
 class MCommand;
 class MMonCommand;
 

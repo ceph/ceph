@@ -48,6 +48,7 @@
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
+#include "include/common_fwd.h"
 #include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
 #include "mgr/MgrClient.h"
@@ -99,7 +100,6 @@ enum {
 class QuorumService;
 class PaxosService;
 
-class PerfCounters;
 class AdminSocketHook;
 
 #define COMPAT_SET_LOC "feature_set"

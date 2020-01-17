@@ -4,9 +4,9 @@
 #ifndef CEPH_RBD_MIRROR_THREADS_H
 #define CEPH_RBD_MIRROR_THREADS_H
 
+#include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 
-class CephContext;
 class ContextWQ;
 class SafeTimer;
 class ThreadPool;

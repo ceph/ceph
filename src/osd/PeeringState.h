@@ -14,6 +14,7 @@
 #include <atomic>
 
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 
 #include "PGLog.h"
 #include "PGStateUtils.h"

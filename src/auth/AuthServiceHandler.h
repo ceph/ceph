@@ -18,9 +18,9 @@
 #include <stddef.h>              // for NULL
 #include <stdint.h>              // for uint64_t
 #include "common/entity_name.h"  // for EntityName
+#include "include/common_fwd.h"
 #include "include/buffer_fwd.h"  // for ceph::buffer::list
 
-class CephContext;
 class KeyServer;
 class CryptoKey;
 struct AuthCapsInfo;

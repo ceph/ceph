@@ -17,9 +17,9 @@
 
 #include "common/ceph_mutex.h"
 #include "common/Thread.h"
+#include "include/common_fwd.h"
 #include "include/buffer.h"
 
-class CephContext;
 
 class OutputDataSocket : public Thread
 {

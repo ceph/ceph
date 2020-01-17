@@ -127,7 +127,7 @@ static const string OSD_SNAP_PREFIX("osd_snap");
   -> map<int64_t,interval_set<snapid_t>>
 
   */
-
+using namespace TOPNSPC::common;
 namespace {
 
 struct OSDMemCache : public PriorityCache::PriCache {

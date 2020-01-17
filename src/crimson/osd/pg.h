@@ -98,7 +98,7 @@ public:
   std::ostream& gen_prefix(std::ostream& out) const final {
     return out << *this;
   }
-  CephContext *get_cct() const final {
+  crimson::common::CephContext *get_cct() const final {
     return shard_services.get_cct();
   }
   unsigned get_subsys() const final {

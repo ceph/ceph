@@ -16,9 +16,11 @@
 #include "common/perf_counters.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
+#include "include/common_fwd.h"
 
 using std::ostringstream;
 
+namespace TOPNSPC::common {
 PerfCountersCollectionImpl::PerfCountersCollectionImpl()
 {
 }
@@ -583,3 +585,4 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
   return ret;
 }
 
+}

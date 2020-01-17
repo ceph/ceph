@@ -4,11 +4,11 @@
 #ifndef CEPH_LIBRBD_IMAGE_CLONE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_CLONE_REQUEST_H
 
-#include "include/rbd/librbd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
+#include "common/config_fwd.h"
 #include "librbd/internal.h"
+#include "include/rbd/librbd.hpp"
 
-class ConfigProxy;
 class Context;
 
 using librados::IoCtx;

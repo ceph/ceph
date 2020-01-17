@@ -43,7 +43,7 @@
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
-
+using namespace TOPNSPC::common;
 namespace {
   template <typename Map>
   bool map_compare(Map const &lhs, Map const &rhs) {

@@ -4,10 +4,10 @@
 #pragma once
 
 #include "AuthRegistry.h"
+#include "include/common_fwd.h"
 
 #include <vector>
 
-class CephContext;
 class Connection;
 
 class AuthServer {

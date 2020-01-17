@@ -65,10 +65,9 @@
 
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class Context;
-class PerfCounters;
 class Finisher;
 class C_OnFinisher;
 

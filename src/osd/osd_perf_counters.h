@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "include/common_fwd.h"
 #include "common/perf_counters.h"
 
 enum {

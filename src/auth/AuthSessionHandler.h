@@ -16,6 +16,7 @@
 #ifndef CEPH_AUTHSESSIONHANDLER_H
 #define CEPH_AUTHSESSIONHANDLER_H
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "Auth.h"
 
@@ -23,7 +24,6 @@
 
 // Defines the security applied to ongoing messages in a session, once the session is established. PLR
 
-class CephContext;
 class Message;
 
 struct AuthSessionHandler {

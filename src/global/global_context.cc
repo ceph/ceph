@@ -24,6 +24,7 @@
 /*
  * Global variables for use from process context.
  */
+namespace TOPNSPC::global {
 CephContext *g_ceph_context = NULL;
 ConfigProxy& g_conf() {
 #ifdef WITH_SEASTAR
@@ -72,4 +73,5 @@ int note_io_error_event(
   g_eio_offset = offset;
   g_eio_length = length;
   return 0;
+}
 }

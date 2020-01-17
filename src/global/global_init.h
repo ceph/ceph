@@ -23,8 +23,6 @@
 #include "common/code_environment.h"
 #include "common/common_init.h"
 
-class CephContext;
-
 /*
  * global_init is the first initialization function that
  * daemons and utility programs need to call. It takes care of a lot of
@@ -40,8 +38,10 @@ global_init(
   const char *data_dir_option = 0,
   bool run_pre_init = true);
 
-void intrusive_ptr_add_ref(CephContext* cct);
-void intrusive_ptr_release(CephContext* cct);
+namespace TOPNSPC::common {
+  void intrusive_ptr_add_ref(CephContext* cct);
+  void intrusive_ptr_release(CephContext* cct);
+}
 
 // just the first half; enough to get config parsed but doesn't start up the
 // cct or log.
@@ -104,5 +104,4 @@ int global_init_preload_erasure_code(const CephContext *cct);
  * print daemon startup banner/warning
  */
 void global_print_banner(void);
-
 #endif

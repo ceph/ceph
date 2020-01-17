@@ -8,10 +8,9 @@
 #include <ostream>
 #include <boost/variant.hpp>
 #include "include/ceph_assert.h"	// boost clobbers this
+#include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
-
-class CephContext;
 
 typedef boost::variant<std::string,
 		       bool,
@@ -22,6 +21,7 @@ typedef boost::variant<std::string,
 		       std::vector<double>>  cmd_vartype;
 typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
+namespace TOPNSPC::common {
 std::string cmddesc_get_prefix(const std::string_view &cmddesc);
 std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc);
 void dump_cmd_to_json(ceph::Formatter *f, uint64_t features,
@@ -108,4 +108,5 @@ bool validate_cmd(CephContext* cct,
 extern int parse_osd_id(const char *s, std::ostream *pss);
 extern long parse_pos_long(const char *s, std::ostream *pss = NULL);
 
+}
 #endif

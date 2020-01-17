@@ -19,11 +19,11 @@
 
 #include <set>
 
+#include "include/common_fwd.h"
 #include "osdc/Filer.h"
 
 class CInode;
 class MDSRank;
-class PerfCounters;
 
 class RecoveryQueue {
 public:

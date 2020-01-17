@@ -17,6 +17,7 @@
 #include "crimson/osd/osd.h"
 
 using crimson::osd::OSD;
+using namespace crimson::common;
 
 namespace {
 seastar::logger& logger()

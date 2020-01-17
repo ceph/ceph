@@ -30,6 +30,10 @@
 #include "ceph_statx.h"
 
 #ifdef __cplusplus
+namespace ceph::common {
+  class CephContext;
+}
+using CephContext = ceph::common::CephContext;
 extern "C" {
 #endif
 
@@ -89,12 +93,12 @@ typedef struct vinodeno_t {
 } vinodeno_t;
 
 typedef struct Fh Fh;
+struct CephContext;
 #else /* _cplusplus */
 
 struct inodeno_t;
 struct vinodeno_t;
 typedef struct vinodeno_t vinodeno;
-
 #endif /* ! __cplusplus */
 
 struct UserPerm;
@@ -105,7 +109,6 @@ typedef struct Inode Inode;
 
 struct ceph_mount_info;
 struct ceph_dir_result;
-struct CephContext;
 
 /* setattr mask bits */
 #ifndef CEPH_SETATTR_MODE
@@ -221,8 +224,11 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
  * @param conf reuse this pre-existing CephContext config
  * @returns 0 on success, negative error code on failure
  */
+#ifdef __cplusplus
+int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *conf);
+#else
 int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
-
+#endif
 
 #ifndef VOIDPTR_RADOS_T
 #define VOIDPTR_RADOS_T
@@ -382,8 +388,11 @@ uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount);
  * @param cmount the ceph mount handle to get the context from.
  * @returns the CephContext associated with the mount handle.
  */
+#ifdef __cplusplus
+CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount);
+#else
 struct CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount);
-
+#endif
 /*
  * Check mount status.
  *

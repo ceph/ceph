@@ -19,6 +19,8 @@
 
 #include <common/DecayCounter.h>
 
+#include "include/common_fwd.h"
+
 #include "messages/MClientReconnect.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientRequest.h"
@@ -33,7 +35,6 @@
 #include "MDSContext.h"
 
 class OSDMap;
-class PerfCounters;
 class LogEvent;
 class EMetaBlob;
 class EUpdate;

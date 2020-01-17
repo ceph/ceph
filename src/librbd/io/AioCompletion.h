@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_IO_AIO_COMPLETION_H
 
 #include "common/ceph_time.h"
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
@@ -18,7 +19,6 @@
 #include <condition_variable>
 #include <mutex>
 
-class CephContext;
 
 namespace librbd {
 namespace io {

@@ -5,6 +5,7 @@
 #include "acconfig.h"
 #include <stdexcept>
 
+#include "include/common_fwd.h"
 #include "include/buffer.h"
 #include "include/types.h"
 
@@ -28,27 +29,22 @@ extern "C" {
   const EVP_MD *EVP_sha512(void);
 }
 
-namespace ceph {
-  namespace crypto {
-    void assert_init();
-    void init();
-    void shutdown(bool shared=true);
+namespace TOPNSPC::crypto {
+  void assert_init();
+  void init();
+  void shutdown(bool shared=true);
 
-    void zeroize_for_security(void *s, size_t n);
-  }
-}
+  void zeroize_for_security(void *s, size_t n);
 
-namespace ceph {
-  namespace crypto {
-    class DigestException : public std::runtime_error
-    {
+  class DigestException : public std::runtime_error
+  {
     public:
       DigestException(const char* what_arg) : runtime_error(what_arg)
 	{}
-    };
+  };
 
-    namespace ssl {
-      class OpenSSLDigest {
+  namespace ssl {
+    class OpenSSLDigest {
       private:
 	EVP_MD_CTX *mpContext;
 	const EVP_MD *mpType;
@@ -58,37 +54,33 @@ namespace ceph {
 	void Restart();
 	void Update (const unsigned char *input, size_t length);
 	void Final (unsigned char *digest);
-      };
+    };
 
-      class MD5 : public OpenSSLDigest {
+    class MD5 : public OpenSSLDigest {
       public:
 	static constexpr size_t digest_size = CEPH_CRYPTO_MD5_DIGESTSIZE;
 	MD5 () : OpenSSLDigest(EVP_md5()) { }
-      };
+    };
 
-      class SHA1 : public OpenSSLDigest {
+    class SHA1 : public OpenSSLDigest {
       public:
         static constexpr size_t digest_size = CEPH_CRYPTO_SHA1_DIGESTSIZE;
         SHA1 () : OpenSSLDigest(EVP_sha1()) { }
-      };
+    };
 
-      class SHA256 : public OpenSSLDigest {
+    class SHA256 : public OpenSSLDigest {
       public:
         static constexpr size_t digest_size = CEPH_CRYPTO_SHA256_DIGESTSIZE;
         SHA256 () : OpenSSLDigest(EVP_sha256()) { }
-      };
+    };
 
-      class SHA512 : public OpenSSLDigest {
+    class SHA512 : public OpenSSLDigest {
       public:
         static constexpr size_t digest_size = CEPH_CRYPTO_SHA512_DIGESTSIZE;
         SHA512 () : OpenSSLDigest(EVP_sha512()) { }
-      };
-    }
-  }
-}
+    };
 
 
-namespace ceph::crypto::ssl {
 # if OPENSSL_VERSION_NUMBER < 0x10100000L
   class HMAC {
   private:
@@ -100,7 +92,7 @@ namespace ceph::crypto::ssl {
       : mpType(type) {
       // the strict FIPS zeroization doesn't seem to be necessary here.
       // just in the case.
-      ::ceph::crypto::zeroize_for_security(&mContext, sizeof(mContext));
+      ::TOPNSPC::crypto::zeroize_for_security(&mContext, sizeof(mContext));
       const auto r = HMAC_Init_ex(&mContext, key, length, mpType, nullptr);
       if (r != 1) {
 	  throw DigestException("HMAC_Init_ex() failed");
@@ -188,19 +180,14 @@ namespace ceph::crypto::ssl {
 }
 
 
-namespace ceph {
-  namespace crypto {
-    using ceph::crypto::ssl::SHA256;
-    using ceph::crypto::ssl::MD5;
-    using ceph::crypto::ssl::SHA1;
-    using ceph::crypto::ssl::SHA512;
+  using ssl::SHA256;
+  using ssl::MD5;
+  using ssl::SHA1;
+  using ssl::SHA512;
 
-    using ceph::crypto::ssl::HMACSHA256;
-    using ceph::crypto::ssl::HMACSHA1;
-  }
-}
+  using ssl::HMACSHA256;
+  using ssl::HMACSHA1;
 
-namespace ceph::crypto {
 template<class Digest>
 auto digest(const ceph::buffer::list& bl)
 {

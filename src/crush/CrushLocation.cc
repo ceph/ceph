@@ -9,11 +9,14 @@
 #include "include/str_list.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/common_fwd.h"
 #include "include/compat.h"
 
 #include "common/SubProcess.h"
 
 #include <vector>
+
+namespace TOPNSPC::crush {
 
 int CrushLocation::update_from_conf()
 {
@@ -141,4 +144,6 @@ std::ostream& operator<<(std::ostream& os, const CrushLocation& loc)
     os << '"' << type << '=' << pos << '"';
   }
   return os;
+}
+
 }
