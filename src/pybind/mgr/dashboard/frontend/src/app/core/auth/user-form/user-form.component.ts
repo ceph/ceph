@@ -227,14 +227,6 @@ export class UserFormComponent implements OnInit {
     }
   }
 
-  showExpirationDateField() {
-    return (
-      this.userForm.getValue('pwdExpirationDate') > 0 ||
-      this.userForm.touched ||
-      this.pwdExpirationSettings.pwdExpirationSpan > 0
-    );
-  }
-
   public isCurrentUser(): boolean {
     return this.authStorageService.getUsername() === this.userForm.getValue('username');
   }
