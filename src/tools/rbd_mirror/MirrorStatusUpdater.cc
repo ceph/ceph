@@ -293,6 +293,11 @@ void MirrorStatusUpdater<I>::update_task(int r) {
   Context* ctx = create_context_callback<
     MirrorStatusUpdater<I>,
     &MirrorStatusUpdater<I>::handle_update_task>(this);
+  if (updating_global_image_ids.empty()) {
+    ctx->complete(0);
+    return;
+  }
+
   auto gather = new C_Gather(g_ceph_context, ctx);
 
   auto it = updating_global_image_ids.begin();
