@@ -781,11 +781,11 @@ void RGWOp_DATALog_Delete::execute() {
 class RGWOp_MDLog_Status : public RGWRESTOp {
   rgw_meta_sync_status status;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_caps());
   }
   void execute() override;
   void send_response() override;
@@ -819,11 +819,11 @@ void RGWOp_MDLog_Status::send_response()
 class RGWOp_BILog_Status : public RGWRESTOp {
   std::vector<rgw_bucket_shard_sync_info> status;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_caps());
   }
   void execute() override;
   void send_response() override;
@@ -876,11 +876,11 @@ void RGWOp_BILog_Status::send_response()
 class RGWOp_DATALog_Status : public RGWRESTOp {
   rgw_data_sync_status status;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_caps());
   }
   void execute() override ;
   void send_response() override;

@@ -51,11 +51,11 @@ void RGWOp_Period_Base::send_response()
 class RGWOp_Period_Get : public RGWOp_Period_Base {
  public:
   void execute() override;
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_caps());
   }
   const char* name() const override { return "get_period"; }
 };
@@ -81,11 +81,11 @@ void RGWOp_Period_Get::execute()
 class RGWOp_Period_Post : public RGWOp_Period_Base {
  public:
   void execute() override;
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_WRITE);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_caps());
   }
   const char* name() const override { return "post_period"; }
 };
@@ -258,11 +258,11 @@ class RGWRESTMgr_Period : public RGWRESTMgr {
 class RGWOp_Realm_Get : public RGWRESTOp {
   std::unique_ptr<RGWRealm> realm;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_caps());
   }
   void execute() override;
   void send_response() override;
@@ -304,11 +304,11 @@ class RGWOp_Realm_List : public RGWRESTOp {
   std::string default_id;
   std::list<std::string> realms;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_caps());
   }
   void execute() override;
   void send_response() override;

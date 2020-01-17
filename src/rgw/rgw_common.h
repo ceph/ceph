@@ -41,6 +41,10 @@ namespace ceph {
   class Formatter;
 }
 
+namespace rgw::sal {
+  class RGWUser;
+}
+
 using ceph::crypto::MD5;
 
 
@@ -614,7 +618,7 @@ public:
      decode(caps, bl);
      DECODE_FINISH(bl);
   }
-  int check_cap(const string& cap, uint32_t perm);
+  int check_cap(const string& cap, uint32_t perm) const;
   bool is_valid_cap_type(const string& tp);
   void dump(Formatter *f) const;
   void dump(Formatter *f, const char *name) const;
@@ -2027,7 +2031,7 @@ struct req_state : DoutPrefixProvider {
 
   bool has_bad_meta{false};
 
-  RGWUserInfo *user;
+  rgw::sal::RGWUser *user;
 
   struct {
     /* TODO(rzarzynski): switch out to the static_ptr for both members. */
@@ -2108,7 +2112,7 @@ struct req_state : DoutPrefixProvider {
   /// optional coroutine context
   optional_yield yield{null_yield};
 
-  req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id);
+  req_state(CephContext* _cct, RGWEnv* e, rgw::sal::RGWUser* u, uint64_t id);
   ~req_state();
 
   bool is_err() const { return err.is_err(); }

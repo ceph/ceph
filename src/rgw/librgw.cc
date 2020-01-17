@@ -303,7 +303,7 @@ namespace rgw {
       if (ret < 0) {
 	if (s->system_request) {
 	  dout(2) << "overriding permissions due to system operation" << dendl;
-	} else if (s->auth.identity->is_admin_of(s->user->user_id)) {
+	} else if (s->auth.identity->is_admin_of(s->user->get_id())) {
 	  dout(2) << "overriding permissions due to admin operation" << dendl;
 	} else {
 	  abort_req(s, op, ret);
@@ -423,7 +423,7 @@ namespace rgw {
     if (ret < 0) {
       if (s->system_request) {
 	dout(2) << "overriding permissions due to system operation" << dendl;
-      } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
+      } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
 	dout(2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
@@ -677,8 +677,8 @@ namespace rgw {
     s->perm_mask = RGW_PERM_FULL_CONTROL;
 
     // populate the owner info
-    s->owner.set_id(s->user->user_id);
-    s->owner.set_name(s->user->display_name);
+    s->owner.set_id(s->user->get_id());
+    s->owner.set_name(s->user->get_display_name());
 
     return 0;
   } /* RGWHandler_Lib::authorize */
