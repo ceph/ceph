@@ -4,6 +4,17 @@
 
 See `Block Device`_ for additional details.
 
+Generic IO Settings
+===================
+
+``rbd compression hint``
+
+:Description: Hint to send to the OSDs on write operations. If set to `compressible` and the OSD `bluestore compression mode` setting is `passive`, the OSD will attempt to compress the data. If set to `incompressible` and the OSD compression setting is `aggressive`, the OSD will not attempt to compress the data.
+:Type: Enum
+:Required: No
+:Default: ``none``
+:Values: ``none``, ``compressible``, ``incompressible``
+
 Cache Settings
 =======================
 
