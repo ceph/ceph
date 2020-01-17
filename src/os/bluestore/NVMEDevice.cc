@@ -928,8 +928,6 @@ void NVMEDevice::close()
 {
   dout(1) << __func__ << dendl;
 
-  delete queue_t;
-  queue_t = nullptr;
   name.clear();
   driver->remove_device(this);
 
