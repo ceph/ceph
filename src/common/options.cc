@@ -7626,7 +7626,13 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_cache_trim_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description("interval in seconds between cache trimming"),
+    .set_description("interval in seconds between cache trimming")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("mds_cache_release_free_interval", Option::TYPE_SECS, Option::LEVEL_DEV)
+    .set_default(10)
+    .set_description("interval in seconds between heap releases")
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
