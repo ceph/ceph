@@ -172,12 +172,10 @@ function teardown() {
     local pattern="$(sysctl -n $KERNCORE)"
     # See if we have apport core handling
     if [ "${pattern:0:1}" = "|" ]; then
-      # TODO: Where can we get the dumps?
-      # Not sure where the dumps really are so this will look in the CWD
-      pattern=""
-    fi
+      echo "Misconfigured test environment, systemd-coredump not supported"
+      local MISCONFIG=yes
     # Local we start with core and teuthology ends with core
-    if ls $(dirname "$pattern") | grep -q '^core\|core$' ; then
+    elif ls $(dirname "$pattern") | grep -q '^core\|core$' ; then
         cores="yes"
         if [ -n "$LOCALRUN" ]; then
 	    mkdir /tmp/cores.$$ 2> /dev/null || true
@@ -203,6 +201,9 @@ function teardown() {
 	    echo "Find saved core files in /tmp/cores.$$"
         fi
         return 1
+    fi
+    if [ "$MISCONFIG" = "yes" ]; then
+	return 1
     fi
     return 0
 }
