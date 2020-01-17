@@ -21,9 +21,6 @@ extern "C" {
 /* Max Including null terminator */
 #define SECRET_BUFSIZE (MAX_SECRET_LEN + 1)
 
-/* Buffer size for secret= option */
-#define SECRET_OPTION_BUFSIZE (sizeof("secret=") + MAX_SECRET_LEN + 1)
-
 /* 2k should be enough for anyone? */
 #define MON_LIST_BUFSIZE	2048
 
