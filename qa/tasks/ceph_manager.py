@@ -251,24 +251,23 @@ class OSDThrasher(Thrasher):
         if mark_out and osd in self.in_osds:
             self.out_osd(osd)
         if self.ceph_objectstore_tool:
-            self.log("Testing ceph-objectstore-tool on down osd")
+            self.log("Testing ceph-objectstore-tool on down osd.%s" % osd)
             remote = self.ceph_manager.find_remote('osd', osd)
             FSPATH = self.ceph_manager.get_filepath()
             JPATH = os.path.join(FSPATH, "journal")
             exp_osd = imp_osd = osd
+            self.log('remote for osd %s is %s' % (osd, remote))
             exp_remote = imp_remote = remote
             # If an older osd is available we'll move a pg from there
             if (len(self.dead_osds) > 1 and
                     random.random() < self.chance_move_pg):
                 exp_osd = random.choice(self.dead_osds[:-1])
                 exp_remote = self.ceph_manager.find_remote('osd', exp_osd)
+                self.log('remote for exp osd %s is %s' % (exp_osd, exp_remote))
             prefix = [
                 '--no-mon-config',
-                '--data-path', FSPATH.format(id=osd),
-                '--journal-path', JPATH.format(id=osd),
                 '--log-file=/var/log/ceph/objectstore_tool.$pid.log',
             ]
-            cmd = prefix + ['--op', 'list-pgs']
 
             if not self.ceph_manager.cephadm:
                 # ceph-objectstore-tool might be temporarily absent during an
@@ -287,7 +286,12 @@ class OSDThrasher(Thrasher):
             with safe_while(sleep=15, tries=40, action="ceph-objectstore-tool --op list-pgs") as proceed:
                 while proceed():
                     proc = self.run_ceph_objectstore_tool(
-                        exp_remote, 'osd.%s' % osd, cmd)
+                        exp_remote, 'osd.%s' % osd,
+                        prefix + [
+                            '--data-path', FSPATH.format(id=exp_osd),
+                            '--journal-path', JPATH.format(id=exp_osd),
+                            '--op', 'list-pgs',
+                        ])
                     if proc.exitstatus == 0:
                         break
                     elif proc.exitstatus == 1 and proc.stderr == "OSD has the store locked":
@@ -320,17 +324,29 @@ class OSDThrasher(Thrasher):
 
             # export
             # Can't use new export-remove op since this is part of upgrade testing
-            cmd = prefix + ['--op', 'export', '--pgid', pg, '--file', exp_path]
-            proc = self.run_ceph_objectstore_tool(exp_remote, 'osd.%s' % osd,
-                                                  cmd)
+            proc = self.run_ceph_objectstore_tool(
+                exp_remote, 'osd.%s' % osd,
+                prefix + [
+                    '--data-path', FSPATH.format(id=exp_osd),
+                    '--journal-path', JPATH.format(id=exp_osd),
+                    '--op', 'export',
+                    '--pgid', pg,
+                    '--file', exp_path,
+                ])
             if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "export failure with status {ret}".
                                 format(ret=proc.exitstatus))
             # remove
-            cmd = prefix + ['--force', '--op', 'remove', '--pgid', pg]
-            proc = self.run_ceph_objectstore_tool(exp_remote, 'osd.%s' % osd,
-                                                  cmd)
+            proc = self.run_ceph_objectstore_tool(
+                exp_remote, 'osd.%s' % osd,
+                prefix + [
+                    '--data-path', FSPATH.format(id=exp_osd),
+                    '--journal-path', JPATH.format(id=exp_osd),
+                    '--force',
+                    '--op', 'remove',
+                    '--pgid', pg,
+                ])
             if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "remove failure with status {ret}".
@@ -338,10 +354,14 @@ class OSDThrasher(Thrasher):
             # If there are at least 2 dead osds we might move the pg
             if exp_osd != imp_osd:
                 # If pg isn't already on this osd, then we will move it there
-                cmd = prefix + ['--op', 'list-pgs']
-                proc = self.run_ceph_objectstore_tool(imp_remote,
-                                                      'osd.%s' % osd,
-                                                      cmd)
+                proc = self.run_ceph_objectstore_tool(
+                    imp_remote,
+                    'osd.%s' % osd,
+                    prefix + [
+                        '--data-path', FSPATH.format(id=imp_osd),
+                        '--journal-path', JPATH.format(id=imp_osd),
+                        '--op', 'list-pgs',
+                    ])
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
@@ -362,12 +382,15 @@ class OSDThrasher(Thrasher):
                     imp_osd = exp_osd
                     imp_remote = exp_remote
             # import
-            cmd = ['--data-path', FSPATH.format(id=imp_osd),
-                   '--journal-path', JPATH.format(id=imp_osd),
-                   '--log-file=/var/log/ceph/objectstore_tool.$pid.log',
-                   '--op', 'import', '--file', exp_path]
             proc = self.run_ceph_objectstore_tool(
-                imp_remote, 'osd.%s' % imp_osd, cmd)
+                imp_remote, 'osd.%s' % imp_osd,
+                [
+                    '--data-path', FSPATH.format(id=imp_osd),
+                    '--journal-path', JPATH.format(id=imp_osd),
+                    '--log-file=/var/log/ceph/objectstore_tool.$pid.log',
+                    '--op', 'import',
+                    '--file', exp_path,
+                ])
             if proc.exitstatus == 1:
                 bogosity = "The OSD you are using is older than the exported PG"
                 if bogosity in proc.stderr.getvalue():
@@ -400,9 +423,12 @@ class OSDThrasher(Thrasher):
                     cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
                            "--filestore-split-multiple 1' sudo -E "
                            + 'ceph-objectstore-tool '
-                           + ' '.join(prefix)
+                           + ' '.join(prefix + [
+                               '--data-path', FSPATH.format(id=imp_osd),
+                               '--journal-path', JPATH.format(id=imp_osd),
+                           ])
                            + " --op apply-layout-settings --pool " + pool).format(id=osd)
-                    proc = remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
+                    proc = imp_remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
                     output = proc.stderr.getvalue()
                     if 'Couldn\'t find pool' in output:
                         continue
