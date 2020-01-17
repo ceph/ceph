@@ -300,6 +300,24 @@ def ceph_bootstrap(ctx, config):
         log.debug('Final config:\n' + conf_fp.getvalue())
         ctx.ceph[cluster_name].conf = seed_config
 
+        # register initial daemons
+        ctx.daemons.register_daemon(
+            bootstrap_remote, 'mon', first_mon,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild('mon.' + first_mon),
+            wait=False,
+            started=True,
+        )
+        ctx.daemons.register_daemon(
+            bootstrap_remote, 'mgr', first_mgr,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild('mgr.' + first_mgr),
+            wait=False,
+            started=True,
+        )
+
         # bootstrap
         log.info('Bootstrapping...')
         cmd = [
@@ -327,24 +345,6 @@ def ceph_bootstrap(ctx, config):
             'sudo', 'chmod', '+r', '{}/{}.keyring'.format(testdir, cluster_name),
         ]
         bootstrap_remote.run(args=cmd)
-
-        # register initial daemons
-        ctx.daemons.register_daemon(
-            bootstrap_remote, 'mon', first_mon,
-            cluster=cluster_name,
-            fsid=fsid,
-            logger=log.getChild('mon.' + first_mon),
-            wait=False,
-            started=True,
-        )
-        ctx.daemons.register_daemon(
-            bootstrap_remote, 'mgr', first_mgr,
-            cluster=cluster_name,
-            fsid=fsid,
-            logger=log.getChild('mgr.' + first_mgr),
-            wait=False,
-            started=True,
-        )
 
         # fetch keys and configs
         log.info('Fetching config...')
