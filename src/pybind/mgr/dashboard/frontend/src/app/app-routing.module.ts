@@ -74,12 +74,13 @@ const routes: Routes = [
   {
     path: '',
     component: WorkbenchLayoutComponent,
+    canActivate: [AuthGuardService],
+    canActivateChild: [AuthGuardService],
     children: [
-      { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuardService] },
+      { path: 'dashboard', component: DashboardComponent },
       // Cluster
       {
         path: 'hosts',
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/Hosts' },
         children: [
           { path: '', component: HostsComponent },
@@ -93,25 +94,20 @@ const routes: Routes = [
       {
         path: 'monitor',
         component: MonitorComponent,
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/Monitors' }
       },
       {
         path: 'services',
         component: ServicesComponent,
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/Services' }
       },
       {
         path: 'inventory',
         component: InventoryComponent,
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/Inventory' }
       },
       {
         path: 'osd',
-        canActivate: [AuthGuardService],
-        canActivateChild: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/OSDs' },
         children: [
           { path: '', component: OsdListComponent },
@@ -137,18 +133,15 @@ const routes: Routes = [
       {
         path: 'crush-map',
         component: CrushmapComponent,
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/CRUSH map' }
       },
       {
         path: 'logs',
         component: LogsComponent,
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/Logs' }
       },
       {
         path: 'monitoring',
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/Monitoring' },
         children: [
           {
@@ -180,7 +173,6 @@ const routes: Routes = [
       {
         path: 'perf_counters/:type/:id',
         component: PerformanceCounterComponent,
-        canActivate: [AuthGuardService],
         data: {
           breadcrumbs: PerformanceCounterBreadcrumbsResolver
         }
@@ -188,8 +180,6 @@ const routes: Routes = [
       // Mgr modules
       {
         path: 'mgr-modules',
-        canActivate: [AuthGuardService],
-        canActivateChild: [AuthGuardService],
         data: { breadcrumbs: 'Cluster/Manager modules' },
         children: [
           {
@@ -208,16 +198,12 @@ const routes: Routes = [
       // Pools
       {
         path: 'pool',
-        canActivate: [AuthGuardService],
-        canActivateChild: [AuthGuardService],
         data: { breadcrumbs: 'Pools' },
         loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
       },
       // Block
       {
         path: 'block',
-        canActivateChild: [AuthGuardService],
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: true, text: 'Block', path: null },
         loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
       },
@@ -225,13 +211,13 @@ const routes: Routes = [
       {
         path: 'cephfs',
         component: CephfsListComponent,
-        canActivate: [FeatureTogglesGuardService, AuthGuardService],
+        canActivate: [FeatureTogglesGuardService],
         data: { breadcrumbs: 'Filesystems' }
       },
       // Object Gateway
       {
         path: 'rgw',
-        canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService, AuthGuardService],
+        canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'rgw',
@@ -246,16 +232,12 @@ const routes: Routes = [
       // User/Role Management
       {
         path: 'user-management',
-        canActivate: [AuthGuardService],
-        canActivateChild: [AuthGuardService],
         data: { breadcrumbs: 'User management', path: null },
         loadChildren: () => import('./core/auth/auth.module').then((m) => m.RoutedAuthModule)
       },
       // User Profile
       {
         path: 'user-profile',
-        canActivate: [AuthGuardService],
-        canActivateChild: [AuthGuardService],
         data: { breadcrumbs: 'User profile', path: null },
         children: [
           {
@@ -270,13 +252,11 @@ const routes: Routes = [
       {
         path: 'nfs/501/:message',
         component: Nfs501Component,
-        canActivate: [AuthGuardService],
         data: { breadcrumbs: 'NFS' }
       },
       {
         path: 'nfs',
-        canActivate: [AuthGuardService],
-        canActivateChild: [AuthGuardService, ModuleStatusGuardService],
+        canActivateChild: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'nfs-ganesha',
