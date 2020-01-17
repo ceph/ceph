@@ -184,40 +184,6 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Default: ``/etc/mime.types``
 
 
-``rgw gc max objs``
-
-:Description: The maximum number of objects that may be handled by
-              garbage collection in one garbage collection processing cycle.
-
-:Type: Integer
-:Default: ``32``
-
-
-``rgw gc obj min wait``
-
-:Description: The minimum wait time before the object may be removed
-              and handled by garbage collection processing.
-
-:Type: Integer
-:Default: ``2 * 3600``
-
-
-``rgw gc processor max time``
-
-:Description: The maximum time between the beginning of two consecutive garbage
-              collection processing cycles.
-
-:Type: Integer
-:Default: ``3600``
-
-
-``rgw gc processor period``
-
-:Description: The cycle time for garbage collection processing.
-:Type: Integer
-:Default: ``3600``
-
-
 ``rgw s3 success create obj status``
 
 :Description: The alternate success status response for ``create-obj``.
@@ -415,6 +381,71 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Type: Boolean
 :Default: ``true``
 
+
+Garbage Collection Settings
+===========================
+
+The Ceph Object Gateway allocates storage for new objects immediately.
+
+The Ceph Object Gateway purges the storage space used for deleted and overwritten 
+objects in the Ceph Storage cluster some time after the gateway deletes the 
+objects from the bucket index. The process of purging the deleted object data 
+from the Ceph Storage cluster is known as Garbage Collection or GC.
+
+To view the queue of objects awaiting garbage collection, execute the following::
+
+  $ radosgw-admin gc list 
+
+  Note: specify --include-all to list all entries, including unexpired
+  
+Garbage collection is a background activity that may
+execute continuously or during times of low loads, depending upon how the
+administrator configures the Ceph Object Gateway. By default, the Ceph Object
+Gateway conducts GC operations continuously. Since GC operations are a normal
+part of Ceph Object Gateway operations, especially with object delete
+operations, objects eligible for garbage collection exist most of the time.
+
+Some workloads may temporarily or permanently outpace the rate of garbage
+collection activity. This is especially true of delete-heavy workloads, where
+many objects get stored for a short period of time and then deleted. For these
+types of workloads, administrators can increase the priority of garbage
+collection operations relative to other operations with the following
+configuration parameters.
+
+
+``rgw gc max objs``
+
+:Description: The maximum number of objects that may be handled by
+              garbage collection in one garbage collection processing cycle.
+              Please do not change this value after the first deployment.
+
+:Type: Integer
+:Default: ``32``
+
+
+``rgw gc obj min wait``
+
+:Description: The minimum wait time before a deleted object may be removed
+              and handled by garbage collection processing.
+
+:Type: Integer
+:Default: ``2 * 3600``
+
+
+``rgw gc processor max time``
+
+:Description: The maximum time between the beginning of two consecutive garbage
+              collection processing cycles.
+
+:Type: Integer
+:Default: ``3600``
+
+
+``rgw gc processor period``
+
+:Description: The cycle time for garbage collection processing.
+:Type: Integer
+:Default: ``3600``
 
 Multisite Settings
 ==================
