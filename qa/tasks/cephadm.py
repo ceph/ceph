@@ -159,8 +159,9 @@ def ceph_log(ctx, config):
                 '/var/log/ceph/{fsid}/ceph.log'.format(
                     fsid=fsid),
             ]
-            for exclude in excludes:
-                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+            if excludes:
+                for exclude in excludes:
+                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
@@ -174,7 +175,7 @@ def ceph_log(ctx, config):
             return None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config['log-whitelist']) is not None:
+                             config.get('log-whitelist')) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
