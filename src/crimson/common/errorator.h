@@ -872,6 +872,31 @@ namespace ct_error {
     ct_error_code<std::errc::operation_not_supported>;
   using not_connected = ct_error_code<std::errc::not_connected>;
   using timed_out = ct_error_code<std::errc::timed_out>;
+
+  struct pass_further_all {
+    template <class ErrorT>
+    decltype(auto) operator()(ErrorT&& e) {
+      return std::forward<ErrorT>(e);
+    }
+  };
+
+  struct discard_all {
+    template <class ErrorT>
+    decltype(auto) operator()(ErrorT&&) {
+    }
+  };
+
+  template <class ErrorFunc>
+  static decltype(auto) all_same_way(ErrorFunc&& error_func) {
+    return [
+      error_func = std::forward<ErrorFunc>(error_func)
+    ] (auto&& e) mutable -> decltype(auto) {
+      using decayed_t = std::decay_t<decltype(e)>;
+      auto&& handler =
+        decayed_t::error_t::handle(std::forward<ErrorFunc>(error_func));
+      return std::invoke(std::move(handler), std::forward<decltype(e)>(e));
+    };
+  };
 }
 
 using stateful_errc = stateful_error_t<std::errc>;
