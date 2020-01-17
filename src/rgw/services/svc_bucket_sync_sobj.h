@@ -39,8 +39,7 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
     std::shared_ptr<RGWBucketSyncPolicyHandler> handler;
   };
 
-  using RGWChainedCacheImpl_bucket_sync_policy_cache_entry = RGWChainedCacheImpl<bucket_sync_policy_cache_entry>;
-  unique_ptr<RGWChainedCacheImpl_bucket_sync_policy_cache_entry> sync_policy_cache;
+  unique_ptr<RGWChainedCacheImpl<bucket_sync_policy_cache_entry> > sync_policy_cache;
 
   std::unique_ptr<RGWSI_Bucket_Sync_SObj_HintIndexManager> hint_index_mgr;
 
