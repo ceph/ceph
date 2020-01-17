@@ -630,6 +630,11 @@ private:
     friend inline auto ::seastar::do_with(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
   };
 
+  class Enabler {};
+
+  template <typename T>
+  using EnableIf = typename std::enable_if<contains_once_v<std::decay_t<T>>, Enabler>::type;
+
 public:
   // HACK: `errorated_future_marker` and `_future` is just a hack to
   // specialize `seastar::futurize` for category of class templates:
@@ -644,7 +649,7 @@ public:
 
   // the visitor that forwards handling of all errors to next continuation
   struct pass_further {
-    template <class ErrorT>
+    template <class ErrorT, EnableIf<ErrorT>...>
     decltype(auto) operator()(ErrorT&& e) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "passing further disallowed ErrorT");
@@ -653,7 +658,7 @@ public:
   };
 
   struct discard_all {
-    template <class ErrorT>
+    template <class ErrorT, EnableIf<ErrorT>...>
     decltype(auto) operator()(ErrorT&&) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
