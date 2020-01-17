@@ -16,44 +16,6 @@ total lifetime.
 */
 
 template<class T>
-class mutable_item_history {
-private:
-  std::mutex lock;
-  std::list<T> history;
-  T *current = nullptr;
-
-public:
-  mutable_item_history() {
-    history.emplace_back(T());
-    current = &history.back();
-  }
-
-  // readers are lock-free
-  const T& operator*() const {
-    return *current;
-  }
-  const T *operator->() const {
-    return current;
-  }
-
-  // non-const variants (be careful!)
-  T& operator*() {
-    return *current;
-  }
-  T *operator->() {
-    return current;
-  }
-
-  // writes are serialized
-  const T& operator=(const T& other) {
-    std::lock_guard l(lock);
-    history.push_back(other);
-    current = &history.back();
-    return *current;
-  }
-};
-
-template<class T>
 class safe_item_history {
 private:
   std::mutex lock;
