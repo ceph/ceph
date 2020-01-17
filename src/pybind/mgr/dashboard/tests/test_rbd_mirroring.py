@@ -48,7 +48,7 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
         mgr.list_servers.return_value = mock_list_servers
-        mgr.get_metadata.return_value = mock_get_metadata
+        mgr.get_metadata = mock.Mock(return_value=mock_get_metadata)
         mgr.get_daemon_status.return_value = mock_get_daemon_status
         mgr.get.side_effect = lambda key: {
             'osd_map': mock_osd_map,
