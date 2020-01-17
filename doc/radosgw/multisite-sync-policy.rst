@@ -27,7 +27,7 @@ A sync policy group can be in 3 states:
 
 A policy can be defined at the bucket level. A bucket level sync policy inherits the data flow of the zonegroup policy, and can only define a subset of what the zonegroup allows.
 
-A wildcard zone, and a wildcard bucket parameter in the policy defines all relevant zones, or all relevant buckets. In the context of a bucket policy it means the current bucket instance.  A disaster recovery configuration where entire zones are mirrored doesn't require configuring anything on the buckets. However, for a fine grained bucket sync it would be better to configure the pipes to be synced by allowing (status=allowed) them at the zonegroup level (e.g., using wildcards), but only enable the specific sync at the bucket leve (status=enabled)l. If needed, the policy at the bucket level can limit the data movement to specific relevant zones.
+A wildcard zone, and a wildcard bucket parameter in the policy defines all relevant zones, or all relevant buckets. In the context of a bucket policy it means the current bucket instance.  A disaster recovery configuration where entire zones are mirrored doesn't require configuring anything on the buckets. However, for a fine grained bucket sync it would be better to configure the pipes to be synced by allowing (status=allowed) them at the zonegroup level (e.g., using wildcards), but only enable the specific sync at the bucket leve (status=enabled). If needed, the policy at the bucket level can limit the data movement to specific relevant zones.
 
 .. important:: Any changes to the zonegroup policy needs to be applied on the
                zonegroup master zone, and require period update and commit. Changes
@@ -38,7 +38,7 @@ A wildcard zone, and a wildcard bucket parameter in the policy defines all relev
 S3 Replication API
 ~~~~~~~~~~~~~~~~~~
 
-The S3 bucket replication api has also been implemented, and allows users to create replication rules between different buckets. Note though that while the AWS replication feature allows bucket replication within the same zone, rgw does not allow it at the moment.  However, the rgw api also added a new 'Zone' array that allows users to select to what zones the specific bucket will be synced to.
+The S3 bucket replication api has also been implemented, and allows users to create replication rules between different buckets. Note though that while the AWS replication feature allows bucket replication within the same zone, rgw does not allow it at the moment.  However, the rgw api also added a new 'Zone' array that allows users to select to what zones the specific bucket will be synced.
 
 
 Sync Policy Control Reference
@@ -236,7 +236,7 @@ To get information about the expected sync sources and targets (as defined by th
                                 [--effective-zone-name=<zone>]
 
 
-Since a bucket can define a policy that defines data movement from it towards a different bucket at a different zone, when the policy is created we also generate a list of bucket dependencies that are used as hints when a sync of any particular bucket happens. The fact that a bucket reference another bucket doesn't mean it actually sync to/from it, as the data flow might not permit it.  
+Since a bucket can define a policy that defines data movement from it towards a different bucket at a different zone, when the policy is created we also generate a list of bucket dependencies that are used as hints when a sync of any particular bucket happens. The fact that a bucket references another bucket does not mean it actually syncs to/from it, as the data flow might not permit it.  
 
 
 Examples
