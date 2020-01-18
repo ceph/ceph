@@ -76,7 +76,12 @@
 %endif
 %if %{with selinux}
 # get selinux policy version
+# Force 0.0.0 policy version for centos builds to avoid repository sync issues between rhel and centos
+%if %{?centos}
+%global _selinux_policy_version 0.0.0
+%else
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
+%endif
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
