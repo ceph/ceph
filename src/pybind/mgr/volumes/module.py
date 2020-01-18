@@ -53,6 +53,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString '
                    'name=pool_layout,type=CephString,req=false '
+                   'name=uid,type=CephInt,req=false '
+                   'name=gid,type=CephInt,req=false '
                    'name=mode,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume group in a volume, and optionally, "
                     "with a specific data pool layout, and a specific numeric mode",
@@ -80,6 +82,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=size,type=CephInt,req=false '
                    'name=group_name,type=CephString,req=false '
                    'name=pool_layout,type=CephString,req=false '
+                   'name=uid,type=CephInt,req=false '
+                   'name=gid,type=CephInt,req=false '
                    'name=mode,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
@@ -245,7 +249,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """
         return self.vc.create_subvolume_group(
             None, vol_name=cmd['vol_name'], group_name=cmd['group_name'],
-            pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'))
+            pool_layout=cmd.get('pool_layout', None), uid=cmd.get('uid', None),
+            gid=cmd.get('gid', None), mode=cmd.get('mode', '755'))
 
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
         """
@@ -268,6 +273,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         group_name=cmd.get('group_name', None),
                                         size=cmd.get('size', None),
                                         pool_layout=cmd.get('pool_layout', None),
+                                        uid=cmd.get('uid', None),
+                                        gid=cmd.get('gid', None),
                                         mode=cmd.get('mode', '755'))
 
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):

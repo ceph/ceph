@@ -388,6 +388,8 @@ class VolumeClient(object):
         groupname  = kwargs['group_name']
         size       = kwargs['size']
         pool       = kwargs['pool_layout']
+        uid        = kwargs['uid']
+        gid        = kwargs['gid']
         mode       = kwargs['mode']
 
         try:
@@ -397,7 +399,7 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, create it with " \
                         "`ceph fs subvolumegroup create` before creating subvolumes".format(groupname))
-                sv.create_subvolume(spec, size, pool=pool, mode=self.octal_str_to_decimal_int(mode))
+                sv.create_subvolume(spec, size, pool=pool, uid=uid, gid=gid, mode=self.octal_str_to_decimal_int(mode))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -586,13 +588,15 @@ class VolumeClient(object):
         volname   = kwargs['vol_name']
         groupname = kwargs['group_name']
         pool      = kwargs['pool_layout']
+        uid       = kwargs['uid']
+        gid       = kwargs['gid']
         mode      = kwargs['mode']
 
         try:
             # TODO: validate that subvol size fits in volume size
             with SubVolume(self.mgr, fs_handle) as sv:
                 spec = SubvolumeSpec("", groupname)
-                sv.create_group(spec, pool=pool, mode=self.octal_str_to_decimal_int(mode))
+                sv.create_group(spec, pool=pool, uid=uid, gid=gid, mode=self.octal_str_to_decimal_int(mode))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

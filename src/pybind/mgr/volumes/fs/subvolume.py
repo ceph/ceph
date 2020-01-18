@@ -57,7 +57,8 @@ class SubVolume(object):
 
     ### basic subvolume operations
 
-    def create_subvolume(self, spec, size=None, namespace_isolated=True, mode=0o755, pool=None):
+    def create_subvolume(self, spec, size=None,  pool=None, namespace_isolated=True,
+                         uid=None, gid=None, mode=0o755):
         """
         Set up metadata, pools and auth for a subvolume.
 
@@ -66,8 +67,11 @@ class SubVolume(object):
 
         :param spec: subvolume path specification
         :param size: In bytes, or None for no size limit
-        :param namespace_isolated: If true, use separate RADOS namespace for this subvolume
         :param pool: the RADOS pool where the data objects of the subvolumes will be stored
+        :param namespace_isolated: If true, use separate RADOS namespace for this subvolume
+        :param uid: the user identifier
+        :param gid: the group identifier
+        :mode: the user permissions
         :return: None
         """
         subvolpath = spec.subvolume_path
@@ -101,6 +105,33 @@ class SubVolume(object):
                 xattr_val = self._get_ancestor_xattr(subvolpath, "ceph.dir.layout.pool")
             # TODO: handle error...
             self.fs.setxattr(subvolpath, xattr_key, xattr_val.encode('utf-8'), 0)
+
+            groupstat = self.fs.stat(spec.group_path)
+            if uid is None:
+                uid = int(groupstat.st_uid)
+            else:
+                try:
+                    uid = int(uid)
+                    if uid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid uid")
+
+            if gid is None:
+                gid = int(groupstat.st_gid)
+            else:
+                try:
+                    gid = int(gid)
+                    if gid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid gid")
+
+            try:
+                self.fs.chown(subvolpath, uid, gid)
+            except cephfs.InvalidValue:
+                raise VolumeException(-e.args[0], e.args[1])
+
         except Exception as e:
             try:
                 # cleanup subvol path on best effort basis
@@ -259,7 +290,17 @@ class SubVolume(object):
 
     ### group operations
 
-    def create_group(self, spec, mode=0o755, pool=None):
+    def create_group(self, spec, pool=None, uid=None, gid=None, mode=0o755):
+        """
+        Create a subvolume group.
+
+        :param spec: subvolume path specification
+        :param pool: the RADOS pool where the data objects of the subvolumes will be stored
+        :param uid: the user identifier
+        :param gid: the group identifier
+        :mode: the user permissions
+        :return: None
+        """
         path = spec.group_path
         self.fs.mkdirs(path, mode)
         try:
@@ -270,6 +311,32 @@ class SubVolume(object):
             except cephfs.InvalidValue:
                 raise VolumeException(-errno.EINVAL,
                                       "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
+
+            if uid is None:
+                uid = 0
+            else:
+                try:
+                    uid = int(uid)
+                    if uid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid uid")
+
+            if gid is None:
+                gid = 0
+            else:
+                try:
+                    gid = int(gid)
+                    if gid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid gid")
+
+            try:
+                self.fs.chown(path, uid, gid)
+            except cephfs.InvalidValue:
+                raise VolumeException(-e.args[0], e.args[1])
+
         except Exception as e:
             try:
                 # cleanup group path on best effort basis
