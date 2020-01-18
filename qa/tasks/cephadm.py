@@ -159,8 +159,9 @@ def ceph_log(ctx, config):
                 '/var/log/ceph/{fsid}/ceph.log'.format(
                     fsid=fsid),
             ]
-            for exclude in excludes:
-                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+            if excludes:
+                for exclude in excludes:
+                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
@@ -174,7 +175,7 @@ def ceph_log(ctx, config):
             return None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config['log-whitelist']) is not None:
+                             config.get('log-whitelist')) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
@@ -299,6 +300,24 @@ def ceph_bootstrap(ctx, config):
         log.debug('Final config:\n' + conf_fp.getvalue())
         ctx.ceph[cluster_name].conf = seed_config
 
+        # register initial daemons
+        ctx.daemons.register_daemon(
+            bootstrap_remote, 'mon', first_mon,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild('mon.' + first_mon),
+            wait=False,
+            started=True,
+        )
+        ctx.daemons.register_daemon(
+            bootstrap_remote, 'mgr', first_mgr,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild('mgr.' + first_mgr),
+            wait=False,
+            started=True,
+        )
+
         # bootstrap
         log.info('Bootstrapping...')
         cmd = [
@@ -326,24 +345,6 @@ def ceph_bootstrap(ctx, config):
             'sudo', 'chmod', '+r', '{}/{}.keyring'.format(testdir, cluster_name),
         ]
         bootstrap_remote.run(args=cmd)
-
-        # register initial daemons
-        ctx.daemons.register_daemon(
-            bootstrap_remote, 'mon', first_mon,
-            cluster=cluster_name,
-            fsid=fsid,
-            logger=log.getChild('mon.' + first_mon),
-            wait=False,
-            started=True,
-        )
-        ctx.daemons.register_daemon(
-            bootstrap_remote, 'mgr', first_mgr,
-            cluster=cluster_name,
-            fsid=fsid,
-            logger=log.getChild('mgr.' + first_mgr),
-            wait=False,
-            started=True,
-        )
 
         # fetch keys and configs
         log.info('Fetching config...')
@@ -623,6 +624,9 @@ def ceph_clients(ctx, config):
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     testdir = teuthology.get_testdir(ctx)
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
+    ctx.cluster.run(args=[
+        'sudo', 'mkdir', '-p', '/etc/ceph',
+        ]);
     for remote, roles_for_host in clients.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
                                                      cluster_name):
