@@ -812,7 +812,7 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
   }
 }
 
-multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_sources()
+multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_sources() const
 {
   multimap<rgw_zone_id, rgw_sync_bucket_pipe> m;
 
@@ -838,7 +838,7 @@ multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_
   return std::move(m);
 }
 
-multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_dests()
+multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_dests() const
 {
   multimap<rgw_zone_id, rgw_sync_bucket_pipe> m;
 
@@ -861,7 +861,33 @@ multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_
     m.insert(make_pair(*pipe.dest.zone, pipe));
   }
 
-  return std::move(m);
+  return m;
+}
+
+multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_dests_in_zone(const rgw_zone_id& zone_id) const
+{
+  multimap<rgw_zone_id, rgw_sync_bucket_pipe> m;
+
+  auto iter = targets.find(zone_id);
+  if (iter != targets.end()) {
+    auto& pipes = iter->second.pipe_map;
+
+    for (auto& entry : pipes) {
+      auto& pipe = entry.second;
+      m.insert(make_pair(zone_id, pipe));
+    }
+  }
+
+  for (auto& pipe : resolved_dests) {
+    if (!pipe.dest.zone ||
+        *pipe.dest.zone != zone_id) {
+      continue;
+    }
+
+    m.insert(make_pair(*pipe.dest.zone, pipe));
+  }
+
+  return m;
 }
 
 void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sources, std::set<rgw_sync_bucket_pipe> *_targets,
