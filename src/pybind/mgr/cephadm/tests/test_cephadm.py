@@ -49,7 +49,9 @@ class TestCephadm(object):
         assert new_mon.startswith('mon.')
         assert new_mon != 'mon.a'
 
-    def test_host(self, cephadm_module):
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+    def test_host(self, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [InventoryNode('test')]
         c = cephadm_module.get_hosts()
