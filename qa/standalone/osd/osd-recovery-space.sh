@@ -49,7 +49,6 @@ function get_num_in_state() {
 
 function wait_for_state() {
     local state=$1
-    local num_in_state=-1
     local cur_in_state
     local -a delays=($(get_timeout_delays $2 5))
     local -i loop=0
@@ -61,11 +60,8 @@ function wait_for_state() {
 
     while true ; do
         cur_in_state=$(get_num_in_state ${state})
-        test $cur_in_state = "0" && break
-        if test $cur_in_state != $num_in_state ; then
-            loop=0
-            num_in_state=$cur_in_state
-        elif (( $loop >= ${#delays[*]} )) ; then
+        test $cur_in_state -gt 0 && break
+        if (( $loop >= ${#delays[*]} )) ; then
             ceph pg dump pgs
             return 1
         fi
