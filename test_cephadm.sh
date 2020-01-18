@@ -14,10 +14,11 @@ OSD_LV_NAME=${SCRIPT_NAME%.*}
 
 CEPHADM=../src/cephadm/cephadm
 
-#A="-d"
+# add verbose logging
+#CEPHADM_ARGS="$CEPHADM_ARGS -v"
 
 # clean up previous run(s)?
-$CEPHADM $A rm-cluster --fsid $fsid --force
+$CEPHADM $CEPHADM_ARGS rm-cluster --fsid $fsid --force
 vgchange -an $OSD_VG_NAME || true
 loopdev=$(losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
 if ! [ "$loopdev" = "" ]; then
@@ -30,7 +31,7 @@ cat <<EOF > c
 	log to file = true
 EOF
 
-$CEPHADM $A \
+$CEPHADM $CEPHADM_ARGS \
     --image $image \
     bootstrap \
     --mon-id a \
@@ -46,20 +47,21 @@ chmod 644 k c
 # mon.b
 cp c c.mon
 echo "public addrv = [v2:$ip:3301,v1:$ip:6790]" >> c.mon
-$CEPHADM $A \
-	 --image $image \
-	 deploy --name mon.b \
-	 --fsid $fsid \
-	 --keyring /var/lib/ceph/$fsid/mon.a/keyring \
-	 --config c.mon
+$CEPHADM $CEPHADM_ARGS \
+     --image $image \
+     deploy --name mon.b \
+     --fsid $fsid \
+     --keyring /var/lib/ceph/$fsid/mon.a/keyring \
+     --config c.mon
 rm c.mon
 
 # mgr.b
-bin/ceph -c c -k k auth get-or-create mgr.y \
-	 mon 'allow profile mgr' \
-	 osd 'allow *' \
-	 mds 'allow *' > k-mgr.y
-$CEPHADM $A \
+$CEPHADM $CEPHADM_ARGS shell --fsid $fsid --config c --keyring k -- \
+    ceph auth get-or-create mgr.y \
+        mon 'allow profile mgr' \
+        osd 'allow *' \
+        mds 'allow *' > k-mgr.y
+$CEPHADM $CEPHADM_ARGS \
     --image $image \
     deploy --name mgr.y \
     --fsid $fsid \
@@ -68,17 +70,18 @@ $CEPHADM $A \
 
 # mds.{k,j}
 for id in k j; do
-    bin/ceph -c c -k k auth get-or-create mds.$id \
-	     mon 'allow profile mds' \
-	     mgr 'allow profile mds' \
-	     osd 'allow *' \
-	     mds 'allow *' > k-mds.$id
-    $CEPHADM $A \
-	--image $image \
-	deploy --name mds.$id \
-	--fsid $fsid \
-	--keyring k-mds.$id \
-	--config c
+    $CEPHADM $CEPHADM_ARGS shell --fsid $fsid --config c --keyring k -- \
+        ceph auth get-or-create mds.$id \
+            mon 'allow profile mds' \
+            mgr 'allow profile mds' \
+            osd 'allow *' \
+            mds 'allow *' > k-mds.$id
+    $CEPHADM $CEPHADM_ARGS \
+        --image $image \
+        deploy --name mds.$id \
+        --fsid $fsid \
+        --keyring k-mds.$id \
+        --config c
 done
 
 # add osd.{1,2,..}
@@ -93,4 +96,4 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
 
-bin/ceph -c c -k k -s
+$CEPHADM $CEPHADM_ARGS shell --fsid $fsid --config c --keyring k -- ceph -s
