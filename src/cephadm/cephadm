@@ -139,6 +139,7 @@ class Monitoring(object):
 def attempt_bind(s, address, port):
     # type (str) -> None
     try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((address, port))
     except (socket.error, OSError) as e:  # py2 and py3
         msg = 'Cannot bind to IP %s port %d: %s' % (address, port, e)
