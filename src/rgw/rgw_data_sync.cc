@@ -4895,7 +4895,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
                            rgw::sal::RGWRadosStore *store,
                            const rgw_sync_bucket_pipe& pipe,
                            const RGWBucketInfo& dest_bucket_info,
-                           RGWBucketInfo *psource_bucket_info,
+                           const RGWBucketInfo *psource_bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status)
 {
   if (!pipe.source.zone ||
@@ -4914,17 +4914,18 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
 
   RGWBucketInfo source_bucket_info;
 
-  auto& bucket_ctl = store->getRados()->ctl.bucket;
+  if (!psource_bucket_info) {
+    auto& bucket_ctl = store->getRados()->ctl.bucket;
 
-  int ret = bucket_ctl->read_bucket_info(source_bucket, &source_bucket_info, null_yield);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info: bucket=" << source_bucket << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
+    int ret = bucket_ctl->read_bucket_info(source_bucket, &source_bucket_info, null_yield);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info: bucket=" << source_bucket << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    psource_bucket_info = &source_bucket_info;
   }
 
-  if (psource_bucket_info) {
-    *psource_bucket_info = source_bucket_info;
-  }
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
@@ -4936,7 +4937,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
 
   RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
   return crs.run(new RGWCollectBucketSyncStatusCR(store, &sc,
-                                                  source_bucket_info,
+                                                  *psource_bucket_info,
                                                   dest_bucket_info,
                                                   status));
 }

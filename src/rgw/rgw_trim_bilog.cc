@@ -476,32 +476,35 @@ int BucketTrimInstanceCR::operate()
     // query peers for sync status
     set_status("fetching sync status from relevant peers");
     yield {
-      // query data sync status from each sync peer
-      rgw_http_param_pair params[] = {
-        { "type", "bucket-index" },
-        { "status", nullptr },
-        { "bucket", bucket_instance.c_str() },
-        { "source-zone", zone_id.c_str() },
-        { nullptr, nullptr }
-      };
-
       const auto& all_dests = source_policy->policy_handler->get_all_dests();
 
-      set<rgw_zone_id> target_zones;
-      rgw_zone_id last_zone;
-      for (const auto& entry : all_dests) {
-        if (entry.first != last_zone) {
-          last_zone = entry.first;
-          target_zones.insert(last_zone);
+      vector<rgw_zone_id> zids;
+      rgw_zone_id last_zid;
+      for (auto& diter : all_dests) {
+        const auto& zid = diter.first;
+        if (zid == last_zid) {
+          continue;
         }
+        last_zid = zid;
+        zids.push_back(zid);
       }
 
-      peer_status.resize(target_zones.size());
+      peer_status.resize(zids.size());
 
       auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
 
       auto p = peer_status.begin();
-      for (auto& zid : target_zones) {
+      for (auto& zid : zids) {
+        // query data sync status from each sync peer
+        rgw_http_param_pair params[] = {
+          { "type", "bucket-index" },
+          { "status", nullptr },
+          { "options", "merge" },
+          { "source-bucket", bucket_instance.c_str() },
+          { "source-zone", zone_id.c_str() },
+          { nullptr, nullptr }
+        };
+
         auto ziter = zone_conn_map.find(zid);
         if (ziter == zone_conn_map.end()) {
           ldout(cct, 0) << "WARNING: no connection to zone " << zid << ", can't trim bucket: " << bucket << dendl;

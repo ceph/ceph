@@ -2266,9 +2266,22 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
     out << indented{width} << "does not sync from zone\n";
     return 0;
   }
+
+  if (!pipe.source.bucket) {
+    lderr(store->ctx()) << __func__ << "(): missing source bucket" << dendl;
+    return -EINVAL;
+  }
+
   RGWBucketInfo source_bucket_info;
+  rgw_bucket source_bucket;
+  int r = init_bucket(*pipe.source.bucket, source_bucket_info, source_bucket);
+  if (r < 0) {
+    lderr(store->ctx()) << "failed to read source bucket info: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   std::vector<rgw_bucket_shard_sync_info> status;
-  int r = rgw_bucket_sync_status(dpp(), store, pipe, bucket_info, &source_bucket_info, &status);
+  r = rgw_bucket_sync_status(dpp(), store, pipe, bucket_info, &source_bucket_info, &status);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
     return r;
