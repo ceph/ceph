@@ -695,6 +695,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         :param host: host name
         """
+        out, err, code = self._run_cephadm(host, '', 'check-host', [],
+                                           error_ok=True, no_fsid=True)
+        if code:
+            raise OrchestratorError('New host %s failed check: %s' % (host, err))
+
         self.inventory[host] = {}
         self._save_inventory()
         self.inventory_cache[host] = orchestrator.OutdatableData()
