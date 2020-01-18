@@ -838,6 +838,32 @@ multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_
   return std::move(m);
 }
 
+multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_dests()
+{
+  multimap<rgw_zone_id, rgw_sync_bucket_pipe> m;
+
+  for (auto& dest_entry : targets) {
+    auto& zone_id = dest_entry.first;
+
+    auto& pipes = dest_entry.second.pipe_map;
+
+    for (auto& entry : pipes) {
+      auto& pipe = entry.second;
+      m.insert(make_pair(zone_id, pipe));
+    }
+  }
+
+  for (auto& pipe : resolved_dests) {
+    if (!pipe.dest.zone) {
+      continue;
+    }
+
+    m.insert(make_pair(*pipe.dest.zone, pipe));
+  }
+
+  return std::move(m);
+}
+
 void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sources, std::set<rgw_sync_bucket_pipe> *_targets,
                                            std::optional<rgw_sync_bucket_entity> filter_peer) { /* return raw pipes */
   for (auto& entry : source_pipes.pipe_map) {

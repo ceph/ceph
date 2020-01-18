@@ -367,6 +367,7 @@ public:
   }
 
   multimap<rgw_zone_id, rgw_sync_bucket_pipe> get_all_sources();
+  multimap<rgw_zone_id, rgw_sync_bucket_pipe> get_all_dests();
 
   const  map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set>& get_targets() {
     return targets;
