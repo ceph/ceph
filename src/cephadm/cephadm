@@ -1535,7 +1535,12 @@ def command_pull():
         container_path, 'inspect',
         '--format', '{{.Id}}',
         args.image])
-    print(out.strip())
+    ver = CephContainer(args.image, 'ceph', ['--version']).run()
+    print(json.dumps({
+        'ceph_version': ver,
+        'image_id': out.strip(),
+        }, indent=4, sort_keys=True))
+
 
 ##################################
 
