@@ -101,10 +101,11 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
   static BootstrapRequest* create(
       Threads<librbd::MockTestImageCtx>* threads,
       librados::IoCtx &local_io_ctx,
-      librados::IoCtx &remote_io_ctx,
+      librados::IoCtx& remote_io_ctx,
       rbd::mirror::InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
       const std::string &global_image_id,
       const std::string &local_mirror_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler *cache_manager_handler,
       rbd::mirror::ProgressContext *progress_ctx,
       StateBuilder<librbd::MockTestImageCtx>** state_builder,
@@ -354,8 +355,10 @@ public:
     m_image_replayer = new MockImageReplayer(
         m_local_io_ctx, "local_mirror_uuid", "global image id",
         &mock_threads, &m_instance_watcher, &m_local_status_updater, nullptr);
-    m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx,
-                               &m_remote_status_updater);
+    m_image_replayer->add_peer({"peer_uuid", m_remote_io_ctx,
+                                {"remote mirror uuid",
+                                 "remote mirror peer uuid"},
+                                &m_remote_status_updater});
   }
 
   void wait_for_stopped() {

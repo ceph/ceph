@@ -47,26 +47,26 @@ public:
       librados::IoCtx &local_ioctx,
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
-      const std::string &remote_mirror_uuid,
-      const std::string &local_site_name,
+      const std::string &local_mirror_peer_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       Threads<ImageCtxT> *threads,
       Throttler<ImageCtxT> *image_sync_throttler,
       Throttler<ImageCtxT> *image_deletion_throttler,
       ServiceDaemon<ImageCtxT> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler) {
     return new NamespaceReplayer(name, local_ioctx, remote_ioctx,
-                                 local_mirror_uuid, remote_mirror_uuid,
-                                 local_site_name, threads, image_sync_throttler,
-                                 image_deletion_throttler, service_daemon,
-                                 cache_manager_handler);
+                                 local_mirror_uuid, local_mirror_peer_uuid,
+                                 remote_pool_meta, threads,
+                                 image_sync_throttler, image_deletion_throttler,
+                                 service_daemon, cache_manager_handler);
   }
 
   NamespaceReplayer(const std::string &name,
                     librados::IoCtx &local_ioctx,
                     librados::IoCtx &remote_ioctx,
                     const std::string &local_mirror_uuid,
-                    const std::string &remote_mirror_uuid,
-                    const std::string &local_site_name,
+                    const std::string& local_mirror_peer_uuid,
+                    const RemotePoolMeta& remote_pool_meta,
                     Threads<ImageCtxT> *threads,
                     Throttler<ImageCtxT> *image_sync_throttler,
                     Throttler<ImageCtxT> *image_deletion_throttler,
@@ -264,8 +264,8 @@ private:
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
   std::string m_local_mirror_uuid;
-  std::string m_remote_mirror_uuid;
-  std::string m_local_site_name;
+  std::string m_local_mirror_peer_uuid;
+  RemotePoolMeta m_remote_pool_meta;
   Threads<ImageCtxT> *m_threads;
   Throttler<ImageCtxT> *m_image_sync_throttler;
   Throttler<ImageCtxT> *m_image_deletion_throttler;

@@ -38,15 +38,16 @@ template <typename I>
 NamespaceReplayer<I>::NamespaceReplayer(
     const std::string &name,
     librados::IoCtx &local_io_ctx, librados::IoCtx &remote_io_ctx,
-    const std::string &local_mirror_uuid, const std::string &remote_mirror_uuid,
-    const std::string &local_site_name, Threads<I> *threads,
+    const std::string &local_mirror_uuid,
+    const std::string& local_mirror_peer_uuid,
+    const RemotePoolMeta& remote_pool_meta, Threads<I> *threads,
     Throttler<I> *image_sync_throttler, Throttler<I> *image_deletion_throttler,
     ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler) :
   m_namespace_name(name),
   m_local_mirror_uuid(local_mirror_uuid),
-  m_remote_mirror_uuid(remote_mirror_uuid),
-  m_local_site_name(local_site_name),
+  m_local_mirror_peer_uuid(local_mirror_peer_uuid),
+  m_remote_pool_meta(remote_pool_meta),
   m_threads(threads), m_image_sync_throttler(image_sync_throttler),
   m_image_deletion_throttler(image_deletion_throttler),
   m_service_daemon(service_daemon),
@@ -263,7 +264,7 @@ void NamespaceReplayer<I>::init_local_status_updater() {
   ceph_assert(!m_local_status_updater);
 
   m_local_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_local_io_ctx, m_threads, "", ""));
+    m_local_io_ctx, m_threads, ""));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_local_status_updater>(this);
@@ -298,11 +299,6 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!m_remote_status_updater);
 
-  std::string local_site_name;
-  if (m_namespace_name.empty()) {
-    local_site_name = m_local_site_name;
-  }
-
   librados::Rados rados(m_local_io_ctx);
   std::string local_fsid;
   int r = rados.cluster_fsid(&local_fsid);
@@ -314,7 +310,7 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   }
 
   m_remote_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_remote_io_ctx, m_threads, local_site_name, local_fsid));
+    m_remote_io_ctx, m_threads, local_fsid));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_remote_status_updater>(this);
@@ -372,8 +368,9 @@ void NamespaceReplayer<I>::handle_init_instance_replayer(int r) {
     return;
   }
 
-  m_instance_replayer->add_peer(m_remote_mirror_uuid, m_remote_io_ctx,
-                                m_remote_status_updater.get());
+  m_instance_replayer->add_peer({m_local_mirror_peer_uuid, m_remote_io_ctx,
+                                 m_remote_pool_meta,
+                                 m_remote_status_updater.get()});
 
   init_instance_watcher();
 }
@@ -611,7 +608,8 @@ void NamespaceReplayer<I>::init_local_pool_watcher(Context *on_finish) {
   std::lock_guard locker{m_lock};
   ceph_assert(!m_local_pool_watcher);
   m_local_pool_watcher.reset(PoolWatcher<I>::create(
-      m_threads, m_local_io_ctx, m_local_pool_watcher_listener));
+      m_threads, m_local_io_ctx, m_local_mirror_uuid,
+      m_local_pool_watcher_listener));
 
   // ensure the initial set of local images is up-to-date
   // after acquiring the leader role
@@ -645,7 +643,8 @@ void NamespaceReplayer<I>::init_remote_pool_watcher(Context *on_finish) {
   std::lock_guard locker{m_lock};
   ceph_assert(!m_remote_pool_watcher);
   m_remote_pool_watcher.reset(PoolWatcher<I>::create(
-      m_threads, m_remote_io_ctx, m_remote_pool_watcher_listener));
+      m_threads, m_remote_io_ctx, m_remote_pool_meta.mirror_uuid,
+      m_remote_pool_watcher_listener));
 
   auto ctx = new LambdaContext([this, on_finish](int r) {
       handle_init_remote_pool_watcher(r, on_finish);

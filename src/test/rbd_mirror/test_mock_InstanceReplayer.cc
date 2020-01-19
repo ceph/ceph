@@ -92,8 +92,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(restart, void());
   MOCK_METHOD0(flush, void());
   MOCK_METHOD1(print_status, void(Formatter *));
-  MOCK_METHOD3(add_peer, void(const std::string &, librados::IoCtx &,
-                              MirrorStatusUpdater<librbd::MockTestImageCtx>*));
+  MOCK_METHOD1(add_peer, void(const Peer<librbd::MockTestImageCtx>& peer));
   MOCK_METHOD0(get_global_image_id, const std::string &());
   MOCK_METHOD0(get_local_image_id, const std::string &());
   MOCK_METHOD0(is_running, bool());
@@ -191,12 +190,12 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   Context *timer_ctx = nullptr;
   expect_add_event_after(mock_threads, &timer_ctx);
   instance_replayer.init();
-  instance_replayer.add_peer("peer_uuid", m_remote_io_ctx, nullptr);
+  instance_replayer.add_peer({"peer_uuid", m_remote_io_ctx, {}, nullptr});
 
   // Acquire
 
   C_SaferCond on_acquire;
-  EXPECT_CALL(mock_image_replayer, add_peer("peer_uuid", _, _));
+  EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
@@ -260,12 +259,12 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   Context *timer_ctx1 = nullptr;
   expect_add_event_after(mock_threads, &timer_ctx1);
   instance_replayer.init();
-  instance_replayer.add_peer("peer_uuid", m_remote_io_ctx, nullptr);
+  instance_replayer.add_peer({"peer_uuid", m_remote_io_ctx, {}, nullptr});
 
   // Acquire
 
   C_SaferCond on_acquire;
-  EXPECT_CALL(mock_image_replayer, add_peer("peer_uuid", _, _));
+  EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
@@ -333,11 +332,11 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
   Context *timer_ctx = nullptr;
   expect_add_event_after(mock_threads, &timer_ctx);
   instance_replayer.init();
-  instance_replayer.add_peer("peer_uuid", m_remote_io_ctx, nullptr);
+  instance_replayer.add_peer({"peer_uuid", m_remote_io_ctx, {}, nullptr});
 
   // Acquire
 
-  EXPECT_CALL(mock_image_replayer, add_peer("peer_uuid", _, _));
+  EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
