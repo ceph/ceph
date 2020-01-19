@@ -295,6 +295,12 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
       if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	// handle special options
+	if (name == "fsid") {
+	  odata.append(stringify(mon->monmap->get_fsid()));
+	  odata.append("\n");
+	  goto reply;
+	}
 	err = -EINVAL;
 	ss << name << " is special and cannot be stored by the mon";
 	goto reply;
