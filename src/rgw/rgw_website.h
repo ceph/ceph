@@ -227,7 +227,7 @@ struct RGWBucketWebsiteConf
                        RGWBWRoutingRule *redirect);
 
   bool get_effective_key(const std::string& key,
-                         std::string *effective_key, bool is_file) const;
+                         std::string *effective_key) const;
 
   const std::string& get_index_doc() const {
     return index_doc_suffix;

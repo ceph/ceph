@@ -19,7 +19,7 @@
 
 class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
   std::string original_object_name; // object name before retarget()
-  bool web_dir() const;
+  bool redirect_to_index_doc(const std::string index_doc_suffix, boost::optional<int> &http_ret) const;
 protected:
   int retarget(RGWOp *op, RGWOp **new_op) override;
   // TODO: this should be virtual I think, and ensure that it's always
