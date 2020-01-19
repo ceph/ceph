@@ -6136,6 +6136,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
     if (!targeti) {
       dout(10) << "ESTALE on path2, attempting recovery" << dendl;
       mdcache->find_ino_peers(req->get_filepath2().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      return;
     }
     mdr->pin(targeti);
 
