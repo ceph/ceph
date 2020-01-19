@@ -67,7 +67,7 @@ static seastar::future<> test_echo(unsigned rounds,
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        auto&& fut = crimson::net::Messenger::create(name, lname, nonce);
+        auto&& fut = crimson::net::Messenger::create(name, lname, nonce, 0);
         return fut.then([this, addr](crimson::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
@@ -156,7 +156,7 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        return crimson::net::Messenger::create(name, lname, nonce)
+        return crimson::net::Messenger::create(name, lname, nonce, 0)
           .then([this](crimson::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& client) {
                 client.msgr = messenger->get_local_shard();
