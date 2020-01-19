@@ -5,6 +5,7 @@
 import argparse
 import logging
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -75,8 +76,15 @@ def scrape_path(path):
                     (metapath, p, os.path.join('posted/', p))
                 )
 
+def handler(signum, frame):
+    print('*** Interrupted with signal %d ***' % signum)
+    sys.exit(0)
 
 def main():
+    # exit code 0 on SIGINT, SIGTERM
+    signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGTERM, handler)
+
     args = parse_args()
     postdir = os.path.join(args.path, 'posted')
     if args.name:
