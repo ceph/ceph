@@ -434,6 +434,9 @@ int main(int argc, char** argv)
       return test_preemptive_down();
     }).then([] {
       logger.info("All tests succeeded");
+      // Seastar has bugs to have events undispatched during shutdown,
+      // which will result in memory leak and thus fail LeakSanitizer.
+      return seastar::sleep(100ms);
     }).handle_exception([] (auto eptr) {
       std::cout << "Test failure" << std::endl;
       return seastar::make_exception_future<>(eptr);
