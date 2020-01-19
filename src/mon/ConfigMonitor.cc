@@ -486,14 +486,18 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	goto reply;
       }
 
-      if (opt) {
-	Option::value_t real_value;
-	string errstr;
-	err = opt->parse_value(value, &real_value, &errstr, &value);
-	if (err < 0) {
-	  ss << "error parsing value: " << errstr;
-	  goto reply;
-	}
+      Option::value_t real_value;
+      string errstr;
+      err = opt->parse_value(value, &real_value, &errstr, &value);
+      if (err < 0) {
+	ss << "error parsing value: " << errstr;
+	goto reply;
+      }
+
+      if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	err = -EINVAL;
+	ss << name << " is special and cannot be stored by the mon";
+	goto reply;
       }
     }
 
