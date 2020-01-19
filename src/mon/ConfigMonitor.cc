@@ -286,19 +286,24 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       &config, &src);
 
     if (cmd_getval(g_ceph_context, cmdmap, "key", name)) {
-      // get a single value
-      auto p = config.find(name);
-      if (p != config.end()) {
-	odata.append(p->second);
-	odata.append("\n");
-	goto reply;
-      }
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon->mgrmon()->find_module_option(name);
       }
       if (!opt) {
 	err = -ENOENT;
+	goto reply;
+      }
+      if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	err = -EINVAL;
+	ss << name << " is special and cannot be stored by the mon";
+	goto reply;
+      }
+      // get a single value
+      auto p = config.find(name);
+      if (p != config.end()) {
+	odata.append(p->second);
+	odata.append("\n");
 	goto reply;
       }
       if (!entity.is_client() &&
