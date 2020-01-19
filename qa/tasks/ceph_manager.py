@@ -286,7 +286,7 @@ class OSDThrasher(Thrasher):
             with safe_while(sleep=15, tries=40, action="ceph-objectstore-tool --op list-pgs") as proceed:
                 while proceed():
                     proc = self.run_ceph_objectstore_tool(
-                        exp_remote, 'osd.%s' % osd,
+                        exp_remote, 'osd.%s' % exp_osd,
                         prefix + [
                             '--data-path', FSPATH.format(id=exp_osd),
                             '--journal-path', JPATH.format(id=exp_osd),
@@ -325,7 +325,7 @@ class OSDThrasher(Thrasher):
             # export
             # Can't use new export-remove op since this is part of upgrade testing
             proc = self.run_ceph_objectstore_tool(
-                exp_remote, 'osd.%s' % osd,
+                exp_remote, 'osd.%s' % exp_osd,
                 prefix + [
                     '--data-path', FSPATH.format(id=exp_osd),
                     '--journal-path', JPATH.format(id=exp_osd),
@@ -339,7 +339,7 @@ class OSDThrasher(Thrasher):
                                 format(ret=proc.exitstatus))
             # remove
             proc = self.run_ceph_objectstore_tool(
-                exp_remote, 'osd.%s' % osd,
+                exp_remote, 'osd.%s' % exp_osd,
                 prefix + [
                     '--data-path', FSPATH.format(id=exp_osd),
                     '--journal-path', JPATH.format(id=exp_osd),
@@ -356,7 +356,7 @@ class OSDThrasher(Thrasher):
                 # If pg isn't already on this osd, then we will move it there
                 proc = self.run_ceph_objectstore_tool(
                     imp_remote,
-                    'osd.%s' % osd,
+                    'osd.%s' % imp_osd,
                     prefix + [
                         '--data-path', FSPATH.format(id=imp_osd),
                         '--journal-path', JPATH.format(id=imp_osd),
