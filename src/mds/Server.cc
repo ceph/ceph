@@ -7472,6 +7472,8 @@ bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
   dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
   ceph_assert(in->is_auth());
 
+  if (in->filelock.is_cached())
+    return false; // there can be pending async create/unlink. don't know.
   if (in->snaprealm && in->snaprealm->srnode.snaps.size())
     return true; // in a snapshot!
 
