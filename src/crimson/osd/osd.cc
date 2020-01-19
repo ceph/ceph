@@ -401,6 +401,10 @@ seastar::future<> OSD::stop()
   }).then([this] {
     return monc->stop();
   }).then([this] {
+    return when_all_succeed(
+      public_msgr.shutdown(),
+      cluster_msgr.shutdown());
+  }).then([this] {
     return store->umount();
   }).handle_exception([](auto ep) {
     logger().error("error while stopping osd: {}", ep);

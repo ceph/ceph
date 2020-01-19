@@ -71,7 +71,8 @@ Heartbeat::start_messenger(crimson::net::Messenger& msgr,
 
 seastar::future<> Heartbeat::stop()
 {
-  return seastar::now();
+  return seastar::when_all_succeed(front_msgr.shutdown(),
+                                   back_msgr.shutdown());
 }
 
 const entity_addrvec_t& Heartbeat::get_front_addrs() const
