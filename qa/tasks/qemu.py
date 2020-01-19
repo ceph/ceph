@@ -266,7 +266,7 @@ def download_image(ctx, config):
                 )
 
 
-def _setup_nfs_mount(remote, client, mount_dir):
+def _setup_nfs_mount(remote, client, service_name, mount_dir):
     """
     Sets up an nfs mount on the remote that the guest can use to
     store logs. This nfs mount is also used to touch a file
@@ -297,10 +297,10 @@ def _setup_nfs_mount(remote, client, mount_dir):
     if remote.os.package_type == "deb":
         remote.run(args=['sudo', 'service', 'nfs-kernel-server', 'restart'])
     else:
-        remote.run(args=['sudo', 'systemctl', 'restart', 'nfs'])
+        remote.run(args=['sudo', 'systemctl', 'restart', service_name])
 
 
-def _teardown_nfs_mount(remote, client):
+def _teardown_nfs_mount(remote, client, service_name):
     """
     Tears down the nfs mount on the remote used for logging and reporting the
     status of the tests being ran in the guest.
@@ -314,7 +314,7 @@ def _teardown_nfs_mount(remote, client):
         ])
     else:
         remote.run(args=[
-            'sudo', 'systemctl', 'stop', 'nfs'
+            'sudo', 'systemctl', 'stop', service_name
         ])
     log.info("Unmounting exported directory...")
     remote.run(args=[
@@ -335,7 +335,7 @@ def _teardown_nfs_mount(remote, client):
         ])
     else:
         remote.run(args=[
-            'sudo', 'systemctl', 'start', 'nfs'
+            'sudo', 'systemctl', 'start', service_name
         ])
 
 
@@ -354,9 +354,13 @@ def run_qemu(ctx, config):
                 ]
             )
 
+        nfs_service_name = 'nfs'
+        if remote.os.name in ['rhel', 'centos'] and float(remote.os.version) >= 8:
+            nfs_service_name = 'nfs-server'
+
         # make an nfs mount to use for logging and to
         # allow to test to tell teuthology the tests outcome
-        _setup_nfs_mount(remote, client, log_dir)
+        _setup_nfs_mount(remote, client, nfs_service_name, log_dir)
 
         # Hack to make sure /dev/kvm permissions are set correctly
         # See http://tracker.ceph.com/issues/17977 and
@@ -443,7 +447,7 @@ def run_qemu(ctx, config):
                 )
 
             # teardown nfs mount
-            _teardown_nfs_mount(remote, client)
+            _teardown_nfs_mount(remote, client, nfs_service_name)
             # check for test status
             remote.run(
                 args=[
