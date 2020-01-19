@@ -430,7 +430,6 @@ std::vector<Option> get_global_options() {
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")
-    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_tag("network")
