@@ -3715,6 +3715,9 @@ int main(int argc, char** argv)
       return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
     }).then([] {
       std::cout << "All tests succeeded" << std::endl;
+      // Seastar has bugs to have events undispatched during shutdown,
+      // which will result in memory leak and thus fail LeakSanitizer.
+      return seastar::sleep(100ms);
     }).handle_exception([] (auto eptr) {
       std::cout << "Test failure" << std::endl;
       return seastar::make_exception_future<>(eptr);
