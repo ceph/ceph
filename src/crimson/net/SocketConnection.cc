@@ -119,7 +119,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
 }
 
 void
-SocketConnection::start_accept(SocketFRef&& sock,
+SocketConnection::start_accept(SocketRef&& sock,
                                const entity_addr_t& _peer_addr)
 {
   protocol->start_accept(std::move(sock), _peer_addr);

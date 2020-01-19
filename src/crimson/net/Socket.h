@@ -22,7 +22,6 @@ namespace crimson::net {
 
 class Socket;
 using SocketRef = std::unique_ptr<Socket>;
-using SocketFRef = seastar::foreign_ptr<SocketRef>;
 
 class Socket
 {
@@ -60,27 +59,12 @@ class Socket
 
   Socket(Socket&& o) = delete;
 
-  static seastar::future<SocketFRef>
+  static seastar::future<SocketRef>
   connect(const entity_addr_t& peer_addr) {
-    return seastar::connect(peer_addr.in4_addr())
-      .then([] (seastar::connected_socket socket) {
-        return seastar::make_foreign(std::make_unique<Socket>(std::move(socket),
-							      construct_tag{}));
-      });
-  }
-
-  static seastar::future<SocketFRef, entity_addr_t>
-  accept(seastar::server_socket& listener) {
-    return listener.accept().then([] (seastar::accept_result accept_result) {
-        auto [socket, paddr] = std::move(accept_result);
-        entity_addr_t peer_addr;
-        peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-        peer_addr.set_type(entity_addr_t::TYPE_ANY);
-        return seastar::make_ready_future<SocketFRef, entity_addr_t>(
-          seastar::make_foreign(std::make_unique<Socket>(std::move(socket),
-							 construct_tag{})),
-	  peer_addr);
-      });
+    return seastar::connect(peer_addr.in4_addr()
+    ).then([] (seastar::connected_socket socket) {
+      return std::make_unique<Socket>(std::move(socket), construct_tag{});
+    });
   }
 
   /// read the requested number of bytes into a bufferlist
@@ -141,7 +125,9 @@ class Socket
 
  public:
   void set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_);
+
 #endif
+  friend class FixedCPUServerSocket;
 };
 
 class FixedCPUServerSocket
@@ -218,12 +204,17 @@ public:
       std::ignore = seastar::with_gate(ss.shutdown_gate,
           [&ss, fn_accept = std::move(fn_accept)] () mutable {
         return seastar::keep_doing([&ss, fn_accept = std::move(fn_accept)] () mutable {
-          return Socket::accept(*ss.listener
-          ).then([&ss, fn_accept = std::move(fn_accept)]
-                 (auto socket, entity_addr_t peer_addr) mutable {
+          return ss.listener->accept().then(
+              [&ss, fn_accept = std::move(fn_accept)]
+              (seastar::accept_result accept_result) mutable {
             // assert seastar::listen_options::set_fixed_cpu() works
             assert(seastar::engine().cpu_id() == ss.cpu);
-            SocketRef _socket = socket.release();
+            auto [socket, paddr] = std::move(accept_result);
+            entity_addr_t peer_addr;
+            peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+            peer_addr.set_type(entity_addr_t::TYPE_ANY);
+            SocketRef _socket = std::make_unique<Socket>(
+                std::move(socket), Socket::construct_tag{});
             std::ignore = seastar::with_gate(ss.shutdown_gate,
                 [socket = std::move(_socket), peer_addr,
                  &ss, fn_accept = std::move(fn_accept)] () mutable {

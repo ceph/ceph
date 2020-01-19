@@ -125,8 +125,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
       assert(seastar::engine().cpu_id() == master_sid);
       SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
           *this, *dispatcher, get_myaddr().is_msgr2());
-      // TODO: use SocketRef
-      conn->start_accept(seastar::make_foreign(std::move(socket)), peer_addr);
+      conn->start_accept(std::move(socket), peer_addr);
       return seastar::now();
     });
   }
