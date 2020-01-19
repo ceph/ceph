@@ -98,7 +98,7 @@ class SocketConnection : public Connection {
                      const entity_type_t& peer_type);
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
-  void start_accept(SocketFRef&& socket,
+  void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr);
 
   bool is_server_side() const {

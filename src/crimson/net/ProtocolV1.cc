@@ -320,7 +320,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   (void) seastar::with_gate(pending_dispatch, [this] {
       return Socket::connect(conn.peer_addr)
-        .then([this](SocketFRef sock) {
+        .then([this](SocketRef sock) {
           socket = std::move(sock);
           if (state == state_t::closing) {
             return socket->close().then([] {
@@ -600,7 +600,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
     });
 }
 
-void ProtocolV1::start_accept(SocketFRef&& sock,
+void ProtocolV1::start_accept(SocketRef&& sock,
                               const entity_addr_t& _peer_addr)
 {
   ceph_assert(state == state_t::none);

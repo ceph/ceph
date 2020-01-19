@@ -18,9 +18,10 @@ using seastar::future;
 using crimson::net::error;
 using crimson::net::FixedCPUServerSocket;
 using crimson::net::Socket;
-using crimson::net::SocketFRef;
 using crimson::net::SocketRef;
 using crimson::net::stop_t;
+
+using SocketFRef = seastar::foreign_ptr<SocketRef>;
 
 static seastar::logger logger{"crimsontest"};
 static entity_addr_t server_addr = [] {
@@ -33,7 +34,7 @@ future<SocketRef> socket_connect() {
   logger.debug("socket_connect()...");
   return Socket::connect(server_addr).then([] (auto socket) {
     logger.debug("socket_connect() connected");
-    return socket.release();
+    return socket;
   });
 }
 
