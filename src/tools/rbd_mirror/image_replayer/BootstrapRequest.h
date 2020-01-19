@@ -45,6 +45,7 @@ public:
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
@@ -52,8 +53,8 @@ public:
       Context* on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
-      local_mirror_uuid,  cache_manager_handler, progress_ctx, state_builder,
-      do_resync, on_finish);
+      local_mirror_uuid, remote_pool_meta, cache_manager_handler, progress_ctx,
+      state_builder, do_resync, on_finish);
   }
 
   BootstrapRequest(
@@ -63,6 +64,7 @@ public:
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
@@ -127,6 +129,7 @@ private:
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
+  RemotePoolMeta m_remote_pool_meta;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
   ProgressContext *m_progress_ctx;
   StateBuilder<ImageCtxT>** m_state_builder;

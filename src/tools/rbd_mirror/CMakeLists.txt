@@ -19,6 +19,7 @@ set(rbd_mirror_internal
   NamespaceReplayer.cc
   PoolReplayer.cc
   PoolWatcher.cc
+  RemotePoolPoller.cc
   ServiceDaemon.cc
   Threads.cc
   Throttler.cc

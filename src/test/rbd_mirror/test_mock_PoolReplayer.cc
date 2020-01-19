@@ -14,6 +14,7 @@
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/NamespaceReplayer.h"
 #include "tools/rbd_mirror/PoolReplayer.h"
+#include "tools/rbd_mirror/RemotePoolPoller.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "common/Formatter.h"
@@ -131,8 +132,8 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
       librados::IoCtx &local_ioctx,
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
-      const std::string &remote_mirror_uuid,
-      const std::string &site_name,
+      const std::string& local_mirror_peer_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       Threads<librbd::MockTestImageCtx> *threads,
       Throttler<librbd::MockTestImageCtx> *image_sync_throttler,
       Throttler<librbd::MockTestImageCtx> *image_deletion_throttler,
@@ -201,6 +202,33 @@ struct LeaderWatcher<librbd::MockTestImageCtx> {
 LeaderWatcher<librbd::MockTestImageCtx>* LeaderWatcher<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 template<>
+struct RemotePoolPoller<librbd::MockTestImageCtx> {
+  static RemotePoolPoller* s_instance;
+
+  remote_pool_poller::Listener* listener = nullptr;
+
+  static RemotePoolPoller* create(
+      Threads<librbd::MockTestImageCtx>* threads,
+      librados::IoCtx& remote_io_ctx,
+      const std::string& local_site_name,
+      const std::string& local_fsid,
+      remote_pool_poller::Listener& listener) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->listener = &listener;
+    return s_instance;
+  }
+
+  MOCK_METHOD1(init, void(Context*));
+  MOCK_METHOD1(shut_down, void(Context*));
+
+  RemotePoolPoller() {
+    s_instance = this;
+  }
+};
+
+RemotePoolPoller<librbd::MockTestImageCtx>* RemotePoolPoller<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+template<>
 struct ServiceDaemon<librbd::MockTestImageCtx> {
   MOCK_METHOD2(add_namespace, void(int64_t, const std::string &));
   MOCK_METHOD2(remove_namespace, void(int64_t, const std::string &));
@@ -260,6 +288,7 @@ public:
   typedef PoolReplayer<librbd::MockTestImageCtx> MockPoolReplayer;
   typedef Throttler<librbd::MockTestImageCtx> MockThrottler;
   typedef NamespaceReplayer<librbd::MockTestImageCtx> MockNamespaceReplayer;
+  typedef RemotePoolPoller<librbd::MockTestImageCtx> MockRemotePoolPoller;
   typedef LeaderWatcher<librbd::MockTestImageCtx> MockLeaderWatcher;
   typedef ServiceDaemon<librbd::MockTestImageCtx> MockServiceDaemon;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
@@ -351,6 +380,31 @@ public:
       MockLeaderWatcher& mock_leader_watcher) {
     EXPECT_CALL(mock_leader_watcher, list_instances(_))
       .Times(AtLeast(0));
+  }
+
+  void expect_remote_pool_poller_init(
+      MockRemotePoolPoller& mock_remote_pool_poller,
+      const RemotePoolMeta& remote_pool_meta, int r) {
+    EXPECT_CALL(mock_remote_pool_poller, init(_))
+      .WillOnce(Invoke(
+                  [this, &mock_remote_pool_poller, remote_pool_meta, r]
+                  (Context* ctx) {
+                    if (r >= 0) {
+                      mock_remote_pool_poller.listener->handle_updated(
+                        remote_pool_meta);
+                    }
+
+                    m_threads->work_queue->queue(ctx, r);
+                }));
+  }
+
+  void expect_remote_pool_poller_shut_down(
+      MockRemotePoolPoller& mock_remote_pool_poller, int r) {
+    EXPECT_CALL(mock_remote_pool_poller, shut_down(_))
+      .WillOnce(Invoke(
+                  [this, r](Context* ctx) {
+                    m_threads->work_queue->queue(ctx, r);
+                }));
   }
 
   void expect_namespace_replayer_is_blacklisted(
@@ -504,6 +558,9 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   expect_create_ioctx(mock_local_rados_client, mock_local_io_ctx);
 
   expect_mirror_uuid_get(mock_local_io_ctx, "uuid", 0);
+  auto mock_remote_pool_poller = new MockRemotePoolPoller();
+  expect_remote_pool_poller_init(*mock_remote_pool_poller,
+                                 {"remote mirror uuid", ""}, 0);
   expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
@@ -523,6 +580,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
 
   expect_leader_watcher_shut_down(*mock_leader_watcher);
   expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
+  expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
 }
@@ -560,6 +618,9 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   expect_create_ioctx(mock_local_rados_client, mock_local_io_ctx);
 
   expect_mirror_uuid_get(mock_local_io_ctx, "uuid", 0);
+  auto mock_remote_pool_poller = new MockRemotePoolPoller();
+  expect_remote_pool_poller_init(*mock_remote_pool_poller,
+                                 {"remote mirror uuid", ""}, 0);
   expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
@@ -592,6 +653,7 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
 
   expect_leader_watcher_shut_down(*mock_leader_watcher);
   expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
+  expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
 }
@@ -642,6 +704,9 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
                  nullptr);
   expect_create_ioctx(mock_local_rados_client, mock_local_io_ctx);
   expect_mirror_uuid_get(mock_local_io_ctx, "uuid", 0);
+  auto mock_remote_pool_poller = new MockRemotePoolPoller();
+  expect_remote_pool_poller_init(*mock_remote_pool_poller,
+                                 {"remote mirror uuid", ""}, 0);
   expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
@@ -707,6 +772,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   expect_namespace_replayer_shut_down(*mock_ns1_namespace_replayer);
   expect_leader_watcher_shut_down(*mock_leader_watcher);
   expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
+  expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
 }
@@ -754,6 +820,9 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
                  nullptr);
   expect_create_ioctx(mock_local_rados_client, mock_local_io_ctx);
   expect_mirror_uuid_get(mock_local_io_ctx, "uuid", 0);
+  auto mock_remote_pool_poller = new MockRemotePoolPoller();
+  expect_remote_pool_poller_init(*mock_remote_pool_poller,
+                                 {"remote mirror uuid", ""}, 0);
   expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
@@ -837,6 +906,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
 
   expect_leader_watcher_shut_down(*mock_leader_watcher);
   expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
+  expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
 }

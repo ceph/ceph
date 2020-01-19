@@ -53,26 +53,48 @@ std::ostream &operator<<(std::ostream &, const ImageId &image_id);
 
 typedef std::set<ImageId> ImageIds;
 
+struct RemotePoolMeta {
+  RemotePoolMeta() {}
+  RemotePoolMeta(const std::string& mirror_uuid,
+                 const std::string& mirror_peer_uuid)
+    : mirror_uuid(mirror_uuid),
+      mirror_peer_uuid(mirror_peer_uuid) {
+  }
+
+  std::string mirror_uuid;
+  std::string mirror_peer_uuid;
+};
+
+std::ostream& operator<<(std::ostream& lhs,
+                         const RemotePoolMeta& remote_pool_meta);
+
 template <typename I>
 struct Peer {
-  std::string peer_uuid;
-  librados::IoCtx io_ctx;
+  std::string uuid;
+  mutable librados::IoCtx io_ctx;
+  RemotePoolMeta remote_pool_meta;
   MirrorStatusUpdater<I>* mirror_status_updater = nullptr;
 
   Peer() {
   }
-  Peer(const std::string &peer_uuid) : peer_uuid(peer_uuid) {
-  }
-  Peer(const std::string &peer_uuid, librados::IoCtx& io_ctx,
+  Peer(const std::string& uuid,
+       librados::IoCtx& io_ctx,
+       const RemotePoolMeta& remote_pool_meta,
        MirrorStatusUpdater<I>* mirror_status_updater)
-    : peer_uuid(peer_uuid), io_ctx(io_ctx),
+    : io_ctx(io_ctx),
+      remote_pool_meta(remote_pool_meta),
       mirror_status_updater(mirror_status_updater) {
   }
 
   inline bool operator<(const Peer &rhs) const {
-    return peer_uuid < rhs.peer_uuid;
+    return uuid < rhs.uuid;
   }
 };
+
+template <typename I>
+std::ostream& operator<<(std::ostream& lhs, const Peer<I>& peer) {
+  return lhs << peer.remote_pool_meta;
+}
 
 struct PeerSpec {
   PeerSpec() = default;

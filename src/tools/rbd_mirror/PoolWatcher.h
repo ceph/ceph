@@ -34,12 +34,15 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class PoolWatcher {
 public:
   static PoolWatcher* create(Threads<ImageCtxT> *threads,
-                             librados::IoCtx &remote_io_ctx,
+                             librados::IoCtx &io_ctx,
+                             const std::string& mirror_uuid,
                              pool_watcher::Listener &listener) {
-    return new PoolWatcher(threads, remote_io_ctx, listener);
+    return new PoolWatcher(threads, io_ctx, mirror_uuid, listener);
   }
 
-  PoolWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &remote_io_ctx,
+  PoolWatcher(Threads<ImageCtxT> *threads,
+              librados::IoCtx &io_ctx,
+              const std::string& mirror_uuid,
               pool_watcher::Listener &listener);
   ~PoolWatcher();
   PoolWatcher(const PoolWatcher&) = delete;
@@ -75,9 +78,6 @@ private:
    *    |/----------------------------\   |
    *    |                             |   |
    *    v                             |   |
-   * GET_MIRROR_UUID                  |   |
-   *    |                             |   |
-   *    v                             |   |
    * NOTIFY_LISTENER                  |   |
    *    |                             |   |
    *    v                             |   |
@@ -103,7 +103,8 @@ private:
   class MirroringWatcher;
 
   Threads<ImageCtxT> *m_threads;
-  librados::IoCtx m_remote_io_ctx;
+  librados::IoCtx m_io_ctx;
+  std::string m_mirror_uuid;
   pool_watcher::Listener &m_listener;
 
   ImageIds m_refresh_image_ids;
@@ -114,15 +115,12 @@ private:
   Context *m_on_init_finish = nullptr;
 
   ImageIds m_image_ids;
-  std::string m_mirror_uuid;
 
   bool m_pending_updates = false;
   bool m_notify_listener_in_progress = false;
   ImageIds m_pending_image_ids;
   ImageIds m_pending_added_image_ids;
   ImageIds m_pending_removed_image_ids;
-
-  std::string m_pending_mirror_uuid;
 
   MirroringWatcher *m_mirroring_watcher;
 
@@ -145,11 +143,8 @@ private:
   void schedule_refresh_images(double interval);
   void process_refresh_images();
 
-  void get_mirror_uuid();
-  void handle_get_mirror_uuid(int r);
-
   void handle_rewatch_complete(int r);
-  void handle_image_updated(const std::string &remote_image_id,
+  void handle_image_updated(const std::string &image_id,
                             const std::string &global_image_id,
                             bool enabled);
 
