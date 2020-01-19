@@ -256,6 +256,7 @@ int TestIoCtxImpl::selfmanaged_snap_set_write_ctx(snap_t seq,
 int TestIoCtxImpl::set_alloc_hint(const std::string& oid,
                                   uint64_t expected_object_size,
                                   uint64_t expected_write_size,
+                                  uint32_t flags,
                                   const SnapContext &snapc) {
   return 0;
 }
