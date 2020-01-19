@@ -1361,7 +1361,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         Create a new monitor on the given host.
         """
-        self.log.info("create_mon({}:{}): starting".format(host, network))
+        name = name or host
+
+        self.log.info("create_mon({}:{}): starting mon.{}".format(
+            host, network, name))
 
         # get mon. key
         ret, keyring, err = self.mon_command({
@@ -1380,7 +1383,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         else:
             raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
 
-        return self._create_daemon('mon', name or host, host, keyring,
+        return self._create_daemon('mon', name, host, keyring,
                                    extra_config=extra_config)
 
     def update_mons(self, spec):
