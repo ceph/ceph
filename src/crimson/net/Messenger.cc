@@ -12,10 +12,15 @@ Messenger::create(const entity_name_t& name,
                   const uint64_t nonce,
                   const int master_sid)
 {
-  return create_sharded<SocketMessenger>(name, lname, nonce, master_sid)
-    .then([](Messenger *msgr) {
-      return msgr;
-    });
+  // enforce the messenger to a specific core (master_sid)
+  // TODO: drop the cross-core feature and cleanup the related interfaces in
+  // the future.
+  ceph_assert(master_sid >= 0);
+  return create_sharded<SocketMessenger>(
+      name, lname, nonce, static_cast<seastar::shard_id>(master_sid)
+  ).then([](Messenger *msgr) {
+    return msgr;
+  });
 }
 
 } // namespace crimson::net
