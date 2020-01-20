@@ -262,8 +262,8 @@ server list`` on the teuthology machine, but the target VM hostnames (e.g.
 ``target149202171058.teuthology``) are resolvable within the teuthology
 cluster.
 
-.. _Integration testing: testing-integration-tests
-.. _IRC:  essentials/#irc
-.. _Mailing List: essentials/#mailing-list
-.. _Reading A Standalone Test: testing-integration-tests/#reading-a-standalone-test
+.. _Integration testing: ../tests-integration-tests
+.. _IRC:  ../essentials/#irc
+.. _Mailing List: ../essentials/#mailing-list
+.. _Reading A Standalone Test: ../testing-integration-tests/#reading-a-standalone-test
 .. _teuthology framework: https://github.com/ceph/teuthology

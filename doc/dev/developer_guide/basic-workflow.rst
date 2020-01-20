@@ -297,10 +297,10 @@ flagged for backporting, in which case the status should be changed to
 
 
 .. _make check:
-.. _Backporting: essentials/#backporting
-.. _IRC:  essentials/#irc
-.. _Issue Tracker: issue-tracker
-.. _Integration Tests: testing-integration-tests
-.. _Integration Testing: testing-integration-tests
-.. _Mailing List: essentials/#mailing-list
-.. _Submitting Patches: essentials/#submitting-patches
+.. _Backporting: ../essentials/#backporting
+.. _IRC:  ../essentials/#irc
+.. _Issue Tracker: ../issue-tracker
+.. _Integration Tests: ../tests-integration-tests
+.. _Integration Testing: ../tests-integration-tests
+.. _Mailing List: ../essentials/#mailing-list
+.. _Submitting Patches: ../essentials/#submitting-patches
