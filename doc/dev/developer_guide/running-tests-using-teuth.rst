@@ -148,7 +148,7 @@ https://github.com/ceph/ceph-ci/branches.
 
 .. _ceph-ci: https://github.com/ceph/ceph-ci
 .. _Pulpito: http://pulpito.front.sepia.ceph.com/
-.. _Running Your First Test: running-tests-locally/#running-your-first-test
+.. _Running Your First Test: ../running-tests-locally/#running-your-first-test
 .. _Shaman: https://shaman.ceph.com/builds/ceph/
-.. _Suites Inventory: testing-integration-tests/#suites-inventory
-.. _Testing Priority: testing-integration-tests/#testing-priority
+.. _Suites Inventory: ../tests-integration-tests/#suites-inventory
+.. _Testing Priority: ../tests-integration-tests/#testing-priority
