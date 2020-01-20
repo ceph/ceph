@@ -779,6 +779,13 @@ void ConfigMonitor::load_config()
 	       << dendl;
       pending_cleanup[key] = boost::none;
     } else {
+      if (section_name.empty()) {
+	// we prefer global/$option instead of just $option
+	derr << __func__ << " adding global/ prefix to key '" << key << "'"
+	     << dendl;
+	pending_cleanup[key] = boost::none;
+	pending_cleanup["global/"s + key] = it->value();
+      }
       Section *section = &config_map.global;;
       if (section_name.size()) {
 	if (section_name.find('.') != std::string::npos) {
