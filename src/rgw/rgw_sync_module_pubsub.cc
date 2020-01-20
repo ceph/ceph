@@ -148,10 +148,12 @@ using  PSSubConfigRef = std::shared_ptr<PSSubConfig>;
 struct PSTopicConfig {
   std::string name;
   std::set<std::string> subs;
+  std::string opaque_data;
 
   void dump(Formatter *f) const {
     encode_json("name", name, f);
     encode_json("subs", subs, f);
+    encode_json("opaque", opaque_data, f);
   }
 };
 
@@ -195,10 +197,10 @@ using PSTopicConfigRef = std::shared_ptr<PSTopicConfig>;
 using TopicsRef = std::shared_ptr<std::vector<PSTopicConfigRef>>;
 
 struct PSConfig {
-  string id{"pubsub"};
+  const std::string id{"pubsub"};
   rgw_user user;
-  string data_bucket_prefix;
-  string data_oid_prefix;
+  std::string data_bucket_prefix;
+  std::string data_oid_prefix;
 
   int events_retention_days{0};
 
@@ -234,7 +236,7 @@ struct PSConfig {
     }
     {
       Formatter::ObjectSection section(*f, "notifications");
-      string last;
+      std::string last;
       for (auto& notif : notifications) {
         const string& n = notif.first;
         if (n != last) {
@@ -288,7 +290,7 @@ struct PSConfig {
   }
 
   void get_topics(CephContext *cct, const rgw_bucket& bucket, const rgw_obj_key& key, TopicsRef *result) {
-    string path = bucket.name + "/" + key.name;
+    const std::string path = bucket.name + "/" + key.name;
 
     auto iter = notifications.upper_bound(path);
     if (iter == notifications.begin()) {
@@ -1149,6 +1151,7 @@ public:
         std::shared_ptr<PSTopicConfig> tc = std::make_shared<PSTopicConfig>();
         tc->name = info.name;
         tc->subs = user_topics.topics[info.name].subs;
+        tc->opaque_data = info.opaque_data;
         (*topics)->push_back(tc);
       }
 
@@ -1173,7 +1176,7 @@ class RGWPSHandleObjEventCR : public RGWCoroutine {
   PSSubscriptionRef sub;
   std::array<rgw_user, 2>::const_iterator oiter;
   std::vector<PSTopicConfigRef>::const_iterator titer;
-  std::set<string>::const_iterator siter;
+  std::set<std::string>::const_iterator siter;
   int last_sub_conf_error;
 
 public:
@@ -1254,6 +1257,7 @@ public:
               // subscription was made by S3 compatible API
               ldout(sync_env->cct, 20) << "storing record for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
               record->configurationId = sub->sub_conf->s3_id;
+              record->opaque_data = (*titer)->opaque_data;
               yield call(PSSubscription::store_event_cr(sync_env, sub, record));
               if (retcode < 0) {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
@@ -1328,7 +1332,7 @@ public:
       {
         std::vector<std::pair<std::string, std::string> > attrs;
         for (auto& attr : attrs) {
-          string k = attr.first;
+          std::string k = attr.first;
           if (boost::algorithm::starts_with(k, RGW_ATTR_PREFIX)) {
             k = k.substr(sizeof(RGW_ATTR_PREFIX) - 1);
           }
@@ -1528,7 +1532,7 @@ public:
 RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
 {
   data_handler = std::unique_ptr<RGWPSDataSyncModule>(new RGWPSDataSyncModule(cct, config));
-  string jconf = json_str("conf", *data_handler->get_conf());
+  const std::string jconf = json_str("conf", *data_handler->get_conf());
   JSONParser p;
   if (!p.parse(jconf.c_str(), jconf.size())) {
     ldout(cct, 1) << "ERROR: failed to parse sync module effective conf: " << jconf << dendl;
