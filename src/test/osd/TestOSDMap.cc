@@ -1283,15 +1283,11 @@ TEST_F(OSDMapTest, BUG_38897) {
 
   // ready to go
   {
-    // require perfect distribution!
-    auto ret = g_ceph_context->_conf->set_val(
-      "osd_calc_pg_upmaps_max_stddev", "0");
-    ASSERT_EQ(0, ret);
-    g_ceph_context->_conf->apply_changes(nullptr);
     set<int64_t> only_pools;
     ASSERT_TRUE(pool_1_id >= 0);
     only_pools.insert(pool_1_id);
     OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    // require perfect distribution! (max deviation 0)
     osdmap.calc_pg_upmaps(g_ceph_context,
                           0, // so we can force optimizing
                           100,

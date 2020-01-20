@@ -13,6 +13,7 @@ import time
 from mgr_module import MgrModule, CommandResult
 from threading import Event
 from mgr_module import CRUSHMap
+import datetime
 
 # available modes: 'none', 'crush', 'crush-compat', 'upmap', 'osd_weight'
 default_mode = 'none'
@@ -285,11 +286,22 @@ class Module(MgrModule):
             "desc": "Execute an optimization plan",
             "perm": "rw",
         },
+        {
+            "cmd": "balancer sleep name=secs,type=CephString",
+            "desc": "Set balancer sleep interval",
+            "perm": "rw",
+        },
     ]
     active = False
     run = True
     plans = {}
     mode = ''
+    optimizing = False
+    last_optimize_started = ''
+    last_optimize_duration = ''
+    optimize_result = ''
+    success_string = 'Optimization plan created successfully'
+    in_progress_string = 'in progress'
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -301,6 +313,9 @@ class Module(MgrModule):
             s = {
                 'plans': list(self.plans.keys()),
                 'active': self.active,
+                'last_optimize_started': self.last_optimize_started,
+                'last_optimize_duration': self.last_optimize_duration,
+                'optimize_result': self.optimize_result,
                 'mode': self.get_config('mode', default_mode),
             }
             return (0, json.dumps(s, indent=4), '')
@@ -350,6 +365,11 @@ class Module(MgrModule):
                                   'current cluster')
             return (0, self.evaluate(ms, pools, verbose=verbose), '')
         elif command['prefix'] == 'balancer optimize':
+            # The GIL can be release by the active balancer, so disallow when active
+            if self.active:
+                return (-errno.EINVAL, '', 'Balancer enabled, disable to optimize manually')
+            if self.optimizing:
+                return (-errno.EINVAL, '', 'Balancer finishing up....try again')
             pools = []
             if 'pools' in command:
                 pools = command['pools']
@@ -362,11 +382,18 @@ class Module(MgrModule):
             if len(invalid_pool_names):
                 return (-errno.EINVAL, '', 'pools %s not found' % invalid_pool_names)
             plan = self.plan_create(command['plan'], osdmap, pools)
+            self.last_optimize_started = time.asctime(time.localtime())
+            self.optimize_result = self.in_progress_string
+            start = time.time()
             r, detail = self.optimize(plan)
-            # remove plan if we are currently unable to find an optimization
-            # or distribution is already perfect
-            if r:
-                self.plan_rm(command['plan'])
+            end = time.time()
+            self.last_optimize_duration = str(datetime.timedelta(seconds=(end - start)))
+            if r == 0:
+                # Add plan if an optimization was created
+                self.optimize_result = self.success_string
+                self.plans[command['plan']] = plan
+            else:
+                self.optimize_result = detail
             return (r, '', detail)
         elif command['prefix'] == 'balancer rm':
             self.plan_rm(command['plan'])
@@ -387,12 +414,20 @@ class Module(MgrModule):
                 return (-errno.ENOENT, '', 'plan %s not found' % command['plan'])
             return (0, plan.show(), '')
         elif command['prefix'] == 'balancer execute':
+            # The GIL can be release by the active balancer, so disallow when active
+            if self.active:
+                return (-errno.EINVAL, '', 'Balancer enabled, disable to execute a plan')
+            if self.optimizing:
+                return (-errno.EINVAL, '', 'Balancer finishing up....try again')
             plan = self.plans.get(command['plan'])
             if not plan:
                 return (-errno.ENOENT, '', 'plan %s not found' % command['plan'])
             r, detail = self.execute(plan)
             self.plan_rm(command['plan'])
             return (r, '', detail)
+        elif command['prefix'] == 'balancer sleep':
+            self.set_config('sleep_interval', command['secs'])
+            return (0, "", '')
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -445,10 +480,19 @@ class Module(MgrModule):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
                 plan = self.plan_create(name, self.get_osdmap(), [])
+                self.optimizing = True
+                self.last_optimize_started = time.asctime(time.localtime())
+                self.optimize_result = self.in_progress_string
+                start = time.time()
                 r, detail = self.optimize(plan)
+                end = time.time()
+                self.last_optimize_duration = str(datetime.timedelta(seconds=(end - start)))
                 if r == 0:
+                    self.optimize_result = self.success_string
                     self.execute(plan)
-                self.plan_rm(name)
+                else:
+                    self.optimize_result = detail
+                self.optimizing = False
             self.log.debug('Sleeping for %d', sleep_interval)
             self.event.wait(sleep_interval)
             self.event.clear()
@@ -459,7 +503,6 @@ class Module(MgrModule):
                                  self.get("pg_dump"),
                                  'plan %s initial' % name),
                     pools)
-        self.plans[name] = plan
         return plan
 
     def plan_rm(self, name):
@@ -727,7 +770,7 @@ class Module(MgrModule):
     def do_upmap(self, plan):
         self.log.info('do_upmap')
         max_iterations = int(self.get_config('upmap_max_iterations', 10))
-        max_deviation = float(self.get_config('upmap_max_deviation', .01))
+        max_deviation = int(self.get_config('upmap_max_deviation', 5))
 
         ms = plan.initial
         if len(plan.pools):
@@ -753,7 +796,7 @@ class Module(MgrModule):
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
         if total_did == 0:
-            return -errno.EALREADY, 'Unable to find further optimization,' \
+            return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or distribution is already perfect'
         return 0, ''
 

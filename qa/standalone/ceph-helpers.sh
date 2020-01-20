@@ -560,6 +560,7 @@ function run_mgr() {
         --admin-socket=$(get_asok_path) \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
+        --mgr-module-path=$(realpath ${CEPH_ROOT}/src/pybind/mgr) \
         "$@" || return 1
 }
 
@@ -1886,7 +1887,7 @@ function test_flush_pg_stats()
     local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'
     raw_bytes_used=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
     bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
-    test $raw_bytes_used > 0 || return 1
+    test $raw_bytes_used -gt 0 || return 1
     test $raw_bytes_used == $bytes_used || return 1
     teardown $dir
 }

@@ -1372,12 +1372,13 @@ public:
     pg_t pg,                       ///< pg to potentially remap
     const set<int>& overfull,      ///< osds we'd want to evacuate
     const vector<int>& underfull,  ///< osds to move to, in order of preference
+    const vector<int>& more_underfull,  ///< less full osds to move to, in order of preference
     vector<int> *orig,
     vector<int> *out);             ///< resulting alternative mapping
 
   int calc_pg_upmaps(
     CephContext *cct,
-    float max_deviation, ///< max deviation from target (value < 1.0)
+    uint32_t max_deviation, ///< max deviation from target (value >= 1)
     int max_iterations,  ///< max iterations to run
     const set<int64_t>& pools,        ///< [optional] restrict to pool
     Incremental *pending_inc
