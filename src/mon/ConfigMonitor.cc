@@ -540,6 +540,8 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     string key;
     if (section.size()) {
       key += section + "/";
+    } else {
+      key += "global/";
     }
     string mask_str = mask.to_str();
     if (mask_str.size()) {

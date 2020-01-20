@@ -174,6 +174,7 @@ bool ConfigMap::parse_mask(
   for (unsigned j = 0; j < split.size(); ++j) {
     auto& i = split[j];
     if (i == "global") {
+      *section = "global";
       continue;
     }
     size_t delim = i.find(':');
