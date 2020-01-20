@@ -946,8 +946,6 @@ inline namespace v14_2_0 {
     }
 
   private:
-    mutable iterator last_p;
-
     // always_empty_bptr has no underlying raw but its _len is always 0.
     // This is useful for e.g. get_append_buffer_unused_tail_length() as
     // it allows to avoid conditionals on hot paths.
@@ -959,24 +957,21 @@ inline namespace v14_2_0 {
     list()
       : _carriage(&always_empty_bptr),
         _len(0),
-        _memcopy_count(0),
-        last_p(this) {
+        _memcopy_count(0) {
     }
     // cppcheck-suppress noExplicitConstructor
     // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc)
       : _carriage(&always_empty_bptr),
         _len(0),
-        _memcopy_count(0),
-	last_p(this) {
+        _memcopy_count(0) {
       reserve(prealloc);
     }
 
     list(const list& other)
       : _carriage(&always_empty_bptr),
         _len(other._len),
-        _memcopy_count(other._memcopy_count),
-        last_p(this) {
+        _memcopy_count(other._memcopy_count) {
       _buffers.clone_from(other._buffers);
     }
     list(list&& other) noexcept;
@@ -990,7 +985,6 @@ inline namespace v14_2_0 {
         _carriage = &always_empty_bptr;
         _buffers.clone_from(other._buffers);
         _len = other._len;
-        last_p = begin();
       }
       return *this;
     }
@@ -999,7 +993,6 @@ inline namespace v14_2_0 {
       _carriage = other._carriage;
       _len = other._len;
       _memcopy_count = other._memcopy_count;
-      last_p = begin();
       other.clear();
       return *this;
     }
@@ -1057,7 +1050,6 @@ inline namespace v14_2_0 {
       _buffers.clear_and_dispose();
       _len = 0;
       _memcopy_count = 0;
-      last_p = begin();
     }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
@@ -1133,18 +1125,18 @@ inline namespace v14_2_0 {
     operator seastar::net::packet() &&;
 #endif
 
-    iterator begin() {
-      return iterator(this, 0);
+    iterator begin(size_t offset=0) {
+      return iterator(this, offset);
     }
     iterator end() {
       return iterator(this, _len, _buffers.end(), 0);
     }
 
-    const_iterator begin() const {
-      return const_iterator(this, 0);
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset);
     }
-    const_iterator cbegin() const {
-      return begin();
+    const_iterator cbegin(size_t offset=0) const {
+      return begin(offset);
     }
     const_iterator end() const {
       return const_iterator(this, _len, _buffers.end(), 0);
