@@ -141,7 +141,7 @@ private:
                                   bool write_op, uint64_t tid);
   void finish_in_flight_write();
 
-  void unblock_flushes(uint64_t tid);
+  void unblock_flushes();
   bool block_overlapping_io(ImageExtentIntervals* in_flight_image_extents,
                             uint64_t object_off, uint64_t object_len);
   void unblock_overlapping_io(uint64_t offset, uint64_t length, uint64_t tid);
