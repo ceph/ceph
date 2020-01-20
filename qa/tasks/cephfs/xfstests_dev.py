@@ -93,29 +93,35 @@ class XFSTestsDev(CephFSTestCase):
     def install_deps(self):
         from teuthology.misc import get_system_type
 
-        args = ['sudo', 'install', '-y']
+        distro, version = get_system_type(self.mount_a.client_remote,
+                                          distro=True, version=True)
+        distro = distro.lower()
+        version = int(version.split('.')[0]) # only keep major release number
 
         distro = get_system_type(self.mount_a.client_remote,
                                  distro=True).lower()
-        if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora', 'centos'):
+        if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora',
+                      'centos'):
             deps = """acl attr automake bc dbench dump e2fsprogs fio \
             gawk gcc indent libtool lvm2 make psmisc quota sed \
             xfsdump xfsprogs \
             libacl-devel libattr-devel libaio-devel libuuid-devel \
-            xfsprogs-devel btrfs-progs-devel python sqlite""".split()
-            deps_for_old_distros = "xfsprogs-qa-devel"
+            xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
+            deps_old_distros = ['xfsprogs-qa-devel']
 
-            args.insert(1, 'yum')
-            args.extend(deps)
-            args.append(deps_for_old_distros)
+            if distro == 'centos' and version > 7:
+                    deps.remove('btrfs-progs-devel')
+
+            args = ['sudo', 'yum', 'install', '-y'] + deps + deps_old_distros
         elif distro == 'ubuntu':
             deps = """xfslibs-dev uuid-dev libtool-bin \
             e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
             libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
             uuid-runtime python sqlite3""".split()
 
-            args.insert(1, 'apt-get')
-            args.extend(deps)
+            if version >= 19:
+                deps[deps.index('python')] ='python2'
+            args = ['sudo', 'apt-get', 'install', '-y'] + deps
         else:
             raise RuntimeError('expected a yum based or a apt based system')
 
