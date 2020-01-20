@@ -990,6 +990,7 @@ inline namespace v14_2_0 {
         _carriage = &always_empty_bptr;
         _buffers.clone_from(other._buffers);
         _len = other._len;
+        last_p = begin();
       }
       return *this;
     }
