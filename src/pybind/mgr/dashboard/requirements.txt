@@ -8,4 +8,4 @@ python3-saml
 requests
 Routes
 six
-../../../python-common
+-e ../../../python-common
