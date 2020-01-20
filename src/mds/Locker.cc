@@ -2155,6 +2155,7 @@ bool Locker::revoke_stale_caps(Session *session)
   // invalidate all caps
   session->inc_cap_gen();
 
+  bool ret = true;
   std::vector<CInode*> to_eval;
 
   for (auto p = session->caps.begin(); !p.end(); ) {
@@ -2171,8 +2172,10 @@ bool Locker::revoke_stale_caps(Session *session)
     if (!revoking)
       continue;
 
-    if (revoking & CEPH_CAP_ANY_WR)
-      return false;
+    if (revoking & CEPH_CAP_ANY_WR) {
+      ret = false;
+      break;
+    }
 
     int issued = cap->issued();
     CInode *in = cap->get_inode();
@@ -2207,7 +2210,7 @@ bool Locker::revoke_stale_caps(Session *session)
       request_inode_file_caps(in);
   }
 
-  return true;
+  return ret;
 }
 
 void Locker::resume_stale_caps(Session *session)
