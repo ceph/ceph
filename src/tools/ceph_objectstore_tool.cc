@@ -3520,10 +3520,10 @@ int main(int argc, char **argv)
       return 1;
     }
     if (r > 0) {
-      cerr << "fsck found " << r << " errors" << std::endl;
+      cerr << "fsck status: " << r << " remaining error(s) and warning(s)" << std::endl;
       return 1;
     }
-    cout << "fsck found no errors" << std::endl;
+    cout << "fsck success" << std::endl;
     return 0;
   }
   if (op == "repair" || op == "repair-deep") {
@@ -3533,10 +3533,10 @@ int main(int argc, char **argv)
       return 1;
     }
     if (r > 0) {
-      cerr << "repair found " << r << " errors" << std::endl;
+      cerr << "repair status: " << r << " remaining error(s) and warning(s)" << std::endl;
       return 1;
     }
-    cout << "repair found no errors" << std::endl;
+    cout << "repair success" << std::endl;
     return 0;
   }
   if (op == "mkfs") {
