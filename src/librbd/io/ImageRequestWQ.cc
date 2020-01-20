@@ -341,7 +341,6 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(req);
   } else {
-    c->start_op();
     process_io(req, false);
     finish_in_flight_io();
   }
@@ -388,7 +387,6 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(req);
   } else {
-    c->start_op();
     process_io(req, false);
     finish_in_flight_io();
   }
@@ -436,7 +434,6 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
     queue(req);
   } else {
-    c->start_op();
     process_io(req, false);
     finish_in_flight_io();
   }
@@ -483,7 +480,6 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(req);
   } else {
-    c->start_op();
     process_io(req, false);
     finish_in_flight_io();
   }
@@ -533,7 +529,6 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(req);
   } else {
-    c->start_op();
     process_io(req, false);
     finish_in_flight_io();
   }
@@ -572,15 +567,17 @@ void ImageRequestWQ<I>::unblock_overlapping_io(uint64_t offset, uint64_t length,
   if (!m_blocked_ios.empty()) {
     auto it = m_blocked_ios.begin();
     while (it != m_blocked_ios.end()) {
-      auto next_blocked_object_ios_it = it;
-      ++next_blocked_object_ios_it;
       auto blocked_io = *it;
 
-      if (block_overlapping_io(&m_in_flight_extents, offset, length)) {
+      const auto& extents = blocked_io->get_image_extents();
+      uint64_t off = extents.size() ? extents.front().first : 0;
+      uint64_t len = extents.size() ? extents.front().second : 0;
+
+      if (block_overlapping_io(&m_in_flight_extents, off, len)) {
         break;
       }
-      ldout(cct, 20) << "unblocking off: " << offset << ", "
-                     << "len: " << length << dendl;
+      ldout(cct, 20) << "unblocking off: " << off << ", "
+                     << "len: " << len << dendl;
       AioCompletion *aio_comp = blocked_io->get_aio_completion();
 
       m_blocked_ios.erase(it);
@@ -592,7 +589,7 @@ void ImageRequestWQ<I>::unblock_overlapping_io(uint64_t offset, uint64_t length,
 }
 
 template <typename I>
-void ImageRequestWQ<I>::unblock_flushes(uint64_t tid) {
+void ImageRequestWQ<I>::unblock_flushes() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "ictx=" << &m_image_ctx << dendl;
   std::unique_lock locker{m_lock};
@@ -866,7 +863,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
         return nullptr;
       }
 
-      if (!lock_required && !refresh_required) {
+      if (!lock_required && !refresh_required && !peek_item->blocked) {
         // completed ops will requeue the IO -- don't count it as in-progress
         m_in_flight_writes++;
       }
@@ -922,7 +919,6 @@ void *ImageRequestWQ<I>::_void_dequeue() {
     return nullptr;
   }
 
-  item->start_op();
   return item;
 }
 
@@ -938,24 +934,23 @@ void ImageRequestWQ<I>::process_io(ImageDispatchSpec<I> *req,
   const auto& extents = req->get_image_extents();
   bool write_op = req->is_write_op();
   uint64_t tid = req->get_tid();
-  uint64_t offset = 0;
-  uint64_t length = 0;
+  uint64_t offset = extents.size() ? extents.front().first : 0;
+  uint64_t length = extents.size() ? extents.front().second : 0;
 
-  if (write_op) {
+  if (write_op && !req->blocked) {
     std::lock_guard locker{m_lock};
-    offset = extents.size() ? extents.front().first : 0;
-    length = extents.size() ? extents.front().second : 0;
     bool blocked = block_overlapping_io(&m_in_flight_extents, offset, length);
     if (blocked) {
       ldout(cct, 20) << "blocking overlapping IO: " << "ictx="
                      << &m_image_ctx << ", "
                      << "off=" <<  offset << ", len=" << length << dendl;
+      req->blocked = true;
       m_blocked_ios.push_back(req);
-      --m_in_flight_ios;
       return;
     }
   }
 
+  req->start_op();
   req->send();
 
   if (write_op) {
@@ -963,7 +958,7 @@ void ImageRequestWQ<I>::process_io(ImageDispatchSpec<I> *req,
       finish_in_flight_write();
     }
     unblock_overlapping_io(offset, length, tid);
-    unblock_flushes(tid);
+    unblock_flushes();
   }
   delete req;
 }
@@ -994,7 +989,7 @@ void ImageRequestWQ<I>::remove_in_flight_write_ios(uint64_t offset, uint64_t len
         if(!m_in_flight_extents.empty()) {
           CephContext *cct = m_image_ctx.cct;
           ldout(cct, 20) << "erasing in flight extents with tid:" 
-                         << tid << dendl;
+                         << tid << ", offset: " << offset << dendl;
           ImageExtentIntervals extents;
           extents.insert(offset, length);
           ImageExtentIntervals intersect;
