@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+    - SLOW_OPS
     conf:
       osd:
         filestore flush min: 0
