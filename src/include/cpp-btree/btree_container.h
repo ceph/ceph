@@ -142,7 +142,6 @@ class btree_container {
   void clear() { tree_.clear(); }
   void swap(btree_container &x) { tree_.swap(x.tree_); }
   void verify() const { tree_.verify(); }
-  void dump(std::ostream &os) const { tree_.dump(os); }
 
   // Size routines.
   size_type size() const { return tree_.size(); }
@@ -184,12 +183,6 @@ class btree_container {
  protected:
   Tree tree_;
 };
-
-template <typename T>
-inline std::ostream& operator<<(std::ostream &os, const btree_container<T> &b) {
-  b.dump(os);
-  return os;
-}
 
 // A common base class for btree_set and btree_map.
 template <typename Tree>
