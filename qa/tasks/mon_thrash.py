@@ -299,8 +299,8 @@ class MonitorThrasher:
                 self.log('triggering scrub')
                 try:
                     self.manager.raw_cluster_cmd('scrub')
-                except Exception:
-                    log.exception("Saw exception while triggering scrub")
+                except Exception as e:
+                    log.warning("Ignoring exception while triggering scrub: %s", e)
 
             if self.thrash_delay > 0.0:
                 self.log('waiting for {delay} secs before continuing thrashing'.format(
