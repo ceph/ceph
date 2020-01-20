@@ -416,11 +416,26 @@ void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
     return;
   }
 
-  auto ctx = new C_ImageGetInfo(mirror_image_info, on_finish);
-  auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
-                                               &ctx->promotion_state,
-                                               ctx);
-  req->send();
+  auto on_refresh = new FunctionContext(
+    [ictx, mirror_image_info, on_finish](int r) {
+      if (r < 0) {
+        lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
+        on_finish->complete(r);
+        return;
+      }
+
+      auto ctx = new C_ImageGetInfo(mirror_image_info, on_finish);
+      auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
+                                                   &ctx->promotion_state,
+                                                   ctx);
+      req->send();
+    });
+
+  if (ictx->state->is_refresh_required()) {
+    ictx->state->refresh(on_refresh);
+  } else {
+    on_refresh->complete(0);
+  }
 }
 
 template <typename I>
