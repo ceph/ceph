@@ -7080,6 +7080,19 @@ int BlueStore::cold_close()
   return 0;
 }
 
+// derr wrapper to limit enormous output and avoid log flooding.
+// Of limited use where such output is expected for now
+#define fsck_derr(err_cnt, threshold) \
+  if (err_cnt <= threshold) {         \
+    bool need_skip_print = err_cnt == threshold; \
+    derr
+
+#define fsck_dendl \
+    dendl;          \
+    if (need_skip_print) \
+      derr << "more error lines skipped..." << dendl; \
+  }
+
 int _fsck_sum_extents(
   const PExtentVector& extents,
   bool compressed,
@@ -7702,27 +7715,32 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
   ceph_assert(o->onode.has_omap());
   if (!o->onode.is_perpool_omap() && !o->onode.is_pgmeta_omap()) {
     if (per_pool_omap) {
-      derr << "fsck error: " << o->oid
-        << " has omap that is not per-pool or pgmeta" << dendl;
+      fsck_derr(errors, MAX_FSCK_ERROR_LINES)
+        << "fsck error: " << o->oid
+        << " has omap that is not per-pool or pgmeta"
+        << fsck_dendl;
       ++errors;
     } else {
       const char* w;
+      int64_t num;
       if (cct->_conf->bluestore_fsck_error_on_no_per_pool_omap) {
         ++errors;
+        num = errors;
         w = "error";
       } else {
         ++warnings;
+        num = warnings;
         w = "warning";
       }
-      //FIXME
-      dout(10) << "fsck " << w << ": " << o->oid
-        << " has omap that is not per-pool or pgmeta" << dendl;
+      fsck_derr(num, MAX_FSCK_ERROR_LINES)
+        << "fsck " << w << ": " << o->oid
+        << " has omap that is not per-pool or pgmeta"
+        << fsck_dendl;
     }
   }
   if (repairer &&
-    o->onode.has_omap() &&
     !o->onode.is_perpool_omap() &&
-    !o->oid.is_pgmeta()) {
+    !o->onode.is_pgmeta_omap()) {
     dout(10) << "fsck converting " << o->oid << " omap to per-pool" << dendl;
     bufferlist h;
     map<string, bufferlist> kv;
@@ -8606,7 +8624,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 			  errors, warnings, repair ? &repairer : nullptr);
 
   if (depth != FSCK_SHALLOW) {
-    dout(1) << __func__ << " checking for stray omap data " << used_omap_head.size() << dendl;
+    dout(1) << __func__ << " checking for stray omap data " << dendl;
     it = db->get_iterator(PREFIX_OMAP);
     if (it) {
       uint64_t last_omap_head = 0;
@@ -8615,8 +8633,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         _key_decode_u64(it->key().c_str(), &omap_head);
         if (used_omap_head.count(omap_head) == 0 &&
 	    omap_head != last_omap_head) {
-	  dout(10) << "fsck error: found stray omap data on omap_head "
-	       << omap_head << dendl;
+          fsck_derr(errors, MAX_FSCK_ERROR_LINES)
+            << "fsck error: found stray omap data on omap_head "
+            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head)<< fsck_dendl;
 	  ++errors;
 	  last_omap_head = omap_head;
         }
@@ -8630,9 +8649,10 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         _key_decode_u64(it->key().c_str(), &omap_head);
         if (used_omap_head.count(omap_head) == 0 &&
 	    omap_head != last_omap_head) {
-          dout(10) << "fsck error: found stray (pgmeta) omap data on omap_head "
-	       << omap_head << dendl;
-	  last_omap_head = omap_head;
+          fsck_derr(errors, MAX_FSCK_ERROR_LINES)
+            << "fsck error: found stray (pgmeta) omap data on omap_head "
+            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
+          last_omap_head = omap_head;
 	  ++errors;
         }
       }
@@ -8649,9 +8669,10 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         c = _key_decode_u64(c, &omap_head);
         if (used_omap_head.count(omap_head) == 0 &&
 	    omap_head != last_omap_head) {
-          dout(10) << "fsck error: found stray (per-pool) omap data on omap_head "
-	       << omap_head << dendl;
-	  ++errors;
+          fsck_derr(errors, MAX_FSCK_ERROR_LINES)
+            << "fsck error: found stray (per-pool) omap data on omap_head "
+            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
+          ++errors;
 	  last_omap_head = omap_head;
         }
       }

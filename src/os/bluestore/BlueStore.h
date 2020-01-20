@@ -2372,6 +2372,9 @@ public:
     FSCK_DEEP,
     FSCK_SHALLOW
   };
+  enum {
+    MAX_FSCK_ERROR_LINES = 100,
+  };
 
 private:
   int _fsck_check_extents(
