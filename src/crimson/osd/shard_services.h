@@ -150,6 +150,16 @@ public:
   seastar::future<> send_pg_created();
   void prune_pg_created();
 
+  unsigned get_pg_num() const {
+    return num_pgs;
+  }
+  void inc_pg_num() {
+    ++num_pgs;
+  }
+  void dec_pg_num() {
+    --num_pgs;
+  }
+
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   // Time state
@@ -161,6 +171,9 @@ public:
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
   crimson::osd::ObjectContextRegistry obc_registry;
+
+private:
+  unsigned num_pgs = 0;
 };
 
 }
