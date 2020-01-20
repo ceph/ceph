@@ -1034,7 +1034,6 @@ bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
     waiting_for_nolaggy.push_back(m);
   } else {
     if (!handle_deferrable_message(m)) {
-      dout(0) << "unrecognized message " << *m << dendl;
       return false;
     }
 
