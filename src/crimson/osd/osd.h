@@ -111,7 +111,6 @@ class OSD final : public crimson::net::Dispatcher,
 			     const AuthCapsInfo& caps) final;
 
   crimson::osd::ShardServices shard_services;
-  std::unordered_map<spg_t, Ref<PG>> pgs;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> heartbeat_timer;
