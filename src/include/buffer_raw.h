@@ -15,10 +15,10 @@
 #ifndef CEPH_BUFFER_RAW_H
 #define CEPH_BUFFER_RAW_H
 
-#include <atomic>
 #include <map>
 #include <utility>
 #include <type_traits>
+#include "common/ceph_atomic.h"
 #include "include/buffer.h"
 #include "include/mempool.h"
 #include "include/spinlock.h"
@@ -34,7 +34,7 @@ inline namespace v14_2_0 {
 			 alignof(ptr_node)>::type bptr_storage;
     char *data;
     unsigned len;
-    std::atomic<unsigned> nref { 0 };
+    ceph::atomic<unsigned> nref { 0 };
     int mempool;
 
     std::pair<size_t, size_t> last_crc_offset {std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
