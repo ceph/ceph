@@ -159,8 +159,8 @@ int MetaTool::main(string& mode,
         for (auto role : role_selector.get_roles()) {
             rank = role.rank;
 
-            int ret =  process(mode, ino, out, in, confirm);
-            cout << "executing for rank " << rank << " op[" <<mode<< "] ret : " << ret << std::endl;
+            r =  process(mode, ino, out, in, confirm);
+            cout << "executing for rank " << rank << " op[" <<mode<< "] ret : " << r << std::endl;
         }
         
     }else{
@@ -175,8 +175,8 @@ int MetaTool::main(string& mode,
 
 
         rank = conv_t<int>(manual_rank_num);
-        int ret = process(mode, ino, out, in, confirm);
-        cout << "op[" << mode << "] ret : " << ret << std::endl;
+        r = process(mode, ino, out, in, confirm);
+        cout << "op[" << mode << "] ret : " << r << std::endl;
     }
     return r;
 }
@@ -320,7 +320,7 @@ int MetaTool::_amend_meta(string& k, inode_meta_t& inode_meta, const string& fn,
              << "         You must confirm that all logs of mds have been flushed!!!\n"
              << "         if you want amend it, please add --yes-i-really-really-mean-it!!!"
              << std::endl;
-            
+        return -1;
     }
     bufferlist bl;
     inode_meta.encode(bl, features);
@@ -328,7 +328,7 @@ int MetaTool::_amend_meta(string& k, inode_meta_t& inode_meta, const string& fn,
     to_set[k].swap(bl);
     inode_backpointer_t bp;
     if (!op.top_op()->get_ancestor(bp))
-        return false;
+        return -1;
     frag_t frag;
     auto item = op.inodes.find(bp.dirino);
     if (item != op.inodes.end()){

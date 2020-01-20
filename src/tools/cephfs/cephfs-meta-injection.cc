@@ -53,7 +53,7 @@ int main(int argc, const char **argv){
     all.add(modeoptions).add(general);
     po::variables_map vm;
     try{
-        po::store(po::command_line_parser(argc, argv).options(all).positional(p).run(), vm);
+        po::store(po::command_line_parser(argc, argv).options(all).positional(p).allow_unregistered().run(), vm);
     }catch(exception &e){
         cerr << "error : " << e.what() << std::endl;
         return -1;
