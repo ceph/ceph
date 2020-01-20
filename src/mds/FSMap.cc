@@ -1054,7 +1054,7 @@ void FSMap::insert(const MDSMap::mds_info_t &new_info)
 void FSMap::adjust_standby_fscid(mds_gid_t standby_gid,
 				 fs_cluster_id_t fscid)
 {
-  standby_daemon_fscid.at(standby_gid) = fscid;
+  standby_daemon_fscid[standby_gid] = fscid;
 }
 
 std::size_t FSMap::clear_standby_fscid(mds_gid_t standby_gid)
