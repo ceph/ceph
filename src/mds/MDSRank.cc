@@ -3610,6 +3610,13 @@ bool MDSRankDispatcher::handle_command(
     cmd_getval(g_ceph_context, cmdmap, "path", path);
     cmd_getval(g_ceph_context, cmdmap, "tag", tag);
 
+    /* Multiple MDS scrub is not currently supported. See also: https://tracker.ceph.com/issues/12274 */
+    if (mdsmap->get_max_mds() > 1) {
+      *ss << "Scrub is not currently supported for multiple active MDS. Please reduce max_mds to 1 and then scrub.";
+      *r = ENOTSUP;
+      return true;
+    }
+
     *need_reply = false;
     *run_later = create_async_exec_context(new C_ScrubExecAndReply
                                            (this, m, path, tag, scrubop_vec));
