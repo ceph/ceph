@@ -32,183 +32,118 @@ describe('TableKeyValueComponent', () => {
   });
 
   it('should make key value object pairs out of arrays with length two', () => {
-    component.data = [['someKey', 0], [3, 'something']];
+    component.data = [['someKey', 0], ['arrayKey', [1, 2, 3]], [3, 'something']];
     component.ngOnInit();
-    expect(component.tableData.length).toBe(2);
-    expect(component.tableData[0].key).toBe('someKey');
-    expect(component.tableData[1].value).toBe('something');
+    expect(component.tableData).toEqual([
+      { key: 'arrayKey', value: '1, 2, 3' },
+      { key: 'someKey', value: 0 },
+      { key: 3, value: 'something' }
+    ]);
   });
 
-  it('should transform arrays', () => {
-    component.data = [['someKey', [1, 2, 3]], [3, 'something']];
-    component.ngOnInit();
-    expect(component.tableData.length).toBe(2);
-    expect(component.tableData[0].key).toBe('someKey');
-    expect(component.tableData[0].value).toBe('1, 2, 3');
-    expect(component.tableData[1].value).toBe('something');
-  });
-
-  it('should remove pure object values', () => {
+  it('should remove items with objects as values', () => {
     component.data = [[3, 'something'], ['will be removed', { a: 3, b: 4, c: 5 }]];
     component.ngOnInit();
-    expect(component.tableData.length).toBe(1);
-    expect(component.tableData[0].value).toBe('something');
+    expect(component.tableData).toEqual([{ key: 3, value: 'something' }]);
   });
 
   it('makes key value object pairs out of an object', () => {
-    component.data = {
-      3: 'something',
-      someKey: 0
-    };
+    component.data = { 3: 'something', someKey: 0 };
     component.ngOnInit();
-    expect(component.tableData.length).toBe(2);
-    expect(component.tableData[0].value).toBe('something');
-    expect(component.tableData[1].key).toBe('someKey');
+    expect(component.tableData).toEqual([
+      { key: '3', value: 'something' },
+      { key: 'someKey', value: 0 }
+    ]);
   });
 
-  it('does nothing if data is correct', () => {
-    component.data = [
-      {
-        key: 3,
-        value: 'something'
-      },
-      {
-        key: 'someKey',
-        value: 0
-      }
-    ];
+  it('does nothing if data does not need to be converted', () => {
+    component.data = [{ key: 3, value: 'something' }, { key: 'someKey', value: 0 }];
     component.ngOnInit();
-    expect(component.tableData.length).toBe(2);
-    expect(component.tableData[0].value).toBe('something');
-    expect(component.tableData[1].key).toBe('someKey');
+    expect(component.tableData).toEqual(component.data);
   });
 
-  it('throws errors if miss match', () => {
+  it('throws errors if data cannot be converted', () => {
     component.data = 38;
     expect(() => component.ngOnInit()).toThrowError('Wrong data format');
     component.data = [['someKey', 0, 3]];
-    expect(() => component.ngOnInit()).toThrowError('Wrong array format: [string, any][]');
-    component.data = [{ somekey: 939, somethingElse: 'test' }];
+    expect(() => component.ngOnInit()).toThrowError(
+      'Array contains too many elements (3). Needs to be of type [string, any][]'
+    );
   });
 
-  describe('Class objects equal plain objects', () => {
-    class Example {
-      sth = 'something';
-      deep?: Example;
-      constructor(deep: boolean) {
-        if (deep) {
-          this.deep = new Example(false);
-        }
-      }
-    }
-
-    const classExample = new Example(true);
-    const objectExample = {
-      sth: 'something',
-      deep: {
-        sth: 'something'
-      }
-    };
-
-    const getTableData = (data) => {
-      component.data = data;
-      expect(() => component.ngOnInit()).not.toThrow();
-      return component.tableData;
-    };
-
-    const doesClassEqualsObject = (classData, objectData, dataLength) => {
-      const classTableData = getTableData(classData);
-      expect(classTableData).toEqual(getTableData(objectData));
-      expect(classTableData.length).toBe(dataLength);
-    };
-
-    it('should convert class objects the same way as plain objects', () => {
-      doesClassEqualsObject(classExample, objectExample, 1);
-      doesClassEqualsObject([classExample], [objectExample], 1);
-      component.renderObjects = true;
-      doesClassEqualsObject(classExample, objectExample, 2);
-      doesClassEqualsObject([classExample], [objectExample], 2);
-    });
-  });
-
-  it('tests _makePairs', () => {
-    expect(component._makePairs([['dash', 'board']])).toEqual([{ key: 'dash', value: 'board' }]);
+  it('tests makePairs()', () => {
+    const makePairs = (data) => component['makePairs'](data);
+    expect(makePairs([['dash', 'board']])).toEqual([{ key: 'dash', value: 'board' }]);
     const pair = [{ key: 'dash', value: 'board' }, { key: 'ceph', value: 'mimic' }];
     const pairInverse = [{ key: 'ceph', value: 'mimic' }, { key: 'dash', value: 'board' }];
-    expect(component._makePairs(pair)).toEqual(pairInverse);
-    expect(component._makePairs({ dash: 'board' })).toEqual([{ key: 'dash', value: 'board' }]);
-    expect(component._makePairs({ dash: 'board', ceph: 'mimic' })).toEqual(pairInverse);
+    expect(makePairs(pair)).toEqual(pairInverse);
+    expect(makePairs({ dash: 'board' })).toEqual([{ key: 'dash', value: 'board' }]);
+    expect(makePairs({ dash: 'board', ceph: 'mimic' })).toEqual(pairInverse);
   });
 
-  it('tests _makePairsFromArray', () => {
-    expect(component._makePairsFromArray([['dash', 'board']])).toEqual([
-      { key: 'dash', value: 'board' }
-    ]);
+  it('tests makePairsFromArray()', () => {
+    const makePairsFromArray = (data) => component['makePairsFromArray'](data);
+    expect(makePairsFromArray([['dash', 'board']])).toEqual([{ key: 'dash', value: 'board' }]);
     const pair = [{ key: 'dash', value: 'board' }, { key: 'ceph', value: 'mimic' }];
-    expect(component._makePairsFromArray(pair)).toEqual(pair);
+    expect(makePairsFromArray(pair)).toEqual(pair);
   });
 
-  it('tests _makePairsFromObject', () => {
-    expect(component._makePairsFromObject({ dash: 'board' })).toEqual([
-      { key: 'dash', value: 'board' }
-    ]);
-    expect(component._makePairsFromObject({ dash: 'board', ceph: 'mimic' })).toEqual([
+  it('tests makePairsFromObject()', () => {
+    const makePairsFromObject = (data) => component['makePairsFromObject'](data);
+    expect(makePairsFromObject({ dash: 'board' })).toEqual([{ key: 'dash', value: 'board' }]);
+    expect(makePairsFromObject({ dash: 'board', ceph: 'mimic' })).toEqual([
       { key: 'dash', value: 'board' },
       { key: 'ceph', value: 'mimic' }
     ]);
   });
 
-  describe('tests _convertValue', () => {
-    const v = (value) => ({ key: 'sth', value: value });
-    const testConvertValue = (value, result) =>
-      expect(component._convertValue(v(value)).value).toBe(result);
+  describe('tests convertValue()', () => {
+    const convertValue = (data) => component['convertValue'](data);
+    const expectConvertValue = (value, expectation) =>
+      expect(convertValue(value)).toBe(expectation);
 
-    it('should leave a string as it is', () => {
-      testConvertValue('something', 'something');
+    it('should not convert strings', () => {
+      expectConvertValue('something', 'something');
     });
 
-    it('should leave an int as it is', () => {
-      testConvertValue(29, 29);
+    it('should not convert integers', () => {
+      expectConvertValue(29, 29);
     });
 
-    it('should convert arrays with any type to string', () => {
-      testConvertValue([1, 2, 3], '1, 2, 3');
-      testConvertValue([{ sth: 'something' }], '{"sth":"something"}');
-      testConvertValue([1, 'two', { 3: 'three' }], '1, two, {"3":"three"}');
+    it('should convert arrays with any type to strings', () => {
+      expectConvertValue([1, 2, 3], '1, 2, 3');
+      expectConvertValue([{ sth: 'something' }], '{"sth":"something"}');
+      expectConvertValue([1, 'two', { 3: 'three' }], '1, two, {"3":"three"}');
     });
 
-    it('should convert only allow objects if renderObjects is set to true', () => {
-      expect(component._convertValue(v({ sth: 'something' }))).toBe(undefined);
+    it('should only convert objects if renderObjects is set to true', () => {
+      expect(convertValue({ sth: 'something' })).toBe(null);
       component.renderObjects = true;
-      expect(component._convertValue(v({ sth: 'something' }))).toEqual(v({ sth: 'something' }));
+      expect(convertValue({ sth: 'something' })).toEqual({ sth: 'something' });
+    });
+  });
+
+  describe('automatically pipe UTC dates through cdDate', () => {
+    let datePipe: CdDatePipe;
+
+    beforeEach(() => {
+      datePipe = TestBed.get(CdDatePipe);
+      spyOn(datePipe, 'transform').and.callThrough();
     });
 
-    describe('automatically pipe utc dates through cdDate', () => {
-      let datePipe: CdDatePipe;
+    const expectTimeConversion = (date: string) => {
+      component.data = { dateKey: date };
+      component.ngOnInit();
+      expect(datePipe.transform).toHaveBeenCalledWith(date);
+      expect(component.tableData[0].key).not.toBe(date);
+    };
 
-      beforeEach(() => {
-        datePipe = TestBed.get(CdDatePipe);
-        spyOn(datePipe, 'transform').and.callThrough();
-      });
+    it('converts some date', () => {
+      expectTimeConversion('2019-04-15 12:26:52.305285');
+    });
 
-      const expectTimeConversion = (date: string) => {
-        component.data = {
-          3: 'some time',
-          someKey: date
-        };
-        component.ngOnInit();
-        expect(component.tableData.length).toBe(2);
-        expect(datePipe.transform).toHaveBeenCalledWith(date);
-        expect(component.tableData[1].key).not.toBe(date);
-      };
-
-      it('converts some date', () => {
-        expectTimeConversion('2019-04-15 12:26:52.305285');
-      });
-
-      it('converts utc date', () => {
-        expectTimeConversion('2019-04-16T12:35:46.646300974Z');
-      });
+    it('converts UTC date', () => {
+      expectTimeConversion('2019-04-16T12:35:46.646300974Z');
     });
   });
 
@@ -216,16 +151,15 @@ describe('TableKeyValueComponent', () => {
     beforeEach(() => {
       component.data = {
         options: {
-          someSetting1: 38,
-          anotherSetting2: 'somethingElse',
-          suboptions: {
+          numberKey: 38,
+          stringKey: 'somethingElse',
+          objectKey: {
             sub1: 12,
             sub2: 34,
             sub3: 56
           }
         },
-        someKey: 0,
-        o2: {
+        otherOptions: {
           sub1: {
             x: 42
           },
@@ -244,14 +178,13 @@ describe('TableKeyValueComponent', () => {
       expect(component.tableData).toEqual([
         { key: 'additionalKeyContainingObject type', value: 'none' },
         { key: 'keyWithEmptyObject', value: '' },
-        { key: 'o2 sub1 x', value: 42 },
-        { key: 'o2 sub2 y', value: 555 },
-        { key: 'options anotherSetting2', value: 'somethingElse' },
-        { key: 'options someSetting1', value: 38 },
-        { key: 'options suboptions sub1', value: 12 },
-        { key: 'options suboptions sub2', value: 34 },
-        { key: 'options suboptions sub3', value: 56 },
-        { key: 'someKey', value: 0 }
+        { key: 'options numberKey', value: 38 },
+        { key: 'options objectKey sub1', value: 12 },
+        { key: 'options objectKey sub2', value: 34 },
+        { key: 'options objectKey sub3', value: 56 },
+        { key: 'options stringKey', value: 'somethingElse' },
+        { key: 'otherOptions sub1 x', value: 42 },
+        { key: 'otherOptions sub2 y', value: 555 }
       ]);
     });
 
@@ -259,10 +192,9 @@ describe('TableKeyValueComponent', () => {
       component.appendParentKey = false;
       component.ngOnInit();
       expect(component.tableData).toEqual([
-        { key: 'anotherSetting2', value: 'somethingElse' },
         { key: 'keyWithEmptyObject', value: '' },
-        { key: 'someKey', value: 0 },
-        { key: 'someSetting1', value: 38 },
+        { key: 'numberKey', value: 38 },
+        { key: 'stringKey', value: 'somethingElse' },
         { key: 'sub1', value: 12 },
         { key: 'sub2', value: 34 },
         { key: 'sub3', value: 56 },
@@ -294,6 +226,8 @@ describe('TableKeyValueComponent', () => {
   describe('hide empty items', () => {
     beforeEach(() => {
       component.data = {
+        booleanFalse: false,
+        booleanTrue: true,
         string: '',
         array: [],
         object: {},
@@ -319,6 +253,8 @@ describe('TableKeyValueComponent', () => {
       component.ngOnInit();
       expect(component.tableData).toEqual([
         { key: 'array', value: '' },
+        { key: 'booleanFalse', value: false },
+        { key: 'booleanTrue', value: true },
         { key: 'emptyObject array', value: '' },
         { key: 'emptyObject object', value: '' },
         { key: 'emptyObject string', value: '' },
@@ -337,6 +273,8 @@ describe('TableKeyValueComponent', () => {
       component.hideEmpty = true;
       component.ngOnInit();
       expect(component.tableData).toEqual([
+        { key: 'booleanFalse', value: false },
+        { key: 'booleanTrue', value: true },
         { key: 'someArray', value: '0, 1' },
         { key: 'someDifferentNumber', value: 1 },
         { key: 'someNumber', value: 0 },
@@ -351,15 +289,8 @@ describe('TableKeyValueComponent', () => {
 
     beforeEach(() => {
       columns = [
-        {
-          prop: 'key',
-          flexGrow: 1,
-          cellTransformation: CellTemplate.bold
-        },
-        {
-          prop: 'value',
-          flexGrow: 3
-        }
+        { prop: 'key', flexGrow: 1, cellTransformation: CellTemplate.bold },
+        { prop: 'value', flexGrow: 3 }
       ];
     });
 
@@ -369,9 +300,7 @@ describe('TableKeyValueComponent', () => {
     });
 
     it('should have the following column set up if customCss is defined', () => {
-      component.customCss = {
-        'answer-of-everything': 42
-      };
+      component.customCss = { 'class-name': 42 };
       component.ngOnInit();
       columns[1].cellTransformation = CellTemplate.classAdding;
       expect(component.columns).toEqual(columns);
