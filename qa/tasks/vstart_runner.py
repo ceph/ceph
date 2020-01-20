@@ -391,6 +391,11 @@ class LocalRemote(object):
 
         return proc
 
+    def sh(self, command, log_limit=1024, cwd=None, env=None):
+        from teuthology.misc import sh as teuth_sh
+
+        return teuth_sh(command=command, log_limit=log_limit, cwd=cwd,
+                        env=env)
 
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
