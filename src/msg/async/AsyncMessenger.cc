@@ -346,7 +346,7 @@ int AsyncMessenger::shutdown()
     p->stop();
   mark_down_all();
   // break ref cycles on the loopback connection
-  local_connection->set_priv(NULL);
+  local_connection->clear_priv();
   local_connection->mark_down();
   did_bind = false;
   lock.lock();
