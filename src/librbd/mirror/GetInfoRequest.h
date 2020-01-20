@@ -43,9 +43,6 @@ private:
    * <start>
    *    |
    *    v
-   * REFRESH
-   *    |
-   *    v
    * GET_MIRROR_IMAGE
    *    |
    *    v
@@ -64,9 +61,6 @@ private:
 
   bufferlist m_out_bl;
   std::string m_mirror_uuid;
-
-  void refresh_image();
-  void handle_refresh_image(int r);
 
   void get_mirror_image();
   void handle_get_mirror_image(int r);
