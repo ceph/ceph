@@ -39,6 +39,8 @@ def remove_subvol(fs, vol_spec, group, subvolname):
     :return: None
     """
     with open_subvol(fs, vol_spec, group, subvolname) as subvolume:
+        if subvolume.list_snapshots():
+            raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(subvolname))
         subvolume.remove()
 
 @contextmanager
