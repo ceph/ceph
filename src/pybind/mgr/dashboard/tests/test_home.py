@@ -45,6 +45,13 @@ class HomeTest(ControllerTestCase, FakeFsMixin):
     @mock.patch(FakeFsMixin.builtins_open, new=FakeFsMixin.f_open)
     @mock.patch('os.stat', new=FakeFsMixin.f_os.stat)
     @mock.patch('os.listdir', new=FakeFsMixin.f_os.listdir)
+    def test_home_uplevel_check(self):
+        self._get('/../../../../../../etc/shadow')
+        self.assertStatus(403)
+
+    @mock.patch(FakeFsMixin.builtins_open, new=FakeFsMixin.f_open)
+    @mock.patch('os.stat', new=FakeFsMixin.f_os.stat)
+    @mock.patch('os.listdir', new=FakeFsMixin.f_os.listdir)
     def test_home_en_us(self):
         self._get('/', headers=[('Accept-Language', 'en-US')])
         self.assertStatus(200)
