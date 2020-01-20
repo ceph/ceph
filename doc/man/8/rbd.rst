@@ -470,13 +470,15 @@ Commands
   can be explicitly disabled mirroring for each image within
   the pool.
 
-:command:`mirror image enable` *image-spec*
+:command:`mirror image enable` *image-spec* *mode*
   Enable RBD mirroring for an image. If the mirroring is
   configured in ``image`` mode for the image's pool, then it
   can be explicitly enabled mirroring for each image within
   the pool.
 
-  This requires the RBD journaling feature is enabled.
+  The mirror image mode can either be ``journal`` (default) or
+  ``snapshot``. The ``journal`` mode requires the RBD journaling
+  feature.
 
 :command:`mirror image promote` [--force] *image-spec*
   Promote a non-primary image to primary for RBD mirroring.
