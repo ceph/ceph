@@ -25,6 +25,7 @@ public:
     
     topic_name = s->object.name;
 
+    opaque_data = s->info.args.get("OpaqueData");
     dest.push_endpoint = s->info.args.get("push-endpoint");
     
     if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
