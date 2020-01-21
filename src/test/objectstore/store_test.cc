@@ -4072,11 +4072,11 @@ public:
     } else {
       bufferlist value;
       ceph_assert(dstdata.length() > dstoff);
-      dstdata.copy(0, dstoff, value);
+      dstdata.cbegin().copy(dstoff, value);
       value.append(bl);
       if (value.length() < dstdata.length())
-        dstdata.copy(value.length(),
-		     dstdata.length() - value.length(), value);
+        dstdata.cbegin(value.length()).copy(
+          dstdata.length() - value.length(), value);
       value.swap(dstdata);
     }
 
@@ -4118,11 +4118,11 @@ public:
     } else {
       bufferlist value;
       ceph_assert(data.length() > offset);
-      data.copy(0, offset, value);
+      data.cbegin().copy(offset, value);
       value.append(bl);
       if (value.length() < data.length())
-        data.copy(value.length(),
-		  data.length()-value.length(), value);
+        data.cbegin(value.length()).copy(
+          data.length()-value.length(), value);
       value.swap(data);
     }
 
@@ -4159,7 +4159,7 @@ public:
       data.append_zero(len - data.length());
     } else {
       bufferlist bl;
-      data.copy(0, len, bl);
+      data.cbegin().copy(len, bl);
       bl.swap(data);
     }
 
@@ -4197,7 +4197,7 @@ public:
       n.substr_of(data, 0, offset);
       n.append_zero(len);
       if (data.length() > offset + len)
-	data.copy(offset + len, data.length() - offset - len, n);
+	data.cbegin(offset + len).copy(data.length() - offset - len, n);
       data.swap(n);
     }
 
@@ -4245,7 +4245,7 @@ public:
         len = max_len;
       ceph_assert(len == result.length());
       ASSERT_EQ(len, result.length());
-      expected.copy(offset, len, bl);
+      expected.cbegin(offset).copy(len, bl);
       ASSERT_EQ(r, (int)len);
       ASSERT_TRUE(bl_eq(bl, result));
     }

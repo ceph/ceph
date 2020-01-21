@@ -3504,7 +3504,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       ceph::buffer::list t;
       t.claim(*op->outbl);
       t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
-      bl.copy(0, bl.length(), t.c_str());
+      bl.begin().copy(bl.length(), t.c_str());
       op->outbl->substr_of(t, 0, bl.length());
     } else {
       m->claim_data(*op->outbl);
