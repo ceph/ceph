@@ -1318,6 +1318,36 @@ function test_get_num_active_clean() {
     teardown $dir || return 1
 }
 
+##
+# Return the number of active or peered PGs in the cluster. A PG matches if
+# ceph pg dump pgs reports it is either **active** or **peered** and that
+# not **stale**.
+#
+# @param STDOUT the number of active PGs
+# @return 0 on success, 1 on error
+#
+function get_num_active_or_peered() {
+    local expression
+    expression+="select(contains(\"active\") or contains(\"peered\")) | "
+    expression+="select(contains(\"stale\") | not)"
+    ceph --format json pg dump pgs 2>/dev/null | \
+        jq ".pg_stats | [.[] | .state | $expression] | length"
+}
+
+function test_get_num_active_or_peered() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+    local num_peered=$(get_num_active_or_peered)
+    test "$num_peered" = $PG_NUM || return 1
+    teardown $dir || return 1
+}
+
 #######################################################################
 
 ##
@@ -1592,6 +1622,64 @@ function test_wait_for_clean() {
     wait_for_clean || return 1
     teardown $dir || return 1
 }
+
+##
+# Wait until the cluster becomes peered or if it does not make progress
+# for $WAIT_FOR_CLEAN_TIMEOUT seconds.
+# Progress is measured either via the **get_is_making_recovery_progress**
+# predicate or if the number of peered PGs changes (as returned by get_num_active_or_peered)
+#
+# @return 0 if the cluster is clean, 1 otherwise
+#
+function wait_for_peered() {
+    local cmd=$1
+    local num_peered=-1
+    local cur_peered
+    local -a delays=($(get_timeout_delays $WAIT_FOR_CLEAN_TIMEOUT .1))
+    local -i loop=0
+
+    flush_pg_stats || return 1
+    while test $(get_num_pgs) == 0 ; do
+	sleep 1
+    done
+
+    while true ; do
+        # Comparing get_num_active_clean & get_num_pgs is used to determine
+        # if the cluster is clean. That's almost an inline of is_clean() to
+        # get more performance by avoiding multiple calls of get_num_active_clean.
+        cur_peered=$(get_num_active_or_peered)
+        test $cur_peered = $(get_num_pgs) && break
+        if test $cur_peered != $num_peered ; then
+            loop=0
+            num_peered=$cur_peered
+        elif get_is_making_recovery_progress ; then
+            loop=0
+        elif (( $loop >= ${#delays[*]} )) ; then
+            ceph report
+            return 1
+        fi
+	# eval is a no-op if cmd is empty
+        eval $cmd
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+    return 0
+}
+
+function test_wait_for_peered() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_mgr $dir x || return 1
+    create_rbd_pool || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_clean || return 1
+    run_osd $dir 1 || return 1
+    wait_for_peered || return 1
+    teardown $dir || return 1
+}
+
 
 #######################################################################
 
