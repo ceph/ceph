@@ -2,64 +2,58 @@
  Mount CephFS using Kernel Driver
 =================================
 
-Prerequisite
-------------
-Before mounting CephFS, copy the Ceph configuration file and keyring for the
-CephX user that has CAPS to mount MDS to the client host (where CephFS will be
-mounted and used) from the host where Ceph Monitor resides. Please note that
-it's possible to mount CephFS without conf and keyring, but in that case, you
-would have to pass the MON's socket and CephX user's secret key manually to
-every mount command you run.
+The CephFS kernel driver is part of the Linux kernel. It allows mounting
+CephFS as a regular file system with native kernel performance. It is the
+client of choice for most use-cases.
 
-#. Generate a minimal conf file for the client host and place it at a
-   standard location::
+Prerequisites
+=============
 
-    # on client host
-    mkdir /etc/ceph
-    ssh {user}@{mon-host} "sudo ceph config generate-minimal-conf" | sudo tee /etc/ceph/ceph.conf
+Complete General Prerequisites
+------------------------------
+Go through the prerequisites required by both, kernel as well as FUSE mounts,
+in `Mount CephFS: Prerequisites`_ page.
 
-   Alternatively, you may copy the conf file. But the above method creates a
-   conf with minimum details which is better.
-
-#. Ensure that the conf file has appropriate permissions::
-
-    chmod 644 /etc/ceph/ceph.conf
-
-#. Create a CephX user and get its secret key::
-
-    ssh {user}@{mon-host} "sudo ceph fs authorize cephfs client.foo / rw" | sudo tee /etc/ceph/ceph.client.foo.keyring
-
-   In above command, replace ``cephfs`` with the name of your CephFS, ``foo``
-   by the name you want for CephX user and ``/`` by the path within your
-   CephFS for which you want to allow access to the client and ``rw`` stands
-   for, both, read and write permissions. Alternatively, you may copy the Ceph
-   keyring from the MON host to client host at ``/etc/ceph`` but creating a
-   keyring specific to the client host is better.
-
-.. note:: If you get 2 prompts for password while running above any of 2 above
-   command, run ``sudo ls`` (or any other trivial command with sudo)
-   immediately before these commands.
-
-#. Ensure that the keyring has appropriate permissions::
-
-    chmod 600 /etc/ceph/ceph.client.foo.keyring
-
-#. ``mount.ceph`` helper is installed with Ceph packages. If for some reason
-   installing these packages is not feasible and/or ``mount.ceph`` is not
-   present on the system, you can still mount CephFS, but you'll need to
-   explicitly pass the monitor addreses and CephX user keyring. To verify that
-   it is installed, do::
+Is mount helper is present?
+---------------------------
+``mount.ceph`` helper is installed by Ceph packages. The helper passes the
+monitor address(es) and CephX user keyrings automatically saving the Ceph
+admin the effort to pass these details explicitly while mountng CephFS. In
+case the helper is not present on the client machine, CephFS can still be
+mounted using kernel but by passing these details explicitly to the ``mount``
+command. To check whether it is present on your system, do::
 
     stat /sbin/mount.ceph
 
+Which Kernel Version?
+---------------------
+
+Because the kernel client is distributed as part of the linux kernel (not
+as part of packaged ceph releases), you will need to consider which kernel
+version to use on your client nodes. Older kernels are known to include buggy
+ceph clients, and may not support features that more recent Ceph clusters
+support.
+
+Remember that the "latest" kernel in a stable linux distribution is likely
+to be years behind the latest upstream linux kernel where Ceph development
+takes place (including bug fixes).
+
+As a rough guide, as of Ceph 10.x (Jewel), you should be using a least a 4.x
+kernel. If you absolutely have to use an older kernel, you should use the
+fuse client instead of the kernel client.
+
+This advice does not apply if you are using a linux distribution that
+includes CephFS support, as in this case the distributor will be responsible
+for backporting fixes to their stable kernel: check with your vendor.
+
 Synopsis
---------
+========
 In general, the command to mount CephFS via kernel driver looks like this::
 
     mount -t ceph {device-string}:{path-to-mounted} {mount-point} -o {key-value-args} {other-args}
 
 Mounting CephFS
----------------
+===============
 On Ceph clusters, CephX is enabled by default. Use ``mount`` command to
 mount CephFS with the kernel driver::
 
@@ -103,7 +97,7 @@ non-default FS on your local FS as follows::
     mount -t ceph :/ /mnt/mycephfs2 -o name=fs,mds_namespace=mycephfs2
 
 Unmounting CephFS
------------------
+=================
 To unmount the Ceph file system, use the ``umount`` command as usual::
 
     umount /mnt/mycephfs
@@ -112,7 +106,7 @@ To unmount the Ceph file system, use the ``umount`` command as usual::
    executing this command.
 
 Persistent Mounts
-------------------
+==================
 
 To mount CephFS in your file systems table as a kernel driver, add the
 following to ``/etc/fstab``::
@@ -132,5 +126,6 @@ manual for more options it can take. For troubleshooting, see
 :ref:`kernel_mount_debugging`.
 
 .. _fstab: ../fstab/#kernel-driver
-.. _User Management: ../../rados/operations/user-management/
+.. _Mount CephFS\: Prerequisites: ../mount-prerequisites
 .. _mount.ceph: ../../man/8/mount.ceph/
+.. _User Management: ../../rados/operations/user-management/
