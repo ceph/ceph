@@ -2361,7 +2361,7 @@ static std::vector<string> convert_bucket_set_to_str_vec(const std::set<rgw_buck
   for (auto& b : bs) {
     result.push_back(b.get_key());
   }
-  return std::move(result);
+  return result;
 }
 
 static void get_hint_entities(const std::set<rgw_zone_id>& zones, const std::set<rgw_bucket>& buckets,

@@ -47,7 +47,7 @@ static std::vector<rgw_sync_bucket_pipe> filter_relevant_pipes(const std::vector
     }
   }
 
-  return std::move(relevant_pipes);
+  return relevant_pipes;
 }
 
 static bool is_wildcard_bucket(const rgw_bucket& bucket)
@@ -229,7 +229,7 @@ vector<rgw_sync_bucket_pipe> rgw_sync_group_pipe_map::find_source_pipes(const rg
       result.push_back(pipe);
     }
   }
-  return std::move(result);
+  return result;
 }
 
 /*
@@ -250,7 +250,7 @@ vector<rgw_sync_bucket_pipe> rgw_sync_group_pipe_map::find_dest_pipes(std::optio
     }
   }
 
-  return std::move(result);
+  return result;
 }
 
 /*
@@ -839,7 +839,7 @@ multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_
     m.insert(make_pair(*pipe.source.zone, pipe));
   }
 
-  return std::move(m);
+  return m;
 }
 
 multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_dests() const
