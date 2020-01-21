@@ -15,6 +15,7 @@ from teuthology.exceptions import (
 )
 from teuthology.misc import deep_merge, get_results_url
 from teuthology.orchestra.opsys import OS
+from teuthology.repo_utils import build_git_url
 
 from teuthology.suite import util
 from teuthology.suite.build_matrix import combine_path, build_matrix
@@ -206,7 +207,14 @@ class Run(object):
                     "branch {0} not in teuthology.git; will use master for"
                     " teuthology".format(self.args.ceph_branch))
                 teuthology_branch = 'master'
-        log.info("teuthology branch: %s", teuthology_branch)
+        teuthology_hash = util.git_ls_remote(
+            'teuthology',
+            teuthology_branch
+        )
+        if not teuthology_hash:
+            exc = BranchNotFoundError(teuthology_branch, build_git_url('teuthology'))
+            util.schedule_fail(message=str(exc), name=self.name)
+        log.info("teuthology branch: %s %s", teuthology_branch, teuthology_hash)
         return teuthology_branch
 
     @property
