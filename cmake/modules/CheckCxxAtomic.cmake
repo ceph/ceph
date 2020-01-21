@@ -30,6 +30,7 @@ cmake_push_check_state()
 check_cxx_atomics(HAVE_CXX11_ATOMIC)
 cmake_pop_check_state()
 
+set(HAVE_CXX11_ATOMIC FALSE)
 if(NOT HAVE_CXX11_ATOMIC)
   cmake_push_check_state()
   set(CMAKE_REQUIRED_LIBRARIES "atomic")
