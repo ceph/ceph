@@ -17,6 +17,8 @@
       <button type="button"
               class="btn btn-light"
               (click)="showSelectionModal()"
+              data-toggle="tooltip"
+              [title]="addButtonTooltip"
               [disabled]="availDevices.length === 0 || !canSelect">
         <i [ngClass]="[icons.add]"></i>
         <ng-container i18n>Add</ng-container>
@@ -36,9 +38,13 @@
       </div>
       <div>
         <cd-inventory-devices [devices]="devices"
-                              [hiddenColumns]="['available']"
+                              [hiddenColumns]="['available', 'osd_ids']"
                               [filterColumns]="[]">
         </cd-inventory-devices>
+      </div>
+      <div *ngIf="type === 'data'"
+           class="float-right">
+        <span i18n>Raw capacity: {{ capacity | dimlessBinary }}</span>
       </div>
     </ng-template>
   </div>
