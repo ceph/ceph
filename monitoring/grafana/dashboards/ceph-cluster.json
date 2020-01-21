@@ -346,6 +346,7 @@
       },
       "id": 53,
       "legend": {
+        "alignAsTable": true,
         "avg": false,
         "current": false,
         "max": false,
@@ -402,52 +403,52 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "ceph_pg_total",
+          "expr": "ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_total)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Total",
+          "legendFormat": "{{name}} Total",
           "refId": "A"
         },
         {
-          "expr": "ceph_pg_active",
+          "expr": "ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_active)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Active",
+          "legendFormat": "{{name}} Active",
           "refId": "B"
         },
         {
-          "expr": "ceph_pg_total - ceph_pg_active",
+          "expr": "ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_total - ceph_pg_active)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Inactive",
+          "legendFormat": "{{name}} Inactive",
           "refId": "G"
         },
         {
-          "expr": "ceph_pg_undersized",
+          "expr": "ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_undersized)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Undersized",
+          "legendFormat": "{{name}} Undersized",
           "refId": "F"
         },
         {
-          "expr": "ceph_pg_degraded",
+          "expr": "ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_degraded)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Degraded",
+          "legendFormat": "{{name}} Degraded",
           "refId": "C"
         },
         {
-          "expr": "ceph_pg_inconsistent",
+          "expr": "ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_inconsistent)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Inconsistent",
+          "legendFormat": "{{name}} Inconsistent",
           "refId": "D"
         },
         {
-          "expr": "ceph_pg_down",
+          "expr": "ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_down)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Down",
+          "legendFormat": "{{name}} Down",
           "refId": "E"
         }
       ],
