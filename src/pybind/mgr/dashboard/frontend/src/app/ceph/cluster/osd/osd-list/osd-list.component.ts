@@ -344,7 +344,7 @@ export class OsdListComponent implements OnInit {
         }),
         fields: [
           {
-            type: 'inputText',
+            type: 'text',
             name: 'deviceClass',
             value: selectedOsd.tree.device_class,
             label: this.i18n('Device class'),
