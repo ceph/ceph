@@ -383,8 +383,10 @@ void SnapshotRemoveRequest<I>::handle_remove_image_state(int r) {
   if (r < 0) {
     lderr(cct) << "failed to remove image state: " << cpp_strerror(r)
                << dendl;
-    this->complete(r);
-    return;
+    if (r != -ENOENT) {
+      this->complete(r);
+      return;
+    }
   }
 
   release_snap_id();
