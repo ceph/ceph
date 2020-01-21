@@ -89,7 +89,7 @@ int CrushLocation::update_from_hook()
     return ret;
 
   std::string out;
-  bl.copy(0, bl.length(), out);
+  bl.begin().copy(bl.length(), out);
   out.erase(out.find_last_not_of(" \n\r\t")+1);
   return _parse(out);
 }

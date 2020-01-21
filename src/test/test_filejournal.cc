@@ -300,14 +300,14 @@ TEST(TestFileJournal, ReplaySmall) {
     uint64_t seq = 0;
     ASSERT_EQ(true, fj.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
-    inbl.copy(0, inbl.length(), v);
+    inbl.cbegin().copy(inbl.length(), v);
     ASSERT_EQ("small", v);
     inbl.clear();
     v.clear();
 
     ASSERT_EQ(true, fj.read_entry(inbl, seq));
     ASSERT_EQ(seq, 3ull);
-    inbl.copy(0, inbl.length(), v);
+    inbl.cbegin().copy(inbl.length(), v);
     ASSERT_EQ("small", v);
     inbl.clear();
     v.clear();
@@ -392,7 +392,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
     uint64_t seq = 0;
     ASSERT_EQ(true, fj.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
-    inbl.copy(0, inbl.length(), v);
+    inbl.cbegin().copy(inbl.length(), v);
     ASSERT_EQ(needle, v);
     inbl.clear();
     v.clear();
