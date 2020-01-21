@@ -853,7 +853,7 @@ struct ReplicationConfiguration {
         }
       }
 
-      return std::move(ids);
+      return ids;
     }
 
     vector<string> get_zone_names_from_ids(rgw::sal::RGWRadosStore *store,
@@ -867,7 +867,7 @@ struct ReplicationConfiguration {
         }
       }
 
-      return std::move(names);
+      return names;
     }
 
     std::optional<DeleteMarkerReplication> delete_marker_replication;

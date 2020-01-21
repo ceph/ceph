@@ -207,7 +207,7 @@ std::vector<rgw_sync_bucket_entity> rgw_sync_bucket_entities::expand() const
     e.all_zones = true;
     e.bucket = b;
     result.push_back(e);
-    return std::move(result);
+    return result;
   }
 
   if (!zones) {
