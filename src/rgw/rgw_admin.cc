@@ -2256,7 +2256,7 @@ static int remote_bilog_markers(rgw::sal::RGWRadosStore *store, const RGWZone& s
 static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
-                                     const rgw_sync_bucket_pipe& pipe,
+                                     rgw_sync_bucket_pipe pipe,
                                      int width, std::ostream& out)
 {
   out << indented{width, "source zone"} << source.id << " (" << source.name << ")" << std::endl;
@@ -2279,6 +2279,9 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
     lderr(store->ctx()) << "failed to read source bucket info: " << cpp_strerror(r) << dendl;
     return r;
   }
+
+  pipe.source.bucket = source_bucket;
+  pipe.dest.bucket = bucket_info.bucket;
 
   std::vector<rgw_bucket_shard_sync_info> status;
   r = rgw_bucket_sync_status(dpp(), store, pipe, bucket_info, &source_bucket_info, &status);
@@ -7829,7 +7832,18 @@ next:
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketPipeSyncStatusManager sync(store, source_zone, opt_source_bucket, bucket);
+    auto opt_sb = opt_source_bucket;
+    if (opt_sb && opt_sb->bucket_id.empty()) {
+      string sbid;
+      rgw_bucket sbuck;
+      int ret = init_bucket_for_sync(opt_sb->tenant, opt_sb->name, sbid, sbuck);
+      if (ret < 0) {
+        return -ret;
+      }
+      opt_sb = sbuck;
+    }
+
+    RGWBucketPipeSyncStatusManager sync(store, source_zone, opt_sb, bucket);
 
     ret = sync.init();
     if (ret < 0) {
