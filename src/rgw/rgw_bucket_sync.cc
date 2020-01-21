@@ -307,7 +307,8 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
     return false;
   }
 
-  auto iter = prefix_refs.upper_bound(key.name);
+  auto end = prefix_refs.upper_bound(key.name);
+  auto iter = end;
   if (iter != prefix_refs.begin()) {
     --iter;
   }
@@ -315,7 +316,10 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
     return false;
   }
 
-  auto end = prefix_refs.upper_bound(key.name);
+  if (iter != prefix_refs.begin()) {
+    iter = prefix_refs.find(iter->first); /* prefix_refs is multimap, find first element
+                                             holding that key */
+  }
 
   std::vector<decltype(iter)> iters;
 
