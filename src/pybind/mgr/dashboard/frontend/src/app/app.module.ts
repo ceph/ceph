@@ -11,9 +11,8 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BlockUIModule } from 'ng-block-ui';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { SidebarModule } from 'ng-sidebar';
+
 import { AccordionModule } from 'ngx-bootstrap/accordion';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -38,7 +37,6 @@ export function jwtTokenGetter() {
   declarations: [AppComponent],
   imports: [
     HttpClientModule,
-    BlockUIModule.forRoot(),
     BrowserModule,
     BrowserAnimationsModule,
     ToastrModule.forRoot({
@@ -59,7 +57,6 @@ export function jwtTokenGetter() {
       }
     }),
     NgBootstrapFormValidationModule.forRoot(),
-    SidebarModule.forRoot(),
     WebStorageModule
   ],
   exports: [SharedModule],

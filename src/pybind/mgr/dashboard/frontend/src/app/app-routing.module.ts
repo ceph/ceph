@@ -28,6 +28,8 @@ import { LoginComponent } from './core/auth/login/login.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
 import { UserPasswordFormComponent } from './core/auth/user-password-form/user-password-form.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
+import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.component';
+import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
@@ -69,237 +71,229 @@ export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
 const routes: Routes = [
   // Dashboard
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-  { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuardService] },
-  // Cluster
   {
-    path: 'hosts',
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Hosts' },
-    children: [
-      { path: '', component: HostsComponent },
-      {
-        path: URLVerbs.ADD,
-        component: HostFormComponent,
-        data: { breadcrumbs: ActionLabels.ADD }
-      }
-    ]
-  },
-  {
-    path: 'monitor',
-    component: MonitorComponent,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Monitors' }
-  },
-  {
-    path: 'services',
-    component: ServicesComponent,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Services' }
-  },
-  {
-    path: 'inventory',
-    component: InventoryComponent,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Inventory' }
-  },
-  {
-    path: 'osd',
+    path: '',
+    component: WorkbenchLayoutComponent,
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/OSDs' },
     children: [
-      { path: '', component: OsdListComponent },
+      { path: 'dashboard', component: DashboardComponent },
+      // Cluster
       {
-        path: URLVerbs.CREATE,
-        component: OsdFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE }
-      }
-    ]
-  },
-  {
-    path: 'configuration',
-    data: { breadcrumbs: 'Cluster/Configuration' },
-    children: [
-      { path: '', component: ConfigurationComponent },
-      {
-        path: 'edit/:name',
-        component: ConfigurationFormComponent,
-        data: { breadcrumbs: ActionLabels.EDIT }
-      }
-    ]
-  },
-  {
-    path: 'crush-map',
-    component: CrushmapComponent,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/CRUSH map' }
-  },
-  {
-    path: 'logs',
-    component: LogsComponent,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Logs' }
-  },
-  {
-    path: 'monitoring',
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Monitoring' },
-    children: [
-      {
-        path: '',
-        component: MonitoringListComponent
+        path: 'hosts',
+        data: { breadcrumbs: 'Cluster/Hosts' },
+        children: [
+          { path: '', component: HostsComponent },
+          {
+            path: URLVerbs.ADD,
+            component: HostFormComponent,
+            data: { breadcrumbs: ActionLabels.ADD }
+          }
+        ]
       },
       {
-        path: 'silence/' + URLVerbs.CREATE,
-        component: SilenceFormComponent,
-        data: { breadcrumbs: `${ActionLabels.CREATE} Silence` }
+        path: 'monitor',
+        component: MonitorComponent,
+        data: { breadcrumbs: 'Cluster/Monitors' }
       },
       {
-        path: `silence/${URLVerbs.CREATE}/:id`,
-        component: SilenceFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE }
+        path: 'services',
+        component: ServicesComponent,
+        data: { breadcrumbs: 'Cluster/Services' }
       },
       {
-        path: `silence/${URLVerbs.EDIT}/:id`,
-        component: SilenceFormComponent,
-        data: { breadcrumbs: ActionLabels.EDIT }
+        path: 'inventory',
+        component: InventoryComponent,
+        data: { breadcrumbs: 'Cluster/Inventory' }
       },
       {
-        path: `silence/${URLVerbs.RECREATE}/:id`,
-        component: SilenceFormComponent,
-        data: { breadcrumbs: ActionLabels.RECREATE }
-      }
-    ]
-  },
-  {
-    path: 'perf_counters/:type/:id',
-    component: PerformanceCounterComponent,
-    canActivate: [AuthGuardService],
-    data: {
-      breadcrumbs: PerformanceCounterBreadcrumbsResolver
-    }
-  },
-  // Mgr modules
-  {
-    path: 'mgr-modules',
-    canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Manager modules' },
-    children: [
-      {
-        path: '',
-        component: MgrModuleListComponent
+        path: 'osd',
+        data: { breadcrumbs: 'Cluster/OSDs' },
+        children: [
+          { path: '', component: OsdListComponent },
+          {
+            path: URLVerbs.CREATE,
+            component: OsdFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          }
+        ]
       },
       {
-        path: 'edit/:name',
-        component: MgrModuleFormComponent,
+        path: 'configuration',
+        data: { breadcrumbs: 'Cluster/Configuration' },
+        children: [
+          { path: '', component: ConfigurationComponent },
+          {
+            path: 'edit/:name',
+            component: ConfigurationFormComponent,
+            data: { breadcrumbs: ActionLabels.EDIT }
+          }
+        ]
+      },
+      {
+        path: 'crush-map',
+        component: CrushmapComponent,
+        data: { breadcrumbs: 'Cluster/CRUSH map' }
+      },
+      {
+        path: 'logs',
+        component: LogsComponent,
+        data: { breadcrumbs: 'Cluster/Logs' }
+      },
+      {
+        path: 'monitoring',
+        data: { breadcrumbs: 'Cluster/Monitoring' },
+        children: [
+          {
+            path: '',
+            component: MonitoringListComponent
+          },
+          {
+            path: 'silence/' + URLVerbs.CREATE,
+            component: SilenceFormComponent,
+            data: { breadcrumbs: `${ActionLabels.CREATE} Silence` }
+          },
+          {
+            path: `silence/${URLVerbs.CREATE}/:id`,
+            component: SilenceFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          },
+          {
+            path: `silence/${URLVerbs.EDIT}/:id`,
+            component: SilenceFormComponent,
+            data: { breadcrumbs: ActionLabels.EDIT }
+          },
+          {
+            path: `silence/${URLVerbs.RECREATE}/:id`,
+            component: SilenceFormComponent,
+            data: { breadcrumbs: ActionLabels.RECREATE }
+          }
+        ]
+      },
+      {
+        path: 'perf_counters/:type/:id',
+        component: PerformanceCounterComponent,
         data: {
-          breadcrumbs: StartCaseBreadcrumbsResolver
+          breadcrumbs: PerformanceCounterBreadcrumbsResolver
         }
+      },
+      // Mgr modules
+      {
+        path: 'mgr-modules',
+        data: { breadcrumbs: 'Cluster/Manager modules' },
+        children: [
+          {
+            path: '',
+            component: MgrModuleListComponent
+          },
+          {
+            path: 'edit/:name',
+            component: MgrModuleFormComponent,
+            data: {
+              breadcrumbs: StartCaseBreadcrumbsResolver
+            }
+          }
+        ]
+      },
+      // Pools
+      {
+        path: 'pool',
+        data: { breadcrumbs: 'Pools' },
+        loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
+      },
+      // Block
+      {
+        path: 'block',
+        data: { breadcrumbs: true, text: 'Block', path: null },
+        loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
+      },
+      // Filesystems
+      {
+        path: 'cephfs',
+        component: CephfsListComponent,
+        canActivate: [FeatureTogglesGuardService],
+        data: { breadcrumbs: 'Filesystems' }
+      },
+      // Object Gateway
+      {
+        path: 'rgw',
+        canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            apiPath: 'rgw',
+            redirectTo: 'rgw/501'
+          },
+          breadcrumbs: true,
+          text: 'Object Gateway',
+          path: null
+        },
+        loadChildren: () => import('./ceph/rgw/rgw.module').then((m) => m.RoutedRgwModule)
+      },
+      // User/Role Management
+      {
+        path: 'user-management',
+        data: { breadcrumbs: 'User management', path: null },
+        loadChildren: () => import('./core/auth/auth.module').then((m) => m.RoutedAuthModule)
+      },
+      // User Profile
+      {
+        path: 'user-profile',
+        data: { breadcrumbs: 'User profile', path: null },
+        children: [
+          {
+            path: URLVerbs.EDIT,
+            component: UserPasswordFormComponent,
+            canActivate: [NoSsoGuardService],
+            data: { breadcrumbs: ActionLabels.EDIT }
+          }
+        ]
+      },
+      // NFS
+      {
+        path: 'nfs/501/:message',
+        component: Nfs501Component,
+        data: { breadcrumbs: 'NFS' }
+      },
+      {
+        path: 'nfs',
+        canActivateChild: [ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            apiPath: 'nfs-ganesha',
+            redirectTo: 'nfs/501'
+          },
+          breadcrumbs: 'NFS'
+        },
+        children: [
+          { path: '', component: NfsListComponent },
+          {
+            path: URLVerbs.CREATE,
+            component: NfsFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          },
+          {
+            path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
+            component: NfsFormComponent,
+            data: { breadcrumbs: ActionLabels.EDIT }
+          }
+        ]
       }
     ]
   },
-  // Pools
   {
-    path: 'pool',
-    canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'Pools' },
-    loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
-  },
-  // Block
-  {
-    path: 'block',
-    canActivateChild: [AuthGuardService],
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: true, text: 'Block', path: null },
-    loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
-  },
-  // Filesystems
-  {
-    path: 'cephfs',
-    component: CephfsListComponent,
-    canActivate: [FeatureTogglesGuardService, AuthGuardService],
-    data: { breadcrumbs: 'Filesystems' }
-  },
-  // Object Gateway
-  {
-    path: 'rgw',
-    canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService, AuthGuardService],
-    data: {
-      moduleStatusGuardConfig: {
-        apiPath: 'rgw',
-        redirectTo: 'rgw/501'
-      },
-      breadcrumbs: true,
-      text: 'Object Gateway',
-      path: null
-    },
-    loadChildren: () => import('./ceph/rgw/rgw.module').then((m) => m.RoutedRgwModule)
-  },
-  // User/Role Management
-  {
-    path: 'user-management',
-    canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'User management', path: null },
-    loadChildren: () => import('./core/auth/auth.module').then((m) => m.RoutedAuthModule)
-  },
-  // User Profile
-  {
-    path: 'user-profile',
-    canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'User profile', path: null },
+    path: '',
+    component: BlankLayoutComponent,
     children: [
-      {
-        path: URLVerbs.EDIT,
-        component: UserPasswordFormComponent,
-        canActivate: [NoSsoGuardService],
-        data: { breadcrumbs: ActionLabels.EDIT }
-      }
+      // Single Sign-On (SSO)
+      { path: 'sso/404', component: SsoNotFoundComponent },
+      // System
+      { path: 'login', component: LoginComponent },
+      { path: 'logout', children: [] },
+      { path: '403', component: ForbiddenComponent },
+      { path: '404', component: NotFoundComponent },
+      { path: '**', redirectTo: '/404' }
     ]
-  },
-  // NFS
-  {
-    path: 'nfs/501/:message',
-    component: Nfs501Component,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'NFS' }
-  },
-  {
-    path: 'nfs',
-    canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService, ModuleStatusGuardService],
-    data: {
-      moduleStatusGuardConfig: {
-        apiPath: 'nfs-ganesha',
-        redirectTo: 'nfs/501'
-      },
-      breadcrumbs: 'NFS'
-    },
-    children: [
-      { path: '', component: NfsListComponent },
-      {
-        path: URLVerbs.CREATE,
-        component: NfsFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE }
-      },
-      {
-        path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
-        component: NfsFormComponent,
-        data: { breadcrumbs: ActionLabels.EDIT }
-      }
-    ]
-  },
-  // Single Sign-On (SSO)
-  { path: 'sso/404', component: SsoNotFoundComponent },
-  // System
-  { path: 'login', component: LoginComponent },
-  { path: 'logout', children: [] },
-  { path: '403', component: ForbiddenComponent },
-  { path: '404', component: NotFoundComponent },
-  { path: '**', redirectTo: '/404' }
+  }
 ];
 
 @NgModule({

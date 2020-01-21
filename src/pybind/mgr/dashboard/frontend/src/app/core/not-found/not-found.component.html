@@ -1,14 +1,20 @@
-<div class="row">
-  <div class="col-md-12 text-center">
-    <h1 i18n>Sorry, we could not find what you were looking for</h1>
-
+<div class="horizontal-align vertical-align full-height">
+  <div class="text-center">
+    <h1 i18n>Sorry, we could not find what you were looking for.</h1>
     <img class="img-fluid mx-auto rounded"
          src="assets/1280px-Nautilus_Octopus.jpg">
+    <br>
     <span>
       "<a href="https://www.flickr.com/photos/146401137@N06/40335060661">Nautilus Octopus</a>" by Jin Kemoole is licensed under
       <a rel="nofollow"
          class="external text"
          href="https://creativecommons.org/licenses/by/2.0/">CC BY 2.0</a>
     </span>
+    <br>
+    <button type="button"
+            class="btn btn-primary"
+            [routerLink]="'/login'">
+      <ng-container i18n>Back</ng-container>
+    </button>
   </div>
 </div>
