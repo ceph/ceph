@@ -61,9 +61,9 @@ Basic
     for autodiscovery of monitor addresses and auth secrets. The default is
     to use the standard search path for ceph.conf files.
 
-:command: `mds_namespace=<fs-name>`
-      Specify the non-default file system to be mounted. Not passing this
-      option mounts the default file system.
+:command:`mds_namespace=<fs-name>`
+    Specify the non-default file system to be mounted. Not passing this
+    option mounts the default file system.
 
 :command:`mount_timeout`
     int (seconds), Default: 60
