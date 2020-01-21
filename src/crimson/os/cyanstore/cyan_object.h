@@ -37,4 +37,6 @@ struct Object : public boost::intrusive_ref_counter<
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
 };
+using ObjectRef = boost::intrusive_ptr<Object>;
+
 }

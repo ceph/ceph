@@ -45,7 +45,6 @@ public:
 					   const ec_profile_t& ec_profile);
 
   using read_errorator = ll_read_errorator::extend<
-    crimson::ct_error::input_output_error,
     crimson::ct_error::object_corrupted>;
   read_errorator::future<ceph::bufferlist> read(
     const object_info_t& oi,
