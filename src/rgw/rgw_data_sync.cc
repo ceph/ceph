@@ -4707,7 +4707,7 @@ int RGWBucketPipeSyncStatusManager::init()
   ret = cr_mgr.run(new RGWGetBucketPeersCR(&sync_env,
                                            dest_bucket,
                                            source_zone,
-                                           std::nullopt,
+                                           source_bucket,
                                            &pipes,
                                            sync_env.sync_tracer->root_node));
   if (ret < 0) {
