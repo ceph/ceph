@@ -59,7 +59,8 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    if (this.authStorageService.getPermissions().prometheus.read) {
+    const permissions = this.authStorageService.getPermissions();
+    if (permissions.prometheus.read && permissions.configOpt.read) {
       this.triggerPrometheusAlerts();
       this.ngZone.runOutsideAngular(() => {
         this.interval = window.setInterval(() => {

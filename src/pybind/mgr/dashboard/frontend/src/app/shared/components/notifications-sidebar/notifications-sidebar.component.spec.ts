@@ -13,6 +13,7 @@ import { RbdService } from '../../api/rbd.service';
 import { SettingsService } from '../../api/settings.service';
 import { NotificationType } from '../../enum/notification-type.enum';
 import { ExecutingTask } from '../../models/executing-task';
+import { Permissions } from '../../models/permissions';
 import { PipesModule } from '../../pipes/pipes.module';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { NotificationService } from '../../services/notification.service';
@@ -59,7 +60,8 @@ describe('NotificationsSidebarComponent', () => {
   describe('prometheus alert handling', () => {
     let prometheusAlertService: PrometheusAlertService;
     let prometheusNotificationService: PrometheusNotificationService;
-    let prometheusAccessAllowed: boolean;
+    let prometheusReadPermission: string;
+    let configOptReadPermission: string;
 
     const expectPrometheusServicesToBeCalledTimes = (n: number) => {
       expect(prometheusNotificationService.refresh).toHaveBeenCalledTimes(n);
@@ -67,10 +69,15 @@ describe('NotificationsSidebarComponent', () => {
     };
 
     beforeEach(() => {
-      prometheusAccessAllowed = true;
-      spyOn(TestBed.get(AuthStorageService), 'getPermissions').and.callFake(() => ({
-        prometheus: { read: prometheusAccessAllowed }
-      }));
+      prometheusReadPermission = 'read';
+      configOptReadPermission = 'read';
+      spyOn(TestBed.get(AuthStorageService), 'getPermissions').and.callFake(
+        () =>
+          new Permissions({
+            prometheus: [prometheusReadPermission],
+            'config-opt': [configOptReadPermission]
+          })
+      );
 
       spyOn(TestBed.get(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
 
@@ -82,7 +89,14 @@ describe('NotificationsSidebarComponent', () => {
     });
 
     it('should not refresh prometheus services if not allowed', () => {
-      prometheusAccessAllowed = false;
+      prometheusReadPermission = '';
+      configOptReadPermission = 'read';
+      fixture.detectChanges();
+
+      expectPrometheusServicesToBeCalledTimes(0);
+
+      prometheusReadPermission = 'read';
+      configOptReadPermission = '';
       fixture.detectChanges();
 
       expectPrometheusServicesToBeCalledTimes(0);
