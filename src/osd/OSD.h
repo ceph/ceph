@@ -710,10 +710,6 @@ public:
   }
   bool _get_map_bl(epoch_t e, bufferlist& bl);
 
-  void add_map_inc_bl(epoch_t e, bufferlist& bl) {
-    std::lock_guard l(map_cache_lock);
-    return _add_map_inc_bl(e, bl);
-  }
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
 
@@ -1727,9 +1723,6 @@ protected:
   }
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     return service.get_map_bl(e, bl);
-  }
-  void add_map_inc_bl(epoch_t e, bufferlist& bl) {
-    return service.add_map_inc_bl(e, bl);
   }
 
 public:
