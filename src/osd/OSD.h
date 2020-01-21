@@ -703,10 +703,6 @@ public:
   }
   OSDMapRef _add_map(OSDMap *o);
 
-  void add_map_bl(epoch_t e, bufferlist& bl) {
-    std::lock_guard l(map_cache_lock);
-    return _add_map_bl(e, bl);
-  }
   void _add_map_bl(epoch_t e, bufferlist& bl);
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     std::lock_guard l(map_cache_lock);
@@ -1728,9 +1724,6 @@ protected:
   }
   OSDMapRef add_map(OSDMap *o) {
     return service.add_map(o);
-  }
-  void add_map_bl(epoch_t e, bufferlist& bl) {
-    return service.add_map_bl(e, bl);
   }
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     return service.get_map_bl(e, bl);
