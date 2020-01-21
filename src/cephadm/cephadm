@@ -839,7 +839,7 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
             '--setgroup', 'ceph',
             '--default-log-to-file=false',
             '--default-log-to-stderr=true',
-            '--default-log-stderr-prefix=debug\ ',
+            '--default-log-stderr-prefix="debug "',
         ]
         if daemon_type == 'mon':
             r += [
