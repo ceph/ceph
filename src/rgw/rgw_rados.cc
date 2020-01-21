@@ -5989,7 +5989,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
 
       if (ofs < astate->data.length()) {
         unsigned copy_len = std::min((uint64_t)astate->data.length() - ofs, len);
-        astate->data.copy(ofs, copy_len, bl);
+        astate->data.begin(ofs).copy(copy_len, bl);
         read_len -= copy_len;
         read_ofs += copy_len;
         if (!read_len)
