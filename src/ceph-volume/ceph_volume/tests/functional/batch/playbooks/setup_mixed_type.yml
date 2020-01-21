@@ -3,6 +3,46 @@
   become: yes
   tasks:
 
+    - name: install lvm2
+      package:
+        name: lvm2
+        state: present
+    - name: tell lvm to ignore loop devices
+      lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: '        global_filter = [ "r|loop|", "a|.*|" ]'
+        insertafter: '^devices {'
+    - name: lvm allow changes depsite duplicate PVIDs
+      lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: '        allow_changes_with_duplicate_pvs = 1'
+        insertafter: '^devices {'
+        regexp: 'allow_changes_with_duplicate_pvs = 0'
+    - name: create mount points
+      command: "mkdir /opt/{{ item }}"
+      loop:
+        - vdd
+        - vde
+      ignore_errors: yes
+
+    - name: add part
+      shell: echo "type=83" | sfdisk /dev/{{ item }}
+      loop:
+        - vdd
+        - vde
+
+    - name: add fs
+      command: "mkfs.ext4 /dev/{{ item }}1"
+      loop:
+        - vdd
+        - vde
+
+    - name: mount additional drives
+      command: "mount /dev/{{ item }}1 /opt/{{ item }}"
+      loop:
+        - vdd
+        - vde
+
     - name: create the nvme image systemd unit
       copy:
         content: |
@@ -26,12 +66,14 @@
         content: |
           set -x
           set -e
+          mount /dev/vdd1 /opt/vdd
+          mount /dev/vde1 /opt/vde
           modprobe nvmet
           modprobe nvme_loop
           modprobe nvme_fabrics
           modprobe loop
-          losetup -v /dev/loop0 /opt/loop0_nvme0
-          losetup -v /dev/loop1 /opt/loop1_nvme1
+          losetup -v /dev/loop0 /opt/vdd/loop0_nvme0
+          losetup -v /dev/loop1 /opt/vde/loop1_nvme1
           losetup -l
           nvmetcli restore /opt/loop.json
           nvme connect -t loop -n testnqn1 -q hostnqn
@@ -74,21 +116,22 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - /opt/loop0_nvme0
-        - /opt/loop1_nvme1
+        - /opt/vdd/loop0_nvme0
+        - /opt/vde/loop1_nvme1
 
     - name: create 11GB sparse files for NVMe
       command: "fallocate -l 11G {{ item }}"
       loop:
-        - /opt/loop0_nvme0
-        - /opt/loop1_nvme1
+        - /opt/vdd/loop0_nvme0
+        - /opt/vde/loop1_nvme1
 
-    - name: setup loop devices with sparse files
-      command: "losetup /dev/loop{{ item }} /opt/loop{{ item }}_nvme{{ item }}"
+    - name: setup loop devices with sparse files 0
+      command: "losetup /dev/loop0 /opt/vdd/loop0_nvme0"
       failed_when: false
-      loop:
-        - 0
-        - 1
+
+    - name: setup loop devices with sparse files 1
+      command: "losetup /dev/loop1 /opt/vde/loop1_nvme1"
+      failed_when: false
 
     - name: create the loop.json file for nvmetcli
       copy:
