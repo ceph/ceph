@@ -3829,7 +3829,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
     auto aiter = obj_attrs.find(RGW_ATTR_ACL);
     if (aiter == obj_attrs.end()) {
-      ldout(cct, 0) << "WARNING: " << __func__ << "(): object doesn't have ACL attribute" << dendl;
+      ldout(cct, 0) << "WARNING: " << __func__ << "(): object doesn't have ACL attribute, setting default ACLs" << dendl;
+      acl.create_default(owner_info.user_id, owner_info.display_name);
     } else {
       auto iter = aiter->second.cbegin();
       try {
