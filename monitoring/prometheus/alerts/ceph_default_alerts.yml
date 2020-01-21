@@ -222,7 +222,7 @@ groups:
     rules:
       - alert: pool full
         expr: |
-          ceph_pool_stored / ceph_pool_max_avail
+          ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)
           * on(pool_id) group_right ceph_pool_metadata * 100 > 90
         labels:
           severity: critical
@@ -235,7 +235,7 @@ groups:
         expr: |
           (
             (
-              (ceph_pool_max_avail - ceph_pool_stored) / deriv(ceph_pool_max_avail[2d])
+              ceph_pool_max_avail / deriv(ceph_pool_max_avail[2d])
             ) * on(pool_id) group_right ceph_pool_metadata <= 5
           ) > 0
         labels:
