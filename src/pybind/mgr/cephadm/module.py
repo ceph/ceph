@@ -303,11 +303,29 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'desc': 'Container image name, without the tag',
             'runtime': True,
         },
+        {
+            'name': 'warn_on_stray_hosts',
+            'type': 'bool',
+            'default': True,
+            'desc': 'raise a health warning if services are detected on a host '
+                    'that is not managed by cephadm',
+        },
+        {
+            'name': 'warn_on_stray_services',
+            'type': 'bool',
+            'default': True,
+            'desc': 'raise a health warning if services are detected '
+                    'that are not managed by cephadm',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
         super(CephadmOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid = self.get('mon_map')['fsid']
+
+        # for serve()
+        self.run = True
+        self.event = Event()
 
         self.config_notify()
 
@@ -368,10 +386,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if h not in self.inventory:
                 del self.service_cache[h]
 
-        # for serve()
-        self.run = True
-        self.event = Event()
-
     def shutdown(self):
         self.log.info('shutdown')
         self._worker_pool.close()
@@ -405,8 +419,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                               (s.service_type, s.service_instance))
                 return True
 
-    def _clear_health_checks(self):
-        self.health_checks = {}
+    def _clear_upgrade_health_checks(self):
+        for k in ['UPGRADE_NO_STANDBY_MGR']:
+            if k in self.health_checks:
+                del self.health_checks[k]
         self.set_health_checks(self.health_checks)
 
     def _do_upgrade(self, daemons):
@@ -557,6 +573,61 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self._save_upgrade_state()
         return None
 
+    def _check_for_strays(self):
+        self.log.debug('_check_for_strays')
+        for k in ['CEPHADM_STRAY_HOST',
+                  'CEPHADM_STRAY_SERVICE']:
+            if k in self.health_checks:
+                del self.health_checks[k]
+        if self.warn_on_stray_hosts or self.warn_on_stray_services:
+            ls = self.list_servers()
+            managed = []
+            if self.warn_on_stray_services:
+                completion = self._get_services()
+                self._orchestrator_wait([completion])
+                orchestrator.raise_if_exception(completion)
+                self.log.debug('services %s' % completion.result)
+                for s in completion.result:
+                    managed.append(s.name())
+                self.log.debug('cephadm daemons %s' % managed)
+            host_detail = []     # type: List[str]
+            host_num_services = 0
+            service_detail = []  # type: List[str]
+            for item in ls:
+                host = item.get('hostname')
+                services = item.get('services')
+                missing_names = []
+                for s in services:
+                    name = '%s.%s' % (s.get('type'), s.get('id'))
+                    if host not in self.inventory:
+                        missing_names.append(name)
+                        host_num_services += 1
+                    if name not in managed:
+                        service_detail.append(
+                            'stray service %s on host %s not managed by cephadm' % (name, host))
+                if missing_names:
+                    host_detail.append(
+                        'stray host %s has %d stray daemons: %s' % (
+                            host, len(missing_names), missing_names))
+            if host_detail:
+                self.health_checks['CEPHADM_STRAY_HOST'] = {
+                    'severity': 'warning',
+                    'summary': '%d stray host(s) with %s service(s) '
+                    'not managed by cephadm' % (
+                        len(host_detail), host_num_services),
+                    'count': len(host_detail),
+                    'detail': host_detail,
+                }
+            if service_detail:
+                self.health_checks['CEPHADM_STRAY_SERVICE'] = {
+                    'severity': 'warning',
+                    'summary': '%d stray service(s) not managed by cephadm' % (
+                        len(service_detail)),
+                    'count': len(service_detail),
+                    'detail': service_detail,
+                }
+        self.set_health_checks(self.health_checks)
+
     def serve(self):
         # type: () -> None
         self.log.info("serve starting")
@@ -578,7 +649,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     orchestrator.raise_if_exception(completion)
                 self.log.debug('did _do_upgrade')
 
-            sleep_interval = 60*60  # this really doesn't matter
+            self._check_for_strays()
+
+            sleep_interval = 600
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
@@ -599,6 +672,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     opt,  # type: ignore
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
+        self.event.set()
+
+    def notify(self, notify_type, notify_id):
+        self.event.set()
 
     def get_unique_name(self, existing, prefix=None, forcename=None):
         """
@@ -929,6 +1006,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self._save_inventory()
         self.inventory_cache[host] = orchestrator.OutdatableData()
         self.service_cache[host] = orchestrator.OutdatableData()
+        self.event.set()  # refresh stray health check
         return "Added host '{}'".format(host)
 
     @async_completion
@@ -942,6 +1020,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self._save_inventory()
         del self.inventory_cache[host]
         del self.service_cache[host]
+        self.event.set()  # refresh stray health check
         return "Removed host '{}'".format(host)
 
     @trivial_completion
@@ -1807,7 +1886,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'target_version': target_version,
         }
         self._save_upgrade_state()
-        self._clear_health_checks()
+        self._clear_upgrade_health_checks()
         self.event.set()
         return trivial_result('Initiating upgrade to %s %s' % (image, target_id))
 
@@ -1840,7 +1919,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         target_name = self.upgrade_state.get('target_name')
         self.upgrade_state = None
         self._save_upgrade_state()
-        self._clear_health_checks()
+        self._clear_upgrade_health_checks()
         self.event.set()
         return trivial_result('Stopped upgrade to %s' % target_name)
 

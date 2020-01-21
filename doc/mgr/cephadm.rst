@@ -37,3 +37,44 @@ To clear this value use the command:
 ::
 
     # ceph cephadm clear-ssh-config
+
+Health checks
+-------------
+
+CEPHADM_STRAY_HOST
+^^^^^^^^^^^^^^^^^^
+
+One or more hosts have running Ceph daemons but are not registered as
+hosts managed by *cephadm*.  This means that those services cannot
+currently be managed by cephadm (e.g., restarted, upgraded, included
+in `ceph orchestrator service ls`).
+
+You can manage the host(s) with::
+
+  ceph orchestrator host add *<hostname>*
+
+Note that you may need to configure SSH access to the remote host
+before this will work.
+
+Alternatively, you can manually connect to the host and ensure that
+services on that host are removed and/or migrated to a host that is
+managed by *cephadm*.
+
+You can also disable this warning entirely with::
+
+  ceph config set mgr mgr/cephadm/warn_on_stray_hosts false
+
+CEPHADM_STRAY_SERVICE
+^^^^^^^^^^^^^^^^^^^^^
+
+One or more Ceph daemons are running but not are not managed by
+*cephadm*, perhaps because they were deploy using a different tool, or
+were started manually.  This means that those services cannot
+currently be managed by cephadm (e.g., restarted, upgraded, included
+in `ceph orchestrator service ls`).
+
+**FIXME:** We need to implement and document an adopt procedure here.
+
+You can also disable this warning entirely with::
+
+  ceph config set mgr mgr/cephadm/warn_on_stray_services false
