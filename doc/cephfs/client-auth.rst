@@ -29,9 +29,9 @@ directory while creating key for a client using the following syntax. ::
 
  ceph fs authorize *filesystem_name* client.*client_name* /*specified_directory* rw
 
-for example, to restrict client ``foo`` to writing only in the ``bar`` directory of filesystem ``cephfs``, use ::
+For example, to restrict client ``foo`` to writing only in the ``bar`` directory of filesystem ``cephfs_a``, use ::
 
- ceph fs authorize cephfs client.foo / r /bar rw
+ ceph fs authorize cephfs_a client.foo / r /bar rw
 
  results in:
 
@@ -44,7 +44,7 @@ for example, to restrict client ``foo`` to writing only in the ``bar`` directory
 To completely restrict the client to the ``bar`` directory, omit the
 root directory ::
 
- ceph fs authorize cephfs client.foo /bar rw
+ ceph fs authorize cephfs_a client.foo /bar rw
 
 Note that if a client's read access is restricted to a path, they will only
 be able to mount the filesystem when specifying a readable path in the
