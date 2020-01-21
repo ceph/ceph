@@ -115,13 +115,13 @@ seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
   });
 }
 
-store_statfs_t CyanStore::stat() const
+seastar::future<store_statfs_t> CyanStore::stat() const
 {
   logger().debug("{}", __func__);
   store_statfs_t st;
   st.total = crimson::common::local_conf().get_val<Option::size_t>("memstore_device_bytes");
   st.available = st.total - used_bytes;
-  return st;
+  return seastar::make_ready_future<store_statfs_t>(std::move(st));
 }
 
 seastar::future<std::vector<ghobject_t>, ghobject_t>
