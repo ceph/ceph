@@ -54,7 +54,7 @@ class Module(MgrModule):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_module_option(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
         if self.get_ceph_option('device_failure_prediction_mode') == 'local':
             self._event.set()
