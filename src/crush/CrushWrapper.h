@@ -1580,11 +1580,13 @@ public:
     const vector<pair<int,int>>& stack,
     const set<int>& overfull,
     const vector<int>& underfull,
+    const vector<int>& more_underfull,
     const vector<int>& orig,
     vector<int>::const_iterator& i,
     set<int>& used,
     vector<int> *pw,
-    int root_bucket) const;
+    int root_bucket,
+    int rule) const;
 
   int try_remap_rule(
     CephContext *cct,
@@ -1592,6 +1594,7 @@ public:
     int maxout,
     const set<int>& overfull,
     const vector<int>& underfull,
+    const vector<int>& more_underfull,
     const vector<int>& orig,
     vector<int> *out) const;
 

@@ -132,9 +132,19 @@
 
     ceph config set global <option> <value>
 
-12.2.7
+14.2.7
 ------
 
 * The MGR now accepts 'profile rbd' and 'profile rbd-read-only' user caps.
   These caps can be used to provide users access to MGR-based RBD functionality
   such as 'rbd perf image iostat' an 'rbd perf image iotop'.
+
+* The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for upmap
+  balancing has been removed. Instead use the mgr balancer config
+  ``upmap_max_deviation`` which now is an integer number of PGs of deviation
+  from the target PGs per OSD.  This can be set with a command like
+  ``ceph config set mgr mgr/balancer/upmap_max_deviation 2``.  The default
+  ``upmap_max_deviation`` is 1.  There are situations where crush rules
+  would not allow a pool to ever have completely balanced PGs.  For example, if
+  crush requires 1 replica on each of 3 racks, but there are fewer OSDs in 1 of
+  the racks.  In those cases, the configuration value can be increased.
