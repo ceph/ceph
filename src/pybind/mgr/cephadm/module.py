@@ -591,7 +591,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],  # type: ignore
-                    self.get_module_option(opt['name']) or opt['default'])  # type: ignore
+                    self.get_module_option(opt['name']))  # type: ignore
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
         for opt in self.NATIVE_OPTIONS:
