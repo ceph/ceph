@@ -1266,6 +1266,8 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
+mkdir -p %{buildroot}%{_sysconfdir}/ld.so.conf.d/
+echo %{_libdir}/ceph > %{buildroot}%{_sysconfdir}/ld.so.conf.d/ceph.conf
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -1997,6 +1999,7 @@ fi
 
 %files -n librados2
 %{_libdir}/librados.so.*
+%{_sysconfdir}/ld.so.conf.d/ceph.conf
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/libceph-common.so.*
 %if %{with lttng}
