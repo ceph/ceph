@@ -26,10 +26,16 @@ extern "C" {
    * Safe functions wrapping the raw read() and write() libc functions.
    * These retry on EINTR, and on error return -errno instead of returning
    * -1 and setting errno).
+   *
+   * On Windows, only recv/send work with sockets.
    */
   ssize_t safe_read(int fd, void *buf, size_t count)
       WARN_UNUSED_RESULT;
   ssize_t safe_write(int fd, const void *buf, size_t count)
+      WARN_UNUSED_RESULT;
+  ssize_t safe_recv(int fd, void *buf, size_t count)
+      WARN_UNUSED_RESULT;
+  ssize_t safe_send(int fd, const void *buf, size_t count)
       WARN_UNUSED_RESULT;
   ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
       WARN_UNUSED_RESULT;
@@ -53,6 +59,8 @@ extern "C" {
    * number of bytes can be read.
    */
   ssize_t safe_read_exact(int fd, void *buf, size_t count)
+      WARN_UNUSED_RESULT;
+  ssize_t safe_recv_exact(int fd, void *buf, size_t count)
       WARN_UNUSED_RESULT;
   ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
       WARN_UNUSED_RESULT;

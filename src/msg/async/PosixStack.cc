@@ -204,7 +204,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     ::shutdown(_fd, SHUT_RDWR);
   }
   void close() override {
-    ::close(_fd);
+    compat_closesocket(_fd);
   }
   int fd() const override {
     return _fd;
