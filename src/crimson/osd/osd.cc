@@ -416,6 +416,7 @@ seastar::future<> OSD::load_pgs()
         return load_pg(pgid).then([pgid, this](auto&& pg) {
           logger().info("load_pgs: loaded {}", pgid);
           pg_map.pg_loaded(pgid, std::move(pg));
+          shard_services.inc_pg_num();
           return seastar::now();
         });
       } else if (coll.is_temp(&pgid)) {
