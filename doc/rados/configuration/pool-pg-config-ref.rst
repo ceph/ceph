@@ -237,6 +237,15 @@ Ceph configuration file.
 :Default: ``250``
 
 
+``osd max pg log entries``
+
+:Description: The maximum number of placement group logs to maintain
+              when trimming log files.
+
+:Type: 32-bit Int Unsigned
+:Default: ``10000``
+
+
 ``osd default data pool replay window``
 
 :Description: The time (in seconds) for an OSD to wait for a client to replay
