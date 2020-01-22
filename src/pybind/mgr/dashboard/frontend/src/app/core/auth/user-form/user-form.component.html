@@ -103,13 +103,26 @@
                   i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
-
         <!-- Password expiration date -->
         <div class="form-group row"
-             *ngIf="showExpirationDateField()">
+             *ngIf="!authStorageService.isSSO()">
           <label class="col-form-label col-sm-3"
                  for="pwdExpirationDate">
             <ng-container i18n>Password expiration date</ng-container>
+            <cd-helper class="text-pre"
+                       *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
+              <p>
+                The Dashboard setting defining the expiration interval of
+                passwords is currently set to <strong>0</strong>. This means
+                if a date is set, the user password will only expire once.
+              </p>
+              <p>
+                Consider configuring the Dashboard setting
+                <a routerLink="/mgr-modules/edit/dashboard"
+                   class="alert-link">USER_PWD_EXPIRATION_SPAN</a>
+                in order to let passwords expire periodically.
+              </p>
+            </cd-helper>
             <span class="required"
                   *ngIf="pwdExpirationSettings.pwdExpirationSpan > 0"></span>
           </label>
