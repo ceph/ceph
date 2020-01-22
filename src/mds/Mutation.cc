@@ -321,11 +321,6 @@ bool MDRequestImpl::slave_rolling_back()
   return has_more() && more()->slave_rolling_back;
 }
 
-bool MDRequestImpl::did_ino_allocation() const
-{
-  return alloc_ino || used_prealloc_ino || prealloc_inos.size();
-}      
-
 bool MDRequestImpl::freeze_auth_pin(CInode *inode)
 {
   ceph_assert(!more()->rename_inode || more()->rename_inode == inode);

@@ -369,7 +369,6 @@ struct MDRequestImpl : public MutationImpl {
   bool has_witnesses();
   bool slave_did_prepare();
   bool slave_rolling_back();
-  bool did_ino_allocation() const;
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);

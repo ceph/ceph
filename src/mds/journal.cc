@@ -791,7 +791,7 @@ void EMetaBlob::encode(bufferlist& bl, uint64_t features) const
 }
 void EMetaBlob::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
   decode(lump_order, bl);
   decode(lump_map, bl);
   if (struct_v >= 4) {
@@ -1496,11 +1496,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
 	if (used_preallocated_ino) {
 	  if (!session->info.prealloc_inos.empty()) {
-	    inodeno_t next = session->next_ino();
 	    inodeno_t i = session->take_ino(used_preallocated_ino);
-	    if (next != i)
-	      mds->clog->warn() << " replayed op " << client_reqs << " used ino " << i
-			       << " but session next is " << next;
 	    ceph_assert(i == used_preallocated_ino);
 	    session->info.used_inos.clear();
 	  }
