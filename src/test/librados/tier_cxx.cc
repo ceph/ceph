@@ -2979,8 +2979,7 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
 TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
   // skip test if not yet mimic
   if (_get_required_osd_release(cluster) < "mimic") {
-    cout << "cluster is not yet mimic, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet mimic, skipping test";
   }
 
   // create object
@@ -3050,8 +3049,7 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
 TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
   // skip test if not yet mimic
   if (_get_required_osd_release(cluster) < "mimic") {
-    cout << "cluster is not yet mimic, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet mimic, skipping test";
   }
 
   // create object
@@ -3247,8 +3245,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
 TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // skip test if not yet nautilus
   if (_get_required_osd_release(cluster) < "nautilus") {
-    cout << "cluster is not yet nautilus, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet nautilus, skipping test";
   }
 
   // create object
@@ -3391,8 +3388,7 @@ using ceph::crypto::SHA1;
 TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   // skip test if not yet nautilus
   if (_get_required_osd_release(cluster) < "nautilus") {
-    cout << "cluster is not yet nautilus, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet nautilus, skipping test";
   }
 
   bufferlist inbl;
@@ -3519,8 +3515,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
 TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
   // skip test if not yet octopus 
   if (_get_required_osd_release(cluster) < "octopus") {
-    cout << "cluster is not yet octopus, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
   }
 
   // create object
