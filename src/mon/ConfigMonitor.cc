@@ -66,11 +66,14 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << " " << (version+1) << dendl;
   put_last_committed(t, version+1);
 
-  for (auto& key : need_clean_options) {
-    derr << __func__ << " removing bad config key '" << key << "'" << dendl;
-    t->erase(CONFIG_PREFIX, key);
+  for (auto& [key, value] : pending_cleanup) {
+    if (pending.count(key) == 0) {
+      derr << __func__ << " repair: adjusting config key '" << key << "'"
+	   << dendl;
+      pending[key] = value;
+    }
   }
-  need_clean_options.clear();
+  pending_cleanup.clear();
 
   // TODO: record changed sections (osd, mds.foo, rack:bar, ...)
 
@@ -704,7 +707,7 @@ void ConfigMonitor::tick()
   }
   dout(10) << __func__ << dendl;
   bool changed = false;
-  if (!need_clean_options.empty()) {
+  if (!pending_cleanup.empty()) {
     changed = true;
   }
   if (changed) {
@@ -723,7 +726,7 @@ void ConfigMonitor::load_config()
   it->lower_bound(KEY_PREFIX);
   config_map.clear();
   current.clear();
-  need_clean_options.clear();
+  pending_cleanup.clear();
   while (it->valid() &&
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
     string key = it->key().substr(KEY_PREFIX.size());
@@ -767,12 +770,12 @@ void ConfigMonitor::load_config()
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
       derr << __func__ << " invalid mask for key " << key << dendl;
-      need_clean_options.push_back(KEY_PREFIX + key);
+      pending_cleanup[key] = boost::none;
     } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
       dout(10) << __func__ << " NO_MON_UPDATE option '"
 	       << name << "' = '" << value << "' for " << name
 	       << dendl;
-      need_clean_options.push_back(KEY_PREFIX + key);
+      pending_cleanup[key] = boost::none;
     } else {
       Section *section = &config_map.global;;
       if (section_name.size()) {
