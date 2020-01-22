@@ -23,10 +23,9 @@ endif()
 
 # unittest_lockdep
 add_executable(unittest_lockdep
-  test_lockdep.cc
-  )
+  test_lockdep.cc)
 add_ceph_unittest(unittest_lockdep)
-target_link_libraries(unittest_lockdep ceph-common global)
+target_link_libraries(unittest_lockdep ceph-common)
 
 # FreeBSD only has shims to support NUMA, no functional code.
 if(LINUX)
