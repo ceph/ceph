@@ -195,18 +195,18 @@ class PoolTest(DashboardTestCase):
             ['osd', 'erasure-code-profile', 'set', 'ecprofile', 'crush-failure-domain=osd'])
         pools = [{
             'pool': 'dashboard_pool1',
-            'pg_num': '10',
+            'pg_num': '32',
             'pool_type': 'replicated',
             'application_metadata': ['rbd', 'sth'],
         }, {
             'pool': 'dashboard_pool2',
-            'pg_num': '10',
+            'pg_num': '32',
             'pool_type': 'erasure',
             'erasure_code_profile': 'ecprofile',
             'crush_rule': 'ecrule',
         }, {
             'pool': 'dashboard_pool3',
-            'pg_num': '10',
+            'pg_num': '32',
             'pool_type': 'replicated',
             'compression_algorithm': 'zstd',
             'compression_mode': 'aggressive',
@@ -219,7 +219,7 @@ class PoolTest(DashboardTestCase):
     def test_update(self):
         pool = {
             'pool': 'dashboard_pool_update1',
-            'pg_num': '4',
+            'pg_num': '32',
             'pool_type': 'replicated',
             'compression_mode': 'passive',
             'compression_algorithm': 'snappy',
