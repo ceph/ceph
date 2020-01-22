@@ -395,7 +395,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             })
             if not self.upgrade_state or self.upgrade_state.get('paused'):
                 return False
-            if err:
+            if ret:
                 self.log.info('Upgrade: not safe to stop %s.%s' %
                               (s.service_type, s.service_instance))
                 time.sleep(15)
