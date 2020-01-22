@@ -321,7 +321,7 @@ struct Condition {
     ceph::bufferlist bin;
 
     try {
-      base64.decode_base64(bin);
+      bin.decode_base64(base64);
     } catch (const ceph::buffer::malformed_input& e) {
       return boost::none;
     }
