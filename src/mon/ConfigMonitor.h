@@ -16,6 +16,7 @@ class ConfigMonitor : public PaxosService
   ConfigMap config_map;
   map<string,boost::optional<bufferlist>> pending;
   string pending_description;
+  list<string> need_clean_options;
 
   map<string,bufferlist> current;
 

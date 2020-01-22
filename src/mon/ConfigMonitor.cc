@@ -66,6 +66,12 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << " " << (version+1) << dendl;
   put_last_committed(t, version+1);
 
+  for (auto& key : need_clean_options) {
+    derr << __func__ << " removing bad config key '" << key << "'" << dendl;
+    t->erase(CONFIG_PREFIX, key);
+  }
+  need_clean_options.clear();
+
   // TODO: record changed sections (osd, mds.foo, rack:bar, ...)
 
   string history = HISTORY_PREFIX + stringify(version+1) + "/";
@@ -286,19 +292,30 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       &src);
 
     if (cmd_getval(g_ceph_context, cmdmap, "key", name)) {
-      // get a single value
-      auto p = config.find(name);
-      if (p != config.end()) {
-	odata.append(p->second);
-	odata.append("\n");
-	goto reply;
-      }
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon->mgrmon()->find_module_option(name);
       }
       if (!opt) {
 	err = -ENOENT;
+	goto reply;
+      }
+      if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	// handle special options
+	if (name == "fsid") {
+	  odata.append(stringify(mon->monmap->get_fsid()));
+	  odata.append("\n");
+	  goto reply;
+	}
+	err = -EINVAL;
+	ss << name << " is special and cannot be stored by the mon";
+	goto reply;
+      }
+      // get a single value
+      auto p = config.find(name);
+      if (p != config.end()) {
+	odata.append(p->second);
+	odata.append("\n");
 	goto reply;
       }
       if (!entity.is_client() &&
@@ -494,14 +511,18 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	goto reply;
       }
 
-      if (opt) {
-	Option::value_t real_value;
-	string errstr;
-	err = opt->parse_value(value, &real_value, &errstr, &value);
-	if (err < 0) {
-	  ss << "error parsing value: " << errstr;
-	  goto reply;
-	}
+      Option::value_t real_value;
+      string errstr;
+      err = opt->parse_value(value, &real_value, &errstr, &value);
+      if (err < 0) {
+	ss << "error parsing value: " << errstr;
+	goto reply;
+      }
+
+      if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	err = -EINVAL;
+	ss << name << " is special and cannot be stored by the mon";
+	goto reply;
       }
     }
 
@@ -683,6 +704,9 @@ void ConfigMonitor::tick()
   }
   dout(10) << __func__ << dendl;
   bool changed = false;
+  if (!need_clean_options.empty()) {
+    changed = true;
+  }
   if (changed) {
     propose_pending();
   }
@@ -699,6 +723,7 @@ void ConfigMonitor::load_config()
   it->lower_bound(KEY_PREFIX);
   config_map.clear();
   current.clear();
+  need_clean_options.clear();
   while (it->valid() &&
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
     string key = it->key().substr(KEY_PREFIX.size());
@@ -741,7 +766,13 @@ void ConfigMonitor::load_config()
     string section_name;
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
-      derr << __func__ << " ignoring key " << key << dendl;
+      derr << __func__ << " invalid mask for key " << key << dendl;
+      need_clean_options.push_back(KEY_PREFIX + key);
+    } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      dout(10) << __func__ << " NO_MON_UPDATE option '"
+	       << name << "' = '" << value << "' for " << name
+	       << dendl;
+      need_clean_options.push_back(KEY_PREFIX + key);
     } else {
       Section *section = &config_map.global;;
       if (section_name.size()) {
