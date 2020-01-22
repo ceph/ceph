@@ -68,7 +68,8 @@ OSD::OSD(int id, uint32_t nonce,
     mgrc{new crimson::mgr::Client{*public_msgr, *this}},
     store{crimson::os::FuturizedStore::create(
       local_conf().get_val<std::string>("osd_objectstore"),
-      local_conf().get_val<std::string>("osd_data"))},
+      local_conf().get_val<std::string>("osd_data"),
+      local_conf().get_config_values())},
     shard_services{*this, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background

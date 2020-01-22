@@ -27,7 +27,8 @@ class FuturizedStore {
 
 public:
   static std::unique_ptr<FuturizedStore> create(const std::string& type,
-                                                const std::string& data);
+                                                const std::string& data,
+                                                const ConfigValues& values);
   FuturizedStore() = default;
   virtual ~FuturizedStore() = default;
 

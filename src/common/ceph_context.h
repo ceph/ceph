@@ -30,7 +30,7 @@
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/perf_counters_collection.h"
 #else
@@ -60,7 +60,7 @@ namespace ceph {
   }
 }
 
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 namespace crimson::common {
 class CephContext {
 public:

@@ -89,6 +89,9 @@ public:
   const ConfigValues* operator->() const noexcept {
     return values.get();
   }
+  const ConfigValues get_config_values() {
+     return *values.get();
+  }
   ConfigValues* operator->() noexcept {
     return values.get();
   }
