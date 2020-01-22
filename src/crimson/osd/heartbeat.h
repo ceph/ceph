@@ -27,8 +27,8 @@ public:
 
   Heartbeat(const crimson::osd::ShardServices& service,
 	    crimson::mon::Client& monc,
-	    crimson::net::Messenger& front_msgr,
-	    crimson::net::Messenger& back_msgr);
+	    crimson::net::MessengerRef front_msgr,
+	    crimson::net::MessengerRef back_msgr);
 
   seastar::future<> start(entity_addrvec_t front,
 			  entity_addrvec_t back);
@@ -74,8 +74,8 @@ private:
 private:
   const crimson::osd::ShardServices& service;
   crimson::mon::Client& monc;
-  crimson::net::Messenger& front_msgr;
-  crimson::net::Messenger& back_msgr;
+  crimson::net::MessengerRef front_msgr;
+  crimson::net::MessengerRef back_msgr;
 
   seastar::timer<seastar::lowres_clock> timer;
   // use real_clock so it can be converted to utime_t

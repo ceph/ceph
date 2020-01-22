@@ -26,8 +26,8 @@ namespace {
 
 Heartbeat::Heartbeat(const crimson::osd::ShardServices& service,
                      crimson::mon::Client& monc,
-                     crimson::net::Messenger& front_msgr,
-                     crimson::net::Messenger& back_msgr)
+                     crimson::net::MessengerRef front_msgr,
+                     crimson::net::MessengerRef back_msgr)
   : service{service},
     monc{monc},
     front_msgr{front_msgr},
@@ -46,12 +46,12 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
   }
 
   using crimson::net::SocketPolicy;
-  front_msgr.set_policy(entity_name_t::TYPE_OSD,
+  front_msgr->set_policy(entity_name_t::TYPE_OSD,
+                         SocketPolicy::stateless_server(0));
+  back_msgr->set_policy(entity_name_t::TYPE_OSD,
                         SocketPolicy::stateless_server(0));
-  back_msgr.set_policy(entity_name_t::TYPE_OSD,
-                       SocketPolicy::stateless_server(0));
-  return seastar::when_all_succeed(start_messenger(front_msgr, front_addrs),
-                                   start_messenger(back_msgr, back_addrs))
+  return seastar::when_all_succeed(start_messenger(*front_msgr, front_addrs),
+                                   start_messenger(*back_msgr, back_addrs))
     .then([this] {
       timer.arm_periodic(
         std::chrono::seconds(local_conf()->osd_heartbeat_interval));
@@ -71,25 +71,25 @@ Heartbeat::start_messenger(crimson::net::Messenger& msgr,
 
 seastar::future<> Heartbeat::stop()
 {
-  return seastar::when_all_succeed(front_msgr.shutdown(),
-                                   back_msgr.shutdown());
+  return seastar::when_all_succeed(front_msgr->shutdown(),
+                                   back_msgr->shutdown());
 }
 
 const entity_addrvec_t& Heartbeat::get_front_addrs() const
 {
-  return front_msgr.get_myaddrs();
+  return front_msgr->get_myaddrs();
 }
 
 const entity_addrvec_t& Heartbeat::get_back_addrs() const
 {
-  return back_msgr.get_myaddrs();
+  return back_msgr->get_myaddrs();
 }
 
 void Heartbeat::set_require_authorizer(bool require_authorizer)
 {
-  if (front_msgr.get_require_authorizer() != require_authorizer) {
-    front_msgr.set_require_authorizer(require_authorizer);
-    back_msgr.set_require_authorizer(require_authorizer);
+  if (front_msgr->get_require_authorizer() != require_authorizer) {
+    front_msgr->set_require_authorizer(require_authorizer);
+    back_msgr->set_require_authorizer(require_authorizer);
   }
 }
 
@@ -103,14 +103,13 @@ seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
     auto osdmap = service.get_osdmap_service().get_map();
     // TODO: use addrs
     return seastar::when_all_succeed(
-        front_msgr.connect(osdmap->get_hb_front_addrs(peer).front(),
-                           CEPH_ENTITY_TYPE_OSD),
-        back_msgr.connect(osdmap->get_hb_back_addrs(peer).front(),
-                          CEPH_ENTITY_TYPE_OSD))
-      .then([&info=peer_info->second] (auto xcon_front, auto xcon_back) {
-        // sharded-messenger compatible mode
-        info.con_front = xcon_front->release();
-        info.con_back = xcon_back->release();
+        front_msgr->connect(osdmap->get_hb_front_addrs(peer).front(),
+                            CEPH_ENTITY_TYPE_OSD),
+        back_msgr->connect(osdmap->get_hb_back_addrs(peer).front(),
+                           CEPH_ENTITY_TYPE_OSD))
+      .then([&info=peer_info->second] (auto con_front, auto con_back) {
+        info.con_front = con_front;
+        info.con_back = con_back;
       });
   } else {
     return seastar::now();

@@ -64,6 +64,8 @@ class SocketConnection : public Connection {
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
 
+  seastar::shard_id shard_id() const;
+
  public:
   SocketConnection(SocketMessenger& messenger,
                    Dispatcher& dispatcher,
@@ -87,8 +89,6 @@ class SocketConnection : public Connection {
   seastar::future<> keepalive() override;
 
   seastar::future<> close() override;
-
-  seastar::shard_id shard_id() const override;
 
   void print(ostream& out) const override;
 
