@@ -390,7 +390,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if s.service_type not in ['mon', 'osd', 'mds']:
                 break
             ret, out, err = self.mon_command({
-                'prefix': '%s ok-to-stop',
+                'prefix': '%s ok-to-stop' % s.service_type,
                 'ids': [s.service_instance],
             })
             if not self.upgrade_state or self.upgrade_state.get('paused'):
