@@ -17,9 +17,9 @@ Installing the First Node
 -------------------------
 
 1. Install a recent, supported Linux distribution on a computer.
-2. Install docker. On Fedora or Centos::
-   
-   $ sudo dnf install docker 
+2. Install podman or docker. On Fedora or Centos::
+
+   $ sudo dnf install podman
 
   on Ubuntu or Debian::
   
@@ -91,7 +91,7 @@ Second Node
 #. Install a recent, supported Linux distribution on a second computer.
 #. Install docker. On Fedora or Centos::
 
-   $ sudo dnf install docker 
+   $ sudo dnf install podman
 
   on Ubuntu or Debian::
 
@@ -116,7 +116,7 @@ Third Node
 
 #. Install docker. On Fedora or Centos::
 
-   $ sudo dnf install docker 
+   $ sudo dnf install podman
 
   on Ubuntu or Debian::
 
