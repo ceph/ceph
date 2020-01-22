@@ -1757,6 +1757,8 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.sharedblob(" << this << ") "
+#undef dout_context
+#define dout_context coll->store->cct
 
 void BlueStore::SharedBlob::dump(Formatter* f) const
 {
@@ -1799,9 +1801,9 @@ BlueStore::SharedBlob::~SharedBlob()
 void BlueStore::SharedBlob::put()
 {
   if (--nref == 0) {
-    ldout(coll->store->cct, 20) << __func__ << " " << this
-			     << " removing self from set " << get_parent()
-			     << dendl;
+    dout(20) << __func__ << " " << this
+	     << " removing self from set " << get_parent()
+	     << dendl;
   again:
     auto coll_snap = coll;
     if (coll_snap) {
@@ -1841,10 +1843,10 @@ void BlueStore::SharedBlob::finish_write(uint64_t seq)
     BufferCacheShard *cache = coll->cache;
     std::lock_guard l(cache->lock);
     if (coll->cache != cache) {
-      ldout(coll->store->cct, 20) << __func__
-				  << " raced with sb cache update, was " << cache
-				  << ", now " << coll->cache << ", retrying"
-				  << dendl;
+      dout(20) << __func__
+	       << " raced with sb cache update, was " << cache
+	       << ", now " << coll->cache << ", retrying"
+	       << dendl;
       continue;
     }
     bc._finish_write(cache, seq);
@@ -1923,9 +1925,9 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
     size_t pos = 0;
     for (auto e : get_blob().get_extents()) {
       if (!e.is_valid()) {
-	ldout(coll->store->cct, 20) << __func__ << " 0x" << std::hex << pos
-				    << "~" << e.length
-				    << std::dec << dendl;
+	dout(20) << __func__ << " 0x" << std::hex << pos
+		 << "~" << e.length
+		 << std::dec << dendl;
 	shared_blob->bc.discard(shared_blob->get_cache(), pos, e.length);
       }
       pos += e.length;
@@ -1933,7 +1935,6 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
     if (get_blob().can_prune_tail()) {
       dirty_blob().prune_tail();
       used_in_blob.prune_tail(get_blob().get_ondisk_length());
-      auto cct = coll->store->cct; //used by dout
       dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
     }
   }
@@ -1949,7 +1950,6 @@ void BlueStore::Blob::get_ref(
   // amount of counters in case of per-au tracking nor obtain min_release_size
   // for single counter mode.
   ceph_assert(get_blob().get_logical_length() != 0);
-  auto cct = coll->store->cct;
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
            << std::dec << " " << *this << dendl;
 
@@ -1974,7 +1974,6 @@ bool BlueStore::Blob::put_ref(
 {
   PExtentVector logical;
 
-  auto cct = coll->store->cct;
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
            << std::dec << " " << *this << dendl;
   
@@ -2068,7 +2067,6 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
 
 void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 {
-  auto cct = coll->store->cct; //used by dout
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
   ceph_assert(blob.can_split());
@@ -2152,6 +2150,8 @@ BlueStore::OldExtent* BlueStore::OldExtent::create(CollectionRef c,
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.extentmap(" << this << ") "
+#undef dout_context
+#define dout_context onode->c->store->cct
 
 BlueStore::ExtentMap::ExtentMap(Onode *o)
   : onode(o),
@@ -2722,7 +2722,6 @@ bool BlueStore::ExtentMap::encode_some(
   bufferlist& bl,
   unsigned *pn)
 {
-  auto cct = onode->c->store->cct; //used by dout
   Extent dummy(offset);
   auto start = extent_map.lower_bound(dummy);
   uint32_t end = offset + length;
@@ -2828,7 +2827,6 @@ bool BlueStore::ExtentMap::encode_some(
 
 unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
 {
-  auto cct = onode->c->store->cct; //used by dout
   /*
   derr << __func__ << ":";
   bl.hexdump(*_dout);
@@ -2975,7 +2973,6 @@ void BlueStore::ExtentMap::fault_range(
   uint32_t offset,
   uint32_t length)
 {
-  auto cct = onode->c->store->cct; //used by dout
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   auto start = seek_shard(offset);
@@ -3025,7 +3022,6 @@ void BlueStore::ExtentMap::dirty_range(
   uint32_t offset,
   uint32_t length)
 {
-  auto cct = onode->c->store->cct; //used by dout
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (shards.empty()) {
@@ -3108,7 +3104,6 @@ int BlueStore::ExtentMap::compress_extent_map(
   uint64_t offset,
   uint64_t length)
 {
-  auto cct = onode->c->store->cct; //used by dout
   if (extent_map.empty())
     return 0;
   int removed = 0;
@@ -3256,8 +3251,6 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   uint32_t blob_offset,
   uint32_t pos)
 {
-  auto cct = onode->c->store->cct; //used by dout
-
   uint32_t end_pos = pos + lb->get_blob().get_logical_length() - blob_offset;
   dout(20) << __func__ << " 0x" << std::hex << pos << " end 0x" << end_pos
 	   << " blob_offset 0x" << blob_offset << std::dec << " " << *lb
@@ -3435,6 +3428,8 @@ bool BlueStore::WriteContext::has_conflict(
 // DeferredBatch
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.DeferredBatch(" << this << ") "
+#undef dout_context
+#define dout_context cct
 
 void BlueStore::DeferredBatch::prepare_write(
   CephContext *cct,
@@ -3794,6 +3789,8 @@ void BlueStore::Collection::split_cache(
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.MempoolThread(" << this << ") "
+#undef dout_context
+#define dout_context store->cct
 
 void *BlueStore::MempoolThread::entry()
 {
@@ -3896,7 +3893,6 @@ void BlueStore::MempoolThread::_adjust_cache_settings()
 
 void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
 {
-  auto cct = store->cct;
   size_t onode_shards = store->onode_cache_shards.size();
   size_t buffer_shards = store->buffer_cache_shards.size();
   int64_t kv_used = store->db->get_cache_usage();
@@ -3919,7 +3915,7 @@ void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
   }
   
   if (interval_stats) {
-    ldout(cct, 5) << __func__  << " cache_size: " << cache_size
+    dout(5) << __func__  << " cache_size: " << cache_size
                   << " kv_alloc: " << kv_alloc
                   << " kv_used: " << kv_used
                   << " meta_alloc: " << meta_alloc
@@ -3927,7 +3923,7 @@ void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
                   << " data_alloc: " << data_alloc
                   << " data_used: " << data_used << dendl;
   } else {
-    ldout(cct, 20) << __func__  << " cache_size: " << cache_size
+    dout(20) << __func__  << " cache_size: " << cache_size
                    << " kv_alloc: " << kv_alloc
                    << " kv_used: " << kv_used
                    << " meta_alloc: " << meta_alloc
@@ -3940,7 +3936,7 @@ void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
       (meta_alloc / (double) onode_shards) / meta_cache->get_bytes_per_onode());
   uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / buffer_shards);
 
-  ldout(cct, 30) << __func__ << " max_shard_onodes: " << max_shard_onodes
+  dout(30) << __func__ << " max_shard_onodes: " << max_shard_onodes
                  << " max_shard_buffer: " << max_shard_buffer << dendl;
 
   for (auto i : store->onode_cache_shards) {
@@ -3958,7 +3954,6 @@ void BlueStore::MempoolThread::_update_cache_settings()
     return;
   }
 
-  auto cct = store->cct;
   uint64_t target = store->osd_memory_target;
   uint64_t base = store->osd_memory_base;
   uint64_t min = store->osd_memory_cache_min;
@@ -3975,7 +3970,7 @@ void BlueStore::MempoolThread::_update_cache_settings()
   pcm->set_min_memory(min);
   pcm->set_max_memory(max);
 
-  ldout(cct, 5) << __func__  << " updated pcm target: " << target
+  dout(5) << __func__  << " updated pcm target: " << target
                 << " pcm min: " << min
                 << " pcm max: " << max
                 << dendl;
@@ -4132,6 +4127,8 @@ bufferlist BlueStore::OmapIteratorImpl::value()
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << path << ") "
+#undef dout_context
+#define dout_context cct
 
 
 static void aio_cb(void *priv, void *priv2)
