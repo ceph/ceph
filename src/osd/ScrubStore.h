@@ -48,7 +48,7 @@ private:
   // scrubbing
   OSDriver driver;
   MapCacher::MapCacher<std::string, bufferlist> backend;
-  map<string, bufferlist> results;
+  map<string, bufferlist, less<>> results;
 };
 }
 

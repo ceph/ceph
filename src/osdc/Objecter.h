@@ -436,10 +436,11 @@ struct ObjectOperation {
   struct C_ObjectOperation_decodevals : public Context {
     uint64_t max_entries;
     ceph::buffer::list bl;
-    std::map<std::string,ceph::buffer::list> *pattrs;
+    std::map<std::string,ceph::buffer::list,std::less<>> *pattrs;
     bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodevals(uint64_t m, std::map<std::string,ceph::buffer::list> *pa,
+    C_ObjectOperation_decodevals(uint64_t m,
+				 std::map<std::string,ceph::buffer::list,std::less<>> *pa,
 				 bool *pt, int *pr)
       : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
       if (ptruncated) {
@@ -454,7 +455,7 @@ struct ObjectOperation {
 	  if (pattrs)
 	    decode(*pattrs, p);
 	  if (ptruncated) {
-	    std::map<std::string,ceph::buffer::list> ignore;
+	    std::map<std::string,ceph::buffer::list,std::less<>> ignore;
 	    if (!pattrs) {
 	      decode(ignore, p);
 	      pattrs = &ignore;
@@ -588,7 +589,7 @@ struct ObjectOperation {
       }
     }
   };
-  void getxattrs(std::map<std::string,ceph::buffer::list> *pattrs, int *prval) {
+  void getxattrs(std::map<std::string,ceph::buffer::list,std::less<>> *pattrs, int *prval) {
     add_op(CEPH_OSD_OP_GETXATTRS);
     if (pattrs || prval) {
       unsigned p = ops.size() - 1;
@@ -660,7 +661,7 @@ struct ObjectOperation {
   void omap_get_vals(const std::string &start_after,
 		     const std::string &filter_prefix,
 		     uint64_t max_to_get,
-		     std::map<std::string, ceph::buffer::list> *out_set,
+		     std::map<std::string, ceph::buffer::list, std::less<>> *out_set,
 		     bool *ptruncated,
 		     int *prval) {
     using ceph::encode;
@@ -683,7 +684,7 @@ struct ObjectOperation {
   }
 
   void omap_get_vals_by_keys(const std::set<std::string> &to_get,
-			    std::map<std::string, ceph::buffer::list> *out_set,
+			    std::map<std::string, ceph::buffer::list, std::less<>> *out_set,
 			    int *prval) {
     using ceph::encode;
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSBYKEYS);
@@ -722,7 +723,7 @@ struct ObjectOperation {
     object_copy_cursor_t *cursor;
     uint64_t *out_size;
     ceph::real_time *out_mtime;
-    std::map<std::string,ceph::buffer::list> *out_attrs;
+    std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs;
     ceph::buffer::list *out_data, *out_omap_header, *out_omap_data;
     std::vector<snapid_t> *out_snaps;
     snapid_t *out_snap_seq;
@@ -737,7 +738,7 @@ struct ObjectOperation {
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
 			      ceph::real_time *m,
-			      std::map<std::string,ceph::buffer::list> *a,
+			      std::map<std::string,ceph::buffer::list,std::less<>> *a,
 			      ceph::buffer::list *d, ceph::buffer::list *oh,
 			      ceph::buffer::list *o,
 			      std::vector<snapid_t> *osnaps,
@@ -816,7 +817,7 @@ struct ObjectOperation {
 		uint64_t max,
 		uint64_t *out_size,
 		ceph::real_time *out_mtime,
-		std::map<std::string,ceph::buffer::list> *out_attrs,
+		std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs,
 		ceph::buffer::list *out_data,
 		ceph::buffer::list *out_omap_header,
 		ceph::buffer::list *out_omap_data,
@@ -981,7 +982,7 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
 
-  void omap_set(const std::map<std::string, ceph::buffer::list>& map) {
+  void omap_set(const std::map<std::string, ceph::buffer::list, std::less<>>& map) {
     using ceph::encode;
     ceph::buffer::list bl;
     encode(map, bl);

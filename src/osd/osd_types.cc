@@ -6839,7 +6839,7 @@ void OSDOp::clear_data(vector<OSDOp>& ops)
 
 int prepare_info_keymap(
   CephContext* cct,
-  map<string,bufferlist> *km,
+  map<string,bufferlist,less<>> *km,
   string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,
@@ -6939,7 +6939,7 @@ void init_pg_ondisk(
 
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   t.touch(coll, pgmeta_oid);
-  map<string,bufferlist> values;
+  map<string,bufferlist,less<>> values;
   __u8 struct_v = pg_latest_struct_v;
   encode(struct_v, values[string(infover_key)]);
   t.omap_setkeys(coll, pgmeta_oid, values);

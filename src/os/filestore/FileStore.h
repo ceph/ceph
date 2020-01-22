@@ -642,8 +642,8 @@ public:
   int _remove(const coll_t& cid, const ghobject_t& oid, const SequencerPosition &spos);
 
   int _fgetattr(int fd, const char *name, bufferptr& bp);
-  int _fgetattrs(int fd, map<string,bufferptr>& aset);
-  int _fsetattrs(int fd, map<string, bufferptr> &aset);
+  int _fgetattrs(int fd, map<string,bufferptr,less<>>& aset);
+  int _fsetattrs(int fd, map<string, bufferptr, less<>> &aset);
 
   void do_force_sync();
   void start_sync(Context *onsafe);
@@ -688,7 +688,8 @@ public:
   using ObjectStore::getattr;
   using ObjectStore::getattrs;
   int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, bufferptr &bp) override;
-  int getattrs(CollectionHandle& c, const ghobject_t& oid, map<string,bufferptr>& aset) override;
+  int getattrs(CollectionHandle& c, const ghobject_t& oid,
+	       std::map<std::string,bufferptr,std::less<>>& aset) override;
 
   int _setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset,
 		const SequencerPosition &spos);
@@ -727,7 +728,7 @@ public:
   // omap (see ObjectStore.h for documentation)
   using ObjectStore::omap_get;
   int omap_get(CollectionHandle& c, const ghobject_t &oid, bufferlist *header,
-	       map<string, bufferlist> *out) override;
+	       std::map<std::string, bufferlist, std::less<>> *out) override;
   using ObjectStore::omap_get_header;
   int omap_get_header(
     CollectionHandle& c,
@@ -738,7 +739,7 @@ public:
   int omap_get_keys(CollectionHandle& c, const ghobject_t &oid, set<string> *keys) override;
   using ObjectStore::omap_get_values;
   int omap_get_values(CollectionHandle& c, const ghobject_t &oid, const set<string> &keys,
-		      map<string, bufferlist> *out) override;
+		      map<string, bufferlist, std::less<>> *out) override;
   using ObjectStore::omap_check_keys;
   int omap_check_keys(CollectionHandle& c, const ghobject_t &oid, const set<string> &keys,
 		      set<string> *out) override;

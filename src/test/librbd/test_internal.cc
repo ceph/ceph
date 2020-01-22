@@ -1766,7 +1766,8 @@ TEST_F(TestInternal, MissingDataPool) {
   bufferlist bl;
   using ceph::encode;
   encode(pool_id, bl);
-  ASSERT_EQ(0, m_ioctx.omap_set(header_oid, {{"data_pool_id", bl}}));
+  std::map<std::string, bufferlist, std::less<>> omap{{"data_pool_id", bl}};
+  ASSERT_EQ(0, m_ioctx.omap_set(header_oid, omap));
 
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 

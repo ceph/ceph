@@ -487,7 +487,8 @@ public:
   using ObjectStore::getattr;
   int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, bufferptr& value) override;
   using ObjectStore::getattrs;
-  int getattrs(CollectionHandle& c, const ghobject_t& oid, map<string,bufferptr>& aset) override;
+  int getattrs(CollectionHandle& c, const ghobject_t& oid,
+	       map<string,bufferptr,less<>>& aset) override;
 
   int list_collections(vector<coll_t>& ls) override;
   bool collection_exists(const coll_t& c) override;
@@ -503,7 +504,7 @@ public:
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    map<string, bufferlist, less<>> *out /// < [out] Key to value map
     ) override;
 
   using ObjectStore::omap_get_header;
@@ -529,7 +530,7 @@ public:
     CollectionHandle& c,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    map<string, bufferlist, less<>> *out ///< [out] Returned keys and values
     ) override;
 
   using ObjectStore::omap_check_keys;

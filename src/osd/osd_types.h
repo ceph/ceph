@@ -5132,7 +5132,7 @@ struct object_copy_data_t {
   utime_t mtime;
   uint32_t data_digest, omap_digest;
   uint32_t flags;
-  std::map<std::string, ceph::buffer::list> attrs;
+  std::map<std::string, ceph::buffer::list, std::less<>> attrs;
   ceph::buffer::list data;
   ceph::buffer::list omap_header;
   ceph::buffer::list omap_data;
@@ -5749,8 +5749,8 @@ struct PushOp {
   ceph::buffer::list data;
   interval_set<uint64_t> data_included;
   ceph::buffer::list omap_header;
-  std::map<std::string, ceph::buffer::list> omap_entries;
-  std::map<std::string, ceph::buffer::list> attrset;
+  std::map<std::string, ceph::buffer::list, std::less<>> omap_entries;
+  std::map<std::string, ceph::buffer::list, std::less<>> attrset;
 
   ObjectRecoveryInfo recovery_info;
   ObjectRecoveryProgress before_progress;
@@ -5773,7 +5773,7 @@ std::ostream& operator<<(std::ostream& out, const PushOp &op);
  */
 struct ScrubMap {
   struct object {
-    std::map<std::string, ceph::buffer::ptr> attrs;
+    std::map<std::string, ceph::buffer::ptr, std::less<>> attrs;
     uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
     __u32 digest;              ///< data crc32c
@@ -6235,7 +6235,7 @@ static const __u8 pg_compat_struct_v = 10;
 
 int prepare_info_keymap(
   CephContext* cct,
-  map<string,bufferlist> *km,
+  map<string,bufferlist,less<>> *km,
   string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,

@@ -157,7 +157,7 @@ public:
 
 int KeyValueDBMemory::get(const string &prefix,
 			  const std::set<string> &key,
-			  map<string, bufferlist> *out) {
+			  map<string, bufferlist, less<>> *out) {
   if (!exists_prefix(prefix))
     return 0;
 

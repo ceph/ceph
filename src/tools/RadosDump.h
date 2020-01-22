@@ -219,15 +219,14 @@ struct data_section {
 };
 
 struct attr_section {
-  map<string,bufferlist> data;
-  explicit attr_section(const map<string,bufferlist> &data) : data(data) { }
-  explicit attr_section(map<string, bufferptr> &data_)
+  map<string,bufferlist,less<>> data;
+  explicit attr_section(const map<string,bufferlist,less<>> &data) : data(data) { }
+  explicit attr_section(map<string, bufferptr, less<>> &data_)
   {
-    for (std::map<std::string, bufferptr>::iterator i = data_.begin();
-         i != data_.end(); ++i) {
+    for (auto& [k, v] : data) {
       bufferlist bl;
-      bl.push_back(i->second);
-      data[i->first] = bl;
+      bl.append(v);
+      data[k] = bl;
     }
   }
 
@@ -263,8 +262,8 @@ struct omap_hdr_section {
 };
 
 struct omap_section {
-  map<string, bufferlist> omap;
-  explicit omap_section(const map<string, bufferlist> &omap) :
+  map<string, bufferlist, less<>> omap;
+  explicit omap_section(const map<string, bufferlist, less<>> &omap) :
     omap(omap) { }
   omap_section() { }
 

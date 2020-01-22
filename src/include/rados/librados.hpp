@@ -424,6 +424,7 @@ inline namespace v14_2_0 {
      * @param map [in] keys and values to set
      */
     void omap_set(const std::map<std::string, bufferlist> &map);
+    void omap_set(const std::map<std::string, bufferlist, std::less<>> &map);
 
     /**
      * set header
@@ -542,6 +543,7 @@ inline namespace v14_2_0 {
     void stat2(uint64_t *psize, struct timespec *pts, int *prval);
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
+    void getxattrs(std::map<std::string, bufferlist, std::less<>> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,
 		  uint64_t off, size_t len, size_t chunk_size, bufferlist *pbl,
@@ -585,6 +587,12 @@ inline namespace v14_2_0 {
       std::map<std::string, bufferlist> *out_vals,
       bool *pmore,
       int *prval);
+    void omap_get_vals2(
+      const std::string &start_after,
+      uint64_t max_return,
+      std::map<std::string, bufferlist, std::less<>> *out_vals,
+      bool *pmore,
+      int *prval);
 
     /**
      * omap_get_vals: keys and values from the object omap
@@ -621,6 +629,13 @@ inline namespace v14_2_0 {
       const std::string &filter_prefix,
       uint64_t max_return,
       std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
+      int *prval);
+    void omap_get_vals2(
+      const std::string &start_after,
+      const std::string &filter_prefix,
+      uint64_t max_return,
+      std::map<std::string, bufferlist, std::less<>> *out_vals,
       bool *pmore,
       int *prval);
 
@@ -674,6 +689,9 @@ inline namespace v14_2_0 {
      */
     void omap_get_vals_by_keys(const std::set<std::string> &keys,
 			       std::map<std::string, bufferlist> *map,
+			       int *prval);
+    void omap_get_vals_by_keys(const std::set<std::string> &keys,
+                   std::map<std::string, bufferlist, std::less<>> *map,
 			       int *prval);
 
     /**
@@ -826,6 +844,7 @@ inline namespace v14_2_0 {
     int cmpext(const std::string& o, uint64_t off, bufferlist& cmp_bl);
     int sparse_read(const std::string& o, std::map<uint64_t,uint64_t>& m, bufferlist& bl, size_t len, uint64_t off);
     int getxattr(const std::string& oid, const char *name, bufferlist& bl);
+    int getxattrs(const std::string& oid, std::map<std::string, bufferlist, std::less<>>& attrset);
     int getxattrs(const std::string& oid, std::map<std::string, bufferlist>& attrset);
     int setxattr(const std::string& oid, const char *name, bufferlist& bl);
     int rmxattr(const std::string& oid, const char *name);
@@ -848,6 +867,11 @@ inline namespace v14_2_0 {
 		       const std::string& start_after,
 		       uint64_t max_return,
 		       std::map<std::string, bufferlist> *out_vals,
+		       bool *pmore);
+    int omap_get_vals2(const std::string& oid,
+		       const std::string& start_after,
+		       uint64_t max_return,
+               std::map<std::string, bufferlist, std::less<>> *out_vals,
 		       bool *pmore);
     int omap_get_vals(const std::string& oid,
                       const std::string& start_after,
@@ -876,6 +900,8 @@ inline namespace v14_2_0 {
                               std::map<std::string, bufferlist> *vals);
     int omap_set(const std::string& oid,
                  const std::map<std::string, bufferlist>& map);
+    int omap_set(const std::string& oid,
+                 const std::map<std::string, bufferlist, std::less<>>& map);
     int omap_set_header(const std::string& oid,
                         const bufferlist& bl);
     int omap_clear(const std::string& oid);
@@ -1107,6 +1133,7 @@ inline namespace v14_2_0 {
     int aio_flush_async(AioCompletion *c);
     int aio_getxattr(const std::string& oid, AioCompletion *c, const char *name, bufferlist& bl);
     int aio_getxattrs(const std::string& oid, AioCompletion *c, std::map<std::string, bufferlist>& attrset);
+    int aio_getxattrs(const std::string& oid, AioCompletion *c, std::map<std::string, bufferlist, std::less<>>& attrset);
     int aio_setxattr(const std::string& oid, AioCompletion *c, const char *name, bufferlist& bl);
     int aio_rmxattr(const std::string& oid, AioCompletion *c, const char *name);
     int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);

@@ -352,7 +352,7 @@ public:
   int get(
     const string &prefix,
     const std::set<string> &key,
-    std::map<string, bufferlist> *out
+    std::map<string, bufferlist, std::less<>> *out
     ) override;
   int get(
     const string &prefix,

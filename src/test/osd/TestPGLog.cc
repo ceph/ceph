@@ -2464,7 +2464,7 @@ public:
     hoid.pool = 1;
     hoid.oid = "log";
     ghobject_t log_oid(hoid);
-    map<string, bufferlist> km;
+    map<string, bufferlist, less<>> km;
     write_log_and_missing(t, &km, test_coll, log_oid, false);
     if (!km.empty()) {
       t.omap_setkeys(test_coll, log_oid, km);

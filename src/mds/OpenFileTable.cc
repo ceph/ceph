@@ -308,7 +308,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     unsigned write_size = 0;
     unsigned journal_idx = 0;
     bool clear = false;
-    std::map<string, bufferlist> to_update, journaled_update;
+    std::map<string, bufferlist, std::less<>> to_update, journaled_update;
     std::set<string> to_remove, journaled_remove;
   };
   std::vector<omap_update_ctl> omap_updates(omap_num_objs);
@@ -344,8 +344,8 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 
     char key[32];
     snprintf(key, sizeof(key), "_journal.%x", ctl.journal_idx++);
-    std::map<string, bufferlist> tmp_map;
-    tmp_map[key].swap(bl);
+    std::map<string, bufferlist, less<>> tmp_map;
+    tmp_map.emplace(key, std::move(bl));
     op.omap_set(tmp_map);
 
     object_t oid = get_object_name(idx);
@@ -647,7 +647,7 @@ public:
   int header_r = 0;  //< Return value from OMAP header read
   int values_r = 0;  //< Return value from OMAP value read
   bufferlist header_bl;
-  std::map<std::string, bufferlist> values;
+  std::map<std::string, bufferlist, std::less<>> values;
   unsigned index;
   bool first;
   bool more = false;
@@ -694,7 +694,7 @@ void OpenFileTable::_recover_finish(int r)
 void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 				 unsigned idx, bool first, bool more,
 				 bufferlist &header_bl,
-				 std::map<std::string, bufferlist> &values)
+				 std::map<std::string, bufferlist, less<>> &values)
 {
   using ceph::decode;
   int err = -EINVAL;
@@ -843,7 +843,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 	    continue;
 	  auto p = it.second.cbegin();
 	  version_t version;
-	  std::map<string, bufferlist> to_update;
+	  std::map<string, bufferlist, less<>> to_update;
 	  std::set<string> to_remove;
 	  decode(version, p);
 	  if (version != omap_version)

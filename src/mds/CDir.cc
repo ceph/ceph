@@ -1578,8 +1578,8 @@ class C_IO_Dir_OMAP_FetchedMore : public CDirIOContext {
 public:
   bufferlist hdrbl;
   bool more = false;
-  map<string, bufferlist> omap;      ///< carry-over from before
-  map<string, bufferlist> omap_more; ///< new batch
+  map<string, bufferlist, less<>> omap;      ///< carry-over from before
+  map<string, bufferlist, less<>> omap_more; ///< new batch
   int ret;
   C_IO_Dir_OMAP_FetchedMore(CDir *d, MDSContext *f) :
     CDirIOContext(d), fin(f), ret(0) { }
@@ -1608,7 +1608,7 @@ class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
 public:
   bufferlist hdrbl;
   bool more = false;
-  map<string, bufferlist> omap;
+  map<string, bufferlist, less<>> omap;
   bufferlist btbl;
   int ret1, ret2, ret3;
 
@@ -1668,7 +1668,7 @@ void CDir::_omap_fetch(MDSContext *c, const std::set<dentry_key_t>& keys)
 
 void CDir::_omap_fetch_more(
   bufferlist& hdrbl,
-  map<string, bufferlist>& omap,
+  map<string, bufferlist, less<>>& omap,
   MDSContext *c)
 {
   // we have more omap keys to fetch!
@@ -1887,7 +1887,7 @@ CDentry *CDir::_load_dentry(
   return dn;
 }
 
-void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
+void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist, less<>>& omap,
 			 bool complete, int r)
 {
   LogChannelRef clog = cache->mds->clog;
@@ -2163,7 +2163,7 @@ void CDir::_omap_commit(int op_prio)
   }
 
   set<string> to_remove;
-  map<string, bufferlist> to_set;
+  map<string, bufferlist, less<>> to_set;
 
   C_GatherBuilder gather(g_ceph_context,
 			 new C_OnFinisher(new C_IO_Dir_Committed(this,

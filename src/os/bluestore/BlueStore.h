@@ -2706,7 +2706,7 @@ public:
 	      bufferptr& value) override;
 
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       map<string,bufferptr>& aset) override;
+	       map<string,bufferptr,less<>>& aset) override;
 
   int list_collections(vector<coll_t>& ls) override;
 
@@ -2729,13 +2729,13 @@ public:
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    map<string, bufferlist, less<>> *out /// < [out] Key to value map
     ) override;
   int _omap_get(
     Collection *c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    map<string, bufferlist, less<>> *out /// < [out] Key to value map
     );
 
   /// Get omap header
@@ -2758,7 +2758,7 @@ public:
     CollectionHandle &c,         ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    map<string, bufferlist, less<>> *out ///< [out] Returned keys and values
     ) override;
 
   /// Filters keys into out which are defined on oid

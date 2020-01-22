@@ -915,7 +915,7 @@ void PG::upgrade(ObjectStore *store)
 
   // update infover_key
   if (info_struct_v < pg_latest_struct_v) {
-    map<string,bufferlist> v;
+    map<string,bufferlist,less<>> v;
     __u8 ver = pg_latest_struct_v;
     encode(ver, v[string(infover_key)]);
     t.omap_setkeys(coll, pgmeta_oid, v);
@@ -953,7 +953,7 @@ void PG::prepare_write(
 {
   info.stats.stats.add(unstable_stats);
   unstable_stats.clear();
-  map<string,bufferlist> km;
+  map<string,bufferlist,less<>> km;
   string key_to_remove;
   if (dirty_big_info || dirty_info) {
     int ret = prepare_info_keymap(
@@ -992,7 +992,7 @@ bool PG::_has_removal_flag(ObjectStore *store,
   // first try new way
   set<string> keys;
   keys.insert("_remove");
-  map<string,bufferlist> values;
+  map<string,bufferlist,less<>> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
   if (store->omap_get_values(ch, pgmeta_oid, keys, &values) == 0 &&
@@ -1018,7 +1018,7 @@ int PG::peek_map_epoch(ObjectStore *store,
   set<string> keys;
   keys.insert(string(infover_key));
   keys.insert(string(epoch_key));
-  map<string,bufferlist> values;
+  map<string,bufferlist,less<>> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
   int r = store->omap_get_values(ch, pgmeta_oid, keys, &values);
@@ -1081,7 +1081,7 @@ int PG::read_info(
   keys.insert(string(biginfo_key));
   keys.insert(string(fastinfo_key));
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
-  map<string,bufferlist> values;
+  map<string,bufferlist,less<>> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
   int r = store->omap_get_values(ch, pgmeta_oid, keys, &values);

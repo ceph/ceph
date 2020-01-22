@@ -266,7 +266,7 @@ void PG::prepare_write(pg_info_t &info,
 		       bool need_write_epoch,
 		       ceph::os::Transaction &t)
 {
-  std::map<string,bufferlist> km;
+  std::map<std::string, bufferlist, std::less<>> km;
   std::string key_to_remove;
   if (dirty_big_info || dirty_info) {
     int ret = prepare_info_keymap(

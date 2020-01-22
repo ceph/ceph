@@ -156,7 +156,7 @@ public:
   int get(
     const ghobject_t &oid,
     bufferlist *header,
-    map<string, bufferlist> *out
+    map<string, bufferlist, less<>> *out
     ) override;
 
   int get_keys(
@@ -167,7 +167,7 @@ public:
   int get_values(
     const ghobject_t &oid,
     const set<string> &keys,
-    map<string, bufferlist> *out
+    map<string, bufferlist, less<>> *out
     ) override;
 
   int check_keys(
@@ -179,7 +179,7 @@ public:
   int get_xattrs(
     const ghobject_t &oid,
     const set<string> &to_get,
-    map<string, bufferlist> *out
+    map<string, bufferlist, less<>> *out
     ) override;
 
   int get_all_xattrs(
@@ -529,7 +529,7 @@ private:
   int scan(Header header,
 	   const set<string> &in_keys,
 	   set<string> *out_keys,
-	   map<string, bufferlist> *out_values);
+	   map<string, bufferlist, less<>> *out_values);
 
   /// Remove header and all related prefixes
   int _clear(Header header,

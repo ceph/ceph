@@ -352,7 +352,7 @@ static int os_getattr(const char *path, struct stat *stbuf)
 	return -ENOENT;
       set<string> k;
       k.insert(key);
-      map<string,bufferlist> v;
+      map<string,bufferlist,less<>> v;
       fs->store->omap_get_values(ch, oid, k, &v);
       if (!v.count(key)) {
 	return -ENOENT;
@@ -535,7 +535,7 @@ static int os_readdir(const char *path,
 
   case FN_OBJECT_ATTR:
     {
-      map<string,bufferptr> aset;
+      map<string,bufferptr,less<>> aset;
       fs->store->getattrs(ch, oid, aset);
       unsigned skip = offset;
       for (auto a : aset) {
@@ -684,7 +684,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 	[&](bufferlist *pbl) {
 	  set<string> k;
 	  k.insert(key);
-	  map<string,bufferlist> v;
+	  map<string,bufferlist,less<>> v;
 	  int r = fs->store->omap_get_values(ch, oid, k, &v);
 	  if (r < 0)
 	    return r;
@@ -835,10 +835,10 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
       pbl = new bufferlist;
       set<string> k;
       k.insert(key);
-      map<string,bufferlist> v;
+      map<string,bufferlist,less<>> v;
       fs->store->omap_get_values(ch, oid, k, &v);
       if (v.count(key) == 0) {
-	map<string,bufferlist> aset;
+	map<string,bufferlist,less<>> aset;
 	aset[key] = bufferlist();
 	t.omap_setkeys(cid, oid, aset);
       } else {
@@ -967,7 +967,7 @@ int os_flush(const char *path, struct fuse_file_info *fi)
 
   case FN_OBJECT_OMAP_VAL:
     {
-      map<string,bufferlist> aset;
+      map<string,bufferlist,less<>> aset;
       aset[key] = o->bl;
       t.omap_setkeys(cid, oid, aset);
       break;

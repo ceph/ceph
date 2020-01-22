@@ -1082,7 +1082,7 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
 int RocksDBStore::get(
     const string &prefix,
     const std::set<string> &keys,
-    std::map<string, bufferlist> *out)
+    std::map<string, bufferlist, std::less<>> *out)
 {
   utime_t start = ceph_clock_now();
   auto cf = get_cf_handle(prefix);

@@ -62,7 +62,7 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
-  std::map<std::string, bufferlist> *out)
+  std::map<std::string, bufferlist, std::less<>> *out)
 {
   return os->omap_get_values(ch, hoid, keys, out);
 }
@@ -215,7 +215,7 @@ void SnapMapper::set_snaps(
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
   ceph_assert(check(oid));
-  map<string, bufferlist> to_set;
+  map<string, bufferlist, less<>> to_set;
   bufferlist bl;
   encode(in, bl);
   to_set[to_object_key(oid)] = bl;
@@ -291,7 +291,7 @@ void SnapMapper::add_oid(
   object_snaps _snaps(oid, snaps);
   set_snaps(oid, _snaps, t);
 
-  map<string, bufferlist> to_add;
+  map<string, bufferlist, less<>> to_add;
   for (set<snapid_t>::iterator i = snaps.begin();
        i != snaps.end();
        ++i) {
@@ -413,7 +413,7 @@ string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 }
 
 void SnapMapper::make_purged_snap_key_value(
-  int64_t pool, snapid_t begin, snapid_t end, map<string,bufferlist> *m)
+  int64_t pool, snapid_t begin, snapid_t end, map<string,bufferlist,less<>> *m)
 {
   string k = make_purged_snap_key(pool, end - 1);
   auto& v = (*m)[k];
@@ -467,7 +467,7 @@ void SnapMapper::record_purged_snaps(
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps)
 {
   dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
-  map<string,bufferlist> m;
+  map<string,bufferlist, less<>> m;
   set<string> rm;
   for (auto& [epoch, bypool] : purged_snaps) {
     // index by (pool, snap)
@@ -663,7 +663,7 @@ int SnapMapper::convert_legacy(
   auto start = ceph::mono_clock::now();
 
   iter->upper_bound(SnapMapper::LEGACY_MAPPING_PREFIX);
-  map<string,bufferlist> to_set;
+  map<string,bufferlist,less<>> to_set;
   while (iter->valid()) {
     bool valid = SnapMapper::is_legacy_mapping(iter->key());
     if (valid) {

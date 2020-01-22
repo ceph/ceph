@@ -27,7 +27,7 @@ class Transaction {
 public:
   /// Set keys according to map
   virtual void set_keys(
-    const std::map<K, V> &keys ///< [in] keys/values to set
+    const std::map<K, V, std::less<>> &keys ///< [in] keys/values to set
     ) = 0;
 
   /// Remove keys
@@ -51,7 +51,7 @@ public:
   /// Returns requested key values
   virtual int get_keys(
     const std::set<K> &keys,   ///< [in] keys requested
-    std::map<K, V> *got  ///< [out] values for keys obtained
+    std::map<K, V, std::less<>> *got  ///< [out] values for keys obtained
     ) = 0; ///< @return error value
 
   /// Returns next key
@@ -123,15 +123,13 @@ public:
 
   /// Adds operation setting keys to Transaction
   void set_keys(
-    const map<K, V> &keys,  ///< [in] keys/values to set
+    const map<K, V, less<>> &keys,  ///< [in] keys/values to set
     Transaction<K, V> *t    ///< [out] transaction to use
     ) {
     std::set<VPtr> vptrs;
-    for (typename map<K, V>::const_iterator i = keys.begin();
-	 i != keys.end();
-	 ++i) {
-      VPtr ip = in_progress.lookup_or_create(i->first, i->second);
-      *ip = i->second;
+    for (const auto& [k, v] :  keys) {
+      VPtr ip = in_progress.lookup_or_create(k, v);
+      *ip = v;
       vptrs.insert(ip);
     }
     t->set_keys(keys);
@@ -162,7 +160,7 @@ public:
     map<K, V> *got             ///< [out] keys gotten
     ) {
     set<K> to_get;
-    map<K, V> _got;
+    map<K, V, less<>> _got;
     for (typename set<K>::const_iterator i = keys_to_get.begin();
 	 i != keys_to_get.end();
 	 ++i) {

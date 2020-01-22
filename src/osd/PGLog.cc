@@ -616,7 +616,7 @@ void PGLog::check() {
 // non-static
 void PGLog::write_log_and_missing(
   ObjectStore::Transaction& t,
-  map<string,bufferlist> *km,
+  map<string,bufferlist,less<>> *km,
   const coll_t& coll,
   const ghobject_t &log_oid,
   bool require_rollback)
@@ -655,7 +655,7 @@ void PGLog::write_log_and_missing(
 // static
 void PGLog::write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
-    map<string,bufferlist> *km,
+    map<string,bufferlist,less<>> *km,
     pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
     map<eversion_t, hobject_t> &divergent_priors,
@@ -672,7 +672,7 @@ void PGLog::write_log_and_missing_wo_missing(
 // static
 void PGLog::write_log_and_missing(
     ObjectStore::Transaction& t,
-    map<string,bufferlist> *km,
+    map<string,bufferlist,less<>> *km,
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid,
@@ -698,7 +698,7 @@ void PGLog::write_log_and_missing(
 // static
 void PGLog::_write_log_and_missing_wo_missing(
   ObjectStore::Transaction& t,
-  map<string,bufferlist> *km,
+  map<string,bufferlist,less<>> *km,
   pg_log_t &log,
   const coll_t& coll, const ghobject_t &log_oid,
   map<eversion_t, hobject_t> &divergent_priors,
@@ -813,7 +813,7 @@ void PGLog::_write_log_and_missing_wo_missing(
 // static
 void PGLog::_write_log_and_missing(
   ObjectStore::Transaction& t,
-  map<string,bufferlist>* km,
+  map<string,bufferlist,less<>>* km,
   pg_log_t &log,
   const coll_t& coll, const ghobject_t &log_oid,
   eversion_t dirty_to,

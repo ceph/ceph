@@ -743,8 +743,8 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
     bl.push_back(buffer::copy(reinterpret_cast<char*>(u->xfer_buf),
                               u->xfer_buflen ) );
 
-    map<string,bufferptr> attrset;
-    map<string, bufferlist> omaps;
+    map<string,bufferptr,less<>> attrset;
+    map<string,bufferlist,less<>> omaps;
     // enqueue a write transaction on the collection's handle
     ObjectStore::Transaction t;
     char ver_key[64];
@@ -827,7 +827,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       }
     }
 
-    if (attrset.size()) {
+    if (!attrset.empty()) {
       t.setattrs(coll.cid, object.oid, attrset);
     }
     t.write(coll.cid, object.oid, u->offset, u->xfer_buflen, bl, flags);
@@ -849,7 +849,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       t.omap_rmkeys(coll.cid, pgmeta_oid, rmkeys);
     }
 
-    if (omaps.size()) {
+    if (!omaps.empty()) {
       ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
       t.omap_setkeys(coll.cid, pgmeta_oid, omaps);
     }

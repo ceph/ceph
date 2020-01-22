@@ -41,7 +41,7 @@ WRITE_CLASS_ENCODER(kstore_cnode_t)
 struct kstore_onode_t {
   uint64_t nid;                        ///< numeric id (locally unique)
   uint64_t size;                       ///< object size
-  map<string, bufferptr> attrs;        ///< attrs
+  map<string, bufferptr, less<>> attrs;        ///< attrs
   uint64_t omap_head;                  ///< id for omap root node
   uint32_t stripe_size;                ///< stripe size
 

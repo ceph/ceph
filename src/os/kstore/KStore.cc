@@ -1398,7 +1398,7 @@ int KStore::getattr(
 int KStore::getattrs(
   CollectionHandle& ch,
   const ghobject_t& oid,
-  map<string,bufferptr>& aset)
+  map<string,bufferptr,less<>>& aset)
 {
   dout(15) << __func__ << " " << ch->cid << " " << oid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());
@@ -1675,7 +1675,7 @@ int KStore::omap_get(
   CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
+  map<string, bufferlist, less<>> *out /// < [out] Key to value map
   )
 {
   dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
@@ -1799,7 +1799,7 @@ int KStore::omap_get_values(
   CollectionHandle& ch,                    ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
-  map<string, bufferlist> *out ///< [out] Returned keys and values
+  map<string, bufferlist, less<>> *out ///< [out] Returned keys and values
   )
 {
   dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;

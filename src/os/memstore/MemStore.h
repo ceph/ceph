@@ -32,9 +32,9 @@ public:
   struct Object : public RefCountedObject {
     ceph::mutex xattr_mutex{ceph::make_mutex("MemStore::Object::xattr_mutex")};
     ceph::mutex omap_mutex{ceph::make_mutex("MemStore::Object::omap_mutex")};
-    map<string,bufferptr> xattr;
+    map<string,bufferptr,less<>> xattr;
     bufferlist omap_header;
-    map<string,bufferlist> omap;
+    map<string,bufferlist,less<>> omap;
 
     using Ref = ceph::ref_t<Object>;
 
@@ -318,7 +318,7 @@ public:
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       map<string,bufferptr>& aset) override;
+	       map<string,bufferptr,std::less<>>& aset) override;
 
   int list_collections(vector<coll_t>& ls) override;
 
@@ -343,7 +343,7 @@ public:
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    map<string, bufferlist, less<>> *out /// < [out] Key to value map
     ) override;
 
   using ObjectStore::omap_get_header;
@@ -369,7 +369,7 @@ public:
     CollectionHandle& c,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    map<string, bufferlist, less<>> *out ///< [out] Returned keys and values
     ) override;
 
   using ObjectStore::omap_check_keys;

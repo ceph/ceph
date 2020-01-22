@@ -3382,7 +3382,7 @@ extern "C" void _rados_write_op_omap_set(rados_write_op_t write_op,
                                          size_t num)
 {
   tracepoint(librados, rados_write_op_omap_set_enter, write_op, num);
-  std::map<std::string, bufferlist> entries;
+  std::map<std::string, bufferlist, less<>> entries;
   for (size_t i = 0; i < num; ++i) {
     tracepoint(librados, rados_write_op_omap_set_entry, keys[i], vals[i], lens[i]);
     bufferlist bl(lens[i]);
@@ -3402,7 +3402,7 @@ extern "C" void _rados_write_op_omap_set2(rados_write_op_t write_op,
                                           size_t num)
 {
   tracepoint(librados, rados_write_op_omap_set_enter, write_op, num);
-  std::map<std::string, bufferlist> entries;
+  std::map<std::string, bufferlist, std::less<>> entries;
   for (size_t i = 0; i < num; ++i) {
     bufferlist bl(val_lens[i]);
     bl.append(vals[i], val_lens[i]);
@@ -3790,8 +3790,8 @@ extern "C" void _rados_read_op_exec_user_buf(rados_read_op_t read_op,
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_exec_user_buf);
 
 struct RadosOmapIter {
-  std::map<std::string, bufferlist> values;
-  std::map<std::string, bufferlist>::iterator i;
+  std::map<std::string, bufferlist, std::less<>> values;
+  std::map<std::string, bufferlist, std::less<>>::iterator i;
 };
 
 class C_OmapIter : public Context {

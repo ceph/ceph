@@ -301,7 +301,7 @@ void LevelDBStore::LevelDBTransactionImpl::rm_range_keys(const string &prefix, c
 int LevelDBStore::get(
     const string &prefix,
     const std::set<string> &keys,
-    std::map<string, bufferlist> *out)
+    std::map<string, bufferlist, std::less<>> *out)
 {
   utime_t start = ceph_clock_now();
   for (std::set<string>::const_iterator i = keys.begin();

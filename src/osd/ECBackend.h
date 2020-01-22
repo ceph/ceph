@@ -279,7 +279,7 @@ private:
 
     // must be filled if state == WRITING
     map<int, bufferlist> returned_data;
-    map<string, bufferlist> xattrs;
+    map<string, bufferlist, less<>> xattrs;
     ECUtil::HashInfoRef hinfo;
     ObjectContextRef obc;
     set<pg_shard_t> waiting_on_pushes;
@@ -301,8 +301,8 @@ private:
   friend struct OnRecoveryReadComplete;
   void handle_recovery_read_complete(
     const hobject_t &hoid,
-    boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
-    std::optional<map<string, bufferlist> > attrs,
+    boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist, less<>>> &to_read,
+    std::optional<map<string, bufferlist, less<>>> attrs,
     RecoveryMessages *m);
   void handle_recovery_push(
     const PushOp &op,
@@ -344,10 +344,10 @@ public:
   struct read_result_t {
     int r;
     map<pg_shard_t, int> errors;
-    std::optional<map<string, bufferlist> > attrs;
+    std::optional<map<string, bufferlist, less<>> > attrs;
     list<
       boost::tuple<
-	uint64_t, uint64_t, map<pg_shard_t, bufferlist> > > returned;
+	uint64_t, uint64_t, map<pg_shard_t, bufferlist, less<>> > > returned;
     read_result_t() : r(0) {}
   };
   struct read_request_t {
@@ -408,7 +408,7 @@ public:
 	    boost::make_tuple(
 	      extent.get<0>(),
 	      extent.get<1>(),
-	      map<pg_shard_t, bufferlist>()));
+	      map<pg_shard_t, bufferlist, less<>>()));
 	}
       }
     }
@@ -634,7 +634,7 @@ public:
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true,
-				    const map<string,bufferptr> *attr = NULL);
+				    const map<string,bufferptr, less<>> *attr = NULL);
 
 public:
   ECBackend(
@@ -665,7 +665,7 @@ public:
 
   int objects_get_attrs(
     const hobject_t &hoid,
-    map<string, bufferlist> *out) override;
+    map<string, bufferlist, less<>> *out) override;
 
   void rollback_append(
     const hobject_t &hoid,

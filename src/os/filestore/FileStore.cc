@@ -3840,7 +3840,7 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
 
   {
     char buf[2];
-    map<string, bufferptr> aset;
+    map<string, bufferptr, less<>> aset;
     r = _fgetattrs(**o, aset);
     if (r < 0)
       goto out3;
@@ -4448,7 +4448,7 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
+int FileStore::_fgetattrs(int fd, map<string,bufferptr,less<>>& aset)
 {
   // get attr list
   char names1[100];
@@ -4499,7 +4499,7 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
   return 0;
 }
 
-int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
+int FileStore::_fsetattrs(int fd, map<string, bufferptr, less<>> &aset)
 {
   for (map<string, bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -4580,7 +4580,7 @@ int FileStore::getattr(CollectionHandle& ch, const ghobject_t& oid, const char *
   r = _fgetattr(**fd, n, bp);
   lfn_close(fd);
   if (r == -ENODATA) {
-    map<string, bufferlist> got;
+    map<string, bufferlist, less<>> got;
     set<string> to_get;
     to_get.insert(string(name));
     Index index;
@@ -4614,12 +4614,13 @@ int FileStore::getattr(CollectionHandle& ch, const ghobject_t& oid, const char *
   }
 }
 
-int FileStore::getattrs(CollectionHandle& ch, const ghobject_t& oid, map<string,bufferptr>& aset)
+int FileStore::getattrs(CollectionHandle& ch, const ghobject_t& oid,
+			std::map<string,bufferptr,std::less<>>& aset)
 {
   tracepoint(objectstore, getattrs_enter, ch->cid.c_str());
   const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
   set<string> omap_attrs;
-  map<string, bufferlist> omap_aset;
+  map<string, bufferlist, less<>> omap_aset;
   Index index;
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
 
@@ -4697,8 +4698,8 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
 {
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
-  map<string, bufferptr> inline_set;
-  map<string, bufferptr> inline_to_set;
+  map<string, bufferptr, less<>> inline_set;
+  map<string, bufferptr, less<>> inline_to_set;
   FDRef fd;
   int spill_out = -1;
   bool incomplete_inline = false;
@@ -4841,7 +4842,7 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
 {
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
 
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   FDRef fd;
   set<string> omap_attrs;
   Index index;
@@ -4860,7 +4861,7 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
 
   r = _fgetattrs(**fd, aset);
   if (r >= 0) {
-    for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); ++p) {
+    for (auto p = aset.begin(); p != aset.end(); ++p) {
       char n[CHAIN_XATTR_MAX_NAME_LEN];
       get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
       r = chain_fremovexattr(**fd, n);
@@ -5202,7 +5203,7 @@ int FileStore::collection_list(const coll_t& c,
 
 int FileStore::omap_get(CollectionHandle& ch, const ghobject_t &hoid,
 			bufferlist *header,
-			map<string, bufferlist> *out)
+			map<string, bufferlist, less<>> *out)
 {
   tracepoint(objectstore, omap_get_enter, ch->cid.c_str());
   const coll_t& c = !_need_temp_object_collection(ch->cid, hoid) ? ch->cid : ch->cid.get_temp();
@@ -5295,7 +5296,7 @@ int FileStore::omap_get_keys(CollectionHandle& ch, const ghobject_t &hoid, set<s
 
 int FileStore::omap_get_values(CollectionHandle& ch, const ghobject_t &hoid,
 			       const set<string> &keys,
-			       map<string, bufferlist> *out)
+			       map<string, bufferlist, less<>> *out)
 {
   tracepoint(objectstore, omap_get_values_enter, ch->cid.c_str());
   const coll_t& c = !_need_temp_object_collection(ch->cid, hoid) ? ch->cid : ch->cid.get_temp();

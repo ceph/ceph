@@ -144,7 +144,7 @@ public:
   int submit_transaction_sync(Transaction) override;
 
   int get(const std::string &prefix, const std::set<std::string> &key,
-    std::map<std::string, bufferlist> *out) override;
+    std::map<std::string, bufferlist, std::less<>> *out) override;
 
   int get(const std::string &prefix, const std::string &key,
           bufferlist *out) override;

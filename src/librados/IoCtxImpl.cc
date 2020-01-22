@@ -1152,12 +1152,12 @@ int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
 
 namespace {
 struct AioGetxattrsData {
-  AioGetxattrsData(librados::AioCompletionImpl *c, map<string, bufferlist>* attrset,
+  AioGetxattrsData(librados::AioCompletionImpl *c, map<string, bufferlist, less<>>* attrset,
 		   librados::RadosClient *_client) :
     user_completion(c), user_attrset(attrset), client(_client) {}
   struct librados::C_AioCompleteAndSafe user_completion;
-  map<string, bufferlist> result_attrset;
-  map<std::string, bufferlist>* user_attrset;
+  map<string, bufferlist, std::less<>> result_attrset;
+  map<std::string, bufferlist, std::less<>>* user_attrset;
   librados::RadosClient *client;
 };
 }
@@ -1180,7 +1180,7 @@ static void aio_getxattrs_complete(rados_completion_t c, void *arg) {
 }
 
 int librados::IoCtxImpl::aio_getxattrs(const object_t& oid, AioCompletionImpl *c,
-				       map<std::string, bufferlist>& attrset)
+				       map<std::string, bufferlist, std::less<>>& attrset)
 {
   AioGetxattrsData *cdata = new AioGetxattrsData(c, &attrset, client);
   ::ObjectOperation rd;
@@ -1541,9 +1541,9 @@ int librados::IoCtxImpl::setxattr(const object_t& oid,
 }
 
 int librados::IoCtxImpl::getxattrs(const object_t& oid,
-				     map<std::string, bufferlist>& attrset)
+				   map<std::string, bufferlist, std::less<>>& attrset)
 {
-  map<string, bufferlist> aset;
+  map<string, bufferlist, less<>> aset;
 
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
@@ -1552,9 +1552,9 @@ int librados::IoCtxImpl::getxattrs(const object_t& oid,
 
   attrset.clear();
   if (r >= 0) {
-    for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); ++p) {
-      ldout(client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << p->first << dendl;
-      attrset[p->first.c_str()] = p->second;
+    for (auto& [k, v] : aset) {
+      ldout(client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << k << dendl;
+      attrset.emplace(k.c_str(), std::move(v));
     }
   }
 

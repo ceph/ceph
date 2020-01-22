@@ -634,7 +634,7 @@ protected:
 
   void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
   void _omap_fetch_more(
-    bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
+    bufferlist& hdrbl, std::map<std::string, bufferlist, std::less<>>& omap,
     MDSContext *fin);
   CDentry *_load_dentry(
       std::string_view key,
@@ -660,7 +660,7 @@ protected:
    */
   void go_bad(bool complete);
 
-  void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
+  void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist, std::less<>>& omap,
 		     bool complete, int r);
 
   // -- commit --

@@ -46,7 +46,7 @@ public:
       : cid(cid), hoid(hoid), t(t) {}
   public:
     void set_keys(
-      const std::map<std::string, bufferlist> &to_set) override {
+	   const std::map<std::string, bufferlist, std::less<>> &to_set) override {
       t->omap_setkeys(cid, hoid, to_set);
     }
     void remove_keys(
@@ -71,7 +71,7 @@ public:
   }
   int get_keys(
     const std::set<std::string> &keys,
-    std::map<std::string, bufferlist> *out) override;
+    std::map<std::string, bufferlist, std::less<>> *out) override;
   int get_next(
     const std::string &key,
     pair<std::string, bufferlist> *next) override;
@@ -205,7 +205,7 @@ private:
     snapid_t *begin, snapid_t *end);
   static void make_purged_snap_key_value(
     int64_t pool, snapid_t begin,
-    snapid_t end, map<string,bufferlist> *m);
+    snapid_t end, map<string,bufferlist,less<>> *m);
   static string make_purged_snap_key(int64_t pool, snapid_t last);
 
 

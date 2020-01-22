@@ -95,7 +95,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     // Compose TYPE_ATTRS chunk
     // ========================
     std::map<std::string, bufferlist> raw_xattrs;
-    std::map<std::string, bufferlist> xattrs;
+    std::map<std::string, bufferlist, std::less<>> xattrs;
     r = io_ctx->getxattrs(oid, raw_xattrs);
     if (r < 0) {
       cerr << "error getting xattr set " << oid << ": " << cpp_strerror(r)
@@ -130,9 +130,9 @@ int PoolDump::dump(IoCtx *io_ctx)
     // Compose TYPE_OMAP
     int MAX_READ = 512;
     string last_read = "";
-    do {
-      map<string, bufferlist> values;
-      r = io_ctx->omap_get_vals(oid, last_read, MAX_READ, &values);
+    for (bool more = true; more;) {
+      map<string, bufferlist, less<>> values;
+      r = io_ctx->omap_get_vals2(oid, last_read, MAX_READ, &values, &more);
       if (r < 0) {
 	cerr << "error getting omap keys " << oid << ": "
 	     << cpp_strerror(r) << std::endl;
@@ -149,7 +149,7 @@ int PoolDump::dump(IoCtx *io_ctx)
         return r;
       }
       r = values.size();
-    } while (r == MAX_READ);
+    }
 
     // Close object
     // =============

@@ -51,7 +51,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs) {
   return lhs; // unreachable
 }
 
-static ostream &operator<<(ostream &lhs, const map<pg_shard_t, bufferlist> &rhs)
+static ostream &operator<<(ostream &lhs, const map<pg_shard_t, bufferlist, less<>> &rhs)
 {
   lhs << "[";
   for (map<pg_shard_t, bufferlist>::const_iterator i = rhs.begin();
@@ -79,7 +79,7 @@ static ostream &operator<<(ostream &lhs, const map<int, bufferlist> &rhs)
 
 static ostream &operator<<(
   ostream &lhs,
-  const boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &rhs)
+  const boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist, less<>> > &rhs)
 {
   return lhs << "(" << rhs.get<0>() << ", "
 	     << rhs.get<1>() << ", " << rhs.get<2>() << ")";
@@ -413,8 +413,8 @@ void ECBackend::handle_recovery_push_reply(
 
 void ECBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
-  boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
-  std::optional<map<string, bufferlist> > attrs,
+  boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist, less<>> > &to_read,
+  std::optional<map<string, bufferlist, less<>> > attrs,
   RecoveryMessages *m)
 {
   dout(10) << __func__ << ": returned " << hoid << " "
@@ -459,7 +459,7 @@ void ECBackend::handle_recovery_read_complete(
       }
       // Need to remove ECUtil::get_hinfo_key() since it should not leak out
       // of the backend (see bug #12983)
-      map<string, bufferlist> sanitized_attrs(op.xattrs);
+      map<string, bufferlist, less<>> sanitized_attrs(op.xattrs);
       sanitized_attrs.erase(ECUtil::get_hinfo_key());
       op.obc = get_parent()->get_obc(hoid, sanitized_attrs);
       ceph_assert(op.obc);
@@ -1182,10 +1182,7 @@ void ECBackend::handle_sub_read_reply(
     }
     list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator req_iter =
       rop.to_read.find(i->first)->second.to_read.begin();
-    list<
-      boost::tuple<
-	uint64_t, uint64_t, map<pg_shard_t, bufferlist> > >::iterator riter =
-      rop.complete[i->first].returned.begin();
+    auto riter = rop.complete[i->first].returned.begin();
     for (list<pair<uint64_t, bufferlist> >::iterator j = i->second.begin();
 	 j != i->second.end();
 	 ++j, ++req_iter, ++riter) {
@@ -1207,7 +1204,7 @@ void ECBackend::handle_sub_read_reply(
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
     }
-    rop.complete[i->first].attrs = map<string, bufferlist>();
+    rop.complete[i->first].attrs = {};
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
   for (auto i = op.errors.begin();
@@ -1780,7 +1777,7 @@ void ECBackend::do_read_op(ReadOp &op)
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool checks, const map<string,bufferptr> *attrs)
+  const hobject_t &hoid, bool checks, const map<string,bufferptr,less<>> *attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -2439,7 +2436,7 @@ int ECBackend::send_all_remaining_reads(
 
 int ECBackend::objects_get_attrs(
   const hobject_t &hoid,
-  map<string, bufferlist> *out)
+  map<string, bufferlist, less<>> *out)
 {
   int r = store->getattrs(
     ch,

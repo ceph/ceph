@@ -6060,7 +6060,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       {
 	tracepoint(osd, do_osd_op_pre_getxattrs, soid.oid.name.c_str(), soid.snap.val);
-	map<string, bufferlist> out;
+	map<string, bufferlist, less<>> out;
 	result = getattrs_maybe_cache(
 	  ctx->obc,
 	  &out);
@@ -6870,7 +6870,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  oi.user_version = target_version;
 	  ctx->user_at_version = target_version;
 	  /* rm_attrs */
-	  map<string,bufferlist> rmattrs;
+	  map<string,bufferlist,less<>> rmattrs;
 	  result = getattrs_maybe_cache(ctx->obc, &rmattrs);
 	  if (result < 0) {
 	    dout(10) << __func__ << " error: " << cpp_strerror(result) << dendl;
@@ -7448,7 +7448,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  goto fail;
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
-	map<string, bufferlist> out;
+	map<string, bufferlist, less<>> out;
 	if (oi.is_omap()) {
 	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
@@ -7477,7 +7477,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, list_keys(assertions).c_str());
 	
-	map<string, bufferlist> out;
+	map<string, bufferlist, less<>> out;
 
 	if (oi.is_omap()) {
 	  set<string> to_get;
@@ -8818,7 +8818,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
   reply_obj.truncate_size = oi.truncate_size;
 
   // attrs
-  map<string,bufferlist>& out_attrs = reply_obj.attrs;
+  map<string,bufferlist,less<>>& out_attrs = reply_obj.attrs;
   if (!cursor.attr_complete) {
     result = getattrs_maybe_cache(
       ctx->obc,
@@ -10999,7 +10999,7 @@ ObjectContextRef PrimaryLogPG::create_object_context(const object_info_t& oi,
 ObjectContextRef PrimaryLogPG::get_object_context(
   const hobject_t& soid,
   bool can_create,
-  const map<string, bufferlist> *attrs)
+  const map<string, bufferlist, less<>> *attrs)
 {
   auto it_objects = recovery_state.get_pg_log().get_log().objects.find(soid);
   ceph_assert(
@@ -11407,7 +11407,7 @@ void PrimaryLogPG::kick_object_context_blocked(ObjectContextRef obc)
 SnapSetContext *PrimaryLogPG::get_snapset_context(
   const hobject_t& oid,
   bool can_create,
-  const map<string, bufferlist> *attrs,
+  const map<string, bufferlist, less<>> *attrs,
   bool oid_existed)
 {
   std::lock_guard l(snapset_contexts_lock);
@@ -15436,7 +15436,7 @@ int PrimaryLogPG::getattr_maybe_cache(
 
 int PrimaryLogPG::getattrs_maybe_cache(
   ObjectContextRef obc,
-  map<string, bufferlist> *out)
+  map<string, bufferlist, less<>> *out)
 {
   int r = 0;
   ceph_assert(out);
@@ -15445,12 +15445,10 @@ int PrimaryLogPG::getattrs_maybe_cache(
   } else {
     r = pgbackend->objects_get_attrs(obc->obs.oi.soid, out);
   }
-  map<string, bufferlist> tmp;
-  for (map<string, bufferlist>::iterator i = out->begin();
-       i != out->end();
-       ++i) {
-    if (i->first.size() > 1 && i->first[0] == '_')
-      tmp[i->first.substr(1, i->first.size())].claim(i->second);
+  map<string, bufferlist, less<>> tmp;
+  for (auto& [k,v] : *out) {
+    if (k.size() > 1 && k[0] == '_')
+      tmp[k.substr(1)].claim(v);
   }
   tmp.swap(*out);
   return r;

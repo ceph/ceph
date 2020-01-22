@@ -103,7 +103,7 @@ public:
   int header_r;  //< Return value from OMAP header read
   int values_r;  //< Return value from OMAP value read
   bufferlist header_bl;
-  std::map<std::string, bufferlist> session_vals;
+  std::map<std::string, bufferlist, std::less<>> session_vals;
   bool more_session_vals = false;
 
   C_IO_SM_Load(SessionMap *cm, const bool f)
@@ -144,7 +144,7 @@ void SessionMapStore::encode_header(
  * Decode and insert some serialized OMAP values.  Call this
  * repeatedly to insert batched loads.
  */
-void SessionMapStore::decode_values(std::map<std::string, bufferlist> &session_vals)
+void SessionMapStore::decode_values(std::map<std::string, bufferlist, std::less<>> &session_vals)
 {
   for (std::map<std::string, bufferlist>::iterator i = session_vals.begin();
        i != session_vals.end(); ++i) {
@@ -176,7 +176,7 @@ void SessionMap::_load_finish(
     int values_r,
     bool first,
     bufferlist &header_bl,
-    std::map<std::string, bufferlist> &session_vals,
+    std::map<std::string, bufferlist, std::less<>> &session_vals,
     bool more_session_vals)
 {
   if (operation_r < 0) {
@@ -408,7 +408,7 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
   }
 
   dout(20) << " updating keys:" << dendl;
-  map<string, bufferlist> to_set;
+  map<string, bufferlist, less<>> to_set;
   for(std::set<entity_name_t>::iterator i = dirty_sessions.begin();
       i != dirty_sessions.end(); ++i) {
     const entity_name_t name = *i;
@@ -841,7 +841,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 
   // Batch writes into mds_sessionmap_keys_per_op
   const uint32_t kpo = g_conf()->mds_sessionmap_keys_per_op;
-  map<string, bufferlist> to_set;
+  map<string, bufferlist, less<>> to_set;
   for (uint32_t i = 0; i < write_sessions.size(); ++i) {
     const entity_name_t &session_id = write_sessions[i];
     Session *session = session_map[session_id];

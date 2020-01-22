@@ -533,7 +533,7 @@ public:
 
   virtual void encode_header(bufferlist *header_bl);
   virtual void decode_header(bufferlist &header_bl);
-  virtual void decode_values(std::map<std::string, bufferlist> &session_vals);
+  virtual void decode_values(std::map<std::string, bufferlist, std::less<>> &session_vals);
   virtual void decode_legacy(bufferlist::const_iterator& blp);
   void dump(Formatter *f) const;
 
@@ -724,7 +724,7 @@ public:
       int values_r,
       bool first,
       bufferlist &header_bl,
-      std::map<std::string, bufferlist> &session_vals,
+      std::map<std::string, bufferlist, std::less<>> &session_vals,
       bool more_session_vals);
 
   void load_legacy();

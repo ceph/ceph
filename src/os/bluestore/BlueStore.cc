@@ -7929,7 +7929,7 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
             used_omap_head->erase(o->onode.nid);
             used_per_pool_omap_head->insert(o->onode.nid);
             bufferlist h;
-            map<string, bufferlist> kv;
+            map<string, bufferlist, less<>> kv;
             int r = _omap_get(c.get(), oid, &h, &kv);
             if (r < 0) {
               derr << " got " << r << " " << cpp_strerror(r) << dendl;
@@ -10215,7 +10215,7 @@ int BlueStore::getattr(
 int BlueStore::getattrs(
   CollectionHandle &c_,
   const ghobject_t& oid,
-  map<string,bufferptr>& aset)
+  map<string,bufferptr,less<>>& aset)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
@@ -10440,7 +10440,7 @@ int BlueStore::omap_get(
   CollectionHandle &c_,    ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
+  map<string, bufferlist, less<>> *out /// < [out] Key to value map
   )
 {
   Collection *c = static_cast<Collection *>(c_.get());
@@ -10451,7 +10451,7 @@ int BlueStore::_omap_get(
   Collection *c,    ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
+  map<string, bufferlist, less<>> *out /// < [out] Key to value map
   )
 {
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
@@ -10583,7 +10583,7 @@ int BlueStore::omap_get_values(
   CollectionHandle &c_,        ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
-  map<string, bufferlist> *out ///< [out] Returned keys and values
+  map<string, bufferlist, less<>> *out ///< [out] Returned keys and values
   )
 {
   Collection *c = static_cast<Collection *>(c_.get());

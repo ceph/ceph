@@ -507,7 +507,7 @@ int libradosstriper::RadosStriperImpl::setxattr(const object_t& soid,
 }
 
 int libradosstriper::RadosStriperImpl::getxattrs(const object_t& soid,
-                                                 map<string, bufferlist>& attrset)
+                                                 map<string, bufferlist, less<>>& attrset)
 {
   std::string firstObjOid = getObjectId(soid, 0);
   int rc = m_ioCtx.getxattrs(firstObjOid, attrset);

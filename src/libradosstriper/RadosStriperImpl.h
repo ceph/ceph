@@ -61,7 +61,7 @@ struct RadosStriperImpl {
   // xattrs
   int getxattr(const object_t& soid, const char *name, bufferlist& bl);
   int setxattr(const object_t& soid, const char *name, bufferlist& bl);
-  int getxattrs(const object_t& soid, map<string, bufferlist>& attrset);
+  int getxattrs(const object_t& soid, map<string, bufferlist, less<>>& attrset);
   int rmxattr(const object_t& soid, const char *name);
 
   // io

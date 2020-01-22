@@ -126,7 +126,9 @@ namespace libradosstriper
      * Start iterating over xattrs on a striped object.
      */
     int getxattrs(const std::string& oid,
-                  std::map<std::string, ceph::bufferlist>& attrset); 
+                  std::map<std::string, ceph::bufferlist>& attrset);
+    int getxattrs(const std::string& oid,
+                  std::map<std::string, ceph::bufferlist, std::less<>>& attrset);
     
     /**
      * synchronously write to the striped object at the specified offset.

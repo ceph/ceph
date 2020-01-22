@@ -136,7 +136,7 @@ public:
     ceph_tid_t objecter_tid2;
 
     object_copy_cursor_t cursor;
-    map<string,bufferlist> attrs;
+    map<string,bufferlist,less<>> attrs;
     bufferlist data;
     bufferlist omap_header;
     bufferlist omap_data;
@@ -401,7 +401,7 @@ public:
 
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    const map<string, bufferlist> &attrs) override {
+    const map<string, bufferlist, less<>> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
 
@@ -1064,7 +1064,7 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    const map<string, bufferlist> *attrs = 0
+    const map<string, bufferlist, less<>> *attrs = 0
     );
 
   void context_registry_on_change();
@@ -1084,7 +1084,7 @@ protected:
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
-    const map<string, bufferlist> *attrs = 0,
+    const map<string, bufferlist, less<>> *attrs = 0,
     bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
@@ -1970,7 +1970,7 @@ public:
     bufferlist *val);
   int getattrs_maybe_cache(
     ObjectContextRef obc,
-    map<string, bufferlist> *out);
+    map<string, bufferlist, less<>> *out);
 
 public:
   void set_dynamic_perf_stats_queries(

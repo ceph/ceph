@@ -75,7 +75,7 @@ public:
   virtual int get(
     const ghobject_t &oid,             ///< [in] object containing map
     ceph::buffer::list *header,                ///< [out] Returned Header
-    std::map<std::string, ceph::buffer::list> *out       ///< [out] Returned keys and values
+    std::map<std::string, ceph::buffer::list, std::less<>> *out       ///< [out] Returned keys and values
     ) = 0;
 
   /// Get values for supplied keys
@@ -88,7 +88,7 @@ public:
   virtual int get_values(
     const ghobject_t &oid,             ///< [in] object containing map
     const std::set<std::string> &keys,           ///< [in] Keys to get
-    std::map<std::string, ceph::buffer::list> *out       ///< [out] Returned keys and values
+    std::map<std::string, ceph::buffer::list, std::less<>> *out       ///< [out] Returned keys and values
     ) = 0;
 
   /// Check key existence
@@ -102,7 +102,7 @@ public:
   virtual int get_xattrs(
     const ghobject_t &oid,             ///< [in] object
     const std::set<std::string> &to_get,         ///< [in] keys to get
-    std::map<std::string, ceph::buffer::list> *out       ///< [out] subset of attrs/vals defined
+    std::map<std::string, ceph::buffer::list, std::less<>> *out       ///< [out] subset of attrs/vals defined
     ) = 0;
 
   /// Get all xattrs

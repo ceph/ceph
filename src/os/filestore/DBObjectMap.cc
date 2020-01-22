@@ -113,7 +113,7 @@ int DBObjectMap::check(std::ostream &out, bool repair, bool force)
 	break;
 
       set<string> to_get;
-      map<string, bufferlist> got;
+      map<string, bufferlist, less<>> got;
       to_get.insert(HEADER_KEY);
       db->get(sys_parent_prefix(header), to_get, &got);
       if (got.empty()) {
@@ -568,7 +568,7 @@ int DBObjectMap::get_header(const ghobject_t &oid,
 int DBObjectMap::_get_header(Header header,
 			     bufferlist *bl)
 {
-  map<string, bufferlist> out;
+  map<string, bufferlist, less<>> out;
   while (true) {
     out.clear();
     set<string> to_get;
@@ -727,7 +727,7 @@ int DBObjectMap::clear_keys_header(const ghobject_t &oid,
 
 int DBObjectMap::get(const ghobject_t &oid,
 		     bufferlist *_header,
-		     map<string, bufferlist> *out)
+		     map<string, bufferlist, less<>> *out)
 {
   MapHeaderLock hl(this, oid);
   Header header = lookup_map_header(hl, oid);
@@ -762,7 +762,7 @@ int DBObjectMap::get_keys(const ghobject_t &oid,
 int DBObjectMap::scan(Header header,
 		      const set<string> &in_keys,
 		      set<string> *out_keys,
-		      map<string, bufferlist> *out_values)
+		      map<string, bufferlist, less<>> *out_values)
 {
   ObjectMapIterator db_iter = _get_iterator(header);
   for (set<string>::const_iterator key_iter = in_keys.begin();
@@ -783,7 +783,7 @@ int DBObjectMap::scan(Header header,
 
 int DBObjectMap::get_values(const ghobject_t &oid,
 			    const set<string> &keys,
-			    map<string, bufferlist> *out)
+			    map<string, bufferlist, less<>> *out)
 {
   MapHeaderLock hl(this, oid);
   Header header = lookup_map_header(hl, oid);
@@ -805,7 +805,7 @@ int DBObjectMap::check_keys(const ghobject_t &oid,
 
 int DBObjectMap::get_xattrs(const ghobject_t &oid,
 			    const set<string> &to_get,
-			    map<string, bufferlist> *out)
+			    map<string, bufferlist, less<>> *out)
 {
   MapHeaderLock hl(this, oid);
   Header header = lookup_map_header(hl, oid);
@@ -1051,7 +1051,7 @@ void DBObjectMap::set_state()
 
 int DBObjectMap::get_state()
 {
-  map<string, bufferlist> result;
+  map<string, bufferlist, less<>> result;
   set<string> to_get;
   to_get.insert(GLOBAL_STATE_KEY);
   int r = db->get(SYS_PREFIX, to_get, &result);
@@ -1203,7 +1203,7 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
 {
   std::unique_lock l{header_lock};
   header_cond.wait(l, [&input, this] { return !in_use.count(input->parent); });
-  map<string, bufferlist> out;
+  map<string, bufferlist, less<>> out;
   set<string> keys;
   keys.insert(HEADER_KEY);
 
@@ -1346,7 +1346,7 @@ int DBObjectMap::list_object_headers(vector<_Header> *out)
     out->push_back(header);
     while (header.parent) {
       set<string> to_get;
-      map<string, bufferlist> got;
+      map<string, bufferlist, less<>> got;
       to_get.insert(HEADER_KEY);
       db->get(sys_parent_prefix(header), to_get, &got);
       if (got.empty()) {

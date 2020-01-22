@@ -434,7 +434,7 @@ int MemDB::get(const string &prefix, const std::string& key,
 }
 
 int MemDB::get(const string &prefix, const std::set<string> &keys,
-    std::map<string, bufferlist> *out)
+    std::map<string, bufferlist, std::less<>> *out)
 {
   utime_t start = ceph_clock_now();
 

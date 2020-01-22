@@ -280,8 +280,8 @@ private:
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
-			const map<string, bufferlist> &attrs,
-			const map<string, bufferlist> &omap_entries,
+			const map<string, bufferlist, less<>> &attrs,
+			const map<string, bufferlist, less<>> &omap_entries,
 			ObjectStore::Transaction *t);
   void submit_push_complete(const ObjectRecoveryInfo &recovery_info,
 			    ObjectStore::Transaction *t);

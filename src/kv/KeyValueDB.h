@@ -181,14 +181,14 @@ public:
   virtual int get(
     const std::string &prefix,               ///< [in] Prefix/CF for key
     const std::set<std::string> &key,        ///< [in] Key to retrieve
-    std::map<std::string, ceph::buffer::list> *out   ///< [out] Key value retrieved
+    std::map<std::string, ceph::buffer::list, std::less<>> *out   ///< [out] Key value retrieved
     ) = 0;
   virtual int get(const std::string &prefix, ///< [in] prefix or CF name
 		  const std::string &key,    ///< [in] key
 		  ceph::buffer::list *value) {       ///< [out] value
     std::set<std::string> ks;
     ks.insert(key);
-    std::map<std::string,ceph::buffer::list> om;
+    std::map<std::string,ceph::buffer::list,std::less<>> om;
     int r = get(prefix, ks, &om);
     if (om.find(key) != om.end()) {
       *value = std::move(om[key]);

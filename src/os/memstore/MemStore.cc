@@ -385,7 +385,7 @@ int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
 }
 
 int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
-		       map<string,bufferptr>& aset)
+		       map<string,bufferptr,less<>>& aset)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
@@ -468,7 +468,7 @@ int MemStore::omap_get(
   CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
+  map<string, bufferlist, less<>> *out /// < [out] Key to value map
   )
 {
   dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
@@ -523,7 +523,7 @@ int MemStore::omap_get_values(
   CollectionHandle& ch,                    ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
-  map<string, bufferlist> *out ///< [out] Returned keys and values
+  map<string, bufferlist, less<>> *out ///< [out] Returned keys and values
   )
 {
   dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;

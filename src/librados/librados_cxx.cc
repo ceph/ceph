@@ -255,7 +255,9 @@ void librados::ObjectReadOperation::omap_get_vals(
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
-  o->omap_get_vals(start_after, filter_prefix, max_return, out_vals, nullptr,
+  o->omap_get_vals(start_after, filter_prefix, max_return,
+		   reinterpret_cast<std::map<std::string, bufferlist, std::less<>>*>(out_vals),
+		   nullptr,
 		   prval);
 }
 
@@ -264,6 +266,20 @@ void librados::ObjectReadOperation::omap_get_vals2(
   const std::string &filter_prefix,
   uint64_t max_return,
   std::map<std::string, bufferlist> *out_vals,
+  bool *pmore,
+  int *prval)
+{
+  omap_get_vals2(
+    start_after, filter_prefix, max_return,
+    reinterpret_cast<std::map<std::string, bufferlist, std::less<>>*>(out_vals),
+    pmore, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_vals2(
+  const std::string &start_after,
+  const std::string &filter_prefix,
+  uint64_t max_return,
+  std::map<std::string, bufferlist, std::less<>> *out_vals,
   bool *pmore,
   int *prval)
 {
@@ -281,13 +297,27 @@ void librados::ObjectReadOperation::omap_get_vals(
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
-  o->omap_get_vals(start_after, "", max_return, out_vals, nullptr, prval);
+  o->omap_get_vals(start_after, "", max_return,
+		   reinterpret_cast<std::map<std::string, bufferlist, std::less<>>*>(out_vals),
+		   nullptr, prval);
 }
 
 void librados::ObjectReadOperation::omap_get_vals2(
   const std::string &start_after,
   uint64_t max_return,
   std::map<std::string, bufferlist> *out_vals,
+  bool *pmore,
+  int *prval)
+{
+  omap_get_vals2(start_after, max_return,
+		 reinterpret_cast<std::map<std::string, bufferlist, std::less<>>*>(out_vals),
+		 pmore, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_vals2(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::map<std::string, bufferlist, std::less<>> *out_vals,
   bool *pmore,
   int *prval)
 {
@@ -325,10 +355,19 @@ void librados::ObjectReadOperation::omap_get_header(bufferlist *bl, int *prval)
   ::ObjectOperation *o = &impl->o;
   o->omap_get_header(bl, prval);
 }
-
 void librados::ObjectReadOperation::omap_get_vals_by_keys(
   const std::set<std::string> &keys,
   std::map<std::string, bufferlist> *map,
+  int *prval)
+{
+  omap_get_vals_by_keys(keys,
+			reinterpret_cast<std::map<std::string, bufferlist, std::less<>>*>(map),
+			prval);
+}
+
+void librados::ObjectReadOperation::omap_get_vals_by_keys(
+  const std::set<std::string> &keys,
+  std::map<std::string, bufferlist, std::less<>> *map,
   int *prval)
 {
   ceph_assert(impl);
@@ -430,6 +469,11 @@ int librados::IoCtx::omap_get_vals2(
 }
 
 void librados::ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
+{
+  getxattrs(reinterpret_cast<map<string, bufferlist, std::less<>>*>(pattrs), prval);
+}
+
+void librados::ObjectReadOperation::getxattrs(map<string, bufferlist, std::less<>> *pattrs, int *prval)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -546,7 +590,13 @@ void librados::ObjectWriteOperation::setxattr(const char *name,
 }
 
 void librados::ObjectWriteOperation::omap_set(
-  const map<string, bufferlist> &map)
+  const std::map<string, bufferlist> &map)
+{
+  omap_set(reinterpret_cast<const std::map<string, bufferlist, less<>>&>(map));
+}
+
+void librados::ObjectWriteOperation::omap_set(
+  const map<string, bufferlist, less<>> &map)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -1323,6 +1373,12 @@ int librados::IoCtx::getxattr(const std::string& oid, const char *name, bufferli
 
 int librados::IoCtx::getxattrs(const std::string& oid, map<std::string, bufferlist>& attrset)
 {
+  return getxattrs(oid, reinterpret_cast<map<std::string, bufferlist, std::less<>>&>(attrset));
+}
+
+int librados::IoCtx::getxattrs(const std::string& oid,
+			       map<std::string, bufferlist, std::less<>>& attrset)
+{
   object_t obj(oid);
   return io_ctx_impl->getxattrs(obj, attrset);
 }
@@ -1377,6 +1433,19 @@ int librados::IoCtx::omap_get_vals2(
   const std::string& start_after,
   uint64_t max_return,
   std::map<std::string, bufferlist> *out_vals,
+  bool *pmore)
+{
+  return omap_get_vals2(
+    oid, start_after, max_return,
+    reinterpret_cast<std::map<string, bufferlist, less<>>*>(out_vals),
+    pmore);
+}
+
+int librados::IoCtx::omap_get_vals2(
+  const std::string& oid,
+  const std::string& start_after,
+  uint64_t max_return,
+  std::map<std::string, bufferlist, std::less<>> *out_vals,
   bool *pmore)
 {
   ObjectReadOperation op;
@@ -1476,6 +1545,12 @@ int librados::IoCtx::omap_get_vals_by_keys(const std::string& oid,
 
 int librados::IoCtx::omap_set(const std::string& oid,
                               const map<string, bufferlist>& m)
+{
+  return omap_set(oid, reinterpret_cast<const map<string, bufferlist, less<>>&>(m));
+}
+
+int librados::IoCtx::omap_set(const std::string& oid,
+                              const map<string, bufferlist, less<>>& m)
 {
   ObjectWriteOperation op;
   op.omap_set(m);
@@ -2023,6 +2098,13 @@ int librados::IoCtx::aio_getxattr(const std::string& oid, librados::AioCompletio
 
 int librados::IoCtx::aio_getxattrs(const std::string& oid, AioCompletion *c,
 				   map<std::string, bufferlist>& attrset)
+{
+  return aio_getxattrs(oid, c,
+    reinterpret_cast<map<std::string, bufferlist, std::less<>>&>(attrset));
+}
+
+int librados::IoCtx::aio_getxattrs(const std::string& oid, AioCompletion *c,
+				   map<std::string, bufferlist, std::less<>>& attrset)
 {
   object_t obj(oid);
   return io_ctx_impl->aio_getxattrs(obj, c->pc, attrset);

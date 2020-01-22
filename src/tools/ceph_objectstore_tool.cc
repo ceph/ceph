@@ -524,7 +524,7 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   ceph_assert(struct_v >= 8);
   // new omap key
   cout << "setting '_remove' omap key" << std::endl;
-  map<string,bufferlist> values;
+  map<string,bufferlist,less<>> values;
   encode((char)1, values["_remove"]);
   t->omap_setkeys(coll, pgmeta_oid, values);
   return 0;
@@ -576,7 +576,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   //Empty for this
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
-  map<string,bufferlist> km;
+  map<string,bufferlist,less<>> km;
   string key_to_remove;
   pg_info_t last_written_info;
   int ret = prepare_info_keymap(
@@ -607,7 +607,7 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   if (ret)
     return ret;
   coll_t coll(info.pgid);
-  map<string,bufferlist> km;
+  map<string,bufferlist,less<>> km;
 
   if (!divergent.empty()) {
     ceph_assert(missing.get_items().empty());
@@ -729,7 +729,7 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
 }
 
 const int OMAP_BATCH_SIZE = 25;
-void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist> &oset)
+void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist, less<>> &oset)
 {
   oset.clear();
   for (int count = OMAP_BATCH_SIZE; count && iter->valid(); --count, iter->next()) {
@@ -802,7 +802,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
   }
 
   //Handle attrs for this object
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   ret = store->getattrs(ch, obj, aset);
   if (ret) return ret;
   attr_section as(aset);
@@ -835,7 +835,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
   }
   iter->seek_to_first();
   int mapcount = 0;
-  map<string, bufferlist> out;
+  map<string, bufferlist, less<>> out;
   while(iter->valid()) {
     get_omap_batch(iter, out);
 
@@ -1887,7 +1887,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 	init_pg_ondisk(t, pgid, NULL);
 
 	// mark this coll for removal until we're done
-	map<string,bufferlist> values;
+	map<string,bufferlist,less<>> values;
 	encode((char)1, values["_remove"]);
 	t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
 
@@ -2139,18 +2139,16 @@ int do_remove_object(ObjectStore *store, coll_t coll,
 int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   auto ch = store->open_collection(coll);
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   int r = store->getattrs(ch, ghobj, aset);
   if (r < 0) {
     cerr << "getattrs: " << cpp_strerror(r) << std::endl;
     return r;
   }
 
-  for (map<string,bufferptr>::iterator i = aset.begin();i != aset.end(); ++i) {
-    string key(i->first);
-    if (outistty)
-      key = cleanbin(key);
-    cout << key << std::endl;
+  for (const auto& [key, v] : aset) {
+    std::ignore = v;
+    cout << (outistty ? cleanbin(key) : key) << std::endl;
   }
   return 0;
 }
@@ -2164,15 +2162,12 @@ int do_list_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
     return -ENOENT;
   }
   iter->seek_to_first();
-  map<string, bufferlist> oset;
-  while(iter->valid()) {
+  map<string, bufferlist, less<>> oset;
+  while (iter->valid()) {
     get_omap_batch(iter, oset);
 
-    for (map<string,bufferlist>::iterator i = oset.begin();i != oset.end(); ++i) {
-      string key(i->first);
-      if (outistty)
-        key = cleanbin(key);
-      cout << key << std::endl;
+    for (const auto& [key, v] : oset) {
+      cout << (outistty ? cleanbin(key) : key) << std::endl;
     }
   }
   return 0;
@@ -2336,7 +2331,7 @@ int do_get_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
 {
   auto ch = store->open_collection(coll);
   set<string> keys;
-  map<string, bufferlist> out;
+  map<string, bufferlist, less<>> out;
 
   keys.insert(key);
 
@@ -2369,7 +2364,7 @@ int do_set_omap(ObjectStore *store, coll_t coll,
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
-  map<string, bufferlist> attrset;
+  map<string, bufferlist, less<>> attrset;
   bufferlist valbl;
 
   if (debug)
@@ -3001,7 +2996,7 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
 	ObjectStore::Transaction t;
 	t.touch(cid, oid);
 
-	map<string,bufferptr> attrs;
+	map<string,bufferptr,less<>> attrs;
 	src->getattrs(ch, oid, attrs);
 	if (!attrs.empty()) {
 	  t.setattrs(cid, oid, attrs);
@@ -3015,7 +3010,7 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
 	}
 
 	bufferlist header;
-	map<string,bufferlist> omap;
+	map<string,bufferlist,less<>> omap;
 	src->omap_get(ch, oid, &header, &omap);
 	if (header.length()) {
 	  t.omap_setheader(cid, oid, header);

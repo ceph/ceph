@@ -99,7 +99,7 @@ protected:
   void _load_finish(int op_r, int header_r, int values_r,
 		    unsigned idx, bool first, bool more,
                     bufferlist &header_bl,
-		    std::map<std::string, bufferlist> &values);
+		    std::map<std::string, bufferlist, std::less<>> &values);
   void _recover_finish(int r);
 
   void _open_ino_finish(inodeno_t ino, int r);

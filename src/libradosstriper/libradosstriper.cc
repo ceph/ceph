@@ -196,6 +196,13 @@ int libradosstriper::RadosStriper::rmxattr(const std::string& oid, const char *n
 int libradosstriper::RadosStriper::getxattrs(const std::string& oid,
 					     std::map<std::string, bufferlist>& attrset)
 {
+  return rados_striper_impl->getxattrs(oid,
+    reinterpret_cast<std::map<std::string, bufferlist, std::less<>>&>(attrset));
+}
+
+int libradosstriper::RadosStriper::getxattrs(const std::string& oid,
+					     std::map<std::string, bufferlist, std::less<>>& attrset)
+{
   return rados_striper_impl->getxattrs(oid, attrset);
 }
 

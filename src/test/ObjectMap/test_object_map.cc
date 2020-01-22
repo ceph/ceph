@@ -132,7 +132,7 @@ public:
 		string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
-    map<string, bufferlist> got;
+    map<string, bufferlist, less<>> got;
     db->get_xattrs(hoid, to_get, &got);
     if (!got.empty()) {
       *value = string(got.begin()->second.c_str(),
@@ -152,7 +152,7 @@ public:
 	      string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
-    map<string, bufferlist> got;
+    map<string, bufferlist, less<>> got;
     db->get_values(hoid, to_get, &got);
     if (!got.empty()) {
       if (value) {
@@ -682,7 +682,7 @@ TEST_F(ObjectMapTest, CreateOneObject) {
   to_set.insert(make_pair(key, bl));
   ASSERT_EQ(db->set_keys(hoid, to_set), 0);
 
-  map<string, bufferlist> got;
+  map<string, bufferlist, less<>> got;
   set<string> to_get;
   to_get.insert(key);
   to_get.insert("not there");
@@ -765,7 +765,7 @@ TEST_F(ObjectMapTest, CloneOneObject) {
   r = tester.get_key(hoid, "foo2", &result);
   ASSERT_EQ(r, 0);
 
-  map<string, bufferlist> got;
+  map<string, bufferlist, less<>> got;
   bufferlist header;
 
   got.clear();

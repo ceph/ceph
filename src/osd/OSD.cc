@@ -5985,7 +5985,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
-      map<string, bufferlist> newattrs;
+      map<string, bufferlist, less<>> newattrs;
       bufferlist val;
       string key, valstr;
       cmd_getval(service->cct, cmdmap, "key", key);
@@ -6024,7 +6024,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     } else if (command == "getomap") {
       //Debug: Output entire omap
       bufferlist hdrbl;
-      map<string, bufferlist> keyvals;
+      map<string, bufferlist, less<>> keyvals;
       auto ch = store->open_collection(coll_t(pgid));
       if (!ch) {
 	ss << "unable to open collection for " << pgid;
@@ -6033,10 +6033,10 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 	r = store->omap_get(ch, ghobject_t(obj), &hdrbl, &keyvals);
 	if (r >= 0) {
           ss << "header=" << string(hdrbl.c_str(), hdrbl.length());
-          for (map<string, bufferlist>::iterator it = keyvals.begin();
-	       it != keyvals.end(); ++it)
-            ss << " key=" << (*it).first << " val="
-               << string((*it).second.c_str(), (*it).second.length());
+          for (auto& [key,val] : keyvals) {
+            ss << " key=" << key << " val="
+               << string_view(val.c_str(), val.length());
+	  }
 	} else {
           ss << "error=" << r;
 	}

@@ -29,8 +29,8 @@ namespace librados {
   struct RadosXattrsIter {
     RadosXattrsIter();
     ~RadosXattrsIter();
-    std::map<std::string, bufferlist> attrset;
-    std::map<std::string, bufferlist>::iterator i;
+    std::map<std::string, bufferlist, std::less<>> attrset;
+    std::map<std::string, bufferlist, std::less<>>::iterator i;
     char *val;
   };
 };

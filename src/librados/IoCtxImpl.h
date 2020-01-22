@@ -149,7 +149,7 @@ struct librados::IoCtxImpl {
 
   int getxattr(const object_t& oid, const char *name, bufferlist& bl);
   int setxattr(const object_t& oid, const char *name, bufferlist& bl);
-  int getxattrs(const object_t& oid, map<string, bufferlist>& attrset);
+  int getxattrs(const object_t& oid, map<string, bufferlist, less<>>& attrset);
   int rmxattr(const object_t& oid, const char *name);
 
   int operate(const object_t& oid, ::ObjectOperation *o, ceph::real_time *pmtime, int flags=0);
@@ -219,7 +219,7 @@ struct librados::IoCtxImpl {
   int aio_setxattr(const object_t& oid, AioCompletionImpl *c,
 		   const char *name, bufferlist& bl);
   int aio_getxattrs(const object_t& oid, AioCompletionImpl *c,
-		    map<string, bufferlist>& attrset);
+		    map<string, bufferlist, less<>>& attrset);
   int aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
 		  const char *name);
   int aio_cancel(AioCompletionImpl *c);

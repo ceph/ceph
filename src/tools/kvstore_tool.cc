@@ -135,7 +135,7 @@ bufferlist StoreTool::get(const string& prefix,
 {
   ceph_assert(!prefix.empty() && !key.empty());
 
-  map<string,bufferlist> result;
+  map<string,bufferlist,less<>> result;
   std::set<std::string> keys;
   keys.insert(key);
   db->get(prefix, keys, &result);
