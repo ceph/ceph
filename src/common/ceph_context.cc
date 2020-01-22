@@ -55,7 +55,7 @@ using ceph::HeartbeatMap;
 #include <iostream>
 #include <pthread.h>
 
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 namespace crimson::common {
 CephContext::CephContext()
   : _conf{crimson::common::local_conf()},

@@ -74,11 +74,11 @@ protected:
 private:
   void _get() const;
 
-#ifndef WITH_SEASTAR
-  mutable std::atomic<uint64_t> nref{1};
-#else
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
   // crimson is single threaded at the moment
   mutable uint64_t nref{1};
+#else
+  mutable std::atomic<uint64_t> nref{1};
 #endif
   CephContext *cct{nullptr};
 };
@@ -94,7 +94,7 @@ template<typename... Args>
   virtual ~RefCountedObjectSafe() override {}
 };
 
-#ifndef WITH_SEASTAR
+#if !defined(WITH_SEASTAR)|| defined(WITH_ALIEN)
 
 /**
  * RefCountedCond
@@ -185,7 +185,7 @@ struct RefCountedWaitObject {
   }
 };
 
-#endif // WITH_SEASTAR
+#endif // !defined(WITH_SEASTAR)|| defined(WITH_ALIEN)
 
 static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
   p->get();

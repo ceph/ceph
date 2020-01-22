@@ -113,7 +113,7 @@ public:
     prio_default = prio_;
   }
 
-  TOPNSPC::common::PerfCounters* create_perf_counters();
+  PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
@@ -121,7 +121,7 @@ private:
                 const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
                 std::unique_ptr<PerfHistogram<>> histogram = nullptr);
 
-  TOPNSPC::common::PerfCounters *m_perf_counters;
+  PerfCounters *m_perf_counters;
 
   int prio_default = 0;
 };
@@ -289,7 +289,7 @@ private:
 
   int prio_adjust = 0;
 
-#ifndef WITH_SEASTAR
+#if !defined(WITH_SEASTAR) || defined(WITH_ALIEN)
   const std::string m_lock_name;
   /** Protects m_data */
   ceph::mutex m_lock;
