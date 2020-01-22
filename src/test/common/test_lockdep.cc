@@ -1,20 +1,45 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/ceph_context.h"
-#include "include/util.h"
 #include "gtest/gtest.h"
+
+#include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
+#include "common/common_init.h"
 #include "common/lockdep.h"
+#include "include/util.h"
 #include "include/coredumpctl.h"
 #include "log/Log.h"
 
-TEST(lockdep, abba)
+class lockdep : public ::testing::Test
 {
-  ASSERT_TRUE(g_lockdep);
+protected:
+  void SetUp() override {
+#ifdef CEPH_DEBUG_MUTEX
+    GTEST_SKIP() << "WARNING: CEPH_DEBUG_MUTEX is not defined, lockdep will not work";
+#endif
+    CephInitParameters params(CEPH_ENTITY_TYPE_CLIENT);
+    cct = common_preinit(params, CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+    cct->_conf->cluster = "ceph";
+    cct->_conf.set_val("lockdep", "true");
+    cct->_conf.apply_changes(nullptr);
+    ASSERT_TRUE(g_lockdep);
+  }
+  void TearDown() final
+  {
+    if (cct) {
+      cct->put();
+      cct = nullptr;
+    }
+  }
+protected:
+  CephContext *cct = nullptr;
+};
 
+TEST_F(lockdep, abba)
+{
   ceph::mutex a(ceph::make_mutex("a")), b(ceph::make_mutex("b"));
   a.lock();
   ASSERT_TRUE(ceph_mutex_is_locked(a));
@@ -31,10 +56,8 @@ TEST(lockdep, abba)
   b.unlock();
 }
 
-TEST(lockdep, recursive)
+TEST_F(lockdep, recursive)
 {
-  ASSERT_TRUE(g_lockdep);
-
   ceph::mutex a(ceph::make_mutex("a"));
   a.lock();
   PrCtl unset_dumpable;
@@ -48,31 +71,4 @@ TEST(lockdep, recursive)
   b.lock();
   b.unlock();
   b.unlock();
-}
-
-int main(int argc, char **argv) {
-#ifdef NDEBUG
-  cout << "NDEBUG is defined" << std::endl;
-#else
-  cout << "NDEBUG is NOT defined" << std::endl;
-#endif
-#ifndef CEPH_DEBUG_MUTEX
-  cerr << "WARNING: CEPH_DEBUG_MUTEX is not defined, lockdep will not work"
-       << std::endl;
-  exit(0);
-#endif
-  std::vector<const char*> args(argv, argv + argc);
-  args.push_back("--lockdep");
-  auto cct = global_init(NULL, args,
-			 CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_MON_CONFIG |
-			 CINIT_FLAG_NO_DAEMON_ACTIONS);
-  common_init_finish(g_ceph_context);
-
-  // stop logging thread
-  g_ceph_context->_log->stop();
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
