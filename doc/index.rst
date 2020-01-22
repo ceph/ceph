@@ -196,7 +196,7 @@ Confirming Successful Installation
 
 #. Run the following command on node 1 in order to enter the Ceph shell::
 
-   [node 1]$ sudo cephadm shell
+   [node 1]$ sudo ./cephadm shell
 #. From within the Ceph shell, run "ceph status". Confirm that the following exist:
 
   1) a cluster
