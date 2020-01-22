@@ -404,6 +404,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 self.log.info('Upgrade: safe to stop %s.%s' %
                               (s.service_type, s.service_instance))
                 return True
+        self.log.info('Upgrade: safe to stop %s.%s' %
+                      (s.service_type, s.service_instance))
+        return True
 
     def _clear_health_checks(self):
         self.health_checks = {}
