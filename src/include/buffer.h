@@ -1165,9 +1165,11 @@ struct error_code;
     ssize_t pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error);
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
+    ssize_t recv_fd(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
     int write_fd(int fd, uint64_t offset) const;
+    int send_fd(int fd) const;
     template<typename VectorT>
     void prepare_iov(VectorT *piov) const {
 #ifdef __CEPH__

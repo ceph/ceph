@@ -135,6 +135,8 @@ elseif(SUN)
   list(APPEND common_srcs solaris_errno.cc)
 elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
+elseif(WIN32)
+  list(APPEND common_srcs win32_errno.c)
 endif()
 
 if(WITH_EVENTTRACE)

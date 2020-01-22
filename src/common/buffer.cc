@@ -1799,6 +1799,17 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
   return ret;
 }
 
+ssize_t buffer::list::recv_fd(int fd, size_t len)
+{
+  auto bp = ptr_node::create(buffer::create(len));
+  ssize_t ret = safe_recv(fd, (void*)bp->c_str(), len);
+  if (ret >= 0) {
+    bp->set_length(ret);
+    push_back(std::move(bp));
+  }
+  return ret;
+}
+
 int buffer::list::write_file(const char *fn, int mode)
 {
   int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, mode));
@@ -1916,6 +1927,10 @@ int buffer::list::write_fd(int fd) const
   return 0;
 }
 
+int buffer::list::send_fd(int fd) const {
+  return buffer::list::write_fd(fd);
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   iovec iov[IOV_MAX];
@@ -1959,11 +1974,37 @@ int buffer::list::write_fd(int fd) const
 
       written += r;
     }
+
+    left_pbrs--;
+    p++;
   }
 
   return 0;
-
 }
+
+int buffer::list::send_fd(int fd) const
+{
+  // There's no writev on Windows. WriteFileGather may be an option,
+  // but it has strict requirements in terms of buffer size and alignment.
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
+  while (left_pbrs) {
+    int written = 0;
+    while (written < p->length()) {
+      int r = ::send(fd, p->c_str(), p->length() - written, 0);
+      if (r < 0)
+        return -ceph_sock_errno();
+
+      written += r;
+    }
+
+    left_pbrs--;
+    p++;
+  }
+
+  return 0;
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   int r = ::lseek64(fd, offset, SEEK_SET);
