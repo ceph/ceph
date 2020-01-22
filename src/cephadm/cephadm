@@ -1537,7 +1537,7 @@ def command_pull():
         args.image])
     ver = CephContainer(args.image, 'ceph', ['--version']).run()
     print(json.dumps({
-        'ceph_version': ver,
+        'ceph_version': ver.strip(),
         'image_id': out.strip(),
         }, indent=4, sort_keys=True))
 
