@@ -240,6 +240,8 @@ public:
 			    ceph::timespan delay) final;
   void recheck_readable() final;
 
+  unsigned get_target_pg_log_entries() const final;
+
   void on_pool_change() final {
     // Not needed yet
   }
@@ -268,9 +270,7 @@ public:
   void on_removal(ceph::os::Transaction &t) final {
     // TODO
   }
-  void do_delete_work(ceph::os::Transaction &t) final {
-    // TODO
-  }
+  void do_delete_work(ceph::os::Transaction &t) final;
 
   // merge/split not ready
   void clear_ready_to_merge() final {}
