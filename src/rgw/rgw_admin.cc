@@ -4323,7 +4323,15 @@ int main(int argc, const char **argv)
           }
           target.storage_classes.insert(rule.get_storage_class());
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
-          zonegroup.placement_targets.erase(placement_id);
+          if (storage_class.empty()) {
+            zonegroup.placement_targets.erase(placement_id);
+          } else {
+            auto iter = zonegroup.placement_targets.find(placement_id);
+            if (iter != zonegroup.placement_targets.end()) {
+              RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[placement_id];
+              info.storage_classes.erase(storage_class);
+            }
+          }
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
           if (!zonegroup.placement_targets.count(placement_id)) {
             cerr << "failed to find a zonegroup placement target named '"
@@ -4828,7 +4836,15 @@ int main(int argc, const char **argv)
              return ret;
           }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
-          zone.placement_pools.erase(placement_id);
+          if (storage_class.empty()) {
+            zone.placement_pools.erase(placement_id);
+          } else {
+            auto iter = zone.placement_pools.find(placement_id);
+            if (iter != zone.placement_pools.end()) {
+              RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
+              info.storage_classes.remove_storage_class(storage_class);
+            }
+          }
         }
 
         ret = zone.update();
