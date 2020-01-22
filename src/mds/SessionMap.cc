@@ -79,6 +79,7 @@ void SessionMap::dump()
 	     << " state " << p->second->get_state_name()
 	     << " completed " << p->second->info.completed_requests
 	     << " prealloc_inos " << p->second->info.prealloc_inos
+	     << " delegated_inos " << p->second->delegated_inos
 	     << " used_inos " << p->second->info.used_inos
 	     << dendl;
 }
@@ -627,6 +628,7 @@ void SessionMap::wipe_ino_prealloc()
        p != session_map.end(); 
        ++p) {
     p->second->pending_prealloc_inos.clear();
+    p->second->delegated_inos.clear();
     p->second->info.prealloc_inos.clear();
     p->second->info.used_inos.clear();
   }

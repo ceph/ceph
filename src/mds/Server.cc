@@ -758,6 +758,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     ceph_assert(session->is_closing() || session->is_killing() ||
 	   session->is_opening()); // re-open closing session
     session->info.prealloc_inos.subtract(inos);
+    session->delegated_inos.clear();
     mds->inotable->apply_release_ids(inos);
     ceph_assert(mds->inotable->get_version() == piv);
   }
@@ -3169,12 +3170,8 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   bool allow_prealloc_inos = mdr->session->is_open();
 
   // assign ino
-  if (allow_prealloc_inos &&
-      mdr->session->info.prealloc_inos.size()) {
-    mdr->used_prealloc_ino = 
-      in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
+  if (allow_prealloc_inos && (mdr->used_prealloc_ino = in->inode.ino = mdr->session->take_ino(useino))) {
     mds->sessionmap.mark_projected(mdr->session);
-
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
 	     << " (" << mdr->session->info.prealloc_inos
 	     << ", " << mdr->session->info.prealloc_inos.size() << " left)"
@@ -4378,7 +4375,22 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, in);
 
-  if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+  if (mdr->session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
+    openc_response_t	ocresp;
+
+    dout(10) << "adding created_ino and delegated_inos" << dendl;
+    ocresp.created_ino = in->inode.ino;
+
+    // Try to delegate some prealloc_inos to the client, if it's down to half the max
+    auto pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
+    if (pct) {
+      unsigned frac = 100 / pct;
+      if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
+	mdr->session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
+    }
+
+    encode(ocresp, mdr->reply_extra_bl);
+  } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
     dout(10) << "adding ino to reply to indicate inode was created" << dendl;
     // add the file created flag onto the reply if create_flags features is supported
     encode(in->inode.ino, mdr->reply_extra_bl);

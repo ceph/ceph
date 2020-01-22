@@ -571,7 +571,7 @@ void session_info_t::dump(Formatter *f) const
   f->open_array_section("prealloc_inos");
   for (const auto& [start, len] : prealloc_inos) {
     f->open_object_section("ino_range");
-    f->dump_unsigned("start", start);
+    f->dump_stream("start") << start;
     f->dump_unsigned("length", len);
     f->close_section();
   }
@@ -580,7 +580,7 @@ void session_info_t::dump(Formatter *f) const
   f->open_array_section("used_inos");
   for (const auto& [start, len] : used_inos) {
     f->open_object_section("ino_range");
-    f->dump_unsigned("start", start);
+    f->dump_stream("start") << start;
     f->dump_unsigned("length", len);
     f->close_section();
   }
