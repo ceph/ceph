@@ -225,12 +225,6 @@ void Server::create_logger()
 Server::Server(MDSRank *m) : 
   mds(m), 
   mdcache(mds->mdcache), mdlog(mds->mdlog),
-  logger(0),
-  is_full(false),
-  reconnect_done(NULL),
-  failed_reconnects(0),
-  reconnect_evicting(false),
-  terminating_sessions(false),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
