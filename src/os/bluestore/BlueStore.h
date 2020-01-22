@@ -2771,6 +2771,15 @@ public:
     map<string, bufferlist> *out ///< [out] Returned keys and values
     ) override;
 
+#ifdef WITH_SEASTAR
+  int omap_get_values(
+    CollectionHandle &c,         ///< [in] Collection containing oid
+    const ghobject_t &oid,       ///< [in] Object containing omap
+    const std::optional<string> &start_after,     ///< [in] Keys to get
+    map<string, bufferlist> *out ///< [out] Returned keys and values
+    ) override;
+#endif
+
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
     CollectionHandle &c,                ///< [in] Collection containing oid
