@@ -2,9 +2,11 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { ClickOutsideModule } from 'ng-click-outside';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { ToastrModule } from 'ngx-toastr';
+import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -34,7 +36,9 @@ describe('NotificationsSidebarComponent', () => {
       ProgressbarModule.forRoot(),
       RouterTestingModule,
       ToastrModule.forRoot(),
-      NoopAnimationsModule
+      NoopAnimationsModule,
+      SimplebarAngularModule,
+      ClickOutsideModule
     ],
     declarations: [NotificationsSidebarComponent],
     providers: [
@@ -101,6 +105,7 @@ describe('NotificationsSidebarComponent', () => {
 
       expectPrometheusServicesToBeCalledTimes(0);
     });
+
     it('should first refresh prometheus notifications and alerts during init', () => {
       fixture.detectChanges();
 
@@ -155,5 +160,42 @@ describe('NotificationsSidebarComponent', () => {
       expect(component.notifications.length).toBe(1);
       expect(component.notifications[0].title).toBe('Sample title');
     }));
+  });
+
+  describe('Sidebar', () => {
+    let notificationService: NotificationService;
+
+    beforeEach(() => {
+      notificationService = TestBed.get(NotificationService);
+      fixture.detectChanges();
+    });
+
+    it('should always close if sidebarSubject value is true', fakeAsync(() => {
+      // Closed before next value
+      expect(component.isSidebarOpened).toBeFalsy();
+      notificationService.sidebarSubject.next(true);
+      tick();
+      expect(component.isSidebarOpened).toBeFalsy();
+
+      // Opened before next value
+      component.isSidebarOpened = true;
+      expect(component.isSidebarOpened).toBeTruthy();
+      notificationService.sidebarSubject.next(true);
+      tick();
+      expect(component.isSidebarOpened).toBeFalsy();
+    }));
+
+    it('should toggle sidebar visibility if sidebarSubject value is false', () => {
+      // Closed before next value
+      expect(component.isSidebarOpened).toBeFalsy();
+      notificationService.sidebarSubject.next(false);
+      expect(component.isSidebarOpened).toBeTruthy();
+
+      // Opened before next value
+      component.isSidebarOpened = true;
+      expect(component.isSidebarOpened).toBeTruthy();
+      notificationService.sidebarSubject.next(false);
+      expect(component.isSidebarOpened).toBeFalsy();
+    });
   });
 });

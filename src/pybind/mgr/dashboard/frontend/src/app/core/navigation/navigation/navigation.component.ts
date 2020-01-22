@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, HostBinding, OnInit } from '@angular/core';
 
 import { PrometheusService } from '../../../shared/api/prometheus.service';
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -16,6 +16,8 @@ import { SummaryService } from '../../../shared/services/summary.service';
   styleUrls: ['./navigation.component.scss']
 })
 export class NavigationComponent implements OnInit {
+  @HostBinding('class.isPwdDisplayed') isPwdDisplayed = false;
+
   permissions: Permissions;
   summaryData: any;
   icons = Icons;
@@ -27,7 +29,6 @@ export class NavigationComponent implements OnInit {
   isCollapsed = true;
   showMenuSidebar = true;
   displayedSubMenu = '';
-  isPwdDisplayed = false;
 
   simplebar = {
     autoHide: false

@@ -249,6 +249,10 @@ export abstract class PageHelper {
     return $$('legend');
   }
 
+  getToast() {
+    return $('.ngx-toastr');
+  }
+
   async waitPresence(elem: ElementFinder, message?: string) {
     return browser.wait(EC.presenceOf(elem), TIMEOUT, message);
   }
