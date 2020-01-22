@@ -557,6 +557,15 @@ def ceph_osds(ctx, config):
             devs = devs_by_remote[remote]
             assert devs   ## FIXME ##
             dev = devs.pop()
+            # scratch devices are always formatted like this:
+            # /dev/vg_name/lv_name
+            #
+            # `ceph-volume osd create --data /dev/pv_name_lv_name`
+            # should've never worked (https://tracker.ceph.com/issues/43754)
+            # but since we moved over to `ceph-volume lvm batch` with
+            # https://github.com/ceph/ceph/pull/32545 it stops working
+            # this is a tmp fix to verify this theory.
+            dev = dev.replace('/dev/', '')
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
             _shell(ctx, cluster_name, remote, [
