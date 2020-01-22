@@ -106,9 +106,12 @@ Second Node
     $ sudo mkdir -p /root/.ssh
     $ sudo touch /root/.ssh/authorized_keys
 #. Copy the public key from node 1 to node 2::
-    
-    [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring
-    [ceph: root@node 1] $ ceph orchestrator host add 192.168.1.102 
+
+    [node 1] $ sudo cat ceph.pub | ssh root@192.168.1.102 tee -a /root/.ssh/authorized_keys
+
+#. On node 1, issue the command that adds node 2 to the cluster::
+
+    [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring ceph orchestrator host add 192.168.1.102
 
 Third Node
 ----------
@@ -133,12 +136,11 @@ Third Node
 
 #. Copy the public key from node 1 to node 3::
 
-    [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring
-    [ceph: root@node 1] $ ceph orchestrator host add 192.168.1.103
+    [node 1] $ sudo cat ceph.pub | ssh root@192.168.1.103 tee -a /root/.ssh/authorized_keys
 
 #. On node 1, issue the command that adds node 3 to the cluster::
 
-    [node 1] $ sudo ceph orchestrator host add 192.168.1.103
+    [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring ceph orchestrator host add 192.168.1.103
 
 
 Creating Two More Monitors
@@ -146,16 +148,14 @@ Creating Two More Monitors
 
 #. Set up a Ceph monitor on node 2 by issuing the following command on node 1.  ::
 
-   [node 1] $ sudo ceph orchestrator mon update 2 192.168.1.102:192.168.1.0/24
-   [sudo] password for user:
+   [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring ceph orchestrator mon update 2 192.168.1.102:192.168.1.0/24
    ["(Re)deployed mon 192.168.1.102 on host '192.168.1.102'"]
-   [user@192-168-1-101 ~] $ \ 
+
 #. Set up a Ceph monitor on node 3 by issuing the following command on node 1::
 
-   [node 1] $ sudo ceph orchestrator mon update 3 192.168.1.103:192.168.1.0/24
-   [sudo] password for user:
+   [node 1] $ sudo ./cephadm shell -c ceph.conf -k ceph.keyring ceph orchestrator mon update 3 192.168.1.103:192.168.1.0/24
    ["(Re)deployed mon 192.168.1.103 on host '192.168.1.103'"]
-   [user@192-168-1-101 ~]$
+
 
 
 Creating OSDs
@@ -166,7 +166,7 @@ Creating an OSD on the First Node
 
 #. Use a command of the following form to create an OSD on node 1::
 
-   [node 1@192-168-1-101]$ sudo ceph orchestrator osd create 192-168-1-101:/dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928343
+   [node 1@192-168-1-101]$ sudo ./cephadm shell -c ceph.conf -k ceph.keyring ceph orchestrator osd create 192-168-1-101:/dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928343
    ["Created osd(s) on host '192-168-1-101'"]
    [node 1@192-168-1-101]$
 
@@ -176,7 +176,7 @@ Creating an OSD on the Second Node
 
 #. Use a command of the following form ON NODE 1 to create an OSD on node 2::
 
-   [node 1@192-168-1-101]$ sudo ceph orchestrator osd create 192-168-1-102:/dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928383
+   [node 1@192-168-1-101]$ sudo ./cephadm shell -c ceph.conf -k ceph.keyring ceph orchestrator osd create 192-168-1-102:/dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928383
    ["Created osd(s) on host '192-168-1-102'"]
    [node 1@192-168-1-101]$
 
@@ -186,7 +186,7 @@ Creating an OSD on the Third Node
 
 #. Use a command of the following form ON NODE 1 to create an OSD on node 3::
 
-   [node 1@192-168-1-101]$ sudo ceph orchestrator osd create 192-168-1-103:/dev//dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928384
+   [node 1@192-168-1-101]$ sudo ./cephadm shell -c ceph.conf -k ceph.keyring ceph orchestrator osd create 192-168-1-103:/dev//dev/by-id/ata-WDC+WDS_300T2C0A-00SM50_123405928384
    ["Created osd(s) on host '192-168-1-103'"]
    [node 1@192-168-1-101]$
 
