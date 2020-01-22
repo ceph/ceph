@@ -441,29 +441,32 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for d in daemons:
                 if d.service_type != daemon_type:
                     continue
+                if d.container_image_id == target_id:
+                    continue
+
                 if daemon_type == 'mgr' and \
                    d.service_instance == self.get_mgr_id():
                     self.log.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                   self.get_mgr_id())
                     need_upgrade_self = True
                     continue
-                if d.container_image_id != target_id:
-                    if not self._wait_for_ok_to_stop(d):
-                        return None
-                    self.log.info('Upgrade: Redeploying %s.%s' %
-                                  (d.service_type, d.service_instance))
-                    ret, out, err = self.mon_command({
-                        'prefix': 'config set',
-                        'name': 'container_image',
-                        'value': target_name,
-                        'who': daemon_type + '.' + d.service_instance,
-                    })
-                    return self._service_action([(
-                        d.service_type,
-                        d.service_instance,
-                        d.nodename,
-                        'redeploy'
-                    )])
+
+                if not self._wait_for_ok_to_stop(d):
+                    return None
+                self.log.info('Upgrade: Redeploying %s.%s' %
+                              (d.service_type, d.service_instance))
+                ret, out, err = self.mon_command({
+                    'prefix': 'config set',
+                    'name': 'container_image',
+                    'value': target_name,
+                    'who': daemon_type + '.' + d.service_instance,
+                })
+                return self._service_action([(
+                    d.service_type,
+                    d.service_instance,
+                    d.nodename,
+                    'redeploy'
+                )])
 
             if need_upgrade_self:
                 mgr_map = self.get('mgr_map')
