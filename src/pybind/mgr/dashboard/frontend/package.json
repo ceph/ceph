@@ -99,7 +99,7 @@
     "moment": "2.24.0",
     "ng-block-ui": "2.1.7",
     "ng-bootstrap-form-validation": "5.0.0",
-    "ng-sidebar": "9.1.1",
+    "ng-click-outside": "5.3.0",
     "ng2-charts": "2.3.0",
     "ng2-tree": "2.0.0-rc.11",
     "ngx-bootstrap": "5.1.2",
