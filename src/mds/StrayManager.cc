@@ -688,9 +688,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 
 StrayManager::StrayManager(MDSRank *mds, PurgeQueue &purge_queue_)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
-    mds(mds), logger(NULL), started(false), num_strays(0),
-    num_strays_delayed(0), num_strays_enqueuing(0),
-    purge_queue(purge_queue_)
+    mds(mds), purge_queue(purge_queue_)
 {
   ceph_assert(mds != NULL);
 }
