@@ -12723,7 +12723,7 @@ void BlueStore::_pad_zeros(
     back_pad = chunk_size - back_copy;
     ceph_assert(back_copy <= length);
     bufferptr tail(chunk_size);
-    bl->copy(length - back_copy, back_copy, tail.c_str());
+    bl->begin(length - back_copy).copy(back_copy, tail.c_str());
     tail.zero(back_copy, back_pad, false);
     bufferlist old;
     old.swap(*bl);
