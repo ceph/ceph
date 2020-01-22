@@ -2963,11 +2963,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       for (auto& p : service_map.services) {
         const std::string &service = p.first;
         // filter out normal ceph entity types
-        if (service == "osd" ||
-            service == "client" ||
-            service == "mon" ||
-            service == "mds" ||
-            service == "mgr") {
+        if (ServiceMap::is_normal_ceph_entity(service)) {
           continue;
         }
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
@@ -3797,7 +3793,11 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->close_section();
 
     for (auto& p : mgrstatmon()->get_service_map().services) {
-      f->open_object_section(p.first.c_str());
+      auto &service = p.first;
+      if (ServiceMap::is_normal_ceph_entity(service)) {
+        continue;
+      }
+      f->open_object_section(service.c_str());
       map<string,int> m;
       p.second.count_metadata("ceph_version", &m);
       for (auto& q : m) {
