@@ -15,6 +15,7 @@
 #include "acconfig.h"
 #include <sys/types.h>
 #include <errno.h>
+#include <unistd.h>
 
 #if defined(__linux__)
 #define PROCPREFIX
@@ -212,6 +213,8 @@ unsigned get_page_size();
 
 #include <windows.h>
 
+#include "include/win32/win32_errno.h"
+
 // There are a few name collisions between Windows headers and Ceph.
 // Updating Ceph definitions would be the prefferable fix in order to avoid
 // confussion, unless it requires too many changes, in which case we're going
@@ -262,19 +265,6 @@ struct iovec {
 #define SIGKILL 9
 #endif
 
-#ifndef ENODATA
-// mingw doesn't define this, the Windows SDK does.
-#define ENODATA 120
-#endif
-
-#ifndef EDQUOT
-#define EDQUOT ENOSPC
-#endif
-
-#define ESHUTDOWN ECONNABORTED
-#define ESTALE 256
-#define EREMOTEIO 257
-
 #define IOV_MAX 1024
 
 #ifdef __cplusplus
@@ -313,6 +303,7 @@ extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
 }
 #endif
 
+#define compat_closesocket closesocket
 // Use "aligned_free" when freeing memory allocated using posix_memalign or
 // _aligned_malloc. Using "free" will crash.
 #define aligned_free(ptr) _aligned_free(ptr)
@@ -328,6 +319,9 @@ extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
 #define SOCKOPT_VAL_TYPE void*
 
 #define aligned_free(ptr) free(ptr)
+static inline int compat_closesocket(int fildes) {
+  return close(fildes);
+}
 
 #endif /* WIN32 */
 
