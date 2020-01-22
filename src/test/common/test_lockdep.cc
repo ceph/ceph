@@ -9,6 +9,7 @@
 #include "global/global_init.h"
 #include "common/lockdep.h"
 #include "include/coredumpctl.h"
+#include "log/Log.h"
 
 TEST(lockdep, abba)
 {
@@ -65,8 +66,12 @@ int main(int argc, char **argv) {
   auto cct = global_init(NULL, args,
 			 CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_MON_CONFIG);
+			 CINIT_FLAG_NO_MON_CONFIG |
+			 CINIT_FLAG_NO_DAEMON_ACTIONS);
   common_init_finish(g_ceph_context);
+
+  // stop logging thread
+  g_ceph_context->_log->stop();
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
