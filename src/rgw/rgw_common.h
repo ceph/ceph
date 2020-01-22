@@ -847,7 +847,7 @@ struct RGWUserInfo
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(21, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
