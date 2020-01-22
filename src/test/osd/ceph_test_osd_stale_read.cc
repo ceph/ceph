@@ -36,8 +36,10 @@ int get_primary_osd(Rados& rados, const string& pool_name,
     + oid
     + string("\",\"format\": \"json\"}");
   bufferlist outbl;
-  int r = rados.mon_command(cmd, inbl, &outbl, NULL);
-  assert(r >= 0);
+  if (int r = rados.mon_command(cmd, inbl, &outbl, nullptr);
+      r < 0) {
+    return r;
+  }
   string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;
   if (!json_spirit::read(outstr, v)) {
