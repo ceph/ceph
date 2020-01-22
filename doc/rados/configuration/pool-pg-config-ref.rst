@@ -234,7 +234,7 @@ Ceph configuration file.
               when trimming log files.
 
 :Type: 32-bit Int Unsigned
-:Default: ``1000``
+:Default: ``250``
 
 
 ``osd default data pool replay window``
