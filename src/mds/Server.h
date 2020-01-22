@@ -84,39 +84,13 @@ public:
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
 
-private:
-  MDSRank *mds;
-  MDCache *mdcache;
-  MDLog *mdlog;
-  PerfCounters *logger;
-
-  // OSDMap full status, used to generate ENOSPC on some operations
-  bool is_full;
-
-  // State for while in reconnect
-  MDSContext *reconnect_done;
-  int failed_reconnects;
-  bool reconnect_evicting;  // true if I am waiting for evictions to complete
-                            // before proceeding to reconnect_gather_finish
-  time reconnect_start = clock::zero();
-  time reconnect_last_seen = clock::zero();
-  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
-
-  feature_bitset_t supported_features;
-  feature_bitset_t required_client_features;
-
-  bool replay_unsafe_with_closed_session = false;
-  double cap_revoke_eviction_timeout = 0;
-  uint64_t max_snaps_per_dir = 100;
-
-  friend class MDSContinuation;
-  friend class ServerContext;
-  friend class ServerLogContext;
-  friend class Batch_Getattr_Lookup;
-
-public:
-  bool terminating_sessions;
-
+  enum class RecallFlags : uint64_t {
+    NONE = 0,
+    STEADY = (1<<0),
+    ENFORCE_MAX = (1<<1),
+    TRIM = (1<<2),
+    ENFORCE_LIVENESS = (1<<3),
+  };
   explicit Server(MDSRank *m);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
@@ -155,7 +129,6 @@ public:
   size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
   void journal_close_session(Session *session, int state, Context *on_safe);
 
-  set<client_t> client_reclaim_gather;
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
   Session *find_session_by_uuid(std::string_view uuid);
   void reclaim_session(Session *session, const cref_t<MClientReclaim> &m);
@@ -172,13 +145,6 @@ public:
   void reconnect_tick();
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
-  enum class RecallFlags : uint64_t {
-    NONE = 0,
-    STEADY = (1<<0),
-    ENFORCE_MAX = (1<<1),
-    TRIM = (1<<2),
-    ENFORCE_LIVENESS = (1<<3),
-  };
   std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, RecallFlags=RecallFlags::NONE);
   void force_clients_readonly();
 
@@ -221,7 +187,6 @@ public:
 	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
-
 
   // requests on existing inodes.
   void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
@@ -313,7 +278,6 @@ public:
   void handle_client_renamesnap(MDRequestRef& mdr);
   void _renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
 
-
   // helpers
   bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_rank_t> &witnesse,
 			       vector<CDentry*>& srctrace, vector<CDentry*>& dsttrace, CDentry *straydn);
@@ -342,10 +306,43 @@ public:
   void evict_cap_revoke_non_responders();
   void handle_conf_change(const std::set<std::string>& changed);
 
+  bool terminating_sessions = false;
+
+  set<client_t> client_reclaim_gather;
+
 private:
+  friend class MDSContinuation;
+  friend class ServerContext;
+  friend class ServerLogContext;
+  friend class Batch_Getattr_Lookup;
+
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder *gather);
   void clear_batch_ops(const MDRequestRef& mdr);
+
+  MDSRank *mds;
+  MDCache *mdcache;
+  MDLog *mdlog;
+  PerfCounters *logger = nullptr;
+
+  // OSDMap full status, used to generate ENOSPC on some operations
+  bool is_full = false;
+
+  // State for while in reconnect
+  MDSContext *reconnect_done = nullptr;
+  int failed_reconnects = 0;
+  bool reconnect_evicting = false;  // true if I am waiting for evictions to complete
+                            // before proceeding to reconnect_gather_finish
+  time reconnect_start = clock::zero();
+  time reconnect_last_seen = clock::zero();
+  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+
+  feature_bitset_t supported_features;
+  feature_bitset_t required_client_features;
+
+  bool replay_unsafe_with_closed_session = false;
+  double cap_revoke_eviction_timeout = 0;
+  uint64_t max_snaps_per_dir = 100;
 
   DecayCounter recall_throttle;
   time last_recall_state;
@@ -367,5 +364,4 @@ static inline constexpr bool operator!(const Server::RecallFlags& f) {
   using T = std::underlying_type<Server::RecallFlags>::type;
   return static_cast<T>(f) == static_cast<T>(0);
 }
-
 #endif
