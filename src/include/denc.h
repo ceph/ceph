@@ -1536,6 +1536,29 @@ struct denc_traits<std::nullopt_t> {
     }									\
   };
 
+// ----------------------------------------------------------------------
+// encoded_sizeof_wrapper
+
+namespace ceph {
+
+template <typename T, typename traits=denc_traits<T>>
+constexpr std::enable_if_t<traits::supported && traits::bounded, size_t>
+encoded_sizeof_bounded() {
+  size_t p = 0;
+  traits::bound_encode(T(), p);
+  return p;
+}
+
+template <typename T, typename traits=denc_traits<T>>
+std::enable_if_t<traits::supported, size_t>
+encoded_sizeof(const T &t) {
+  size_t p = 0;
+  traits::bound_encode(t, p);
+  return p;
+}
+
+} // namespace ceph
+
 
 // ----------------------------------------------------------------------
 // encode/decode wrappers
