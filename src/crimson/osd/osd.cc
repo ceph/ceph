@@ -54,22 +54,22 @@ using crimson::os::FuturizedStore;
 namespace crimson::osd {
 
 OSD::OSD(int id, uint32_t nonce,
-         crimson::net::Messenger& cluster_msgr,
-         crimson::net::Messenger& public_msgr,
-         crimson::net::Messenger& hb_front_msgr,
-         crimson::net::Messenger& hb_back_msgr)
+         crimson::net::MessengerRef cluster_msgr,
+         crimson::net::MessengerRef public_msgr,
+         crimson::net::MessengerRef hb_front_msgr,
+         crimson::net::MessengerRef hb_back_msgr)
   : whoami{id},
     nonce{nonce},
     // do this in background
     beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
-    monc{new crimson::mon::Client{public_msgr, *this}},
-    mgrc{new crimson::mgr::Client{public_msgr, *this}},
+    monc{new crimson::mon::Client{*public_msgr, *this}},
+    mgrc{new crimson::mgr::Client{*public_msgr, *this}},
     store{crimson::os::FuturizedStore::create(
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"))},
-    shard_services{*this, cluster_msgr, public_msgr, *monc, *mgrc, *store},
+    shard_services{*this, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
     heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
@@ -78,8 +78,8 @@ OSD::OSD(int id, uint32_t nonce,
   osdmaps[0] = boost::make_local_shared<OSDMap>();
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
                     std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
-    msgr.get().set_auth_server(monc.get());
-    msgr.get().set_auth_client(monc.get());
+    msgr.get()->set_auth_server(monc.get());
+    msgr.get()->set_auth_client(monc.get());
   }
 
   if (local_conf()->osd_open_classes_on_start) {
@@ -224,34 +224,34 @@ seastar::future<> OSD::start()
       CEPH_FEATURE_OSDENC;
     using crimson::net::SocketPolicy;
 
-    public_msgr.set_default_policy(SocketPolicy::stateless_server(0));
-    public_msgr.set_policy(entity_name_t::TYPE_MON,
-                           SocketPolicy::lossy_client(osd_required));
-    public_msgr.set_policy(entity_name_t::TYPE_MGR,
-                           SocketPolicy::lossy_client(osd_required));
-    public_msgr.set_policy(entity_name_t::TYPE_OSD,
-                           SocketPolicy::stateless_server(0));
-
-    cluster_msgr.set_default_policy(SocketPolicy::stateless_server(0));
-    cluster_msgr.set_policy(entity_name_t::TYPE_MON,
-                            SocketPolicy::lossy_client(0));
-    cluster_msgr.set_policy(entity_name_t::TYPE_OSD,
-                            SocketPolicy::lossless_peer(osd_required));
-    cluster_msgr.set_policy(entity_name_t::TYPE_CLIENT,
+    public_msgr->set_default_policy(SocketPolicy::stateless_server(0));
+    public_msgr->set_policy(entity_name_t::TYPE_MON,
+                            SocketPolicy::lossy_client(osd_required));
+    public_msgr->set_policy(entity_name_t::TYPE_MGR,
+                            SocketPolicy::lossy_client(osd_required));
+    public_msgr->set_policy(entity_name_t::TYPE_OSD,
                             SocketPolicy::stateless_server(0));
+
+    cluster_msgr->set_default_policy(SocketPolicy::stateless_server(0));
+    cluster_msgr->set_policy(entity_name_t::TYPE_MON,
+                             SocketPolicy::lossy_client(0));
+    cluster_msgr->set_policy(entity_name_t::TYPE_OSD,
+                             SocketPolicy::lossless_peer(osd_required));
+    cluster_msgr->set_policy(entity_name_t::TYPE_CLIENT,
+                             SocketPolicy::stateless_server(0));
 
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
     dispatchers.push_front(mgrc.get());
     return seastar::when_all_succeed(
-      cluster_msgr.try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
+      cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
+                             local_conf()->ms_bind_port_min,
+                             local_conf()->ms_bind_port_max)
+        .then([this] { return cluster_msgr->start(&dispatchers); }),
+      public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             local_conf()->ms_bind_port_min,
                             local_conf()->ms_bind_port_max)
-        .then([this] { return cluster_msgr.start(&dispatchers); }),
-      public_msgr.try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
-                           local_conf()->ms_bind_port_min,
-                           local_conf()->ms_bind_port_max)
-        .then([this] { return public_msgr.start(&dispatchers); }));
+        .then([this] { return public_msgr->start(&dispatchers); }));
   }).then([this] {
     return seastar::when_all_succeed(monc->start(),
                                      mgrc->start());
@@ -264,15 +264,15 @@ seastar::future<> OSD::start()
     return monc->renew_subs();
   }).then([this] {
     if (auto [addrs, changed] =
-        replace_unknown_addrs(cluster_msgr.get_myaddrs(),
-                              public_msgr.get_myaddrs()); changed) {
-      return cluster_msgr.set_myaddrs(addrs);
+        replace_unknown_addrs(cluster_msgr->get_myaddrs(),
+                              public_msgr->get_myaddrs()); changed) {
+      return cluster_msgr->set_myaddrs(addrs);
     } else {
       return seastar::now();
     }
   }).then([this] {
-    return heartbeat->start(public_msgr.get_myaddrs(),
-                            cluster_msgr.get_myaddrs());
+    return heartbeat->start(public_msgr->get_myaddrs(),
+                            cluster_msgr->get_myaddrs());
   }).then([this] {
     return start_boot();
   });
@@ -325,13 +325,13 @@ seastar::future<> OSD::_send_boot()
 
   logger().info("hb_back_msgr: {}", heartbeat->get_back_addrs());
   logger().info("hb_front_msgr: {}", heartbeat->get_front_addrs());
-  logger().info("cluster_msgr: {}", cluster_msgr.get_myaddr());
+  logger().info("cluster_msgr: {}", cluster_msgr->get_myaddr());
   auto m = make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
                                   osdmap->get_epoch(),
                                   heartbeat->get_back_addrs(),
                                   heartbeat->get_front_addrs(),
-                                  cluster_msgr.get_myaddrs(),
+                                  cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
   return monc->send_message(m);
 }
@@ -402,8 +402,8 @@ seastar::future<> OSD::stop()
     return monc->stop();
   }).then([this] {
     return when_all_succeed(
-      public_msgr.shutdown(),
-      cluster_msgr.shutdown());
+      public_msgr->shutdown(),
+      cluster_msgr->shutdown());
   }).then([this] {
     return store->umount();
   }).handle_exception([](auto ep) {
@@ -833,7 +833,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       shard_services.update_map(osdmap);
       if (up_epoch != 0 &&
           osdmap->is_up(whoami) &&
-          osdmap->get_addrs(whoami) == public_msgr.get_myaddrs()) {
+          osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
         up_epoch = osdmap->get_epoch();
         if (!boot_epoch) {
           boot_epoch = osdmap->get_epoch();
@@ -842,7 +842,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     });
   }).then([m, this] {
     if (osdmap->is_up(whoami) &&
-        osdmap->get_addrs(whoami) == public_msgr.get_myaddrs() &&
+        osdmap->get_addrs(whoami) == public_msgr->get_myaddrs() &&
         bind_epoch < osdmap->get_up_from(whoami)) {
       if (state.is_booting()) {
         logger().info("osd.{}: activating...", whoami);
@@ -924,17 +924,17 @@ bool OSD::should_restart() const
     logger().info("map e {} marked osd.{} down",
                   osdmap->get_epoch(), whoami);
     return true;
-  } else if (osdmap->get_addrs(whoami) != public_msgr.get_myaddrs()) {
+  } else if (osdmap->get_addrs(whoami) != public_msgr->get_myaddrs()) {
     logger().error("map e {} had wrong client addr ({} != my {})",
                    osdmap->get_epoch(),
                    osdmap->get_addrs(whoami),
-                   public_msgr.get_myaddrs());
+                   public_msgr->get_myaddrs());
     return true;
-  } else if (osdmap->get_cluster_addrs(whoami) != cluster_msgr.get_myaddrs()) {
+  } else if (osdmap->get_cluster_addrs(whoami) != cluster_msgr->get_myaddrs()) {
     logger().error("map e {} had wrong cluster addr ({} != my {})",
                    osdmap->get_epoch(),
                    osdmap->get_cluster_addrs(whoami),
-                   cluster_msgr.get_myaddrs());
+                   cluster_msgr->get_myaddrs());
     return true;
   } else {
     return false;

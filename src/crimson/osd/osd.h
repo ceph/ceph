@@ -68,9 +68,9 @@ class OSD final : public crimson::net::Dispatcher,
   const uint32_t nonce;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   // talk with osd
-  crimson::net::Messenger& cluster_msgr;
+  crimson::net::MessengerRef cluster_msgr;
   // talk with client/mon/mgr
-  crimson::net::Messenger& public_msgr;
+  crimson::net::MessengerRef public_msgr;
   ChainedDispatchers dispatchers;
   std::unique_ptr<crimson::mon::Client> monc;
   std::unique_ptr<crimson::mgr::Client> mgrc;
@@ -117,10 +117,10 @@ class OSD final : public crimson::net::Dispatcher,
 
 public:
   OSD(int id, uint32_t nonce,
-      crimson::net::Messenger& cluster_msgr,
-      crimson::net::Messenger& client_msgr,
-      crimson::net::Messenger& hb_front_msgr,
-      crimson::net::Messenger& hb_back_msgr);
+      crimson::net::MessengerRef cluster_msgr,
+      crimson::net::MessengerRef client_msgr,
+      crimson::net::MessengerRef hb_front_msgr,
+      crimson::net::MessengerRef hb_back_msgr);
   ~OSD() final;
 
   seastar::future<> mkfs(uuid_d osd_uuid, uuid_d cluster_fsid);

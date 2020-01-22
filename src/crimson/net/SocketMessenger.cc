@@ -32,10 +32,9 @@ namespace crimson::net {
 
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
-                                 uint32_t nonce,
-                                 seastar::shard_id master_sid)
+                                 uint32_t nonce)
   : Messenger{myname},
-    master_sid{master_sid},
+    master_sid{seastar::engine().cpu_id()},
     logic_name{logic_name},
     nonce{nonce}
 {}
@@ -115,7 +114,7 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
 seastar::future<> SocketMessenger::start(Dispatcher *disp) {
   assert(seastar::engine().cpu_id() == master_sid);
 
-  dispatcher = disp->get_local_shard();
+  dispatcher = disp;
   if (listener) {
     // make sure we have already bound to a valid address
     ceph_assert(get_myaddr().is_legacy() || get_myaddr().is_msgr2());
@@ -132,7 +131,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
   return seastar::now();
 }
 
-seastar::future<crimson::net::ConnectionXRef>
+seastar::future<crimson::net::ConnectionRef>
 SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
 {
   assert(seastar::engine().cpu_id() == master_sid);
@@ -141,18 +140,13 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
   ceph_assert(peer_addr.is_legacy() || peer_addr.is_msgr2());
   ceph_assert(peer_addr.get_port() > 0);
 
-  // TODO: use ConnectionRef
   if (auto found = lookup_conn(peer_addr); found) {
-    return seastar::make_ready_future<ConnectionXRef>(
-      seastar::make_lw_shared<seastar::foreign_ptr<ConnectionRef>>(
-        seastar::make_foreign(found->shared_from_this())));
+    return seastar::make_ready_future<ConnectionRef>(found->shared_from_this());
   }
   SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
       *this, *dispatcher, peer_addr.is_msgr2());
   conn->start_connect(peer_addr, peer_type);
-  return seastar::make_ready_future<ConnectionXRef>(
-    seastar::make_lw_shared<seastar::foreign_ptr<ConnectionRef>>(
-      seastar::make_foreign(conn->shared_from_this())));
+  return seastar::make_ready_future<ConnectionRef>(conn->shared_from_this());
 }
 
 seastar::future<> SocketMessenger::shutdown()

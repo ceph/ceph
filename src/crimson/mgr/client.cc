@@ -73,8 +73,8 @@ seastar::future<> Client::reconnect()
     }
     auto peer = mgrmap.get_active_addrs().front();
     return msgr.connect(peer, CEPH_ENTITY_TYPE_MGR).then(
-      [this](auto xconn) {
-        conn = xconn->release();
+      [this](auto _conn) {
+        conn = _conn;
         // ask for the mgrconfigure message
         auto m = ceph::make_message<MMgrOpen>();
         m->daemon_name = local_conf()->name.get_id();

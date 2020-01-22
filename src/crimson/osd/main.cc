@@ -15,7 +15,7 @@
 #include "common/ceph_argparse.h"
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
-#include "crimson/net/SocketMessenger.h"
+#include "crimson/net/Messenger.h"
 #include "global/pidfile.h"
 
 #include "osd.h"
@@ -129,8 +129,6 @@ int main(int argc, char* argv[])
                                               &cluster_name,
                                               &conf_file_list);
   seastar::sharded<crimson::osd::OSD> osd;
-  seastar::sharded<crimson::net::SocketMessenger> cluster_msgr, client_msgr;
-  seastar::sharded<crimson::net::SocketMessenger> hb_front_msgr, hb_back_msgr;
   using crimson::common::sharded_conf;
   using crimson::common::sharded_perf_coll;
   try {
@@ -156,30 +154,23 @@ int main(int argc, char* argv[])
         pidfile_write(local_conf()->pid_file);
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = static_cast<uint32_t>(getpid());
+        crimson::net::MessengerRef cluster_msgr, client_msgr;
+        crimson::net::MessengerRef hb_front_msgr, hb_back_msgr;
         for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
                                   make_pair(std::ref(client_msgr), "client"s),
                                   make_pair(std::ref(hb_front_msgr), "hb_front"s),
                                   make_pair(std::ref(hb_back_msgr), "hb_back"s)}) {
-          const auto shard = seastar::engine().cpu_id();
-          msgr.start(entity_name_t::OSD(whoami), name, nonce, shard).get();
+          msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami), name, nonce);
           if (local_conf()->ms_crc_data) {
-            msgr.local().set_crc_data();
+            msgr->set_crc_data();
           }
           if (local_conf()->ms_crc_header) {
-            msgr.local().set_crc_header();
+            msgr->set_crc_header();
           }
         }
         osd.start_single(whoami, nonce,
-          reference_wrapper<crimson::net::Messenger>(cluster_msgr.local()),
-          reference_wrapper<crimson::net::Messenger>(client_msgr.local()),
-          reference_wrapper<crimson::net::Messenger>(hb_front_msgr.local()),
-          reference_wrapper<crimson::net::Messenger>(hb_back_msgr.local())).get();
-        seastar::engine().at_exit([&] {
-          return seastar::when_all_succeed(cluster_msgr.stop(),
-                                           client_msgr.stop(),
-                                           hb_front_msgr.stop(),
-                                           hb_back_msgr.stop());
-        });
+                         cluster_msgr, client_msgr,
+                         hb_front_msgr, hb_back_msgr).get();
         if (config.count("mkkey")) {
           make_keyring().handle_exception([](std::exception_ptr) {
             seastar::engine().exit(1);

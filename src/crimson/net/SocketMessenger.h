@@ -29,7 +29,7 @@ namespace crimson::net {
 
 class FixedCPUServerSocket;
 
-class SocketMessenger final : public Messenger, public seastar::peering_sharded_service<SocketMessenger> {
+class SocketMessenger final : public Messenger {
   const seastar::shard_id master_sid;
   seastar::promise<> shutdown_promise;
 
@@ -51,8 +51,7 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
  public:
   SocketMessenger(const entity_name_t& myname,
                   const std::string& logic_name,
-                  uint32_t nonce,
-                  seastar::shard_id master_sid);
+                  uint32_t nonce);
   ~SocketMessenger() override { ceph_assert(!listener); }
 
   seastar::future<> set_myaddrs(const entity_addrvec_t& addr) override;
@@ -66,8 +65,8 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
 
   seastar::future<> start(Dispatcher *dispatcher) override;
 
-  seastar::future<ConnectionXRef> connect(const entity_addr_t& peer_addr,
-                                          const entity_type_t& peer_type) override;
+  seastar::future<ConnectionRef> connect(const entity_addr_t& peer_addr,
+                                         const entity_type_t& peer_type) override;
   // can only wait once
   seastar::future<> wait() override {
     assert(seastar::engine().cpu_id() == master_sid);
@@ -75,10 +74,6 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   }
 
   seastar::future<> shutdown() override;
-
-  Messenger* get_local_shard() override {
-    return &container().local();
-  }
 
   void print(ostream& out) const override {
     out << get_myname()
