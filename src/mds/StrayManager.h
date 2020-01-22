@@ -177,20 +177,20 @@ protected:
 
   // Global references for doing I/O
   MDSRank *mds;
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
-  bool started;
+  bool started = false;
 
   // Stray dentries for this rank (including those not in cache)
-  uint64_t num_strays;
+  uint64_t num_strays = 0;
 
   // Stray dentries
-  uint64_t num_strays_delayed;
+  uint64_t num_strays_delayed = 0;
   /**
    * Entries that have entered enqueue() but not been persistently
    * recorded by PurgeQueue yet
    */
-  uint64_t num_strays_enqueuing;
+  uint64_t num_strays_enqueuing = 0;
 
   PurgeQueue &purge_queue;
 };
