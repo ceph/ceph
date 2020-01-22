@@ -152,54 +152,6 @@ void Migrator::dispatch(const cref_t<Message> &m)
   }
 }
 
-
-class C_MDC_EmptyImport : public MigratorContext {
-  CDir *dir;
-public:
-  C_MDC_EmptyImport(Migrator *m, CDir *d) : MigratorContext(m), dir(d) {}
-  void finish(int r) override {
-    mig->export_empty_import(dir);
-  }
-};
-
-
-void Migrator::export_empty_import(CDir *dir)
-{
-  dout(7) << "export_empty_import " << *dir << dendl;
-  ceph_assert(dir->is_subtree_root());
-
-  if (dir->inode->is_auth()) {
-    dout(7) << " inode is auth" << dendl;
-    return;
-  }
-  if (!dir->is_auth()) {
-    dout(7) << " not auth" << dendl;
-    return;
-  }
-  if (dir->is_freezing() || dir->is_frozen()) {
-    dout(7) << " freezing or frozen" << dendl;
-    return;
-  }
-  if (dir->get_num_head_items() > 0) {
-    dout(7) << " not actually empty" << dendl;
-    return;
-  }
-  if (dir->inode->is_root()) {
-    dout(7) << " root" << dendl;
-    return;
-  }
-  
-  mds_rank_t dest = dir->inode->authority().first;
-  //if (mds->is_shutting_down()) dest = 0;  // this is more efficient.
-  
-  dout(7) << " really empty, exporting to " << dest << dendl;
-  assert (dest != mds->get_nodeid());
-  
-  dout(7) << "exporting to mds." << dest 
-           << " empty import " << *dir << dendl;
-  export_dir( dir, dest );
-}
-
 void Migrator::find_stale_export_freeze()
 {
   utime_t now = ceph_clock_now();
@@ -3170,13 +3122,6 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   // did i just import mydir?
   if (dir->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
     cache->populate_mydir();
-
-  // is it empty?
-  if (dir->get_num_head_items() == 0 &&
-      !dir->inode->is_auth()) {
-    // reexport!
-    export_empty_import(dir);
-  }
 }
 
 

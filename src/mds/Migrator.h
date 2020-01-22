@@ -187,7 +187,6 @@ public:
   // exporter
   void dispatch_export_dir(MDRequestRef& mdr, int count);
   void export_dir(CDir *dir, mds_rank_t dest);
-  void export_empty_import(CDir *dir);
 
   void export_dir_nicely(CDir *dir, mds_rank_t dest);
   void maybe_do_queued_export();

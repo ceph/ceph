@@ -6655,7 +6655,6 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
 	    dir->is_freezing() || dir->is_frozen())
 	  continue;
 
-	migrator->export_empty_import(dir);
         ++trimmed;
       }
     } else {
