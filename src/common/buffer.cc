@@ -1324,31 +1324,6 @@ static ceph::spinlock debug_lock;
     bl.clear();
   }
 
-  void buffer::list::copy(unsigned off, unsigned len, char *dest) const
-  {
-    begin(off).copy(len, dest);
-  }
-
-  void buffer::list::copy(unsigned off, unsigned len, list &dest) const
-  {
-    begin(off).copy(len, dest);
-  }
-
-  void buffer::list::copy(unsigned off, unsigned len, std::string& dest) const
-  {
-    begin(off).copy(len, dest);
-  }
-    
-  void buffer::list::copy_in(unsigned off, unsigned len, const char *src, bool crc_reset)
-  {
-    begin(off).copy_in(len, src, crc_reset);
-  }
-
-  void buffer::list::copy_in(unsigned off, unsigned len, const list& src)
-  {
-    begin(off).copy_in(len, src);
-  }
-
   void buffer::list::append(char c)
   {
     // put what we can into the existing append_buffer.

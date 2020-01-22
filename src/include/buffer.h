@@ -1142,14 +1142,6 @@ inline namespace v14_2_0 {
       return const_iterator(this, _len, _buffers.end(), 0);
     }
 
-    // crope lookalikes.
-    // **** WARNING: this are horribly inefficient for large bufferlists. ****
-    void copy(unsigned off, unsigned len, char *dest) const;
-    void copy(unsigned off, unsigned len, list &dest) const;
-    void copy(unsigned off, unsigned len, std::string& dest) const;
-    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset = true);
-    void copy_in(unsigned off, unsigned len, const list& src);
-
     void append(char c);
     void append(const char *data, unsigned len);
     void append(std::string s) {
