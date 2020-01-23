@@ -342,7 +342,7 @@ string cleanbin(bufferlist &bl, bool &base64, bool show)
 
 // If non-printable characters found then convert to "Base64:" followed by
 // base64 encoding
-string cleanbin(string &str)
+string cleanbin(const string &str)
 {
   bool base64;
   bufferlist bl;

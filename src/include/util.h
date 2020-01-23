@@ -94,7 +94,7 @@ void dump_services(ceph::Formatter* f, const std::map<std::string,
 		   std::list<std::string> >& services, const char* type);
 
 std::string cleanbin(ceph::buffer::list &bl, bool &b64, bool show = false);
-std::string cleanbin(std::string &str);
+std::string cleanbin(const std::string &str);
 
 namespace ceph::util {
 
