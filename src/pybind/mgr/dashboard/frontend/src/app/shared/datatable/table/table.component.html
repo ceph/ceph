@@ -3,6 +3,7 @@
                 i18n>Failed to load data.</cd-alert-panel>
 
 <div class="dataTables_wrapper">
+
   <div *ngIf="onlyActionHeader"
        class="dataTables_header clearfix">
     <div class="cd-datatable-actions">
@@ -21,6 +22,53 @@
     <ng-content select=".table-filters"></ng-content>
     <!-- end filters -->
 
+    <!-- column filters -->
+    <div *ngIf="columnFilters.length !== 0"
+         class="btn-group widget-toolbar">
+      <div dropdown
+           class="btn-group">
+        <a dropdownToggle
+           class="btn btn-light dropdown-toggle tc_columnBtn"
+           data-toggle="dropdown">
+          <i [ngClass]="[icons.large, icons.filter]"></i>
+          {{ selectedFilter.column.name }}
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu px-1"
+            role="menu">
+          <li *ngFor="let filter of columnFilters"
+              role="menuitem">
+            <a href=""
+               class="dropdown-item"
+               (click)="onSelectFilter(filter); false">{{ filter.column.name }}</a>
+          </li>
+        </ul>
+      </div>
+      <div dropdown
+           class="btn-group">
+        <a dropdownToggle
+           class="btn btn-light dropdown-toggle"
+           [class.disabled]="selectedFilter.options.length === 0"
+           data-toggle="dropdown">
+           {{ selectedFilter.value ? selectedFilter.value.formatted: 'Any' }}
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu px-1"
+            role="menu">
+          <li *ngFor="let option of selectedFilter.options"
+              role="menuitem">
+            <a href=""
+               class="dropdown-item"
+               (click)="onChangeFilter(selectedFilter, option); false">{{ option.formatted }}
+              <i *ngIf="selectedFilter.value !== undefined && (selectedFilter.value.raw === option.raw)"
+                 [ngClass]="[icons.check]"></i>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <!-- end column filters -->
+
     <!-- search -->
     <div class="input-group search"
          *ngIf="searchField">
@@ -36,7 +84,7 @@
       <div class="input-group-append">
         <button type="button"
                 class="btn btn-light"
-                (click)="updateFilter(true)">
+                (click)="onClearSearch()">
           <i class="icon-prepend {{ icons.destroy }}"></i>
         </button>
       </div>
@@ -98,6 +146,29 @@
       </button>
     </div>
     <!-- end refresh button -->
+  </div>
+  <div class="dataTables_header clearfix"
+       *ngIf="toolHeader && columnFiltered">
+    <!-- filter chips for column filters -->
+    <div class="filter-chips">
+      <span *ngFor="let filter of columnFilters">
+        <span *ngIf="filter.value"
+              class="badge badge-info mr-2">
+          <span class="mr-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
+          <a class="badge-remove"
+             (click)="onChangeFilter(filter); false">
+            <i [ngClass]="[icons.destroy]"
+               aria-hidden="true"></i>
+          </a>
+        </span>
+      </span>
+      <a class="tc_clearSelections"
+         href=""
+         (click)="onClearFilters(); false">
+        <ng-container i18n>Clear filters</ng-container>
+      </a>
+    </div>
+    <!-- end filter chips for column filters -->
   </div>
   <ngx-datatable #table
                  class="bootstrap cd-datatable"

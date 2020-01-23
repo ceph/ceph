@@ -185,15 +185,15 @@ export class OsdFormComponent implements OnInit {
   }
 
   onDevicesSelected(event: DevicesSelectionChangeEvent) {
-    this.availDevices = event.filterOutDevices;
+    this.availDevices = event.dataOut;
 
     if (event.type === 'data') {
       // If user selects data devices for a single host, make only remaining devices on
       // that host as available.
       const hostnameFilter = _.find(event.filters, { prop: 'hostname' });
       if (hostnameFilter) {
-        this.hostname = hostnameFilter.value;
-        this.availDevices = event.filterOutDevices.filter((device: InventoryDevice) => {
+        this.hostname = hostnameFilter.value.raw;
+        this.availDevices = event.dataOut.filter((device: InventoryDevice) => {
           return device.hostname === this.hostname;
         });
         this.driveGroup.setHostPattern(this.hostname);

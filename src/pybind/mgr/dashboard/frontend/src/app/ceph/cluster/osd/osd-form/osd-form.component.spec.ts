@@ -61,8 +61,8 @@ describe('OsdFormComponent', () => {
     const event: DevicesSelectionChangeEvent = {
       type: type,
       filters: [],
-      filterInDevices: devices,
-      filterOutDevices: []
+      data: devices,
+      dataOut: []
     };
     component.onDevicesSelected(event);
     if (type === 'data') {
