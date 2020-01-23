@@ -746,7 +746,7 @@ static ceph::spinlock debug_lock;
   {
     if (p == ls->end())
       throw end_of_buffer();
-    return p->get_raw() == other.get_raw();
+    return p->_raw == other._raw;
   }
 
   // copy data out.
@@ -1147,14 +1147,14 @@ static ceph::spinlock debug_lock;
   void buffer::list::reassign_to_mempool(int pool)
   {
     for (auto& p : _buffers) {
-      p.get_raw()->reassign_to_mempool(pool);
+      p._raw->reassign_to_mempool(pool);
     }
   }
 
   void buffer::list::try_assign_to_mempool(int pool)
   {
     for (auto& p : _buffers) {
-      p.get_raw()->try_assign_to_mempool(pool);
+      p._raw->try_assign_to_mempool(pool);
     }
   }
 
@@ -1166,7 +1166,7 @@ static ceph::spinlock debug_lock;
     std::vector<const raw*> raw_vec;
     raw_vec.reserve(_buffers.size());
     for (const auto& p : _buffers)
-      raw_vec.push_back(p.get_raw());
+      raw_vec.push_back(p._raw);
     std::sort(raw_vec.begin(), raw_vec.end());
 
     uint64_t total = 0;
@@ -1311,7 +1311,7 @@ static ceph::spinlock debug_lock;
       auto curbuf_prev = bl._buffers.before_begin();
 
       while (curbuf != bl._buffers.end()) {
-	const auto* const raw = curbuf->get_raw();
+	const auto* const raw = curbuf->_raw;
 	if (unlikely(raw && !raw->is_shareable())) {
 	  auto* clone = ptr_node::copy_hypercombined(*curbuf);
 	  curbuf = bl._buffers.erase_after_and_dispose(curbuf_prev);
@@ -1485,8 +1485,7 @@ static ceph::spinlock debug_lock;
     ceph_assert(len+off <= bp.length());
     if (!_buffers.empty()) {
       ptr &l = _buffers.back();
-      if (l.get_raw() == bp.get_raw() &&
-	  l.end() == bp.start() + off) {
+      if (l._raw == bp._raw && l.end() == bp.start() + off) {
 	// yay contiguous with tail bp!
 	l.set_length(l.length()+len);
 	_len += len;
@@ -2023,7 +2022,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 
   for (const auto& node : _buffers) {
     if (node.length()) {
-      raw* const r = node.get_raw();
+      raw* const r = node._raw;
       pair<size_t, size_t> ofs(node.offset(), node.offset() + node.length());
       pair<uint32_t, uint32_t> ccrc;
       if (r->get_crc(ofs, &ccrc)) {
@@ -2067,9 +2066,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
 void buffer::list::invalidate_crc()
 {
   for (const auto& node : _buffers) {
-    raw* const r = node.get_raw();
-    if (r) {
-      r->invalidate_crc();
+    if (node._raw) {
+      node._raw->invalidate_crc();
     }
   }
 }
@@ -2193,7 +2191,7 @@ bool buffer::ptr_node::dispose_if_hypercombined(
   buffer::ptr_node* const delete_this)
 {
   const bool is_hypercombined = static_cast<void*>(delete_this) == \
-    static_cast<void*>(&delete_this->get_raw()->bptr_storage);
+    static_cast<void*>(&delete_this->_raw->bptr_storage);
   if (is_hypercombined) {
     ceph_assert_always("hypercombining is currently disabled" == nullptr);
     delete_this->~ptr_node();
@@ -2217,14 +2215,14 @@ buffer::ptr_node* buffer::ptr_node::copy_hypercombined(
   // FIXME: we don't currently hypercombine buffers due to crashes
   // observed in the rados suite. After fixing we'll use placement
   // new to create ptr_node on buffer::raw::bptr_storage.
-  auto raw_new = copy_this.get_raw()->clone();
+  auto raw_new = copy_this._raw->clone();
   return new ptr_node(copy_this, std::move(raw_new));
 }
 
 buffer::ptr_node* buffer::ptr_node::cloner::operator()(
   const buffer::ptr_node& clone_this)
 {
-  const raw* const raw_this = clone_this.get_raw();
+  const raw* const raw_this = clone_this._raw;
   if (likely(!raw_this || raw_this->is_shareable())) {
     return new ptr_node(clone_this);
   } else {

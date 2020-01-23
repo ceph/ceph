@@ -183,6 +183,8 @@ inline namespace v14_2_0 {
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */
   class CEPH_BUFFER_API ptr {
+    friend class list;
+  protected:
     raw *_raw;
   public: // dirty hack for testing; if it works, this will be abstracted
     unsigned _off, _len;
@@ -306,7 +308,6 @@ inline namespace v14_2_0 {
     void try_assign_to_mempool(int pool);
 
     // accessors
-    raw *get_raw() const { return _raw; }
     const char *c_str() const;
     char *c_str();
     const char *end_c_str() const;
