@@ -353,14 +353,13 @@ void rgw_sync_bucket_pipes::get_potential_related_buckets(const rgw_bucket& buck
 
 bool rgw_sync_data_flow_group::find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group)
 {
-  if (!symmetrical) {
+  if (symmetrical.empty()) {
     if (!create) {
       return false;
     }
-    symmetrical.emplace();
   }
 
-  for (auto& group : *symmetrical) {
+  for (auto& group : symmetrical) {
     if (flow_id == group.id) {
       *flow_group = &group;
       return true;
@@ -371,7 +370,7 @@ bool rgw_sync_data_flow_group::find_symmetrical(const string& flow_id, bool crea
     return false;
   }
 
-  auto& group = symmetrical->emplace_back();
+  auto& group = symmetrical.emplace_back();
   *flow_group = &group;
   (*flow_group)->id = flow_id;
   return true;
@@ -379,11 +378,11 @@ bool rgw_sync_data_flow_group::find_symmetrical(const string& flow_id, bool crea
 
 void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::optional<std::vector<rgw_zone_id> > zones)
 {
-  if (!symmetrical) {
+  if (symmetrical.empty()) {
     return;
   }
 
-  auto& groups = *symmetrical;
+  auto& groups = symmetrical;
 
   auto iter = groups.begin();
 
@@ -392,7 +391,7 @@ void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::op
       if (!zones) {
         groups.erase(iter);
         if (groups.empty()) {
-          symmetrical.reset();
+          symmetrical.clear();
         }
         return;
       }
@@ -414,20 +413,19 @@ void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::op
     groups.erase(iter);
   }
   if (groups.empty()) {
-    symmetrical.reset();
+    symmetrical.clear();
   }
 }
 
 bool rgw_sync_data_flow_group::find_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone, bool create, rgw_sync_directional_rule **flow_group)
 {
-  if (!directional) {
+  if (directional.empty()) {
     if (!create) {
       return false;
     }
-    directional.emplace();
   }
 
-  for (auto& rule : *directional) {
+  for (auto& rule : directional) {
     if (source_zone == rule.source_zone &&
         dest_zone == rule.dest_zone) {
       *flow_group = &rule;
@@ -439,7 +437,7 @@ bool rgw_sync_data_flow_group::find_directional(const rgw_zone_id& source_zone, 
     return false;
   }
 
-  auto& rule = directional->emplace_back();
+  auto& rule = directional.emplace_back();
   *flow_group = &rule;
 
   rule.source_zone = source_zone;
@@ -450,18 +448,15 @@ bool rgw_sync_data_flow_group::find_directional(const rgw_zone_id& source_zone, 
 
 void rgw_sync_data_flow_group::remove_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone)
 {
-  if (!directional) {
+  if (directional.empty()) {
     return;
   }
 
-  for (auto iter = directional->begin(); iter != directional->end(); ++iter) {
+  for (auto iter = directional.begin(); iter != directional.end(); ++iter) {
     auto& rule = *iter;
     if (source_zone == rule.source_zone &&
         dest_zone == rule.dest_zone) {
-      directional->erase(iter);
-      if (directional->empty()) {
-        directional.reset();
-      }
+      directional.erase(iter);
       return;
     }
   }
@@ -469,8 +464,8 @@ void rgw_sync_data_flow_group::remove_directional(const rgw_zone_id& source_zone
 
 void rgw_sync_data_flow_group::init_default(const std::set<rgw_zone_id>& zones)
 {
-  symmetrical.emplace();
-  symmetrical->push_back(rgw_sync_symmetric_group("default", zones));
+  symmetrical.clear();
+  symmetrical.push_back(rgw_sync_symmetric_group("default", zones));
 }
 
 bool rgw_sync_policy_group::find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipes **pipe)

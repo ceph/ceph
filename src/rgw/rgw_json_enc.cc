@@ -1054,8 +1054,13 @@ void rgw_sync_bucket_pipes::decode_json(JSONObj *obj)
 
 void rgw_sync_data_flow_group::dump(Formatter *f) const
 {
-  encode_json("symmetrical", symmetrical, f);
-  encode_json("directional", directional, f);
+  if (!symmetrical.empty()) {
+    encode_json("symmetrical", symmetrical, f);
+  }
+
+  if (!directional.empty()) {
+    encode_json("directional", directional, f);
+  }
 }
 
 void rgw_sync_data_flow_group::decode_json(JSONObj *obj)
