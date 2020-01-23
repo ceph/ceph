@@ -841,6 +841,11 @@ bool RGWSI_Zone::zone_is_writeable()
   return writeable_zone && !get_zone().is_read_only();
 }
 
+bool RGWSI_Zone::sync_module_supports_writes() const
+{
+  return writeable_zone;
+}
+
 uint32_t RGWSI_Zone::get_zone_short_id() const
 {
   return zone_short_id;
