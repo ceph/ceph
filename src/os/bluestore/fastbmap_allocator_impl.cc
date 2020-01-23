@@ -286,7 +286,7 @@ void AllocatorLevel01Loose::_mark_alloc_l0(int64_t l0_pos_start,
 
   int64_t pos = l0_pos_start;
   slot_t bits = (slot_t)1 << (l0_pos_start % d0);
-  slot_t* val_s = &l0[pos / d0];
+  slot_t* val_s = l0.data() + (pos / d0);
   int64_t pos_e = std::min(l0_pos_end, p2roundup<int64_t>(l0_pos_start + 1, d0));
   while (pos < pos_e) {
     (*val_s) &= ~bits;
