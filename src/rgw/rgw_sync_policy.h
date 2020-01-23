@@ -577,9 +577,9 @@ struct rgw_sync_data_flow_group {
     return (symmetrical.empty() && directional.empty());
   }
 
-  bool find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group);
+  bool find_or_create_symmetrical(const string& flow_id, rgw_sync_symmetric_group **flow_group);
   void remove_symmetrical(const string& flow_id, std::optional<std::vector<rgw_zone_id> > zones);
-  bool find_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone, bool create, rgw_sync_directional_rule **flow_group);
+  bool find_or_create_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone, rgw_sync_directional_rule **flow_group);
   void remove_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone);
 
   void init_default(const std::set<rgw_zone_id>& zones);

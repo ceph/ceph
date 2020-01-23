@@ -637,10 +637,9 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
       if (z1.syncs_from(z2.name)) {
         found = true;
         rgw_sync_directional_rule *rule;
-        group.data_flow.find_directional(id2,
-                                         id1,
-                                         true,
-                                         &rule);
+        group.data_flow.find_or_create_directional(id2,
+                                                   id1,
+                                                   &rule);
       }
     }
   }
