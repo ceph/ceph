@@ -388,8 +388,12 @@ private:
       : base_t(::seastar::make_ready_future<ValuesT...>(std::forward<A>(a)...)) {
     }
     [[gnu::always_inline]]
-    _future(exception_future_marker, std::exception_ptr&& ep)
-      : base_t(::seastar::make_exception_future<ValuesT...>(std::move(ep))) {
+    _future(exception_future_marker, ::seastar::future_state_base&& state) noexcept
+      : base_t(::seastar::futurize<base_t>::make_exception_future(std::move(state))) {
+    }
+    [[gnu::always_inline]]
+    _future(exception_future_marker, std::exception_ptr&& ep) noexcept
+      : base_t(::seastar::futurize<base_t>::make_exception_future(std::move(ep))) {
     }
 
     template <template <class...> class ErroratedFuture,
@@ -700,6 +704,11 @@ public:
   static
   future<T...> make_exception_future2(std::exception_ptr&& ex) noexcept {
     return future<T...>(exception_future_marker(), std::move(ex));
+  }
+  template <typename... T>
+  static
+  future<T...> make_exception_future2(seastar::future_state_base&& state) noexcept {
+    return future<T...>(exception_future_marker(), std::move(state));
   }
   template <typename... T, typename Exception>
   static
