@@ -640,23 +640,25 @@ def infer_fsid(func):
             logger.debug('Using specified fsid: %s' % args.fsid)
             return func()
 
-        fsid_list = []
-        if os.path.exists(args.data_dir):
-            for i in os.listdir(args.data_dir):
-                if is_fsid(i):
-                    fsid_list.append(i)
-        logger.debug('Found fsids %s' % str(fsid_list))
+        fsids = set()
+        daemon_list = list_daemons(detail=False)
+        for daemon in daemon_list:
+            if 'name' not in args or not args.name:
+                fsids.add(daemon['fsid'])
+            elif daemon['name'] == args.name:
+                fsids.add(daemon['fsid'])
+        fsids = list(fsids)
 
-        if not fsid_list:
-            # TODO: raise?
-            return func()
-
-        if len(fsid_list) > 1:
-            raise Error('cannot infer fsid, must specify --fsid')
-
-        logger.info('Inferring fsid %s' % fsid_list[0])
-        args.fsid = fsid_list[0]
+        if not fsids:
+            # some commands do not always require an fsid
+            pass
+        elif len(fsids) == 1:
+            logger.info('Inferring fsid %s' % fsids[0])
+            args.fsid = fsids[0]
+        else:
+            raise Error('Cannot infer an fsid, one must be specified: %s' % fsids)
         return func()
+
     return _infer_fsid
 
 def write_tmp(s, uid, gid):
@@ -1997,6 +1999,10 @@ def command_shell():
     else:
         daemon_type = 'osd'  # get the most mounts
         daemon_id = None
+
+    if daemon_id and not args.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
                                   no_config=True if args.config else False)
     if args.config:
