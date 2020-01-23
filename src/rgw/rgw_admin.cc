@@ -8226,7 +8226,7 @@ next:
 
       rgw_sync_symmetric_group *flow_group;
 
-      group.data_flow.find_symmetrical(*opt_flow_id, true, &flow_group);
+      group.data_flow.find_or_create_symmetrical(*opt_flow_id, &flow_group);
 
       for (auto& z : *opt_zone_ids) {
         flow_group->zones.insert(z);
@@ -8237,7 +8237,7 @@ next:
 
       rgw_sync_directional_rule *flow_rule;
 
-      group.data_flow.find_directional(*opt_source_zone_id, *opt_dest_zone_id, true, &flow_rule);
+      group.data_flow.find_or_create_directional(*opt_source_zone_id, *opt_dest_zone_id, &flow_rule);
     }
 
     ret = sync_policy_ctx.write_policy();
