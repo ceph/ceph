@@ -10,6 +10,7 @@ import {
   OnDestroy,
   OnInit,
   Output,
+  PipeTransform,
   TemplateRef,
   ViewChild
 } from '@angular/core';
@@ -20,12 +21,15 @@ import {
   SortPropDir,
   TableColumnProp
 } from '@swimlane/ngx-datatable';
+import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
 import * as _ from 'lodash';
 import { Observable, timer as observableTimer } from 'rxjs';
 
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
+import { CdTableColumnFilter } from '../../models/cd-table-column-filter';
+import { CdTableColumnFiltersChange } from '../../models/cd-table-column-filters-change';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../models/cd-table-selection';
 import { CdUserConfig } from '../../models/cd-user-config';
@@ -122,6 +126,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Input()
   customCss?: { [css: string]: number | string | ((any) => boolean) };
 
+  // Columns that aren't displayed but can be used as filters
+  @Input()
+  extraFilterableColumns: CdTableColumn[] = [];
+
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
@@ -144,6 +152,16 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    */
   @Output()
   updateSelection = new EventEmitter();
+
+  /**
+   * This should be defined if you need access to the applied column filters.
+   *
+   * Each time the column filters changes, this will be triggered and
+   * the column filters change event will be sent.
+   *
+   * @memberof TableComponent
+   */
+  @Output() columnFiltersChanged = new EventEmitter<CdTableColumnFiltersChange>();
 
   /**
    * Use this variable to access the selected row(s).
@@ -175,6 +193,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Internal variable to check if it is necessary to recalculate the
   // table columns after the browser window has been resized.
   private currentWidth: number;
+
+  columnFilters: CdTableColumnFilter[] = [];
+  selectedFilter: CdTableColumnFilter;
+  get columnFiltered(): boolean {
+    return _.some(this.columnFilters, (filter) => {
+      return filter.value !== undefined;
+    });
+  }
 
   constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
 
@@ -222,6 +248,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
     this.initCheckboxColumn();
     this.filterHiddenColumns();
+    this.initColumnFilters();
+    this.updateColumnFilterOptions();
     // Load the data table content every N ms or at least once.
     // Force showing the loading indicator if there are subscribers to the fetchData
     // event. This is necessary because it has been set to False in useData() when
@@ -339,6 +367,112 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.tableColumns = this.columns.filter((c) => !c.isHidden);
   }
 
+  initColumnFilters() {
+    let filterableColumns = _.filter(this.columns, { filterable: true });
+    filterableColumns = [...filterableColumns, ...this.extraFilterableColumns];
+    this.columnFilters = filterableColumns.map((col: CdTableColumn) => {
+      return {
+        column: col,
+        options: [],
+        value: col.filterInitValue
+          ? this.createColumnFilterOption(col.filterInitValue, col.pipe)
+          : undefined
+      };
+    });
+    this.selectedFilter = _.first(this.columnFilters);
+  }
+
+  private createColumnFilterOption(
+    value: any,
+    pipe?: PipeTransform
+  ): { raw: string; formatted: string } {
+    return {
+      raw: _.toString(value),
+      formatted: pipe ? pipe.transform(value) : _.toString(value)
+    };
+  }
+
+  updateColumnFilterOptions() {
+    // update all possible values in a column
+    this.columnFilters.forEach((filter) => {
+      let values: any[] = [];
+
+      if (_.isUndefined(filter.column.filterOptions)) {
+        // only allow types that can be easily converted into string
+        const pre = _.filter(_.map(this.data, filter.column.prop), (v) => {
+          return (_.isString(v) && v !== '') || _.isBoolean(v) || _.isFinite(v) || _.isDate(v);
+        });
+        values = _.sortedUniq(pre.sort());
+      } else {
+        values = filter.column.filterOptions;
+      }
+
+      const options = values.map((v) => this.createColumnFilterOption(v, filter.column.pipe));
+
+      // In case a previous value is not available anymore
+      if (filter.value && _.isUndefined(_.find(options, { raw: filter.value.raw }))) {
+        filter.value = undefined;
+      }
+
+      filter.options = options;
+    });
+  }
+
+  onSelectFilter(filter: CdTableColumnFilter) {
+    this.selectedFilter = filter;
+  }
+
+  onChangeFilter(filter: CdTableColumnFilter, option?: { raw: string; formatted: string }) {
+    filter.value = _.isEqual(filter.value, option) ? undefined : option;
+    this.updateFilter();
+  }
+
+  doColumnFiltering() {
+    const appliedFilters: CdTableColumnFiltersChange['filters'] = [];
+    let data = [...this.data];
+    let dataOut = [];
+    this.columnFilters.forEach((filter) => {
+      if (filter.value === undefined) {
+        return;
+      }
+      appliedFilters.push({
+        name: filter.column.name,
+        prop: filter.column.prop,
+        value: filter.value
+      });
+      // Separate data to filtered and filtered-out parts.
+      const parts = _.partition(data, (row) => {
+        // Use getter from ngx-datatable to handle props like 'sys_api.size'
+        const valueGetter = getterForProp(filter.column.prop);
+        const value = valueGetter(row, filter.column.prop);
+        if (_.isUndefined(filter.column.filterPredicate)) {
+          // By default, test string equal
+          return `${value}` === filter.value.raw;
+        } else {
+          // Use custom function to filter
+          return filter.column.filterPredicate(row, filter.value.raw);
+        }
+      });
+      data = parts[0];
+      dataOut = [...dataOut, ...parts[1]];
+    });
+
+    this.columnFiltersChanged.emit({
+      filters: appliedFilters,
+      data: data,
+      dataOut: dataOut
+    });
+
+    // Remove the selection if previously-selected rows are filtered out.
+    _.forEach(this.selection.selected, (selectedItem) => {
+      if (_.find(data, { [this.identifier]: selectedItem[this.identifier] }) === undefined) {
+        this.selection = new CdTableSelection();
+        this.onSelect(this.selection);
+      }
+    });
+    return data;
+  }
+
   ngOnDestroy() {
     if (this.reloadSubscriber) {
       this.reloadSubscriber.unsubscribe();
@@ -439,11 +573,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.data) {
       return; // Wait for data
     }
-    if (this.search.length > 0) {
-      this.updateFilter();
-    } else {
-      this.rows = [...this.data];
-    }
+    this.updateColumnFilterOptions();
+    this.updateFilter();
     this.reset();
     this.updateSelected();
   }
@@ -525,15 +656,31 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.userConfig.sorts = sorts;
   }
 
-  updateFilter(clearSearch = false) {
-    if (clearSearch) {
-      this.search = '';
+  onClearSearch() {
+    this.search = '';
+    this.updateFilter();
+  }
+
+  onClearFilters() {
+    this.columnFilters.forEach((filter) => {
+      filter.value = undefined;
+    });
+    this.selectedFilter = _.first(this.columnFilters);
+    this.updateFilter();
+  }
+
+  updateFilter() {
+    let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
+
+    if (this.search.length > 0) {
+      const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
+      // update the rows
+      rows = this.subSearch(rows, TableComponent.prepareSearch(this.search), columns);
+      // Whenever the filter changes, always go back to the first page
+      this.table.offset = 0;
     }
-    const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
-    // update the rows
-    this.rows = this.subSearch(this.data, TableComponent.prepareSearch(this.search), columns);
-    // Whenever the filter changes, always go back to the first page
-    this.table.offset = 0;
+
+    this.rows = rows;
   }
 
   subSearch(data: any[], currentSearch: string[], columns: CdTableColumn[]) {
