@@ -702,11 +702,11 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add rgw',
-        'name=realm_name,type=CephString '
-        'name=zone_name,type=CephString '
+        'name=realm_name,type=CephString,req=false '
+        'name=zone_name,type=CephString,req=false '
         'name=placement,type=CephString,req=false',
         'Start RGW daemon(s)')
-    def _rgw_add(self, realm_name, zone_name, placement=None, inbuf=None):
+    def _rgw_add(self, realm_name=None, zone_name=None, placement=None, inbuf=None):
         usage = """
 Usage:
   ceph orch daemon rgw add -i <json_file>
@@ -718,11 +718,13 @@ Usage:
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        rgw_spec = RGWSpec(
-            rgw_realm=realm_name,
-            rgw_zone=zone_name,
-            placement=PlacementSpec.from_string(placement),
-        )
+        elif realm_name and zone_name:
+            rgw_spec = RGWSpec(
+                rgw_realm=realm_name,
+                rgw_zone=zone_name,
+                placement=PlacementSpec.from_string(placement))
+        else:
+            return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
         completion = self.add_rgw(rgw_spec)
         self._orchestrator_wait([completion])
