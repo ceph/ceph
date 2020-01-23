@@ -787,7 +787,7 @@ void ConfigMonitor::load_config()
 	pending_cleanup["global/"s + key] = it->value();
       }
       Section *section = &config_map.global;;
-      if (section_name.size()) {
+      if (section_name.size() && section_name != "global") {
 	if (section_name.find('.') != std::string::npos) {
 	  section = &config_map.by_id[section_name];
 	} else {
