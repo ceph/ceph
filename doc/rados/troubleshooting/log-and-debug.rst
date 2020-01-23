@@ -449,7 +449,7 @@ OSD
 :Description: The minimum number of log entries for placement groups. 
 :Type: 32-bit Unsigned Integer
 :Required: No
-:Default: 1000
+:Default: 250
 
 
 ``osd op log threshold``
