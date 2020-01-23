@@ -73,18 +73,26 @@ void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
                                                std::set<rgw_sync_bucket_entity> *hint_entities,
                                                optional_yield y)
 {
-  for (auto& zone : zones) {
-    for (auto& b : buckets) {
-      RGWBucketInfo hint_bucket_info;
-      int ret = svc.bucket_sobj->read_bucket_info(ctx, b, &hint_bucket_info,
-                                                  nullptr, nullptr, boost::none,
-                                                  y);
-      if (ret < 0) {
-	ldout(cct, 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
-	continue;
-      }
+  vector<rgw_bucket> hint_buckets;
 
-      hint_entities->insert(rgw_sync_bucket_entity(zone, hint_bucket_info.bucket));
+  hint_buckets.reserve(buckets.size());
+
+  for (auto& b : buckets) {
+    RGWBucketInfo hint_bucket_info;
+    int ret = svc.bucket_sobj->read_bucket_info(ctx, b, &hint_bucket_info,
+                                                nullptr, nullptr, boost::none,
+                                                y);
+    if (ret < 0) {
+      ldout(cct, 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+      continue;
+    }
+
+    hint_buckets.emplace_back(std::move(hint_bucket_info.bucket));
+  }
+
+  for (auto& zone : zones) {
+    for (auto& b : hint_buckets) {
+      hint_entities->insert(rgw_sync_bucket_entity(zone, b));
     }
   }
 }
