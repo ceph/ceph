@@ -1480,7 +1480,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   // current epoch and sorts after the current instance
   const bool promote = (olh.get_epoch() > prev_epoch) ||
       (olh.get_epoch() == prev_epoch &&
-       olh.get_entry().key.instance > op.key.instance);
+       olh.get_entry().key.instance >= op.key.instance);
 
   if (olh_found) {
     const string& olh_tag = olh.get_tag();
