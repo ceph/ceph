@@ -43,12 +43,14 @@ class raw_seastar_local_ptr : public raw {
 
 inline namespace v14_2_0 {
 
-raw* create_foreign(temporary_buffer&& buf) {
-  return new raw_seastar_foreign_ptr(std::move(buf));
+ceph::unique_leakable_ptr<buffer::raw> create_foreign(temporary_buffer&& buf) {
+  return ceph::unique_leakable_ptr<buffer::raw>(
+    new raw_seastar_foreign_ptr(std::move(buf)));
 }
 
-raw* create(temporary_buffer&& buf) {
-  return new raw_seastar_local_ptr(std::move(buf));
+ceph::unique_leakable_ptr<buffer::raw> create(temporary_buffer&& buf) {
+  return ceph::unique_leakable_ptr<buffer::raw>(
+    new raw_seastar_local_ptr(std::move(buf)));
 }
 
 } // inline namespace v14_2_0
@@ -99,8 +101,8 @@ public:
 
 buffer::ptr seastar_buffer_iterator::get_ptr(size_t len)
 {
-  buffer::raw* r = new raw_seastar_local_shared_ptr{buf};
-  buffer::ptr p{r};
+  buffer::ptr p{ceph::unique_leakable_ptr<buffer::raw>(
+    new raw_seastar_local_shared_ptr{buf})};
   p.set_length(len);
   return p;
 }
