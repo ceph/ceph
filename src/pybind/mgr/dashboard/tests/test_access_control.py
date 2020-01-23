@@ -718,10 +718,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         })
 
     def test_load_v2(self):
-        """
-        The `enabled` and `pwdExpirationDate` attributes of a user have been added in v2
-        """
-        self.CONFIG_KEY_DICT['accessdb_v1'] = '''
+        self.CONFIG_KEY_DICT['accessdb_v2'] = '''
             {{
                 "users": {{
                     "admin": {{
@@ -746,7 +743,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                         }}
                     }}
                 }},
-                "version": 1
+                "version": 2
             }}
         '''.format(int(round(time.time())), Scope.ISCSI, Permission.READ,
                    Permission.UPDATE, Scope.POOL, Permission.CREATE)
