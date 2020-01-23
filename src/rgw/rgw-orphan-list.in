@@ -28,9 +28,9 @@ error_out() {
 }
 
 echo "Available pools:"
-rados lspools >$temp_file 2>$lspools_err
+rados lspools >"$temp_file" 2>"$lspools_err"
 if [ "$?" -ne 0 ] ;then
-    error_out "rados lspools" $lspools_err
+    error_out "rados lspools" "$lspools_err"
 fi
 sed 's/^/    /' $temp_file # list pools and indent
 printf "Which pool do you want to search for orphans? "
@@ -39,17 +39,17 @@ read pool
 echo "Note: files produced will be tagged with the current timestamp -- ${timestamp}."
 
 echo "running 'rados ls' at $(date)"
-rados ls --pool="$pool" >$rados_out 2>$rados_err
+rados ls --pool="$pool" >"$rados_out" 2>"$rados_err"
 if [ "$?" -ne 0 ] ;then
-    error_out "rados ls" $rados_err
+    error_out "rados ls" "$rados_err"
 fi
 sort -u "$rados_out" >"$temp_file"
 mv -f "$temp_file" "$rados_out"
 
 echo "running 'radosgw-admin bucket radoslist' at $(date)"
-radosgw-admin bucket radoslist >$rgwadmin_out 2>$rgwadmin_err
+radosgw-admin bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
 if [ "$?" -ne 0 ] ;then
-    error_out "radosgw-admin radoslist" $rgwadmin_err
+    error_out "radosgw-admin radoslist" "$rgwadmin_err"
 fi
 sort -u "$rgwadmin_out" >"$temp_file"
 mv -f "$temp_file" "$rgwadmin_out"
