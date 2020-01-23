@@ -230,6 +230,7 @@ Server::Server(MDSRank *m) :
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
+  delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -1150,6 +1151,9 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
     max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
     dout(20) << __func__ << " max snapshots per directory changed to "
             << max_snaps_per_dir << dendl;
+  }
+  if (changed.count("mds_client_delegate_inos_pct")) {
+    delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
   }
 }
 
@@ -4375,10 +4379,9 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     dout(10) << "adding created_ino and delegated_inos" << dendl;
     ocresp.created_ino = in->inode.ino;
 
-    // Try to delegate some prealloc_inos to the client, if it's down to half the max
-    auto pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
-    if (pct) {
-      unsigned frac = 100 / pct;
+    if (delegate_inos_pct && !req->is_queued_for_replay()) {
+      // Try to delegate some prealloc_inos to the client, if it's down to half the max
+      unsigned frac = 100 / delegate_inos_pct;
       if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
 	mdr->session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
     }
