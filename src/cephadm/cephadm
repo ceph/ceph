@@ -608,6 +608,16 @@ def generate_password():
     return ''.join(random.choice(string.ascii_lowercase + string.digits)
                    for i in range(10))
 
+def normalize_container_id(i):
+    # docker adds the sha256: prefix, but AFAICS both
+    # docker (18.09.7 in bionic at least) and podman
+    # both always use sha256, so leave off the prefix
+    # for consistency.
+    prefix = 'sha256:'
+    if i.startswith(prefix):
+        i = i[len(prefix):]
+    return i
+
 def make_fsid():
     # type: () -> str
     return str(uuid.uuid1())
@@ -1536,9 +1546,10 @@ def command_pull():
         '--format', '{{.Id}}',
         args.image])
     ver = CephContainer(args.image, 'ceph', ['--version']).run()
+    image_id = normalize_container_id(out.strip())
     print(json.dumps({
-        'ceph_version': ver,
-        'image_id': out.strip(),
+        'ceph_version': ver.strip(),
+        'image_id': image_id,
         }, indent=4, sort_keys=True))
 
 
@@ -2188,13 +2199,7 @@ def list_daemons(detail=True, legacy_dir=None):
                             verbose_on_failure=False)
                         if not code:
                             (container_id, image_name, image_id) = out.strip().split(',')
-                            # docker adds the sha256: prefix, but AFAICS both
-                            # docker (18.09.7 in bionic at least) and podman
-                            # both always use sha256, so leave off the prefix
-                            # for consistency.
-                            prefix = 'sha256:'
-                            if image_name.startswith(prefix):
-                                image_name = image_name[len(prefix):]
+                            image_id = normalize_container_id(image_id)
                             out, err, code = call(
                                 [container_path, 'exec', container_id,
                                  'ceph', '-v'])
