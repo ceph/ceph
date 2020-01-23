@@ -7,6 +7,7 @@ overrides:
     conf:
       global:
         ms bind msgr2: false
+        mon_warn_on_msgr2_not_enabled: false
       mon:
         mon osd initial require min compat client: hammer
 tasks:

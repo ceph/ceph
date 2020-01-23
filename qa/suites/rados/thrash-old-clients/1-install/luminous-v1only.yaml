@@ -7,6 +7,7 @@ overrides:
       global:
         ms type: async
         ms bind msgr2: false
+        mon warn on msgr2 not enabled: false
 tasks:
 - install:
     branch: luminous
