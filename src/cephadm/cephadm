@@ -1988,6 +1988,10 @@ def command_shell():
     else:
         daemon_type = 'osd'  # get the most mounts
         daemon_id = None
+
+    if daemon_id and not args.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
                                   no_config=True if args.config else False)
     if args.config:
