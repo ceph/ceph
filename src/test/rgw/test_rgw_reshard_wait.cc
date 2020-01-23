@@ -13,7 +13,9 @@
  */
 
 #include "rgw/rgw_reshard.h"
+#ifdef HAVE_BOOST_CONTEXT
 #include <spawn/spawn.hpp>
+#endif
 
 #include <gtest/gtest.h>
 
