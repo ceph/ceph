@@ -250,6 +250,7 @@ def remove_ceph_packages(ctx):
     for remote in ctx.cluster.remotes.keys():
         if remote.os.package_type == 'rpm':
             log.info("Remove any broken repos")
+            dist_release = remote.os.name
             remote.run(
                 args=['sudo', 'rm', run.Raw("/etc/yum.repos.d/*ceph*")],
                 check_status=False
@@ -267,14 +268,18 @@ def remove_ceph_packages(ctx):
                 check_status=False,
             )
             remote.run(
-                args=['sudo', 'rpm', '--rebuilddb', run.Raw('&&'), 'yum',
-                      'clean', 'all']
+                args=['sudo', 'rpm', '--rebuilddb']
             )
-            log.info('Remove any ceph packages')
-            remote.run(
-                args=['sudo', 'yum', 'remove', '-y', run.Raw(pkgs)],
-                check_status=False
-            )
+            if dist_release in ['opensuse', 'sle']:
+                remote.sh('sudo zypper clean')
+                log.info('Remove any ceph packages')
+                remote.sh('sudo zypper remove --non-interactive',
+                    check_status=False
+                )
+            else:
+                remote.sh('sudo yum clean all')
+                log.info('Remove any ceph packages')
+                remote.sh('sudo yum remove -y', check_status=False)
         else:
             log.info("Remove any broken repos")
             remote.run(
@@ -340,7 +345,6 @@ def remove_ceph_data(ctx):
             run.Raw('/var/run/ceph*'),
         ],
     )
-    install_task.purge_data(ctx)
 
 
 def remove_testing_tree(ctx):
