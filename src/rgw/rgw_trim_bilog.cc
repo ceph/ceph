@@ -500,7 +500,8 @@ int BucketTrimInstanceCR::operate()
           { "type", "bucket-index" },
           { "status", nullptr },
           { "options", "merge" },
-          { "source-bucket", bucket_instance.c_str() },
+          { "bucket", bucket_instance.c_str() }, /* equal to source-bucket when `options==merge` and source-bucket
+                                                    param is not provided */
           { "source-zone", zone_id.c_str() },
           { nullptr, nullptr }
         };
