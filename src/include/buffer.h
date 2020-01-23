@@ -186,7 +186,6 @@ inline namespace v14_2_0 {
     friend class list;
   protected:
     raw *_raw;
-  public: // dirty hack for testing; if it works, this will be abstracted
     unsigned _off, _len;
   private:
 
