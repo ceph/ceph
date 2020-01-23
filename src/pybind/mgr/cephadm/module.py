@@ -390,12 +390,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if s.service_type not in ['mon', 'osd', 'mds']:
                 break
             ret, out, err = self.mon_command({
-                'prefix': '%s ok-to-stop',
+                'prefix': '%s ok-to-stop' % s.service_type,
                 'ids': [s.service_instance],
             })
             if not self.upgrade_state or self.upgrade_state.get('paused'):
                 return False
-            if err:
+            if ret:
                 self.log.info('Upgrade: not safe to stop %s.%s' %
                               (s.service_type, s.service_instance))
                 time.sleep(15)
@@ -404,6 +404,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 self.log.info('Upgrade: safe to stop %s.%s' %
                               (s.service_type, s.service_instance))
                 return True
+        self.log.info('Upgrade: safe to stop %s.%s' %
+                      (s.service_type, s.service_instance))
+        return True
 
     def _clear_health_checks(self):
         self.health_checks = {}
@@ -438,29 +441,36 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for d in daemons:
                 if d.service_type != daemon_type:
                     continue
-                if daemon_type == 'mgr' and \
-                   d.service_instance == self.get_mgr_id():
+                if d.container_image_id == target_id:
+                    self.log.debug('daemon %s.%s version correct' % (
+                        daemon_type, d.service_instance))
+                    continue
+                self.log.debug('daemon %s.%s version incorrect (%s, %s)' % (
+                    daemon_type, d.service_instance,
+                    d.container_image_id, d.version))
+
+                if d.service_instance == self.get_mgr_id():
                     self.log.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                   self.get_mgr_id())
                     need_upgrade_self = True
                     continue
-                if d.container_image_id != target_id:
-                    if not self._wait_for_ok_to_stop(d):
-                        return None
-                    self.log.info('Upgrade: Redeploying %s.%s' %
-                                  (d.service_type, d.service_instance))
-                    ret, out, err = self.mon_command({
-                        'prefix': 'config set',
-                        'name': 'container_image',
-                        'value': target_name,
-                        'who': daemon_type + '.' + d.service_instance,
-                    })
-                    return self._service_action([(
-                        d.service_type,
-                        d.service_instance,
-                        d.nodename,
-                        'redeploy'
-                    )])
+
+                if not self._wait_for_ok_to_stop(d):
+                    return None
+                self.log.info('Upgrade: Redeploying %s.%s' %
+                              (d.service_type, d.service_instance))
+                ret, out, err = self.mon_command({
+                    'prefix': 'config set',
+                    'name': 'container_image',
+                    'value': target_name,
+                    'who': daemon_type + '.' + d.service_instance,
+                })
+                return self._service_action([(
+                    d.service_type,
+                    d.service_instance,
+                    d.nodename,
+                    'redeploy'
+                )])
 
             if need_upgrade_self:
                 mgr_map = self.get('mgr_map')
