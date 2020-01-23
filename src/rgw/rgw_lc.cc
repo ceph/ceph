@@ -772,7 +772,9 @@ public:
       r = remove_expired_obj(oc, !oc.bucket_info.versioned());
     }
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " 
+      << oc.bucket_info.bucket << ":" << o.key 
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << dendl;
@@ -801,7 +803,9 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc, true);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
+      << oc.bucket_info.bucket << ":" << o.key 
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << " (non-current expiration)" << dendl;
@@ -832,7 +836,9 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc, true);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj (delete marker expiration) "
+      << oc.bucket_info.bucket << ":" << o.key
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << " (delete marker expiration)" << dendl;
@@ -902,7 +908,10 @@ public:
     int r = oc.store->getRados()->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
                                      target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp, null_yield);
     if (r < 0) {
-      ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
+      ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
+      << oc.bucket_info.bucket << ":" << o.key 
+      << " -> " << transition.storage_class 
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldpp_dout(oc.dpp, 2) << "TRANSITIONED:" << oc.bucket_info.bucket << ":" << o.key << " -> " << transition.storage_class << dendl;
@@ -1009,7 +1018,9 @@ int LCOpRule::process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp)
 
     int r = (*selected)->process(ctx);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " 
+      << env.bucket_info.bucket << ":" << o.key
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldpp_dout(dpp, 20) << "processed:" << env.bucket_info.bucket << ":" << o.key << dendl;
