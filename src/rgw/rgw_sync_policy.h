@@ -553,8 +553,8 @@ std::ostream& operator<<(std::ostream& os, const rgw_sync_bucket_pipes& pipe);
  * Directional: one zone fetches data from another.
  */
 struct rgw_sync_data_flow_group {
-  std::optional<std::vector<rgw_sync_symmetric_group> > symmetrical;
-  std::optional<std::vector<rgw_sync_directional_rule> > directional;
+  std::vector<rgw_sync_symmetric_group> symmetrical;
+  std::vector<rgw_sync_directional_rule> directional;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -574,8 +574,7 @@ struct rgw_sync_data_flow_group {
   void decode_json(JSONObj *obj);
 
   bool empty() const {
-    return ((!symmetrical || symmetrical->empty()) &&
-            (!directional || directional->empty()));
+    return (symmetrical.empty() && directional.empty());
   }
 
   bool find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group);

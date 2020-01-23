@@ -185,30 +185,26 @@ void rgw_sync_group_pipe_map::init(CephContext *cct,
   pall_zones->insert(zone);
 
   /* symmetrical */
-  if (flow.symmetrical) {
-    for (auto& symmetrical_group : *flow.symmetrical) {
-      if (symmetrical_group.zones.find(zone) != symmetrical_group.zones.end()) {
-        for (auto& z : symmetrical_group.zones) {
-          if (z != zone) {
-            pall_zones->insert(z);
-            try_add_source(z, zone, zone_pipes, filter_cb);
-            try_add_dest(zone, z, zone_pipes, filter_cb);
-          }
+  for (auto& symmetrical_group : flow.symmetrical) {
+    if (symmetrical_group.zones.find(zone) != symmetrical_group.zones.end()) {
+      for (auto& z : symmetrical_group.zones) {
+        if (z != zone) {
+          pall_zones->insert(z);
+          try_add_source(z, zone, zone_pipes, filter_cb);
+          try_add_dest(zone, z, zone_pipes, filter_cb);
         }
       }
     }
   }
 
   /* directional */
-  if (flow.directional) {
-    for (auto& rule : *flow.directional) {
-      if (rule.source_zone == zone) {
-        pall_zones->insert(rule.dest_zone);
-        try_add_dest(zone, rule.dest_zone, zone_pipes, filter_cb);
-      } else if (rule.dest_zone == zone) {
-        pall_zones->insert(rule.source_zone);
-        try_add_source(rule.source_zone, zone, zone_pipes, filter_cb);
-      }
+  for (auto& rule : flow.directional) {
+    if (rule.source_zone == zone) {
+      pall_zones->insert(rule.dest_zone);
+      try_add_dest(zone, rule.dest_zone, zone_pipes, filter_cb);
+    } else if (rule.dest_zone == zone) {
+      pall_zones->insert(rule.source_zone);
+      try_add_source(rule.source_zone, zone, zone_pipes, filter_cb);
     }
   }
 }
