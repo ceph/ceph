@@ -99,12 +99,14 @@ static ceph::spinlock debug_lock;
 	alignment(align) {
     }
     raw* clone_empty() override {
-      return create(len, alignment);
+      return create(len, alignment).release();
     }
 
-    static raw_combined *create(unsigned len,
-				unsigned align,
-				int mempool = mempool::mempool_buffer_anon) {
+    static ceph::unique_leakable_ptr<buffer::raw>
+    create(unsigned len,
+	   unsigned align,
+	   int mempool = mempool::mempool_buffer_anon)
+    {
       if (!align)
 	align = sizeof(size_t);
       size_t rawlen = round_up_to(sizeof(buffer::raw_combined),
@@ -124,7 +126,8 @@ static ceph::spinlock debug_lock;
 
       // actual data first, since it has presumably larger alignment restriction
       // then put the raw_combined at the end
-      return new (ptr + datalen) raw_combined(ptr, len, align, mempool);
+      return ceph::unique_leakable_ptr<buffer::raw>(
+	new (ptr + datalen) raw_combined(ptr, len, align, mempool));
     }
 
     static void operator delete(void *ptr) {
@@ -314,27 +317,35 @@ static ceph::spinlock debug_lock;
   ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len) {
     return buffer::create_aligned(len, sizeof(size_t));
   }
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create_in_mempool(unsigned len, int mempool) {
+  ceph::unique_leakable_ptr<buffer::raw>
+  buffer::create_in_mempool(unsigned len, int mempool) {
     return buffer::create_aligned_in_mempool(len, sizeof(size_t), mempool);
   }
-  buffer::raw* buffer::claim_char(unsigned len, char *buf) {
-    return new raw_claimed_char(len, buf);
+  ceph::unique_leakable_ptr<buffer::raw>
+  buffer::claim_char(unsigned len, char *buf) {
+    return ceph::unique_leakable_ptr<buffer::raw>(
+      new raw_claimed_char(len, buf));
   }
-  buffer::raw* buffer::create_malloc(unsigned len) {
-    return new raw_malloc(len);
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create_malloc(unsigned len) {
+    return ceph::unique_leakable_ptr<buffer::raw>(new raw_malloc(len));
   }
-  buffer::raw* buffer::claim_malloc(unsigned len, char *buf) {
-    return new raw_malloc(len, buf);
+  ceph::unique_leakable_ptr<buffer::raw>
+  buffer::claim_malloc(unsigned len, char *buf) {
+    return ceph::unique_leakable_ptr<buffer::raw>(new raw_malloc(len, buf));
   }
-  buffer::raw* buffer::create_static(unsigned len, char *buf) {
-    return new raw_static(buf, len);
+  ceph::unique_leakable_ptr<buffer::raw>
+  buffer::create_static(unsigned len, char *buf) {
+    return ceph::unique_leakable_ptr<buffer::raw>(new raw_static(buf, len));
   }
-  buffer::raw* buffer::claim_buffer(unsigned len, char *buf, deleter del) {
-    return new raw_claim_buffer(buf, len, std::move(del));
+  ceph::unique_leakable_ptr<buffer::raw>
+  buffer::claim_buffer(unsigned len, char *buf, deleter del) {
+    return ceph::unique_leakable_ptr<buffer::raw>(
+      new raw_claim_buffer(buf, len, std::move(del)));
   }
 
   ceph::unique_leakable_ptr<buffer::raw> buffer::create_aligned_in_mempool(
-    unsigned len, unsigned align, int mempool) {
+    unsigned len, unsigned align, int mempool)
+  {
     // If alignment is a page multiple, use a separate buffer::raw to
     // avoid fragmenting the heap.
     //
@@ -352,8 +363,7 @@ static ceph::spinlock debug_lock;
       return ceph::unique_leakable_ptr<buffer::raw>(new raw_hack_aligned(len, align));
 #endif
     }
-    return ceph::unique_leakable_ptr<buffer::raw>(
-      raw_combined::create(len, align, mempool));
+    return raw_combined::create(len, align, mempool);
   }
   ceph::unique_leakable_ptr<buffer::raw> buffer::create_aligned(
     unsigned len, unsigned align) {
@@ -367,19 +377,15 @@ static ceph::spinlock debug_lock;
   ceph::unique_leakable_ptr<buffer::raw> buffer::create_small_page_aligned(unsigned len) {
     if (len < CEPH_PAGE_SIZE) {
       return create_aligned(len, CEPH_BUFFER_ALLOC_UNIT);
-    } else
+    } else {
       return create_aligned(len, CEPH_PAGE_SIZE);
+    }
   }
 
-  buffer::raw* buffer::create_unshareable(unsigned len) {
-    return new raw_unshareable(len);
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create_unshareable(unsigned len) {
+    return ceph::unique_leakable_ptr<buffer::raw>(new raw_unshareable(len));
   }
 
-  buffer::ptr::ptr(raw* r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
-  {
-    r->nref++;
-    bdout << "ptr " << this << " get " << _raw << bendl;
-  }
   buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
     : _raw(r.release()),
       _off(0),
@@ -2203,21 +2209,6 @@ buffer::ptr_node::create_hypercombined(ceph::unique_leakable_ptr<buffer::raw> r)
   // new to create ptr_node on buffer::raw::bptr_storage.
   return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
     new ptr_node(std::move(r)));
-}
-
-std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
-buffer::ptr_node::create_hypercombined(buffer::raw* const r)
-{
-  if (likely(r->nref == 0)) {
-    // FIXME: we don't currently hypercombine buffers due to crashes
-    // observed in the rados suite. After fixing we'll use placement
-    // new to create ptr_node on buffer::raw::bptr_storage.
-    return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
-      new ptr_node(r));
-  } else {
-    return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
-      new ptr_node(r));
-  }
 }
 
 buffer::ptr_node* buffer::ptr_node::copy_hypercombined(

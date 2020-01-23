@@ -667,7 +667,8 @@ future<> MonMap::read_monmap(const std::string& monmap)
       return do_with(make_file_input_stream(f), [this, s](input_stream<char>& in) {
         return in.read_exactly(s).then([this](temporary_buffer<char> buf) {
           ceph::buffer::list bl;
-          bl.append(ceph::buffer::create(std::move(buf)));
+          bl.push_back(ceph::buffer::ptr_node::create(
+            ceph::buffer::create(std::move(buf))));
           decode(bl);
         });
       });
