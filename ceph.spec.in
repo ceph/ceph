@@ -1092,6 +1092,8 @@ done
 %endif
 
 %if 0%{?suse_version}
+# remove any -O? from RPM_OPT_FLAGS: we rely on cmake to set the correct value
+RPM_OPT_FLAGS="$(echo "$RPM_OPT_FLAGS" | sed -e 's/\$-O[0-9] //' | sed -e 's/-O[0-9] //g' |sed -e 's/\-O[0-9]$//')"
 # the following setting fixed an OOM condition we once encountered in the OBS
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
