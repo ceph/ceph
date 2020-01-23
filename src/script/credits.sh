@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 range="$1"
 TMP=/tmp/credits
