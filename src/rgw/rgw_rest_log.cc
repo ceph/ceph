@@ -866,7 +866,8 @@ void RGWOp_BILog_Status::execute()
 
   rgw_bucket source_bucket;
 
-  if (source_key.empty()) {
+  if (source_key.empty() ||
+      source_key == key) {
     source_bucket = info.bucket;
   } else {
     http_ret = rgw_bucket_parse_bucket_key(s->cct, source_key, &source_bucket, nullptr);
