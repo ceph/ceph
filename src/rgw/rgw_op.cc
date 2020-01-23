@@ -1419,8 +1419,9 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 
   /* Custom: */
   origin = orig;
-  op_ret = read_bucket_cors();
-  if (op_ret < 0) {
+  int temp_op_ret = read_bucket_cors();
+  if (temp_op_ret < 0) {
+    op_ret = temp_op_ret;
     return false;
   }
 
