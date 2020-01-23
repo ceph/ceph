@@ -2994,10 +2994,13 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
     bci.info.bucket.name = bucket_name;
     bci.info.bucket.bucket_id = bucket_instance;
     bci.info.bucket.tenant = tenant_name;
-    ret = bihandler->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
-      return ret;
+    // if the sync module never writes data, don't require the zone to specify all placement targets
+    if (bihandler->svc.zone->sync_module_supports_writes()) {
+      ret = bihandler->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        return ret;
+      }
     }
     bci.info.index_type = rule_info.index_type;
   } else {
