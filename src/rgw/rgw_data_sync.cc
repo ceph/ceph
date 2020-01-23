@@ -1641,7 +1641,11 @@ public:
       }
 
       yield call(data_sync_module->start_sync(sync_env));
-
+      if (retcode < 0) {
+        tn->log(0, SSTR("ERROR: failed to start sync, retcode=" << retcode));
+        return set_cr_error(retcode);
+      }
+      
       yield {
         if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateSync) {
           tn->log(10, SSTR("spawning " << num_shards << " shards sync"));
