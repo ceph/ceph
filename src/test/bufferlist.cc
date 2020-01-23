@@ -44,6 +44,12 @@
 
 static char cmd[128];
 
+struct instrumented_bptr : public ceph::buffer::ptr {
+  const ceph::buffer::raw* get_raw() const {
+    return _raw;
+  }
+};
+
 TEST(Buffer, constructors) {
   unsigned len = 17;
   //
@@ -146,7 +152,7 @@ TEST(Buffer, BenchAlloc) {
 TEST(BufferRaw, ostream) {
   bufferptr ptr(1);
   std::ostringstream stream;
-  stream << *ptr.get_raw();
+  stream << *static_cast<instrumented_bptr&>(ptr).get_raw();
   EXPECT_GT(stream.str().size(), stream.str().find("buffer::raw("));
   EXPECT_GT(stream.str().size(), stream.str().find("len 1 nref 1)"));
 }
@@ -215,7 +221,8 @@ TEST(BufferPtr, constructors) {
     bufferptr original(str.c_str(), len);
     bufferptr ptr(original);
     EXPECT_TRUE(ptr.have_raw());
-    EXPECT_EQ(original.get_raw(), ptr.get_raw());
+    EXPECT_EQ(static_cast<instrumented_bptr&>(original).get_raw(),
+              static_cast<instrumented_bptr&>(ptr).get_raw());
     EXPECT_EQ(2, ptr.raw_nref());
     EXPECT_EQ(0, ::memcmp(original.c_str(), ptr.c_str(), len));
   }
@@ -227,7 +234,8 @@ TEST(BufferPtr, constructors) {
     bufferptr original(str.c_str(), len);
     bufferptr ptr(original, 0, 0);
     EXPECT_TRUE(ptr.have_raw());
-    EXPECT_EQ(original.get_raw(), ptr.get_raw());
+    EXPECT_EQ(static_cast<instrumented_bptr&>(original).get_raw(),
+              static_cast<instrumented_bptr&>(ptr).get_raw());
     EXPECT_EQ(2, ptr.raw_nref());
     EXPECT_EQ(0, ::memcmp(original.c_str(), ptr.c_str(), len));
     PrCtl unset_dumpable;
@@ -286,7 +294,8 @@ TEST(BufferPtr, assignment) {
     original.set_length(length);
     same_raw = original;
     ASSERT_EQ(2, original.raw_nref());
-    ASSERT_EQ(same_raw.get_raw(), original.get_raw());
+    ASSERT_EQ(static_cast<instrumented_bptr&>(same_raw).get_raw(),
+              static_cast<instrumented_bptr&>(original).get_raw());
     ASSERT_EQ(same_raw.offset(), original.offset());
     ASSERT_EQ(same_raw.length(), original.length());
   }
@@ -317,7 +326,8 @@ TEST(BufferPtr, assignment) {
     bufferptr ptr;
     ptr = original;
     ASSERT_EQ(2, original.raw_nref());
-    ASSERT_EQ(ptr.get_raw(), original.get_raw());
+    ASSERT_EQ(static_cast<instrumented_bptr&>(ptr).get_raw(),
+              static_cast<instrumented_bptr&>(original).get_raw());
     ASSERT_EQ(original.offset(), ptr.offset());
     ASSERT_EQ(original.length(), ptr.length());
   }
@@ -410,7 +420,7 @@ TEST(BufferPtr, accessors) {
   ptr[1] = 'Y';
   const bufferptr const_ptr(ptr);
 
-  EXPECT_NE((void*)NULL, (void*)ptr.get_raw());
+  EXPECT_NE((void*)nullptr, (void*)static_cast<instrumented_bptr&>(ptr).get_raw());
   EXPECT_EQ('X', ptr.c_str()[0]);
   {
     bufferptr ptr;
@@ -1633,7 +1643,9 @@ TEST(BufferList, push_back) {
     EXPECT_EQ((unsigned)(1 + len), bl.length());
     EXPECT_EQ((unsigned)2, bl.get_num_buffers());
     EXPECT_EQ('B', bl.back()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.back().get_raw());
+    const bufferptr& back_bp = bl.back();
+    EXPECT_EQ(static_cast<instrumented_bptr&>(ptr).get_raw(),
+              static_cast<const instrumented_bptr&>(back_bp).get_raw());
   }
   //
   // void push_back(ptr&& bp)
@@ -1654,7 +1666,7 @@ TEST(BufferList, push_back) {
     EXPECT_EQ((unsigned)(1 + len), bl.length());
     EXPECT_EQ((unsigned)2, bl.buffers().size());
     EXPECT_EQ('B', bl.buffers().back()[0]);
-    EXPECT_FALSE(ptr.get_raw());
+    EXPECT_FALSE(static_cast<instrumented_bptr&>(ptr).get_raw());
   }
 }
 
@@ -2054,7 +2066,7 @@ TEST(BufferList, append) {
       bl.append(std::move(ptr));
       EXPECT_EQ((unsigned)1, bl.buffers().size());
       EXPECT_EQ((unsigned)3, bl.length());
-      EXPECT_FALSE(ptr.get_raw());
+      EXPECT_FALSE(static_cast<instrumented_bptr&>(ptr).get_raw());
     }
   }
 }
