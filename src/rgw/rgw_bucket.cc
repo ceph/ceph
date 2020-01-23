@@ -725,7 +725,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
   /* link to user */
   r = store->ctl()->bucket->link_bucket(user_info.user_id,
                                      bucket_info.bucket,
-                                     ceph::real_time(),
+                                     ep.creation_time,
                                      y, true, &ep_data);
   if (r < 0) {
     set_err_msg(err_msg, "failed to relink bucket");
