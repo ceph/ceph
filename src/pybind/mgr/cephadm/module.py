@@ -1109,11 +1109,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def _service_action(self, service_type, service_id, host, action):
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
-            return self._create_daemon(service_type, service_id, host,
-                                       None)
+            return self._create_daemon(service_type, service_id, host)
         elif action == 'reconfig':
             return self._create_daemon(service_type, service_id, host,
-                                       None, reconfig=True)
+                                       reconfig=True)
 
         actions = {
             'start': ['reset-failed', 'start'],
@@ -1253,12 +1252,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     continue
 
                 # create
-                ret, keyring, err = self.mon_command({
-                    'prefix': 'auth get',
-                    'entity': 'osd.%s' % str(osd_id),
-                })
                 self._create_daemon(
-                    'osd', str(osd_id), host, keyring,
+                    'osd', str(osd_id), host,
                     extra_args=[
                         '--osd-fsid', osd['tags']['ceph.osd_fsid'],
                     ])
@@ -1293,12 +1288,22 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             raise OrchestratorError('Unable to find ODS: %s' % not_found)
         return self._remove_daemon(args)
 
-    def _create_daemon(self, daemon_type, daemon_id, host, keyring,
+    def _create_daemon(self, daemon_type, daemon_id, host,
+                       keyring=None,
                        extra_args=None, extra_config=None,
                        reconfig=False):
         if not extra_args:
             extra_args = []
         name = '%s.%s' % (daemon_type, daemon_id)
+
+        # keyring
+        if not keyring:
+            ret, keyring, err = self.mon_command({
+                'prefix': 'auth get',
+                'entity': '%s.%s' % str(
+                    daemon_type,
+                    daemon_id if daemon_type != 'mon' else ''),
+            })
 
         # generate config
         ret, config, err = self.mon_command({
@@ -1393,7 +1398,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         else:
             raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
 
-        return self._create_daemon('mon', name, host, keyring,
+        return self._create_daemon('mon', name, host,
+                                   keyring=keyring,
                                    extra_config=extra_config)
 
     def update_mons(self, spec):
@@ -1463,7 +1469,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'mds', 'allow *'],
         })
 
-        return self._create_daemon('mgr', name, host, keyring)
+        return self._create_daemon('mgr', name, host, keyring=keyring)
 
     @with_services('mgr')
     def update_mgrs(self, spec, services):
@@ -1587,7 +1593,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'osd', 'allow rwx',
                      'mds', 'allow'],
         })
-        return self._create_daemon('mds', mds_id, host, keyring)
+        return self._create_daemon('mds', mds_id, host, keyring=keyring)
 
     def remove_mds(self, name):
         self.log.debug("Attempting to remove volume: {}".format(name))
@@ -1650,7 +1656,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'mgr', 'allow rw',
                      'osd', 'allow rwx'],
         })
-        return self._create_daemon('rgw', rgw_id, host, keyring)
+        return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
     def remove_rgw(self, name):
 
@@ -1705,7 +1711,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'caps': ['mon', 'profile rbd-mirror',
                      'osd', 'profile rbd'],
         })
-        return self._create_daemon('rbd-mirror', daemon_id, host, keyring)
+        return self._create_daemon('rbd-mirror', daemon_id, host,
+                                   keyring=keyring)
 
     def remove_rbd_mirror(self, name):
         def _remove_rbd_mirror(daemons):
