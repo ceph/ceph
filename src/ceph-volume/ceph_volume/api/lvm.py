@@ -267,6 +267,16 @@ def dmsetup_splitname(dev):
     return _splitname_parser(out)
 
 
+def is_ceph_device(lv):
+    try:
+        lv.tags['ceph.osd_id']
+    except (KeyError, AttributeError):
+        logger.warning('device is not part of ceph: %s', lv)
+        return False
+
+    return True
+
+
 ####################################
 #
 # Code for LVM Physical Volumes
