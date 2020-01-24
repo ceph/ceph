@@ -18,6 +18,7 @@ from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 # to behave cleanly.
 from urllib3.exceptions import ProtocolError
 
+from ceph.deployment.drive_group import DriveGroupSpec
 from mgr_util import merge_dicts
 
 try:
@@ -470,7 +471,7 @@ class RookCluster(object):
         return self._patch(cnfs.CephNFS, 'cephnfses',svc_id, _update_nfs_count)
 
     def add_osds(self, drive_group, all_hosts):
-        # type: (orchestrator.DriveGroupSpec, List[str]) -> str
+        # type: (DriveGroupSpec, List[str]) -> str
         """
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
