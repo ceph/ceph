@@ -6,6 +6,7 @@ import six
 import rbd
 
 from .. import mgr
+from .ceph_service import CephService
 
 
 RBD_FEATURES_NAME_MAPPING = {
@@ -85,6 +86,20 @@ class RbdConfiguration(object):
                 except rbd.ImageNotFound:
                     result = []
             else:  # pool config
+                pg_status = list(CephService.get_pool_pg_status(self._pool_name).keys())
+                if len(pg_status) == 1 and 'unknown' in pg_status[0]:
+                    # If config_list would be called with ioctx if it's a bad pool,
+                    # the dashboard would stop working, waiting for the response
+                    # that would not happen.
+                    #
+                    # This is only a workaround for https://tracker.ceph.com/issues/43771 which
+                    # already got rejected as not worth the effort.
+                    #
+                    # Are more complete workaround for the dashboard will be implemented with
+                    # https://tracker.ceph.com/issues/44224
+                    #
+                    # @TODO: If #44224 is addressed remove this workaround
+                    return []
                 result = self._rbd.config_list(ioctx)
             return list(result)
 
