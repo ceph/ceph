@@ -90,6 +90,9 @@ void global_pre_init(
   std::string conf_file_list;
   std::string cluster = "";
 
+  // ensure environment arguments are included in early processing
+  env_to_vec(args);
+
   CephInitParameters iparams = ceph_argparse_early_args(
     args, module_type,
     &cluster, &conf_file_list);
