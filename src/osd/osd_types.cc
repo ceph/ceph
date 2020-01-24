@@ -6816,20 +6816,18 @@ void OSDOp::clear_data(vector<OSDOp>& ops)
     if (ceph_osd_op_type_attr(op.op.op) &&
         op.op.xattr.name_len &&
 	op.indata.length() >= op.op.xattr.name_len) {
-      ceph::buffer::ptr bp(op.op.xattr.name_len);
       ceph::buffer::list bl;
-      bl.append(bp);
-      bl.copy_in(0, op.op.xattr.name_len, op.indata);
+      bl.push_back(ceph::buffer::ptr_node::create(op.op.xattr.name_len));
+      bl.begin().copy_in(op.op.xattr.name_len, op.indata);
       op.indata.claim(bl);
     } else if (ceph_osd_op_type_exec(op.op.op) &&
                op.op.cls.class_len &&
 	       op.indata.length() >
 	         (op.op.cls.class_len + op.op.cls.method_len)) {
       __u8 len = op.op.cls.class_len + op.op.cls.method_len;
-      ceph::buffer::ptr bp(len);
       ceph::buffer::list bl;
-      bl.append(bp);
-      bl.copy_in(0, len, op.indata);
+      bl.push_back(ceph::buffer::ptr_node::create(len));
+      bl.begin().copy_in(len, op.indata);
       op.indata.claim(bl);
     } else {
       op.indata.clear();
