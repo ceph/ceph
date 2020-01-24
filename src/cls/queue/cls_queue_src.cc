@@ -303,7 +303,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     do {
       CLS_LOG(10, "INFO: queue_list_entries(): index: %u, size_to_process: %lu\n", index, size_to_process);
       cls_queue_entry entry;
-      it.seek(index);
+      ceph_assert(it.get_off() == index);
       //Populate offset if not done in previous iteration
       if (! offset_populated) {
         cls_queue_marker marker = {start_offset + index, gen};
@@ -346,11 +346,11 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       }
       // Data
       if (data_size <= size_to_process) {
-        bl_chunk.copy(index, data_size, entry.data);
+        it.copy(data_size, entry.data);
         index += entry.data.length();
         size_to_process -= entry.data.length();
       } else {
-        bl_chunk.copy(index, size_to_process, bl);
+        it.copy(size_to_process, bl);
         offset_populated = true;
         entry_start_processed = true;
         CLS_LOG(10, "INFO: queue_list_entries(): not enough data to read data, breaking out!\n");
