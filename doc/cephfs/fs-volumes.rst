@@ -47,7 +47,7 @@ Create a volume using::
 
 This creates a CephFS file system and its data and metadata pools. It also tries
 to create MDSes for the filesystem using the enabled ceph-mgr orchestrator
-module  (see :doc:`/mgr/orchestrator_cli`) , e.g., rook.
+module  (see :doc:`/mgr/orchestrator`) , e.g., rook.
 
 Remove a volume using::
 
