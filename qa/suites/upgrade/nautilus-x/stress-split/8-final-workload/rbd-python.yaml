@@ -8,7 +8,6 @@ overrides:
         rbd default clone format: 1
 tasks:
 - workunit:
-    branch: nautilus
     clients:
       client.0:
         - rbd/test_librbd_python.sh
