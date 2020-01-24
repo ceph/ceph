@@ -4121,7 +4121,6 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
 
   rgw_sync_pipe_info_set::iterator siter;
 
-  rgw_bucket_get_sync_policy_params get_policy_params;
   std::shared_ptr<rgw_bucket_get_sync_policy_result> source_policy;
   std::shared_ptr<rgw_bucket_get_sync_policy_result> target_policy;
 
@@ -4458,6 +4457,70 @@ void RGWGetBucketPeersCR::update_from_source_bucket_policy()
   }
 }
 
+
+class RGWSyncGetBucketSyncPolicyHandlerCR : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  rgw_bucket bucket;
+  rgw_bucket_get_sync_policy_params get_policy_params;
+
+  std::shared_ptr<rgw_bucket_get_sync_policy_result> policy;
+
+  RGWSyncTraceNodeRef tn;
+
+  int i;
+
+public:
+  RGWSyncGetBucketSyncPolicyHandlerCR(RGWDataSyncEnv *_sync_env,
+                         std::optional<rgw_zone_id> zone,
+                         const rgw_bucket& _bucket,
+                         std::shared_ptr<rgw_bucket_get_sync_policy_result>& _policy,
+                         const RGWSyncTraceNodeRef& _tn_parent)
+    : RGWCoroutine(_sync_env->cct),
+      sync_env(_sync_env),
+      bucket(_bucket),
+      policy(_policy),
+      tn(sync_env->sync_tracer->add_node(_tn_parent, "get_sync_policy_handler",
+                                         SSTR(bucket))) {
+    get_policy_params.zone = zone;
+    get_policy_params.bucket = bucket;
+  }
+
+  int operate() override {
+    reenter(this) {
+      for (i = 0; i < 2; ++i) {
+        yield call(new RGWBucketGetSyncPolicyHandlerCR(sync_env->async_rados,
+                                                       sync_env->store,
+                                                       get_policy_params,
+                                                       policy));
+        if (retcode < 0 &&
+            retcode != -ENOENT) {
+          return set_cr_error(retcode);
+        }
+
+        if (retcode == 0) {
+          return set_cr_done();
+        }
+
+        /* bucket instance was not found,
+         * try to get bucket instance info, can trigger
+         * metadata sync of bucket instance
+         */
+        yield call(new RGWSyncGetBucketInfoCR(sync_env, 
+                                              bucket, 
+                                              nullptr,
+                                              nullptr,
+                                              tn));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+      }
+    }
+
+    return 0;
+  }
+};
+
+
 int RGWGetBucketPeersCR::operate()
 {
   reenter(this) {
@@ -4465,13 +4528,12 @@ int RGWGetBucketPeersCR::operate()
       pipes->clear();
     }
     if (target_bucket) {
-      get_policy_params.zone = nullopt;
-      get_policy_params.bucket = *target_bucket;
       target_policy = make_shared<rgw_bucket_get_sync_policy_result>();
-      yield call(new RGWBucketGetSyncPolicyHandlerCR(sync_env->async_rados,
-                                                     sync_env->store,
-                                                     get_policy_params,
-                                                     target_policy));
+      yield call(new RGWSyncGetBucketSyncPolicyHandlerCR(sync_env,
+                                                         nullopt,
+                                                         *target_bucket,
+                                                         target_policy,
+                                                         tn));
       if (retcode < 0 &&
           retcode != -ENOENT) {
         return set_cr_error(retcode);
@@ -4481,13 +4543,12 @@ int RGWGetBucketPeersCR::operate()
     }
 
     if (source_bucket && source_zone) {
-      get_policy_params.zone = source_zone;
-      get_policy_params.bucket = *source_bucket;
       source_policy = make_shared<rgw_bucket_get_sync_policy_result>();
-      yield call(new RGWBucketGetSyncPolicyHandlerCR(sync_env->async_rados,
-                                                     sync_env->store,
-                                                     get_policy_params,
-                                                     source_policy));
+      yield call(new RGWSyncGetBucketSyncPolicyHandlerCR(sync_env,
+                                                         source_zone,
+                                                         *source_bucket,
+                                                         source_policy,
+                                                         tn));
       if (retcode < 0 &&
           retcode != -ENOENT) {
         return set_cr_error(retcode);
@@ -4521,13 +4582,12 @@ int RGWGetBucketPeersCR::operate()
              ++hiter) {
           ldpp_dout(sync_env->dpp, 20) << "Got sync hint for bucket=" << *source_bucket << ": " << hiter->get_key() << dendl;
 
-          get_policy_params.zone = nullopt;
-          get_policy_params.bucket = *hiter;
           target_policy = make_shared<rgw_bucket_get_sync_policy_result>();
-          yield call(new RGWBucketGetSyncPolicyHandlerCR(sync_env->async_rados,
-                                                         sync_env->store,
-                                                         get_policy_params,
-                                                         target_policy));
+          yield call(new RGWSyncGetBucketSyncPolicyHandlerCR(sync_env,
+                                                             nullopt,
+                                                             *hiter,
+                                                             target_policy,
+                                                             tn));
           if (retcode < 0 &&
               retcode != -ENOENT) {
             return set_cr_error(retcode);
