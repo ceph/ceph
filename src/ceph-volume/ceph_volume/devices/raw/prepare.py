@@ -11,7 +11,7 @@ from .common import create_parser
 logger = logging.getLogger(__name__)
 
 
-def prepare_bluestore(block, secrets, osd_id, fsid, tmpfs):
+def prepare_bluestore(block, secrets, tmpfs):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -77,7 +77,7 @@ class Prepare(object):
     @decorators.needs_root
     def prepare(self):
         secrets = {'cephx_secret': prepare_utils.create_key()}
-        osd_fsid = self.args.osd_fsid or system.generate_uuid()
+        osd_fsid = system.generate_uuid()
         crush_device_class = self.args.crush_device_class
         if crush_device_class:
             secrets['crush_device_class'] = crush_device_class

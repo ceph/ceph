@@ -27,14 +27,6 @@ def create_parser(prog, description):
         help='Crush device class to assign this OSD to',
     )
     parser.add_argument(
-        '--osd-id',
-        help='Reuse an existing OSD id',
-    )
-    parser.add_argument(
-        '--osd-fsid',
-        help='Reuse an existing OSD UUID',
-    )
-    parser.add_argument(
         '--cluster-fsid',
         help='Specify the cluster fsid, useful when no ceph.conf is available',
     )
