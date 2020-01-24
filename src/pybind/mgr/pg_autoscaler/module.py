@@ -383,6 +383,8 @@ class PgAutoscaler(MgrModule):
     def _maybe_adjust(self):
         self.log.info('_maybe_adjust')
         osdmap = self.get_osdmap()
+        if osdmap.get_require_osd_release() < 'nautilus':
+            return
         pools = osdmap.get_pools_by_name()
         ps, root_map, pool_root = self._get_pool_status(osdmap, pools)
 
