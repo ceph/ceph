@@ -78,3 +78,24 @@ in `ceph orchestrator service ls`).
 You can also disable this warning entirely with::
 
   ceph config set mgr mgr/cephadm/warn_on_stray_services false
+
+CEPHADM_HOST_CHECK_FAILED
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+One or more hosts have failed the basic cephadm host check, which verifies
+that (1) the host is reachable and cephadm can be executed there, and (2)
+that the host satisfies basic prerequisites, like a working container
+runtime (podman or docker) and working time synchronization.
+If this test fails, cephadm will no be able to manage services on that host.
+
+You can manually run this check with::
+
+  ceph cephadm check-host *<hostname>*
+
+You can remove a broken host from management with::
+
+  ceph orchestrator host rm *<hostname>*
+
+You can disable this health warning with::
+
+  ceph config set mgr mgr/cephadm/warn_on_failed_host_check false
