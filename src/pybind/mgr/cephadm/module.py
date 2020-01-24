@@ -634,7 +634,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             }
         self.set_health_checks(self.health_checks)
 
-    def _check_for_strays(self):
+    def _check_for_strays(self, services):
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_SERVICE']:
@@ -643,14 +643,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if self.warn_on_stray_hosts or self.warn_on_stray_services:
             ls = self.list_servers()
             managed = []
-            if self.warn_on_stray_services:
-                completion = self._get_services()
-                self._orchestrator_wait([completion])
-                orchestrator.raise_if_exception(completion)
-                self.log.debug('services %s' % completion.result)
-                for s in completion.result:
-                    managed.append(s.name())
-                self.log.debug('cephadm daemons %s' % managed)
+            for s in services:
+                managed.append(s.name())
+            self.log.debug('cephadm daemons %s' % managed)
             host_detail = []     # type: List[str]
             host_num_services = 0
             service_detail = []  # type: List[str]
@@ -694,15 +689,19 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.log.info("serve starting")
         while self.run:
             self._check_hosts()
-            self._check_for_strays()
+
+            # refresh services
+            self.log.debug('refreshing services')
+            completion = self._get_services(refresh=True)
+            self._orchestrator_wait([completion])
+            orchestrator.raise_if_exception(completion)
+            services = completion.result
+            self.log.debug('services %s' % services)
+
+            self._check_for_strays(services)
 
             while self.upgrade_state and not self.upgrade_state.get('paused'):
-                self.log.debug('Upgrade in progress, refreshing services')
-                completion = self._get_services()
-                self._orchestrator_wait([completion])
-                orchestrator.raise_if_exception(completion)
-                self.log.debug('services %s' % completion.result)
-                completion = self._do_upgrade(completion.result)
+                completion = self._do_upgrade(services)
                 if completion:
                     while not completion.has_result:
                         self.process([completion])
