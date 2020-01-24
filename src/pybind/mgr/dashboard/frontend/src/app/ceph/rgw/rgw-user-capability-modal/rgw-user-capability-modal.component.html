@@ -16,14 +16,11 @@
 
     <!-- Type -->
     <div class="form-group row">
-      <label class="col-form-label col-sm-3"
-             for="type">
-        <ng-container i18n>Type</ng-container>
-        <span class="required"
-              *ngIf="!editing">
-        </span>
-      </label>
-      <div class="col-sm-9">
+      <label class="cd-col-form-label"
+             [ngClass]="{'required': !editing}"
+             for="type"
+             i18n>Type</label>
+      <div class="cd-col-form-input">
         <input id="type"
                class="form-control"
                type="text"
@@ -49,12 +46,10 @@
 
     <!-- Permission -->
     <div class="form-group row">
-      <label class="col-form-label col-sm-3"
-             for="perm">
-        <ng-container i18n>Permission</ng-container>
-        <span class="required"></span>
-      </label>
-      <div class="col-sm-9">
+      <label class="cd-col-form-label required"
+             for="perm"
+             i18n>Permission</label>
+      <div class="cd-col-form-input">
         <select id="perm"
                 class="form-control custom-select"
                 formControlName="perm">

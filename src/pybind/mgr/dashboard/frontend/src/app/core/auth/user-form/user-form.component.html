@@ -1,7 +1,7 @@
 <cd-loading-panel *ngIf="!pwdExpirationSettings"
                   i18n>Loading...</cd-loading-panel>
 
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form">
   <form name="userForm"
         #formDir="ngForm"
         [formGroup]="userForm"
@@ -14,13 +14,11 @@
 
         <!-- Username -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="username">
-            <ng-container i18n>Username</ng-container>
-            <span class="required"
-                  *ngIf="mode !== userFormMode.editing"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': mode !== userFormMode.editing}"
+                 for="username"
+                 i18n>Username</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    placeholder="Username..."
@@ -36,14 +34,14 @@
 
         <!-- Password -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="password">
-          <ng-container i18n>Password</ng-container>
-        <cd-helper class="text-pre"
-                   html="{{ passwordPolicyHelpText }}">
-        </cd-helper>
+            <ng-container i18n>Password</ng-container>
+            <cd-helper class="text-pre"
+                       html="{{ passwordPolicyHelpText }}">
+            </cd-helper>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <div class="input-group">
               <input class="form-control"
                      type="password"
@@ -78,9 +76,9 @@
         <!-- Confirm password -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3"
+                 class="cd-col-form-label"
                  for="confirmpassword">Confirm password</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <div class="input-group">
               <input class="form-control"
                      type="password"
@@ -106,7 +104,8 @@
         <!-- Password expiration date -->
         <div class="form-group row"
              *ngIf="!authStorageService.isSSO()">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': pwdExpirationSettings.pwdExpirationSpan > 0}"
                  for="pwdExpirationDate">
             <ng-container i18n>Password expiration date</ng-container>
             <cd-helper class="text-pre"
@@ -123,10 +122,8 @@
                 in order to let passwords expire periodically.
               </p>
             </cd-helper>
-            <span class="required"
-                  *ngIf="pwdExpirationSettings.pwdExpirationSpan > 0"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <div class="input-group">
               <input type="text"
                      class="form-control"
@@ -155,9 +152,9 @@
         <!-- Name -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3"
+                 class="cd-col-form-label"
                  for="name">Full name</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    placeholder="Full name..."
@@ -170,9 +167,9 @@
         <!-- Email -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3"
+                 class="cd-col-form-label"
                  for="email">Email</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="email"
                    placeholder="Email..."
@@ -188,9 +185,9 @@
 
         <!-- Roles -->
         <div class="form-group row">
-          <label class="col-sm-3 col-form-label"
+          <label class="cd-col-form-label"
                  i18n>Roles</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <span class="no-border full-height"
                   *ngIf="allRoles">
               <cd-select-badges [data]="userForm.controls.roles.value"
@@ -203,7 +200,7 @@
         <!-- Enabled -->
         <div class="form-group row"
              *ngIf="!isCurrentUser()">
-          <div class="offset-sm-3 col-sm-9">
+          <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"
