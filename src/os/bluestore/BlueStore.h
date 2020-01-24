@@ -1211,7 +1211,6 @@ public:
                                    PerfCounters *logger);
     virtual void _add(Onode* o, int level) = 0;
     virtual void _rm(Onode* o) = 0;
-    virtual void _touch(Onode* o) = 0;
 
     void pin(Onode* o, std::function<bool ()> validator) {
       std::lock_guard l(lock);
