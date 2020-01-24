@@ -198,7 +198,7 @@ Ceph configuration file.
               value is the same as ``pg_num`` with ``mkpool``.
 
 :Type: 32-bit Integer
-:Default: ``16``
+:Default: ``32``
 
 
 ``osd pool default pgp num``
