@@ -2452,7 +2452,9 @@ struct perm_state_base {
   virtual ~perm_state_base() {}
 
   virtual const char *get_referer() const = 0;
-  virtual std::optional<bool> get_request_payer() const = 0;
+  virtual std::optional<bool> get_request_payer() const = 0; /*
+                                                              * empty state means that request_payer param was not passed in
+                                                              */
 
 };
 
