@@ -110,7 +110,7 @@ function TEST_backfill_log_1() {
 function TEST_backfill_log_2() {
     local dir=$1
 
-    _common_test $dir "--osd_min_pg_log_entries=1 --osd_max_pg_log_entries=2" 1 149 150
+    _common_test $dir "--osd_min_pg_log_entries=1 --osd_max_pg_log_entries=2" 2 148 150
 }
 
 
