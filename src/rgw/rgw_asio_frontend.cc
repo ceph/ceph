@@ -67,8 +67,7 @@ class StreamIO : public rgw::asio::ClientIO {
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
       http::read_some(stream, buffer, parser, ec);
-      if (ec == http::error::partial_message ||
-          ec == http::error::need_buffer) {
+      if (ec == http::error::need_buffer) {
         break;
       }
       if (ec) {
