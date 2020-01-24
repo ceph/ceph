@@ -53,9 +53,9 @@ Finally, to mount CephFS on your client nodes, see `Mount CephFS:
 Prerequisites`_ page. Additionally, a command-line shell utility is available
 for interactive access or scripting via the `cephfs-shell`_.
 
-.. _Orchestrator: ../mgr/orchestrator_cli
+.. _Orchestrator: ../mgr/orchestrator
 .. _deploy MDS manually as needed: add-remove-mds
-.. _Orchestrator deployment table: ../mgr/orchestrator_cli/#current-implementation-status
+.. _Orchestrator deployment table: ../mgr/orchestrator/#current-implementation-status
 .. _Mount CephFS\: Prerequisites: mount-prerequisites
 .. _cephfs-shell: cephfs-shell
 
