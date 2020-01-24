@@ -453,7 +453,7 @@ class Completion(_Promise):
     call one completion from another completion. I.e. making them re-usable
     using Promises E.g.::
 
-        >>> return Orchestrator().get_hosts().then(self._create_osd)
+        >>> return Orchestrator().get_hosts().then(self._create_osd) # doctest: +SKIP
 
     where ``get_hosts`` returns a Completion of list of hosts and
     ``_create_osd`` takes a list of hosts.
@@ -462,8 +462,9 @@ class Completion(_Promise):
     explicit and then explicitly evaluate the chain:
 
         >>> p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
-        ... p.finalize(2)
-        ... assert p.result = "4"
+        >>> p.finalize(2)
+        >>> p.result
+        '4'
 
     or graphically::
 
@@ -722,7 +723,7 @@ class Orchestrator(object):
             is actually available in the orchestrator. I.e. this
             won't work as expected::
 
-                >>> if OrchestratorClientMixin().available()[0]:  # wrong.
+                >>> if OrchestratorClientMixin().available()[0]:  # wrong. # doctest: +SKIP
                 ...     OrchestratorClientMixin().get_hosts()
 
         :return: two-tuple of boolean, string
@@ -754,13 +755,13 @@ class Orchestrator(object):
             is actually possible in the orchestrator. I.e. this
             won't work as expected::
 
-                >>> api = OrchestratorClientMixin()
-                ... if api.get_feature_set()['get_hosts']['available']:  # wrong.
+                >>> api = OrchestratorClientMixin()  # doctest: +SKIP
+                >>> if api.get_feature_set()['get_hosts']['available']:  # wrong. # doctest: +SKIP
                 ...     api.get_hosts()
 
             It's better to ask for forgiveness instead::
 
-                >>> try:
+                >>> try:  # doctest: +SKIP
                 ...     OrchestratorClientMixin().get_hosts()
                 ... except (OrchestratorError, NotImplementedError):
                 ...     ...
