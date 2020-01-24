@@ -33,5 +33,16 @@ def create_parser(prog, description):
     parser.add_argument(
         '--no-tmpfs',
         action='store_true',
-        help='Do not use a tmpfs mount for OSD data dir')
+        help='Do not use a tmpfs mount for OSD data dir'
+    )
+    parser.add_argument(
+        '--block.db',
+        dest='block_db',
+        help='Path to bluestore block.db block device'
+    )
+    parser.add_argument(
+        '--block.wal',
+        dest='block_wal',
+        help='Path to bluestore block.wal block device'
+    )
     return parser
