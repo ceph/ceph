@@ -1089,7 +1089,7 @@ class PlacementSpec(object):
             if all([isinstance(host, HostPlacementSpec) for host in hosts]):
                 self.hosts = hosts
             else:
-                self.hosts = [parse_host_placement_specs(x, require_network=False) for x in hosts if x]
+                self.hosts = [HostPlacementSpec.parse(x, require_network=False) for x in hosts if x]
 
 
         self.count = count  # type: Optional[int]
