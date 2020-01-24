@@ -46,14 +46,6 @@ def activate_bluestore(meta, tmpfs, systemd):
     system.chown(os.path.join(osd_path, 'block'))
     system.chown(osd_path)
 
-#    if systemd:
-        # write me
-        # enable the OSD
-        #systemctl.enable_osd(osd_id)
-
-        # start the OSD
-        #systemctl.start_osd(osd_id)
-
     terminal.success("ceph-volume raw activate successful for osd ID: %s" % osd_id)
 
 
@@ -82,7 +74,7 @@ class Activate(object):
 
     def main(self):
         sub_command_help = dedent("""
-        Activate (BlueStore) OSD on a raw block device based on the 
+        Activate (BlueStore) OSD on a raw block device based on the
         device label (normally the first block of the device).
 
             ceph-volume raw activate --device /dev/sdb
