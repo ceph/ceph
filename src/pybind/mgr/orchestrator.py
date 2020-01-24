@@ -1085,10 +1085,74 @@ class PlacementSpec(object):
 
     def validate(self):
         if self.hosts and self.label:
-            # TODO: a less generic Exception
-            raise Exception('Node and label are mutually exclusive')
+            raise OrchestratorValidationError('Node and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
-            raise Exception("num/count must be > 1")
+            raise OrchestratorValidationError("num/count must be > 1")
+
+    @classmethod
+    def from_strings(cls, strings):
+        # type: (Optional[List[str]]) -> PlacementSpec
+        """
+        A single integer is parsed as a count:
+
+        >>> PlacementSpec.from_strings('3'.split())
+        PlacementSpec(count=3)
+
+        A list of names is parsed as host specifications:
+
+        >>> PlacementSpec.from_strings('host1 host2'.split())
+        PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')])
+
+        You can also prefix the hosts with a count as follows:
+
+        >>> PlacementSpec.from_strings('2 host1 host2'.split())
+        PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')], count=2)
+
+        You can spefify labels using `label:<label>`
+
+        >>> PlacementSpec.from_strings('label:mon'.split())
+        PlacementSpec(label='label:mon')
+
+        Labels als support a count:
+
+        >>> PlacementSpec.from_strings('3 label:mon'.split())
+        PlacementSpec(label='label:mon', count=3)
+
+        >>> PlacementSpec.from_strings(None)
+        PlacementSpec()
+        """
+        strings = strings or []
+
+        count = None
+        if strings:
+            try:
+                count = int(strings[0])
+                strings = strings[1:]
+            except ValueError:
+                pass
+
+        hosts = [x for x in strings if 'label:' not in x]
+        labels = [x for x in strings if 'label:' in x]
+        if len(labels) > 1:
+            raise OrchestratorValidationError('more than one label provided: {}'.format(labels))
+
+        ps = PlacementSpec(count=count, hosts=hosts, label=labels[0] if labels else None)
+        ps.validate()
+        return ps
+
+    def __bool__(self):
+        return self.label or self.hosts or (self.count is not None)
+
+    def __repr__(self):
+        args = []
+        if self.label:
+            args.append('label=' + repr(self.label))
+        if self.hosts:
+            args.append('label=' + repr(self.hosts))
+        if self.count:
+            args.append('count=' + repr(self.count))
+        return 'PlacementSpec({})'.format(', '.join(args))
+
 
 
 def handle_type_error(method):

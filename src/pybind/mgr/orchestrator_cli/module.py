@@ -382,13 +382,13 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator rbd-mirror add',
-        "name=num,type=CephInt,req=false "
-        "name=hosts,type=CephString,n=N,req=false",
+        'name=placement,type=CephString,n=N,req=false',
         'Create an rbd-mirror service')
-    def _rbd_mirror_add(self, num=None, hosts=None):
+    def _rbd_mirror_add(self, placement=None):
+        # type: (Optional[List[str]]) -> HandleCommandResult
         spec = orchestrator.StatelessServiceSpec(
             None,
-            placement=orchestrator.PlacementSpec(hosts=hosts, count=num))
+            placement=orchestrator.PlacementSpec.from_strings(placement))
         completion = self.add_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -396,14 +396,13 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator rbd-mirror update',
-        "name=num,type=CephInt,req=false "
-        "name=hosts,type=CephString,n=N,req=false "
-        "name=label,type=CephString,req=false",
+        'name=placement,type=CephString,n=N,req=false',
         'Update the number of rbd-mirror instances')
-    def _rbd_mirror_update(self, num, label=None, hosts=[]):
+    def _rbd_mirror_update(self, placement=None):
+        # type: (Optional[List[str]]) -> HandleCommandResult
         spec = orchestrator.StatelessServiceSpec(
             None,
-            placement=orchestrator.PlacementSpec(hosts=hosts, count=num, label=label))
+            placement=orchestrator.PlacementSpec.from_strings(placement))
         completion = self.update_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -422,13 +421,13 @@ Usage:
     @orchestrator._cli_write_command(
         'orchestrator mds add',
         "name=fs_name,type=CephString "
-        "name=num,type=CephInt,req=false "
-        "name=hosts,type=CephString,n=N,req=false",
+        'name=placement,type=CephString,n=N,req=false',
         'Create an MDS service')
-    def _mds_add(self, fs_name, num=None, hosts=None):
+    def _mds_add(self, fs_name, placement=None):
+        # type: (str, Optional[List[str]]) -> HandleCommandResult
         spec = orchestrator.StatelessServiceSpec(
             fs_name,
-            placement=orchestrator.PlacementSpec(hosts=hosts, count=num))
+            placement=orchestrator.PlacementSpec.from_strings(placement))
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -437,17 +436,14 @@ Usage:
     @orchestrator._cli_write_command(
         'orchestrator mds update',
         "name=fs_name,type=CephString "
-        "name=num,type=CephInt,req=false "
-        "name=hosts,type=CephString,n=N,req=false "
-        "name=label,type=CephString,req=false",
+        'name=placement,type=CephString,n=N,req=false',
         'Update the number of MDS instances for the given fs_name')
-    def _mds_update(self, fs_name, num=None, label=None, hosts=[]):
-        placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
-        placement.validate()
+    def _mds_update(self, fs_name, placement=None):
+        # type: (str, Optional[List[str]]) -> HandleCommandResult
 
         spec = orchestrator.StatelessServiceSpec(
             fs_name,
-            placement=placement)
+            placement=orchestrator.PlacementSpec.from_strings(placement))
 
         completion = self.update_mds(spec)
         self._orchestrator_wait([completion])
@@ -468,11 +464,11 @@ Usage:
         'orchestrator rgw add',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        'name=num,type=CephInt,req=false '
-        "name=hosts,type=CephString,n=N,req=false",
+        'name=placement,type=CephString,n=N,req=false',
         'Create an RGW service. A complete <rgw_spec> can be provided'\
         ' using <-i> to customize completelly the RGW service')
-    def _rgw_add(self, realm_name, zone_name, num=1, hosts=None, inbuf=None):
+    def _rgw_add(self, realm_name, zone_name, placement=None, inbuf=None):
+        # type: (str, str, Optional[List[str]], Optional[str]) -> HandleCommandResult
         usage = """
 Usage:
   ceph orchestrator rgw add -i <json_file>
@@ -484,10 +480,11 @@ Usage:
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        rgw_spec = orchestrator.RGWSpec(
-            rgw_realm=realm_name,
-            rgw_zone=zone_name,
-            placement=orchestrator.PlacementSpec(hosts=hosts, count=num))
+        else:
+            rgw_spec = orchestrator.RGWSpec(
+                rgw_realm=realm_name,
+                rgw_zone=zone_name,
+                placement=orchestrator.PlacementSpec.from_strings(placement))
 
         completion = self.add_rgw(rgw_spec)
         self._orchestrator_wait([completion])
@@ -498,15 +495,14 @@ Usage:
         'orchestrator rgw update',
         'name=zone_name,type=CephString '
         'name=realm_name,type=CephString '
-        'name=num,type=CephInt,req=false '
-        'name=hosts,type=CephString,n=N,req=false '
-        'name=label,type=CephString,req=false',
+        'name=placement,type=CephString,n=N,req=false',
         'Update the number of RGW instances for the given zone')
-    def _rgw_update(self, zone_name, realm_name, num=None, label=None, hosts=[]):
+    def _rgw_update(self, zone_name, realm_name, placement=None):
+        # type: (str, str, Optional[List[str]]) -> HandleCommandResult
         spec = orchestrator.RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
-            placement=orchestrator.PlacementSpec(hosts=hosts, label=label, count=num))
+            placement=orchestrator.PlacementSpec.from_strings(placement))
         completion = self.update_rgw(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -529,16 +525,15 @@ Usage:
         "name=svc_arg,type=CephString "
         "name=pool,type=CephString "
         "name=namespace,type=CephString,req=false "
-        'name=num,type=CephInt,req=false '
-        'name=hosts,type=CephString,n=N,req=false '
-        'name=label,type=CephString,req=false',
+        'name=placement,type=CephString,n=N,req=false',
         'Create an NFS service')
-    def _nfs_add(self, svc_arg, pool, namespace=None, num=None, label=None, hosts=[]):
+    def _nfs_add(self, svc_arg, pool, namespace=None, placement=None):
+        # type: (str, str, Optional[str], Optional[List[str]]) -> HandleCommandResult
         spec = orchestrator.NFSServiceSpec(
             svc_arg,
             pool=pool,
             namespace=namespace,
-            placement=orchestrator.PlacementSpec(label=label, hosts=hosts, count=num),
+            placement=orchestrator.PlacementSpec.from_strings(placement),
         )
         spec.validate_add()
         completion = self.add_nfs(spec)
@@ -549,15 +544,13 @@ Usage:
     @orchestrator._cli_write_command(
         'orchestrator nfs update',
         "name=svc_id,type=CephString "
-        'name=num,type=CephInt,req=false '
-        'name=hosts,type=CephString,n=N,req=false '
-        'name=label,type=CephString,req=false',
+        'name=placement,type=CephString,n=N,req=false',
         'Scale an NFS service')
-    def _nfs_update(self, svc_id, num=None, label=None, hosts=[]):
-        # type: (str, Optional[int], Optional[str], List[str]) -> HandleCommandResult
+    def _nfs_update(self, svc_id, placement=None):
+        # type: (str, Optional[List[str]]) -> HandleCommandResult
         spec = orchestrator.NFSServiceSpec(
             svc_id,
-            placement=orchestrator.PlacementSpec(label=label, hosts=hosts, count=num),
+            placement=orchestrator.PlacementSpec.from_strings(placement),
         )
         completion = self.update_nfs(spec)
         self._orchestrator_wait([completion])
@@ -599,16 +592,13 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator mgr update',
-        "name=num,type=CephInt,req=false "
-        "name=hosts,type=CephString,n=N,req=false "
-        "name=label,type=CephString,req=false",
+        'name=placement,type=CephString,n=N,req=false',
         'Update the number of manager instances')
-    def _update_mgrs(self, num=None, hosts=[], label=None):
+    def _update_mgrs(self, placement=None):
+        # type: (Optional[List[str]]) -> HandleCommandResult
 
-        placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
-        placement.validate()
-
-        spec = orchestrator.StatefulServiceSpec(placement=placement)
+        spec = orchestrator.StatefulServiceSpec(
+            placement=orchestrator.PlacementSpec.from_strings(placement))
 
         completion = self.update_mgrs(spec)
         self._orchestrator_wait([completion])
@@ -617,18 +607,16 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator mon update',
-        "name=num,type=CephInt,req=false "
-        "name=hosts,type=CephString,n=N,req=false "
-        "name=label,type=CephString,req=false",
+        'name=placement,type=CephString,n=N,req=false',
         'Update the number of monitor instances')
-    def _update_mons(self, num=None, hosts=[], label=None):
-        if not num and not hosts and not label:
+    def _update_mons(self, placement=None):
+        # type: (Optional[List[str]]) -> HandleCommandResult
+        placement_spec = orchestrator.PlacementSpec.from_strings(placement)
+        if not placement_spec:
             # Improve Error message. Point to parse_host_spec examples
             raise orchestrator.OrchestratorValidationError("Mons need a placement spec. (num, host, network, name(opt))")
-        placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
-        placement.validate()
 
-        spec = orchestrator.StatefulServiceSpec(placement=placement)
+        spec = orchestrator.StatefulServiceSpec(placement=placement_spec)
 
         completion = self.update_mons(spec)
         self._orchestrator_wait([completion])
