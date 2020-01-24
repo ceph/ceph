@@ -925,7 +925,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
                                            error_ok=True, no_fsid=True)
         if code:
-            return 1, '', err
+            return 1, '', ('check-host failed:\n' + '\n'.join(err))
         return 0, '%s ok' % host, err
 
     def _get_connection(self, host):
