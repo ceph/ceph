@@ -30,6 +30,7 @@
 
 #include "common/errno.h"
 
+#include "rgw_rados.h"
 #include "rgw_metadata.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
@@ -45,6 +46,7 @@ RGWServices_Def::~RGWServices_Def()
 }
 
 int RGWServices_Def::init(CephContext *cct,
+			  RGWRados* rgwrados,
 			  bool have_cache,
                           bool raw,
 			  bool run_sync)
@@ -78,7 +80,7 @@ int RGWServices_Def::init(CephContext *cct,
 
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
-  finisher->init();
+  finisher->init(&rgwrados->io_context());
   bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
@@ -275,11 +277,12 @@ void RGWServices_Def::shutdown()
 }
 
 
-int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_sync)
+int RGWServices::do_init(CephContext *_cct, RGWRados* rgwr, bool have_cache,
+			 bool raw, bool run_sync)
 {
   cct = _cct;
 
-  int r = _svc.init(cct, have_cache, raw, run_sync);
+  int r = _svc.init(cct, rgwr, have_cache, raw, run_sync);
   if (r < 0) {
     return r;
   }

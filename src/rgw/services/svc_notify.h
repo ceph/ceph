@@ -49,7 +49,6 @@ private:
   CB *cb{nullptr};
 
   std::optional<int> finisher_handle;
-  RGWSI_Notify_ShutdownCB *shutdown_cb{nullptr};
 
   bool finalized{false};
 
@@ -80,7 +79,6 @@ private:
   int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
                     optional_yield y);
 
-  void schedule_context(Context *c);
 public:
   RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
   ~RGWSI_Notify();
