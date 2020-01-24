@@ -9,8 +9,7 @@
 
 # For Orchestrator related PRs
 /src/cephadm                                    @ceph/orchestrators
-/src/pybind/mgr/orchestrator_cli                @ceph/orchestrators
-/src/pybind/mgr/orchestrator.py                 @ceph/orchestrators
+/src/pybind/mgr/orchestrator                    @ceph/orchestrators
 /src/pybind/mgr/rook                            @ceph/orchestrators
 /src/pybind/mgr/cephadm                         @ceph/orchestrators
 /src/pybind/mgr/test_orchestrator               @ceph/orchestrators
