@@ -132,6 +132,11 @@ def test_xattr():
     # user.key is already removed
     assert_raises(libcephfs.NoData, cephfs.getxattr, "/", "user.key")
 
+    # user.big is only listed
+    ret_val, ret_buff = cephfs.listxattr("/")
+    assert_equal(9, ret_val)
+    assert_equal("user.big\x00", ret_buff.decode('utf-8'))
+
 @with_setup(setup_test)
 def test_rename():
     cephfs.mkdir(b"/a", 0o755)
