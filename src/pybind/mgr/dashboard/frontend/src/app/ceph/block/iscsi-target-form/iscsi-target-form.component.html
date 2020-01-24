@@ -1,4 +1,4 @@
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form">
   <form name="targetForm"
         #formDir="ngForm"
         [formGroup]="targetForm"
@@ -11,12 +11,10 @@
       <div class="card-body">
         <!-- Target IQN -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="target_iqn">
-            <ng-container i18n>Target IQN</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="target_iqn"
+                 i18n>Target IQN</label>
+          <div class="cd-col-form-input">
             <div class="input-group">
               <input class="form-control"
                      type="text"
@@ -64,12 +62,10 @@
 
         <!-- Portals -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="portals">
-            <ng-container i18n>Portals</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="portals"
+                 i18n>Portals</label>
+          <div class="cd-col-form-input">
 
             <ng-container *ngFor="let portal of portals.value; let i = index">
               <div class="input-group cd-mb">
@@ -117,10 +113,10 @@
 
         <!-- Images -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="disks"
                  i18n>Images</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <ng-container *ngFor="let image of targetForm.getValue('disks'); let i = index">
               <div class="input-group cd-mb">
                 <input class="cd-form-control"
@@ -188,7 +184,7 @@
 
         <!-- acl_enabled -->
         <div class="form-group row">
-          <div class="offset-sm-3 col-sm-9">
+          <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"
@@ -210,11 +206,11 @@
 
           <!-- Target user -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_user">
               <ng-container i18n>User</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      type="text"
                      id="target_user"
@@ -234,11 +230,11 @@
 
           <!-- Target password -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_password">
               <ng-container i18n>Password</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="input-group">
                 <input class="form-control"
                        type="password"
@@ -271,11 +267,11 @@
 
           <!-- Target mutual_user -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_mutual_user">
               <ng-container i18n>Mutual User</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      type="text"
                      id="target_mutual_user"
@@ -295,11 +291,11 @@
 
           <!-- Target mutual_password -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="target_mutual_password">
               <ng-container i18n>Mutual Password</ng-container>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="input-group">
                 <input class="form-control"
                        type="password"
@@ -336,10 +332,10 @@
         <!-- Initiators -->
         <div class="form-group row"
              *ngIf="targetForm.getValue('acl_enabled')">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="initiators"
                  i18n>Initiators</label>
-          <div class="col-sm-9"
+          <div class="cd-col-form-input"
                formArrayName="initiators">
             <div class="card mb-2"
                  *ngFor="let initiator of initiators.controls; let ii = index"
@@ -355,12 +351,10 @@
               <div class="card-body">
                 <!-- Initiator: Name -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
-                         for="client_iqn">
-                    <ng-container i18n>Client IQN</ng-container>
-                    <span class="required"></span>
-                  </label>
-                  <div class="col-sm-9">
+                  <label class="cd-col-form-label required"
+                         for="client_iqn"
+                         i18n>Client IQN</label>
+                  <div class="cd-col-form-input">
                     <input class="form-control"
                            type="text"
                            formControlName="client_iqn"
@@ -384,10 +378,10 @@
                 <ng-container formGroupName="auth">
                   <!-- Initiator: User -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="user"
                            i18n>User</label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <input [id]="'user' + ii"
                              class="form-control"
                              formControlName="user"
@@ -405,10 +399,10 @@
 
                   <!-- Initiator: Password -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="password"
                            i18n>Password</label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <div class="input-group">
                         <input [id]="'password' + ii"
                                class="form-control"
@@ -440,11 +434,11 @@
 
                   <!-- Initiator: mutual_user -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="mutual_user">
                       <ng-container i18n>Mutual User</ng-container>
                     </label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <input [id]="'mutual_user' + ii"
                              class="form-control"
                              formControlName="mutual_user"
@@ -463,10 +457,10 @@
 
                   <!-- Initiator: mutual_password -->
                   <div class="form-group row">
-                    <label class="col-form-label col-sm-3"
+                    <label class="cd-col-form-label"
                            for="mutual_password"
                            i18n>Mutual Password</label>
-                    <div class="col-sm-9">
+                    <div class="cd-col-form-input">
                       <div class="input-group">
                         <input [id]="'mutual_password' + ii"
                                class="form-control"
@@ -498,10 +492,10 @@
 
                 <!-- Initiator: Images -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
+                  <label class="cd-col-form-label"
                          for="luns"
                          i18n>Images</label>
-                  <div class="col-sm-9">
+                  <div class="cd-col-form-input">
                     <ng-container *ngFor="let image of initiator.getValue('luns'); let li = index">
                       <div class="input-group cd-mb">
                         <input class="cd-form-control"
@@ -560,10 +554,10 @@
         <!-- Groups -->
         <div class="form-group row"
              *ngIf="targetForm.getValue('acl_enabled')">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="initiators"
                  i18n>Groups</label>
-          <div class="col-sm-9"
+          <div class="cd-col-form-input"
                formArrayName="groups">
             <div class="card mb-2"
                  *ngFor="let group of groups.controls; let gi = index"
@@ -579,12 +573,10 @@
               <div class="card-body">
                 <!-- Group: group_id -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
-                         for="group_id">
-                    <ng-container i18n>Name</ng-container>
-                    <span class="required"></span>
-                  </label>
-                  <div class="col-sm-9">
+                  <label class="cd-col-form-label required"
+                         for="group_id"
+                         i18n>Name</label>
+                  <div class="cd-col-form-input">
                     <input class="form-control"
                            type="text"
                            formControlName="group_id">
@@ -593,11 +585,11 @@
 
                 <!-- Group: members -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
+                  <label class="cd-col-form-label"
                          for="members">
                     <ng-container i18n>Initiators</ng-container>
                   </label>
-                  <div class="col-sm-9">
+                  <div class="cd-col-form-input">
                     <ng-container *ngFor="let member of group.getValue('members'); let i = index">
                       <div class="input-group cd-mb">
                         <input class="cd-form-control"
@@ -634,11 +626,11 @@
 
                 <!-- Group: disks -->
                 <div class="form-group row">
-                  <label class="col-form-label col-sm-3"
+                  <label class="cd-col-form-label"
                          for="disks">
                     <ng-container i18n>Images</ng-container>
                   </label>
-                  <div class="col-sm-9">
+                  <div class="cd-col-form-input">
                     <ng-container *ngFor="let disk of group.getValue('disks'); let i = index">
                       <div class="input-group cd-mb">
                         <input class="cd-form-control"

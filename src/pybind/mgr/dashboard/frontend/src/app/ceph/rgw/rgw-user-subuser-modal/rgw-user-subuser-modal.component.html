@@ -15,10 +15,10 @@
 
     <!-- Username -->
     <div class="form-group row">
-      <label class="col-form-label col-sm-3"
+      <label class="cd-col-form-label"
              for="uid"
              i18n>Username</label>
-      <div class="col-sm-9">
+      <div class="cd-col-form-input">
         <input id="uid"
                class="form-control"
                type="text"
@@ -29,14 +29,11 @@
 
     <!-- Subuser -->
     <div class="form-group row">
-      <label class="col-form-label col-sm-3"
-             for="subuid">
-        <ng-container i18n>Subuser</ng-container>
-        <span class="required"
-              *ngIf="!editing">
-        </span>
-      </label>
-      <div class="col-sm-9">
+      <label class="cd-col-form-label"
+             [ngClass]="{'required': !editing}"
+             for="subuid"
+             i18n>Subuser</label>
+      <div class="cd-col-form-input">
         <input id="subuid"
                class="form-control"
                type="text"
@@ -54,12 +51,10 @@
 
     <!-- Permission -->
     <div class="form-group row">
-      <label class="col-form-label col-sm-3"
-             for="perm">
-        <ng-container i18n>Permission</ng-container>
-        <span class="required"></span>
-      </label>
-      <div class="col-sm-9">
+      <label class="cd-col-form-label required"
+             for="perm"
+             i18n>Permission</label>
+      <div class="cd-col-form-input">
         <select id="perm"
                 class="form-control custom-select"
                 formControlName="perm">
@@ -86,7 +81,7 @@
 
       <!-- Auto-generate key -->
       <div class="form-group row">
-        <div class="offset-sm-3 col-sm-9">
+        <div class="cd-col-form-offset">
           <div class="custom-control custom-checkbox">
             <input class="custom-control-input"
                    id="generate_secret"
@@ -102,12 +97,10 @@
       <!-- Secret key -->
       <div class="form-group row"
            *ngIf="!editing && !formGroup.getValue('generate_secret')">
-        <label class="col-form-label col-sm-3"
-               for="secret_key">
-          <ng-container i18n>Secret key</ng-container>
-          <span class="required"></span>
-        </label>
-        <div class="col-sm-9">
+        <label class="cd-col-form-label required"
+               for="secret_key"
+               i18n>Secret key</label>
+        <div class="cd-col-form-input">
           <div class="input-group">
             <input id="secret_key"
                    class="form-control"

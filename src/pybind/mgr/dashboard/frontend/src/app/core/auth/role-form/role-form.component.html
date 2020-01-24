@@ -1,4 +1,4 @@
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form">
   <form name="roleForm"
         #formDir="ngForm"
         [formGroup]="roleForm"
@@ -10,13 +10,11 @@
 
         <!-- Name -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="name">
-            <ng-container i18n>Name</ng-container>
-            <span class="required"
-                  *ngIf="mode !== roleFormMode.editing"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': mode !== roleFormMode.editing}"
+                 for="name"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    i18n-placeholder
@@ -37,9 +35,9 @@
         <!-- Description -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3"
+                 class="cd-col-form-label"
                  for="description">Description</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    i18n-placeholder
@@ -53,8 +51,8 @@
         <!-- Permissions -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3">Permissions</label>
-          <div class="col-sm-9">
+                 class="cd-col-form-label">Permissions</label>
+          <div class="cd-col-form-input">
             <cd-table [data]="scopes_permissions"
                       [columns]="columns"
                       columnMode="flex"

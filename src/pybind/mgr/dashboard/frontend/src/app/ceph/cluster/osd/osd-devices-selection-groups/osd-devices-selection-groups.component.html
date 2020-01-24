@@ -1,6 +1,6 @@
 <!-- button -->
 <div class="form-group row">
-  <label class="col-sm-3 col-form-label"
+  <label class="cd-col-form-label"
          for="createDeleteButton">
     <ng-container i18n>{{ name }} devices</ng-container>
     <cd-helper>
@@ -12,7 +12,7 @@
             *ngIf="type === 'db'">DB devices can be used for storing BlueStore’s internal metadata.  It is only helpful to provision a DB device if it is faster than the primary device (e.g. NVME devices or SSD).</span>
     </cd-helper>
   </label>
-  <div class="col-sm-9">
+  <div class="cd-col-form-input">
     <ng-container *ngIf="devices.length === 0; else blockClearDevices">
       <button type="button"
               class="btn btn-light"

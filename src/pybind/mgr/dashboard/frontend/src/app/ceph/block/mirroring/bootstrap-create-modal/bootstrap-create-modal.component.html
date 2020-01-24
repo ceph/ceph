@@ -17,11 +17,9 @@
         </p>
 
         <div class="form-group">
-          <label class="col-form-label"
-                 for="siteName">
-            <span i18n>Site Name</span>
-            <span class="required"></span>
-          </label>
+          <label class="col-form-label required"
+                 for="siteName"
+                 i18n>Site Name</label>
           <input class="form-control"
                  type="text"
                  placeholder="Name..."
@@ -37,11 +35,9 @@
 
         <div class="form-group"
              formGroupName="pools">
-          <label class="col-form-label"
-                 for="pools">
-            <span i18n>Pools</span>
-            <span class="required"></span>
-          </label>
+          <label class="col-form-label required"
+                 for="pools"
+                 i18n>Pools</label>
           <div class="custom-control custom-checkbox"
                *ngFor="let pool of pools">
             <input type="checkbox"
