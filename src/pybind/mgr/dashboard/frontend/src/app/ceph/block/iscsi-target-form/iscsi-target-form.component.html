@@ -26,7 +26,8 @@
                      type="text"
                      id="target_iqn"
                      name="target_iqn"
-                     formControlName="target_iqn" />
+                     formControlName="target_iqn"
+                     cdTrim />
               <span class="input-group-btn">
                 <button class="btn btn-default"
                         id="ecp-info-button"
@@ -364,6 +365,7 @@
                     <input class="form-control"
                            type="text"
                            formControlName="client_iqn"
+                           cdTrim
                            (blur)="updatedInitiatorSelector()">
 
                     <span class="help-block"
