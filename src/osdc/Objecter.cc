@@ -2906,7 +2906,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   if (t->paused && !should_be_paused) {
     unpaused = true;
   }
-  t->paused = should_be_paused;
+  if (t->paused != should_be_paused) {
+    ldout(cct, 10) << __func__ << " paused " << t->paused
+		   << " -> " << should_be_paused << dendl;
+    t->paused = should_be_paused;
+  }
 
   bool legacy_change =
     t->pgid != pgid ||
