@@ -150,6 +150,10 @@ class OSDMap(ceph_module.BasePyOSDMap):
         d = self._dump()
         return d['erasure_code_profiles'].get(name, None)
 
+    def get_require_osd_release(self):
+        d = self._dump()
+        return d['require_osd_release']
+
 
 class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
     def get_epoch(self):
