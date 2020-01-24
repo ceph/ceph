@@ -12,7 +12,7 @@ function usage() {
     local prog_name=$(basename $1)
     shift
     cat <<EOF
-$prog_name [options] ... [test_name]
+$prog_name [options] ... [test_name] [-- posargs-to-tox]
 
 options:
 
@@ -22,6 +22,7 @@ options:
   [--tox-path dir]    directory in which "tox.ini" is located. if "test_name" is not specified, it is the current directory by default, otherwise the script will try to find a directory with the name of specified \$test_name with a "tox.ini" under it.
   <--tox-envs envs>   tox envlist. this option is required.
   [--venv-path]       the python virtualenv path. \$build_dir/\$test_name by default.
+  posargs-to-tox      See `posargs` as usable in tox.ini
 
 example:
 
@@ -29,9 +30,9 @@ following command will run tox with envlist of "py27,py3" using the "tox.ini" in
 
   $prog_name --tox-envs py27,py3
 
-following command will run tox with envlist of "py27" using "src/pybind/mgr/ansible/tox.ini"
+following command will run tox with envlist of "mypy,py3" using "src/pybind/mgr/tox.ini"
 
-  $prog_name --tox-envs py27 ansible
+  $prog_name --tox-envs mypy,py3 mgr
 
 following command will run tox with envlist of "py27" using "/ceph/src/python-common/tox.ini"
 
