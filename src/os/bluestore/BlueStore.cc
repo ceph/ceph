@@ -813,14 +813,6 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     }
     --num;
   }
-  void _touch(BlueStore::Onode* o) override
-  {
-    ceph_assert(o->cached);
-    if (!o->pinned) {
-      lru.erase(lru.iterator_to(*o));
-      lru.push_front(*o);
-    }
-  }
   void _pin(BlueStore::Onode* o) override
   {
     lru.erase(lru.iterator_to(*o));
@@ -1589,10 +1581,11 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
     } else {
       ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
 			    << dendl;
-      // assign before _touch to pin object if needed and avoid
-      // cache touch
+      // This will pin onode and implicitly touch the cache when Onode
+      // eventually will become unpinned
       o = p->second;
-      cache->_touch(p->second.get());
+      ceph_assert(!o->cached || o->pinned);
+
       hit = true;
     }
   }
@@ -1648,9 +1641,12 @@ void BlueStore::OnodeSpace::rename(
   oldo.reset(new Onode(o->c, old_oid, o->key));
   po->second = oldo;
   cache->_add(oldo.get(), 1);
-  // add at new position and fix oid, key
+  // add at new position and fix oid, key.
+  // This will pin 'o' and implicitly touch cache
+  // when it will eventually become unpinned
   onode_map.insert(make_pair(new_oid, o));
-  cache->_touch(o.get());
+  ceph_assert(o->pinned);
+
   o->oid = new_oid;
   o->key = new_okey;
   cache->_trim();
