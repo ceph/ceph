@@ -3104,12 +3104,17 @@ public:
 		  0, 0, op_flags);
     } else {
       C_GatherBuilder gcom(cct, oncommit);
+      auto it = bl.cbegin();
       for (auto p = extents.begin(); p != extents.end(); ++p) {
 	ceph::buffer::list cur;
 	for (auto bit = p->buffer_extents.begin();
 	     bit != p->buffer_extents.end();
-	     ++bit)
-	  bl.copy(bit->first, bit->second, cur);
+	     ++bit) {
+	  if (it.get_off() != bit->first) {
+	    it.seek(bit->first);
+	  }
+	  it.copy(bit->second, cur);
+	}
 	ceph_assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
