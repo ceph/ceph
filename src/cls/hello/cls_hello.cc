@@ -183,7 +183,6 @@ static int write_too_much_return_data(cls_method_context_t hctx, bufferlist *in,
   return 42;
 }
 
-
 /**
  * replay - a "read" method to get a previously recorded hello
  *
@@ -317,6 +316,7 @@ CLS_INIT(hello)
   cls_method_handle_t h_record_hello;
   cls_method_handle_t h_replay;
   cls_method_handle_t h_write_return_data;
+  cls_method_handle_t h_writes_dont_return_data;
   cls_method_handle_t h_write_too_much_return_data;
   cls_method_handle_t h_turn_it_to_11;
   cls_method_handle_t h_bad_reader;
@@ -340,6 +340,10 @@ CLS_INIT(hello)
 			  CLS_METHOD_WR | CLS_METHOD_PROMOTE,
 			  record_hello, &h_record_hello);
   cls_register_cxx_method(h_class, "write_return_data",
+			  CLS_METHOD_WR,
+			  write_return_data, &h_write_return_data);
+  // legacy alias for this method for pre-octopus clients
+  cls_register_cxx_method(h_class, "writes_dont_return_data",
 			  CLS_METHOD_WR,
 			  write_return_data, &h_write_return_data);
   cls_register_cxx_method(h_class, "write_too_much_return_data",

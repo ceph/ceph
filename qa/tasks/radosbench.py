@@ -82,12 +82,12 @@ def task(ctx, config):
             else:
                 pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
+        size = ['-b', str(config.get('size', 65536))]
         osize = config.get('objectsize', 65536)
-        if osize == 0:
+        if osize == 0 or osize == size:
             objectsize = []
         else:
             objectsize = ['-O', str(osize)]
-        size = ['-b', str(config.get('size', 65536))]
         # If doing a reading run then populate data
         if runtype != "write":
             proc = remote.run(
