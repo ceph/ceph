@@ -2,6 +2,9 @@
 from __future__ import absolute_import
 import json
 import logging
+
+from mgr_util import get_most_recent_rate
+
 from . import ApiController, RESTController, Endpoint, ReadPermission, UpdatePermission
 from .. import mgr
 from ..security import Scope
@@ -48,8 +51,9 @@ class Osd(RESTController):
                 continue
             for stat in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = stat.split('.')[1]
-                osd['stats'][prop] = CephService.get_rate('osd', osd_spec, stat)
-                osd['stats_history'][prop] = CephService.get_rates('osd', osd_spec, stat)
+                rates = CephService.get_rates('osd', osd_spec, stat)
+                osd['stats'][prop] = get_most_recent_rate(rates)
+                osd['stats_history'][prop] = rates
             # Gauge stats
             for stat in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
