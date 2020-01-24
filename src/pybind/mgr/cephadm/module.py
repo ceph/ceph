@@ -705,7 +705,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.event.set()
 
     def notify(self, notify_type, notify_id):
-        self.event.set()
+        pass
 
     def get_unique_name(self, existing, prefix=None, forcename=None):
         """
