@@ -1167,6 +1167,9 @@ class ServiceDescription(object):
         # Service status description when status == -1.
         self.status_desc = status_desc
 
+        # datetime when this info was last refreshed
+        self.last_refresh = None   # type: Optional[datetime.datetime]
+
     def name(self):
         if self.service_instance:
             return '%s.%s' % (self.service_type, self.service_instance)

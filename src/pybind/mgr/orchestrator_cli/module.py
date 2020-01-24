@@ -1,3 +1,4 @@
+import datetime
 import errno
 import json
 from functools import wraps
@@ -5,7 +6,7 @@ from functools import wraps
 from ceph.deployment.inventory import Device
 from prettytable import PrettyTable
 
-from mgr_util import format_bytes
+from mgr_util import format_bytes, to_pretty_timedelta
 
 try:
     from typing import List, Set, Optional
@@ -299,8 +300,9 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             data = [s.to_json() for s in services]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
+            now = datetime.datetime.utcnow()
             table = PrettyTable(
-                ['NAME', 'HOST', 'STATUS',
+                ['NAME', 'HOST', 'STATUS', 'REFRESHED',
                  'VERSION', 'IMAGE NAME', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
@@ -314,10 +316,15 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                     None: '<unknown>'
                 }[s.status]
 
+                if s.last_refresh:
+                    age = to_pretty_timedelta(now - s.last_refresh) + ' ago'
+                else:
+                    age = '-'
                 table.add_row((
                     s.name(),
                     ukn(s.nodename),
                     status,
+                    age,
                     ukn(s.version),
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],

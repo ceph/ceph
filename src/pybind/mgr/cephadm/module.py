@@ -12,6 +12,7 @@ except ImportError:
     pass  # just for type checking
 
 
+import datetime
 import six
 import os
 import random
@@ -22,6 +23,7 @@ import subprocess
 
 from ceph.deployment import inventory
 from mgr_module import MgrModule
+import mgr_util
 import orchestrator
 from orchestrator import OrchestratorError, HostSpec, OrchestratorValidationError
 
@@ -45,6 +47,8 @@ DEFAULT_SSH_CONFIG = ('Host *\n'
                       'User root\n'
                       'StrictHostKeyChecking no\n'
                       'UserKnownHostsFile /dev/null\n')
+
+DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 # for py2 compat
 try:
@@ -1075,6 +1079,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         out, err, code = self._run_cephadm(
             host, 'mon', 'ls', [], no_fsid=True)
         data = json.loads(''.join(out))
+        for d in data:
+            d['last_refresh'] = datetime.datetime.utcnow().strftime(DATEFMT)
         self.log.debug('Refreshed host %s services: %s' % (host, data))
         self.service_cache[host] = orchestrator.OutdatableData(data)
         return host, data
@@ -1116,6 +1122,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         continue
                     self.log.debug('including %s %s' % (host, d))
                     sd = orchestrator.ServiceDescription()
+                    sd.last_refresh = datetime.datetime.strptime(
+                        d.get('last_refresh'), DATEFMT)
                     sd.service_type = d['name'].split('.')[0]
                     if service_type and service_type != sd.service_type:
                         continue
@@ -1142,8 +1150,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     result.append(sd)
             return result
 
-        return self._refresh_host_services(wait_for_args).then(
-            _get_services_result)
+        if wait_for_args:
+            return self._refresh_host_services(wait_for_args).then(
+                _get_services_result)
+        else:
+            return trivial_result(_get_services_result({}))
 
     def describe_service(self, service_type=None, service_id=None,
                          node_name=None, refresh=False):
