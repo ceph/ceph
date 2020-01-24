@@ -172,5 +172,91 @@ List snapshots of a subvolume using::
 
     $ ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
+Cloning Snapshots
+-----------------
+
+Subvolumes can be created by cloning subvolume snapshots. Cloning is an asynchronous operation involving copying
+data from a snapshot to a subvolume. Due to this bulk copy nature, cloning is currently inefficient for very huge
+data sets.
+
+Before starting a clone operation, the snapshot should be protected. Protecting a snapshot ensures that the snapshot
+cannot be deleted when a clone operation is in progress. Snapshots can be protected using::
+
+  $ ceph fs subvolume snapshot protect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+To initiate a clone operation use::
+
+  $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name>
+
+If a snapshot (source subvolume) is a part of non-default group, the group name needs to be specified as per::
+
+  $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --group_name <subvol_group_name>
+
+Cloned subvolumes can be a part of a different group than the source snapshot (by default, cloned subvolumes are created in default group). To clone to a particular group use::
+
+  $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --target_group_name <subvol_group_name>
+
+Similar to specifying a pool layout when creating a subvolume, pool layout can be specified when creating a cloned subvolume. To create a cloned subvolume with a specific pool layout use::
+
+  $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
+
+To check the status of a clone operation use::
+
+  $ ceph fs clone status <vol_name> <clone_name> [--group_name <group_name>]
+
+A clone can be in one of the following states:
+
+#. `pending`     : Clone operation has not started
+#. `in-progress` : Clone operation is in progress
+#. `complete`    : Clone operation has sucessfully finished
+#. `failed`      : Clone operation has failed
+
+Sample output from an `in-progress` clone operation::
+
+  $ ceph fs subvolume snapshot protect cephfs subvol1 snap1
+  $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
+  $ ceph fs clone status cephfs clone1
+  {
+    "status": {
+      "state": "in-progress",
+      "source": {
+        "volume": "cephfs",
+        "subvolume": "subvol1",
+        "snapshot": "snap1"
+      }
+    }
+  }
+
+(NOTE: since `subvol1` is in default group, `source` section in `clone status` does not include group name)
+
+.. note:: Cloned subvolumes are accessible only after the clone operation has successfully completed.
+
+For a successsful clone operation, `clone status` would look like so::
+
+  $ ceph fs clone status cephfs clone1
+  {
+    "status": {
+      "state": "complete"
+    }
+  }
+
+or `failed` state when clone is unsuccessful.
+
+On failure of a clone operation, the partial clone needs to be deleted and the clone operation needs to be retriggered.
+To delete a partial clone use::
+
+  $ ceph fs subvolume rm <vol_name> <clone_name> [--group_name <group_name>] --force
+
+When no clone operations are in progress or scheduled, the snaphot can be unprotected. To unprotect a snapshot use::
+
+  $ ceph fs subvolume snapshot unprotect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+Note that unprotecting a snapshot would fail if there are pending or in progress clone operations. Also note that,
+only unprotected snapshots can be removed. This guarantees that a snapshot cannot be deleted when clones are pending
+(or in progress).
+
+.. note:: Cloning only synchronizes directories, regular files and symbolic links. Also, certain attributes such as
+          inode timestamps (for supported file types) and ownership (for symbolic links) are not synchronized.
+
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi
