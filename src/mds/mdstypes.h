@@ -1141,6 +1141,7 @@ struct client_metadata_t {
   iterator find(const std::string& key) const { return kv_map.find(key); }
   iterator begin() const { return kv_map.begin(); }
   iterator end() const { return kv_map.end(); }
+  void erase(iterator it) { kv_map.erase(it); }
   std::string& operator[](const std::string& key) { return kv_map[key]; }
   void merge(const client_metadata_t& other) {
     kv_map.insert(other.kv_map.begin(), other.kv_map.end());
