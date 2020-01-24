@@ -137,8 +137,8 @@ class SELinux(Task):
         ignore_known_denials = '\'\(' + str.join('\|', known_denials) + '\)\''
         for remote in self.cluster.remotes.keys():
             proc = remote.run(
-                args=['sudo', 'grep', 'avc: .*denied',
-                      '/var/log/audit/audit.log', run.Raw('|'), 'grep', '-v',
+                args=['sudo', 'grep', '-a', 'avc: .*denied',
+                      '/var/log/audit/audit.log', run.Raw('|'), 'grep', '-av',
                       run.Raw(ignore_known_denials)],
                 stdout=StringIO(),
                 check_status=False,
