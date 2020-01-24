@@ -10,4 +10,5 @@ ceph-volume developer documentation
 
    plugins
    lvm
+   zfs
    systemd
