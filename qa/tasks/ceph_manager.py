@@ -374,6 +374,9 @@ class OSDThrasher(Thrasher):
                         # Copy export file to the other machine
                         self.log("Transfer export file from {srem} to {trem}".
                                  format(srem=exp_remote, trem=imp_remote))
+                        # just in case an upgrade make /var/log/ceph unreadable by non-root,
+                        exp_remote.run(args=['sudo', 'chmod', '777', '/var/log/ceph'])
+                        imp_remote.run(args=['sudo', 'chmod', '777', '/var/log/ceph'])
                         tmpexport = Remote.get_file(exp_remote, exp_host_path)
                         Remote.put_file(imp_remote, tmpexport, exp_host_path)
                         os.remove(tmpexport)
