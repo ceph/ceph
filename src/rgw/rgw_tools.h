@@ -6,12 +6,19 @@
 
 #include <string>
 
+#include <boost/system/error_code.hpp>
+
 #include "include/types.h"
 #include "include/ceph_hash.h"
+#include "include/neorados/RADOS.hpp"
+#include "include/expected.hpp"
 
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
+
+namespace R = neorados;
+namespace bs = boost::system;
 
 class RGWSI_SysObj;
 
@@ -103,6 +110,166 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
 
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();
+
+
+// NEORados
+//
+// We need all these available as free functions so we can use them in
+// unit tests without having to spin up an entire RGWRados.
+
+bs::error_code
+rgw_rados_set_omap_heavy(R::RADOS& r, std::string_view pool,
+			 optional_yield y);
+tl::expected<std::int64_t, bs::error_code>
+rgw_rados_acquire_pool_id(R::RADOS& r, std::string_view pool, bool mostly_omap,
+			  optional_yield y, bool create = true);
+tl::expected<R::IOContext, bs::error_code>
+rgw_rados_acquire_pool(R::RADOS& r, rgw_pool pool, bool mostly_omap,
+		       optional_yield y, bool create = true);
+
+bs::error_code
+rgw_rados_operate(R::RADOS& r, const R::Object& o, const R::IOContext& i,
+		  R::WriteOp&& op, optional_yield y,
+		  version_t* objver = nullptr);
+bs::error_code
+rgw_rados_operate(R::RADOS& r, const R::Object& o, const R::IOContext& i,
+		  R::ReadOp&& op, bufferlist* bl, optional_yield y,
+		  version_t* objver = nullptr);
+tl::expected<uint64_t, bs::error_code>
+rgw_rados_watch(R::RADOS& r, const R::Object& o, const R::IOContext& i,
+		R::RADOS::WatchCB&& f, optional_yield y);
+bs::error_code
+rgw_rados_unwatch(R::RADOS& r, const R::IOContext& i, uint64_t handle,
+		  optional_yield y);
+bs::error_code
+rgw_rados_notify(R::RADOS& r, const R::Object& o, const R::IOContext& i,
+		 bufferlist&& bl,
+		 std::optional<std::chrono::milliseconds> timeout,
+		 bufferlist* pbl, optional_yield y);
+bs::error_code
+rgw_rados_notify_ack(R::RADOS& r, const R::Object& o, R::IOContext& i,
+		     uint64_t notify_id, uint64_t cookie,
+		     bufferlist&& bl, optional_yield y);
+void rgw_rados_watch_flush(R::RADOS& r, optional_yield y);
+
+using rgw_rados_list_filter = std::function<bool(std::string_view,
+						 std::string_view)>;
+inline auto rgw_rados_prefix_filter(std::string prefix) {
+  return [prefix = std::move(prefix)](std::string_view,
+				      std::string_view key) -> bool {
+	   return (prefix.compare(key.substr(0, prefix.size())) == 0);
+	 };
+}
+
+bs::error_code
+rgw_rados_list_pool(R::RADOS& r, const R::IOContext& i, const int max,
+		    const rgw_rados_list_filter& filter,
+		    R::Cursor& iter, std::vector<std::string>* oids,
+		    bool* is_truncated, optional_yield y);
+
+
+// Analogous to rgw_rados_ref, contains a pointer to the RADOS handle,
+// IOContext, Object, and the name of the pool. (Since in one place we
+// end up looking it up.)
+struct neo_obj_ref {
+  R::RADOS* r = nullptr;
+  R::Object oid;
+  R::IOContext ioc;
+  std::string pool_name;
+
+  neo_obj_ref() = default;
+
+  neo_obj_ref(R::RADOS* r, R::Object oid, R::IOContext ioc,
+	      std::string pool_name)
+    : r(r), oid(std::move(oid)), ioc(std::move(ioc)),
+      pool_name(std::move(pool_name)) {}
+
+  bs::error_code operate(R::WriteOp&& op, optional_yield y,
+			 version_t* objver = nullptr) {
+    return rgw_rados_operate(*r, oid, ioc, std::move(op), y, objver);
+  }
+  template<typename CT>
+  auto aio_operate(R::WriteOp&& op, CT&& ct, version_t* objver = nullptr) {
+    return r->execute(oid, ioc, std::move(op), std::forward<CT>(ct), objver);
+  }
+  bs::error_code operate(R::ReadOp&& op, bufferlist* bl, optional_yield y,
+			 version_t* objver = nullptr) {
+    return rgw_rados_operate(*r, oid, ioc, std::move(op), bl, y, objver);
+  }
+  template<typename CT>
+  auto aio_operate(R::ReadOp&& op, bufferlist* bl, CT&& ct,
+		   version_t* objver = nullptr) {
+    return r->execute(oid, ioc, std::move(op), bl, std::forward<CT>(ct),
+		      objver);
+  }
+  tl::expected<uint64_t, bs::error_code>
+  watch(R::RADOS::WatchCB&& f, optional_yield y) {
+    return rgw_rados_watch(*r, oid, ioc, std::move(f), y);
+  }
+  template<typename CT>
+  auto aio_watch(R::RADOS::WatchCB&& f, CT&& ct) {
+    return r->watch(oid, ioc, nullopt, std::move(f), std::forward<CT>(ct));
+  }
+  bs::error_code unwatch(uint64_t handle, optional_yield y) {
+    return rgw_rados_unwatch(*r, ioc, handle, y);
+  }
+  template<typename CT>
+  auto aio_unwatch(uint64_t handle, CT&& ct) {
+    return r->unwatch(ioc, handle, std::forward<CT>(ct));
+  }
+  bs::error_code notify(bufferlist&& bl,
+			std::optional<std::chrono::milliseconds> timeout,
+			bufferlist* pbl, optional_yield y) {
+    return rgw_rados_notify(*r, oid, ioc, std::move(bl), timeout, pbl, y);
+  }
+  template<typename CT>
+  auto aio_notify(bufferlist&& bl,
+		  std::optional<std::chrono::milliseconds> timeout,
+		  bufferlist* pbl, CT&& ct) {
+    return r->notify(oid, ioc, std::move(bl), timeout, pbl,
+		     std::forward<CT>(ct));
+  }
+  bs::error_code notify_ack(uint64_t notify_id, uint64_t cookie,
+			    bufferlist&& bl, optional_yield y) {
+    return rgw_rados_notify_ack(*r, oid, ioc, notify_id, cookie, std::move(bl), y);
+  }
+  template<typename CT>
+  auto aio_notify_ack(uint64_t notify_id, uint64_t cookie, bufferlist&& bl,
+		      CT&& ct) {
+    return r->notify_ack(oid, ioc, notify_id, cookie, std::move(bl),
+			 std::forward<CT>(ct));
+  }
+};
+inline bool operator <(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) < std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator <=(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) <= std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator >=(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) >= std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator >(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) > std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator ==(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) == std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator !=(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) != std::tie(rhs.ioc, rhs.oid);
+}
+namespace std {
+template<>
+struct hash<neo_obj_ref> {
+  size_t operator ()(const neo_obj_ref& ref) const {
+    return hash<R::IOContext>{}(ref.ioc) ^ (hash<R::Object>{}(ref.oid) << 1);
+  }
+};
+}
+
+tl::expected<neo_obj_ref, bs::error_code>
+rgw_rados_acquire_obj(R::RADOS& r, const rgw_raw_obj& obj, optional_yield y);
+
 
 template<class H, size_t S>
 class RGWEtag

@@ -20,6 +20,7 @@
 #include "cls/log/cls_log_types.h"
 #include "cls/timeindex/cls_timeindex_types.h"
 #include "cls/otp/cls_otp_types.h"
+#include "rgw_tools.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
@@ -75,7 +76,7 @@ static inline void prepend_bucket_marker(const rgw_bucket& bucket, const string&
   }
 }
 
-static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& locator)
+inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& locator)
 {
   const rgw_bucket& bucket = obj.bucket;
   prepend_bucket_marker(bucket, obj.get_oid(), oid);
@@ -403,6 +404,9 @@ class lru_map;
 using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
 
 class RGWIndexCompletionManager;
+
+
+
 
 class RGWRados
 {
@@ -1572,6 +1576,69 @@ public:
    */
   static uint32_t calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 						     uint32_t num_shards);
+
+  // NEORados
+  bs::error_code set_omap_heavy(std::string_view pool, optional_yield y) {
+    return rgw_rados_set_omap_heavy(*neorados, pool, y);
+  }
+public:
+  tl::expected<std::int64_t, bs::error_code>
+  acquire_pool_id(std::string_view pool, bool mostly_omap,
+		  optional_yield y, bool create = true) {
+    return rgw_rados_acquire_pool_id(*neorados, pool, mostly_omap, y, create);
+  }
+  tl::expected<R::IOContext, bs::error_code>
+  acquire_pool(rgw_pool pool, bool mostly_omap,
+	       optional_yield y, bool create = true) {
+    return rgw_rados_acquire_pool(*neorados, pool, mostly_omap, y, create);
+  }
+  tl::expected<neo_obj_ref, bs::error_code>
+  acquire_obj(const rgw_raw_obj& obj, optional_yield y) {
+    return rgw_rados_acquire_obj(*neorados, obj, y);
+  }
+
+  bs::error_code operate(const R::Object& o, const R::IOContext& i,
+			 R::WriteOp&& op, optional_yield y,
+			 version_t* objver = nullptr) {
+    return rgw_rados_operate(*neorados, o, i, std::move(op), y, objver);
+  }
+  bs::error_code operate(const R::Object& o, const R::IOContext& i,
+			 R::ReadOp&& op, bufferlist* bl, optional_yield y,
+			 version_t* objver = nullptr) {
+    return rgw_rados_operate(*neorados, o, i, std::move(op), bl, y, objver);
+  }
+  tl::expected<uint64_t, bs::error_code>
+  watch(const R::Object& o, const R::IOContext& i,
+	R::RADOS::WatchCB&& f, optional_yield y) {
+    return rgw_rados_watch(*neorados, o, i, std::move(f), y);
+  }
+  bs::error_code unwatch(const R::IOContext& i, uint64_t handle,
+			 optional_yield y) {
+    return rgw_rados_unwatch(*neorados, i, handle, y);
+  }
+  bs::error_code notify(const R::Object& o, const R::IOContext& i,
+			bufferlist&& bl,
+			std::optional<std::chrono::milliseconds> timeout,
+			bufferlist* pbl, optional_yield y) {
+    return rgw_rados_notify(*neorados, o, i, std::move(bl), timeout, pbl, y);
+  }
+  bs::error_code notify_ack(const R::Object& o, R::IOContext& i,
+			    uint64_t notify_id, uint64_t cookie,
+			    bufferlist&& bl, optional_yield y) {
+    return rgw_rados_notify_ack(*neorados, o, i, notify_id, cookie,
+				std::move(bl), y);
+  }
+  void watch_flush(optional_yield y) {
+    rgw_rados_watch_flush(*neorados, y);
+  }
+
+  bs::error_code list_pool(const R::IOContext& i, const int max,
+			   const rgw_rados_list_filter& filter,
+			   R::Cursor& iter, std::vector<std::string>* oids,
+			   bool* is_truncated, optional_yield y) {
+    return rgw_rados_list_pool(*neorados, i, max, filter, iter, oids, is_truncated, y);
+  }
 };
+
 
 #endif
