@@ -429,25 +429,33 @@ int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const string& oid, const str
 class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
   cls_rgw_obj_key start_obj;
   string filter_prefix;
+  string delimiter;
   uint32_t num_entries;
   bool list_versions;
   map<int, rgw_cls_list_ret>& result;
 protected:
   int issue_op(int shard_id, const string& oid) override;
 public:
-  CLSRGWIssueBucketList(librados::IoCtx& io_ctx, const cls_rgw_obj_key& _start_obj,
-                        const string& _filter_prefix, uint32_t _num_entries,
+  CLSRGWIssueBucketList(librados::IoCtx& io_ctx,
+			const cls_rgw_obj_key& _start_obj,
+                        const string& _filter_prefix,
+			const string& _delimiter,
+			uint32_t _num_entries,
                         bool _list_versions,
                         map<int, string>& oids,
                         map<int, rgw_cls_list_ret>& list_results,
                         uint32_t max_aio) :
   CLSRGWConcurrentIO(io_ctx, oids, max_aio),
-  start_obj(_start_obj), filter_prefix(_filter_prefix), num_entries(_num_entries), list_versions(_list_versions), result(list_results) {}
+    start_obj(_start_obj), filter_prefix(_filter_prefix), delimiter(_delimiter),
+    num_entries(_num_entries), list_versions(_list_versions),
+    result(list_results)
+  {}
 };
 
 void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const cls_rgw_obj_key& start_obj,
                             const std::string& filter_prefix,
+			    const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
                             rgw_cls_list_ret* result);
