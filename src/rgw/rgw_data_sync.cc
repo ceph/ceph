@@ -2793,7 +2793,7 @@ public:
         }
 
         if (write_status) {
-          map<string, bufferlist> attrs;
+	  bc::flat_map<string, bufferlist> attrs;
           status.encode_all_attrs(attrs);
           call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, sync_env->svc->sysobj, obj, attrs, &objv_tracker));
         } else {
@@ -2857,10 +2857,10 @@ RGWCoroutine *RGWRemoteBucketManager::init_sync_status_cr(int num, RGWObjVersion
 
 #define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
 
-template <class T>
-static bool decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const string& attr_name, T *val)
+template<typename T, typename M>
+static bool decode_attr(CephContext *cct, M& attrs, const string& attr_name, T *val)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(attr_name);
+  auto iter = attrs.find(attr_name);
   if (iter == attrs.end()) {
     *val = T();
     return false;
@@ -2876,7 +2876,8 @@ static bool decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const 
   return true;
 }
 
-void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs)
+void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct,
+						   bc::flat_map<string, bufferlist>& attrs)
 {
   if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "state", &state)) {
     decode_attr(cct, attrs, "state", &state);
@@ -2889,26 +2890,25 @@ void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct, map<string,
   }
 }
 
-void rgw_bucket_shard_sync_info::encode_all_attrs(map<string, bufferlist>& attrs)
-{
+void rgw_bucket_shard_sync_info::encode_all_attrs(bc::flat_map<string, bufferlist>& attrs) {
   encode_state_attr(attrs);
   full_marker.encode_attr(attrs);
   inc_marker.encode_attr(attrs);
 }
 
-void rgw_bucket_shard_sync_info::encode_state_attr(map<string, bufferlist>& attrs)
+void rgw_bucket_shard_sync_info::encode_state_attr(bc::flat_map<string, bufferlist>& attrs)
 {
   using ceph::encode;
   encode(state, attrs[BUCKET_SYNC_ATTR_PREFIX "state"]);
 }
 
-void rgw_bucket_shard_full_sync_marker::encode_attr(map<string, bufferlist>& attrs)
+void rgw_bucket_shard_full_sync_marker::encode_attr(bc::flat_map<string, bufferlist>& attrs)
 {
   using ceph::encode;
   encode(*this, attrs[BUCKET_SYNC_ATTR_PREFIX "full_marker"]);
 }
 
-void rgw_bucket_shard_inc_sync_marker::encode_attr(map<string, bufferlist>& attrs)
+void rgw_bucket_shard_inc_sync_marker::encode_attr(bc::flat_map<string, bufferlist>& attrs)
 {
   using ceph::encode;
   encode(*this, attrs[BUCKET_SYNC_ATTR_PREFIX "inc_marker"]);
@@ -2920,7 +2920,7 @@ class RGWReadBucketPipeSyncStatusCoroutine : public RGWCoroutine {
   string oid;
   rgw_bucket_shard_sync_info *status;
   RGWObjVersionTracker* objv_tracker;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
 public:
   RGWReadBucketPipeSyncStatusCoroutine(RGWDataSyncCtx *_sc,
                                    const rgw_bucket_sync_pair_info& sync_pair,
@@ -3349,7 +3349,7 @@ public:
     sync_marker.position = new_marker;
     sync_marker.count = index_pos;
 
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     sync_marker.encode_attr(attrs);
 
     tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
@@ -3370,7 +3370,7 @@ class RGWWriteBucketShardIncSyncStatus : public RGWCoroutine {
   rgw_bucket_shard_inc_sync_marker sync_marker;
   ceph::real_time* stable_timestamp;
   RGWObjVersionTracker& objv_tracker;
-  std::map<std::string, bufferlist> attrs;
+  bc::flat_map<std::string, bufferlist> attrs;
  public:
   RGWWriteBucketShardIncSyncStatus(RGWDataSyncEnv *sync_env,
                                    const rgw_raw_obj& obj,
@@ -3838,7 +3838,7 @@ int RGWBucketShardFullSyncCR::operate()
     if (sync_status == 0) {
       yield {
         sync_info.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
-        map<string, bufferlist> attrs;
+	bc::flat_map<string, bufferlist> attrs;
         sync_info.encode_state_attr(attrs);
         call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, sync_env->svc->sysobj,
                                             rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, status_oid),

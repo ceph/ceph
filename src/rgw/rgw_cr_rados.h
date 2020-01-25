@@ -307,7 +307,7 @@ public:
                        bool want_attrs, bool raw_attrs);
 
   bufferlist bl;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   RGWObjVersionTracker objv_tracker;
 };
 
@@ -330,14 +330,14 @@ public:
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
   RGWSI_SysObj *svc;
   rgw_raw_obj obj;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
 
 protected:
   int _send_request() override;
 public:
   RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
-                       RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       map<string, bufferlist> _attrs);
+			    RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
+			    bc::flat_map<string, bufferlist> _attrs);
 
   RGWObjVersionTracker objv_tracker;
 };
@@ -454,14 +454,14 @@ class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
   RGWSI_SysObj *svc;
 
   rgw_raw_obj obj;
-  map<string, bufferlist> *pattrs;
+  bc::flat_map<string, bufferlist> *pattrs;
   bool raw_attrs;
   RGWObjVersionTracker* objv_tracker;
   RGWAsyncGetSystemObj *req = nullptr;
 
 public:
   RGWSimpleRadosReadAttrsCR(RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
-                            const rgw_raw_obj& _obj, map<string, bufferlist> *_pattrs,
+                            const rgw_raw_obj& _obj, bc::flat_map<string, bufferlist> *_pattrs,
                             bool _raw_attrs, RGWObjVersionTracker* objv_tracker = nullptr)
     : RGWSimpleCoroutine(_svc->ctx()),
       async_rados(_async_rados), svc(_svc),
@@ -473,7 +473,7 @@ public:
   ~RGWSimpleRadosReadAttrsCR() override {
     request_cleanup();
   }
-                                                         
+
   void request_cleanup() override {
     if (req) {
       req->finish();
@@ -535,13 +535,13 @@ class RGWSimpleRadosWriteAttrsCR : public RGWSimpleCoroutine {
   RGWObjVersionTracker *objv_tracker;
 
   rgw_raw_obj obj;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   RGWAsyncPutSystemObjAttrs *req = nullptr;
 
 public:
   RGWSimpleRadosWriteAttrsCR(RGWAsyncRadosProcessor *_async_rados,
                              RGWSI_SysObj *_svc, const rgw_raw_obj& _obj,
-                             map<string, bufferlist> _attrs,
+                             bc::flat_map<string, bufferlist> _attrs,
                              RGWObjVersionTracker *objv_tracker = nullptr)
     : RGWSimpleCoroutine(_svc->ctx()), async_rados(_async_rados),
       svc(_svc), objv_tracker(objv_tracker), obj(_obj),

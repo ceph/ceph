@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_DATA_SYNC_H
 #define CEPH_RGW_DATA_SYNC_H
 
+#include <boost/container/flat_map.hpp>
 #include "include/encoding.h"
 
 #include "common/RWLock.h"
@@ -77,6 +78,8 @@ struct rgw_bucket_sync_pipe {
 inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pipe& p) {
   return out << p.info;
 }
+
+namespace bc = boost::container;
 
 struct rgw_datalog_info {
   uint32_t num_shards;
@@ -473,7 +476,7 @@ struct rgw_bucket_shard_full_sync_marker {
 
   rgw_bucket_shard_full_sync_marker() : count(0) {}
 
-  void encode_attr(map<string, bufferlist>& attrs);
+  void encode_attr(bc::flat_map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -484,8 +487,8 @@ struct rgw_bucket_shard_full_sync_marker {
 
   void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
-    decode(position, bl);
-    decode(count, bl);
+     decode(position, bl);
+     decode(count, bl);
      DECODE_FINISH(bl);
   }
 
@@ -498,7 +501,7 @@ struct rgw_bucket_shard_inc_sync_marker {
   string position;
   ceph::real_time timestamp;
 
-  void encode_attr(map<string, bufferlist>& attrs);
+  void encode_attr(bc::flat_map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
@@ -533,9 +536,12 @@ struct rgw_bucket_shard_sync_info {
   rgw_bucket_shard_full_sync_marker full_marker;
   rgw_bucket_shard_inc_sync_marker inc_marker;
 
-  void decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs);
-  void encode_all_attrs(map<string, bufferlist>& attrs);
-  void encode_state_attr(map<string, bufferlist>& attrs);
+  void decode_from_attrs(CephContext *cct,
+			 bc::flat_map<string, bufferlist>& attrs);
+
+  void encode_all_attrs(bc::flat_map<string, bufferlist>& attrs);
+
+  void encode_state_attr(bc::flat_map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
