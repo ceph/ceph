@@ -100,7 +100,7 @@ int RGWServices_Def::init(CephContext *cct,
   notify->init(zone.get(), rgwrados, finisher.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
-  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
+  zone->init(sysobj.get(), rgwrados, sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());
