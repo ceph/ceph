@@ -12,3 +12,4 @@ target_link_libraries(libneorados PRIVATE
 
 add_library(neorados_cls_fifo STATIC cls/fifo.cc)
 add_library(neorados_cls_version STATIC cls/version.cc)
+add_library(neorados_cls_rgw STATIC cls/rgw.cc)
