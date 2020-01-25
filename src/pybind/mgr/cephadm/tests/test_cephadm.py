@@ -60,7 +60,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.describe_service()
+            c = cephadm_module.describe_service(refresh=True)
             assert wait(cephadm_module, c) == []
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
