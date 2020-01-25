@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_RGW_OPS_H
 #define CEPH_CLS_RGW_OPS_H
 
@@ -383,29 +386,37 @@ struct rgw_cls_list_op
   uint32_t num_entries;
   string filter_prefix;
   bool list_versions;
+  string delimiter;
 
   rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 4, bl);
+    ENCODE_START(6, 4, bl);
     encode(num_entries, bl);
     encode(filter_prefix, bl);
     encode(start_obj, bl);
     encode(list_versions, bl);
+    encode(delimiter, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
     if (struct_v < 4) {
       decode(start_obj.name, bl);
     }
     decode(num_entries, bl);
-    if (struct_v >= 3)
+    if (struct_v >= 3) {
       decode(filter_prefix, bl);
-    if (struct_v >= 4)
+    }
+    if (struct_v >= 4) {
       decode(start_obj, bl);
-    if (struct_v >= 5)
+    }
+    if (struct_v >= 5) {
       decode(list_versions, bl);
+    }
+    if (struct_v >= 6) {
+      decode(delimiter, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -417,18 +428,27 @@ struct rgw_cls_list_ret {
   rgw_bucket_dir dir;
   bool is_truncated;
 
-  rgw_cls_list_ret() : is_truncated(false) {}
+  // cls_filtered is not transmitted; it is assumed true for versions
+  // on/after 3 and false for prior versions; this allows the rgw
+  // layer to know when an older osd (cls) does not do the filtering
+  bool cls_filtered;
+
+  rgw_cls_list_ret() :
+    is_truncated(false),
+    cls_filtered(true)
+  {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     encode(dir, bl);
     encode(is_truncated, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     decode(dir, bl);
     decode(is_truncated, bl);
+    cls_filtered = struct_v >= 3;
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

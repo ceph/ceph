@@ -1707,19 +1707,10 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 }
 
 
-static inline std::string after_delim(std::string_view delim)
-{
-  // assert: ! delim.empty()
-  std::string result{delim.data(), delim.length()};
-  result += char(255);
-  return result;
-}
-
-
 /**
  * Get ordered listing of the objects in a bucket.
  *
- * max: maximum number of results to return
+ * max_p: maximum number of results to return
  * bucket: bucket to list contents of
  * prefix: only return results that match this prefix
  * delim: do not include results that match this string.
@@ -1733,11 +1724,12 @@ static inline std::string after_delim(std::string_view delim)
  * is_truncated: if number of objects in the bucket is bigger than
  * max, then truncated.
  */
-int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
-						 vector<rgw_bucket_dir_entry> *result,
-						 map<string, bool> *common_prefixes,
-						 bool *is_truncated,
-						 optional_yield y)
+int RGWRados::Bucket::List::list_objects_ordered(
+  int64_t max_p,
+  vector<rgw_bucket_dir_entry> *result,
+  map<string, bool> *common_prefixes,
+  bool *is_truncated,
+  optional_yield y)
 {
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
@@ -1745,17 +1737,21 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
 
   int count = 0;
   bool truncated = true;
+  bool cls_filtered = false;
   const int64_t max = // protect against memory issues and negative vals
     std::min(bucket_list_objects_absolute_max, std::max(int64_t(0), max_p));
   int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead, max);
 
   result->clear();
 
-  rgw_obj_key marker_obj(params.marker.name, params.marker.instance, params.ns);
+  rgw_obj_key marker_obj(params.marker.name,
+			 params.marker.instance,
+			 params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
-  rgw_obj_key end_marker_obj(params.end_marker.name, params.end_marker.instance,
+  rgw_obj_key end_marker_obj(params.end_marker.name,
+			     params.end_marker.instance,
                              params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
@@ -1767,7 +1763,7 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
   string after_delim_s; /* needed in !params.delim.empty() AND later */
 
   if (!params.delim.empty()) {
-    after_delim_s = after_delim(params.delim);
+    after_delim_s = cls_rgw_after_delim(params.delim);
     /* if marker points at a common prefix, fast forward it into its
      * upper bound string */
     int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
@@ -1779,7 +1775,6 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
   }
 
   constexpr int allowed_read_attempts = 2;
-  string skip_after_delim;
   for (int attempt = 0; attempt < allowed_read_attempts; ++attempt) {
     // this loop is generally expected only to have a single
     // iteration; see bottom of loop for early exit
@@ -1790,14 +1785,17 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
 					   shard_id,
 					   cur_marker,
 					   cur_prefix,
+					   params.delim,
 					   read_ahead + 1 - count,
 					   params.list_versions,
 					   ent_map,
 					   &truncated,
+					   &cls_filtered,
 					   &cur_marker,
                                            y);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     for (auto eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
       rgw_bucket_dir_entry& entry = eiter->second;
@@ -1813,7 +1811,8 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
        */
       bool valid = rgw_obj_key::parse_raw_oid(index_key.name, &obj);
       if (!valid) {
-        ldout(cct, 0) << "ERROR: could not parse object name: " << obj.name << dendl;
+        ldout(cct, 0) << "ERROR: could not parse object name: " <<
+	  obj.name << dendl;
         continue;
       }
 
@@ -1843,36 +1842,72 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
         next_marker = index_key;
       }
 
-      if (params.filter && !params.filter->filter(obj.name, index_key.name))
+      if (params.filter &&
+	  ! params.filter->filter(obj.name, index_key.name)) {
         continue;
+      }
 
       if (params.prefix.size() &&
-	  (obj.name.compare(0, params.prefix.size(), params.prefix) != 0))
+	  0 != obj.name.compare(0, params.prefix.size(), params.prefix)) {
         continue;
+      }
 
       if (!params.delim.empty()) {
-        int delim_pos = obj.name.find(params.delim, params.prefix.size());
+	const int delim_pos = obj.name.find(params.delim, params.prefix.size());
+	if (delim_pos >= 0) {
+	  // run either the code where delimiter filtering is done a)
+	  // in the OSD/CLS or b) here.
+	  if (cls_filtered) {
+	    // NOTE: this condition is for the newer versions of the
+	    // OSD that does filtering on the CLS side
 
-        if (delim_pos >= 0) {
-	  /* extract key -with trailing delimiter- for CommonPrefix */
-          string prefix_key =
-	    obj.name.substr(0, delim_pos + params.delim.length());
+	    // should only find one delimiter at the end if it finds any
+	    // after the prefix
+	    if (delim_pos !=
+		int(obj.name.length() - params.delim.length())) {
+	      ldout(cct, 0) <<
+		"WARNING: found delimiter in place other than the end of "
+		"the prefix; obj.name=" << obj.name <<
+		", prefix=" << params.prefix << dendl;
+	    }
+	    if (common_prefixes) {
+	      if (count >= max) {
+		truncated = true;
+		goto done;
+	      }
 
-          if (common_prefixes &&
-              common_prefixes->find(prefix_key) == common_prefixes->end()) {
-            if (count >= max) {
-              truncated = true;
-              goto done;
-            }
-            next_marker = prefix_key;
-            (*common_prefixes)[prefix_key] = true;
+	      (*common_prefixes)[obj.name] = true;
+	      count++;
+	    }
 
-            count++;
-          }
+	    continue;
+	  } else {
+	    // NOTE: this condition is for older versions of the OSD
+	    // that do not filter on the CLS side, so the following code
+	    // must do the filtering; once we reach version 16 of ceph,
+	    // this code can be removed along with the conditional that
+	    // can lead this way
 
-          continue;
-        }
-      }
+	    /* extract key -with trailing delimiter- for CommonPrefix */
+	    string prefix_key =
+	      obj.name.substr(0, delim_pos + params.delim.length());
+
+	    if (common_prefixes &&
+		common_prefixes->find(prefix_key) == common_prefixes->end()) {
+	      if (count >= max) {
+		truncated = true;
+		goto done;
+	      }
+	      next_marker = prefix_key;
+	      (*common_prefixes)[prefix_key] = true;
+
+	      count++;
+	    }
+
+	    continue;
+	  } // if we're running an older OSD version
+	} // if a delimiter was found after prefix
+      } // if a delimiter was passed in
 
       if (count >= max) {
         truncated = true;
@@ -1883,10 +1918,16 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
       count++;
     } // eiter for loop
 
-    if (!params.delim.empty()) {
-      int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
+    // NOTE: the following conditional is needed by older versions of
+    // the OSD that don't do delimiter filtering on the CLS side; once
+    // we reach version 16 of ceph, the following conditional and the
+    // code within can be removed
+    if (!cls_filtered && !params.delim.empty()) {
+      int marker_delim_pos =
+	cur_marker.name.find(params.delim, cur_prefix.size());
       if (marker_delim_pos >= 0) {
-        skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
+	std::string skip_after_delim =
+	  cur_marker.name.substr(0, marker_delim_pos);
         skip_after_delim.append(after_delim_s);
 
         ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
@@ -1899,7 +1940,7 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
                          << dendl;
         }
       }
-    }
+    } // if older osd didn't do delimiter filtering
 
     // if we finished listing, or if we're returning at least half the
     // requested entries, that's enough; S3 and swift protocols allow
@@ -1914,8 +1955,10 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
   } // read attempt loop
 
 done:
-  if (is_truncated)
+
+  if (is_truncated) {
     *is_truncated = truncated;
+  }
 
   return 0;
 } // list_objects_ordered
@@ -8025,19 +8068,21 @@ uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 
 int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      int shard_id,
-				      const rgw_obj_index_key& start,
+				      const rgw_obj_index_key& start_after,
 				      const string& prefix,
+				      const string& delimiter,
 				      uint32_t num_entries,
 				      bool list_versions,
 				      ent_map_t& m,
-				      bool *is_truncated,
+				      bool* is_truncated,
+				      bool* cls_filtered,
 				      rgw_obj_index_key *last_entry,
                                       optional_yield y,
-				      bool (*force_check_filter)(const string& name))
+				      check_filter_t force_check_filter)
 {
   ldout(cct, 10) << "cls_bucket_list_ordered " << bucket_info.bucket <<
-    " start " << start.name << "[" << start.instance << "] num_entries " <<
-    num_entries << dendl;
+    " start_after " << start_after.name << "[" << start_after.instance <<
+    "] num_entries " << num_entries << dendl;
 
   RGWSI_RADOS::Pool index_pool;
   // key   - oid (for different shards if there is any)
@@ -8060,8 +8105,9 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
   auto& ioctx = index_pool.ioctx();
   map<int, struct rgw_cls_list_ret> list_results;
-  cls_rgw_obj_key start_key(start.name, start.instance);
-  r = CLSRGWIssueBucketList(ioctx, start_key, prefix, num_entries_per_shard,
+  cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
+  r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
+			    num_entries_per_shard,
 			    list_versions, oids, list_results,
 			    cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
@@ -8075,10 +8121,20 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   vcurrents.reserve(list_results.size());
   vends.reserve(list_results.size());
   vnames.reserve(list_results.size());
-  for (auto& iter : list_results) {
-    vcurrents.push_back(iter.second.dir.m.begin());
-    vends.push_back(iter.second.dir.m.end());
-    vnames.push_back(oids[iter.first]);
+  *is_truncated = false;
+  *cls_filtered = true;
+  for (auto& r : list_results) {
+    vcurrents.push_back(r.second.dir.m.begin());
+    vends.push_back(r.second.dir.m.end());
+    vnames.push_back(oids[r.first]);
+
+    // if any *one* shard's result is trucated, the entire result is
+    // truncated
+    *is_truncated = *is_truncated || r.second.is_truncated;
+
+    // unless *all* are shards are cls_filtered, the entire result is
+    // not filtered
+    *cls_filtered = *cls_filtered && r.second.cls_filtered;
   }
 
   // create a map to track the next candidate entry from each shard,
@@ -8101,9 +8157,12 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     const string& name = vcurrents[pos]->first;
     struct rgw_bucket_dir_entry& dirent = vcurrents[pos]->second;
 
-    bool force_check = force_check_filter &&
-        force_check_filter(dirent.key.name);
-    if ((!dirent.exists && !dirent.is_delete_marker()) ||
+    bool force_check =
+      force_check_filter && force_check_filter(dirent.key.name);
+
+    if ((!dirent.exists &&
+	 !dirent.is_delete_marker() &&
+	 !dirent.is_common_prefix()) ||
         !dirent.pending_map.empty() ||
         force_check) {
       /* there are uncommitted ops. We need to check the current
@@ -8176,7 +8235,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
 int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					int shard_id,
-					const rgw_obj_index_key& start,
+					const rgw_obj_index_key& start_after,
 					const string& prefix,
 					uint32_t num_entries,
 					bool list_versions,
@@ -8184,9 +8243,9 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
-					bool (*force_check_filter)(const string& name)) {
+					check_filter_t force_check_filter) {
   ldout(cct, 10) << "cls_bucket_list_unordered " << bucket_info.bucket <<
-    " start " << start.name << "[" << start.instance <<
+    " start_after " << start_after.name << "[" << start_after.instance <<
     "] num_entries " << num_entries << dendl;
 
   static MultipartMetaFilter multipart_meta_filter;
@@ -8203,23 +8262,23 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 
   const uint32_t num_shards = oids.size();
 
-  rgw_obj_index_key marker = start;
+  rgw_obj_index_key marker = start_after;
   uint32_t current_shard;
   if (shard_id >= 0) {
     current_shard = shard_id;
-  } else if (start.empty()) {
+  } else if (start_after.empty()) {
     current_shard = 0u;
   } else {
-    // at this point we have a marker (start) that has something in
-    // it, so we need to get to the bucket shard index, so we can
+    // at this point we have a marker (start_after) that has something
+    // in it, so we need to get to the bucket shard index, so we can
     // start reading from there
 
     std::string key;
     // test whether object name is a multipart meta name
-    if(! multipart_meta_filter.filter(start.name, key)) {
+    if(! multipart_meta_filter.filter(start_after.name, key)) {
       // if multipart_meta_filter fails, must be "regular" (i.e.,
       // unadorned) and the name is the key
-      key = start.name;
+      key = start_after.name;
     }
 
     // now convert the key (oid) to an rgw_obj_key since that will
@@ -8229,7 +8288,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     if (!parsed) {
       ldout(cct, 0) <<
 	"ERROR: RGWRados::cls_bucket_list_unordered received an invalid "
-	"start marker: '" << start << "'" << dendl;
+	"start marker: '" << start_after << "'" << dendl;
       return -EINVAL;
     } else if (obj_key.name.empty()) {
       // if the name is empty that means the object name came in with
@@ -8253,7 +8312,9 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     rgw_cls_list_ret result;
 
     librados::ObjectReadOperation op;
-    cls_rgw_bucket_list_op(op, marker, prefix, num_entries,
+    string empty_delimiter;
+    cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
+			   num_entries,
                            list_versions, &result);
     r = rgw_rados_operate(ioctx, oid, &op, nullptr, null_yield);
     if (r < 0)

@@ -22,6 +22,13 @@
 
 #include "services/svc_bucket_types.h"
 
+
+static constexpr size_t listing_max_entries = 1000;
+
+
+// define as static when RGWBucket implementation completes
+extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
+
 class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
@@ -41,6 +48,10 @@ extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
 extern void rgw_parse_url_bucket(const string& bucket,
                                  const string& auth_tenant,
                                  string &tenant_name, string &bucket_name);
+
+// this is used as a filter to RGWRados::cls_bucket_list_ordered; it
+// conforms to the type declaration of RGWRados::check_filter_t.
+extern bool rgw_bucket_object_check_filter(const string& oid);
 
 struct RGWBucketCompleteInfo {
   RGWBucketInfo info;
