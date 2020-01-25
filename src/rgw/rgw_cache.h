@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <unordered_map>
+#include <boost/container/flat_map.hpp>
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/ceph_assert.h"
@@ -14,6 +15,8 @@
 
 #include "cls/version/cls_version_types.h"
 #include "rgw_common.h"
+
+namespace bc = boost::container;
 
 enum {
   UPDATE_OBJ,
@@ -54,8 +57,8 @@ struct ObjectCacheInfo {
   uint32_t flags = 0;
   uint64_t epoch = 0;
   bufferlist data;
-  map<string, bufferlist> xattrs;
-  map<string, bufferlist> rm_xattrs;
+  bc::flat_map<string, bufferlist> xattrs;
+  bc::flat_map<string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
   obj_version version = {};
   ceph::coarse_mono_time time_added;

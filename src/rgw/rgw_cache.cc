@@ -180,17 +180,15 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
 
   if (info.flags & CACHE_FLAG_XATTRS) {
     target.xattrs = info.xattrs;
-    map<string, bufferlist>::iterator iter;
-    for (iter = target.xattrs.begin(); iter != target.xattrs.end(); ++iter) {
+    for (auto iter = target.xattrs.begin(); iter != target.xattrs.end(); ++iter) {
       ldout(cct, 10) << "updating xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
     }
   } else if (info.flags & CACHE_FLAG_MODIFY_XATTRS) {
-    map<string, bufferlist>::iterator iter;
-    for (iter = info.rm_xattrs.begin(); iter != info.rm_xattrs.end(); ++iter) {
+    for (auto iter = info.rm_xattrs.begin(); iter != info.rm_xattrs.end(); ++iter) {
       ldout(cct, 10) << "removing xattr: name=" << iter->first << dendl;
       target.xattrs.erase(iter->first);
     }
-    for (iter = info.xattrs.begin(); iter != info.xattrs.end(); ++iter) {
+    for (auto iter = info.xattrs.begin(); iter != info.xattrs.end(); ++iter) {
       ldout(cct, 10) << "appending xattr: name=" << iter->first << " bl.length()=" << iter->second.length() << dendl;
       target.xattrs[iter->first] = iter->second;
     }
