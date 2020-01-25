@@ -35,3 +35,5 @@ target_link_libraries(libneorados PRIVATE
 #   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 # target_link_libraries(libneorados ${rados_libs})
 # install(TARGETS libneorados DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+add_library(neorados_cls_version STATIC cls/version.cc)
