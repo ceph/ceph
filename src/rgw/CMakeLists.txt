@@ -253,7 +253,7 @@ endif()
 
 target_link_libraries(rgw_a
   PRIVATE
-  librados libneorados neorados_cls_version cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
+  librados libneorados neorados_cls_version neorados_cls_rgw cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client cls_cmpomap_client
   cls_user_client cls_rgw_gc_client cls_2pc_queue_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
@@ -336,7 +336,7 @@ install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_executable(radosgwd radosgw.cc)
 target_link_libraries(radosgwd radosgw librados libneorados neorados_cls_version
-  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  neorados_cls_rgw cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global
@@ -353,6 +353,7 @@ set(radosgw_admin_srcs
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin ${rgw_libs} librados libneorados
   neorados_cls_version
+  neorados_cls_rgw
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
@@ -364,7 +365,7 @@ set(radosgw_es_srcs
   rgw_es_main.cc)
 add_executable(radosgw-es ${radosgw_es_srcs})
 target_link_libraries(radosgw-es ${rgw_libs} librados libneorados neorados_cls_version
-  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  neorados_cls_rgw cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
@@ -375,14 +376,14 @@ set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
 target_link_libraries(radosgw-token librados libneorados neorados_cls_version
-  global ${ALLOC_LIBS})
+  neorados_cls_rgw global ${ALLOC_LIBS})
 install(TARGETS radosgw-token DESTINATION bin)
 
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
 target_link_libraries(radosgw-object-expirer ${rgw_libs} librados libneorados neorados_cls_version
-  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  neorados_cls_rgw cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
@@ -396,7 +397,10 @@ add_library(rgw SHARED ${librgw_srcs})
 target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
-  librados libneorados neorados_cls_version
+  librados
+  libneorados
+  neorados_cls_version
+  neorados_cls_rgw
   cls_rgw_client
   cls_otp_client
   cls_lock_client

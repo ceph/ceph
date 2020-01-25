@@ -57,7 +57,7 @@ struct RGWZoneParams;
 class RGWReshard;
 class RGWReshardWait;
 
-class RGWSysObjectCtx;
+struct RGWSysObjectCtx;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -491,6 +491,7 @@ class RGWRados
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
   void remove_rgw_head_obj(librados::ObjectWriteOperation& op);
+  void remove_rgw_head_obj(nr::WriteOp& op);
   void cls_obj_check_prefix_exist(librados::ObjectOperation& op, const string& prefix, bool fail_if_exist);
   void cls_obj_check_mtime(librados::ObjectOperation& op, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type);
 protected:
@@ -738,8 +739,10 @@ public:
     int get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, bool follow_olh, optional_yield y, bool assume_noent = false);
     void invalidate_state();
 
-    int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, optional_yield y);
+    int prepare_atomic_modification(const DoutPrefixProvider *dpp, nr::WriteOp& op, bool reset_obj, const string *ptag,
+                                    const char *ifmatch, const char *ifnomatch,
+				    bool removal_op, bool modify_tail,
+				    optional_yield y);
     int complete_atomic_modification();
 
   public:
@@ -825,85 +828,74 @@ public:
       RGWRados::Object *target;
 
       struct MetaParams {
-        ceph::real_time *mtime;
-        map<std::string, bufferlist>* rmattrs;
-        const bufferlist *data;
-        RGWObjManifest *manifest;
-        const string *ptag;
-        list<rgw_obj_index_key> *remove_objs;
+        ceph::real_time* mtime = nullptr;
+	std::map<std::string, bufferlist>* rmattrs = nullptr;
+        const bufferlist* data = nullptr;
+        RGWObjManifest* manifest = nullptr;
+        const string* ptag = nullptr;
+	list<rgw_obj_index_key>* remove_objs = nullptr;
         ceph::real_time set_mtime;
         rgw_user owner;
-        RGWObjCategory category;
-        int flags;
-        const char *if_match;
-        const char *if_nomatch;
+        RGWObjCategory category = RGWObjCategory::Main;
+        int flags = 0;
+        const char *if_match = nullptr;
+        const char *if_nomatch = nullptr;
         std::optional<uint64_t> olh_epoch;
         ceph::real_time delete_at;
-        bool canceled;
-        const string *user_data;
-        rgw_zone_set *zones_trace;
-        bool modify_tail;
-        bool completeMultipart;
-        bool appendable;
+        bool canceled = false;
+        const string *user_data = nullptr;
+        rgw_zone_set *zones_trace= nullptr;
+        bool modify_tail = false;
+        bool completeMultipart = false;
+        bool appendable = false;
 
-        MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL),
-		       ptag(NULL),
-		       remove_objs(NULL), category(RGWObjCategory::Main),
-		       flags(0), if_match(NULL), if_nomatch(NULL),
-		       canceled(false), user_data(nullptr),
-		       zones_trace(nullptr), modify_tail(false),
-		       completeMultipart(false), appendable(false) {}
+        MetaParams() = default;
       } meta;
 
-      explicit Write(RGWRados::Object *_target) : target(_target) {}
+      explicit Write(RGWRados::Object* target) : target(target) {}
 
-      int _do_write_meta(const DoutPrefixProvider *dpp, 
-                     uint64_t size, uint64_t accounted_size,
-                     map<std::string, bufferlist>& attrs,
-                     bool modify_tail, bool assume_noent,
-                     void *index_op, optional_yield y);
+      int _do_write_meta(const DoutPrefixProvider *dpp, uint64_t size, uint64_t accounted_size,
+			 std::map<std::string, bufferlist>& attrs,
+			 bool modify_tail, bool assume_noent,
+			 void* index_op, optional_yield y);
       int write_meta(const DoutPrefixProvider *dpp, uint64_t size, uint64_t accounted_size,
-                     map<std::string, bufferlist>& attrs, optional_yield y);
-      int write_data(const char *data, uint64_t ofs, uint64_t len,
-		     bool exclusive);
+                     std::map<std::string, bufferlist>& attrs,
+		     optional_yield y);
       const req_state* get_req_state() {
         return (req_state *)target->get_ctx().get_private();
       }
     };
 
     struct Delete {
-      RGWRados::Object *target;
+      RGWRados::Object* target;
 
       struct DeleteParams {
         rgw_user bucket_owner;
-        int versioning_status;
+        int versioning_status = 0;
         ACLOwner obj_owner; /* needed for creation of deletion marker */
-        uint64_t olh_epoch;
+        uint64_t olh_epoch = 0;
         string marker_version_id;
-        uint32_t bilog_flags;
-        list<rgw_obj_index_key> *remove_objs;
+        uint32_t bilog_flags = 0;
+        list<rgw_obj_index_key> *remove_objs = nullptr;
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
         ceph::real_time mtime; /* for setting delete marker mtime */
-        bool high_precision_time;
-        rgw_zone_set *zones_trace;
-	bool abortmp;
-	uint64_t parts_accounted_size;
+        bool high_precision_time = false;
+        rgw_zone_set *zones_trace = nullptr;
+	bool abortmp = false;
+	uint64_t parts_accounted_size = 0;
 
-        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0),
-			 remove_objs(NULL), high_precision_time(false),
-			 zones_trace(nullptr), abortmp(false),
-			 parts_accounted_size(0) {}
+        DeleteParams() = default;
       } params;
 
       struct DeleteResult {
-        bool delete_marker;
+        bool delete_marker = false;
         string version_id;
 
-        DeleteResult() : delete_marker(false) {}
+        DeleteResult() = default;
       } result;
 
-      explicit Delete(RGWRados::Object *_target) : target(_target) {}
+      explicit Delete(RGWRados::Object* target) : target(target) {}
 
       int delete_obj(optional_yield y, const DoutPrefixProvider *dpp);
     };
@@ -1626,6 +1618,5 @@ public:
 			       iter, oids, is_truncated, y);
   }
 };
-
 
 #endif

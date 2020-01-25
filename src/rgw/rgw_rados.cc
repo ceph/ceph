@@ -46,6 +46,7 @@
 #include "cls/version/cls_version_client.h"
 #include "osd/osd_types.h"
 
+#include "neorados/cls/rgw.h"
 #include "neorados/cls/version.h"
 
 #include "rgw_tools.h"
@@ -110,8 +111,11 @@ namespace bs = boost::system;
 namespace ca = ceph::async;
 namespace nr = neorados;
 namespace nrcv = neorados::cls::version;
+namespace nrcr = neorados::cls::rgw;
 
 using namespace librados;
+
+using ceph::from_error_code;
 
 
 static string shadow_ns = "shadow";
@@ -3058,15 +3062,15 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 }
 
 int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
-                                           uint64_t size, uint64_t accounted_size,
-                                           map<string, bufferlist>& attrs,
-                                           bool assume_noent, bool modify_tail,
-                                           void *_index_op, optional_yield y)
+					    uint64_t size, uint64_t accounted_size,
+					    std::map<string, bufferlist>& attrs,
+					    bool assume_noent, bool modify_tail,
+					    void *_index_op, optional_yield y)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
 
-  ObjectWriteOperation op;
+  nr::WriteOp op;
 #ifdef WITH_LTTNG
   const struct req_state* s =  get_req_state();
   string req_id;
@@ -3080,8 +3084,12 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
 
   RGWObjState *state;
   int r = target->get_state(dpp, &state, false, y, assume_noent);
-  if (r < 0)
+  if (r < 0) {
+    ldout(store->ctx(), 10) << __func__
+			    << "(): target->get_state() failed with r="
+			    << r << dendl;
     return r;
+  }
 
   rgw_obj& obj = target->get_obj();
 
@@ -3090,10 +3098,13 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     return -EIO;
   }
 
-  rgw_rados_ref ref;
-  r = store->get_obj_head_ref(target->get_bucket_info(), obj, &ref);
-  if (r < 0)
-    return r;
+  auto ref = store->get_obj_head_ref(target->get_bucket_info(), obj, y);
+  if (!ref) {
+    ldout(store->ctx(), 10) << __func__
+			    << "(): store->get_obj_head_ref() got error "
+			    << ref.error().message() << dendl;
+    return from_error_code(ref.error());
+  }
 
   bool is_olh = state->is_olh;
 
@@ -3104,8 +3115,12 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     ptag = index_op->get_optag();
   }
   r = target->prepare_atomic_modification(dpp, op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false, modify_tail, y);
-  if (r < 0)
+  if (r < 0) {
+    ldout(store->ctx(), 10)
+      << __func__ << "(): target->prepare_atomic_modification() failed, r="
+      << ref.error()<< dendl;
     return r;
+  }
 
   if (real_clock::is_zero(meta.set_mtime)) {
     meta.set_mtime = real_clock::now();
@@ -3119,21 +3134,20 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
       RGWObjectRetention obj_retention(mode, lock_until_date);
       bufferlist bl;
       obj_retention.encode(bl);
-      op.setxattr(RGW_ATTR_OBJECT_RETENTION, bl);
+      op.setxattr(RGW_ATTR_OBJECT_RETENTION, std::move(bl));
     }
   }
 
   if (state->is_olh) {
-    op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
+    op.setxattr(RGW_ATTR_OLH_ID_TAG, bufferlist(state->olh_tag));
   }
 
-  struct timespec mtime_ts = real_clock::to_timespec(meta.set_mtime);
-  op.mtime2(&mtime_ts);
+  op.set_mtime(meta.set_mtime);
 
   if (meta.data) {
     /* if we want to overwrite the data, we also want to overwrite the
        xattrs, so just remove the object */
-    op.write_full(*meta.data);
+    op.write_full(bufferlist(*meta.data));
   }
 
   string etag;
@@ -3141,11 +3155,10 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   bufferlist acl_bl;
   string storage_class;
 
-  map<string, bufferlist>::iterator iter;
   if (meta.rmattrs) {
-    for (iter = meta.rmattrs->begin(); iter != meta.rmattrs->end(); ++iter) {
+    for (auto iter = meta.rmattrs->begin(); iter != meta.rmattrs->end(); ++iter) {
       const string& name = iter->first;
-      op.rmxattr(name.c_str());
+      op.rmxattr(name);
     }
   }
 
@@ -3153,23 +3166,23 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     storage_class = meta.manifest->get_tail_placement().placement_rule.storage_class;
 
     /* remove existing manifest attr */
-    iter = attrs.find(RGW_ATTR_MANIFEST);
+    auto iter = attrs.find(RGW_ATTR_MANIFEST);
     if (iter != attrs.end())
       attrs.erase(iter);
 
     bufferlist bl;
     encode(*meta.manifest, bl);
-    op.setxattr(RGW_ATTR_MANIFEST, bl);
+    op.setxattr(RGW_ATTR_MANIFEST, std::move(bl));
   }
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+  for (auto iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
     bufferlist& bl = iter->second;
 
     if (!bl.length())
       continue;
 
-    op.setxattr(name.c_str(), bl);
+    op.setxattr(name, bufferlist(bl));
 
     if (name.compare(RGW_ATTR_ETAG) == 0) {
       etag = rgw_bl_str(bl);
@@ -3180,19 +3193,19 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     }
   }
   if (attrs.find(RGW_ATTR_PG_VER) == attrs.end()) {
-    cls_rgw_obj_store_pg_ver(op, RGW_ATTR_PG_VER);
+    nrcr::obj_store_pg_ver(op, RGW_ATTR_PG_VER);
   }
 
   if (attrs.find(RGW_ATTR_SOURCE_ZONE) == attrs.end()) {
     bufferlist bl;
     encode(store->svc.zone->get_zone_short_id(), bl);
-    op.setxattr(RGW_ATTR_SOURCE_ZONE, bl);
+    op.setxattr(RGW_ATTR_SOURCE_ZONE, std::move(bl));
   }
 
   if (!storage_class.empty()) {
     bufferlist bl;
     bl.append(storage_class);
-    op.setxattr(RGW_ATTR_STORAGE_CLASS, bl);
+    op.setxattr(RGW_ATTR_STORAGE_CLASS, std::move(bl));
   }
 
   if (!op.size())
@@ -3202,7 +3215,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   int64_t poolid;
   bool orig_exists;
   uint64_t orig_size;
-  
+
   if (!reset_obj) {    //Multipart upload, it has immutable head. 
     orig_exists = false;
     orig_size = 0;
@@ -3224,27 +3237,34 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     tracepoint(rgw_rados, prepare_enter, req_id.c_str());
     r = index_op->prepare(dpp, CLS_RGW_OP_ADD, &state->write_tag, y);
     tracepoint(rgw_rados, prepare_exit, req_id.c_str());
-    if (r < 0)
-      return r;
-  }
-
-  auto& ioctx = ref.pool.ioctx();
-
-  tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
-  tracepoint(rgw_rados, operate_exit, req_id.c_str());
-  if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
-                or -ENOENT if was removed, or -EEXIST if it did not exist
-                before and now it does */
-    if (r == -EEXIST && assume_noent) {
-      target->invalidate_state();
+    if (r < 0) {
+      ldout(store->ctx(), 10)
+	<< __func__<< "(): index_op->prepare() failed: r=" << r << dendl;
       return r;
     }
+  }
+
+  tracepoint(rgw_rados, operate_enter, req_id.c_str());
+  bs::error_code ec;
+  ref->operate(std::move(op), y[ec], &epoch);
+
+  tracepoint(rgw_rados, operate_exit, req_id.c_str());
+  if (ec) { /* we can expect to get -ECANCELED if object was replaced under,
+               or -ENOENT if was removed, or -EEXIST if it did not exist
+               before and now it does */
+    ldout(store->ctx(), 10) << __func__<< "(): ref->operate() failed: ec="
+			    << ec << dendl;
+    if (ec == bs::errc::file_exists && assume_noent) {
+      target->invalidate_state();
+      ldout(store->ctx(), 10) << __func__<< "(): invalidating and returning"
+			      << ec.message() << dendl;
+      return from_error_code(ec);
+    }
+    r = from_error_code(ec);
     goto done_cancel;
   }
 
-  epoch = ioctx.get_last_version();
-  poolid = ioctx.get_id();
+  poolid = ref->ioc.pool();
 
   r = target->complete_atomic_modification();
   if (r < 0) {
@@ -3257,8 +3277,11 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
                         storage_class, &acl_bl,
                         meta.category, meta.remove_objs, meta.user_data, meta.appendable);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
-  if (r < 0)
+  if (r < 0) {
+    ldout(store->ctx(), 10) << __func__<< "(): index_op->complete() failed: r="
+			    << r << dendl;
     goto done_cancel;
+  }
 
   if (meta.mtime) {
     *meta.mtime = meta.set_mtime;
@@ -3271,6 +3294,8 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   if (versioned_op && meta.olh_epoch) {
     r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, y, meta.zones_trace);
     if (r < 0) {
+      ldout(store->ctx(), 10) << __func__<< "(): store->set_olh() failed: r="
+			      << r << dendl;
       return r;
     }
   }
@@ -3290,8 +3315,8 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
 
   /* update quota cache */
   if (meta.completeMultipart){
-  	store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
-                                     0, orig_size);
+    store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
+				       0, orig_size);
   }
   else {
     store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
@@ -3345,14 +3370,15 @@ done_cancel:
 }
 
 int RGWRados::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, uint64_t accounted_size,
-                                           map<string, bufferlist>& attrs, optional_yield y)
+					std::map<string, bufferlist>& attrs,
+					optional_yield y)
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(target->get_store(), bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
   index_op.set_zones_trace(meta.zones_trace);
-  
+
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
   if (assume_noent) {
@@ -5040,6 +5066,11 @@ void RGWRados::remove_rgw_head_obj(ObjectWriteOperation& op)
   cls_rgw_remove_obj(op, prefixes);
 }
 
+void RGWRados::remove_rgw_head_obj(nr::WriteOp& op)
+{
+  nrcr::remove_obj(op, { RGW_ATTR_OLH_PREFIX });
+}
+
 void RGWRados::cls_obj_check_prefix_exist(ObjectOperation& op, const string& prefix, bool fail_if_exist)
 {
   cls_rgw_obj_check_attrs_prefix(op, prefix, fail_if_exist);
@@ -5143,18 +5174,17 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     return 0;
   }
 
-  rgw_rados_ref ref;
-  int r = store->get_obj_head_ref(target->get_bucket_info(), obj, &ref);
-  if (r < 0) {
-    return r;
+  auto ref = store->get_obj_head_ref(target->get_bucket_info(), obj, y);
+  if (!ref) {
+    return from_error_code(ref.error());
   }
 
   RGWObjState *state;
-  r = target->get_state(dpp, &state, false, y);
+  int r = target->get_state(dpp, &state, false, y);
   if (r < 0)
     return r;
 
-  ObjectWriteOperation op;
+  nr::WriteOp op;
 
   if (!real_clock::is_zero(params.unmod_since)) {
     struct timespec ctime = ceph::real_clock::to_timespec(state->mtime);
@@ -5170,11 +5200,12 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     }
 
     /* only delete object if mtime is less than or equal to params.unmod_since */
-    store->cls_obj_check_mtime(op, params.unmod_since, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_LE);
+    nrcr::obj_check_mtime(op, params.unmod_since, params.high_precision_time,
+				 CLS_RGW_CHECK_TIME_MTIME_LE);
   }
   uint64_t obj_accounted_size = state->accounted_size;
 
-  if(params.abortmp) {
+  if (params.abortmp) {
     obj_accounted_size = params.parts_accounted_size;
   }
 
@@ -5212,7 +5243,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
 
   RGWRados::Bucket bop(store, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
-  
+
   index_op.set_zones_trace(params.zones_trace);
   index_op.set_bilog_flags(params.bilog_flags);
 
@@ -5222,21 +5253,23 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
 
   store->remove_rgw_head_obj(op);
 
-  auto& ioctx = ref.pool.ioctx();
-  r = rgw_rados_operate(ioctx, ref.obj.oid, &op, null_yield);
+  version_t lastv;
+  bs::error_code ec;
+  ref->operate(std::move(op), y[ec], &lastv);
+  r = from_error_code(ec);
 
   /* raced with another operation, object state is indeterminate */
   const bool need_invalidate = (r == -ECANCELED);
 
-  int64_t poolid = ioctx.get_id();
+  int64_t poolid = ref->ioc.pool();
   if (r >= 0) {
     tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
     if (obj_tombstone_cache) {
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime, params.remove_objs);
-    
+    r = index_op.complete_del(dpp, poolid, lastv, state->mtime, params.remove_objs);
+
     int ret = target->complete_atomic_modification();
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
@@ -5708,10 +5741,15 @@ void RGWRados::Object::invalidate_state()
   ctx.invalidate(obj);
 }
 
-int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp, 
-                                                  ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                                  const char *if_match, const char *if_nomatch, bool removal_op,
-                                                  bool modify_tail, optional_yield y)
+int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
+						  nr::WriteOp& op,
+						  bool reset_obj,
+						  const string *ptag,
+                                                  const char *if_match,
+						  const char *if_nomatch,
+						  bool removal_op,
+                                                  bool modify_tail,
+						  optional_yield y)
 {
   int r = get_state(dpp, &state, false, y);
   if (r < 0)
@@ -5726,7 +5764,8 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
 
     if (reset_obj) {
       op.create(false);
-      store->remove_rgw_head_obj(op); // we're not dropping reference here, actually removing object
+      // we're not dropping reference here, actually removing object
+      store->remove_rgw_head_obj(op);
     }
 
     return 0;
@@ -5735,7 +5774,7 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
   if (need_guard) {
     /* first verify that the object wasn't replaced under */
     if (if_nomatch == NULL || strcmp(if_nomatch, "*") != 0) {
-      op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag); 
+      op.cmpxattr(RGW_ATTR_ID_TAG, nr::cmpxattr_op::eq, state->obj_tag); 
       // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
     }
 
@@ -5794,13 +5833,14 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
 
   ldpp_dout(dpp, 10) << "setting object write_tag=" << state->write_tag << dendl;
 
-  op.setxattr(RGW_ATTR_ID_TAG, bl);
+  op.setxattr(RGW_ATTR_ID_TAG, bufferlist(bl));
   if (modify_tail) {
-    op.setxattr(RGW_ATTR_TAIL_TAG, bl);
+    op.setxattr(RGW_ATTR_TAIL_TAG, std::move(bl));
   }
 
   return 0;
 }
+
 
 /**
  * Set an attr on an object.
