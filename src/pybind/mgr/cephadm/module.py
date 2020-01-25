@@ -1218,13 +1218,17 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     sd.container_image_name = d.get('container_image_name')
                     sd.container_image_id = d.get('container_image_id')
                     sd.version = d.get('version')
-                    sd.status_desc = d['state']
-                    sd.status = {
-                        'running': 1,
-                        'stopped': 0,
-                        'error': -1,
-                        'unknown': -1,
-                    }[d['state']]
+                    if 'state' in d:
+                        sd.status_desc = d['state']
+                        sd.status = {
+                            'running': 1,
+                            'stopped': 0,
+                            'error': -1,
+                            'unknown': -1,
+                        }[d['state']]
+                    else:
+                        sd.status_desc = 'unknown'
+                        sd.status = None
                     result.append(sd)
             return result
 
