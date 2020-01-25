@@ -692,7 +692,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
             # refresh services
             self.log.debug('refreshing services')
-            completion = self._get_services(refresh=True)
+            completion = self._get_services(maybe_refresh=True)
             self._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
             services = completion.result
@@ -1168,7 +1168,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                       service_name=None,
                       service_id=None,
                       node_name=None,
-                      refresh=False):
+                      refresh=False,
+                      maybe_refresh=False):
         hosts = []
         wait_for_args = []
         services = {}
@@ -1177,9 +1178,22 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             keys = [node_name]
         for host, host_info in self.service_cache.items_filtered(keys):
             hosts.append(host)
-            if host_info.outdated(self.service_cache_timeout) or refresh:
+            if refresh:
+                self.log.info("refreshing services for '{}'".format(host))
+                wait_for_args.append((host,))
+            elif maybe_refresh and host_info.outdated(self.service_cache_timeout):  # type: ignore
                 self.log.info("refreshing stale services for '{}'".format(host))
                 wait_for_args.append((host,))
+            elif not host_info.last_refresh:
+                services[host] = [
+                    {
+                        'name': '*',
+                        'service_type': '*',
+                        'service_instance': '*',
+                        'style': 'cephadm',
+                        'fsid': self._cluster_fsid,
+                    },
+                ]
             else:
                 self.log.debug('have recent services for %s: %s' % (
                     host, host_info.data))
@@ -1200,14 +1214,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         continue
                     self.log.debug('including %s %s' % (host, d))
                     sd = orchestrator.ServiceDescription()
-                    sd.last_refresh = datetime.datetime.strptime(
-                        d.get('last_refresh'), DATEFMT)
+                    if 'last_refresh' in d:
+                        sd.last_refresh = datetime.datetime.strptime(
+                            d['last_refresh'], DATEFMT)
                     sd.service_type = d['name'].split('.')[0]
                     if service_type and service_type != sd.service_type:
                         continue
                     if '.' in d['name']:
                         sd.service_instance = '.'.join(d['name'].split('.')[1:])
-                    else:
+                    elif d['name'] != '*':
                         sd.service_instance = host  # e.g., crash
                     if service_id and service_id != sd.service_instance:
                         continue
