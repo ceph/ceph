@@ -39,3 +39,13 @@ auto create_pool(neorados::RADOS& r, std::string_view pname,
 		});
   return init.result.get();
 }
+
+template<typename CompletionToken>
+auto create_obj(neorados::RADOS& r, std::string_view oid,
+		const neorados::IOContext& ioc,
+		CompletionToken&& token)
+{
+  neorados::WriteOp op;
+  op.create(true);
+  r.execute(oid, ioc, std::move(op), std::forward<CompletionToken>(token));
+}
