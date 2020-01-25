@@ -37,3 +37,4 @@ target_link_libraries(libneorados PRIVATE
 # install(TARGETS libneorados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_library(neorados_cls_version STATIC cls/version.cc)
+add_library(neorados_cls_rgw STATIC cls/rgw.cc)
