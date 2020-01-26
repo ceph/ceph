@@ -274,7 +274,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   bool get_data;
   bool partial_content;
   bool ignore_invalid_range;
@@ -1201,7 +1201,7 @@ public:
   /* this is for cases when copying data from other object */
   virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                                  RGWGetObj_Filter* cb,
-                                 map<string, bufferlist>& attrs,
+                                 bc::flat_map<string, bufferlist>& attrs,
                                  bufferlist* manifest_bl) {
     *filter = nullptr;
     return 0;
@@ -1432,7 +1432,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, buffer::list> attrs;
+  bc::flat_map<string, buffer::list> attrs;
   string src_tenant_name, src_bucket_name;
   rgw_bucket src_bucket;
   rgw_obj_key src_object;
@@ -2030,10 +2030,11 @@ static inline void format_xattr(std::string &xattr)
  * On failure returns a negative error code.
  *
  */
-static inline int rgw_get_request_metadata(CephContext* const cct,
-                                           struct req_info& info,
-                                           std::map<std::string, ceph::bufferlist>& attrs,
-                                           const bool allow_empty_attrs = true)
+template<typename M>
+inline int rgw_get_request_metadata(CephContext* const cct,
+				    struct req_info& info,
+				    M& attrs,
+				    const bool allow_empty_attrs = true)
 {
   static const std::set<std::string> blacklisted_headers = {
       "x-amz-server-side-encryption-customer-algorithm",
@@ -2093,12 +2094,13 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
   return 0;
 } /* rgw_get_request_metadata */
 
-static inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
-					map<string, bufferlist>& attrs)
+template<typename M>
+inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
+				  M& attrs)
 {
   if (delete_at == boost::none) {
     return;
-  } 
+  }
 
   bufferlist delatbl;
   encode(*delete_at, delatbl);
@@ -2119,8 +2121,9 @@ static inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, buffer
   attrs[RGW_ATTR_TAGS] = tagsbl;
 }
 
-static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
-					  map<string, bufferlist>& attrs)
+template<typename M>
+inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
+				    M& attrs)
 {
   string dm = dlo_manifest;
 

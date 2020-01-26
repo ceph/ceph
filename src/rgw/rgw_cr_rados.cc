@@ -633,7 +633,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
 
   rgw_obj src_obj(src_bucket, key);
 

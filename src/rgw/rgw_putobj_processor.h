@@ -195,7 +195,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   // write the head object atomically in a bucket index transaction
   int complete(size_t accounted_size, const std::string& etag,
                ceph::real_time *mtime, ceph::real_time set_mtime,
-               std::map<std::string, bufferlist>& attrs,
+               map<std::string, bufferlist>& attrs,
                ceph::real_time delete_at,
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /**
@@ -143,8 +143,9 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);
 
+template<typename M>
 int rgw_s3_prepare_decrypt(struct req_state* s,
-                           std::map<std::string, ceph::bufferlist>& attrs,
+                           M& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);

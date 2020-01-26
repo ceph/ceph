@@ -91,7 +91,9 @@ inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& 
   }
 }
 
-int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
+template<typename M>
+int rgw_policy_from_attrset(CephContext *cct, M& attrset,
+			    RGWAccessControlPolicy *policy);
 
 struct RGWOLHInfo {
   rgw_obj target;
@@ -489,6 +491,11 @@ class RGWRados
   int append_atomic_test(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state, optional_yield y);
   int append_atomic_test(const RGWObjState* astate, librados::ObjectOperation& op);
+  int append_atomic_test(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info,
+			 const rgw_obj& obj, R::Op& op,RGWObjState **state,
+			 optional_yield y);
+  int append_atomic_test(const RGWObjState* astate, R::Op& op);
+
 
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
@@ -502,7 +509,9 @@ protected:
   ceph::async::io_context_pool ctxpool{2};
 
   librados::Rados rados;
+public:
   std::optional<R::RADOS> neorados;
+protected:
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
@@ -778,44 +787,40 @@ public:
       RGWRados::Object* source;
 
       struct GetObjState {
-        map<rgw_pool, librados::IoCtx> io_ctxs;
+	std::unordered_map<rgw_pool, R::IOContext> io_ctxs;
         rgw_pool cur_pool;
-        librados::IoCtx *cur_ioctx{nullptr};
+	R::IOContext* cur_ioctx = nullptr;
         rgw_obj obj;
         rgw_raw_obj head_obj;
       } state;
 
       struct ConditionParams {
-        const ceph::real_time *mod_ptr;
-        const ceph::real_time *unmod_ptr;
-        bool high_precision_time;
-        uint32_t mod_zone_id;
-        uint64_t mod_pg_ver;
-        const char *if_match;
-        const char *if_nomatch;
+        const ceph::real_time *mod_ptr = nullptr;
+        const ceph::real_time *unmod_ptr = nullptr;
+        bool high_precision_time = false;
+        uint32_t mod_zone_id = 0;
+        uint64_t mod_pg_ver = 0;
+        const char *if_match = nullptr;
+        const char *if_nomatch = nullptr;
 
-        ConditionParams() :
-                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false),
-		 mod_zone_id(0), mod_pg_ver(0),
-                 if_match(NULL), if_nomatch(NULL) {}
+        ConditionParams() = default;
       } conds;
 
       struct Params {
-        ceph::real_time *lastmod;
-        uint64_t *obj_size;
-        map<string, bufferlist> *attrs;
-        rgw_obj *target_obj;
+        ceph::real_time* lastmod = nullptr;
+        uint64_t* obj_size = nullptr;
+	bc::flat_map<string, bufferlist> *attrs = nullptr;
+        rgw_obj* target_obj = nullptr;
 
-        Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
-		 target_obj(nullptr) {}
+        Params() = default;
       } params;
 
-      explicit Read(RGWRados::Object *_source) : source(_source) {}
+      explicit Read(RGWRados::Object* source) : source(source) {}
 
       int prepare(optional_yield y);
-      static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
+      static int range_to_ofs(uint64_t obj_size, int64_t& ofs, int64_t& end);
       int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y);
-      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
+      int iterate(int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y);
       int get_attr(const char *name, bufferlist& dest, optional_yield y);
     };
 
@@ -1108,8 +1113,9 @@ public:
                                rgw_obj& obj,                    /* in */
                                bool& restored,                 /* out */
                                const DoutPrefixProvider *dpp);     /* in/out */                
+  template<typename M>
   int copy_obj_to_remote_dest(RGWObjState *astate,
-                              map<string, bufferlist>& src_attrs,
+                              M& src_attrs,
                               RGWRados::Object::Read& read_op,
                               const rgw_user& user_id,
                               rgw_obj& dest_obj,
@@ -1136,12 +1142,13 @@ public:
                bool high_precision_time,
                const char *if_match,
                const char *if_nomatch,
-               map<string, bufferlist> *pattrs,
+	       map<string, bufferlist> *pattrs,
                map<string, string> *pheaders,
                string *version_id,
                string *ptag,
                string *petag);
 
+  template<typename M>
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const rgw_user& user_id,
                        req_info *info,
@@ -1160,7 +1167,7 @@ public:
                        const char *if_nomatch,
                        AttrsMod attrs_mod,
                        bool copy_if_newer,
-                       map<string, bufferlist>& attrs,
+                       M& attrs,
                        RGWObjCategory category,
                        std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
@@ -1186,6 +1193,7 @@ public:
    *                             are overwritten by values contained in attrs parameter.
    * Returns: 0 on success, -ERR# otherwise.
    */
+  template<typename M>
   int copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
@@ -1204,7 +1212,7 @@ public:
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               map<std::string, bufferlist>& attrs,
+               M& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
@@ -1223,7 +1231,7 @@ public:
                const rgw_obj& dest_obj,
 	       ceph::real_time *mtime,
 	       ceph::real_time set_mtime,
-               map<string, bufferlist>& attrs,
+	       bc::flat_map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                string *petag,
@@ -1283,9 +1291,14 @@ public:
   int set_attr(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj, const char *name, bufferlist& bl);
 
   int set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj,
-                        map<string, bufferlist>& attrs,
-                        map<string, bufferlist>* rmattrs,
-                        optional_yield y);
+		map<string, bufferlist>& attrs,
+		map<string, bufferlist>* rmattrs,
+		optional_yield y);
+
+  int set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj,
+		bc::flat_map<string, bufferlist>& attrs,
+		bc::flat_map<string, bufferlist>* rmattrs,
+		optional_yield y);
 
   int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state,
                     bool follow_olh, optional_yield y, bool assume_noent = false);
@@ -1298,8 +1311,7 @@ public:
 
   int iterate_obj(RGWObjectCtx& ctx, const RGWBucketInfo& bucket_info,
                   const rgw_obj& obj, off_t ofs, off_t end,
-                  uint64_t max_chunk_size, iterate_obj_cb cb, void *arg,
-                  optional_yield y);
+                  uint64_t max_chunk_size, iterate_obj_cb cb, void *arg);
 
   int get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                          off_t read_ofs, off_t len, bool is_head_obj,

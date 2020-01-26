@@ -122,8 +122,7 @@ static struct response_attr_param resp_attr_params[] = {
 };
 
 int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
-  map<string, bufferlist>::iterator iter;
-  iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
+  auto iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
   if (iter != attrs.end()) {
     bufferlist &bl = iter->second;
     s->redirect = bl.c_str();
@@ -167,10 +166,10 @@ int RGWGetObj_ObjStore_S3::send_response_data_error()
   return send_response_data(bl, 0 , 0);
 }
 
-template <class T>
-int decode_attr_bl_single_value(map<string, bufferlist>& attrs, const char *attr_name, T *result, T def_val)
+template<class M, class T>
+int decode_attr_bl_single_value(M& attrs, const char *attr_name, T *result, T def_val)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(attr_name);
+  auto iter = attrs.find(attr_name);
   if (iter == attrs.end()) {
     *result = def_val;
     return 0;
@@ -2524,7 +2523,9 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
-static inline int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
+inline int get_obj_attrs(rgw::sal::RGWRadosStore *store,
+			 struct req_state *s, rgw_obj& obj,
+			 bc::flat_map<string, bufferlist>& attrs)
 {
   RGWRados::Object op_target(store->getRados(), s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -2534,14 +2535,14 @@ static inline int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state
   return read_op.prepare(s->yield);
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
+inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
 {
   bufferlist bl;
   encode(value,bl);
   attrs.emplace(key, std::move(bl));
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
+inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
 {
   bufferlist bl;
   encode(value,bl);
@@ -2549,10 +2550,10 @@ static inline void set_attr(map<string, bufferlist>& attrs, const char* key, con
 }
 
 int RGWPutObj_ObjStore_S3::get_decrypt_filter(
-    std::unique_ptr<RGWGetObj_Filter>* filter,
-    RGWGetObj_Filter* cb,
-    map<string, bufferlist>& attrs,
-    bufferlist* manifest_bl)
+  std::unique_ptr<RGWGetObj_Filter>* filter,
+  RGWGetObj_Filter* cb,
+  bc::flat_map<string, bufferlist>& attrs,
+  bufferlist* manifest_bl)
 {
   std::map<std::string, std::string> crypt_http_responses_unused;
 
@@ -2586,7 +2587,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     rgw_obj obj;
     obj.init_ns(s->bucket, mp.get_meta(), RGW_OBJ_NS_MULTIPART);
     obj.set_in_extra_data(true);
-    map<string, bufferlist> xattrs;
+    bc::flat_map<string, bufferlist> xattrs;
     res = get_obj_attrs(store, s, obj, xattrs);
     if (res == 0) {
       std::unique_ptr<BlockCrypt> block_crypt;

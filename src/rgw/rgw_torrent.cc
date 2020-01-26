@@ -45,7 +45,8 @@ void seed::init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store)
 int seed::get_torrent_file(RGWRados::Object::Read &read_op,
                            uint64_t &total_len,
                            ceph::bufferlist &bl_data,
-                           rgw_obj &obj)
+                           rgw_obj &obj,
+			   optional_yield y)
 {
   /* add other field if config is set */
   dencode.bencode_dict(bl);
@@ -67,12 +68,16 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
   get_obj_bucket_and_oid_loc(obj, oid, key);
   ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
-  const set<string> obj_key{RGW_OBJ_TORRENT};
-  map<string, bufferlist> m;
-  const int r = read_op.state.cur_ioctx->omap_get_vals_by_keys(oid, obj_key, &m);
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
-    return r;
+  bc::flat_map<string, bufferlist> m;
+  R::ReadOp op;
+  op.get_omap_vals_by_keys({RGW_OBJ_TORRENT}, &m);
+  const auto ec = store->getRados()->operate(oid, *read_op.state.cur_ioctx,
+					     std::move(op), nullptr, y);
+
+
+  if (ec) {
+    ldout(s->cct, 0) << "ERROR: get_omap_vals_by_keys failed: " << ec << dendl;
+    return ceph::from_error_code(ec);
   }
   if (m.size() != 1) {
     ldout(s->cct, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;

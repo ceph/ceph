@@ -370,7 +370,7 @@ static bool pass_object_lock_check(RGWRados *store, RGWBucketInfo& bucket_info,
   }
   RGWRados::Object op_target(store, bucket_info, ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   read_op.params.attrs = &attrs;
   int ret = read_op.prepare(null_yield);
   if (ret < 0) {

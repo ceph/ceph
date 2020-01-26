@@ -1340,7 +1340,7 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
 
 int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   uint64_t obj_size;
 
   RGWObjectCtx obj_ctx(store);
@@ -1356,8 +1356,7 @@ int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& buc
     return ret;
   }
 
-  map<string, bufferlist>::iterator iter;
-  iter = attrs.find(RGW_ATTR_MANIFEST);
+  auto iter = attrs.find(RGW_ATTR_MANIFEST);
   if (iter == attrs.end()) {
     *need_rewrite = (obj_size >= min_stripe_size);
     return 0;
@@ -7104,7 +7103,7 @@ next:
     obj.key.set_instance(object_version);
 
     uint64_t obj_size;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     RGWObjectCtx obj_ctx(store);
     RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
     RGWRados::Object::Read read_op(&op_target);
@@ -7121,9 +7120,8 @@ next:
     formatter->dump_string("name", object);
     formatter->dump_unsigned("size", obj_size);
 
-    map<string, bufferlist>::iterator iter;
     map<string, bufferlist> other_attrs;
-    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    for (auto iter = attrs.begin(); iter != attrs.end(); ++iter) {
       bufferlist& bl = iter->second;
       bool handled = false;
       if (iter->first == RGW_ATTR_MANIFEST) {
@@ -7145,7 +7143,7 @@ next:
     }
 
     formatter->open_object_section("attrs");
-    for (iter = other_attrs.begin(); iter != other_attrs.end(); ++iter) {
+    for (auto iter = other_attrs.begin(); iter != other_attrs.end(); ++iter) {
       dump_string(iter->first.c_str(), iter->second, formatter);
     }
     formatter->close_section();

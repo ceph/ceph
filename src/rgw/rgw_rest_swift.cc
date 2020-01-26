@@ -875,7 +875,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
   bool compressed;
   RGWCompressionInfo cs_info;
-  map<std::string, buffer::list> attrs;
+  bc::flat_map<std::string, buffer::list> attrs;
   uint64_t size_bytes{0};
 
   read_op.params.attrs = &attrs;
@@ -1309,17 +1309,19 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
 
 }
 
-static void get_contype_from_attrs(map<string, bufferlist>& attrs,
+template<typename M>
+static void get_contype_from_attrs(M& attrs,
 				   string& content_type)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  auto iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != attrs.end()) {
     content_type = rgw_bl_str(iter->second);
   }
 }
 
+template<typename M>
 static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state * const s,
-				 const map<string, bufferlist>& attrs)
+				 const M& attrs)
 {
   map<string, string> response_attrs;
 

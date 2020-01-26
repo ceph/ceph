@@ -5,10 +5,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs,
+template<typename M>
+int rgw_compression_info_from_attrset(M& attrs,
                                       bool& need_decompress,
-                                      RGWCompressionInfo& cs_info) {
-  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_COMPRESSION);
+                                      RGWCompressionInfo& cs_info)
+{
+  auto value = attrs.find(RGW_ATTR_COMPRESSION);
   if (value != attrs.end()) {
     auto bliter = value->second.cbegin();
     try {
@@ -29,6 +31,15 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs,
     return 0;
   }
 }
+
+template int
+rgw_compression_info_from_attrset<map<string, bufferlist>>(
+  map<string, bufferlist>& attrs, bool& need_decompress,
+  RGWCompressionInfo& cs_info);
+template int
+rgw_compression_info_from_attrset<bc::flat_map<string, bufferlist>>(
+  bc::flat_map<string, bufferlist>& attrs, bool& need_decompress,
+  RGWCompressionInfo& cs_info);
 
 //------------RGWPutObj_Compress---------------
 

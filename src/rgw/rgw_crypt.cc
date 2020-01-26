@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /**
@@ -586,8 +586,9 @@ static inline void set_attr(map<string, bufferlist>& attrs,
   attrs[key] = std::move(bl);
 }
 
-static inline std::string get_str_attribute(map<string, bufferlist>& attrs,
-                                            const char *name)
+template<typename M>
+inline std::string get_str_attribute(M& attrs,
+				     const char *name)
 {
   auto iter = attrs.find(name);
   if (iter == attrs.end()) {
@@ -882,10 +883,11 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 }
 
 
+template<typename M>
 int rgw_s3_prepare_decrypt(struct req_state* s,
-                       map<string, bufferlist>& attrs,
-                       std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses)
+			   M& attrs,
+			   std::unique_ptr<BlockCrypt>* block_crypt,
+			   std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
@@ -1050,3 +1052,12 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   /*no decryption*/
   return 0;
 }
+
+template int rgw_s3_prepare_decrypt<map<string, bufferlist>>(
+  struct req_state* s, map<string,bufferlist>& attrs,
+  std::unique_ptr<BlockCrypt>* block_crypt,
+  std::map<std::string, std::string>& crypt_http_responses);
+template int rgw_s3_prepare_decrypt<bc::flat_map<string, bufferlist>>(
+  struct req_state* s, bc::flat_map<string,bufferlist>& attrs,
+  std::unique_ptr<BlockCrypt>* block_crypt,
+  std::map<std::string, std::string>& crypt_http_responses);

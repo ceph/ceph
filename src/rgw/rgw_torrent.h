@@ -121,7 +121,8 @@ public:
   int get_torrent_file(RGWRados::Object::Read &read_op,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,
-                       rgw_obj &obj);
+                       rgw_obj &obj,
+		       optional_yield y);
   
   off_t get_data_len();
   bool get_flag();

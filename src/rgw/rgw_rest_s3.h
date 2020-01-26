@@ -278,7 +278,7 @@ public:
                          rgw::putobj::DataProcessor *cb) override;
   int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                          RGWGetObj_Filter* cb,
-                         map<string, bufferlist>& attrs,
+                         bc::flat_map<string, bufferlist>& attrs,
                          bufferlist* manifest_bl) override;
 };
 

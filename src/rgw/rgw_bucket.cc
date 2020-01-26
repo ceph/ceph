@@ -2934,7 +2934,7 @@ public:
 
   void init(RGWSI_Zone *zone_svc,
            RGWSI_Bucket *bucket_svc,
-           RGWSI_BucketIndex *bi_svc) {
+           RGWSI_BucketIndex *bi_svc) override {
     base_init(bucket_svc->ctx(),
               bucket_svc->get_bi_be_handler().get());
     svc.zone = zone_svc;
@@ -3644,7 +3644,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
       RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, r_obj);
       RGWRados::Object::Read read_op(&op_target);
 
-      map<string, bufferlist> attrs;
+      bc::flat_map<string, bufferlist> attrs;
       read_op.params.attrs = &attrs;
       ret = read_op.prepare(y);
       if (ret < 0){
