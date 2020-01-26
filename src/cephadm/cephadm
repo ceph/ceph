@@ -1225,7 +1225,6 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 args=[
                     'lvm', 'deactivate',
                     str(daemon_id), osd_fsid,
-                    '--no-systemd'
                 ],
                 container_args=['--privileged'],
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
