@@ -50,9 +50,9 @@ static ceph::spinlock debug_lock;
 # define bendl std::endl; }
 #endif
 
-  static std::atomic<unsigned> buffer_cached_crc { 0 };
-  static std::atomic<unsigned> buffer_cached_crc_adjusted { 0 };
-  static std::atomic<unsigned> buffer_missed_crc { 0 };
+  static ceph::atomic<unsigned> buffer_cached_crc { 0 };
+  static ceph::atomic<unsigned> buffer_cached_crc_adjusted { 0 };
+  static ceph::atomic<unsigned> buffer_missed_crc { 0 };
 
   static bool buffer_track_crc = get_env_bool("CEPH_BUFFER_TRACK");
 
