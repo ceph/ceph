@@ -6,9 +6,11 @@
 
 #include <functional>
 #include <boost/container/flat_map.hpp>
+#include <boost/system/error_code.hpp>
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
+#include "common/async/context_pool.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "common/ceph_time.h"
@@ -27,8 +29,13 @@
 #include "rgw_trim_bilog.h"
 #include "rgw_service.h"
 
+#include "include/neorados/RADOS.hpp"
+
 #include "services/svc_rados.h"
 #include "services/svc_bi_rados.h"
+
+namespace R = neorados;
+namespace bs = boost::system;
 
 class RGWWatcher;
 class SafeTimer;
@@ -481,8 +488,10 @@ class RGWRados
   void cls_obj_check_mtime(librados::ObjectOperation& op, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type);
 protected:
   CephContext *cct;
+  ceph::async::io_context_pool ctxpool{2};
 
   librados::Rados rados;
+  std::optional<R::RADOS> neorados;
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
@@ -519,6 +528,13 @@ public:
                cr_registry(NULL),
                pctl(&ctl),
                reshard(NULL) {}
+
+  auto& io_context() {
+    return ctxpool.get_io_context();
+  }
+  auto& RADOS() {
+    return *neorados;
+  }
 
   RGWRados& set_use_cache(bool status) {
     use_cache = status;
@@ -622,6 +638,7 @@ public:
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
+  bs::error_code init_neo();
   int init_svc(bool raw);
   int init_ctl();
   int init_rados();
@@ -702,18 +719,23 @@ public:
     bool bs_initialized;
 
   protected:
-    int get_state(RGWObjState **pstate, bool follow_olh, optional_yield y, bool assume_noent = false);
+    int get_state(RGWObjState **pstate, bool follow_olh, optional_yield y,
+		  bool assume_noent = false);
     void invalidate_state();
 
-    int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, optional_yield y);
+    int prepare_atomic_modification(librados::ObjectWriteOperation& op,
+				    bool reset_obj, const string *ptag,
+                                    const char *ifmatch, const char *ifnomatch,
+				    bool removal_op, bool modify_tail,
+				    optional_yield y);
     int complete_atomic_modification();
 
   public:
-    Object(RGWRados *_store, const RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
-                                                                                               ctx(_ctx), obj(_obj), bs(store),
-                                                                                               state(NULL), versioning_disabled(false),
-                                                                                               bs_initialized(false) {}
+    Object(RGWRados *_store, const RGWBucketInfo& _bucket_info,
+	   RGWObjectCtx& _ctx, const rgw_obj& _obj)
+      : store(_store), bucket_info(_bucket_info), ctx(_ctx), obj(_obj),
+	bs(store), state(NULL), versioning_disabled(false),
+	bs_initialized(false) {}
 
     RGWRados *get_store() { return store; }
     rgw_obj& get_obj() { return obj; }
@@ -752,7 +774,7 @@ public:
         rgw_obj obj;
         rgw_raw_obj head_obj;
       } state;
-      
+
       struct ConditionParams {
         const ceph::real_time *mod_ptr;
         const ceph::real_time *unmod_ptr;
@@ -761,9 +783,10 @@ public:
         uint64_t mod_pg_ver;
         const char *if_match;
         const char *if_nomatch;
-        
-        ConditionParams() : 
-                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
+
+        ConditionParams() :
+                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false),
+		 mod_zone_id(0), mod_pg_ver(0),
                  if_match(NULL), if_nomatch(NULL) {}
       } conds;
 
@@ -788,7 +811,7 @@ public:
 
     struct Write {
       RGWRados::Object *target;
-      
+
       struct MetaParams {
         ceph::real_time *mtime;
         map<std::string, bufferlist>* rmattrs;
@@ -811,10 +834,13 @@ public:
         bool completeMultipart;
         bool appendable;
 
-        MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
-                 remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
-                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false),  completeMultipart(false), appendable(false) {}
+        MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL),
+		       ptag(NULL),
+		       remove_objs(NULL), category(RGWObjCategory::Main),
+		       flags(0), if_match(NULL), if_nomatch(NULL),
+		       canceled(false), user_data(nullptr),
+		       zones_trace(nullptr), modify_tail(false),
+		       completeMultipart(false), appendable(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
@@ -825,7 +851,8 @@ public:
                      void *index_op, optional_yield y);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs, optional_yield y);
-      int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
+      int write_data(const char *data, uint64_t ofs, uint64_t len,
+		     bool exclusive);
       const req_state* get_req_state() {
         return (req_state *)target->get_ctx().get_private();
       }
@@ -850,7 +877,10 @@ public:
 	bool abortmp;
 	uint64_t parts_accounted_size;
 
-        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr), abortmp(false), parts_accounted_size(0) {}
+        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0),
+			 remove_objs(NULL), high_precision_time(false),
+			 zones_trace(nullptr), abortmp(false),
+			 parts_accounted_size(0) {}
       } params;
 
       struct DeleteResult {
@@ -859,7 +889,7 @@ public:
 
         DeleteResult() : delete_marker(false) {}
       } result;
-      
+
       explicit Delete(RGWRados::Object *_target) : target(_target) {}
 
       int delete_obj(optional_yield y);
