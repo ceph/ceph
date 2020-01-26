@@ -18,6 +18,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/buffer.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
@@ -95,7 +96,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:crimson-auth>
-  $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crimson-crush>)
 
