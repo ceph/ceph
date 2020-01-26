@@ -107,6 +107,12 @@
                                         pool.
       mirror pool status                Show status for all mirrored images in
                                         the pool.
+      mirror snapshot schedule add      Add mirror snapshot schedule.
+      mirror snapshot schedule list (... ls)
+                                        List mirror snapshot schedule.
+      mirror snapshot schedule remove (... rm)
+                                        Remove mirror snapshot schedule.
+      mirror snapshot schedule status   Show mirror snapshot schedule status.
       namespace create                  Create an RBD image namespace.
       namespace list (namespace ls)     List RBD image namespaces.
       namespace remove (namespace rm)   Remove an RBD image namespace.
@@ -1716,9 +1722,8 @@
   
   rbd help mirror pool peer bootstrap create
   usage: rbd mirror pool peer bootstrap create
-                                           [--pool <pool>] 
-                                           [--site-name <site-name>] 
-                                           <pool-name> 
+                                        [--pool <pool>] [--site-name <site-name>] 
+                                        <pool-name> 
   
   Create a peer bootstrap token to import in a remote cluster
   
@@ -1731,11 +1736,11 @@
   
   rbd help mirror pool peer bootstrap import
   usage: rbd mirror pool peer bootstrap import
-                                           [--pool <pool>] 
-                                           [--site-name <site-name>] 
-                                           [--token-path <token-path>] 
-                                           [--direction <direction>] 
-                                           <pool-name> <token-path> 
+                                        [--pool <pool>] 
+                                        [--site-name <site-name>] 
+                                        [--token-path <token-path>] 
+                                        [--direction <direction>] 
+                                        <pool-name> <token-path> 
   
   Import a peer bootstrap token created from a remote cluster
   
@@ -1813,6 +1818,75 @@
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --verbose            be verbose
+  
+  rbd help mirror snapshot schedule add
+  usage: rbd mirror snapshot schedule add
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--image <image>] 
+                                        <interval> <start-time> 
+  
+  Add mirror snapshot schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+  
+  rbd help mirror snapshot schedule list
+  usage: rbd mirror snapshot schedule list
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--image <image>] [--recursive] 
+                                        [--format <format>] [--pretty-format] 
+  
+  List mirror snapshot schedule.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    -R [ --recursive ]   list all schedules
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help mirror snapshot schedule remove
+  usage: rbd mirror snapshot schedule remove
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--image <image>] 
+                                        <interval> <start-time> 
+  
+  Remove mirror snapshot schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+  
+  rbd help mirror snapshot schedule status
+  usage: rbd mirror snapshot schedule status
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--image <image>] [--format <format>] 
+                                        [--pretty-format] 
+  
+  Show mirror snapshot schedule status.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help namespace create
   usage: rbd namespace create [--pool <pool>] [--namespace <namespace>] 

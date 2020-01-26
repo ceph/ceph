@@ -20,7 +20,7 @@ public:
 
   static const size_t LINE_WIDTH = 80;
   static const size_t MIN_NAME_WIDTH = 20;
-  static const size_t MAX_DESCRIPTION_OFFSET = LINE_WIDTH / 2;
+  static const size_t MAX_DESCRIPTION_OFFSET = 37;
 
   OptionPrinter(const OptionsDescription &positional,
                 const OptionsDescription &optional);
