@@ -3781,7 +3781,7 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // create the object processor
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+  auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
                                 s->yield);
   using namespace rgw::putobj;
   constexpr auto max_processor_size = std::max({sizeof(MultipartObjectProcessor),
@@ -4164,7 +4164,7 @@ void RGWPostObj::execute(optional_yield y)
       obj->gen_rand_obj_instance_name();
     }
 
-    auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+    auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
                                   s->yield);
 
     using namespace rgw::putobj;
@@ -6128,7 +6128,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   // remove the upload obj
   string version_id;
-  int r = meta_obj->delete_object(this, s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0, version_id, null_yield);
+  int r = meta_obj->delete_object(this, s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0, version_id, y);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer->clear_locked();
@@ -6995,7 +6995,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   rgw_placement_rule dest_placement = s->dest_placement;
   dest_placement.inherit_from(bucket->get_placement_rule());
 
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+  auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
                                 s->yield);
 
   using namespace rgw::putobj;

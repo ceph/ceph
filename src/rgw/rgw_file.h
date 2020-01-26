@@ -2494,7 +2494,7 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   RGWFileHandle* rgw_fh;
-  std::optional<rgw::BlockingAioThrottle> aio;
+  std::optional<neo::BlockingAioThrottle> aio;
   std::optional<rgw::putobj::AtomicObjectProcessor> processor;
   rgw::putobj::DataProcessor* filter;
   boost::optional<RGWPutObj_Compress> compressor;

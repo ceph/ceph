@@ -115,7 +115,7 @@ class YieldingAioThrottle final : public Aio, private Throttle {
 };
 
 // return a smart pointer to Aio
-inline auto make_throttle(uint64_t window_size, optional_yield y)
+[[deprecated]] inline auto make_throttle(uint64_t window_size, optional_yield y)
 {
   std::unique_ptr<Aio> aio;
   if (y) {
