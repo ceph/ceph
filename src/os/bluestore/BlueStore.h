@@ -2229,6 +2229,7 @@ private:
   void _set_alloc_sizes();
   void _set_blob_size();
   void _set_finisher_num();
+  void _set_per_pool_omap();
   void _update_osd_memory_options();
 
   int _open_bdev(bool create);
@@ -2370,6 +2371,9 @@ public:
     FSCK_REGULAR,
     FSCK_DEEP,
     FSCK_SHALLOW
+  };
+  enum {
+    MAX_FSCK_ERROR_LINES = 100,
   };
 
 private:
@@ -3237,8 +3241,6 @@ public:
 
     mempool_dynamic_bitset* used_blocks;
     uint64_t_btree_t* used_omap_head;
-    uint64_t_btree_t* used_per_pool_omap_head;
-    uint64_t_btree_t* used_pgmeta_omap_head;
 
     ceph::mutex* sb_info_lock;
     sb_info_map_t& sb_info;
@@ -3256,8 +3258,6 @@ public:
                    uint64_t& _num_spanning_blobs,
                    mempool_dynamic_bitset* _ub,
                    uint64_t_btree_t* _used_omap_head,
-                   uint64_t_btree_t* _used_per_pool_omap_head,
-                   uint64_t_btree_t* _used_pgmeta_omap_head,
                    ceph::mutex* _sb_info_lock,
                    sb_info_map_t& _sb_info,
                    store_statfs_t& _store_statfs,
@@ -3272,8 +3272,6 @@ public:
       num_spanning_blobs(_num_spanning_blobs),
       used_blocks(_ub),
       used_omap_head(_used_omap_head),
-      used_per_pool_omap_head(_used_per_pool_omap_head),
-      used_pgmeta_omap_head(_used_pgmeta_omap_head),
       sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
       expected_store_statfs(_store_statfs),
@@ -3294,6 +3292,10 @@ public:
     const BlueStore::FSCK_ObjectCtx& ctx);
 
 private:
+  void _fsck_check_object_omap(FSCKDepth depth,
+    OnodeRef& o,
+    const BlueStore::FSCK_ObjectCtx& ctx);
+
   void _fsck_check_objects(FSCKDepth depth,
     FSCK_ObjectCtx& ctx);
 };
@@ -3483,6 +3485,7 @@ public:
       ++to_repair_cnt;
     }
   }
+  // In fact this is the only repairer's method which is thread-safe!!
   void inc_repaired() {
     ++to_repair_cnt;
   }
@@ -3498,7 +3501,7 @@ public:
   }
 
 private:
-  unsigned to_repair_cnt = 0;
+  std::atomic<unsigned> to_repair_cnt = { 0 };
   KeyValueDB::Transaction fix_per_pool_omap_txn;
   KeyValueDB::Transaction fix_fm_leaked_txn;
   KeyValueDB::Transaction fix_fm_false_free_txn;

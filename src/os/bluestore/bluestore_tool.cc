@@ -431,10 +431,10 @@ int main(int argc, char **argv)
       r = bluestore.quick_fix();
     }
     if (r < 0) {
-      cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
+      cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     } else if (r > 0) {
-      cerr << action << " found " << r << " error(s)" << std::endl;
+      cerr << action << " status: remaining " << r << " error(s) and warning(s)" << std::endl;
       exit(EXIT_FAILURE);
     } else {
       cout << action << " success" << std::endl;
