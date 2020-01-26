@@ -480,9 +480,9 @@ void RGWRESTGenerateHTTPHeaders::set_extra_headers(const map<string, string>& ex
   }
 }
 
-int RGWRESTGenerateHTTPHeaders::set_obj_attrs(map<string, bufferlist>& rgw_attrs)
+int RGWRESTGenerateHTTPHeaders::set_obj_attrs(bc::flat_map<string, bufferlist>& rgw_attrs)
 {
-  map<string, string> new_attrs;
+  std::map<string, string> new_attrs;
 
   /* merge send headers */
   for (auto& attr: rgw_attrs) {
@@ -582,14 +582,16 @@ void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
   url = headers_gen.get_url();
 }
 
-int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send)
+int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key,
+				      bc::flat_map<string, bufferlist>& rgw_attrs,
+				      bool send)
 {
   headers_gen.set_obj_attrs(rgw_attrs);
 
   return send_ready(key, send);
 }
 
-int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
+int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const std::map<string, string>& http_attrs,
                                       RGWAccessControlPolicy& policy, bool send)
 {
   headers_gen.set_http_attrs(http_attrs);
@@ -617,7 +619,10 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, bool send)
   return 0;
 }
 
-int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
+int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj,
+					uint64_t obj_size,
+					bc::flat_map<string, bufferlist>& attrs,
+					bool send)
 {
   send_init(obj);
   return send_ready(key, attrs, send);

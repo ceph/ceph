@@ -91,8 +91,8 @@ inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& 
   }
 }
 
-template<typename M>
-int rgw_policy_from_attrset(CephContext *cct, M& attrset,
+int rgw_policy_from_attrset(CephContext *cct,
+			    bc::flat_map<string, bufferlist>& attrset,
 			    RGWAccessControlPolicy *policy);
 
 struct RGWOLHInfo {
@@ -199,14 +199,14 @@ struct RGWObjState {
 
   RGWObjVersionTracker objv_tracker;
 
-  map<string, bufferlist> attrset;
+  bc::flat_map<string, bufferlist> attrset;
 
   RGWObjState();
   RGWObjState(const RGWObjState& rhs);
   ~RGWObjState();
 
   bool get_attr(string name, bufferlist& dest) {
-    map<string, bufferlist>::iterator iter = attrset.find(name);
+    auto iter = attrset.find(name);
     if (iter != attrset.end()) {
       dest = iter->second;
       return true;
@@ -223,7 +223,7 @@ public:
                      const rgw_obj_key& source_key,
                      const RGWBucketInfo& dest_bucket_info,
                      std::optional<rgw_placement_rule> dest_placement_rule,
-                     const map<string, bufferlist>& obj_attrs,
+                     const bc::flat_map<string, bufferlist>& obj_attrs,
                      std::optional<rgw_user> *poverride_owner,
                      const rgw_placement_rule **prule) = 0;
 };
@@ -238,7 +238,7 @@ public:
              const rgw_obj_key& source_key,
              const RGWBucketInfo& dest_bucket_info,
              std::optional<rgw_placement_rule> dest_placement_rule,
-             const map<string, bufferlist>& obj_attrs,
+             const bc::flat_map<string, bufferlist>& obj_attrs,
              std::optional<rgw_user> *poverride_owner,
              const rgw_placement_rule **prule) override;
 };
@@ -861,17 +861,6 @@ public:
       int write_meta(uint64_t size, uint64_t accounted_size,
                      bc::flat_map<std::string, bufferlist>& attrs,
 		     optional_yield y);
-      int write_meta(uint64_t size, uint64_t accounted_size,
-                     std::map<std::string, bufferlist>& attrs,
-		     optional_yield y) { // ATTRTODO
-	bc::flat_map xttrs{std::make_move_iterator(attrs.begin()),
-			   std::make_move_iterator(attrs.end())}; // ATTRTODO
-	int r = write_meta(size, accounted_size, xttrs, y);
-	attrs.clear();
-	std::move(xttrs.begin(), xttrs.end(),
-		  std::inserter(attrs, attrs.end()));
-	return r;
-      }
       const req_state* get_req_state() {
         return (req_state *)target->get_ctx().get_private();
       }
@@ -1113,9 +1102,8 @@ public:
                                rgw_obj& obj,                    /* in */
                                bool& restored,                 /* out */
                                const DoutPrefixProvider *dpp);     /* in/out */                
-  template<typename M>
   int copy_obj_to_remote_dest(RGWObjState *astate,
-                              M& src_attrs,
+                              bc::flat_map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
                               const rgw_user& user_id,
                               rgw_obj& dest_obj,
@@ -1148,7 +1136,6 @@ public:
                string *ptag,
                string *petag);
 
-  template<typename M>
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const rgw_user& user_id,
                        req_info *info,
@@ -1167,7 +1154,7 @@ public:
                        const char *if_nomatch,
                        AttrsMod attrs_mod,
                        bool copy_if_newer,
-                       M& attrs,
+                       bc::flat_map<string, bufferlist>& attrs,
                        RGWObjCategory category,
                        std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
@@ -1193,7 +1180,6 @@ public:
    *                             are overwritten by values contained in attrs parameter.
    * Returns: 0 on success, -ERR# otherwise.
    */
-  template<typename M>
   int copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
@@ -1212,7 +1198,7 @@ public:
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               M& attrs,
+               bc::flat_map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
@@ -1325,7 +1311,7 @@ public:
    */
 
   int raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, ceph::real_time *pmtime, uint64_t *epoch,
-                   map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                   bc::flat_map<string, bufferlist> *attrs, bufferlist *first_chunk,
                    RGWObjVersionTracker *objv_tracker, optional_yield y);
 
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);

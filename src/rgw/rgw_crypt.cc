@@ -577,8 +577,7 @@ std::string create_random_key_selector(CephContext * const cct) {
   return std::string(random, sizeof(random));
 }
 
-template<typename M>
-inline void set_attr(M& attrs,
+inline void set_attr(bc::flat_map<string, bufferlist>& attrs,
 		     const char* key,
 		     boost::string_view value)
 {
@@ -587,8 +586,7 @@ inline void set_attr(M& attrs,
   attrs[key] = std::move(bl);
 }
 
-template<typename M>
-inline std::string get_str_attribute(M& attrs,
+inline std::string get_str_attribute(bc::flat_map<string, bufferlist>& attrs,
 				     const char *name)
 {
   auto iter = attrs.find(name);
@@ -649,9 +647,8 @@ static boost::string_view get_crypt_attribute(
 }
 
 
-template<typename M>
 int rgw_s3_prepare_encrypt(struct req_state* s,
-                           M& attrs,
+                           bc::flat_map<std::string, bufferlist>& attrs,
                            std::map<std::string,
                                     RGWPostObj_ObjStore::post_form_part,
                                     const ltstr_nocase>* parts,
@@ -884,23 +881,8 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
   return 0;
 }
 
-template
-int rgw_s3_prepare_encrypt<map<string, bufferlist>>(
-  struct req_state* s, map<string, bufferlist>& attrs,
-  std::map<std::string, RGWPostObj_ObjStore::post_form_part,
-  const ltstr_nocase>* parts, std::unique_ptr<BlockCrypt>* block_crypt,
-  std::map<std::string, std::string>& crypt_http_responses);
-template
-int rgw_s3_prepare_encrypt<bc::flat_map<string, bufferlist>>(
-  struct req_state* s, bc::flat_map<string, bufferlist>& attrs,
-  std::map<std::string, RGWPostObj_ObjStore::post_form_part,
-  const ltstr_nocase>* parts, std::unique_ptr<BlockCrypt>* block_crypt,
-  std::map<std::string, std::string>& crypt_http_responses);
-
-
-template<typename M>
 int rgw_s3_prepare_decrypt(struct req_state* s,
-			   M& attrs,
+			   bc::flat_map<string, bufferlist>& attrs,
 			   std::unique_ptr<BlockCrypt>* block_crypt,
 			   std::map<std::string, std::string>& crypt_http_responses)
 {
@@ -1067,12 +1049,3 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   /*no decryption*/
   return 0;
 }
-
-template int rgw_s3_prepare_decrypt<map<string, bufferlist>>(
-  struct req_state* s, map<string,bufferlist>& attrs,
-  std::unique_ptr<BlockCrypt>* block_crypt,
-  std::map<std::string, std::string>& crypt_http_responses);
-template int rgw_s3_prepare_decrypt<bc::flat_map<string, bufferlist>>(
-  struct req_state* s, bc::flat_map<string,bufferlist>& attrs,
-  std::unique_ptr<BlockCrypt>* block_crypt,
-  std::map<std::string, std::string>& crypt_http_responses);

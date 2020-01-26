@@ -830,7 +830,7 @@ int RGWDataAccess::Bucket::get_object(const rgw_obj_key& key,
 }
 
 int RGWDataAccess::Object::put(bufferlist& data,
-			       map<string, bufferlist>& attrs,
+			       bc::flat_map<string, bufferlist>& attrs,
                                const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
@@ -933,11 +933,9 @@ int RGWDataAccess::Object::put(bufferlist& data,
     puser_data = &(*user_data);
   }
 
-  // ATTRTODO
-  bc::flat_map xttr(attrs.begin(), attrs.end());
   return processor.complete(obj_size, etag,
 			    &mtime, mtime,
-			    xttr, delete_at,
+			    attrs, delete_at,
                             nullptr, nullptr,
                             puser_data,
                             nullptr, nullptr, y);

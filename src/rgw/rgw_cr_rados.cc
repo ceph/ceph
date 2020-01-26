@@ -749,7 +749,7 @@ int RGWAsyncRemoveObj::_send_request()
   RGWAccessControlPolicy policy;
 
   /* decode policy */
-  map<string, bufferlist>::iterator iter = state->attrset.find(RGW_ATTR_ACL);
+  auto iter = state->attrset.find(RGW_ATTR_ACL);
   if (iter != state->attrset.end()) {
     auto bliter = iter->second.cbegin();
     try {

@@ -1000,8 +1000,8 @@ int RGWGetObj::verify_permission()
 
 // cache the objects tags into the requests
 // use inside try/catch as "decode()" may throw
-template<typename M>
-void populate_tags_in_request(req_state* s, const M& attrs) {
+void populate_tags_in_request(req_state* s,
+			      const bc::flat_map<string, bufferlist>& attrs) {
   const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
   if (attr_iter != attrs.end()) {
     auto bliter = attr_iter->second.cbegin();
@@ -1010,8 +1010,8 @@ void populate_tags_in_request(req_state* s, const M& attrs) {
 }
 
 // cache the objects metadata into the request
-template<typename M>
-void populate_metadata_in_request(req_state* s, M& attrs) {
+void populate_metadata_in_request(req_state* s,
+				  bc::flat_map<string, bufferlist>& attrs) {
   for (auto& attr : attrs) {
     if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
       std::string_view key(attr.first);
@@ -2164,8 +2164,7 @@ void RGWGetObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-template<typename M>
-static bool object_is_expired(M& attrs) {
+static bool object_is_expired(const bc::flat_map<string, bufferlist>& attrs) {
   auto iter = attrs.find(RGW_ATTR_DELETE_AT);
   if (iter != attrs.end()) {
     utime_t delete_at;
@@ -2184,9 +2183,8 @@ static bool object_is_expired(M& attrs) {
   return false;
 }
 
-template<typename M>
-static inline void rgw_cond_decode_objtags(struct req_state *s,
-					   const M& attrs)
+inline void rgw_cond_decode_objtags(struct req_state *s,
+				    const bc::flat_map<string, bufferlist>& attrs)
 {
   const auto& tags = attrs.find(RGW_ATTR_TAGS);
   if (tags != attrs.end()) {
@@ -5908,7 +5906,7 @@ void RGWInitMultipart::pre_exec()
 void RGWInitMultipart::execute()
 {
   bufferlist aclbl;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   rgw_obj obj;
 
   if (get_params() < 0)

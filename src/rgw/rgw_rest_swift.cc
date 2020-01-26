@@ -1309,8 +1309,7 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
 
 }
 
-template<typename M>
-static void get_contype_from_attrs(M& attrs,
+static void get_contype_from_attrs(bc::flat_map<string, bufferlist>& attrs,
 				   string& content_type)
 {
   auto iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
@@ -1319,11 +1318,10 @@ static void get_contype_from_attrs(M& attrs,
   }
 }
 
-template<typename M>
 static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state * const s,
-				 const M& attrs)
+				 bc::flat_map<string, bufferlist>& attrs)
 {
-  map<string, string> response_attrs;
+  bc::flat_map<string, string> response_attrs;
 
   for (auto kv : attrs) {
     const char * name = kv.first.c_str();

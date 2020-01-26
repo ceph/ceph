@@ -60,7 +60,7 @@ struct rgw_object_simple_put_params {
   RGWDataAccess::BucketRef bucket;
   rgw_obj_key key;
   bufferlist data;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   std::optional<string> user_data;
 };
 

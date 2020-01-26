@@ -555,7 +555,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
     }
   } else {
     // check whether the object appendable
-    map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM);
+    auto iter = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM);
     if (iter == astate->attrset.end()) {
       ldpp_dout(dpp, 5) << "ERROR: The object is not appendable" << dendl;
       return -ERR_OBJECT_NOT_APPENDABLE;
@@ -675,7 +675,9 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
     attrs[RGW_ATTR_ETAG] = etag_bl;
   }
-  r = obj_op.write_meta(actual_size + cur_size, accounted_size + *cur_accounted_size, attrs, y);
+  r = obj_op.write_meta(actual_size + cur_size,
+			accounted_size + *cur_accounted_size,
+			attrs, y);
   if (r < 0) {
     return r;
   }

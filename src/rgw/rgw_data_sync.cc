@@ -2064,12 +2064,13 @@ public:
              const map<string, bufferlist>& bucket_attrs);
 
     bool verify_bucket_permission(int perm);
-    bool verify_object_permission(const map<string, bufferlist>& obj_attrs,
-                                  int perm);
+    bool verify_object_permission(const bc::flat_map<string, bufferlist>& obj_attrs,
+				  int perm);
   };
 
+  template<typename M>
   static int policy_from_attrs(CephContext *cct,
-                               const map<string, bufferlist>& attrs,
+                               const M& attrs,
                                RGWAccessControlPolicy *acl) {
     acl->set_ctx(cct);
 
@@ -2128,7 +2129,7 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(int perm)
                                             perm);
 }
 
-bool RGWUserPermHandler::Bucket::verify_object_permission(const map<string, bufferlist>& obj_attrs,
+bool RGWUserPermHandler::Bucket::verify_object_permission(const bc::flat_map<string, bufferlist>& obj_attrs,
                                                           int perm)
 {
   RGWAccessControlPolicy obj_acl;
@@ -2174,7 +2175,7 @@ public:
              const rgw_obj_key& source_key,
              const RGWBucketInfo& dest_bucket_info,
              std::optional<rgw_placement_rule> dest_placement_rule,
-             const map<string, bufferlist>& obj_attrs,
+             const bc::flat_map<string, bufferlist>& obj_attrs,
              std::optional<rgw_user> *poverride_owner,
              const rgw_placement_rule **prule) override;
 };
@@ -2183,7 +2184,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
                                    const rgw_obj_key& source_key,
                                    const RGWBucketInfo& dest_bucket_info,
                                    std::optional<rgw_placement_rule> dest_placement_rule,
-                                   const map<string, bufferlist>& obj_attrs,
+                                   const bc::flat_map<string, bufferlist>& obj_attrs,
                                    std::optional<rgw_user> *poverride_owner,
                                    const rgw_placement_rule **prule)
 {
@@ -2857,8 +2858,10 @@ RGWCoroutine *RGWRemoteBucketManager::init_sync_status_cr(int num, RGWObjVersion
 
 #define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
 
-template<typename T, typename M>
-static bool decode_attr(CephContext *cct, M& attrs, const string& attr_name, T *val)
+template<typename T>
+static bool decode_attr(CephContext *cct,
+			bc::flat_map<string, bufferlist>& attrs,
+			const string& attr_name, T *val)
 {
   auto iter = attrs.find(attr_name);
   if (iter == attrs.end()) {

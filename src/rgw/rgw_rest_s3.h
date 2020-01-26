@@ -443,7 +443,7 @@ public:
 
   int get_params() override;
   void send_response() override;
-  int prepare_encryption(map<string, bufferlist>& attrs) override;
+  int prepare_encryption(bc::flat_map<string, bufferlist>& attrs) override;
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {

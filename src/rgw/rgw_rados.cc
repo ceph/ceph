@@ -1733,8 +1733,8 @@ int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
   return 0;
 }
 
-template<typename M>
-int rgw_policy_from_attrset(CephContext *cct, M& attrset,
+int rgw_policy_from_attrset(CephContext *cct,
+			    bc::flat_map<string, bufferlist>& attrset,
 			    RGWAccessControlPolicy *policy)
 {
   auto aiter = attrset.find(RGW_ATTR_ACL);
@@ -1757,14 +1757,6 @@ int rgw_policy_from_attrset(CephContext *cct, M& attrset,
   }
   return 0;
 }
-
-template int rgw_policy_from_attrset<map<string, bufferlist>>(
-  CephContext *cct, map<string, bufferlist>& attrset,
-  RGWAccessControlPolicy *policy);
-template int rgw_policy_from_attrset<bc::flat_map<string, bufferlist>>(
-  CephContext *cct, bc::flat_map<string, bufferlist>& attrset,
-  RGWAccessControlPolicy *policy);
-
 
 int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 {
@@ -2960,7 +2952,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 
     /* We are requesting ATTRSMOD_NONE so the attr attribute is perfectly
      * irrelevant and may be safely skipped. */
-    std::map<std::string, ceph::bufferlist> no_attrs;
+    bc::flat_map<std::string, ceph::bufferlist> no_attrs;
 
     rgw_obj archive_obj(archive_binfo.bucket, entry.key);
 
@@ -3370,10 +3362,10 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   uint64_t data_len{0};
-  map<string, bufferlist> src_attrs;
+  bc::flat_map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
-  std::function<int(map<string, bufferlist>&)> attrs_handler;
+  std::function<int(bc::flat_map<string, bufferlist>&)> attrs_handler;
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -3381,7 +3373,7 @@ public:
                  rgw::putobj::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data,
-                 std::function<int(map<string, bufferlist>&)> _attrs_handler) :
+                 std::function<int(bc::flat_map<string, bufferlist>&)> _attrs_handler) :
                        cct(cct),
                        filter(p),
                        compressor(compressor),
@@ -3486,7 +3478,7 @@ public:
 
   bufferlist& get_extra_data() { return extra_data_bl; }
 
-  map<string, bufferlist>& get_attrs() { return src_attrs; }
+  bc::flat_map<string, bufferlist>& get_attrs() { return src_attrs; }
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
@@ -3501,8 +3493,8 @@ public:
 /*
  * prepare attrset depending on attrs_mod.
  */
-template<typename M, typename N>
-static void set_copy_attrs(M& src_attrs, N& attrs,
+static void set_copy_attrs(bc::flat_map<string, bufferlist>& src_attrs,
+			   bc::flat_map<string, bufferlist>& attrs,
                            RGWRados::AttrsMod attrs_mod)
 {
   switch (attrs_mod) {
@@ -3770,7 +3762,7 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
                                       const rgw_obj_key& source_key,
                                       const RGWBucketInfo& dest_bucket_info,
                                       std::optional<rgw_placement_rule> dest_placement_rule,
-                                      const map<string, bufferlist>& obj_attrs,
+                                      const bc::flat_map<string, bufferlist>& obj_attrs,
 				      std::optional<rgw_user> *poverride_owner,
                                       const rgw_placement_rule **prule)
 {
@@ -3789,8 +3781,6 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
   return 0;
 }
 
-
-template<typename M>
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
@@ -3809,7 +3799,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-	       M& attrs,
+	       bc::flat_map<string, bufferlist>& attrs,
                RGWObjCategory category,
                std::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
@@ -3871,7 +3861,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   std::optional<rgw_user> override_owner;
 
   RGWRadosPutObj cb(cct, plugin, compressor, &processor, progress_cb, progress_data,
-                    [&](map<string, bufferlist>& obj_attrs) {
+                    [&](bc::flat_map<string, bufferlist>& obj_attrs) {
                       const rgw_placement_rule *ptail_rule;
 
                       int ret = filter->filter(cct,
@@ -4008,7 +3998,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */
     cb.get_attrs().erase(RGW_ATTR_DELETE_AT);
   } else {
-    map<string, bufferlist>::iterator iter = cb.get_attrs().find(RGW_ATTR_DELETE_AT);
+    auto  iter = cb.get_attrs().find(RGW_ATTR_DELETE_AT);
     if (iter != cb.get_attrs().end()) {
       try {
         decode(delete_at, iter->second);
@@ -4035,9 +4025,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (source_zone.empty()) {
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
   } else {
-    // ATTRTODO
-    attrs.clear();
-    attrs.insert(cb.get_attrs().begin(), cb.get_attrs().end());
+    attrs = cb.get_attrs();
   }
 
   if (copy_if_newer) {
@@ -4058,10 +4046,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
-    // ATTRTODO
-    bc::flat_map xttr{attrs.begin(), attrs.end()};
     ret = processor.complete(cb.get_data_len(), etag, mtime, set_mtime,
-                             xttr, delete_at, nullptr, nullptr, nullptr,
+                             attrs, delete_at, nullptr, nullptr, nullptr,
                              zones_trace, &canceled, null_yield);
     if (ret < 0) {
       goto set_err_state;
@@ -4113,44 +4099,8 @@ set_err_state:
   return ret;
 }
 
-template int
-RGWRados::fetch_remote_obj<std::map<string, bufferlist>>(
-  RGWObjectCtx& obj_ctx, const rgw_user& user_id, req_info *info,
-  const rgw_zone_id& source_zone, const rgw_obj& dest_obj,
-  const rgw_obj& src_obj, const RGWBucketInfo& dest_bucket_info,
-  const RGWBucketInfo *src_bucket_info, std::optional<rgw_placement_rule> dest_placement_rule,
-  real_time *src_mtime, real_time *mtime,
-  const real_time *mod_ptr, const real_time *unmod_ptr,
-  bool high_precision_time, const char *if_match,
-  const char *if_nomatch, AttrsMod attrs_mod,
-  bool copy_if_newer, std::map<string, bufferlist>& attrs,
-  RGWObjCategory category, std::optional<uint64_t> olh_epoch,
-  real_time delete_at, string *ptag,
-  string *petag, void (*progress_cb)(off_t, void *),
-  void *progress_data, const DoutPrefixProvider *dpp,
-  RGWFetchObjFilter *filter, rgw_zone_set *zones_trace,
-  std::optional<uint64_t>* bytes_transferred);
-template int
-RGWRados::fetch_remote_obj<bc::flat_map<string, bufferlist>>(
-  RGWObjectCtx& obj_ctx, const rgw_user& user_id, req_info *info,
-  const rgw_zone_id& source_zone, const rgw_obj& dest_obj,
-  const rgw_obj& src_obj, const RGWBucketInfo& dest_bucket_info,
-  const RGWBucketInfo *src_bucket_info, std::optional<rgw_placement_rule> dest_placement_rule,
-  real_time *src_mtime, real_time *mtime,
-  const real_time *mod_ptr, const real_time *unmod_ptr,
-  bool high_precision_time, const char *if_match,
-  const char *if_nomatch, AttrsMod attrs_mod,
-  bool copy_if_newer, bc::flat_map<string, bufferlist>& attrs,
-  RGWObjCategory category, std::optional<uint64_t> olh_epoch,
-  real_time delete_at, string *ptag,
-  string *petag, void (*progress_cb)(off_t, void *),
-  void *progress_data, const DoutPrefixProvider *dpp,
-  RGWFetchObjFilter *filter, rgw_zone_set *zones_trace,
-  std::optional<uint64_t>* bytes_transferred);
-
-template<typename M>
 int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
-                                      M& src_attrs,
+                                      bc::flat_map<string, bufferlist>& src_attrs,
                                       RGWRados::Object::Read& read_op,
                                       const rgw_user& user_id,
                                       rgw_obj& dest_obj,
@@ -4162,10 +4112,8 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
 
   auto rest_master_conn = svc.zone->get_master_conn();
 
-  std::map<std::string, bufferlist> xttrs{src_attrs.begin(),
-					  src_attrs.end()}; // ATTRTODO
   int ret = rest_master_conn->put_obj_async(user_id, dest_obj, astate->size,
-					    xttrs, true, &out_stream_req);
+					    src_attrs, true, &out_stream_req);
   if (ret < 0) {
     return ret;
   }
@@ -4183,17 +4131,6 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
   return 0;
 }
 
-template
-int RGWRados::copy_obj_to_remote_dest<map<string, bufferlist>>(
-  RGWObjState *astate, map<string, bufferlist>& src_attrs,
-  RGWRados::Object::Read& read_op, const rgw_user& user_id,
-  rgw_obj& dest_obj, real_time *mtime);
-template
-int RGWRados::copy_obj_to_remote_dest<bc::flat_map<string, bufferlist>>(
-  RGWObjState *astate, bc::flat_map<string, bufferlist>& src_attrs,
-  RGWRados::Object::Read& read_op, const rgw_user& user_id,
-  rgw_obj& dest_obj, real_time *mtime);
-
 /**
  * Copy an object.
  * dest_obj: the object to copy into
@@ -4209,7 +4146,6 @@ int RGWRados::copy_obj_to_remote_dest<bc::flat_map<string, bufferlist>>(
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
-template<typename M>
 int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
@@ -4228,7 +4164,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-	       M& attrs,
+	       bc::flat_map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
 	       real_time delete_at,
@@ -4390,9 +4326,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
-    bc::flat_map xttr{attrs.begin(), attrs.end()}; // ATTRTODO
     return copy_obj_data(obj_ctx, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), xttr, olh_epoch, delete_at, petag, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest->obj_begin();
@@ -4507,36 +4442,6 @@ done_ret:
   }
   return ret;
 }
-
-template
-int RGWRados::copy_obj<std::map<string, bufferlist>>(
-  RGWObjectCtx& obj_ctx, const rgw_user& user_id,
-  req_info *info, const rgw_zone_id& source_zone,
-  rgw_obj& dest_obj, rgw_obj& src_obj,
-  RGWBucketInfo& dest_bucket_info, RGWBucketInfo& src_bucket_info,
-  const rgw_placement_rule& dest_placement, real_time *src_mtime,
-  real_time *mtime, const real_time *mod_ptr, const real_time *unmod_ptr,
-  bool high_precision_time, const char *if_match, const char *if_nomatch,
-  AttrsMod attrs_mod, bool copy_if_newer, std::map<string, bufferlist>& attrs,
-  RGWObjCategory category, uint64_t olh_epoch, real_time delete_at,
-  string *version_id, string *ptag, string *petag,
-  void (*progress_cb)(off_t, void *), void *progress_data,
-  const DoutPrefixProvider *dpp, optional_yield y);
-template
-int RGWRados::copy_obj<bc::flat_map<string, bufferlist>>(
-  RGWObjectCtx& obj_ctx, const rgw_user& user_id,
-  req_info *info, const rgw_zone_id& source_zone,
-  rgw_obj& dest_obj, rgw_obj& src_obj,
-  RGWBucketInfo& dest_bucket_info, RGWBucketInfo& src_bucket_info,
-  const rgw_placement_rule& dest_placement, real_time *src_mtime,
-  real_time *mtime, const real_time *mod_ptr, const real_time *unmod_ptr,
-  bool high_precision_time, const char *if_match, const char *if_nomatch,
-  AttrsMod attrs_mod, bool copy_if_newer, bc::flat_map<string, bufferlist>& attrs,
-  RGWObjCategory category, uint64_t olh_epoch, real_time delete_at,
-  string *version_id, string *ptag, string *petag,
-  void (*progress_cb)(off_t, void *), void *progress_data,
-  const DoutPrefixProvider *dpp, optional_yield y);
-
 
 int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
@@ -5343,7 +5248,10 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime)
   return index_op.complete_del(-1 /* pool */, 0, mtime, NULL);
 }
 
-static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
+static void generate_fake_tag(RGWRados *store,
+			      bc::flat_map<string, bufferlist>& attrset,
+			      RGWObjManifest& manifest, bufferlist& manifest_bl,
+			      bufferlist& tag_bl)
 {
   string tag;
 
@@ -5360,7 +5268,7 @@ static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset,
   MD5 hash;
   hash.Update((const unsigned char *)manifest_bl.c_str(), manifest_bl.length());
 
-  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
+  auto iter = attrset.find(RGW_ATTR_ETAG);
   if (iter != attrset.end()) {
     bufferlist& bl = iter->second;
     hash.Update((const unsigned char *)bl.c_str(), bl.length());
@@ -5375,15 +5283,15 @@ static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset,
   tag_bl.append(tag.c_str(), tag.size() + 1);
 }
 
-static bool is_olh(map<string, bufferlist>& attrs)
+static bool is_olh(bc::flat_map<string, bufferlist>& attrs)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_INFO);
+  auto iter = attrs.find(RGW_ATTR_OLH_INFO);
   return (iter != attrs.end());
 }
 
-static bool has_olh_tag(map<string, bufferlist>& attrs)
+static bool has_olh_tag(bc::flat_map<string, bufferlist>& attrs)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_ID_TAG);
+  auto iter = attrs.find(RGW_ATTR_OLH_ID_TAG);
   return (iter != attrs.end());
 }
 
@@ -5529,7 +5437,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
       s->fake_tag = true;
     }
   }
-  map<string, bufferlist>::iterator aiter = s->attrset.find(RGW_ATTR_PG_VER);
+  auto aiter = s->attrset.find(RGW_ATTR_PG_VER);
   if (aiter != s->attrset.end()) {
     bufferlist& pg_ver_bl = aiter->second;
     if (pg_ver_bl.length()) {
@@ -5634,8 +5542,7 @@ bs::error_code RGWRados::Object::Stat::stat_async()
   if (s->has_attrs) {
     result.size = s->size;
     result.mtime = s->mtime;
-    std::copy(s->attrset.begin(), s->attrset.end(),
-	      std::inserter(result.attrs, result.attrs.end())); // TODO
+    result.attrs = s->attrset;
     result.manifest = s->manifest;
     return {};
   }
@@ -6192,9 +6099,7 @@ int RGWRados::Object::Read::prepare(optional_yield y)
     *params.target_obj = state.obj;
   }
   if (params.attrs) {
-    std::copy(astate->attrset.begin(), astate->attrset.end(),
-	      std::inserter(*params.attrs, params.attrs->end())); // TODO
-    // *params.attrs = astate->attrset;
+    *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (auto iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
         ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
@@ -7798,46 +7703,40 @@ int RGWRados::follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx
 }
 
 int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                           map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                           bc::flat_map<string, bufferlist> *attrs, bufferlist *first_chunk,
                            RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
-  rgw_rados_ref ref;
-  int r = get_raw_obj_ref(obj, &ref);
-  if (r < 0) {
-    return r;
-  }
+  auto ref = acquire_obj(obj, y);
+  if (!ref)
+    return ceph::from_error_code(ref.error());
 
-  map<string, bufferlist> unfiltered_attrset;
+  bc::flat_map<string, bufferlist> unfiltered_attrset;
   uint64_t size = 0;
-  struct timespec mtime_ts;
+  ceph::real_time mtime;
 
-  ObjectReadOperation op;
+  R::ReadOp op;
   if (objv_tracker) {
-    objv_tracker->prepare_op_for_read(&op);
+    objv_tracker->prepare_op_for_read(op);
   }
   if (attrs) {
-    op.getxattrs(&unfiltered_attrset, NULL);
+    op.get_xattrs(&unfiltered_attrset);
   }
   if (psize || pmtime) {
-    op.stat2(&size, &mtime_ts, NULL);
+    op.stat(&size, &mtime);
   }
   if (first_chunk) {
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
   bufferlist outbl;
-  r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
+  auto ec = ref->operate(std::move(op), &outbl, y, epoch);
 
-  if (epoch) {
-    *epoch = ref.pool.ioctx().get_last_version();
-  }
-
-  if (r < 0)
-    return r;
+  if (ec)
+    return ceph::from_error_code(ec);
 
   if (psize)
     *psize = size;
   if (pmtime)
-    *pmtime = ceph::real_clock::from_timespec(mtime_ts);
+    *pmtime = mtime;
   if (attrs) {
     rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
   }
@@ -9172,7 +9071,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   object.meta.accounted_size = astate->accounted_size;
   object.meta.mtime = astate->mtime;
 
-  map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_ETAG);
+  auto iter = astate->attrset.find(RGW_ATTR_ETAG);
   if (iter != astate->attrset.end()) {
     etag = rgw_bl_str(iter->second);
   }

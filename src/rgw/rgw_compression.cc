@@ -5,8 +5,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-template<typename M>
-int rgw_compression_info_from_attrset(M& attrs,
+int rgw_compression_info_from_attrset(bc::flat_map<string, bufferlist>& attrs,
                                       bool& need_decompress,
                                       RGWCompressionInfo& cs_info)
 {
@@ -31,15 +30,6 @@ int rgw_compression_info_from_attrset(M& attrs,
     return 0;
   }
 }
-
-template int
-rgw_compression_info_from_attrset<map<string, bufferlist>>(
-  map<string, bufferlist>& attrs, bool& need_decompress,
-  RGWCompressionInfo& cs_info);
-template int
-rgw_compression_info_from_attrset<bc::flat_map<string, bufferlist>>(
-  bc::flat_map<string, bufferlist>& attrs, bool& need_decompress,
-  RGWCompressionInfo& cs_info);
 
 //------------RGWPutObj_Compress---------------
 

@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/system/error_code.hpp>
 
 #include "include/types.h"
@@ -19,6 +20,7 @@
 
 namespace R = neorados;
 namespace bs = boost::system;
+namespace bc = boost::container;
 
 class RGWSI_SysObj;
 
@@ -45,13 +47,13 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 
 extern const std::string MP_META_SUFFIX;
 
-static inline int rgw_shards_max()
+inline int rgw_shards_max()
 {
   return RGW_SHARDS_PRIME_1;
 }
 
 // only called by rgw_shard_id and rgw_bucket_shard_index
-static inline int rgw_shards_mod(unsigned hval, int max_shards)
+inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
   if (max_shards <= RGW_SHARDS_PRIME_0) {
     return hval % RGW_SHARDS_PRIME_0 % max_shards;
@@ -60,7 +62,7 @@ static inline int rgw_shards_mod(unsigned hval, int max_shards)
 }
 
 // used for logging and tagging
-static inline int rgw_shard_id(const string& key, int max_shards)
+inline int rgw_shard_id(const string& key, int max_shards)
 {
   return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
 			max_shards);
@@ -383,7 +385,7 @@ public:
                                       bucket(_bucket),
                                       key(_key) {}
   public:
-    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
+    int put(bufferlist& data, bc::flat_map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
 
     void set_mtime(const ceph::real_time& _mtime) {
       mtime = _mtime;

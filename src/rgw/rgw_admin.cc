@@ -6674,7 +6674,7 @@ next:
       cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
     }
 
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     ret = obj->put(bl, attrs, dpp(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;
