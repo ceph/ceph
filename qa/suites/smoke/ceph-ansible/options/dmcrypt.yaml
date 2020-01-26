@@ -1,0 +1,8 @@
+meta:
+- desc: "use dmcrypt option"
+
+overrides:
+   ceph_ansible:
+     vars:
+        dmcrypt: True
+

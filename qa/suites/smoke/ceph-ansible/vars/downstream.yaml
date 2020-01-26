@@ -1,0 +1,20 @@
+overrides:
+  ceph_ansible:
+    vars:
+      ceph_stable: true
+      ceph_origin: distro
+      ceph_stable_rh_storage: true
+      ceph_repository: rhcs
+      ceph_stable_release: luminous
+      osd_scenario: collocated
+      journal_size: 1024
+      osd_auto_discovery: false
+      ceph_test: true
+      ceph_mgr_modules:
+         - status
+         - restful
+      cephfs_pools:
+        - name: "cephfs_data"
+          pgs: "64"
+        - name: "cephfs_metadata"
+          pgs: "64"
