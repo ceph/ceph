@@ -17,6 +17,7 @@
 
 #include "common/ceph_json.h"
 
+#include "common/async/waiter.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/Throttle.h"
@@ -49,8 +50,6 @@
 #undef fork // fails to compile RGWPeriod::fork() below
 
 #include "common/Clock.h"
-
-using namespace librados;
 
 #include <string>
 #include <iostream>
@@ -97,6 +96,13 @@ using namespace librados;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+namespace ba = boost::asio;
+namespace bc = boost::container;
+namespace bs = boost::system;
+namespace ca = ceph::async;
+
+using namespace librados;
 
 
 static string shadow_ns = "shadow";
@@ -1303,6 +1309,20 @@ int RGWRados::init_complete()
   return ret;
 }
 
+bs::error_code RGWRados::init_neo()
+{
+  ctxpool.start(cct->_conf.get_val<uint64_t>("rgw_asio_thread_count"));
+  try {
+    neorados = R::RADOS::make_with_cct(cct, ctxpool.get_io_context(),
+				       ba::use_future).get();
+  } catch (const bs::system_error& e) {
+    ldout(cct, 0) << "ERROR: Unable to initialize libRADOS: " << e.what()
+		  << dendl;
+    return e.code();
+  }
+  return {};
+}
+
 int RGWRados::init_svc(bool raw)
 {
   if (raw) {
@@ -1328,6 +1348,12 @@ int RGWRados::initialize()
   inject_notify_timeout_probability =
     cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
   max_notify_retries = cct->_conf.get_val<uint64_t>("rgw_max_notify_retries");
+
+  auto ec = init_neo();
+  if (ec) {
+    ldout(cct, 0) << "ERROR: failed to init RADOS (ec=" << ec << ")" << dendl;
+    ceph::from_error_code(ec);
+  }
 
   ret = init_svc(false);
   if (ret < 0) {

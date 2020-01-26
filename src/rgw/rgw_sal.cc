@@ -320,26 +320,30 @@ rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct
 rgw::sal::RGWRadosStore *RGWStoreManager::init_raw_storage_provider(CephContext *cct)
 {
   RGWRados *rados = new RGWRados;
-  rgw::sal::RGWRadosStore *store = new rgw::sal::RGWRadosStore();
+  auto store = std::make_unique<rgw::sal::RGWRadosStore>();
 
   store->setRados(rados);
-  rados->set_store(store);
+  rados->set_store(store.get());
 
   rados->set_context(cct);
+
+  auto ec = rados->init_neo();
+  if (ec) {
+    ldout(cct, 0) << "ERROR: failed to init RADOS (ec=" << ec << ")" << dendl;
+    return nullptr;
+  }
 
   int ret = rados->init_svc(true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
-    delete store;
     return nullptr;
   }
 
   if (rados->init_rados() < 0) {
-    delete store;
     return nullptr;
   }
 
-  return store;
+  return store.release();
 }
 
 void RGWStoreManager::close_storage(rgw::sal::RGWRadosStore *store)
