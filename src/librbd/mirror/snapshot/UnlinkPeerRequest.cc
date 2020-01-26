@@ -164,7 +164,7 @@ void UnlinkPeerRequest<I>::remove_snapshot() {
     }
   }
 
-  if (r == ENOENT) {
+  if (r == -ENOENT) {
     finish(0);
     return;
   }
