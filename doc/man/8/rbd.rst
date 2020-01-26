@@ -539,6 +539,18 @@ Commands
   With --verbose, also show additionally output status
   details for every mirroring image in the pool.
 
+:command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
+  Add mirror snapshot schedule.
+
+:command:`mirror snapshot schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*] [--image *image*]
+  List mirror snapshot schedule.
+
+:command:`mirror snapshot schedule remove` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
+  Remove mirror snapshot schedule.
+
+:command:`mirror snapshot schedule status` [-p | --pool *pool*] [--format *format*] [--pretty-format] [--namespace *namespace*] [--image *image*]
+  Show mirror snapshot schedule status.
+
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
 
