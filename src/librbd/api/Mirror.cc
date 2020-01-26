@@ -682,6 +682,38 @@ int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info) {
 }
 
 template <typename I>
+void Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
+                               ContextWQ *op_work_queue,
+                               const std::string &image_id,
+                               mirror_image_info_t *mirror_image_info,
+                               Context *on_finish) {
+  auto cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "pool_id=" << io_ctx.get_id() << ", image_id=" << image_id
+                 << dendl;
+
+  auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
+  auto req = mirror::GetInfoRequest<I>::create(io_ctx, op_work_queue, image_id,
+                                               &ctx->mirror_image,
+                                               &ctx->promotion_state, ctx);
+  req->send();
+}
+
+template <typename I>
+int Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
+                              ContextWQ *op_work_queue,
+                              const std::string &image_id,
+                              mirror_image_info_t *mirror_image_info) {
+  C_SaferCond ctx;
+  image_get_info(io_ctx, op_work_queue, image_id, mirror_image_info, &ctx);
+
+  int r = ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+template <typename I>
 void Mirror<I>::image_get_mode(I *ictx, mirror_image_mode_t *mode,
                                Context *on_finish) {
   CephContext *cct = ictx->cct;
@@ -1710,6 +1742,66 @@ int Mirror<I>::image_instance_id_list(
 
   for (auto it : instances) {
     (*instance_ids)[it.first] = stringify(it.second.name.num());
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::image_info_list(
+    librados::IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+    const std::string &start_id, size_t max,
+    std::map<std::string, std::pair<mirror_image_mode_t,
+                                    mirror_image_info_t>> *entries) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "pool=" << io_ctx.get_pool_name() << ", mode_filter="
+                 << (mode_filter ? stringify(*mode_filter) : "null")
+                 << ", start_id=" << start_id << ", max=" << max << dendl;
+
+  std::string last_read = start_id;
+  entries->clear();
+
+  while (entries->size() < max) {
+    map<std::string, cls::rbd::MirrorImage> images;
+    map<std::string, cls::rbd::MirrorImageStatus> statuses;
+
+    int r = librbd::cls_client::mirror_image_status_list(&io_ctx, last_read,
+                                                         max, &images,
+                                                         &statuses);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to list mirror image statuses: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (images.empty()) {
+      break;
+    }
+
+    ThreadPool *thread_pool;
+    ContextWQ *op_work_queue;
+    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
+    for (auto &it : images) {
+      auto &image_id = it.first;
+      auto &image = it.second;
+      auto mode = static_cast<mirror_image_mode_t>(image.mode);
+
+      if ((mode_filter && mode != *mode_filter) ||
+          image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+        continue;
+      }
+
+      // need to call get_info for every image to retrieve promotion state
+
+      mirror_image_info_t info;
+      r = image_get_info(io_ctx, op_work_queue, image_id, &info);
+      if (r >= 0) {
+        (*entries)[image_id] = {mode, info};
+      }
+    }
+
+    last_read = images.rbegin()->first;
   }
 
   return 0;

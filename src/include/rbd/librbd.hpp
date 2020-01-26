@@ -347,6 +347,10 @@ public:
       std::map<mirror_image_status_state_t, int> *states);
   int mirror_image_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
       size_t max, std::map<std::string, std::string> *sevice_ids);
+  int mirror_image_info_list(IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+      const std::string &start_id, size_t max,
+      std::map<std::string, std::pair<mirror_image_mode_t,
+                                      mirror_image_info_t>> *entries);
 
   /// mirror_peer_ commands are deprecated to mirror_peer_site_ equivalents
   int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
