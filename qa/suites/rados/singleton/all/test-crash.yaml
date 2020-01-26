@@ -15,4 +15,5 @@ tasks:
   - ceph.restart: [osd.*]
   - exec:
       mon.a:
+        - find $TESTDIR/archive/coredump -ls
         - rm $TESTDIR/archive/coredump/*
