@@ -577,9 +577,10 @@ std::string create_random_key_selector(CephContext * const cct) {
   return std::string(random, sizeof(random));
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs,
-                            const char* key,
-                            boost::string_view value)
+template<typename M>
+inline void set_attr(M& attrs,
+		     const char* key,
+		     boost::string_view value)
 {
   bufferlist bl;
   bl.append(value.data(), value.size());
@@ -648,8 +649,9 @@ static boost::string_view get_crypt_attribute(
 }
 
 
+template<typename M>
 int rgw_s3_prepare_encrypt(struct req_state* s,
-                           std::map<std::string, ceph::bufferlist>& attrs,
+                           M& attrs,
                            std::map<std::string,
                                     RGWPostObj_ObjStore::post_form_part,
                                     const ltstr_nocase>* parts,
@@ -881,6 +883,19 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
   /*no encryption*/
   return 0;
 }
+
+template
+int rgw_s3_prepare_encrypt<map<string, bufferlist>>(
+  struct req_state* s, map<string, bufferlist>& attrs,
+  std::map<std::string, RGWPostObj_ObjStore::post_form_part,
+  const ltstr_nocase>* parts, std::unique_ptr<BlockCrypt>* block_crypt,
+  std::map<std::string, std::string>& crypt_http_responses);
+template
+int rgw_s3_prepare_encrypt<bc::flat_map<string, bufferlist>>(
+  struct req_state* s, bc::flat_map<string, bufferlist>& attrs,
+  std::map<std::string, RGWPostObj_ObjStore::post_form_part,
+  const ltstr_nocase>* parts, std::unique_ptr<BlockCrypt>* block_crypt,
+  std::map<std::string, std::string>& crypt_http_responses);
 
 
 template<typename M>

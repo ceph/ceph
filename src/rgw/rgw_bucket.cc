@@ -331,7 +331,7 @@ int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucke
 
   rgw_obj obj(bucket, key);
 
-  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
+  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status(), null_yield);
 }
 
 /* xxx dang */

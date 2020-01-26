@@ -60,14 +60,15 @@ int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)
 }
 
 
-static int process_completed(const AioResultList& completed, RawObjSet *written)
+static int process_completed(const neo::AioResultList& completed,
+			     ObjSet *written)
 {
   std::optional<int> error;
   for (auto& r : completed) {
-    if (r.result >= 0) {
-      written->insert(r.obj.get_ref().obj);
+    if (!r.result) {
+      written->insert(r.obj);
     } else if (!error) { // record first error code
-      error = r.result;
+      error = ceph::from_error_code(r.result);
     }
   }
   return error.value_or(0);
@@ -75,8 +76,13 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
 
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
-  stripe_obj = store->svc()->rados->obj(raw_obj);
-  return stripe_obj.open();
+  auto ref = store->getRados()->acquire_obj(raw_obj, y);
+
+  if (!ref)
+    return ceph::from_error_code(ref.error());
+
+  stripe_obj = std::move(*ref);
+  return 0;
 }
 
 int RadosWriter::process(bufferlist&& bl, uint64_t offset)
@@ -86,14 +92,14 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   if (cost == 0) { // no empty writes, use aio directly for creates
     return 0;
   }
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
   if (offset == 0) {
-    op.write_full(data);
+    op.write_full(std::move(data));
   } else {
-    op.write(offset, data);
+    op.write(offset, std::move(data));
   }
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj, neo::Aio::rados_op(std::move(op), y), cost, id);
   return process_completed(c, &written);
 }
 
@@ -101,12 +107,12 @@ int RadosWriter::write_exclusive(const bufferlist& data)
 {
   const uint64_t cost = data.length();
 
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
   op.create(true); // exclusive create
-  op.write_full(data);
+  op.write_full(bufferlist(data));
 
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj, neo::Aio::rados_op(std::move(op), y), cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
@@ -126,7 +132,8 @@ RadosWriter::~RadosWriter()
   std::optional<rgw_raw_obj> raw_head;
   if (!head_obj.empty()) {
     raw_head.emplace();
-    store->getRados()->obj_to_raw(bucket_info.placement_rule, head_obj, &*raw_head);
+    store->getRados()->obj_to_raw(bucket_info.placement_rule, head_obj,
+				  &*raw_head);
   }
 
   /**
@@ -141,24 +148,36 @@ RadosWriter::~RadosWriter()
    * we remove all the other raw objects. Note that we use different call to remove the head object,
    * as this one needs to go via the bucket index prepare/complete 2-phase commit scheme.
    */
-  for (const auto& obj : written) {
-    if (raw_head && obj == *raw_head) {
-      ldpp_dout(dpp, 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
+  for (auto& obj : written) {
+    if (raw_head &&
+	(raw_head->pool.name == obj.pool_name) &&
+	(raw_head->pool.ns == obj.ioc.ns()) &&
+	(raw_head->loc == obj.ioc.key()) &&
+	(raw_head->oid == obj.oid)) {
+      ldpp_dout(dpp, 5) << "NOTE: we should not process the head object ("
+			<< obj.oid << ") here" << dendl;
       need_to_remove_head = true;
       continue;
     }
 
-    int r = store->getRados()->delete_raw_obj(obj);
-    if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+    R::WriteOp op;
+    op.remove();
+    auto ec = store->getRados()->operate(obj.oid, obj.ioc, std::move(op), y);
+
+    if (ec && ec != bs::errc::no_such_file_or_directory) {
+      ldpp_dout(dpp, 5) << "WARNING: failed to remove obj (" << obj.oid
+			<< "), leaked" << dendl;
     }
   }
 
   if (need_to_remove_head) {
-    ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = store->getRados()->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
+    ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj ("
+		      << raw_head << ")" << dendl;
+    int r = store->getRados()->delete_obj(obj_ctx, bucket_info, head_obj, 0,
+					  y, 0);
     if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << raw_head
+			<< "), leaked" << dendl;
     }
   }
 }
@@ -275,7 +294,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const std::string& etag,
                                     ceph::real_time *mtime,
                                     ceph::real_time set_mtime,
-                                    std::map<std::string, bufferlist>& attrs,
+                                    bc::flat_map<std::string, bufferlist>& attrs,
                                     ceph::real_time delete_at,
                                     const char *if_match,
                                     const char *if_nomatch,
@@ -411,7 +430,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        const std::string& etag,
                                        ceph::real_time *mtime,
                                        ceph::real_time set_mtime,
-                                       std::map<std::string, bufferlist>& attrs,
+                                       bc::flat_map<std::string, bufferlist>& attrs,
                                        ceph::real_time delete_at,
                                        const char *if_match,
                                        const char *if_nomatch,
@@ -599,7 +618,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
 }
 
 int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, ceph::real_time *mtime,
-                                    ceph::real_time set_mtime, map <string, bufferlist> &attrs,
+                                    ceph::real_time set_mtime, bc::flat_map<string, bufferlist> &attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
                                     optional_yield y)

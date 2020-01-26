@@ -1268,12 +1268,13 @@ public:
 
   /** Delete an object.*/
   int delete_obj(RGWObjectCtx& obj_ctx,
-                         const RGWBucketInfo& bucket_owner,
-                         const rgw_obj& src_obj,
-                         int versioning_status,
-                         uint16_t bilog_flags = 0,
-                         const ceph::real_time& expiration_time = ceph::real_time(),
-                         rgw_zone_set *zones_trace = nullptr);
+		 const RGWBucketInfo& bucket_owner,
+		 const rgw_obj& src_obj,
+		 int versioning_status,
+		 optional_yield y,
+		 uint16_t bilog_flags = 0,
+		 const ceph::real_time& expiration_time = ceph::real_time(),
+		 rgw_zone_set *zones_trace = nullptr);
 
   int delete_raw_obj(const rgw_raw_obj& obj);
 

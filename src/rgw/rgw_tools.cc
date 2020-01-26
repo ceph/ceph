@@ -842,7 +842,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   RGWBucketInfo& bucket_info = bucket->bucket_info;
 
-  rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
+  neo::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   RGWObjectCtx obj_ctx(store);
   rgw_obj obj(bucket_info.bucket, key);
@@ -933,9 +933,11 @@ int RGWDataAccess::Object::put(bufferlist& data,
     puser_data = &(*user_data);
   }
 
+  // ATTRTODO
+  bc::flat_map xttr(attrs.begin(), attrs.end());
   return processor.complete(obj_size, etag,
 			    &mtime, mtime,
-			    attrs, delete_at,
+			    xttr, delete_at,
                             nullptr, nullptr,
                             puser_data,
                             nullptr, nullptr, y);

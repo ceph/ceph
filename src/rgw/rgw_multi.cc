@@ -234,7 +234,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
         string oid = mp_obj.get_part(obj_iter->second.num);
         obj.init_ns(bucket_info.bucket, oid, RGW_OBJ_NS_MULTIPART);
         obj.index_hash_source = mp_obj.get_key();
-        ret = store->getRados()->delete_obj(*obj_ctx, bucket_info, obj, 0);
+        ret = store->getRados()->delete_obj(*obj_ctx, bucket_info, obj, 0, null_yield);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {

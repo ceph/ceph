@@ -22,9 +22,11 @@
 #include "services/svc_rados.h"
 #include "services/svc_tier_rados.h"
 
-namespace rgw {
-
+namespace neo {
 class Aio;
+}
+
+namespace rgw {
 
 namespace putobj {
 
@@ -37,7 +39,7 @@ class ObjectProcessor : public DataProcessor {
   // complete the operation and make its result visible to clients
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
-                       std::map<std::string, bufferlist>& attrs,
+                       bc::flat_map<std::string, bufferlist>& attrs,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -74,22 +76,22 @@ class HeadObjectProcessor : public ObjectProcessor {
 };
 
 
-using RawObjSet = std::set<rgw_raw_obj>;
+using ObjSet = std::unordered_set<neo_obj_ref>;
 
 // a data sink that writes to rados objects and deletes them on cancelation
 class RadosWriter : public DataProcessor {
-  Aio *const aio;
+  neo::Aio *const aio;
   rgw::sal::RGWRadosStore *const store;
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   const rgw_obj head_obj;
-  RGWSI_RADOS::Obj stripe_obj; // current stripe object
-  RawObjSet written; // set of written objects for deletion
+  neo_obj_ref stripe_obj; // current stripe object
+  ObjSet written; // set of written objects for deletion
   const DoutPrefixProvider *dpp;
   optional_yield y;
 
  public:
-  RadosWriter(Aio *aio, rgw::sal::RGWRadosStore *store,
+  RadosWriter(neo::Aio *aio, rgw::sal::RGWRadosStore *store,
 	      const RGWBucketInfo& bucket_info,
               RGWObjectCtx& obj_ctx, const rgw_obj& head_obj,
               const DoutPrefixProvider *dpp, optional_yield y)
@@ -137,7 +139,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   int next(uint64_t offset, uint64_t *stripe_size) override;
 
  public:
-  ManifestObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
+  ManifestObjectProcessor(neo::Aio *aio, rgw::sal::RGWRadosStore *store,
                           const RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -177,7 +179,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
-  AtomicObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
+  AtomicObjectProcessor(neo::Aio *aio, rgw::sal::RGWRadosStore *store,
                         const RGWBucketInfo& bucket_info,
                         const rgw_placement_rule *ptail_placement_rule,
                         const rgw_user& owner,
@@ -195,7 +197,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   // write the head object atomically in a bucket index transaction
   int complete(size_t accounted_size, const std::string& etag,
                ceph::real_time *mtime, ceph::real_time set_mtime,
-               map<std::string, bufferlist>& attrs,
+               bc::flat_map<std::string, bufferlist>& attrs,
                ceph::real_time delete_at,
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
@@ -221,7 +223,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // prepare the head stripe and manifest
   int prepare_head();
  public:
-  MultipartObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
+  MultipartObjectProcessor(neo::Aio *aio, rgw::sal::RGWRadosStore *store,
                            const RGWBucketInfo& bucket_info,
                            const rgw_placement_rule *ptail_placement_rule,
                            const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -233,7 +235,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                               owner, obj_ctx, head_obj, dpp, y),
       target_obj(head_obj), upload_id(upload_id),
       part_num(part_num), part_num_str(part_num_str),
-      mp(head_obj.key.name, upload_id) 
+      mp(head_obj.key.name, upload_id)
   {}
 
   // prepare a multipart manifest
@@ -242,7 +244,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // register the completed part with the multipart meta object
   int complete(size_t accounted_size, const std::string& etag,
                ceph::real_time *mtime, ceph::real_time set_mtime,
-               std::map<std::string, bufferlist>& attrs,
+               bc::flat_map<std::string, bufferlist>& attrs,
                ceph::real_time delete_at,
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
@@ -264,7 +266,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
 
   public:
-    AppendObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
+    AppendObjectProcessor(neo::Aio *aio, rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,const rgw_obj& head_obj,
                           const std::string& unique_tag, uint64_t position,
@@ -278,7 +280,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int prepare(optional_yield y) override;
     int complete(size_t accounted_size, const string& etag,
                  ceph::real_time *mtime, ceph::real_time set_mtime,
-                 map<string, bufferlist>& attrs, ceph::real_time delete_at,
+                 bc::flat_map<string, bufferlist>& attrs, ceph::real_time delete_at,
                  const char *if_match, const char *if_nomatch, const string *user_data,
                  rgw_zone_set *zones_trace, bool *canceled,
                  optional_yield y) override;
@@ -286,4 +288,3 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
 
 } // namespace putobj
 } // namespace rgw
-

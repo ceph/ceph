@@ -621,7 +621,7 @@ protected:
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
   parse_path(const boost::string_ref& path);
-  
+
   std::pair<std::string, std::string>
   handle_upload_path(struct req_state *s);
 
@@ -1138,7 +1138,7 @@ protected:
   std::unique_ptr <RGWObjTags> obj_tags;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
@@ -1233,7 +1233,7 @@ protected:
   const char *supplied_etag;
   string etag;
   RGWAccessControlPolicy policy;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
 
   /* Must be called after get_data() or the result is undefined. */
@@ -2107,9 +2107,10 @@ inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 } /* encode_delete_at_attr */
 
-static inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, bufferlist>& attrs)
+template<typename M>
+inline void encode_obj_tags_attr(RGWObjTags* obj_tags, M& attrs)
 {
-  if (obj_tags == nullptr){
+  if (obj_tags == nullptr) {
     // we assume the user submitted a tag format which we couldn't parse since
     // this wouldn't be parsed later by get/put obj tags, lets delete if the
     // attr was populated

@@ -3910,8 +3910,8 @@ void RGWPutObj::execute()
   }
 
   // create the object processor
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                s->yield);
+  auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+				s->yield);
   using namespace rgw::putobj;
   constexpr auto max_processor_size = std::max({sizeof(MultipartObjectProcessor),
                                                sizeof(AtomicObjectProcessor),
@@ -4290,8 +4290,8 @@ void RGWPostObj::execute()
       store->getRados()->gen_rand_obj_instance_name(&obj);
     }
 
-    auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                  s->yield);
+    auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+				  s->yield);
 
     using namespace rgw::putobj;
     AtomicObjectProcessor processor(&*aio, store, s->bucket_info,
@@ -6272,7 +6272,7 @@ void RGWCompleteMultipart::execute()
 
   // remove the upload obj
   int r = store->getRados()->delete_obj(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-			    s->bucket_info, meta_obj, 0);
+					s->bucket_info, meta_obj, 0, s->yield);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer.clear_locked();
@@ -7150,7 +7150,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
       return true;
     }
   }
-    
+
   return verify_bucket_permission_no_policy(this, s, s->user_acl.get(),
 					    &bacl, RGW_PERM_WRITE);
 }
@@ -7205,8 +7205,8 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   rgw_placement_rule dest_placement = s->dest_placement;
   dest_placement.inherit_from(binfo.placement_rule);
 
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                s->yield);
+  auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+				s->yield);
 
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&*aio, store, binfo, &s->dest_placement, bowner.get_id(),
@@ -7286,7 +7286,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
   /* Create metadata: ETAG. */
-  std::map<std::string, ceph::bufferlist> attrs;
+  bc::flat_map<std::string, ceph::bufferlist> attrs;
   std::string etag = calc_md5;
   ceph::bufferlist etag_bl;
   etag_bl.append(etag.c_str(), etag.size() + 1);

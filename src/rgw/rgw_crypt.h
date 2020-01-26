@@ -134,8 +134,9 @@ public:
 }; /* RGWPutObj_BlockEncrypt */
 
 
+template<typename M>
 int rgw_s3_prepare_encrypt(struct req_state* s,
-                           std::map<std::string, ceph::bufferlist>& attrs,
+                           M& attrs,
                            std::map<std::string,
                                     RGWPostObj_ObjStore::post_form_part,
                                     const ltstr_nocase>* parts,
