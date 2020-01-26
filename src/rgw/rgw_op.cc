@@ -3910,7 +3910,7 @@ void RGWPutObj::execute()
   }
 
   // create the object processor
-  auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
 				s->yield);
   using namespace rgw::putobj;
   constexpr auto max_processor_size = std::max({sizeof(MultipartObjectProcessor),
@@ -4290,7 +4290,7 @@ void RGWPostObj::execute()
       store->getRados()->gen_rand_obj_instance_name(&obj);
     }
 
-    auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+    auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
 				  s->yield);
 
     using namespace rgw::putobj;
@@ -7205,7 +7205,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   rgw_placement_rule dest_placement = s->dest_placement;
   dest_placement.inherit_from(binfo.placement_rule);
 
-  auto aio = neo::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
 				s->yield);
 
   using namespace rgw::putobj;

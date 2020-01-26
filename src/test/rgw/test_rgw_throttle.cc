@@ -15,45 +15,59 @@
 #include <optional>
 #include <thread>
 #include "include/scope_guard.h"
+#include "common/async/context_pool.h"
+#include "common/async/blocked_completion.h"
+#include "include/neorados/RADOS.hpp"
 
 #ifdef HAVE_BOOST_CONTEXT
 #include <spawn/spawn.hpp>
 #endif
 #include <gtest/gtest.h>
-
 #include "rgw/rgw_aio_throttle.h"
+#include "rgw/rgw_tools.h"
 
+namespace ca = ceph::async;
 
 struct RadosEnv : public ::testing::Environment {
  public:
   static constexpr auto poolname = "ceph_test_rgw_throttle";
 
-  static std::optional<RGWSI_RADOS> rados;
+  static ca::io_context_pool ctxpool;
+  static std::optional<R::RADOS> rados;
+  static R::IOContext ioc;
 
   void SetUp() override {
-    rados.emplace(g_ceph_context);
-    ASSERT_EQ(0, rados->start());
-    int r = rados->pool({poolname}).create();
-    if (r == -EEXIST)
-      r = 0;
-    ASSERT_EQ(0, r);
+    ctxpool.start(1);
+    rados = R::RADOS::make_with_cct(g_ceph_context, ctxpool.get_io_context(),
+				    ba::use_future).get();
+    bs::error_code ec;
+    rados->create_pool(poolname, std::nullopt, ca::use_blocked[ec]);
+    if (ec == bs::errc::file_exists)
+      ec.clear();
+    ASSERT_FALSE(ec);
+    auto pool = rados->lookup_pool(poolname, ca::use_blocked[ec]);
+    ASSERT_FALSE(ec);
+    ioc.pool(pool);
   }
   void TearDown() override {
-    rados->shutdown();
     rados.reset();
   }
 };
-std::optional<RGWSI_RADOS> RadosEnv::rados;
+ca::io_context_pool RadosEnv::ctxpool;
+std::optional<R::RADOS> RadosEnv::rados;
+R::IOContext RadosEnv::ioc;
 
 auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
 
 // test fixture for global setup/teardown
 class RadosFixture : public ::testing::Test {
- protected:
-  RGWSI_RADOS::Obj make_obj(const std::string& oid) {
-    auto obj = RadosEnv::rados->obj({{RadosEnv::poolname}, oid});
-    ceph_assert_always(0 == obj.open());
-    return obj;
+public:
+  neo_obj_ref make_obj(const char* oid) {
+    neo_obj_ref ref;
+    ref.r = &*RadosEnv::rados;
+    ref.ioc = RadosEnv::ioc;
+    ref.pool_name = RadosEnv::poolname;
+    return ref;
   }
 };
 
@@ -64,8 +78,12 @@ namespace rgw {
 struct scoped_completion {
   Aio* aio = nullptr;
   AioResult* result = nullptr;
-  ~scoped_completion() { if (aio) { complete(-ECANCELED); } }
-  void complete(int r) {
+  ~scoped_completion() {
+    if (aio) {
+      complete(bs::error_code(ECANCELED, bs::generic_category()));
+    }
+  }
+  void complete(bs::error_code r) {
     result->result = r;
     aio->put(*result);
     aio = nullptr;
@@ -114,7 +132,7 @@ TEST_F(Aio_Throttle, NoThrottleUpToMax)
   auto completions = throttle.drain();
   ASSERT_EQ(4u, completions.size());
   for (auto& c : completions) {
-    EXPECT_EQ(-ECANCELED, c.result);
+    EXPECT_EQ(bs::errc::operation_canceled, c.result);
   }
 }
 
@@ -126,7 +144,7 @@ TEST_F(Aio_Throttle, CostOverWindow)
   scoped_completion op;
   auto c = throttle.get(obj, wait_on(op), 8, 0);
   ASSERT_EQ(1u, c.size());
-  EXPECT_EQ(-EDEADLK, c.front().result);
+  EXPECT_EQ(std::errc::resource_deadlock_would_occur, c.front().result);
 }
 
 TEST_F(Aio_Throttle, ThrottleOverMax)
@@ -179,7 +197,7 @@ TEST_F(Aio_Throttle, YieldCostOverWindow)
       scoped_completion op;
       auto c = throttle.get(obj, wait_on(op), 8, 0);
       ASSERT_EQ(1u, c.size());
-      EXPECT_EQ(-EDEADLK, c.front().result);
+      EXPECT_EQ(bs::errc::resource_deadlock_would_occur, c.front().result);
     });
 }
 
