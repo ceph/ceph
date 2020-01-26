@@ -99,14 +99,21 @@ void RGWAsyncRadosProcessor::queue(RGWAsyncRadosRequest *req) {
 
 int RGWAsyncGetSystemObj::_send_request()
 {
-  map<string, bufferlist> *pattrs = want_attrs ? &attrs : nullptr;
+  bc::flat_map<string, bufferlist> got_attrs;
 
   auto sysobj = obj_ctx.get_obj(obj);
-  return sysobj.rop()
-               .set_objv_tracker(&objv_tracker)
-               .set_attrs(pattrs)
-	       .set_raw_attrs(raw_attrs)
-               .read(&bl, null_yield);
+  auto r = sysobj.rop()
+    .set_objv_tracker(&objv_tracker)
+    .set_attrs(&got_attrs)
+    .set_raw_attrs(raw_attrs)
+    .read(&bl, null_yield);
+
+  if (r >= 0) {
+    if (want_attrs)
+      std::move(got_attrs.begin(), got_attrs.end(),
+		std::inserter(attrs, attrs.end())); // TODO
+  }
+  return r;
 }
 
 RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
@@ -163,12 +170,13 @@ RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletio
 
 int RGWAsyncPutSystemObjAttrs::_send_request()
 {
+  bc::flat_map<string, bufferlist> gttrs{attrs.begin(), attrs.end()}; // TODO
   auto obj_ctx = svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
   return sysobj.wop()
                .set_objv_tracker(&objv_tracker)
                .set_exclusive(false)
-               .set_attrs(attrs)
+               .set_attrs(gttrs)
                .write_attrs(null_yield);
 }
 

@@ -3,33 +3,35 @@
 
 #pragma once
 
+#include <boost/container/flat_map.hpp>
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_rados.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
 
 
+namespace bc = boost::container;
 
 struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
-  RGWSI_RADOS::Obj rados_obj;
-  bool has_rados_obj{false};
+  neo_obj_ref rados_obj;
   uint64_t last_ver{0};
 
   RGWSI_SysObj_Core_GetObjState() {}
 
-  int get_rados_obj(RGWSI_RADOS *rados_svc,
-                    RGWSI_Zone *zone_svc,
+  int get_rados_obj(RGWRados* rados_svc,
                     const rgw_raw_obj& obj,
-                    RGWSI_RADOS::Obj **pobj);
+                    neo_obj_ref **pobj,
+		    optional_yield y);
 };
 
 struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
-  RGWSI_RADOS::Pool pool;
-  RGWSI_RADOS::Pool::List op;
-  RGWAccessListFilterPrefix filter;
+  RGWRados* rados;
+  R::IOContext ioc;
+  rgw_rados_list_filter filter;
+  R::Cursor cursor;
 
-  RGWSI_SysObj_Core_PoolListImplInfo(const string& prefix) : op(pool.op()), filter(prefix) {}
+  RGWSI_SysObj_Core_PoolListImplInfo() = default;
 };
 
 struct RGWSysObjState {
@@ -49,7 +51,7 @@ struct RGWSysObjState {
 
   RGWObjVersionTracker objv_tracker;
 
-  map<string, bufferlist> attrset;
+  bc::flat_map<string, bufferlist> attrset;
   RGWSysObjState() {}
   RGWSysObjState(const RGWSysObjState& rhs) : obj (rhs.obj) {
     has_attrs = rhs.has_attrs;
@@ -113,4 +115,3 @@ public:
     objs_state.erase(iter);
   }
 };
-

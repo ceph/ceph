@@ -2,51 +2,45 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_sys_obj_core.h"
-#include "svc_rados.h"
 #include "svc_zone.h"
 
 #include "rgw/rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWSI_SysObj_Core_GetObjState::get_rados_obj(RGWSI_RADOS *rados_svc,
-                                                 RGWSI_Zone *zone_svc,
-                                                 const rgw_raw_obj& obj,
-                                                 RGWSI_RADOS::Obj **pobj)
-{
-  if (!has_rados_obj) {
-    if (obj.oid.empty()) {
-      ldout(rados_svc->ctx(), 0) << "ERROR: obj.oid is empty" << dendl;
-      return -EINVAL;
-    }
+namespace R = neorados;
 
-    rados_obj = rados_svc->obj(obj);
-    int r = rados_obj.open();
-    if (r < 0) {
-      return r;
-    }
-    has_rados_obj = true;
+int RGWSI_SysObj_Core_GetObjState::get_rados_obj(RGWRados* rados,
+                                                 const rgw_raw_obj& obj,
+                                                 neo_obj_ref** pobj,
+						 optional_yield y)
+{
+  if (obj.oid.empty()) {
+    ldout(rados->ctx(), 0) << "ERROR: obj.oid is empty" << dendl;
+    return -EINVAL;
   }
+  auto r = rados->acquire_obj(obj, y);
+  if (!r)
+    return ceph::from_error_code(r.error());
+  rados_obj = std::move(*r);
   *pobj = &rados_obj;
   return 0;
 }
 
-int RGWSI_SysObj_Core::get_rados_obj(RGWSI_Zone *zone_svc,
-                                     const rgw_raw_obj& obj,
-                                     RGWSI_RADOS::Obj *pobj)
+tl::expected<neo_obj_ref, int>
+RGWSI_SysObj_Core::get_rados_obj(const rgw_raw_obj& obj,
+				 optional_yield y)
 {
   if (obj.oid.empty()) {
-    ldout(rados_svc->ctx(), 0) << "ERROR: obj.oid is empty" << dendl;
-    return -EINVAL;
+    ldout(rados->ctx(), 0) << "ERROR: obj.oid is empty" << dendl;
+    return tl::unexpected(-EINVAL);
   }
 
-  *pobj = rados_svc->obj(obj);
-  int r = pobj->open();
-  if (r < 0) {
-    return r;
-  }
+  auto r = rados->acquire_obj(obj, y);
+  if (!r)
+    return tl::unexpected(ceph::from_error_code((r.error())));
 
-  return 0;
+  return std::move(*r);
 }
 
 int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
@@ -69,7 +63,7 @@ int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
   s->obj = obj;
 
   int r = raw_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset,
-                   (s->prefetch_data ? &s->data : nullptr), objv_tracker, y);
+		   (s->prefetch_data ? &s->data : nullptr), objv_tracker, y);
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -108,44 +102,39 @@ int RGWSI_SysObj_Core::get_system_obj_state(RGWSysObjectCtxBase *rctx,
 }
 
 int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                                map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                                bc::flat_map<string, bufferlist> *attrs, bufferlist *first_chunk,
                                 RGWObjVersionTracker *objv_tracker,
                                 optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    return rados_obj.error();
   }
 
   uint64_t size = 0;
-  struct timespec mtime_ts;
+  real_time mtime;
 
-  librados::ObjectReadOperation op;
+  R::ReadOp op;
   if (objv_tracker) {
-    objv_tracker->prepare_op_for_read(&op);
+    objv_tracker->prepare_op_for_read(op);
   }
-  op.getxattrs(attrs, nullptr);
+  op.get_xattrs(attrs, nullptr);
   if (psize || pmtime) {
-    op.stat2(&size, &mtime_ts, nullptr);
+    op.stat(&size, &mtime);
   }
   if (first_chunk) {
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, nullptr);
   }
   bufferlist outbl;
-  r = rados_obj.operate(&op, &outbl, y);
+  auto r = rados_obj->operate(std::move(op), &outbl, y, epoch);
 
-  if (epoch) {
-    *epoch = rados_obj.get_last_version();
-  }
-
-  if (r < 0)
-    return r;
+  if (r)
+    return ceph::from_error_code(r);
 
   if (psize)
     *psize = size;
   if (pmtime)
-    *pmtime = ceph::real_clock::from_timespec(mtime_ts);
+    *pmtime = mtime;
 
   return 0;
 }
@@ -153,7 +142,7 @@ int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_ti
 int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
                             RGWSI_SysObj_Obj_GetObjState& _state,
                             const rgw_raw_obj& obj,
-                            map<string, bufferlist> *attrs,
+                            bc::flat_map<string, bufferlist> *attrs,
 			    bool raw_attrs,
                             real_time *lastmod,
                             uint64_t *obj_size,
@@ -177,8 +166,7 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
       rgw_filter_attrset(astate->attrset, RGW_ATTR_PREFIX, attrs);
     }
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-      map<string, bufferlist>::iterator iter;
-      for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
+      for (auto iter = attrs->begin(); iter != attrs->end(); ++iter) {
         ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
       }
     }
@@ -197,7 +185,7 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
                             RGWObjVersionTracker *objv_tracker,
                             const rgw_raw_obj& obj,
                             bufferlist *bl, off_t ofs, off_t end,
-                            map<string, bufferlist> *attrs,
+                            bc::flat_map<string, bufferlist> *attrs,
 			    bool raw_attrs,
                             rgw_cache_entry_info *cache_info,
                             boost::optional<obj_version>,
@@ -206,7 +194,7 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
   auto& read_state = static_cast<GetObjState&>(_read_state);
 
   uint64_t len;
-  librados::ObjectReadOperation op;
+  R::ReadOp op;
 
   if (end < 0)
     len = 0;
@@ -214,36 +202,35 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
     len = end - ofs + 1;
 
   if (objv_tracker) {
-    objv_tracker->prepare_op_for_read(&op);
+    objv_tracker->prepare_op_for_read(op);
   }
 
   ldout(cct, 20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
   op.read(ofs, len, bl, nullptr);
 
-  map<string, bufferlist> unfiltered_attrset;
+  bc::flat_map<string, bufferlist> unfiltered_attrset;
 
   if (attrs) {
     if (raw_attrs) {
-      op.getxattrs(attrs, nullptr);
+      op.get_xattrs(attrs, nullptr);
     } else {
-      op.getxattrs(&unfiltered_attrset, nullptr);
+      op.get_xattrs(&unfiltered_attrset, nullptr);
     }
   }
 
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
-  r = rados_obj.operate(&op, nullptr, y);
-  if (r < 0) {
-    ldout(cct, 20) << "rados_obj.operate() r=" << r << " bl.length=" << bl->length() << dendl;
-    return r;
-  }
+  uint64_t op_ver;
+  auto r = rados_obj->operate(std::move(op), nullptr, y, &op_ver);
   ldout(cct, 20) << "rados_obj.operate() r=" << r << " bl.length=" << bl->length() << dendl;
+  if (r) {
+    return ceph::from_error_code(r);
+  }
 
-  uint64_t op_ver = rados_obj.get_last_version();
 
   if (read_state.last_ver > 0 &&
       read_state.last_ver != op_ver) {
@@ -272,60 +259,49 @@ int RGWSI_SysObj_Core::get_attr(const rgw_raw_obj& obj,
                                 bufferlist *dest,
                                 optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
-  librados::ObjectReadOperation op;
+  R::ReadOp op;
 
-  int rval;
-  op.getxattr(name, dest, &rval);
-  
-  r = rados_obj.operate(&op, nullptr, y);
-  if (r < 0)
-    return r;
+  op.get_xattr(name, dest);
 
-  return 0;
+  return ceph::from_error_code(rados_obj->operate(std::move(op), nullptr, y));
 }
 
 int RGWSI_SysObj_Core::set_attrs(const rgw_raw_obj& obj,
-                                 map<string, bufferlist>& attrs,
-                                 map<string, bufferlist> *rmattrs,
+                                 bc::flat_map<string, bufferlist>& attrs,
+                                 bc::flat_map<string, bufferlist> *rmattrs,
                                  RGWObjVersionTracker *objv_tracker,
                                  optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
-
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
 
   if (objv_tracker) {
-    objv_tracker->prepare_op_for_write(&op);
+    objv_tracker->prepare_op_for_write(op);
   }
 
-  map<string, bufferlist>::iterator iter;
   if (rmattrs) {
-    for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
+    for (auto iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
       const string& name = iter->first;
-      op.rmxattr(name.c_str());
+      op.rmxattr(name);
     }
   }
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    const string& name = iter->first;
-    bufferlist& bl = iter->second;
-
+  for (auto& [name, bl] : attrs) {
     if (!bl.length())
       continue;
-
-    op.setxattr(name.c_str(), bl);
+    op.setxattr(name, std::move(bl));
   }
 
   if (!op.size())
@@ -333,7 +309,7 @@ int RGWSI_SysObj_Core::set_attrs(const rgw_raw_obj& obj,
 
   bufferlist bl;
 
-  r = rados_obj.operate(&op, y);
+  auto r = ceph::from_error_code(rados_obj->operate(std::move(op), y));
   if (r < 0)
     return r;
 
@@ -346,30 +322,29 @@ int RGWSI_SysObj_Core::set_attrs(const rgw_raw_obj& obj,
 int RGWSI_SysObj_Core::omap_get_vals(const rgw_raw_obj& obj,
                                      const string& marker,
                                      uint64_t count,
-                                     std::map<string, bufferlist> *m,
+                                     bc::flat_map<string, bufferlist> *m,
                                      bool *pmore,
                                      optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
   string start_after = marker;
   bool more;
 
   do {
-    librados::ObjectReadOperation op;
+    R::ReadOp op;
 
-    std::map<string, bufferlist> t;
-    int rval;
-    op.omap_get_vals2(start_after, count, &t, &more, &rval);
-  
-    r = rados_obj.operate(&op, nullptr, y);
-    if (r < 0) {
-      return r;
+    bc::flat_map<string, bufferlist> t;
+    op.get_omap_vals(start_after, nullopt, count, &t, &more);
+
+    auto r = rados_obj->operate(std::move(op), nullptr, y);
+    if (r) {
+      return ceph::from_error_code(r);
     }
     if (t.empty()) {
       break;
@@ -386,14 +361,14 @@ int RGWSI_SysObj_Core::omap_get_vals(const rgw_raw_obj& obj,
 }
 
 int RGWSI_SysObj_Core::omap_get_all(const rgw_raw_obj& obj,
-                                    std::map<string, bufferlist> *m,
+                                    bc::flat_map<string, bufferlist> *m,
                                     optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
 #define MAX_OMAP_GET_ENTRIES 1024
@@ -402,15 +377,14 @@ int RGWSI_SysObj_Core::omap_get_all(const rgw_raw_obj& obj,
   bool more;
 
   do {
-    librados::ObjectReadOperation op;
+    R::ReadOp op;
 
-    std::map<string, bufferlist> t;
-    int rval;
-    op.omap_get_vals2(start_after, count, &t, &more, &rval);
-  
-    r = rados_obj.operate(&op, nullptr, y);
-    if (r < 0) {
-      return r;
+    bc::flat_map<string, bufferlist> t;
+    op.get_omap_vals(start_after, nullopt, count, &t, &more);
+
+    auto r = rados_obj->operate(std::move(op), nullptr, y);
+    if (r) {
+      return ceph::from_error_code(r);
     }
     if (t.empty()) {
       break;
@@ -425,78 +399,73 @@ int RGWSI_SysObj_Core::omap_set(const rgw_raw_obj& obj, const std::string& key,
                                 bufferlist& bl, bool must_exist,
                                 optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
   ldout(cct, 15) << "omap_set obj=" << obj << " key=" << key << dendl;
 
-  map<string, bufferlist> m;
-  m[key] = bl;
-  librados::ObjectWriteOperation op;
+  bc::flat_map<string, bufferlist> m{{key, std::move(bl)}};
+  R::WriteOp op;
   if (must_exist)
     op.assert_exists();
-  op.omap_set(m);
-  r = rados_obj.operate(&op, y);
-  return r;
+  op.set_omap(m);
+  return ceph::from_error_code(rados_obj->operate(std::move(op), y));
 }
 
 int RGWSI_SysObj_Core::omap_set(const rgw_raw_obj& obj,
-                                const std::map<std::string, bufferlist>& m,
+                                const bc::flat_map<std::string, bufferlist>& m,
                                 bool must_exist, optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
   if (must_exist)
     op.assert_exists();
-  op.omap_set(m);
-  r = rados_obj.operate(&op, y);
-  return r;
+  op.set_omap(m);
+  return ceph::from_error_code(rados_obj->operate(std::move(op), y));
 }
 
 int RGWSI_SysObj_Core::omap_del(const rgw_raw_obj& obj, const std::string& key,
                                 optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
-  set<string> k;
+  bc::flat_set<string> k;
   k.insert(key);
 
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
 
-  op.omap_rm_keys(k);
-
-  r = rados_obj.operate(&op, y);
-  return r;
+  op.rm_omap_keys(k);
+  return ceph::from_error_code(rados_obj->operate(std::move(op), y));
 }
 
 int RGWSI_SysObj_Core::notify(const rgw_raw_obj& obj, bufferlist& bl,
                               uint64_t timeout_ms, bufferlist *pbl,
                               optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
-  r = rados_obj.notify(bl, timeout_ms, pbl, y);
-  return r;
+  return ceph::from_error_code(rados_obj->notify(std::move(bl),
+						 (timeout_ms * 1ms), pbl, y));
 }
 
 int RGWSI_SysObj_Core::remove(RGWSysObjectCtxBase& obj_ctx,
@@ -504,80 +473,75 @@ int RGWSI_SysObj_Core::remove(RGWSysObjectCtxBase& obj_ctx,
                               const rgw_raw_obj& obj,
                               optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
 
   if (objv_tracker) {
-    objv_tracker->prepare_op_for_write(&op);
+    objv_tracker->prepare_op_for_write(op);
   }
 
   op.remove();
-  r = rados_obj.operate(&op, y);
-  if (r < 0)
-    return r;
-
-  return 0;
+  return ceph::from_error_code(rados_obj->operate(std::move(op), y));
 }
 
 int RGWSI_SysObj_Core::write(const rgw_raw_obj& obj,
                              real_time *pmtime,
-                             map<std::string, bufferlist>& attrs,
+                             bc::flat_map<std::string, bufferlist>& attrs,
                              bool exclusive,
                              const bufferlist& data,
                              RGWObjVersionTracker *objv_tracker,
                              real_time set_mtime,
                              optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
 
   if (exclusive) {
     op.create(true); // exclusive create
   } else {
     op.remove();
-    op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    op.set_failok();
     op.create(false);
   }
 
   if (objv_tracker) {
-    objv_tracker->prepare_op_for_write(&op);
+    objv_tracker->prepare_op_for_write(op);
   }
 
   if (real_clock::is_zero(set_mtime)) {
     set_mtime = real_clock::now();
   }
 
-  struct timespec mtime_ts = real_clock::to_timespec(set_mtime);
-  op.mtime2(&mtime_ts);
-  op.write_full(data);
+  op.set_mtime(set_mtime);
+  op.write_full(bufferlist(data));
 
   bufferlist acl_bl;
 
-  for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter) {
+  for (auto iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
     bufferlist& bl = iter->second;
 
     if (!bl.length())
       continue;
 
-    op.setxattr(name.c_str(), bl);
+    op.setxattr(name, std::move(bl));
   }
 
-  r = rados_obj.operate(&op, y);
-  if (r < 0) {
-    return r;
+  auto r = rados_obj->operate(std::move(op), y);
+  if (r) {
+    return ceph::from_error_code(r);
   }
 
   if (objv_tracker) {
@@ -598,26 +562,26 @@ int RGWSI_SysObj_Core::write_data(const rgw_raw_obj& obj,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y)
 {
-  RGWSI_RADOS::Obj rados_obj;
-  int r = get_rados_obj(zone_svc, obj, &rados_obj);
-  if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
-    return r;
+  auto rados_obj = get_rados_obj(obj, y);
+  if (!rados_obj) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned "
+		   << rados_obj.error() << dendl;
+    return rados_obj.error();
   }
 
-  librados::ObjectWriteOperation op;
+  R::WriteOp op;
 
   if (exclusive) {
     op.create(true);
   }
 
   if (objv_tracker) {
-    objv_tracker->prepare_op_for_write(&op);
+    objv_tracker->prepare_op_for_write(op);
   }
-  op.write_full(bl);
-  r = rados_obj.operate(&op, y);
-  if (r < 0)
-    return r;
+  op.write_full(bufferlist(bl));
+  auto r = rados_obj->operate(std::move(op), y);
+  if (r)
+    return ceph::from_error_code(r);
 
   if (objv_tracker) {
     objv_tracker->apply_write();
@@ -630,23 +594,20 @@ int RGWSI_SysObj_Core::pool_list_prefixed_objs(const rgw_pool& pool, const strin
 {
   bool is_truncated;
 
-  auto rados_pool = rados_svc->pool(pool);
-
-  auto op = rados_pool.op();
-
-  RGWAccessListFilterPrefix filter(prefix);
-
-  int r = op.init(string(), &filter);
-  if (r < 0) {
-    return r;
-  }
+  auto rados_pool = rados->acquire_pool(pool, false, null_yield);
+  if (!rados_pool)
+    return ceph::from_error_code(rados_pool.error());
+  auto cursor = R::Cursor::begin();
+  auto filter = rgw_rados_prefix_filter(prefix);
 
   do {
     vector<string> oids;
-#define MAX_OBJS_DEFAULT 1000
-    int r = op.get_next(MAX_OBJS_DEFAULT, &oids, &is_truncated);
-    if (r < 0) {
-      return r;
+    static constexpr auto MAX_OBJS_DEFAULT = 1000;
+    auto r = rados->list_pool(*rados_pool, MAX_OBJS_DEFAULT,
+			      filter, cursor,
+			      &oids, &is_truncated, null_yield);
+    if (r) {
+      return ceph::from_error_code(r);
     }
     for (auto& val : oids) {
       if (val.size() > prefix.size()) {
@@ -663,18 +624,24 @@ int RGWSI_SysObj_Core::pool_list_objects_init(const rgw_pool& pool,
                                               const string& prefix,
                                               RGWSI_SysObj::Pool::ListCtx *_ctx)
 {
-  _ctx->impl.emplace<PoolListImplInfo>(prefix);
+  _ctx->impl.emplace<PoolListImplInfo>();
 
   auto& ctx = static_cast<PoolListImplInfo&>(*_ctx->impl);
-
-  ctx.pool = rados_svc->pool(pool);
-  ctx.op = ctx.pool.op();
-
-  int r = ctx.op.init(marker, &ctx.filter);
-  if (r < 0) {
-    ldout(cct, 10) << "failed to list objects pool_iterate_begin() returned r=" << r << dendl;
-    return r;
+  auto rados_pool = rados->acquire_pool(pool, false, null_yield);
+  if (!rados_pool) {
+    ldout(cct, 10) << "failed to list objects pool_iterate_begin() returned r="
+		   << rados_pool.error() << dendl;
+    return ceph::from_error_code(rados_pool.error());
   }
+  ctx.rados = rados;
+  ctx.ioc = std::move(*rados_pool);
+  auto cursor = R::Cursor::from_str(marker);
+  if (!cursor) {
+    ldout(cct, 10) << "failed to list objects pool_iterate_begin(): invalid marker." << dendl;
+    return -EINVAL;
+  }
+  ctx.cursor = std::move(*cursor);
+  ctx.filter = rgw_rados_prefix_filter(prefix);
   return 0;
 }
 
@@ -687,11 +654,14 @@ int RGWSI_SysObj_Core::pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& _ctx,
     return -EINVAL;
   }
   auto& ctx = static_cast<PoolListImplInfo&>(*_ctx.impl);
-  int r = ctx.op.get_next(max, oids, is_truncated);
-  if (r < 0) {
-    if(r != -ENOENT)
-      ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
-    return r;
+  if (!ctx.rados) {
+    return -EINVAL;
+  }
+  auto r = ctx.rados->list_pool(ctx.ioc, max, ctx.filter, ctx.cursor, oids,
+				is_truncated, null_yield);
+  if (r) {
+    ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
+    return ceph::from_error_code(r);
   }
 
   return oids->size();
@@ -705,5 +675,9 @@ int RGWSI_SysObj_Core::pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx&
   }
 
   auto& ctx = static_cast<PoolListImplInfo&>(*_ctx.impl);
-  return ctx.op.get_marker(marker);
+  if (!ctx.rados) {
+    return -EINVAL;
+  }
+  *marker = ctx.cursor.to_str();
+  return 0;
 }

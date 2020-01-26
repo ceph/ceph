@@ -85,8 +85,8 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
 			 int *next_marker, bool *truncated,
 			 bool assume_unsorted)
 {
-  map<string, bufferlist> parts_map;
-  map<string, bufferlist>::iterator iter;
+  bc::flat_map<string, bufferlist> parts_map;
+  bc::flat_map<string, bufferlist>::iterator iter;
 
   rgw_obj obj;
   obj.init_ns(bucket_info.bucket, meta_oid, RGW_OBJ_NS_MULTIPART);

@@ -1131,7 +1131,7 @@ int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const stri
 int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
 {
   bufferlist map_bl;
-  map<string, bufferlist> m;
+  bc::flat_map<string, bufferlist> m;
   string pool_name;
   bool write_map = false;
 
@@ -1204,7 +1204,7 @@ read_omap:
 int RGWSI_Zone::update_placement_map()
 {
   bufferlist header;
-  map<string, bufferlist> m;
+  bc::flat_map<string, bufferlist> m;
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
 
   auto obj_ctx = sysobj_svc->init_obj_ctx();
@@ -1261,7 +1261,7 @@ int RGWSI_Zone::remove_bucket_placement(const rgw_pool& old_pool)
 int RGWSI_Zone::list_placement_set(set<rgw_pool>& names)
 {
   bufferlist header;
-  map<string, bufferlist> m;
+  bc::flat_map<string, bufferlist> m;
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
   auto obj_ctx = sysobj_svc->init_obj_ctx();
@@ -1271,8 +1271,7 @@ int RGWSI_Zone::list_placement_set(set<rgw_pool>& names)
     return ret;
 
   names.clear();
-  map<string, bufferlist>::iterator miter;
-  for (miter = m.begin(); miter != m.end(); ++miter) {
+  for (auto miter = m.begin(); miter != m.end(); ++miter) {
     names.insert(rgw_pool(miter->first));
   }
 

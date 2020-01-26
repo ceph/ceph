@@ -3,11 +3,16 @@
 
 #pragma once
 
+#include <boost/container/flat_map.hpp>
+#include <boost/system/error_code.hpp>
+
 #include "rgw/rgw_service.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_core_types.h"
+
+namespace bc = boost::container;
+namespace bs = boost::system;
 
 
 class RGWSI_Zone;
@@ -16,25 +21,26 @@ struct rgw_cache_entry_info;
 
 class RGWSI_SysObj_Core : public RGWServiceInstance
 {
-  friend class RGWServices_Def;
+  friend struct RGWServices_Def;
   friend class RGWSI_SysObj;
 
 protected:
-  RGWSI_RADOS *rados_svc{nullptr};
+  RGWRados* rados{nullptr};
   RGWSI_Zone *zone_svc{nullptr};
 
   using GetObjState = RGWSI_SysObj_Core_GetObjState;
   using PoolListImplInfo = RGWSI_SysObj_Core_PoolListImplInfo;
 
-  void core_init(RGWSI_RADOS *_rados_svc,
+  void core_init(RGWRados* _rados,
                  RGWSI_Zone *_zone_svc) {
-    rados_svc = _rados_svc;
+    rados = _rados;
     zone_svc = _zone_svc;
   }
-  int get_rados_obj(RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
+  tl::expected<neo_obj_ref, int>
+  get_rados_obj(const rgw_raw_obj& obj, optional_yield y);
 
   virtual int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                       map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                       bc::flat_map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker,
                        optional_yield y);
 
@@ -43,7 +49,7 @@ protected:
                    RGWObjVersionTracker *objv_tracker,
                    const rgw_raw_obj& obj,
                    bufferlist *bl, off_t ofs, off_t end,
-                   map<string, bufferlist> *attrs,
+                   bc::flat_map<string, bufferlist> *attrs,
 		   bool raw_attrs,
                    rgw_cache_entry_info *cache_info,
                    boost::optional<obj_version>,
@@ -56,7 +62,7 @@ protected:
 
   virtual int write(const rgw_raw_obj& obj,
                     real_time *pmtime,
-                    map<std::string, bufferlist>& attrs,
+                    bc::flat_map<std::string, bufferlist>& attrs,
                     bool exclusive,
                     const bufferlist& data,
                     RGWObjVersionTracker *objv_tracker,
@@ -73,24 +79,24 @@ protected:
                        optional_yield y);
 
   virtual int set_attrs(const rgw_raw_obj& obj,
-                        map<string, bufferlist>& attrs,
-                        map<string, bufferlist> *rmattrs,
+                        bc::flat_map<string, bufferlist>& attrs,
+                        bc::flat_map<string, bufferlist> *rmattrs,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y);
 
-  virtual int omap_get_all(const rgw_raw_obj& obj, std::map<string, bufferlist> *m,
+  virtual int omap_get_all(const rgw_raw_obj& obj, bc::flat_map<string, bufferlist> *m,
                            optional_yield y);
   virtual int omap_get_vals(const rgw_raw_obj& obj,
                             const string& marker,
                             uint64_t count,
-                            std::map<string, bufferlist> *m,
+                            bc::flat_map<string, bufferlist> *m,
                             bool *pmore,
                             optional_yield y);
   virtual int omap_set(const rgw_raw_obj& obj, const std::string& key,
                        bufferlist& bl, bool must_exist,
                        optional_yield y);
   virtual int omap_set(const rgw_raw_obj& obj,
-                       const map<std::string, bufferlist>& m, bool must_exist,
+                       const bc::flat_map<std::string, bufferlist>& m, bool must_exist,
                        optional_yield y);
   virtual int omap_del(const rgw_raw_obj& obj, const std::string& key,
                        optional_yield y);
@@ -128,7 +134,7 @@ protected:
   int stat(RGWSysObjectCtxBase& obj_ctx,
            RGWSI_SysObj_Obj_GetObjState& state,
            const rgw_raw_obj& obj,
-           map<string, bufferlist> *attrs,
+           bc::flat_map<string, bufferlist> *attrs,
 	   bool raw_attrs,
            real_time *lastmod,
            uint64_t *obj_size,

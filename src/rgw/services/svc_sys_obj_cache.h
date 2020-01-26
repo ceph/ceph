@@ -26,10 +26,10 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 
   void normalize_pool_and_obj(const rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 protected:
-  void init(RGWSI_RADOS *_rados_svc,
+  void init(RGWRados* _rados,
             RGWSI_Zone *_zone_svc,
             RGWSI_Notify *_notify_svc) {
-    core_init(_rados_svc, _zone_svc);
+    core_init(_rados, _zone_svc);
     notify_svc = _notify_svc;
   }
 
@@ -37,16 +37,16 @@ protected:
   void shutdown() override;
 
   int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-               map<string, bufferlist> *attrs, bufferlist *first_chunk,
-               RGWObjVersionTracker *objv_tracker,
-               optional_yield y) override;
+	       bc::flat_map<string, bufferlist> *attrs, bufferlist *first_chunk,
+	       RGWObjVersionTracker *objv_tracker,
+	       optional_yield y) override;
 
   int read(RGWSysObjectCtxBase& obj_ctx,
            RGWSI_SysObj_Obj_GetObjState& read_state,
            RGWObjVersionTracker *objv_tracker,
            const rgw_raw_obj& obj,
            bufferlist *bl, off_t ofs, off_t end,
-           map<string, bufferlist> *attrs,
+           bc::flat_map<string, bufferlist> *attrs,
 	   bool raw_attrs,
            rgw_cache_entry_info *cache_info,
            boost::optional<obj_version>,
@@ -55,11 +55,11 @@ protected:
   int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest,
                optional_yield y) override;
 
-  int set_attrs(const rgw_raw_obj& obj, 
-                map<string, bufferlist>& attrs,
-                map<string, bufferlist> *rmattrs,
+  int set_attrs(const rgw_raw_obj& obj,
+                bc::flat_map<string, bufferlist>& attrs,
+                bc::flat_map<string, bufferlist> *rmattrs,
                 RGWObjVersionTracker *objv_tracker,
-                optional_yield y);
+                optional_yield y) override;
 
   int remove(RGWSysObjectCtxBase& obj_ctx,
              RGWObjVersionTracker *objv_tracker,
@@ -68,7 +68,7 @@ protected:
 
   int write(const rgw_raw_obj& obj,
             real_time *pmtime,
-            map<std::string, bufferlist>& attrs,
+            bc::flat_map<std::string, bufferlist>& attrs,
             bool exclusive,
             const bufferlist& data,
             RGWObjVersionTracker *objv_tracker,
@@ -79,7 +79,7 @@ protected:
                  const bufferlist& bl,
                  bool exclusive,
                  RGWObjVersionTracker *objv_tracker,
-                 optional_yield y);
+                 optional_yield y) override;
 
   int distribute_cache(const string& normal_name, const rgw_raw_obj& obj,
                        ObjectCacheInfo& obj_info, int op,

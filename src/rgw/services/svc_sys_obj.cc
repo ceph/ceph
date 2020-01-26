@@ -105,7 +105,7 @@ int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  map<string, bufferlist> m;
+  bc::flat_map<string, bufferlist> m;
   m[name] = bl;
 
   return svc->set_attrs(obj, m, nullptr, objv_tracker, y);
@@ -131,7 +131,7 @@ int RGWSI_SysObj::Pool::Op::get_marker(string *marker)
   return source.core_svc->pool_list_objects_get_marker(ctx, marker);
 }
 
-int RGWSI_SysObj::Obj::OmapOp::get_all(std::map<string, bufferlist> *m,
+int RGWSI_SysObj::Obj::OmapOp::get_all(bc::flat_map<string, bufferlist> *m,
                                        optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
@@ -141,7 +141,7 @@ int RGWSI_SysObj::Obj::OmapOp::get_all(std::map<string, bufferlist> *m,
 }
 
 int RGWSI_SysObj::Obj::OmapOp::get_vals(const string& marker, uint64_t count,
-                                        std::map<string, bufferlist> *m,
+                                        bc::flat_map<string, bufferlist> *m,
                                         bool *pmore, optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
@@ -159,7 +159,7 @@ int RGWSI_SysObj::Obj::OmapOp::set(const std::string& key, bufferlist& bl,
   return svc->omap_set(obj, key, bl, must_exist, y);
 }
 
-int RGWSI_SysObj::Obj::OmapOp::set(const map<std::string, bufferlist>& m,
+int RGWSI_SysObj::Obj::OmapOp::set(const bc::flat_map<std::string, bufferlist>& m,
                                    optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;

@@ -7,7 +7,6 @@
 
 #include "rgw/rgw_service.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
 #include "svc_sys_obj_core_types.h"
 
@@ -51,9 +50,9 @@ public:
       Obj& source;
 
       ceph::static_ptr<RGWSI_SysObj_Obj_GetObjState, sizeof(RGWSI_SysObj_Core_GetObjState)> state;
-      
+
       RGWObjVersionTracker *objv_tracker{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+      bc::flat_map<string, bufferlist> *attrs{nullptr};
       bool raw_attrs{false};
       boost::optional<obj_version> refresh_version{boost::none};
       ceph::real_time *lastmod{nullptr};
@@ -75,7 +74,7 @@ public:
         return *this;
       }
 
-      ROp& set_attrs(map<string, bufferlist> *_attrs) {
+      ROp& set_attrs(bc::flat_map<string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -109,7 +108,7 @@ public:
       Obj& source;
 
       RGWObjVersionTracker *objv_tracker{nullptr};
-      map<string, bufferlist> attrs;
+      bc::flat_map<string, bufferlist> attrs;
       ceph::real_time mtime;
       ceph::real_time *pmtime{nullptr};
       bool exclusive{false};
@@ -119,12 +118,12 @@ public:
         return *this;
       }
 
-      WOp& set_attrs(map<string, bufferlist>& _attrs) {
+      WOp& set_attrs(bc::flat_map<string, bufferlist>& _attrs) {
         attrs = _attrs;
         return *this;
       }
 
-      WOp& set_attrs(map<string, bufferlist>&& _attrs) {
+      WOp& set_attrs(bc::flat_map<string, bufferlist>&& _attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -167,12 +166,12 @@ public:
 
       OmapOp(Obj& _source) : source(_source) {}
 
-      int get_all(std::map<string, bufferlist> *m, optional_yield y);
+      int get_all(bc::flat_map<string, bufferlist> *m, optional_yield y);
       int get_vals(const string& marker, uint64_t count,
-                   std::map<string, bufferlist> *m,
+                   bc::flat_map<string, bufferlist> *m,
                    bool *pmore, optional_yield y);
       int set(const std::string& key, bufferlist& bl, optional_yield y);
-      int set(const map<std::string, bufferlist>& m, optional_yield y);
+      int set(const bc::flat_map<std::string, bufferlist>& m, optional_yield y);
       int del(const std::string& key, optional_yield y);
     };
 
@@ -251,18 +250,18 @@ public:
   };
 
   friend class Obj;
-  friend class Obj::ROp;
-  friend class Obj::WOp;
+  friend struct Obj::ROp;
+  friend struct Obj::WOp;
   friend class Pool;
-  friend class Pool::Op;
+  friend struct Pool::Op;
 
 protected:
-  RGWSI_RADOS *rados_svc{nullptr};
+  RGWRados *rados{nullptr};
   RGWSI_SysObj_Core *core_svc{nullptr};
 
-  void init(RGWSI_RADOS *_rados_svc,
-            RGWSI_SysObj_Core *_core_svc) {
-    rados_svc = _rados_svc;
+  void init(RGWRados* _rados,
+            RGWSI_SysObj_Core* _core_svc) {
+    rados = _rados;
     core_svc = _core_svc;
   }
 

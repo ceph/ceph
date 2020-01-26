@@ -163,9 +163,10 @@ int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
 {
-  map<string,bufferlist> no_attrs;
-  if (!pattrs) {
-    pattrs = &no_attrs;
+  bc::flat_map<string,bufferlist> no_attrs;
+  if (pattrs) {
+    std::move(pattrs->begin(), pattrs->end(),
+	      std::inserter(no_attrs, no_attrs.end()));
   }
 
   rgw_raw_obj obj(pool, oid);
@@ -175,7 +176,7 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                   .set_objv_tracker(objv_tracker)
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
-                  .set_attrs(*pattrs)
+		  .set_attrs(no_attrs)
                   .write(data, y);
 
   return ret;
@@ -202,16 +203,21 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
     original_readv = objv_tracker->read_version;
   }
 
+  bc::flat_map<string, bufferlist> attrs;
   do {
     auto sysobj = obj_ctx.get_obj(obj);
     auto rop = sysobj.rop();
 
-    int ret = rop.set_attrs(pattrs)
+    int ret = rop.set_attrs(&attrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
                  .stat(y);
     if (ret < 0)
       return ret;
+    if (pattrs) {
+      std::move(attrs.begin(), attrs.end(),
+		std::inserter(*pattrs, pattrs->end()));
+    }
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
@@ -768,19 +774,6 @@ const char *rgw_find_mime_by_ext(string& ext)
     return NULL;
 
   return iter->second.c_str();
-}
-
-void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
-                        map<string, bufferlist> *attrset)
-{
-  attrset->clear();
-  map<string, bufferlist>::iterator iter;
-  for (iter = unfiltered_attrset.lower_bound(check_prefix);
-       iter != unfiltered_attrset.end(); ++iter) {
-    if (!boost::algorithm::starts_with(iter->first, check_prefix))
-      break;
-    (*attrset)[iter->first] = iter->second;
-  }
 }
 
 RGWDataAccess::RGWDataAccess(rgw::sal::RGWRadosStore *_store) : store(_store)

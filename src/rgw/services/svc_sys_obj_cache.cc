@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -108,7 +107,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
                              RGWObjVersionTracker *objv_tracker,
                              const rgw_raw_obj& obj,
                              bufferlist *obl, off_t ofs, off_t end,
-                             map<string, bufferlist> *attrs,
+                             bc::flat_map<string, bufferlist> *attrs,
 			     bool raw_attrs,
                              rgw_cache_entry_info *cache_info,
                              boost::optional<obj_version> refresh_version,
@@ -149,7 +148,14 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
       objv_tracker->read_version = info.version;
     if (attrs) {
       if (raw_attrs) {
-	*attrs = info.xattrs;
+	attrs->clear();
+	// TODO: This, with similar moves and copies, exists to have a
+	// defined boundary between the changed cache layer here and
+	// the rest of RGW. So all changes are easily testable and
+	// bisectable incrementally. ObjectCacheInfo.xattrs should
+	// become a flat map soon and these c an go away.
+	std::copy(info.xattrs.begin(), info.xattrs.end(),
+		  std::inserter(*attrs, attrs->end()));
       } else {
 	rgw_filter_attrset(info.xattrs, RGW_ATTR_PREFIX, attrs);
       }
@@ -157,13 +163,13 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     return obl->length();
   }
 
-  map<string, bufferlist> unfiltered_attrset;
+  bc::flat_map<string, bufferlist> unfiltered_attrset;
   int r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
-                         obj, obl, ofs, end,
-			 (attrs ? &unfiltered_attrset : nullptr),
-			 true, /* cache unfiltered attrs */
-			 cache_info,
-                         refresh_version, y);
+				  obj, obl, ofs, end,
+				  (attrs ? &unfiltered_attrset : nullptr),
+				  true, /* cache unfiltered attrs */
+				  cache_info,
+				  refresh_version, y);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
@@ -189,9 +195,12 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     info.version = objv_tracker->read_version;
   }
   if (attrs) {
-    info.xattrs = std::move(unfiltered_attrset);
+    info.xattrs.clear();
+    std::move(unfiltered_attrset.begin(), unfiltered_attrset.end(),
+	      std::inserter(info.xattrs, info.xattrs.end())); // TODO
     if (raw_attrs) {
-      *attrs = info.xattrs;
+      std::copy(info.xattrs.begin(), info.xattrs.end(),
+		std::inserter(*attrs, attrs->end())); // TODO
     } else {
       rgw_filter_attrset(info.xattrs, RGW_ATTR_PREFIX, attrs);
     }
@@ -231,9 +240,9 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
   return RGWSI_SysObj_Core::get_attr(obj, attr_name, dest, y);
 }
 
-int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj, 
-                                  map<string, bufferlist>& attrs,
-                                  map<string, bufferlist> *rmattrs,
+int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
+                                  bc::flat_map<string, bufferlist>& attrs,
+                                  bc::flat_map<string, bufferlist> *rmattrs,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y)
 {
@@ -241,9 +250,13 @@ int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
   ObjectCacheInfo info;
-  info.xattrs = attrs;
+  info.xattrs.clear();
+  std::copy(attrs.begin(), attrs.end(),
+	    std::inserter(info.xattrs, info.xattrs.end())); // TODO
   if (rmattrs) {
-    info.rm_xattrs = *rmattrs;
+    info.rm_xattrs.clear();
+    std::copy(rmattrs->begin(), rmattrs->end(),
+	      std::inserter(info.rm_xattrs, info.rm_xattrs.end())); // TODO
   }
   info.status = 0;
   info.flags = CACHE_FLAG_MODIFY_XATTRS;
@@ -266,19 +279,21 @@ int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
 }
 
 int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
-                             real_time *pmtime,
-                             map<std::string, bufferlist>& attrs,
-                             bool exclusive,
-                             const bufferlist& data,
-                             RGWObjVersionTracker *objv_tracker,
-                             real_time set_mtime,
-                             optional_yield y)
+			      real_time *pmtime,
+			      bc::flat_map<std::string, bufferlist>& attrs,
+			      bool exclusive,
+			      const bufferlist& data,
+			      RGWObjVersionTracker *objv_tracker,
+			      real_time set_mtime,
+			      optional_yield y)
 {
   rgw_pool pool;
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
   ObjectCacheInfo info;
-  info.xattrs = attrs;
+  info.xattrs.clear();
+  std::copy(attrs.begin(), attrs.end(),
+	    std::inserter(info.xattrs, info.xattrs.end())); // TODO
   info.status = 0;
   info.data = data;
   info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
@@ -352,7 +367,7 @@ int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
 }
 
 int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
-                                 map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                                 bc::flat_map<string, bufferlist> *attrs, bufferlist *first_chunk,
                                  RGWObjVersionTracker *objv_tracker,
                                  optional_yield y)
 {
@@ -365,6 +380,7 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
   uint64_t size;
   real_time mtime;
   uint64_t epoch;
+  bc::flat_map<string, bufferlist> xattrs;
 
   ObjectCacheInfo info;
   uint32_t flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
@@ -382,8 +398,10 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
       objv_tracker->read_version = info.version;
     goto done;
   }
-  r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &info.xattrs,
+  r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &xattrs,
                                   first_chunk, objv_tracker, y);
+  std::move(xattrs.begin(), xattrs.end(),
+	    std::inserter(info.xattrs, info.xattrs.end())); // TODO
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
@@ -408,8 +426,11 @@ done:
     *pmtime = mtime;
   if (pepoch)
     *pepoch = epoch;
-  if (attrs)
-    *attrs = info.xattrs;
+  if (attrs) {
+    attrs->clear();
+    std::copy(info.xattrs.begin(), info.xattrs.end(),
+	      std::inserter(*attrs, attrs->begin())); // TODO
+  }
   return 0;
 }
 

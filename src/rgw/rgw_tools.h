@@ -91,8 +91,18 @@ int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const 
 
 const char *rgw_find_mime_by_ext(string& ext);
 
-void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
-                        map<string, bufferlist> *attrset);
+template<typename T, typename U>
+void rgw_filter_attrset(T& unfiltered_attrset, const string& check_prefix,
+                        U* attrset)
+{
+  attrset->clear();
+  for (auto iter = unfiltered_attrset.lower_bound(check_prefix);
+       iter != unfiltered_attrset.end(); ++iter) {
+    if (!boost::algorithm::starts_with(iter->first, check_prefix))
+      break;
+    (*attrset)[iter->first] = iter->second;
+  }
+}
 
 /// indicates whether the current thread is in boost::asio::io_context::run(),
 /// used to log warnings if synchronous librados calls are made
