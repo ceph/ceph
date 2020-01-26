@@ -35,12 +35,7 @@ class Module(MgrModule):
         },
         {
             "cmd": "rbd mirror snapshot schedule list "
-                   "name=level_spec,type=CephString ",
-            "desc": "List rbd mirror snapshot schedule",
-            "perm": "r"
-        },
-        {
-            "cmd": "rbd mirror snapshot schedule dump",
+                   "name=level_spec,type=CephString,req=false ",
             "desc": "List rbd mirror snapshot schedule",
             "perm": "r"
         },
