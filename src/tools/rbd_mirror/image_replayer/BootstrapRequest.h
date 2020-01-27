@@ -97,10 +97,7 @@ private:
    *    v                                           (error) *
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * *
    *    |                                                   *
-   *    v                                                   *
-   * GET_REMOTE_MIRROR_INFO * * * * * * * * * * * * * * *   *
-   *    |                                               *   *
-   *    |                                               *   *
+   *    |                                                   *
    *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *
    *    |         |       ^                             *   *
    *    |         |       .                             *   *
@@ -143,10 +140,6 @@ private:
   bool m_canceled = false;
 
   ImageCtxT *m_remote_image_ctx = nullptr;
-  cls::rbd::MirrorImage m_mirror_image;
-  librbd::mirror::PromotionState m_promotion_state =
-    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
-  std::string m_remote_primary_mirror_uuid;
   int m_ret_val = 0;
 
   std::string m_local_image_name;
@@ -163,9 +156,6 @@ private:
 
   void open_remote_image();
   void handle_open_remote_image(int r);
-
-  void get_remote_mirror_info();
-  void handle_get_remote_mirror_info(int r);
 
   void open_local_image();
   void handle_open_local_image(int r);

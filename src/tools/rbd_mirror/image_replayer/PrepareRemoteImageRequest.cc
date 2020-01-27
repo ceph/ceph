@@ -96,11 +96,23 @@ void PrepareRemoteImageRequest<I>::handle_get_mirror_info(int r) {
     return;
   }
 
-  if (*m_state_builder != nullptr &&
-      (*m_state_builder)->get_mirror_image_mode() != m_mirror_image.mode) {
+  auto state_builder = *m_state_builder;
+  if (state_builder != nullptr &&
+      state_builder->get_mirror_image_mode() != m_mirror_image.mode) {
     derr << "local and remote mirror image using different mirroring modes "
          << "for image " << m_global_image_id << ": split-brain" << dendl;
     finish(-EEXIST);
+    return;
+  } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+    dout(5) << "remote image mirroring is being disabled" << dendl;
+    finish(-EREMOTEIO);
+    return;
+  } else if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
+             (state_builder == nullptr ||
+              state_builder->local_image_id.empty())) {
+    // no local image and remote isn't primary -- don't sync it
+    dout(5) << "remote image is not primary -- not syncing" << dendl;
+    finish(-EREMOTEIO);
     return;
   }
 
