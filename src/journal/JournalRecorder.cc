@@ -426,7 +426,7 @@ JournalRecorder::Lockers JournalRecorder::lock_object_recorders() {
   Lockers lockers;
   lockers.reserve(m_object_ptrs.size());
   for (auto& lock : m_object_locks) {
-    lockers.emplace_back(lock);
+    lockers.emplace_back({lock});
   }
   return lockers;
 }
