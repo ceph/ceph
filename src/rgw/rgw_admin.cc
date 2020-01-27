@@ -5022,6 +5022,21 @@ int main(int argc, const char **argv)
   else if (opt_cmd == OPT_USER_SUSPEND)
     user_op.set_suspension(true);
 
+  if (!placement_id.empty() || !storage_class.empty()) {
+    rgw_placement_rule target_rule;
+    target_rule.name = placement_id;
+    target_rule.storage_class = storage_class;
+    if (!store->svc()->zone->get_zone_params().valid_placement(target_rule)) {
+      cerr << "NOTICE: invalid dest placement: " << target_rule.to_str() << std::endl;
+      return EINVAL;
+    }
+    user_op.set_default_placement(target_rule);
+  }
+
+  if (!tags.empty()) {
+    user_op.set_placement_tags(tags);
+  }
+
   // RGWUser to use for user operations
   RGWUser user;
   int ret = 0;
