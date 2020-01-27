@@ -45,7 +45,6 @@ public:
   BaseRequest* create_local_image_request(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
-      ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
       ProgressContext* progress_ctx,
       Context* on_finish) override;
