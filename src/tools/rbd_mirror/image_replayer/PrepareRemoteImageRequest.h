@@ -7,9 +7,10 @@
 #include "include/buffer_fwd.h"
 #include "include/rados/librados_fwd.hpp"
 #include "cls/journal/cls_journal_types.h"
-#include "journal/Settings.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "librbd/mirror/Types.h"
 #include "tools/rbd_mirror/Types.h"
 #include <string>
 
@@ -87,7 +88,7 @@ private:
    * GET_REMOTE_IMAGE_ID
    *    |
    *    v
-   * GET_REMOTE_MIRROR_IMAGE
+   * GET_REMOTE_MIRROR_INFO
    *    |
    *    | (journal)
    *    \-----------> GET_CLIENT
@@ -113,6 +114,9 @@ private:
 
   bufferlist m_out_bl;
   std::string m_remote_image_id;
+  cls::rbd::MirrorImage m_mirror_image;
+  librbd::mirror::PromotionState m_promotion_state;
+  std::string m_primary_mirror_uuid;
 
   // journal-based mirroring
   Journaler *m_remote_journaler = nullptr;
@@ -121,8 +125,8 @@ private:
   void get_remote_image_id();
   void handle_get_remote_image_id(int r);
 
-  void get_mirror_image();
-  void handle_get_mirror_image(int r);
+  void get_mirror_info();
+  void handle_get_mirror_info(int r);
 
   void get_client();
   void handle_get_client(int r);
