@@ -2,7 +2,13 @@ roles:
   - [client.0, mon.a, mgr.x, osd.0, osd.1, osd.2]
 
 tasks:
+  - exec:
+      mon.a:
+        - sysctl kernel.core_pattern
   - install:
+  - exec:
+      mon.a:
+        - sysctl kernel.core_pattern
   - ceph:
       log-whitelist:
         - Reduced data availability
@@ -15,5 +21,6 @@ tasks:
   - ceph.restart: [osd.*]
   - exec:
       mon.a:
+        - sysctl kernel.core_pattern
         - find $TESTDIR/archive/coredump -ls
         - rm $TESTDIR/archive/coredump/*
