@@ -18,6 +18,7 @@
 #include <time.h>
 #include <sys/mount.h>
 #include "kv/KeyValueDB.h"
+#include "kv/RocksDBStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -313,9 +314,7 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
   if(string(GetParam()) != "rocksdb")
     return;
 
-  std::vector<KeyValueDB::ColumnFamily> cfs;
-  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
-  cfs.push_back(KeyValueDB::ColumnFamily("cf2", ""));
+  std::string cfs("cf1 cf2");
   ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating two column families and opening them" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
@@ -369,8 +368,7 @@ TEST_P(KVTest, RocksDBIteratorTest) {
   if(string(GetParam()) != "rocksdb")
     return;
 
-  std::vector<KeyValueDB::ColumnFamily> cfs;
-  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
+  std::string cfs("cf1");
   ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
@@ -422,8 +420,7 @@ TEST_P(KVTest, RocksDBCFMerge) {
   int r = db->set_merge_operator("cf1",p);
   if (r < 0)
     return; // No merge operators for this database type
-  std::vector<KeyValueDB::ColumnFamily> cfs;
-  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
+  std::string cfs("cf1");
   ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
@@ -468,8 +465,7 @@ TEST_P(KVTest, RocksDB_estimate_size) {
   if(string(GetParam()) != "rocksdb")
     GTEST_SKIP();
 
-  std::vector<KeyValueDB::ColumnFamily> cfs;
-  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
+  std::string cfs("cf1");
   ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout));
@@ -501,8 +497,7 @@ TEST_P(KVTest, RocksDB_estimate_size_column_family) {
   if(string(GetParam()) != "rocksdb")
     GTEST_SKIP();
 
-  std::vector<KeyValueDB::ColumnFamily> cfs;
-  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
+  std::string cfs("cf1");
   ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
@@ -529,6 +524,75 @@ TEST_P(KVTest, RocksDB_estimate_size_column_family) {
 
   fini();
 }
+
+TEST_P(KVTest, RocksDB_parse_sharding_def) {
+  if(string(GetParam()) != "rocksdb")
+    GTEST_SKIP();
+  /*
+  int RocksDBStore::parse_sharding_def(const std::string_view text_def_in,
+				     std::vector<ColumnFamily>& sharding_def,
+				     char const* *error_position,
+				     std::string *error_msg)
+  */
+  bool result;
+  std::vector<RocksDBStore::ColumnFamily> sharding_def;
+  char const* error_position = nullptr;
+  std::string error_msg;
+
+  result = RocksDBStore::parse_sharding_def("A(10,0-30) B(6)=option1,option2=aaaa C",
+					    sharding_def);
+  ASSERT_EQ(result, true);
+  ASSERT_EQ(error_position, nullptr);
+  ASSERT_EQ(error_msg, "");
+  ASSERT_EQ(sharding_def.size(), 3);
+  ASSERT_EQ(sharding_def[0].name, "A");
+  ASSERT_EQ(sharding_def[0].shard_cnt, 10);
+  ASSERT_EQ(sharding_def[0].hash_l, 0);
+  ASSERT_EQ(sharding_def[0].hash_h, 30);
+
+  ASSERT_EQ(sharding_def[1].name, "B");
+  ASSERT_EQ(sharding_def[1].shard_cnt, 6);
+  ASSERT_EQ(sharding_def[1].options, "option1,option2=aaaa");
+  ASSERT_EQ(sharding_def[2].name, "C");
+  ASSERT_EQ(sharding_def[2].shard_cnt, 1);
+
+
+  std::string_view text_def = "A(10 B(6)=option C";
+  result = RocksDBStore::parse_sharding_def(text_def,
+					    sharding_def,
+					    &error_position,
+					    &error_msg);
+  std::cout << text_def << std::endl;
+  std::cout << std::string(error_position - text_def.begin(), ' ') << "^" << error_msg << std::endl;
+  ASSERT_EQ(result, false);
+  ASSERT_NE(error_position, nullptr);
+  ASSERT_NE(error_msg, "");
+
+  text_def = "A(10,1) B(6)=option C";
+  result = RocksDBStore::parse_sharding_def(text_def,
+					    sharding_def,
+					    &error_position,
+					    &error_msg);
+  std::cout << text_def << std::endl;
+  std::cout << std::string(error_position - text_def.begin(), ' ') << "^" << error_msg << std::endl;
+  ASSERT_EQ(result, false);
+  ASSERT_NE(error_position, nullptr);
+  ASSERT_NE(error_msg, "");
+
+  /*
+  text_def = "A(10,1-) B(6)=option C";
+  result = RocksDBStore::parse_sharding_def(text_def,
+					    sharding_def,
+					    &error_position,
+					    &error_msg);
+  std::cout << text_def << std::endl;
+  std::cout << std::string(error_position - text_def.begin(), ' ') << "^" << error_msg << std::endl;
+  ASSERT_EQ(result, false);
+  ASSERT_NE(error_position, nullptr);
+  ASSERT_NE(error_msg, "");
+  */
+}
+
 
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,

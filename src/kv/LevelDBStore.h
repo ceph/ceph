@@ -178,9 +178,9 @@ public:
   int init(string option_str="") override;
 
   /// Opens underlying db
-  int open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
+  int open(ostream &out, const std::string& cfs="") override;
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
+  int create_and_open(ostream &out, const std::string& cfs="") override;
 
   void close() override;
 

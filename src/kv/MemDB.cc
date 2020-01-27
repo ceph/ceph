@@ -177,14 +177,14 @@ int MemDB::do_open(ostream &out, bool create)
   return _init(create);
 }
 
-int MemDB::open(ostream &out, const vector<ColumnFamily>& cfs) {
+int MemDB::open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
-int MemDB::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+int MemDB::create_and_open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }

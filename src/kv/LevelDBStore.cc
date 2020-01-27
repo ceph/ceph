@@ -59,14 +59,14 @@ int LevelDBStore::init(string option_str)
   return 0;
 }
 
-int LevelDBStore::open(ostream &out, const vector<ColumnFamily>& cfs)  {
+int LevelDBStore::open(ostream &out, const std::string& cfs)  {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
-int LevelDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+int LevelDBStore::create_and_open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
