@@ -10,6 +10,7 @@
 #include "journal/Settings.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/Types.h"
 #include <string>
 
 namespace journal { class Journaler; }
@@ -42,11 +43,13 @@ public:
       librados::IoCtx &remote_io_ctx,
       const std::string &global_image_id,
       const std::string &local_mirror_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler *cache_manager_handler,
       StateBuilder<ImageCtxT>** state_builder,
       Context *on_finish) {
     return new PrepareRemoteImageRequest(threads, local_io_ctx, remote_io_ctx,
                                          global_image_id, local_mirror_uuid,
+                                         remote_pool_meta,
                                          cache_manager_handler, state_builder,
                                          on_finish);
   }
@@ -57,6 +60,7 @@ public:
       librados::IoCtx &remote_io_ctx,
       const std::string &global_image_id,
       const std::string &local_mirror_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler *cache_manager_handler,
       StateBuilder<ImageCtxT>** state_builder,
       Context *on_finish)
@@ -65,6 +69,7 @@ public:
       m_remote_io_ctx(remote_io_ctx),
       m_global_image_id(global_image_id),
       m_local_mirror_uuid(local_mirror_uuid),
+      m_remote_pool_meta(remote_pool_meta),
       m_cache_manager_handler(cache_manager_handler),
       m_state_builder(state_builder),
       m_on_finish(on_finish) {
@@ -77,9 +82,6 @@ private:
    * @verbatim
    *
    * <start>
-   *    |
-   *    v
-   * GET_REMOTE_MIRROR_UUID
    *    |
    *    v
    * GET_REMOTE_IMAGE_ID
@@ -104,20 +106,17 @@ private:
   librados::IoCtx &m_remote_io_ctx;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
+  RemotePoolMeta m_remote_pool_meta;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
   StateBuilder<ImageCtxT>** m_state_builder;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
-  std::string m_remote_mirror_uuid;
   std::string m_remote_image_id;
 
   // journal-based mirroring
   Journaler *m_remote_journaler = nullptr;
   cls::journal::Client m_client;
-
-  void get_remote_mirror_uuid();
-  void handle_get_remote_mirror_uuid(int r);
 
   void get_remote_image_id();
   void handle_get_remote_image_id(int r);

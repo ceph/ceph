@@ -42,6 +42,7 @@ bool StateBuilder<I>::is_local_primary() const  {
 
 template <typename I>
 bool StateBuilder<I>::is_linked() const {
+  ceph_assert(!remote_mirror_uuid.empty());
   return (local_promotion_state ==
             librbd::mirror::PROMOTION_STATE_NON_PRIMARY &&
           local_primary_mirror_uuid == remote_mirror_uuid);

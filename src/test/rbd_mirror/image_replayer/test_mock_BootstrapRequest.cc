@@ -252,6 +252,7 @@ struct PrepareRemoteImageRequest<librbd::MockTestImageCtx> {
                                            librados::IoCtx &,
                                            const std::string &global_image_id,
                                            const std::string &local_mirror_uuid,
+                                           const RemotePoolMeta& remote_pool_meta,
                                            ::journal::CacheManagerHandler *cache_manager_handler,
                                            StateBuilder<librbd::MockTestImageCtx>** state_builder,
                                            Context *on_finish) {
