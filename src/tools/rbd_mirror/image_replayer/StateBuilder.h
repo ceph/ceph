@@ -49,6 +49,8 @@ public:
   virtual image_sync::SyncPointHandler* create_sync_point_handler() = 0;
   void destroy_sync_point_handler();
 
+  void close_remote_image(Context* on_finish);
+
   virtual BaseRequest* create_local_image_request(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
@@ -91,6 +93,7 @@ protected:
 
 private:
   void handle_close_local_image(int r, Context* on_finish);
+  void handle_close_remote_image(int r, Context* on_finish);
 };
 
 } // namespace image_replayer

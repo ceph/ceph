@@ -43,10 +43,13 @@ void StateBuilder<I>::close(Context* on_finish) {
   // close the remote journaler after closing the local image
   // in case we have lost contact w/ the remote cluster and
   // will block
-  auto ctx = new LambdaContext([this, on_finish](int) {
+  on_finish = new LambdaContext([this, on_finish](int) {
       shut_down_remote_journaler(on_finish);
     });
-  this->close_local_image(ctx);
+  on_finish = new LambdaContext([this, on_finish](int) {
+      this->close_local_image(on_finish);
+    });
+  this->close_remote_image(on_finish);
 }
 
 template <typename I>
