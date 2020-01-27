@@ -69,7 +69,7 @@ protected:
   bufferlist data;
   PublicAccessBlockConfiguration access_conf;
 public:
-  int check_caps(RGWUserCaps& caps) override;
+  int check_caps(const RGWUserCaps& caps) override;
   int verify_permission() override;
   const char* name() const override { return "put_account_public_access_block";}
   int get_params();
@@ -81,7 +81,7 @@ public:
 class RGWGetAccountPublicAccessBlock : public RGWRESTOp {
   PublicAccessBlockConfiguration access_conf;
 public:
-  int check_caps(RGWUserCaps& caps) override;
+  int check_caps(const RGWUserCaps& caps) override;
   int verify_permission() override;
   const char* name() const override { return "get_account_public_access_block";}
   int get_params();
@@ -93,7 +93,7 @@ public:
 
 class RGWDeleteAccountPublicAccessBlock : public RGWRESTOp {
 public:
-  int check_caps(RGWUserCaps& caps) override;
+  int check_caps(const RGWUserCaps& caps) override;
   int verify_permission() override;
   const char* name() const override { return "get_account_public_access_block";}
   int get_params();

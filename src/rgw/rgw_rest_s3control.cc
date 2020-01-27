@@ -19,7 +19,7 @@ RGWOp* RGWHandler_S3AccountPublicAccessBlock::op_get()
   return new RGWGetAccountPublicAccessBlock;
 }
 
-int RGWPutAccountPublicAccessBlock::check_caps(RGWUserCaps& caps)
+int RGWPutAccountPublicAccessBlock::check_caps(const RGWUserCaps& caps)
 {
   return caps.check_cap("user-policy", RGW_CAP_WRITE);
 }
@@ -35,7 +35,7 @@ int RGWPutAccountPublicAccessBlock::verify_permission()
     return -EACCES;
   }
 
-  if(int ret = check_caps(s->user->caps); ret == 0) {
+  if(int ret = check_caps(s->user->get_caps()); ret == 0) {
     return ret;
   }
   // TODO implement x-amz-account-id stuff here
@@ -89,7 +89,7 @@ void RGWPutAccountPublicAccessBlock::execute()
 
   map<string, bufferlist> attrs;
   attrs.emplace(RGW_ATTR_PUBLIC_ACCESS, std::move(bl));
-  if (const auto account_name = s->user->user_id.tenant;
+  if (const auto account_name = s->user->get_tenant();
       ! account_name.empty()) {
     auto svc = store->getRados()->pctl->svc;
     auto obj_ctx = svc->sysobj->init_obj_ctx();
@@ -117,7 +117,7 @@ void RGWPutAccountPublicAccessBlock::send_response()
   end_header(s);
 }
 
-int RGWGetAccountPublicAccessBlock::check_caps(RGWUserCaps& caps)
+int RGWGetAccountPublicAccessBlock::check_caps(const RGWUserCaps& caps)
 {
   return caps.check_cap("user-policy", RGW_CAP_READ);
 }
@@ -138,7 +138,7 @@ int RGWGetAccountPublicAccessBlock::get_params()
       return -EINVAL;
     }
 
-    if (account_name != s->user->user_id.tenant) {
+    if (account_name != s->user->get_tenant()) {
       ldpp_dout(this, 5) << __func__ << "ERROR: Account ID doesn't match the tenant" << dendl;
       return -EINVAL;
     }
@@ -154,7 +154,7 @@ int RGWGetAccountPublicAccessBlock::verify_permission()
     return -EACCES;
   }
 
-  if(int ret = check_caps(s->user->caps); ret == 0) {
+  if(int ret = check_caps(s->user->get_caps()); ret == 0) {
     return ret;
   }
   // TODO implement x-amz-account-id stuff here
@@ -171,7 +171,7 @@ void RGWGetAccountPublicAccessBlock::execute()
 
   auto svc = store->getRados()->pctl->svc;
   auto obj_ctx = svc->sysobj->init_obj_ctx();
-  const auto& account_name = s->user->user_id.tenant;
+  const auto& account_name = s->user->get_tenant();
 
   map<string, bufferlist> attrs;
   bufferlist bl;
@@ -229,7 +229,7 @@ int RGWDeleteAccountPublicAccessBlock::get_params()
       return -EINVAL;
     }
 
-    if (account_name != s->user->user_id.tenant) {
+    if (account_name != s->user->get_tenant()) {
       ldpp_dout(this, 5) << __func__ << "ERROR: Account ID doesn't match the tenant" << dendl;
       return -EINVAL;
     }
@@ -238,7 +238,7 @@ int RGWDeleteAccountPublicAccessBlock::get_params()
 
   return 0;
 }
-int RGWDeleteAccountPublicAccessBlock::check_caps(RGWUserCaps& caps)
+int RGWDeleteAccountPublicAccessBlock::check_caps(const RGWUserCaps& caps)
 {
   return caps.check_cap("user-policy", RGW_CAP_WRITE);
 }
@@ -249,7 +249,7 @@ int RGWDeleteAccountPublicAccessBlock::verify_permission()
     return -EACCES;
   }
 
-  if(int ret = check_caps(s->user->caps); ret == 0) {
+  if(int ret = check_caps(s->user->get_caps()); ret == 0) {
     return ret;
   }
   // TODO implement x-amz-account-id stuff here
@@ -267,7 +267,7 @@ void RGWDeleteAccountPublicAccessBlock::execute()
 
   auto svc = store->getRados()->pctl->svc;
   auto obj_ctx = svc->sysobj->init_obj_ctx();
-  const auto& account_name = s->user->user_id.tenant;
+  const auto& account_name = s->user->get_tenant();
 
   map<string, bufferlist> attrs;
   bufferlist bl;
