@@ -2916,7 +2916,7 @@ public:
       bucket_info.set_sync_policy(std::move(new_policy));
     }
 
-    policy = (rgw_sync_policy_info *)bucket_info.sync_policy.get();
+    policy = &(*bucket_info.sync_policy);
 
     return 0;
   }

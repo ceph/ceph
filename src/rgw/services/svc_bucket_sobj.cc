@@ -300,11 +300,6 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                   &ci, refresh_version, y);
   *info = e.info;
 
-  if (info->sync_policy) { /* fork policy off cache */
-    auto policy = make_shared<rgw_sync_policy_info>(*info->sync_policy);
-    info->sync_policy = std::const_pointer_cast<const rgw_sync_policy_info>(policy);
-  }
-
   if (ret < 0) {
     if (ret != -ENOENT) {
       lderr(cct) << "ERROR: do_read_bucket_instance_info failed: " << ret << dendl;

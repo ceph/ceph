@@ -2085,15 +2085,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(obj_lock, bl);
   }
   if (struct_v >= 21) {
-    bool has_sync_policy;
-    decode(has_sync_policy, bl);
-    if (has_sync_policy) {
-      auto policy = make_shared<rgw_sync_policy_info>();
-      decode(*policy, bl);
-      sync_policy = std::const_pointer_cast<const rgw_sync_policy_info>(policy);
-    } else {
-      sync_policy.reset();
-    }
+    decode(sync_policy, bl);
   }
   
   DECODE_FINISH(bl);
@@ -2101,8 +2093,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
 
 void RGWBucketInfo::set_sync_policy(rgw_sync_policy_info&& policy)
 {
-  auto shared_policy = make_shared<rgw_sync_policy_info>(policy);
-  sync_policy = std::const_pointer_cast<const rgw_sync_policy_info>(shared_policy);
+  sync_policy = std::move(policy);
 }
 
 bool RGWBucketInfo::empty_sync_policy() const
