@@ -3,7 +3,6 @@
 
 #include "include/compat.h"
 #include "BootstrapRequest.h"
-#include "CloseImageRequest.h"
 #include "CreateImageRequest.h"
 #include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
@@ -426,9 +425,7 @@ void BootstrapRequest<I>::close_remote_image() {
     BootstrapRequest<I>,
     &BootstrapRequest<I>::handle_close_remote_image>(this);
   ceph_assert(*m_state_builder != nullptr);
-  auto request = CloseImageRequest<I>::create(
-    &(*m_state_builder)->remote_image_ctx, ctx);
-  request->send();
+  (*m_state_builder)->close_remote_image(ctx);
 }
 
 template <typename I>

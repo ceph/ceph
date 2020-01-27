@@ -79,6 +79,35 @@ void StateBuilder<I>::handle_close_local_image(int r, Context* on_finish) {
 }
 
 template <typename I>
+void StateBuilder<I>::close_remote_image(Context* on_finish) {
+  if (remote_image_ctx == nullptr) {
+    on_finish->complete(0);
+    return;
+  }
+
+  dout(10) << dendl;
+  auto ctx = new LambdaContext([this, on_finish](int r) {
+      handle_close_remote_image(r, on_finish);
+    });
+  auto request = image_replayer::CloseImageRequest<I>::create(
+    &remote_image_ctx, ctx);
+  request->send();
+}
+
+template <typename I>
+void StateBuilder<I>::handle_close_remote_image(int r, Context* on_finish) {
+  dout(10) << "r=" << r << dendl;
+
+  ceph_assert(remote_image_ctx == nullptr);
+  if (r < 0) {
+    derr << "failed to close remote image for image " << global_image_id << ": "
+         << cpp_strerror(r) << dendl;
+  }
+
+  on_finish->complete(r);
+}
+
+template <typename I>
 void StateBuilder<I>::destroy_sync_point_handler() {
   if (m_sync_point_handler == nullptr) {
     return;
