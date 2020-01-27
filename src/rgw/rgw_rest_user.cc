@@ -182,12 +182,12 @@ void RGWOp_User_Create::execute()
     op_state.set_key_type(key_type);
   }
 
-  if (max_buckets != default_max_buckets)
+  if (max_buckets != default_max_buckets) {
     if (max_buckets < 0) {
       max_buckets = -1;
     }
     op_state.set_max_buckets(max_buckets);
-
+  }
   if (s->info.args.exists("suspended"))
     op_state.set_suspension(suspended);
 
@@ -277,12 +277,12 @@ void RGWOp_User_Modify::execute()
   op_state.set_access_key(access_key);
   op_state.set_secret_key(secret_key);
 
-  if (quota_set)
+  if (quota_set) {
     if (max_buckets < 0 ) {
       max_buckets = -1;
     }
     op_state.set_max_buckets(max_buckets);
-
+  }
   if (gen_key)
     op_state.set_generate_key();
 
