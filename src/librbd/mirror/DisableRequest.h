@@ -44,10 +44,7 @@ private:
    * GET_MIRROR_INFO  * * * * * * * * * * * * * * * * * * * * * * *
    *    |                                                         *
    *    v                                                         *
-   * SET_MIRROR_IMAGE * * * * * * * * * * * * * * * * * * * * * * *
-   *    |                                                         *
-   *    v                                                         *
-   * NOTIFY_MIRRORING_WATCHER                                     *
+   * IMAGE_STATE_UPDATE * * * * * * * * * * * * * * * * * * * * * *
    *    |                                                         *
    *    v                                                         *
    * PROMOTE_IMAGE (skip if primary)                              *
@@ -70,9 +67,6 @@ private:
    *    v                                                         *
    * REMOVE_MIRROR_IMAGE  * * * * * * * * * * * * * * * * * * * * *
    *    |         (skip if no remove)                             *
-   *    v                                                         *
-   * NOTIFY_MIRRORING_WATCHER_REMOVED                             *
-   *    |         (skip if not primary or no remove)              *
    *    v                                                         *
    * <finish> < * * * * * * * * * * * * * * * * * * * * * * * * * *
    *
@@ -98,8 +92,8 @@ private:
   void send_get_mirror_info();
   Context *handle_get_mirror_info(int *result);
 
-  void send_set_mirror_image();
-  Context *handle_set_mirror_image(int *result);
+  void send_image_state_update();
+  Context *handle_image_state_update(int *result);
 
   void send_notify_mirroring_watcher();
   Context *handle_notify_mirroring_watcher(int *result);

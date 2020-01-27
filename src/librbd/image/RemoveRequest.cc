@@ -8,7 +8,6 @@
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/MirroringWatcher.h"
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/PreRemoveRequest.h"
 #include "librbd/journal/RemoveRequest.h"
