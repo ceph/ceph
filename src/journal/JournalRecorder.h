@@ -38,7 +38,7 @@ public:
 
 private:
   typedef std::map<uint8_t, ObjectRecorderPtr> ObjectRecorderPtrs;
-  typedef std::vector<std::unique_lock<ceph::mutex>> Lockers;
+  typedef std::vector<Mutex::Locker> Lockers;
 
   struct Listener : public JournalMetadataListener {
     JournalRecorder *journal_recorder;
