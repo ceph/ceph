@@ -13,6 +13,7 @@
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 #include <type_traits>
 
 #define dout_context g_ceph_context
@@ -130,7 +131,9 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
     *m_state_builder = journal::StateBuilder<I>::create(m_global_image_id);
     break;
   case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
-    // TODO
+    // snapshot-based local image exists
+    *m_state_builder = snapshot::StateBuilder<I>::create(m_global_image_id);
+    break;
   default:
     derr << "unsupported mirror image mode " << m_mirror_image.mode << " "
          << "for image " << m_global_image_id << dendl;
