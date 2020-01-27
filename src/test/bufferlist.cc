@@ -2752,48 +2752,6 @@ TEST(BufferList, TestDirectAppend) {
   ASSERT_EQ(memcmp(bl.c_str(), correct, curpos), 0);
 }
 
-TEST(BufferList, TestCloneNonShareable) {
-  bufferlist bl;
-  std::string str = "sharetest";
-  bl.append(str.c_str(), 9);
-  bufferlist bl_share;
-  bl_share.share(bl);
-  bufferlist bl_noshare;
-  buffer::ptr unraw = buffer::create_unshareable(10);
-  unraw.copy_in(0, 9, str.c_str());
-  bl_noshare.append(unraw);
-  bufferlist bl_copied_share = bl_share;
-  bufferlist bl_copied_noshare = bl_noshare;
-
-  // assert shared bufferlist has same buffers
-  bufferlist::iterator iter_bl = bl.begin();
-  bufferlist::iterator iter_bl_share = bl_share.begin();
-  // ok, this considers ptr::off, but it's still a true assertion (and below)
-  ASSERT_TRUE(iter_bl.get_current_ptr().c_str() ==
-	      iter_bl_share.get_current_ptr().c_str());
-
-  // assert copy of shareable bufferlist has same buffers
-  iter_bl = bl.begin();
-  bufferlist::iterator iter_bl_copied_share = bl_copied_share.begin();
-  ASSERT_TRUE(iter_bl.get_current_ptr().c_str() ==
-	      iter_bl_copied_share.get_current_ptr().c_str());
-
-  // assert copy of non-shareable bufferlist has different buffers
-  bufferlist::iterator iter_bl_copied_noshare = bl_copied_noshare.begin();
-  ASSERT_FALSE(iter_bl.get_current_ptr().c_str() ==
-	       iter_bl_copied_noshare.get_current_ptr().c_str());
-
-  // assert that claim with CLAIM_ALLOW_NONSHAREABLE overrides safe-sharing
-  bufferlist bl_claim_noshare_override;
-  void* addr = bl_noshare.begin().get_current_ptr().c_str();
-  bl_claim_noshare_override.claim(bl_noshare,
-				  buffer::list::CLAIM_ALLOW_NONSHAREABLE);
-  bufferlist::iterator iter_bl_noshare_override =
-    bl_claim_noshare_override.begin();
-  ASSERT_TRUE(addr /* the original first segment of bl_noshare() */ ==
-	      iter_bl_noshare_override.get_current_ptr().c_str());
-}
-
 TEST(BufferList, TestCopyAll) {
   const static size_t BIG_SZ = 10737414;
   std::shared_ptr <unsigned char> big(
@@ -2863,13 +2821,16 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_FALSE(bl.is_provided_buffer(buff));
 }
 
-TEST(BufferList, DanglingLastP) {
+TEST(BufferList, DISABLED_DanglingLastP) {
   bufferlist bl;
   {
-    // going with the unsharable buffer type to distinguish this problem
-    // from the generic crosstalk issue we had since the very beginning:
+    // previously we're using the unsharable buffer type to distinguish
+    // the last_p-specific problem from the generic crosstalk issues we
+    // had since the very beginning:
     // https://gist.github.com/rzarzynski/aed18372e88aed392101adac3bd87bbc
-    bufferptr bp(buffer::create_unshareable(10));
+    // this is no longer possible as `buffer::create_unsharable()` has
+    // been dropped.
+    bufferptr bp(buffer::create(10));
     bp.copy_in(0, 3, "XXX");
     bl.push_back(std::move(bp));
     EXPECT_EQ(0, ::memcmp("XXX", bl.c_str(), 3));
@@ -2890,28 +2851,6 @@ TEST(BufferList, DanglingLastP) {
   // Otherwise `bl::copy_in` will call `seek()` and refresh `last_p`.
   bl.begin(2).copy_in(1, "C");
   EXPECT_EQ(0, ::memcmp("12C", bl.c_str(), 3));
-}
-
-TEST(BufferList, ClaimingTwoUnsharablePtrs) {
-  // two or more consecutive, to be precise. Otherwise the problem
-  // is nonexistent or self-healing.
-  // See: https://tracker.ceph.com/issues/43814.
-  bufferlist to_claim;
-  {
-    bufferptr one(buffer::create_unshareable(3));
-    one.copy_in(0, 3, "ABC");
-    to_claim.push_back(std::move(one));
-
-    bufferptr two(buffer::create_unshareable(3));
-    two.copy_in(0, 3, "123");
-    to_claim.push_back(std::move(two));
-  }
-  bufferlist claimer;
-  // this is supposed to not fail because of destructing wrong bptr:
-  // [ RUN      ] BufferList.ClaimingTwoUnsharablePtrs
-  // *** Error in `./bin/unittest_bufferlist': free(): invalid pointer: 0x00007ffe20f03e20 ***
-  claimer.claim_append(to_claim);
-  EXPECT_EQ(0, ::memcmp("ABC123", claimer.c_str(), 6));
 }
 
 TEST(BufferHash, all) {
