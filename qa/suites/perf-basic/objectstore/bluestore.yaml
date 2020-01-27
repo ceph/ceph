@@ -1,4 +1,28 @@
 overrides:
+  ceph_ansible:
+    vars:
+      ceph_stable: true
+      ceph_origin: distro
+      ceph_stable_rh_storage: true
+      copy_admin_key: true
+      ceph_repository: rhcs
+      ceph_stable_release: luminous
+      osd_scenario: collocated
+      osd_auto_discovery: true
+      ceph_test: true
+      ceph_conf_overrides:
+        global:
+          osd objectstore: bluestore
+          mon allow pool delete: true
+      ceph_mgr_modules:
+         - status
+         - restful
+      cephfs_pools:
+        - name: "cephfs_data"
+          pgs: "64"
+        - name: "cephfs_metadata"
+          pgs: "64"
+
   ceph:
     fs: xfs
     conf:
@@ -12,4 +36,3 @@ overrides:
       osd:
         osd objectstore: bluestore
         bluestore block size: 96636764160
-
