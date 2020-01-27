@@ -166,7 +166,6 @@ inline namespace v14_2_0 {
   ceph::unique_leakable_ptr<raw> create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
   ceph::unique_leakable_ptr<raw> create_page_aligned(unsigned len);
   ceph::unique_leakable_ptr<raw> create_small_page_aligned(unsigned len);
-  ceph::unique_leakable_ptr<raw> create_unshareable(unsigned len);
   ceph::unique_leakable_ptr<raw> claim_buffer(unsigned len, char *buf, deleter del);
 
 #ifdef HAVE_SEASTAR
