@@ -1090,12 +1090,8 @@ inline namespace v14_2_0 {
 
     void reserve(size_t prealloc);
 
-    // assignment-op with move semantics
-    const static unsigned int CLAIM_DEFAULT = 0;
-    const static unsigned int CLAIM_ALLOW_NONSHAREABLE = 1;
-
-    void claim(list& bl, unsigned int flags = CLAIM_DEFAULT);
-    void claim_append(list& bl, unsigned int flags = CLAIM_DEFAULT);
+    void claim(list& bl);
+    void claim_append(list& bl);
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);
 
