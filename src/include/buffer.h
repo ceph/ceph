@@ -674,7 +674,6 @@ inline namespace v14_2_0 {
     // he expects it won't change.
     ptr* _carriage;
     unsigned _len;
-    unsigned _memcopy_count; //the total of memcopy using rebuild().
 
     template <bool is_const>
     class CEPH_BUFFER_API iterator_impl {
@@ -954,22 +953,19 @@ inline namespace v14_2_0 {
     // cons/des
     list()
       : _carriage(&always_empty_bptr),
-        _len(0),
-        _memcopy_count(0) {
+        _len(0) {
     }
     // cppcheck-suppress noExplicitConstructor
     // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc)
       : _carriage(&always_empty_bptr),
-        _len(0),
-        _memcopy_count(0) {
+        _len(0) {
       reserve(prealloc);
     }
 
     list(const list& other)
       : _carriage(&always_empty_bptr),
-        _len(other._len),
-        _memcopy_count(other._memcopy_count) {
+        _len(other._len) {
       _buffers.clone_from(other._buffers);
     }
     list(list&& other) noexcept;
@@ -990,7 +986,6 @@ inline namespace v14_2_0 {
       _buffers = std::move(other._buffers);
       _carriage = other._carriage;
       _len = other._len;
-      _memcopy_count = other._memcopy_count;
       other.clear();
       return *this;
     }
@@ -1008,7 +1003,6 @@ inline namespace v14_2_0 {
       return _carriage->unused_tail_length();
     }
 
-    unsigned get_memcopy_count() const {return _memcopy_count; }
     const buffers_t& buffers() const { return _buffers; }
     void swap(list& other) noexcept;
     unsigned length() const {
@@ -1047,7 +1041,6 @@ inline namespace v14_2_0 {
       _carriage = &always_empty_bptr;
       _buffers.clear_and_dispose();
       _len = 0;
-      _memcopy_count = 0;
     }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)

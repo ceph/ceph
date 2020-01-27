@@ -925,15 +925,13 @@ static ceph::spinlock debug_lock;
   buffer::list::list(list&& other) noexcept
     : _buffers(std::move(other._buffers)),
       _carriage(&always_empty_bptr),
-      _len(other._len),
-      _memcopy_count(other._memcopy_count) {
+      _len(other._len) {
     other.clear();
   }
 
   void buffer::list::swap(list& other) noexcept
   {
     std::swap(_len, other._len);
-    std::swap(_memcopy_count, other._memcopy_count);
     std::swap(_carriage, other._carriage);
     _buffers.swap(other._buffers);
   }
@@ -1174,7 +1172,6 @@ static ceph::spinlock debug_lock;
       nb->copy_in(pos, node.length(), node.c_str(), false);
       pos += node.length();
     }
-    _memcopy_count += pos;
     _carriage = &always_empty_bptr;
     _buffers.clear_and_dispose();
     if (likely(nb->length())) {
@@ -1193,7 +1190,7 @@ static ceph::spinlock debug_lock;
 						    unsigned align_memory,
 						    unsigned max_buffers)
   {
-    unsigned old_memcopy_count = _memcopy_count;
+    bool had_to_rebuild = false;
 
     if (max_buffers && _buffers.size() > max_buffers
 	&& _len > (max_buffers * align_size)) {
@@ -1237,13 +1234,12 @@ static ceph::spinlock debug_lock;
         unaligned.rebuild(
           ptr_node::create(
             buffer::create_aligned(unaligned._len, align_memory)));
-        _memcopy_count += unaligned._len;
+        had_to_rebuild = true;
       }
       _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
       ++p_prev;
     }
-
-    return  (old_memcopy_count != _memcopy_count);
+    return had_to_rebuild;
   }
   
   bool buffer::list::rebuild_page_aligned()
