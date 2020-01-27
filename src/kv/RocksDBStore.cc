@@ -899,7 +899,7 @@ void RocksDBStore::RocksDBTransactionImpl::put_bat(
 			   to_set_bl.length()));
   } else {
     rocksdb::Slice key_slice(key);
-    vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
+    vector<rocksdb::Slice> value_slices(to_set_bl.get_num_buffers());
     bat.Put(cf,
 	    rocksdb::SliceParts(&key_slice, 1),
             prepare_sliceparts(to_set_bl, &value_slices));
@@ -1055,7 +1055,7 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
     } else {
       // make a copy
       rocksdb::Slice key_slice(k);
-      vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
+      vector<rocksdb::Slice> value_slices(to_set_bl.get_num_buffers());
       bat.Merge(cf, rocksdb::SliceParts(&key_slice, 1),
 		prepare_sliceparts(to_set_bl, &value_slices));
     }
@@ -1070,7 +1070,7 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
     } else {
       // make a copy
       rocksdb::Slice key_slice(key);
-      vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
+      vector<rocksdb::Slice> value_slices(to_set_bl.get_num_buffers());
       bat.Merge(
 	db->default_cf,
 	rocksdb::SliceParts(&key_slice, 1),

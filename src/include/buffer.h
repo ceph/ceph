@@ -443,6 +443,12 @@ inline namespace v14_2_0 {
       ptr_hook* _tail;
       std::size_t _size;
 
+      // the presence size() is our implementation detail; we don't
+      // expose it via bufferlist::buffers()::size(). Client should
+      // use buffferlist::get_num_buffers() instead.
+      std::size_t size() const { return _size; }
+      friend list;
+
     public:
       template <class T>
       class buffers_iterator {
@@ -582,7 +588,6 @@ inline namespace v14_2_0 {
 	other._size = 0;
       }
 
-      std::size_t size() const { return _size; }
       bool empty() const { return _tail == &_root; }
 
       const_iterator begin() const {
