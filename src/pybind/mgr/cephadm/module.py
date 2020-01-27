@@ -1569,7 +1569,24 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             ] + extra_args,
             stdin=j)
         self.log.debug('create_daemon code %s out %s' % (code, out))
+        if not code:
+            # prime cached service state with what we (should have)
+            # just created
+            sd = {
+                'style': 'cephadm:v1',
+                'name': '%s.%s' % (daemon_type, daemon_id),
+                'fsid': self._cluster_fsid,
+                'enabled': True,
+                'state': 'running',
+            }
+            data = self.service_cache[host].data
+            if data:
+                data.append(sd)
+            else:
+                data = [sd]
+            self.service_cache[host] = orchestrator.OutdatableData(data)
         self.service_cache.invalidate(host)
+        self.event.set()
         return "{} {} on host '{}'".format(
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
