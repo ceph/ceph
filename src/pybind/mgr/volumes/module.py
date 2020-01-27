@@ -265,7 +265,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Delete nfs exports",
             'perm': 'rw'
         },
-
+        {
+            'cmd': 'fs nfs cluster create '
+                   'name=size,type=CephInt,req=false '
+                   'name=cluster_id,type=CephString ',
+            'desc': "Creates NFS Cluster",
+            'perm': 'rw'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -463,3 +469,5 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_nfs_delete(self, inbuf, cmd):
             instance = create_instance(self, "nfs-ganesha")
             return delete_export(instance, cmd['export_id'])
+    def _cmd_fs_nfs_cluster_create(self, inbuf, cmd):
+            return create_nfs_cluster(self, size=cmd.get('size', 1), cluster_id=cmd['cluster_id'])
