@@ -263,29 +263,6 @@ static ceph::spinlock debug_lock;
     }
   };
 
-  class buffer::raw_unshareable : public buffer::raw {
-  public:
-    MEMPOOL_CLASS_HELPERS();
-
-    explicit raw_unshareable(unsigned l) : raw(l) {
-      if (len)
-	data = new char[len];
-      else
-	data = 0;
-    }
-    raw_unshareable(unsigned l, char *b) : raw(b, l) {
-    }
-    raw* clone_empty() override {
-      return new raw_char(len);
-    }
-    bool is_shareable() const override {
-      return false; // !shareable, will force make_shareable()
-    }
-    ~raw_unshareable() override {
-      delete[] data;
-    }
-  };
-
   class buffer::raw_static : public buffer::raw {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -380,10 +357,6 @@ static ceph::spinlock debug_lock;
     } else {
       return create_aligned(len, CEPH_PAGE_SIZE);
     }
-  }
-
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create_unshareable(unsigned len) {
-    return ceph::unique_leakable_ptr<buffer::raw>(new raw_unshareable(len));
   }
 
   buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
@@ -2221,8 +2194,6 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
 			      buffer_raw_posix_aligned, buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_char, buffer_raw_char, buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_claimed_char, buffer_raw_claimed_char,
-			      buffer_meta);
-MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_unshareable, buffer_raw_unshareable,
 			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
 			      buffer_meta);
