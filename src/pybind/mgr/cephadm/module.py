@@ -1199,11 +1199,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def _service_action(self, service_type, service_id, host, action):
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
-            return self._create_daemon(service_type, service_id, host,
-                                       None)
+            return self._create_daemon(service_type, service_id, host)
         elif action == 'reconfig':
             return self._create_daemon(service_type, service_id, host,
-                                       None, reconfig=True)
+                                       reconfig=True)
 
         actions = {
             'start': ['reset-failed', 'start'],
@@ -1280,6 +1279,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return blink(locs)
 
+    def get_osd_uuid_map(self):
+        # type: () -> Dict[str,str]
+        osd_map = self.get('osd_map')
+        r = {}
+        for o in osd_map['osds']:
+            r[str(o['osd'])] = o['uuid']
+        return r
+
     @async_completion
     def _create_osd(self, all_hosts_, drive_group):
         all_hosts = orchestrator.InventoryNode.get_host_names(all_hosts_)
@@ -1333,6 +1340,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.log.debug('code %s out %s' % (code, out))
         osds_elems = json.loads('\n'.join(out))
         fsid = self._cluster_fsid
+        osd_uuid_map = self.get_osd_uuid_map()
         for osd_id, osds in osds_elems.items():
             for osd in osds:
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
@@ -1341,17 +1349,19 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if len(list(set(devices) & set(osd['devices']))) == 0 and osd.get('lv_path') not in devices:
                     self.log.debug('mismatched devices, skipping %s' % osd)
                     continue
+                if osd_id not in osd_uuid_map:
+                    self.log.debug('osd id %d does not exist in cluster' % osd_id)
+                    continue
+                if osd_uuid_map[osd_id] != osd['tags']['ceph.osd_fsid']:
+                    self.log.debug('mismatched osd uuid (cluster has %s, osd '
+                                   'has %s)' % (
+                                       osd_uuid_map[osd_id],
+                                       osd['tags']['ceph.osd_fsid']))
+                    continue
 
-                # create
-                ret, keyring, err = self.mon_command({
-                    'prefix': 'auth get',
-                    'entity': 'osd.%s' % str(osd_id),
-                })
                 self._create_daemon(
-                    'osd', str(osd_id), host, keyring,
-                    extra_args=[
-                        '--osd-fsid', osd['tags']['ceph.osd_fsid'],
-                    ])
+                    'osd', osd_id, host,
+                    osd_uuid_map=osd_uuid_map)
 
         return "Created osd(s) on host '{}'".format(host)
 
@@ -1383,12 +1393,25 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             raise OrchestratorError('Unable to find ODS: %s' % not_found)
         return self._remove_daemon(args)
 
-    def _create_daemon(self, daemon_type, daemon_id, host, keyring,
+    def _create_daemon(self, daemon_type, daemon_id, host,
+                       keyring=None,
                        extra_args=None, extra_config=None,
-                       reconfig=False):
+                       reconfig=False,
+                       osd_uuid_map=None):
         if not extra_args:
             extra_args = []
         name = '%s.%s' % (daemon_type, daemon_id)
+
+        # keyring
+        if not keyring:
+            if daemon_type == 'mon':
+                ename = 'mon.'
+            else:
+                ename = '%s.%s' % (daemon_type, daemon_id)
+            ret, keyring, err = self.mon_command({
+                'prefix': 'auth get',
+                'entity': ename,
+            })
 
         # generate config
         ret, config, err = self.mon_command({
@@ -1410,6 +1433,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'keyring': keyring,
             'crash_keyring': crash_keyring,
         })
+
+        # osd deployments needs an --osd-uuid arg
+        if daemon_type == 'osd':
+            if not osd_uuid_map:
+                osd_uuid_map = self.get_osd_uuid_map()
+            osd_uuid = osd_uuid_map.get(daemon_id, None)
+            if not osd_uuid:
+                raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
+            extra_args.extend(['--osd-fsid', osd_uuid])
 
         if reconfig:
             extra_args.append('--reconfig')
@@ -1483,7 +1515,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         else:
             raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
 
-        return self._create_daemon('mon', name, host, keyring,
+        return self._create_daemon('mon', name, host,
+                                   keyring=keyring,
                                    extra_config=extra_config)
 
     def update_mons(self, spec):
@@ -1553,7 +1586,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'mds', 'allow *'],
         })
 
-        return self._create_daemon('mgr', name, host, keyring)
+        return self._create_daemon('mgr', name, host, keyring=keyring)
 
     @with_services('mgr')
     def update_mgrs(self, spec, services):
@@ -1677,7 +1710,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'osd', 'allow rwx',
                      'mds', 'allow'],
         })
-        return self._create_daemon('mds', mds_id, host, keyring)
+        return self._create_daemon('mds', mds_id, host, keyring=keyring)
 
     def remove_mds(self, name):
         self.log.debug("Attempting to remove volume: {}".format(name))
@@ -1740,7 +1773,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'mgr', 'allow rw',
                      'osd', 'allow rwx'],
         })
-        return self._create_daemon('rgw', rgw_id, host, keyring)
+        return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
     def remove_rgw(self, name):
 
@@ -1795,7 +1828,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'caps': ['mon', 'profile rbd-mirror',
                      'osd', 'profile rbd'],
         })
-        return self._create_daemon('rbd-mirror', daemon_id, host, keyring)
+        return self._create_daemon('rbd-mirror', daemon_id, host,
+                                   keyring=keyring)
 
     def remove_rbd_mirror(self, name):
         def _remove_rbd_mirror(daemons):
