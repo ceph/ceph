@@ -837,7 +837,8 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     --p;
     while (n > 0) {
       BlueStore::Onode *o = &*p;
-      dout(30) << __func__ << "  rm " << o->oid << dendl;
+      dout(30) << __func__ << "  rm " << o->oid << " "
+               << o->nref << " " << o->cached << " " << o->pinned << dendl;
       if (p != lru.begin()) {
         lru.erase(p--);
       } else {
@@ -1580,6 +1581,9 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
     } else {
       ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
+                            << " " << p->second->nref
+                            << " " << p->second->cached
+                            << " " << p->second->pinned
 			    << dendl;
       // This will pin onode and implicitly touch the cache when Onode
       // eventually will become unpinned
@@ -1668,7 +1672,11 @@ template <int LogLevelV = 30>
 void BlueStore::OnodeSpace::dump(CephContext *cct)
 {
   for (auto& i : onode_map) {
-    ldout(cct, LogLevelV) << i.first << " : " << i.second << dendl;
+    ldout(cct, LogLevelV) << i.first << " : " << i.second
+      << " " << i.second->nref
+      << " " << i.second->cached
+      << " " << i.second->pinned
+      << dendl;
   }
 }
 
@@ -3208,24 +3216,43 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
 
+//
+// A tricky thing about Onode's ref counter is that we do an additional
+// increment when newly pinned instance is detected. And -1 on unpin.
+// This prevents from a conflict with a delete call (when nref == 0).
+// The latter might happen while the thread is in unpin() function
+// (and e.g. waiting for lock acquisition) since nref is already
+// decremented. And another 'putting' thread on the instance will release it.
+//
 void BlueStore::Onode::get() {
   if (++nref == 2) {
     c->get_onode_cache()->pin(this, [&]() {
-        bool r = cached && !pinned;
-        pinned = true;
-        return r;
+        bool was_pinned = pinned;
+        pinned = nref >= 2;
+        // additional increment for newly pinned instance
+        bool r = !was_pinned && pinned;
+        if (r) {
+          ++nref;
+        }
+        return cached && r;
       });
   }
 }
 void BlueStore::Onode::put() {
-  int n = --nref;
-  if (n == 1) {
+  if (--nref == 2) {
     c->get_onode_cache()->unpin(this, [&]() {
-        bool r = cached && pinned;
-        pinned = false;
-        return r;
+        bool was_pinned = pinned;
+        pinned = pinned && nref > 2; // intentionally use > not >= as we have
+                                     // +1 due to pinned state
+        bool r = was_pinned && !pinned;
+        // additional decrement for newly unpinned instance
+        if (r) {
+          --nref;
+        }
+        return cached && r;
       });
-  } else if (n == 0) {
+  }
+  if (nref == 0) {
     delete this;
   }
 }
