@@ -43,6 +43,7 @@ struct GetInfoRequest<librbd::MockTestImageCtx> {
   static GetInfoRequest* create(librbd::MockTestImageCtx &image_ctx,
                                 cls::rbd::MirrorImage *mirror_image,
                                 PromotionState *promotion_state,
+                                std::string* primary_mirror_uuid,
                                 Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->mirror_image = mirror_image;

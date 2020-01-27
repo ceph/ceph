@@ -31,24 +31,28 @@ public:
                                 const std::string &image_id,
                                 cls::rbd::MirrorImage *mirror_image,
                                 PromotionState *promotion_state,
+                                std::string* primary_mirror_uuid,
                                 Context *on_finish) {
     return new GetInfoRequest(io_ctx, op_work_queue, image_id, mirror_image,
-                              promotion_state, on_finish);
+                              promotion_state, primary_mirror_uuid, on_finish);
   }
   static GetInfoRequest *create(ImageCtxT &image_ctx,
                                 cls::rbd::MirrorImage *mirror_image,
                                 PromotionState *promotion_state,
+                                std::string* primary_mirror_uuid,
                                 Context *on_finish) {
     return new GetInfoRequest(image_ctx, mirror_image, promotion_state,
-                              on_finish);
+                              primary_mirror_uuid, on_finish);
   }
 
   GetInfoRequest(librados::IoCtx& io_ctx, ContextWQ *op_work_queue,
                  const std::string &image_id,
                  cls::rbd::MirrorImage *mirror_image,
-                 PromotionState *promotion_state, Context *on_finish);
+                 PromotionState *promotion_state,
+                 std::string* primary_mirror_uuid, Context *on_finish);
   GetInfoRequest(ImageCtxT &image_ctx, cls::rbd::MirrorImage *mirror_image,
-                 PromotionState *promotion_state, Context *on_finish);
+                 PromotionState *promotion_state,
+                 std::string* primary_mirror_uuid, Context *on_finish);
 
   void send();
 
@@ -83,6 +87,7 @@ private:
   std::string m_image_id;
   cls::rbd::MirrorImage *m_mirror_image;
   PromotionState *m_promotion_state;
+  std::string* m_primary_mirror_uuid;
   Context *m_on_finish;
 
   CephContext *m_cct;

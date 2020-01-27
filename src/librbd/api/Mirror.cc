@@ -282,6 +282,7 @@ struct C_ImageGetInfo : public Context {
 
   cls::rbd::MirrorImage mirror_image;
   mirror::PromotionState promotion_state = mirror::PROMOTION_STATE_PRIMARY;
+  std::string primary_mirror_uuid;
 
   C_ImageGetInfo(mirror_image_info_t *mirror_image_info,
                  mirror_image_mode_t *mirror_image_mode,  Context *on_finish)
@@ -658,6 +659,7 @@ void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
       auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
       auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
                                                    &ctx->promotion_state,
+                                                   &ctx->primary_mirror_uuid,
                                                    ctx);
       req->send();
     });
@@ -694,7 +696,8 @@ void Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
   auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(io_ctx, op_work_queue, image_id,
                                                &ctx->mirror_image,
-                                               &ctx->promotion_state, ctx);
+                                               &ctx->promotion_state,
+                                               &ctx->primary_mirror_uuid, ctx);
   req->send();
 }
 
@@ -722,7 +725,7 @@ void Mirror<I>::image_get_mode(I *ictx, mirror_image_mode_t *mode,
   auto ctx = new C_ImageGetInfo(nullptr, mode, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
                                                &ctx->promotion_state,
-                                               ctx);
+                                               &ctx->primary_mirror_uuid, ctx);
   req->send();
 }
 
