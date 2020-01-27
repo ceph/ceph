@@ -7753,7 +7753,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
     dout(10) << "fsck converting " << o->oid << " omap to per-pool" << dendl;
     bufferlist h;
     map<string, bufferlist> kv;
-    int r = _omap_get(o->c, o->oid, &h, &kv);
+    int r = _onode_omap_get(o, &h, &kv);
     if (r < 0) {
       derr << " got " << r << " " << cpp_strerror(r) << dendl;
     } else {
@@ -10543,6 +10543,24 @@ int BlueStore::_omap_get(
     r = -ENOENT;
     goto out;
   }
+  r = _onode_omap_get(o, header, out);
+ out:
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
+  return r;
+}
+
+int BlueStore::_onode_omap_get(
+  const OnodeRef &o,           ///< [in] Object containing omap
+  bufferlist *header,          ///< [out] omap header
+  map<string, bufferlist> *out /// < [out] Key to value map
+)
+{
+  int r = 0;
+  if (!o || !o->exists) {
+    r = -ENOENT;
+    goto out;
+  }
   if (!o->onode.has_omap())
     goto out;
   o->flush();
@@ -10555,24 +10573,22 @@ int BlueStore::_omap_get(
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() == head) {
-	dout(30) << __func__ << "  got header" << dendl;
-	*header = it->value();
+        dout(30) << __func__ << "  got header" << dendl;
+        *header = it->value();
       } else if (it->key() >= tail) {
-	dout(30) << __func__ << "  reached tail" << dendl;
-	break;
+        dout(30) << __func__ << "  reached tail" << dendl;
+        break;
       } else {
-	string user_key;
-	o->decode_omap_key(it->key(), &user_key);
-	dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
-		 << " -> " << user_key << dendl;
-	(*out)[user_key] = it->value();
+        string user_key;
+        o->decode_omap_key(it->key(), &user_key);
+        dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
+          << " -> " << user_key << dendl;
+        (*out)[user_key] = it->value();
       }
       it->next();
     }
   }
- out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
-	   << dendl;
+out:
   return r;
 }
 
