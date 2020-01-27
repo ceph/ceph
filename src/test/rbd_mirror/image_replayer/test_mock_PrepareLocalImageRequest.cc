@@ -97,6 +97,10 @@ struct GetMirrorImageIdRequest<librbd::MockTestImageCtx> {
 template<>
 struct StateBuilder<librbd::MockTestImageCtx> {
   virtual ~StateBuilder() {}
+
+  std::string local_image_id;
+  librbd::mirror::PromotionState local_promotion_state;
+  std::string local_primary_mirror_uuid;
 };
 
 GetMirrorImageIdRequest<librbd::MockTestImageCtx>* GetMirrorImageIdRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -107,9 +111,6 @@ template<>
 struct StateBuilder<librbd::MockTestImageCtx>
   : public image_replayer::StateBuilder<librbd::MockTestImageCtx> {
   static StateBuilder* s_instance;
-
-  std::string local_image_id;
-  std::string local_tag_owner;
 
   static StateBuilder* create(const std::string&) {
     ceph_assert(s_instance != nullptr);
@@ -224,8 +225,10 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, Success) {
   ASSERT_EQ(std::string("local image name"), local_image_name);
   ASSERT_EQ(std::string("local image id"),
             mock_journal_state_builder.local_image_id);
+  ASSERT_EQ(librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
+            mock_journal_state_builder.local_promotion_state);
   ASSERT_EQ(std::string("remote mirror uuid"),
-            mock_journal_state_builder.local_tag_owner);
+            mock_journal_state_builder.local_primary_mirror_uuid);
 }
 
 TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageIdError) {

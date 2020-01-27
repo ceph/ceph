@@ -126,24 +126,8 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
 
   switch (m_mirror_image.mode) {
   case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
-    {
-      // journal-based local image exists
-      auto state_builder = journal::StateBuilder<I>::create(m_global_image_id);
-      state_builder->local_image_id = m_local_image_id;
-      // TODO store promotion state + primary
-      switch (m_promotion_state) {
-      case librbd::mirror::PROMOTION_STATE_PRIMARY:
-        state_builder->local_tag_owner = librbd::Journal<>::LOCAL_MIRROR_UUID;
-        break;
-      case librbd::mirror::PROMOTION_STATE_NON_PRIMARY:
-        state_builder->local_tag_owner = m_primary_mirror_uuid;
-        break;
-      case librbd::mirror::PROMOTION_STATE_ORPHAN:
-        state_builder->local_tag_owner = librbd::Journal<>::ORPHAN_MIRROR_UUID;
-        break;
-      }
-      *m_state_builder = state_builder;
-    }
+    // journal-based local image exists
+    *m_state_builder = journal::StateBuilder<I>::create(m_global_image_id);
     break;
   case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
     // TODO
@@ -154,6 +138,9 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
     break;
   }
 
+  (*m_state_builder)->local_image_id = m_local_image_id;
+  (*m_state_builder)->local_promotion_state = m_promotion_state;
+  (*m_state_builder)->local_primary_mirror_uuid = m_primary_mirror_uuid;
   finish(0);
 }
 

@@ -55,17 +55,6 @@ bool StateBuilder<I>::is_disconnected() const {
 }
 
 template <typename I>
-bool StateBuilder<I>::is_local_primary() const  {
-  return (!this->local_image_id.empty() &&
-          local_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID);
-}
-
-template <typename I>
-bool StateBuilder<I>::is_linked() const {
-  return (local_tag_owner == this->remote_mirror_uuid);
-}
-
-template <typename I>
 cls::rbd::MirrorImageMode StateBuilder<I>::get_mirror_image_mode() const {
   return cls::rbd::MIRROR_IMAGE_MODE_JOURNAL;
 }
