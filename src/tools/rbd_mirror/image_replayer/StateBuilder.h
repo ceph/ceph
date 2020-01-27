@@ -41,8 +41,8 @@ public:
 
   virtual bool is_disconnected() const = 0;
 
-  virtual bool is_local_primary() const = 0;
-  virtual bool is_linked() const = 0;
+  bool is_local_primary() const;
+  virtual bool is_linked() const;
 
   virtual cls::rbd::MirrorImageMode get_mirror_image_mode() const = 0;
 
@@ -73,6 +73,9 @@ public:
   std::string global_image_id;
 
   std::string local_image_id;
+  librbd::mirror::PromotionState local_promotion_state =
+    librbd::mirror::PROMOTION_STATE_PRIMARY;
+  std::string local_primary_mirror_uuid;
   ImageCtxT* local_image_ctx = nullptr;
 
   std::string remote_mirror_uuid;

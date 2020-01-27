@@ -35,6 +35,19 @@ StateBuilder<I>::~StateBuilder() {
 }
 
 template <typename I>
+bool StateBuilder<I>::is_local_primary() const  {
+  return (!local_image_id.empty() &&
+          local_promotion_state == librbd::mirror::PROMOTION_STATE_PRIMARY);
+}
+
+template <typename I>
+bool StateBuilder<I>::is_linked() const {
+  return (local_promotion_state ==
+            librbd::mirror::PROMOTION_STATE_NON_PRIMARY &&
+          local_primary_mirror_uuid == remote_mirror_uuid);
+}
+
+template <typename I>
 void StateBuilder<I>::close_local_image(Context* on_finish) {
   if (local_image_ctx == nullptr) {
     on_finish->complete(0);
