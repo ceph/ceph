@@ -64,7 +64,7 @@ public:
     ZTracer::Trace trace;
     write_item(uint64_t s, bufferlist& b, int ol, TrackedOpRef opref) :
       seq(s), orig_len(ol), tracked_op(opref) {
-      bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
+      bl.claim(b);
     }
     write_item() : seq(0), orig_len(0) {}
   };

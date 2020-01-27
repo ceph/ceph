@@ -1579,7 +1579,7 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
     ebl.push_back(buffer::create_static(h.pre_pad, zero_buf));
   }
   // payload
-  ebl.claim_append(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
+  ebl.claim_append(bl);
   if (h.post_pad) {
     ebl.push_back(buffer::create_static(h.post_pad, zero_buf));
   }
