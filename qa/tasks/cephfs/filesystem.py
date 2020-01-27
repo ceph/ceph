@@ -611,7 +611,6 @@ class Filesystem(MDSCluster):
 
         self.getinfo(refresh = True)
 
-        
     def check_pool_application(self, pool_name):
         osd_map = self.mon_manager.get_osd_dump_json()
         for pool in osd_map['pools']:

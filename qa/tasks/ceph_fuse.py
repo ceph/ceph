@@ -128,7 +128,9 @@ def task(ctx, config):
             continue
 
         if id_ not in all_mounts:
-            fuse_mount = FuseMount(ctx, client_config, testdir, auth_id, remote, brxnet)
+            fuse_mount = FuseMount(ctx=ctx, client_config=client_config,
+                                   test_dir=testdir, client_id=auth_id,
+                                   client_remote=remote, brxnet=brxnet)
             all_mounts[id_] = fuse_mount
         else:
             # Catch bad configs where someone has e.g. tried to use ceph-fuse and kcephfs for the same client
@@ -152,9 +154,12 @@ def task(ctx, config):
     log.info('Mounting ceph-fuse clients...')
     for info in mounted_by_me.values():
         config = info["config"]
-        mount_path = config.get("mount_path")
-        mountpoint = config.get("mountpoint")
-        info["mount"].mount(mountpoint=mountpoint, mount_path=mount_path)
+        mount_x = info['mount']
+        if config.get("mount_path"):
+            mount_x.cephfs_mntpt = config.get("mount_path")
+        if config.get("mountpoint"):
+            mount_x.hostfs_mntpt = config.get("mountpoint")
+        mount_x.mount()
 
     for info in mounted_by_me.values():
         info["mount"].wait_until_mounted()
