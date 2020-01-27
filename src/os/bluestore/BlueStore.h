@@ -2840,6 +2840,10 @@ public:
   void inject_misreference(coll_t cid1, ghobject_t oid1,
 			   coll_t cid2, ghobject_t oid2,
 			   uint64_t offset);
+  // resets global per_pool_omap in DB
+  void inject_legacy_omap();
+  // resets per_pool_omap | pgmeta_omap for onode
+  void inject_legacy_omap(coll_t cid, ghobject_t oid);
 
   void compact() override {
     ceph_assert(db);
