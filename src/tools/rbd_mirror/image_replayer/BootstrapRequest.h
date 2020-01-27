@@ -73,7 +73,6 @@ public:
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish);
-  ~BootstrapRequest() override;
 
   bool is_syncing() const;
 
@@ -139,7 +138,6 @@ private:
   mutable ceph::mutex m_lock;
   bool m_canceled = false;
 
-  ImageCtxT *m_remote_image_ctx = nullptr;
   int m_ret_val = 0;
 
   std::string m_local_image_name;

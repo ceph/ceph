@@ -79,11 +79,6 @@ BootstrapRequest<I>::BootstrapRequest(
 }
 
 template <typename I>
-BootstrapRequest<I>::~BootstrapRequest() {
-  ceph_assert(m_remote_image_ctx == nullptr);
-}
-
-template <typename I>
 bool BootstrapRequest<I>::is_syncing() const {
   std::lock_guard locker{m_lock};
   return (m_image_sync != nullptr);
@@ -215,12 +210,13 @@ void BootstrapRequest<I>::open_remote_image() {
 
   update_progress("OPEN_REMOTE_IMAGE");
 
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_remote_image>(
-      this);
+  auto ctx = create_context_callback<
+    BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_open_remote_image>(this);
+  ceph_assert(*m_state_builder != nullptr);
   OpenImageRequest<I> *request = OpenImageRequest<I>::create(
-    m_remote_io_ctx, &m_remote_image_ctx, remote_image_id, false,
-    ctx);
+    m_remote_io_ctx, &(*m_state_builder)->remote_image_ctx, remote_image_id,
+    false, ctx);
   request->send();
 }
 
@@ -228,14 +224,14 @@ template <typename I>
 void BootstrapRequest<I>::handle_open_remote_image(int r) {
   dout(15) << "r=" << r << dendl;
 
+  ceph_assert(*m_state_builder != nullptr);
   if (r < 0) {
     derr << "failed to open remote image: " << cpp_strerror(r) << dendl;
-    ceph_assert(m_remote_image_ctx == nullptr);
+    ceph_assert((*m_state_builder)->remote_image_ctx == nullptr);
     finish(r);
     return;
   }
 
-  ceph_assert(*m_state_builder != nullptr);
   if ((*m_state_builder)->local_image_id.empty()) {
     create_local_image();
     return;
@@ -343,8 +339,7 @@ void BootstrapRequest<I>::create_local_image() {
     BootstrapRequest<I>,
     &BootstrapRequest<I>::handle_create_local_image>(this);
   auto request = (*m_state_builder)->create_local_image_request(
-    m_threads, m_local_io_ctx, m_remote_image_ctx, m_global_image_id,
-    m_progress_ctx, ctx);
+    m_threads, m_local_io_ctx, m_global_image_id, m_progress_ctx, ctx);
   request->send();
 }
 
@@ -387,7 +382,7 @@ void BootstrapRequest<I>::image_sync() {
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
   m_image_sync = ImageSync<I>::create(
-    m_threads, state_builder->local_image_ctx, m_remote_image_ctx,
+    m_threads, state_builder->local_image_ctx, state_builder->remote_image_ctx,
     m_local_mirror_uuid, sync_point_handler, m_instance_watcher,
     m_progress_ctx, ctx);
   m_image_sync->get();
@@ -427,11 +422,12 @@ void BootstrapRequest<I>::close_remote_image() {
 
   update_progress("CLOSE_REMOTE_IMAGE");
 
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_remote_image>(
-      this);
-  CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_remote_image_ctx, ctx);
+  auto ctx = create_context_callback<
+    BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_close_remote_image>(this);
+  ceph_assert(*m_state_builder != nullptr);
+  auto request = CloseImageRequest<I>::create(
+    &(*m_state_builder)->remote_image_ctx, ctx);
   request->send();
 }
 

@@ -31,6 +31,7 @@ StateBuilder<I>::StateBuilder(const std::string& global_image_id)
 template <typename I>
 StateBuilder<I>::~StateBuilder() {
   ceph_assert(local_image_ctx == nullptr);
+  ceph_assert(remote_image_ctx == nullptr);
   ceph_assert(m_sync_point_handler == nullptr);
 }
 

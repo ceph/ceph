@@ -52,7 +52,6 @@ public:
   virtual BaseRequest* create_local_image_request(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
-      ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
       ProgressContext* progress_ctx,
       Context* on_finish) = 0;
@@ -81,6 +80,7 @@ public:
   std::string remote_image_id;
   librbd::mirror::PromotionState remote_promotion_state =
     librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
+  ImageCtxT* remote_image_ctx = nullptr;
 
 protected:
   image_sync::SyncPointHandler* m_sync_point_handler = nullptr;

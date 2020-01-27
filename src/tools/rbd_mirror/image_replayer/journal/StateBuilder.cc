@@ -71,12 +71,11 @@ template <typename I>
 BaseRequest* StateBuilder<I>::create_local_image_request(
     Threads<I>* threads,
     librados::IoCtx& local_io_ctx,
-    I* remote_image_ctx,
     const std::string& global_image_id,
     ProgressContext* progress_ctx,
     Context* on_finish) {
   return CreateLocalImageRequest<I>::create(
-    threads, local_io_ctx, remote_image_ctx, this->global_image_id,
+    threads, local_io_ctx, this->remote_image_ctx, this->global_image_id,
     progress_ctx, this, on_finish);
 }
 

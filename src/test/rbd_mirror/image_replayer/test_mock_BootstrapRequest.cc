@@ -240,6 +240,7 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   MockBaseRequest mock_base_request;
 
   librbd::MockTestImageCtx* local_image_ctx = nullptr;
+  librbd::MockTestImageCtx* remote_image_ctx = nullptr;
   std::string local_image_id;
   std::string remote_mirror_uuid;
   std::string remote_image_id;
@@ -261,10 +262,9 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   MOCK_CONST_METHOD0(is_local_primary, bool());
   MOCK_CONST_METHOD0(is_linked, bool());
 
-  MOCK_METHOD6(create_local_image_request,
+  MOCK_METHOD5(create_local_image_request,
                BaseRequest*(Threads<librbd::MockTestImageCtx>*,
                             librados::IoCtx&,
-                            librbd::MockTestImageCtx*,
                             const std::string&,
                             ProgressContext*,
                             Context*));
@@ -428,8 +428,8 @@ public:
   void expect_create_local_image(MockStateBuilder& mock_state_builder,
                                  const std::string& local_image_id, int r) {
     EXPECT_CALL(mock_state_builder,
-                create_local_image_request(_, _, _, _, _, _))
-      .WillOnce(WithArg<5>(
+                create_local_image_request(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
         Invoke([this, &mock_state_builder, local_image_id, r](Context* ctx) {
           if (r >= 0) {
             mock_state_builder.local_image_id = local_image_id;
