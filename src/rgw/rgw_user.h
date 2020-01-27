@@ -220,6 +220,11 @@ struct RGWUserAdminOpState {
   // req parameters for listing user
   std::string marker;
   uint32_t max_entries;
+  rgw_placement_rule default_placement; // user default placement
+  bool default_placement_specified;
+
+  list<string> placement_tags;  // user default placement_tags
+  bool placement_tags_specified;
 
   void set_access_key(const std::string& access_key) {
     if (access_key.empty())
@@ -402,6 +407,16 @@ struct RGWUserAdminOpState {
     mfa_ids_specified = true;
   }
 
+  void set_default_placement(const rgw_placement_rule& _placement) {
+    default_placement = _placement;
+    default_placement_specified = true;
+  }
+
+  void set_placement_tags(const list<string>& _tags) {
+    placement_tags = _tags;
+    placement_tags_specified = true;
+  }
+
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
@@ -541,6 +556,8 @@ struct RGWUserAdminOpState {
     found_by_email = false;
     found_by_key = false;
     mfa_ids_specified = false;
+    default_placement_specified = false;
+    placement_tags_specified = false;
     max_entries = 1000;
     marker = "";
   }

@@ -12,6 +12,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -115,6 +116,8 @@ void RGWOp_User_Create::execute()
   std::string caps;
   std::string tenant_name;
   std::string op_mask_str;
+  std::string default_placement_str;
+  std::string placement_tags_str;
 
   bool gen_key;
   bool suspended;
@@ -142,6 +145,8 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
+  RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
+  RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
 
   if (!s->user->get_info().system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
@@ -200,6 +205,23 @@ void RGWOp_User_Create::execute()
   if (gen_key)
     op_state.set_generate_key();
 
+  if (!default_placement_str.empty()) {
+    rgw_placement_rule target_rule;
+    target_rule.from_str(default_placement_str);
+    if (!store->svc()->zone->get_zone_params().valid_placement(target_rule)) {
+      ldout(s->cct, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_default_placement(target_rule);
+  }
+
+  if (!placement_tags_str.empty()) {
+    list<string> placement_tags_list;
+    get_str_list(placement_tags_str, ",", placement_tags_list);
+    op_state.set_placement_tags(placement_tags_list);
+  }
+
   if (!store->svc()->zone->is_meta_master()) {
     bufferlist data;
     op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
@@ -235,6 +257,8 @@ void RGWOp_User_Modify::execute()
   std::string key_type_str;
   std::string caps;
   std::string op_mask_str;
+  std::string default_placement_str;
+  std::string placement_tags_str;
 
   bool gen_key;
   bool suspended;
@@ -260,6 +284,8 @@ void RGWOp_User_Modify::execute()
 
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
+  RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
+  RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
 
   if (!s->user->get_info().system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
@@ -321,6 +347,23 @@ void RGWOp_User_Modify::execute()
       return;
     }
     op_state.set_op_mask(op_mask);
+  }
+
+  if (!default_placement_str.empty()) {
+    rgw_placement_rule target_rule;
+    target_rule.from_str(default_placement_str);
+    if (!store->svc()->zone->get_zone_params().valid_placement(target_rule)) {
+      ldout(s->cct, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_default_placement(target_rule);
+  }
+
+  if (!placement_tags_str.empty()) {
+    list<string> placement_tags_list;
+    get_str_list(placement_tags_str, ",", placement_tags_list);
+    op_state.set_placement_tags(placement_tags_list);
   }
   
   if (!store->svc()->zone->is_meta_master()) {

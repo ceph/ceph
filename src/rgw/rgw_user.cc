@@ -1780,6 +1780,14 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
     rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
   }
 
+  if (op_state.default_placement_specified) {
+    user_info.default_placement = op_state.default_placement;
+  }
+
+  if (op_state.placement_tags_specified) {
+    user_info.placement_tags = op_state.placement_tags;
+  }
+
   // update the request
   op_state.set_user_info(user_info);
   op_state.set_populated();
@@ -2060,6 +2068,15 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.mfa_ids_specified) {
     user_info.mfa_ids = op_state.mfa_ids;
   }
+
+  if (op_state.default_placement_specified) {
+    user_info.default_placement = op_state.default_placement;
+  }
+
+  if (op_state.placement_tags_specified) {
+    user_info.placement_tags = op_state.placement_tags;
+  }
+
   op_state.set_user_info(user_info);
 
   // if we're supposed to modify keys, do so
