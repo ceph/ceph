@@ -9,7 +9,10 @@ groups:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.2.1
         annotations:
-          description: Ceph in health_error state for more than 5m.
+          description: >
+            Ceph in HEALTH_ERROR state for more than 5 minutes.
+            Please check "ceph health detail" for more information.
+
       - alert: health warn
         expr: ceph_health_status == 1
         for: 15m
@@ -18,7 +21,10 @@ groups:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.2.2
         annotations:
-          description: Ceph in health_warn for more than 15m.
+          description: >
+            Ceph has been in HEALTH_WARN for more than 15 minutes.
+            Please check "ceph health detail" for more information.
+
   - name: mon
     rules:
       - alert: low monitor quorum count
@@ -28,17 +34,33 @@ groups:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.3.1
         annotations:
-          description: Monitor count in quorum is low.
+          description: |
+            Monitor count in quorum is below three.
+
+            Only {{ $value }} of {{ with query "count(ceph_mon_quorum_status)" }}{{ . | first | value }}{{ end }} monitors are active.
+
+            The following monitors are down:
+            {{- range query "(ceph_mon_quorum_status == 0) + on(ceph_daemon) group_left(hostname) (ceph_mon_metadata * 0)" }}
+              - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }}
+            {{- end }}
+
   - name: osd
     rules:
       - alert: 10% OSDs down
-        expr: sum(ceph_osd_up) / count(ceph_osd_in) <= 0.9
+        expr: (sum(ceph_osd_up) / count(ceph_osd_up)) * 100 <= 90
         labels:
           severity: critical
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.4.1
         annotations:
-          description: More than 10% of OSDs are down.
+          description: |
+            {{ $value | humanize}}% or {{with query "sum(ceph_osd_up)" }}{{ . | first | value }}{{ end }} of {{ with query "count(ceph_osd_up)"}}{{. | first | value }}{{ end }} OSDs are down (>=10%).
+
+            The following OSDs are down:
+            {{- range query "(ceph_osd_up * on(ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0" }}
+              - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }}
+            {{- end }}
+
       - alert: OSD down
         expr: count(ceph_osd_up == 0) > 0
         for: 15m
@@ -47,30 +69,57 @@ groups:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.4.2
         annotations:
-          description: One or more OSDs down for more than 15 minutes.
+          description: |
+            {{ $s := "" }}{{ if gt $value 1.0 }}{{ $s = "s" }}{{ end }}
+            {{ $value }} OSD{{ $s }} down for more than 15 minutes.
+
+            {{ $value }} of {{ query "count(ceph_osd_up)" | first | value }} OSDs are down.
+
+            The following OSD{{ $s }} {{ if eq $s "" }}is{{ else }}are{{ end }} down:
+              {{- range query "(ceph_osd_up * on(ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0"}}
+                - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }}
+              {{- end }}
+
       - alert: OSDs near full
-        expr: ((ceph_osd_stat_bytes_used / ceph_osd_stat_bytes) and on(ceph_daemon) ceph_osd_up == 1) > 0.8
+        expr: |
+          (
+            ((ceph_osd_stat_bytes_used / ceph_osd_stat_bytes) and on(ceph_daemon) ceph_osd_up == 1)
+            * on(ceph_daemon) group_left(hostname) ceph_osd_metadata
+          ) * 100 > 90
         for: 5m
         labels:
           severity: critical
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.4.3
         annotations:
-          description: OSD {{ $labels.ceph_daemon }} is dangerously full, over 80%.
-      # alert on single OSDs flapping
-      - alert: flap osd
-        expr: rate(ceph_osd_up[5m])*60 > 1
+          description: >
+            OSD {{ $labels.ceph_daemon }} on {{ $labels.hostname }} is
+            dangerously full: {{ $value | humanize }}%
+
+      - alert: flapping OSD
+        expr: |
+          (
+            rate(ceph_osd_up[5m])
+            * on(ceph_daemon) group_left(hostname) ceph_osd_metadata
+          ) * 60 > 1
         labels:
           severity: warning
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.4.4
         annotations:
           description: >
-            OSD {{ $labels.ceph_daemon }} was marked down and back up at least once a
+            OSD {{ $labels.ceph_daemon }} on {{ $labels.hostname }} was
+            marked down and back up at {{ $value | humanize }} times once a
             minute for 5 minutes.
+
       # alert on high deviation from average PG count
       - alert: high pg count deviation
-        expr: abs(((ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0) by (job)) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)) > 0.35
+        expr: |
+          abs(
+            (
+              (ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0) by (job)
+            ) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)
+          ) * on(ceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
         for: 5m
         labels:
           severity: warning
@@ -78,8 +127,8 @@ groups:
           oid: 1.3.6.1.4.1.50495.15.1.2.4.5
         annotations:
           description: >
-            OSD {{ $labels.ceph_daemon }} deviates by more than 30% from
-            average PG count.
+            OSD {{ $labels.ceph_daemon }} on {{ $labels.hostname }} deviates
+            by more than 30% from average PG count.
       # alert on high commit latency...but how high is too high
   - name: mds
     rules:
@@ -97,7 +146,10 @@ groups:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.7.1
         annotations:
-          description: One or more PGs are inactive for more than 5 minutes.
+          description: >
+            {{ $value }} PGs have been inactive for more than 5 minutes.
+            Inactive placement groups aren't able to serve read/write
+            requests.
       - alert: pgs unclean
         expr: ceph_pg_total - ceph_pg_clean > 0
         for: 15m
@@ -106,17 +158,22 @@ groups:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.7.2
         annotations:
-          description: One or more PGs are not clean for more than 15 minutes.
+          description: >
+            {{ $value }} PGs haven't been clean for more than 15 minutes.
+            Unclean PGs haven't been able to completely recover from a
+            previous failure.
   - name: nodes
     rules:
       - alert: root volume full
-        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.05
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100 < 5
         labels:
           severity: critical
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.8.1
         annotations:
-          description: Root volume (OSD and MON store) is dangerously full (< 5% free).
+          description: >
+            Root volume (OSD and MON store) is dangerously full: {{ $value | humanize }}% free.
+
       # alert on nic packet errors and drops rates > 1 packet/s
       - alert: network packets dropped
         expr: irate(node_network_receive_drop_total{device!="lo"}[5m]) + irate(node_network_transmit_drop_total{device!="lo"}[5m]) > 1
@@ -128,8 +185,11 @@ groups:
           description: >
             Node {{ $labels.instance }} experiences packet drop > 1
             packet/s on interface {{ $labels.device }}.
+
       - alert: network packet errors
-        expr: irate(node_network_receive_errs_total{device!="lo"}[5m]) + irate(node_network_transmit_errs_total{device!="lo"}[5m]) > 1
+        expr: |
+          irate(node_network_receive_errs_total{device!="lo"}[5m]) +
+          irate(node_network_transmit_errs_total{device!="lo"}[5m]) > 1
         labels:
           severity: warning
           type: ceph_default
@@ -138,29 +198,46 @@ groups:
           description: >
             Node {{ $labels.instance }} experiences packet errors > 1
             packet/s on interface {{ $labels.device }}.
-      # predict fs fillup times
+
+      # predict fs fill-up times
       - alert: storage filling
-        expr: ((node_filesystem_free_bytes) / deriv(node_filesystem_free_bytes[2d]) <= 5) > 0
+        expr: |
+          (
+            (
+              node_filesystem_free_bytes / deriv(node_filesystem_free_bytes[2d])
+              * on(instance) group_left(nodename) node_uname_info
+            ) <= 5
+          ) > 0
         labels:
           severity: warning
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.8.4
         annotations:
           description: >
-            Mountpoint {{ $labels.mountpoint }} will be full in less than 5 days
-            assuming the average fillup rate of the past 48 hours.
+            Mountpoint {{ $labels.mountpoint }} on {{ $labels.nodename }}
+            will be full in less than 5 days assuming the average fill-up
+            rate of the past 48 hours.
+
   - name: pools
     rules:
       - alert: pool full
-        expr: ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail) * on(pool_id) group_right ceph_pool_metadata > 0.9
+        expr: |
+          ceph_pool_stored / ceph_pool_max_avail
+          * on(pool_id) group_right ceph_pool_metadata * 100 > 90
         labels:
           severity: critical
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.9.1
         annotations:
-          description: Pool {{ $labels.name }} at 90% capacity or over.
+          description: Pool {{ $labels.name }} at {{ $value | humanize }}% capacity.
+
       - alert: pool filling up
-        expr: (((ceph_pool_max_avail - ceph_pool_stored) / deriv(ceph_pool_max_avail[2d])) * on(pool_id) group_right ceph_pool_metadata <=5) > 0
+        expr: |
+          (
+            (
+              (ceph_pool_max_avail - ceph_pool_stored) / deriv(ceph_pool_max_avail[2d])
+            ) * on(pool_id) group_right ceph_pool_metadata <= 5
+          ) > 0
         labels:
           severity: warning
           type: ceph_default
@@ -168,4 +245,4 @@ groups:
         annotations:
           description: >
             Pool {{ $labels.name }} will be full in less than 5 days
-            assuming the average fillup rate of the past 48 hours.
+            assuming the average fill-up rate of the past 48 hours.
