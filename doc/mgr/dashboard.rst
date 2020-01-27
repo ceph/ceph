@@ -619,6 +619,56 @@ dashboard in the future.
 User and Role Management
 ------------------------
 
+Password Policy
+^^^^^^^^^^^^^^^
+
+By default the password policy feature is enabled including the following
+checks:
+
+- Is the password longer than N characters?
+- Are the old and new password the same?
+
+The password policy feature can be switched on or off completely::
+
+    $ ceph dashboard set-pwd-policy-enabled <true|false>
+
+The following individual checks can be switched on or off::
+
+  $ ceph dashboard set-pwd-policy-check-length-enabled <true|false>
+  $ ceph dashboard set-pwd-policy-check-oldpwd-enabled <true|false>
+  $ ceph dashboard set-pwd-policy-check-username-enabled <true|false>
+  $ ceph dashboard set-pwd-policy-check-exclusion-list-enabled <true|false>
+  $ ceph dashboard set-pwd-policy-check-complexity-enabled <true|false>
+  $ ceph dashboard set-pwd-policy-check-sequential-chars-enabled <true|false>
+  $ ceph dashboard set-pwd-policy-check-repetitive-chars-enabled <true|false>
+
+Additionally the following options are available to configure the password
+policy behaviour.
+
+- The minimum password length (defaults to 8)::
+
+  $ ceph dashboard set-pwd-policy-min-length <N>
+
+- The minimum password complexity (defaults to 10)::
+
+  $ ceph dashboard set-pwd-policy-min-complexity <N>
+
+  The password complexity is calculated by classifying each character in
+  the password. The complexity count starts by 0. A character is rated by
+  the following rules in the given order.
+
+  - Increase by 1 if the character is a digit.
+  - Increase by 1 if the character is a lower case ASCII character.
+  - Increase by 2 if the character is an upper case ASCII character.
+  - Increase by 3 if the character is a special character like ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``.
+  - Increase by 5 if the character has not been classified by one of the previous rules.
+
+- A list of comma separated words that are not allowed to be used in a
+  password::
+
+  $ ceph dashboard set-pwd-policy-exclusion-list <word>[,...]
+
+
 User Accounts
 ^^^^^^^^^^^^^
 

@@ -47,7 +47,7 @@ export class UserFormComponent implements OnInit {
   messages = new SelectMessages({ empty: this.i18n('There are no roles.') }, this.i18n);
   action: string;
   resource: string;
-  passwordPolicyHelpText: string;
+  passwordPolicyHelpText = '';
   passwordStrengthLevelClass: string;
   passwordValuation: string;
   icons = Icons;
@@ -79,7 +79,9 @@ export class UserFormComponent implements OnInit {
   }
 
   createForm() {
-    this.passwordPolicyHelpText = this.passwordPolicyService.getHelpText();
+    this.passwordPolicyService.getHelpText().subscribe((helpText: string) => {
+      this.passwordPolicyHelpText = helpText;
+    });
     this.userForm = this.formBuilder.group(
       {
         username: ['', [Validators.required]],

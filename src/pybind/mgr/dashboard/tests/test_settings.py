@@ -116,6 +116,15 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
         self.assertIn('name', data[0].keys())
         self.assertIn('value', data[0].keys())
 
+    def test_settings_list_filtered(self):
+        self._get('/api/settings?names=GRAFANA_ENABLED,PWD_POLICY_ENABLED')
+        self.assertStatus(200)
+        data = self.json_body()
+        self.assertTrue(len(data) == 2)
+        names = [option['name'] for option in data]
+        self.assertIn('GRAFANA_ENABLED', names)
+        self.assertIn('PWD_POLICY_ENABLED', names)
+
     def test_rgw_daemon_get(self):
         self._get('/api/settings/grafana-api-username')
         self.assertStatus(200)

@@ -11,6 +11,27 @@ from .helper import DashboardTestCase, JObj, JLeaf
 
 class UserTest(DashboardTestCase):
     @classmethod
+    def setUpClass(cls):
+        super(UserTest, cls).setUpClass()
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-length-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-oldpwd-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-username-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-exclusion-list-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-complexity-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-sequential-chars-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-repetitive-chars-enabled', 'true'])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-username-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-exclusion-list-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-complexity-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-sequential-chars-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-repetitive-chars-enabled', 'false'])
+        super(UserTest, cls).tearDownClass()
+
+    @classmethod
     def _create_user(cls, username=None, password=None, name=None, email=None, roles=None,
                      enabled=True, pwd_expiration_date=None):
         data = {}
@@ -220,7 +241,7 @@ class UserTest(DashboardTestCase):
         })
         self.assertStatus(400)
         self.assertError('password_policy_validation_failed', 'user',
-                         'Password must not contain keywords.')
+                         'Password must not contain the keyword "OSD".')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_sequential_characters(self):
