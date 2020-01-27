@@ -355,8 +355,7 @@ void BootstrapRequest<I>::prepare_replay() {
   auto ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_prepare_replay>(this);
   auto request = (*m_state_builder)->create_prepare_replay_request(
-    m_local_mirror_uuid, m_promotion_state, m_progress_ctx, m_do_resync,
-    &m_syncing, ctx);
+    m_local_mirror_uuid, m_progress_ctx, m_do_resync, &m_syncing, ctx);
   request->send();
 }
 

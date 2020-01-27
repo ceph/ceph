@@ -218,6 +218,7 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
 
   state_builder->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
   state_builder->remote_image_id = m_remote_image_id;
+  state_builder->remote_promotion_state = m_promotion_state;
   state_builder->remote_journaler = m_remote_journaler;
   state_builder->remote_client_state = client_state;
   state_builder->remote_client_meta = client_meta;
