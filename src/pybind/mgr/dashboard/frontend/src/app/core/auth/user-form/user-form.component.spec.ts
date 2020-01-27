@@ -20,6 +20,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { PasswordPolicyService } from './../../../shared/services/password-policy.service';
 import { UserFormComponent } from './user-form.component';
 import { UserFormModel } from './user-form.model';
 
@@ -62,6 +63,7 @@ describe('UserFormComponent', () => {
   );
 
   beforeEach(() => {
+    spyOn(TestBed.get(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));
     fixture = TestBed.createComponent(UserFormComponent);
     component = fixture.componentInstance;
     form = component.userForm;
