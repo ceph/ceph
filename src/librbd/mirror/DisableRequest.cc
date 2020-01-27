@@ -48,7 +48,8 @@ void DisableRequest<I>::send_get_mirror_info() {
       klass, &klass::handle_get_mirror_info>(this);
 
   auto req = GetInfoRequest<I>::create(*m_image_ctx, &m_mirror_image,
-                                       &m_promotion_state, ctx);
+                                       &m_promotion_state,
+                                       &m_primary_mirror_uuid, ctx);
   req->send();
 }
 

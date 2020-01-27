@@ -239,7 +239,8 @@ void BootstrapRequest<I>::get_remote_mirror_info() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_mirror_info>(
       this);
   auto request = librbd::mirror::GetInfoRequest<I>::create(
-    *m_remote_image_ctx, &m_mirror_image, &m_promotion_state, ctx);
+    *m_remote_image_ctx, &m_mirror_image, &m_promotion_state,
+    &m_remote_primary_mirror_uuid, ctx);
   request->send();
 }
 
@@ -284,7 +285,6 @@ void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
     close_remote_image();
     return;
   }
-
 
   if ((*m_state_builder)->local_image_id.empty()) {
     create_local_image();

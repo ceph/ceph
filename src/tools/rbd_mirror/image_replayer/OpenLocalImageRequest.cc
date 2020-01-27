@@ -158,7 +158,8 @@ void OpenLocalImageRequest<I>::send_get_mirror_info() {
     &OpenLocalImageRequest<I>::handle_get_mirror_info>(
       this);
   auto request = librbd::mirror::GetInfoRequest<I>::create(
-    **m_local_image_ctx, &m_mirror_image, &m_promotion_state, ctx);
+    **m_local_image_ctx, &m_mirror_image, &m_promotion_state,
+    &m_primary_mirror_uuid, ctx);
   request->send();
 }
 

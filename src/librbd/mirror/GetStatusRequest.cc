@@ -39,7 +39,8 @@ void GetStatusRequest<I>::get_info() {
   auto ctx = create_context_callback<
     GetStatusRequest<I>, &GetStatusRequest<I>::handle_get_info>(this);
   auto req = GetInfoRequest<I>::create(m_image_ctx, m_mirror_image,
-                                       m_promotion_state, ctx);
+                                       m_promotion_state,
+                                       &m_primary_mirror_uuid, ctx);
   req->send();
 }
 

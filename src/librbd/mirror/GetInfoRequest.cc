@@ -27,10 +27,11 @@ GetInfoRequest<I>::GetInfoRequest(librados::IoCtx& io_ctx,
                                   const std::string &image_id,
                                   cls::rbd::MirrorImage *mirror_image,
                                   PromotionState *promotion_state,
+                                  std::string* primary_mirror_uuid,
                                   Context *on_finish)
   : m_io_ctx(io_ctx), m_op_work_queue(op_work_queue), m_image_id(image_id),
     m_mirror_image(mirror_image), m_promotion_state(promotion_state),
-    m_on_finish(on_finish),
+    m_primary_mirror_uuid(primary_mirror_uuid), m_on_finish(on_finish),
     m_cct(reinterpret_cast<CephContext *>(io_ctx.cct())) {
 }
 
@@ -38,11 +39,13 @@ template <typename I>
 GetInfoRequest<I>::GetInfoRequest(I &image_ctx,
                                   cls::rbd::MirrorImage *mirror_image,
                                   PromotionState *promotion_state,
+                                  std::string* primary_mirror_uuid,
                                   Context *on_finish)
   : m_image_ctx(&image_ctx), m_io_ctx(image_ctx.md_ctx),
     m_op_work_queue(image_ctx.op_work_queue), m_image_id(image_ctx.id),
     m_mirror_image(mirror_image), m_promotion_state(promotion_state),
-    m_on_finish(on_finish), m_cct(image_ctx.cct) {
+    m_primary_mirror_uuid(primary_mirror_uuid), m_on_finish(on_finish),
+    m_cct(image_ctx.cct) {
 }
 
 template <typename I>
@@ -120,8 +123,12 @@ void GetInfoRequest<I>::handle_get_journal_tag_owner(int r) {
 
   if (m_mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
     *m_promotion_state = PROMOTION_STATE_PRIMARY;
+    *m_primary_mirror_uuid = "";
   } else if (m_mirror_uuid == Journal<>::ORPHAN_MIRROR_UUID) {
     *m_promotion_state = PROMOTION_STATE_ORPHAN;
+    *m_primary_mirror_uuid = "";
+  } else {
+    *m_primary_mirror_uuid = m_mirror_uuid;
   }
 
   finish(0);
@@ -240,6 +247,7 @@ template <typename I>
 void GetInfoRequest<I>::calc_promotion_state(
     const std::map<librados::snap_t, SnapInfo> &snap_info) {
   *m_promotion_state = PROMOTION_STATE_PRIMARY;
+  *m_primary_mirror_uuid = "";
 
   for (auto it = snap_info.rbegin(); it != snap_info.rend(); it++) {
     auto primary = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
@@ -258,12 +266,14 @@ void GetInfoRequest<I>::calc_promotion_state(
         *m_promotion_state = PROMOTION_STATE_ORPHAN;
       } else {
         *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+        *m_primary_mirror_uuid = non_primary->primary_mirror_uuid;
       }
       break;
     }
   }
 
-  ldout(m_cct, 20) << *m_promotion_state << dendl;
+  ldout(m_cct, 10) << "promotion_state=" << *m_promotion_state << ", "
+                   << "primary_mirror_uuid=" << *m_promotion_state << dendl;
 }
 
 } // namespace mirror

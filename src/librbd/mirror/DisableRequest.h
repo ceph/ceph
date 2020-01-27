@@ -87,6 +87,7 @@ private:
   bool m_is_primary = false;
   cls::rbd::MirrorImage m_mirror_image;
   PromotionState m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+  std::string m_primary_mirror_uuid;
   std::set<cls::journal::Client> m_clients;
   std::map<std::string, int> m_ret;
   std::map<std::string, int> m_current_ops;
