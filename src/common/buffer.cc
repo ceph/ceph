@@ -1274,20 +1274,8 @@ static ceph::spinlock debug_lock;
     // steal the other guy's buffers
     _len += bl._len;
     if (!(flags & CLAIM_ALLOW_NONSHAREABLE)) {
-      auto curbuf = bl._buffers.begin();
-      auto curbuf_prev = bl._buffers.before_begin();
-
-      while (curbuf != bl._buffers.end()) {
-	const auto* const raw = curbuf->_raw;
-	if (unlikely(raw && !raw->is_shareable())) {
-	  auto* clone = ptr_node::copy_hypercombined(*curbuf);
-	  curbuf = bl._buffers.erase_after_and_dispose(curbuf_prev);
-	  bl._buffers.insert_after(curbuf_prev, *clone);
-	  ++curbuf_prev;
-	} else {
-	  curbuf_prev = curbuf++;
-	}
-      }
+      // NOP for now.
+      // TODO: kill CLAIM_ALLOW_NONSHAREABLE
     }
     _buffers.splice_back(bl._buffers);
     bl._carriage = &always_empty_bptr;
@@ -2132,26 +2120,10 @@ buffer::ptr_node::create_hypercombined(ceph::unique_leakable_ptr<buffer::raw> r)
     new ptr_node(std::move(r)));
 }
 
-buffer::ptr_node* buffer::ptr_node::copy_hypercombined(
-  const buffer::ptr_node& copy_this)
-{
-  // FIXME: we don't currently hypercombine buffers due to crashes
-  // observed in the rados suite. After fixing we'll use placement
-  // new to create ptr_node on buffer::raw::bptr_storage.
-  auto raw_new = copy_this._raw->clone();
-  return new ptr_node(copy_this, std::move(raw_new));
-}
-
 buffer::ptr_node* buffer::ptr_node::cloner::operator()(
   const buffer::ptr_node& clone_this)
 {
-  const raw* const raw_this = clone_this._raw;
-  if (likely(!raw_this || raw_this->is_shareable())) {
-    return new ptr_node(clone_this);
-  } else {
-    // clone non-shareable buffers (make shareable)
-   return copy_hypercombined(clone_this);
-  }
+  return new ptr_node(clone_this);
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {
