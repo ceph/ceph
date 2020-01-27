@@ -43,13 +43,12 @@ tasks:
     wait-for-osds-up: true
 - exec:
     mon.a:
-    - ceph mon enable-msgr2
-    - ceph config rm global mon_warn_on_msgr2_not_enabled
-- exec:
-    mon.a:
     - ceph osd dump -f json-pretty
     - ceph versions
-    - ceph osd require-osd-release nautilus
+    - ceph mon enable-msgr2
+    - ceph config rm global mon_warn_on_msgr2_not_enabled
+    - ceph osd require-osd-release octopus
+    - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
     #- ceph osd set-require-min-compat-client nautilus
 - ceph.healthy:
 - print: "**** done ceph.restart"
