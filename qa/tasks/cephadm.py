@@ -588,8 +588,6 @@ def ceph_osds(ctx, config):
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
             _shell(ctx, cluster_name, remote, [
-                'ceph-volume', 'lvm', 'zap', dev])
-            _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'osd', 'create',
                 remote.shortname + ':' + dev
             ])
