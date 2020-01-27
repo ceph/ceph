@@ -1,5 +1,7 @@
+import errno
 import json
 import logging
+
 import cephfs
 import orchestrator
 from dashboard.services.cephx import CephX
@@ -236,3 +238,51 @@ def create_rados_pool(vc_mgr, pool_name):
         #return r, outb, outs
     log.info("pool enable done r: {}".format(r))
     """
+def create_nfs_cluster(fs_mgr, size, cluster_id):
+    mgr = fs_mgr.vc.mgr
+    pool_list = [p['pool_name'] for p in mgr.get_osdmap().dump().get('pools', [])]
+    pool_name = 'nfs-ganesha'
+    pool_ns = 'nfsgw'
+    client = 'client.ganesha-%s' % cluster_id
+
+    if pool_name not in pool_list:
+        r, out, err = create_pool(mgr, pool_name)
+        if r != 0:
+            return r, out, err
+        log.info("{}".format(out))
+
+    ret, out, err = mgr.mon_command({
+        'prefix': 'auth get-or-create',
+        'entity': client,
+        'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s' % (pool_name, pool_ns)],
+        })
+
+    if ret!= 0:
+        return ret, out, err
+
+    ret, keyring, err = mgr.mon_command({
+        'prefix': 'auth print-key', 'entity': client,})
+
+    if ret!= 0:
+        return ret, out, err
+
+    ps = orchestrator.PlacementSpec(count=size)
+    spec = orchestrator.NFSServiceSpec(cluster_id, pool_name, pool_ns, ps)
+    try:
+        completion = mgr.add_nfs(spec)
+        mgr._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+    except Exception as e:
+        log.exception("Failed to create NFS Cluster")
+        return -errno.EINVAL, "", str(e)
+
+    if size > 1:
+        try:
+            completion = mgr.update_nfs(spec)
+            mgr._orchestrator_wait([completion])
+            orchestrator.raise_if_exception(completion)
+        except Exception as e:
+            log.exception("Failed to scale NFS Cluster")
+            return -errno.EINVAL, "", str(e)
+
+    return 0,"","NFS Cluster Created Successfully"
