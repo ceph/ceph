@@ -78,8 +78,8 @@ struct GetMirrorImageIdRequest<librbd::MockTestImageCtx> {
 template<>
 struct StateBuilder<librbd::MockTestImageCtx> {
   std::string local_image_id;
-  std::string remote_mirror_uuid;
   std::string remote_image_id;
+  std::string remote_mirror_uuid;
 
   virtual ~StateBuilder() {}
 
@@ -154,19 +154,6 @@ public:
                 }));
   }
 
-  void expect_mirror_uuid_get(librados::IoCtx &io_ctx,
-                              const std::string &mirror_uuid, int r) {
-    bufferlist bl;
-    encode(mirror_uuid, bl);
-
-    EXPECT_CALL(get_mock_io_ctx(io_ctx),
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"), _, _, _))
-      .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
-                                          *out_bl = bl;
-                                        })),
-                      Return(r)));
-  }
-
   void expect_get_mirror_image(librados::IoCtx &io_ctx,
                                cls::rbd::MirrorImageMode mode, int r) {
     cls::rbd::MirrorImage mirror_image;
@@ -214,7 +201,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
-  expect_mirror_uuid_get(m_remote_io_ctx, "remote mirror uuid", 0);
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
@@ -242,6 +228,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
+                                                   {"remote mirror uuid", ""},
                                                    nullptr,
                                                    &mock_state_builder,
                                                    &ctx);
@@ -249,8 +236,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
 
   ASSERT_EQ(0, ctx.wait());
   ASSERT_TRUE(mock_state_builder != nullptr);
-  ASSERT_EQ(std::string("remote mirror uuid"),
-            mock_journal_state_builder.remote_mirror_uuid);
   ASSERT_EQ(std::string("remote image id"),
             mock_journal_state_builder.remote_image_id);
   ASSERT_TRUE(mock_journal_state_builder.remote_journaler != nullptr);
@@ -263,7 +248,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
-  expect_mirror_uuid_get(m_remote_io_ctx, "remote mirror uuid", 0);
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
@@ -294,6 +278,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
+                                                   {"remote mirror uuid", ""},
                                                    nullptr,
                                                    &mock_state_builder,
                                                    &ctx);
@@ -301,8 +286,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
 
   ASSERT_EQ(0, ctx.wait());
   ASSERT_TRUE(mock_state_builder != nullptr);
-  ASSERT_EQ(std::string("remote mirror uuid"),
-            mock_journal_state_builder.remote_mirror_uuid);
   ASSERT_EQ(std::string("remote image id"),
             mock_journal_state_builder.remote_image_id);
   ASSERT_TRUE(mock_journal_state_builder.remote_journaler != nullptr);
@@ -310,37 +293,11 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
             mock_journal_state_builder.remote_client_state);
 }
 
-TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorUuidError) {
-  ::journal::MockJournaler mock_remote_journaler;
-  MockThreads mock_threads(m_threads);
-
-  InSequence seq;
-  expect_mirror_uuid_get(m_remote_io_ctx, "", -EINVAL);
-
-  MockJournalStateBuilder mock_journal_state_builder;
-  MockStateBuilder* mock_state_builder = nullptr;
-  C_SaferCond ctx;
-  auto req = MockPrepareRemoteImageRequest::create(&mock_threads,
-                                                   m_local_io_ctx,
-                                                   m_remote_io_ctx,
-                                                   "global image id",
-                                                   "local mirror uuid",
-                                                   nullptr,
-                                                   &mock_state_builder,
-                                                   &ctx);
-  req->send();
-
-  ASSERT_EQ(-EINVAL, ctx.wait());
-  ASSERT_EQ(std::string(""), mock_journal_state_builder.remote_mirror_uuid);
-  ASSERT_TRUE(mock_journal_state_builder.remote_journaler == nullptr);
-}
-
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorImageIdError) {
   ::journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
-  expect_mirror_uuid_get(m_remote_io_ctx, "remote mirror uuid", 0);
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "", -EINVAL);
 
@@ -352,14 +309,13 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorImageIdError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
+                                                   {"remote mirror uuid", ""},
                                                    nullptr,
                                                    &mock_state_builder,
                                                    &ctx);
   req->send();
 
   ASSERT_EQ(-EINVAL, ctx.wait());
-  ASSERT_EQ(std::string("remote mirror uuid"),
-            mock_journal_state_builder.remote_mirror_uuid);
   ASSERT_TRUE(mock_journal_state_builder.remote_journaler == nullptr);
 }
 
@@ -368,7 +324,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorModeError) {
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
-  expect_mirror_uuid_get(m_remote_io_ctx, "remote mirror uuid", 0);
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
@@ -384,6 +339,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorModeError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
+                                                   {"remote mirror uuid", ""},
                                                    nullptr,
                                                    &mock_state_builder,
                                                    &ctx);
@@ -398,7 +354,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetClientError) {
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
-  expect_mirror_uuid_get(m_remote_io_ctx, "remote mirror uuid", 0);
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
@@ -420,6 +375,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetClientError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
+                                                   {"remote mirror uuid", ""},
                                                    nullptr,
                                                    &mock_state_builder,
                                                    &ctx);
@@ -434,7 +390,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, RegisterClientError) {
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
-  expect_mirror_uuid_get(m_remote_io_ctx, "remote mirror uuid", 0);
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request,
                              "remote image id", 0);
@@ -465,6 +420,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, RegisterClientError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
+                                                   {"remote mirror uuid", ""},
                                                    nullptr,
                                                    &mock_state_builder,
                                                    &ctx);

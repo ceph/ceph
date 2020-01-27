@@ -163,7 +163,8 @@ void BootstrapRequest<I>::prepare_remote_image() {
     BootstrapRequest, &BootstrapRequest<I>::handle_prepare_remote_image>(this);
   auto req = image_replayer::PrepareRemoteImageRequest<I>::create(
     m_threads, m_local_io_ctx, m_remote_io_ctx, m_global_image_id,
-    m_local_mirror_uuid, m_cache_manager_handler, m_state_builder, ctx);
+    m_local_mirror_uuid, m_remote_pool_meta, m_cache_manager_handler,
+    m_state_builder, ctx);
   req->send();
 }
 
@@ -172,6 +173,9 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
   dout(10) << "r=" << r << dendl;
 
   auto state_builder = *m_state_builder;
+  ceph_assert(state_builder == nullptr ||
+              !state_builder->remote_mirror_uuid.empty());
+
   if (state_builder != nullptr && state_builder->is_local_primary()) {
     dout(5) << "local image is primary" << dendl;
     finish(-ENOMSG);

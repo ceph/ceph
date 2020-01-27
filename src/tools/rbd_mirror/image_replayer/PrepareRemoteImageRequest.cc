@@ -33,51 +33,8 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::send() {
-  get_remote_mirror_uuid();
-}
-
-template <typename I>
-void PrepareRemoteImageRequest<I>::get_remote_mirror_uuid() {
-  dout(10) << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_uuid_get_start(&op);
-
-  librados::AioCompletion *aio_comp = create_rados_callback<
-    PrepareRemoteImageRequest<I>,
-    &PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid>(this);
-  int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid(int r) {
-  if (r >= 0) {
-    auto it = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_uuid_get_finish(&it, &m_remote_mirror_uuid);
-    if (r >= 0 && m_remote_mirror_uuid.empty()) {
-      r = -ENOENT;
-    }
-  }
-
-  dout(10) << "r=" << r << dendl;
-  if (r < 0) {
-    if (r == -ENOENT) {
-      dout(5) << "remote mirror uuid missing" << dendl;
-    } else {
-      derr << "failed to retrieve remote mirror uuid: " << cpp_strerror(r)
-           << dendl;
-    }
-    finish(r);
-    return;
-  }
-
-  auto state_builder = *m_state_builder;
-  if (state_builder != nullptr) {
-    // if the local image exists but the remote image doesn't, we still
-    // want to populate the remote mirror uuid that we've looked up
-    state_builder->remote_mirror_uuid = m_remote_mirror_uuid;
+  if (*m_state_builder != nullptr) {
+    (*m_state_builder)->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
   }
 
   get_remote_image_id();
@@ -265,7 +222,7 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
     *m_state_builder = state_builder;
   }
 
-  state_builder->remote_mirror_uuid = m_remote_mirror_uuid;
+  state_builder->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
   state_builder->remote_image_id = m_remote_image_id;
   state_builder->remote_journaler = m_remote_journaler;
   state_builder->remote_client_state = client_state;
