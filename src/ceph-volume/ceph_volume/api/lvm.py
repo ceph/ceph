@@ -126,7 +126,7 @@ def sizing(device_size, parts=None, size=None):
     return {
         'parts': parts,
         'percentages': percentages,
-        'sizes': int(sizes),
+        'sizes': int(sizes/1024/1024/1024),
     }
 
 
@@ -516,8 +516,8 @@ def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
 #
 #############################
 
-#TODO add vg_extent_size here to have that available in VolumeGroup class
-VG_FIELDS = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
+VG_FIELDS = 'vg_name,pv_count,lv_count,vg_attr,vg_extent_count,vg_free_count,vg_extent_size'
+VG_CMD_OPTIONS = ['--noheadings', '--readonly', '--units=b', '--nosuffix', '--separator=";"']
 
 
 def get_api_vgs():
@@ -527,17 +527,15 @@ def get_api_vgs():
 
     Command and sample delimited output should look like::
 
-        $ vgs --noheadings --units=g --readonly --separator=';' \
-          -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
-          ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
-          osd_vg;3;1;0;wz--n-;29.21g;9.21g
+        $ vgs --noheadings --units=b --readonly --separator=';' \
+          -o vg_name,pv_count,lv_count,vg_attr,vg_free_count,vg_extent_size
+          ubuntubox-vg;1;2;wz--n-;12;
 
     To normalize sizing, the units are forced in 'g' which is equivalent to
     gigabytes, which uses multiples of 1024 (as opposed to 1000)
     """
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"',
-         '-o', VG_FIELDS],
+        ['vgs'] + VG_CMD_OPTIONS + ['-o', VG_FIELDS],
         verbose_on_failure=False
     )
     return _output_parser(stdout, VG_FIELDS)
@@ -560,43 +558,19 @@ class VolumeGroup(object):
     def __repr__(self):
         return self.__str__()
 
-    def _parse_size(self, size):
-        error_msg = "Unable to convert vg size to integer: '%s'" % str(size)
-        try:
-            integer, _ = size.split('g')
-        except ValueError:
-            logger.exception(error_msg)
-            raise RuntimeError(error_msg)
-
-        return util.str_to_int(integer)
-
     @property
     def free(self):
         """
-        Parse the available size in gigabytes from the ``vg_free`` attribute, that
-        will be a string with a character ('g') to indicate gigabytes in size.
-        Returns a rounded down integer to ease internal operations::
-
-        >>> data_vg.vg_free
-        '0.01g'
-        >>> data_vg.size
-        0
+        Return free space in VG in bytes
         """
-        return self._parse_size(self.vg_free)
+        return int(self.vg_extent_size) * int(self.vg_free_count)
 
     @property
     def size(self):
         """
-        Parse the size in gigabytes from the ``vg_size`` attribute, that
-        will be a string with a character ('g') to indicate gigabytes in size.
-        Returns a rounded down integer to ease internal operations::
-
-        >>> data_vg.vg_size
-        '1024.9g'
-        >>> data_vg.size
-        1024
+        Returns VG size in bytes
         """
-        return self._parse_size(self.vg_size)
+        return int(self.vg_extent_size) * int(self.vg_extent_count)
 
     def sizing(self, parts=None, size=None):
         """
@@ -635,7 +609,8 @@ class VolumeGroup(object):
         vg_free_count = util.str_to_int(self.vg_free_count)
 
         if size:
-            extents = int(size * vg_free_count / self.free)
+            size = size * 1024 * 1024 * 1024
+            extents = int(size / int(self.vg_extent_size))
             disk_sizing = sizing(self.free, size=size, parts=parts)
         else:
             if parts is not None:
@@ -650,6 +625,18 @@ class VolumeGroup(object):
         disk_sizing['extents'] = int(extents)
         disk_sizing['percentages'] = extent_sizing['percentages']
         return disk_sizing
+
+    def bytes_to_extents(self, size):
+        '''
+        Return a how many extents we can fit into a size in bytes.
+        '''
+        return int(size / int(self.vg_extent_size))
+
+    def slots_to_extents(self, slots):
+        '''
+        Return how many extents fit the VG slot times
+        '''
+        return int(int(self.vg_free_count) / slots)
 
 
 class VolumeGroups(list):
@@ -768,8 +755,6 @@ def create_vg(devices, name=None, name_prefix=None):
         name = "ceph-%s" % str(uuid.uuid4())
     process.run([
         'vgcreate',
-        '-s',
-        '1G',
         '--force',
         '--yes',
         name] + devices
@@ -864,8 +849,7 @@ def get_vg(vg_name=None, vg_tags=None, vgs=None):
 
 def get_device_vgs(device, name_prefix=''):
     stdout, stderr, returncode = process.call(
-        ['pvs', '--noheadings', '--readonly', '--units=g', '--separator=";"',
-         '-o', VG_FIELDS, device],
+        ['pvs'] + VG_CMD_OPTIONS + ['-o', VG_FIELDS, device],
         verbose_on_failure=False
     )
     vgs = _output_parser(stdout, VG_FIELDS)
@@ -1112,14 +1096,21 @@ class Volumes(list):
         return lvs[0]
 
 
-def create_lv(name_prefix, uuid, vg=None, device=None, extents=None, size=None, tags=None):
+def create_lv(name_prefix,
+              uuid,
+              vg=None,
+              device=None,
+              slots=None,
+              extents=None,
+              size=None,
+              tags=None):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
         lvcreate -L 50G -n gfslv vg0
 
-    ``name_prefix`` is required. If ``size`` is provided it must follow
-    lvm's size notation (like 1G, or 20M). Tags are an optional dictionary and is expected to
+    ``name_prefix`` is required. If ``size`` is provided its expected to be a
+    byte count. Tags are an optional dictionary and is expected to
     conform to the convention of prefixing them with "ceph." like::
 
         {"ceph.block_device": "/dev/ceph/osd-1"}
@@ -1129,9 +1120,12 @@ def create_lv(name_prefix, uuid, vg=None, device=None, extents=None, size=None, 
                  form the LV name
     :param vg: optional, pass an existing VG to create LV
     :param device: optional, device to use. Either device of vg must be passed
-    :param extends: optional, how many lvm extends to use
-    :param size: optional, LV size, must follow lvm's size notation, supersedes
-    extends
+    :param slots: optional, number of slots to divide vg up, LV will occupy one
+                    one slot if enough space is available
+    :param extends: optional, how many lvm extends to use, supersedes slots
+    :param size: optional, target LV size in bytes, supersedes extents,
+                            resulting LV might be smaller depending on extent
+                            size of the underlying VG
     :param tags: optional, a dict of lvm tags to set on the LV
     """
     name = '{}-{}'.format(name_prefix, uuid)
@@ -1141,27 +1135,26 @@ def create_lv(name_prefix, uuid, vg=None, device=None, extents=None, size=None, 
         # check if a vgs starting with ceph already exists
         vgs = get_device_vgs(device, 'ceph')
         if vgs:
-            vg = vgs[0].vg_name
+            vg = vgs[0]
         else:
             # create on if not
-            vg = create_vg(device, name_prefix='ceph').vg_name
+            vg = create_vg(device, name_prefix='ceph')
     assert(vg)
 
     if size:
-        command = [
-            'lvcreate',
-            '--yes',
-            '-L',
-            '{}'.format(size),
-            '-n', name, vg
-        ]
-    elif extents:
+        extents = vg.bytes_to_extents(size)
+        logger.debug('size was passed: {} -> {}'.format(size, extents))
+    elif slots and not extents:
+        extents = vg.slots_to_extents(slots)
+        logger.debug('slots was passed: {} -> {}'.format(slots, extents))
+
+    if extents:
         command = [
             'lvcreate',
             '--yes',
             '-l',
             '{}'.format(extents),
-            '-n', name, vg
+            '-n', name, vg.vg_name
         ]
     # create the lv with all the space available, this is needed because the
     # system call is different for LVM
@@ -1171,11 +1164,11 @@ def create_lv(name_prefix, uuid, vg=None, device=None, extents=None, size=None, 
             '--yes',
             '-l',
             '100%FREE',
-            '-n', name, vg
+            '-n', name, vg.vg_name
         ]
     process.run(command)
 
-    lv = get_lv(lv_name=name, vg_name=vg)
+    lv = get_lv(lv_name=name, vg_name=vg.vg_name)
 
     if tags is None:
         tags = {
@@ -1351,11 +1344,6 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
 # Later, these can be easily merged with get_api_* methods
 #
 ###########################################################
-
-PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
-VG_FIELDS = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
-LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
-
 def get_pvs(fields=PV_FIELDS, sep='";"', filters=''):
     args = ['pvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
             filters, '-o', fields]

@@ -146,10 +146,10 @@ class SingleType(Strategy):
             journal_lv_extents = device_vg.sizing(size=self.journal_size.gb.as_int())['extents']
             data_uuid = system.generate_uuid()
             data_lv = lvm.create_lv(
-                'osd-data', data_uuid, vg=device_vg.name, extents=data_lv_extents)
+                'osd-data', data_uuid, vg=device_vg, extents=data_lv_extents)
             journal_uuid = system.generate_uuid()
             journal_lv = lvm.create_lv(
-                'osd-journal', journal_uuid, vg=device_vg.name, extents=journal_lv_extents)
+                'osd-journal', journal_uuid, vg=device_vg, extents=journal_lv_extents)
 
             command = ['--filestore', '--data']
             command.append('%s/%s' % (device_vg.name, data_lv.name))
@@ -254,7 +254,7 @@ class MixedType(MixedStrategy):
 
         # find how many journals are possible from the common VG
         if self.common_vg:
-            common_vg_size = disk.Size(gb=self.common_vg.free)
+            common_vg_size = disk.Size(b=self.common_vg.free)
         else:
             common_vg_size = disk.Size(gb=0)
 
@@ -369,10 +369,10 @@ class MixedType(MixedStrategy):
             data_lv_extents = data_vg.sizing(parts=1)['extents']
             data_uuid = system.generate_uuid()
             data_lv = lvm.create_lv(
-                'osd-data', data_uuid, vg=data_vg.name, extents=data_lv_extents)
+                'osd-data', data_uuid, vg=data_vg, extents=data_lv_extents)
             journal_uuid = system.generate_uuid()
             journal_lv = lvm.create_lv(
-                'osd-journal', journal_uuid, vg=journal_vg.name, size=journal_size)
+                'osd-journal', journal_uuid, vg=journal_vg, size=journal_size)
 
             command = ['--filestore', '--data']
             command.append('%s/%s' % (data_vg.name, data_lv.name))
