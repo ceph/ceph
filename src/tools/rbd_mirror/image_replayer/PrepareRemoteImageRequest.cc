@@ -16,6 +16,7 @@
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -121,7 +122,9 @@ void PrepareRemoteImageRequest<I>::handle_get_mirror_info(int r) {
     get_client();
     break;
   case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
-    // TODO
+    finalize_snapshot_state_builder();
+    finish(0);
+    break;
   default:
     derr << "unsupported mirror image mode " << m_mirror_image.mode << " "
          << "for image " << m_global_image_id << dendl;
@@ -234,6 +237,25 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
   state_builder->remote_journaler = m_remote_journaler;
   state_builder->remote_client_state = client_state;
   state_builder->remote_client_meta = client_meta;
+}
+
+template <typename I>
+void PrepareRemoteImageRequest<I>::finalize_snapshot_state_builder() {
+  snapshot::StateBuilder<I>* state_builder = nullptr;
+  if (*m_state_builder != nullptr) {
+    // already verified that it's a matching builder in
+    // 'handle_get_mirror_info'
+    state_builder = dynamic_cast<snapshot::StateBuilder<I>*>(*m_state_builder);
+    ceph_assert(state_builder != nullptr);
+  } else {
+    state_builder = snapshot::StateBuilder<I>::create(m_global_image_id);
+    *m_state_builder = state_builder;
+  }
+
+  state_builder->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
+  state_builder->remote_mirror_peer_uuid = m_remote_pool_meta.mirror_peer_uuid;
+  state_builder->remote_image_id = m_remote_image_id;
+  state_builder->remote_promotion_state = m_promotion_state;
 }
 
 template <typename I>

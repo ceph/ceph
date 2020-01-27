@@ -42,6 +42,13 @@ bool StateBuilder<I>::is_disconnected() const {
 }
 
 template <typename I>
+bool StateBuilder<I>::is_linked() const {
+  // the remote has to have us registered as a peer
+  return (image_replayer::StateBuilder<I>::is_linked() &&
+          !remote_mirror_peer_uuid.empty());
+}
+
+template <typename I>
 cls::rbd::MirrorImageMode StateBuilder<I>::get_mirror_image_mode() const {
   return cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT;
 }

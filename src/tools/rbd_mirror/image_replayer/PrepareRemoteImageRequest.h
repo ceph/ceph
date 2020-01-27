@@ -92,13 +92,16 @@ private:
    *    |
    *    | (journal)
    *    \-----------> GET_CLIENT
-   *                      |
-   *                      v (skip if not needed)
-   *                  REGISTER_CLIENT
-   *                      |
-   *                      v
-   *                  <finish>
-
+   *    |                 |
+   *    |                 v (skip if not needed)
+   *    |             REGISTER_CLIENT
+   *    |                 |
+   *    |                 |
+   *    |/----------------/
+   *    |
+   *    v
+   * <finish>
+   *
    * @endverbatim
    */
 
@@ -136,6 +139,8 @@ private:
 
   void finalize_journal_state_builder(cls::journal::ClientState client_state,
                                       const MirrorPeerClientMeta& client_meta);
+  void finalize_snapshot_state_builder();
+
   void finish(int r);
 };
 
