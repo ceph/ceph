@@ -1898,7 +1898,7 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   iovec iov[IOV_MAX];
 
   auto p = std::cbegin(_buffers);
-  uint64_t left_pbrs = std::size(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
   while (left_pbrs) {
     ssize_t bytes = 0;
     unsigned iovlen = 0;
