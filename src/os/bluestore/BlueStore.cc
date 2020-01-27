@@ -7753,7 +7753,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
     dout(10) << "fsck converting " << o->oid << " omap to per-pool" << dendl;
     bufferlist h;
     map<string, bufferlist> kv;
-    int r = _omap_get(o->c, o->oid, &h, &kv);
+    int r = _onode_omap_get(o, &h, &kv);
     if (r < 0) {
       derr << " got " << r << " " << cpp_strerror(r) << dendl;
     } else {
@@ -8905,6 +8905,37 @@ void BlueStore::inject_false_free(coll_t cid, ghobject_t oid)
   ceph_assert(injected);
   db->submit_transaction_sync(txn);
 }
+
+void BlueStore::inject_legacy_omap()
+{
+  dout(1) << __func__ << dendl;
+  per_pool_omap = false;
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+  txn->rmkey(PREFIX_SUPER, "per_pool_omap");
+  db->submit_transaction_sync(txn);
+}
+
+void BlueStore::inject_legacy_omap(coll_t cid, ghobject_t oid)
+{
+  dout(1) << __func__ << " "
+          << cid << " " << oid
+          <<dendl;
+  KeyValueDB::Transaction txn;
+  OnodeRef o;
+  CollectionRef c = _get_collection(cid);
+  ceph_assert(c);
+  {
+    std::unique_lock l{ c->lock }; // just to avoid internal asserts
+    o = c->get_onode(oid, false);
+    ceph_assert(o);
+  }
+  o->onode.clear_flag(bluestore_onode_t::FLAG_PERPOOL_OMAP | bluestore_onode_t::FLAG_PGMETA_OMAP);
+  txn = db->get_transaction();
+  _record_onode(o, txn);
+  db->submit_transaction_sync(txn);
+}
+
 
 void BlueStore::inject_statfs(const string& key, const store_statfs_t& new_statfs)
 {
@@ -10512,6 +10543,24 @@ int BlueStore::_omap_get(
     r = -ENOENT;
     goto out;
   }
+  r = _onode_omap_get(o, header, out);
+ out:
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
+  return r;
+}
+
+int BlueStore::_onode_omap_get(
+  const OnodeRef &o,           ///< [in] Object containing omap
+  bufferlist *header,          ///< [out] omap header
+  map<string, bufferlist> *out /// < [out] Key to value map
+)
+{
+  int r = 0;
+  if (!o || !o->exists) {
+    r = -ENOENT;
+    goto out;
+  }
   if (!o->onode.has_omap())
     goto out;
   o->flush();
@@ -10524,24 +10573,22 @@ int BlueStore::_omap_get(
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() == head) {
-	dout(30) << __func__ << "  got header" << dendl;
-	*header = it->value();
+        dout(30) << __func__ << "  got header" << dendl;
+        *header = it->value();
       } else if (it->key() >= tail) {
-	dout(30) << __func__ << "  reached tail" << dendl;
-	break;
+        dout(30) << __func__ << "  reached tail" << dendl;
+        break;
       } else {
-	string user_key;
-	o->decode_omap_key(it->key(), &user_key);
-	dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
-		 << " -> " << user_key << dendl;
-	(*out)[user_key] = it->value();
+        string user_key;
+        o->decode_omap_key(it->key(), &user_key);
+        dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
+          << " -> " << user_key << dendl;
+        (*out)[user_key] = it->value();
       }
       it->next();
     }
   }
- out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
-	   << dendl;
+out:
   return r;
 }
 
