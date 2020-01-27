@@ -2741,6 +2741,12 @@ public:
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
     );
+  int _onode_omap_get(
+    const OnodeRef &o,           ///< [in] Object containing omap
+    bufferlist *header,          ///< [out] omap header
+    map<string, bufferlist> *out /// < [out] Key to value map
+  );
+
 
   /// Get omap header
   int omap_get_header(
