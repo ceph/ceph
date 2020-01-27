@@ -8,6 +8,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "include/rbd/librbd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/ImageCtx.h"
 #include <map>
 #include <string>
 
@@ -15,9 +16,6 @@ class Context;
 class ContextWQ;
 
 namespace librbd {
-
-class ImageCtx;
-
 namespace mirror {
 
 template <typename ImageCtxT = ImageCtx>
@@ -53,10 +51,7 @@ private:
    * GET_TAG_OWNER  * * * * * * * *
    *    |  (skip if not needed)   *
    *    v                         *
-   * SET_MIRROR_IMAGE * * * * * * *
-   *    |                         *
-   *    v                         *
-   * NOTIFY_MIRRORING_WATCHER * * *
+   * IMAGE_STATE_UPDATE * * * * * *
    *    |                         *
    *    v                         *
    * <finish>   < * * * * * * * * *
@@ -90,11 +85,8 @@ private:
   void send_get_tag_owner();
   Context *handle_get_tag_owner(int *result);
 
-  void send_set_mirror_image();
-  Context *handle_set_mirror_image(int *result);
-
-  void send_notify_mirroring_watcher();
-  Context *handle_notify_mirroring_watcher(int *result);
+  void send_image_state_update();
+  Context *handle_image_state_update(int *result);
 };
 
 } // namespace mirror
