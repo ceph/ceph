@@ -253,12 +253,6 @@ $CEPHADM enter --fsid $FSID --name mgr.x -- pidof ceph-mgr
 expect_false $CEPHADM --timeout 1 enter --fsid $FSID --name mon.a -- sleep 10
 $CEPHADM --timeout 10 enter --fsid $FSID --name mon.a -- sleep 1
 
-## logs
-expect_false $CEPHADM logs
-expect_false $CEPHADM logs --fsid $FSID --name mon.z
-$CEPHADM logs --fsid $FSID --name mon.a
-expect_false $CEPHADM --timeout 1 logs --fsid $FSID --name mon.a -f
-
 ## ceph-volume
 $CEPHADM ceph-volume --fsid $FSID -- inventory --format=json \
       | jq '.[]'

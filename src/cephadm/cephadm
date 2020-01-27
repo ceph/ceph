@@ -2133,24 +2133,6 @@ def command_unit():
 
 ##################################
 
-@infer_fsid
-def command_logs():
-    # type: () -> int
-    if not args.fsid:
-        raise Error('must pass --fsid to specify cluster')
-    cmd = [str(container_path), 'logs'] # type: List[str]
-    if args.follow:
-        cmd.append('-f')
-    if args.tail:
-        cmd.append('--tail=' + str(args.tail))
-    cmd.append('ceph-%s-%s' % (args.fsid, args.name))
-
-    # call this directly, without our wrapper, so that we get an unmolested
-    # stdout with logger prefixing.
-    return call_timeout(cmd, args.timeout)
-
-##################################
-
 def command_ls():
     # type: () -> None
     ls = list_daemons(detail=not args.no_detail,
@@ -2665,24 +2647,6 @@ def _get_parser():
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
-
-    parser_logs = subparsers.add_parser(
-        'logs', help='fetch the log for a daemon\'s container')
-    parser_logs.set_defaults(func=command_logs)
-    parser_logs.add_argument(
-        '--fsid',
-        help='cluster FSID')
-    parser_logs.add_argument(
-        '--name', '-n',
-        required=True,
-        help='daemon name (type.id)')
-    parser_logs.add_argument(
-        '-f', '--follow',
-        action='store_true',
-        help='Follow log output')
-    parser_logs.add_argument(
-        '--tail',
-        help='Output the specified number of lines at the end of the log')
 
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
