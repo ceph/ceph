@@ -1,19 +1,23 @@
 import json
 import logging
-from tasks.ceph_test_case import CephTestCase
 import os
 import re
 
+from shlex import split as shlex_split
+from io import StringIO
+
+from tasks.ceph_test_case import CephTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 
 from teuthology import contextutil
+from teuthology.misc import sudo_write_file
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
+
 from teuthology.contextutil import safe_while
 
 
 log = logging.getLogger(__name__)
-
 
 def for_teuthology(f):
     """
@@ -134,11 +138,16 @@ class CephFSTestCase(CephTestCase):
 
             # In case some test messed with auth caps, reset them
             for client_id in client_mount_ids:
-                self.mds_cluster.mon_manager.raw_cluster_cmd_result(
-                    'auth', 'caps', "client.{0}".format(client_id),
-                    'mds', 'allow',
-                    'mon', 'allow r',
-                    'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+                cmd = ['auth', 'caps', f'client.{client_id}', 'mon','allow r',
+                       'osd', f'allow rw pool={self.fs.get_data_pool_name()}',
+                       'mds', 'allow']
+
+                if self.run_cluster_cmd_result(cmd) == 0:
+                    break
+
+                cmd[1] = 'add'
+                if self.run_cluster_cmd_result(cmd) != 0:
+                    raise RuntimeError(f'Failed to create new client {cmd[2]}')
 
             # wait for ranks to become active
             self.fs.wait_for_daemons()
@@ -369,3 +378,43 @@ class CephFSTestCase(CephTestCase):
                         return subtrees
         except contextutil.MaxWhileTries as e:
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
+
+    def run_cluster_cmd(self, cmd):
+        if isinstance(cmd, str):
+            cmd = shlex_split(cmd)
+        return self.fs.mon_manager.raw_cluster_cmd(*cmd)
+
+    def run_cluster_cmd_result(self, cmd):
+        if isinstance(cmd, str):
+            cmd = shlex_split(cmd)
+        return self.fs.mon_manager.raw_cluster_cmd_result(*cmd)
+
+    def create_client(self, client_id, moncap=None, osdcap=None, mdscap=None):
+        if not (moncap or osdcap or mdscap):
+            if self.fs:
+                return self.fs.authorize(client_id, ('/', 'rw'))
+            else:
+                raise RuntimeError('no caps were passed and the default FS '
+                                   'is not created yet to allow client auth '
+                                   'for it.')
+
+        cmd = ['auth', 'add', f'client.{client_id}']
+        if moncap:
+            cmd += ['mon', moncap]
+        if osdcap:
+            cmd += ['osd', osdcap]
+        if mdscap:
+            cmd += ['mds', mdscap]
+
+        self.run_cluster_cmd(cmd)
+        return self.run_cluster_cmd(f'auth get {self.client_name}')
+
+    def create_keyring_file(self, remote, keyring):
+        keyring_path = remote.run(args=['mktemp'], stdout=StringIO()).\
+            stdout.getvalue().strip()
+        sudo_write_file(remote, keyring_path, keyring)
+
+        # required when triggered using vstart_runner.py.
+        remote.run(args=['chmod', '644', keyring_path])
+
+        return keyring_path

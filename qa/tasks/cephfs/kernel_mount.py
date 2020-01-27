@@ -51,8 +51,17 @@ class KernelMount(CephFSMount):
         if retval:
             return retval
 
-        self.client_remote.run(
-            args=['sudo', 'chmod', '1777', self.hostfs_mntpt], timeout=(5*60))
+        stderr = StringIO()
+        try:
+            self.client_remote.run(
+                args=['sudo', 'chmod', '1777', self.hostfs_mntpt],
+                stderr=stderr, timeout=(5*60))
+        except CommandFailedError:
+            # the client does not have write permissions in the caps it holds
+            # for the Ceph FS that was just mounted.
+            if 'permission denied' in stderr.getvalue().lower():
+                pass
+
 
         self.mounted = True
 
