@@ -723,6 +723,10 @@ class RGWHandler_REST_Obj_S3Website;
 
 static inline bool looks_like_ip_address(const char *bucket)
 {
+  struct in6_addr a;
+  if (inet_pton(AF_INET6, bucket, static_cast<void*>(&a)) == 1) {
+    return true;
+  }
   int num_periods = 0;
   bool expect_period = false;
   for (const char *b = bucket; *b; ++b) {
