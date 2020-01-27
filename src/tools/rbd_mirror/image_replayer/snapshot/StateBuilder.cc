@@ -71,7 +71,6 @@ BaseRequest* StateBuilder<I>::create_local_image_request(
 template <typename I>
 BaseRequest* StateBuilder<I>::create_prepare_replay_request(
     const std::string& local_mirror_uuid,
-    librbd::mirror::PromotionState remote_promotion_state,
     ProgressContext* progress_ctx,
     bool* resync_requested,
     bool* syncing,

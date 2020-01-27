@@ -121,6 +121,7 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   std::string local_image_id;
   std::string remote_image_id;
   std::string remote_mirror_uuid;
+  librbd::mirror::PromotionState remote_promotion_state;
 
   virtual ~StateBuilder() {}
 
@@ -285,6 +286,8 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
   ASSERT_TRUE(mock_state_builder != nullptr);
   ASSERT_EQ(std::string("remote image id"),
             mock_journal_state_builder.remote_image_id);
+  ASSERT_EQ(librbd::mirror::PROMOTION_STATE_PRIMARY,
+            mock_journal_state_builder.remote_promotion_state);
   ASSERT_TRUE(mock_journal_state_builder.remote_journaler != nullptr);
   ASSERT_EQ(cls::journal::CLIENT_STATE_DISCONNECTED,
             mock_journal_state_builder.remote_client_state);
@@ -341,6 +344,8 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
   ASSERT_TRUE(mock_state_builder != nullptr);
   ASSERT_EQ(std::string("remote image id"),
             mock_journal_state_builder.remote_image_id);
+  ASSERT_EQ(librbd::mirror::PROMOTION_STATE_PRIMARY,
+            mock_journal_state_builder.remote_promotion_state);
   ASSERT_TRUE(mock_journal_state_builder.remote_journaler != nullptr);
   ASSERT_EQ(cls::journal::CLIENT_STATE_CONNECTED,
             mock_journal_state_builder.remote_client_state);

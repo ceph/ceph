@@ -59,7 +59,6 @@ public:
 
   virtual BaseRequest* create_prepare_replay_request(
       const std::string& local_mirror_uuid,
-      librbd::mirror::PromotionState remote_promotion_state,
       ProgressContext* progress_ctx,
       bool* resync_requested,
       bool* syncing,
@@ -80,6 +79,8 @@ public:
 
   std::string remote_mirror_uuid;
   std::string remote_image_id;
+  librbd::mirror::PromotionState remote_promotion_state =
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
 
 protected:
   image_sync::SyncPointHandler* m_sync_point_handler = nullptr;

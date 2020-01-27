@@ -305,9 +305,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
                             const std::string&,
                             ProgressContext*,
                             Context*));
-  MOCK_METHOD6(create_prepare_replay_request,
+  MOCK_METHOD5(create_prepare_replay_request,
                BaseRequest*(const std::string&,
-                            librbd::mirror::PromotionState,
                             ProgressContext*,
                             bool*, bool*, Context*));
 
@@ -500,8 +499,8 @@ public:
   void expect_prepare_replay(MockStateBuilder& mock_state_builder,
                              bool resync_requested, bool syncing, int r) {
     EXPECT_CALL(mock_state_builder,
-                create_prepare_replay_request(_, _, _, _, _, _))
-      .WillOnce(WithArgs<3, 4, 5>(
+                create_prepare_replay_request(_, _, _, _, _))
+      .WillOnce(WithArgs<2, 3, 4>(
         Invoke([this, &mock_state_builder, resync_requested, syncing, r]
                (bool* resync, bool* sync, Context* ctx) {
           if (r >= 0) {
