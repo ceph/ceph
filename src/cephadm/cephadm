@@ -1596,6 +1596,8 @@ def command_bootstrap():
     # initial vars
     fsid = args.fsid or make_fsid()
     hostname = get_hostname()
+    if '.' in hostname and not args.allow_fqdn_hostname:
+        raise Error('hostname is a fully qualified domain name (%s); either fix (e.g., "sudo hostname %s" or similar) or pass --allow-fqdn-hostname' % (hostname, hostname.split('.')[0]))
     mon_id = args.mon_id or hostname
     mgr_id = args.mgr_id or generate_service_id()
     logging.info('Cluster fsid: %s' % fsid)
@@ -2755,6 +2757,10 @@ def _get_parser():
         '--allow-overwrite',
         action='store_true',
         help='allow overwrite of existing --output-* config/keyring/ssh files')
+    parser_bootstrap.add_argument(
+        '--allow-fqdn-hostname',
+        action='store_true',
+        help='allow hostname that is fully-qualified (contains ".")')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
