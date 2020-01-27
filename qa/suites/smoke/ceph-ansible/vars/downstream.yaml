@@ -5,7 +5,7 @@ overrides:
       ceph_origin: distro
       ceph_stable_rh_storage: true
       ceph_repository: rhcs
-      ceph_stable_release: luminous
+      ceph_stable_release: nautilus
       osd_scenario: collocated
       journal_size: 1024
       osd_auto_discovery: false
