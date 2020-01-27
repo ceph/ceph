@@ -20,7 +20,6 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
-#include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/BaseRequest.h"
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/ProgressContext.h"
@@ -180,6 +179,10 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
     dout(5) << "local image is primary" << dendl;
     finish(-ENOMSG);
     return;
+  } else if (r == -EREMOTEIO) {
+    dout(10) << "remote-image is non-primary" << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
   } else if (r == -ENOENT || state_builder == nullptr) {
     dout(10) << "remote image does not exist" << dendl;
 
@@ -232,66 +235,7 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
     return;
   }
 
-  get_remote_mirror_info();
-}
-
-template <typename I>
-void BootstrapRequest<I>::get_remote_mirror_info() {
-  dout(15) << dendl;
-
-  update_progress("GET_REMOTE_MIRROR_INFO");
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_mirror_info>(
-      this);
-  auto request = librbd::mirror::GetInfoRequest<I>::create(
-    *m_remote_image_ctx, &m_mirror_image, &m_promotion_state,
-    &m_remote_primary_mirror_uuid, ctx);
-  request->send();
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
-  dout(15) << "r=" << r << dendl;
-
-  if (r == -ENOENT) {
-    dout(5) << "remote image is not mirrored" << dendl;
-    m_ret_val = -EREMOTEIO;
-    close_remote_image();
-    return;
-  } else if (r < 0) {
-    derr << "error querying remote image primary status: " << cpp_strerror(r)
-         << dendl;
-    m_ret_val = r;
-    close_remote_image();
-    return;
-  }
-
-  if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
-    dout(5) << "remote image mirroring is being disabled" << dendl;
-    m_ret_val = -EREMOTEIO;
-    close_remote_image();
-    return;
-  }
-
-  if (m_mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
-    dout(5) << ": remote image is in unsupported mode: " << m_mirror_image.mode
-            << dendl;
-    m_ret_val = -EOPNOTSUPP;
-    close_remote_image();
-    return;
-  }
-
   ceph_assert(*m_state_builder != nullptr);
-  if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
-      (*m_state_builder)->local_image_id.empty()) {
-    // no local image and remote isn't primary -- don't sync it
-    dout(5) << "remote image is not primary -- not syncing" << dendl;
-    m_ret_val = -EREMOTEIO;
-    close_remote_image();
-    return;
-  }
-
   if ((*m_state_builder)->local_image_id.empty()) {
     create_local_image();
     return;

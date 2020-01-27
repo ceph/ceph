@@ -3,7 +3,6 @@
 
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "librbd/journal/TypeTraits.h"
-#include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/BaseRequest.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -30,42 +29,6 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 };
 
 } // anonymous namespace
-
-namespace mirror {
-
-template<>
-struct GetInfoRequest<librbd::MockTestImageCtx> {
-  static GetInfoRequest* s_instance;
-  cls::rbd::MirrorImage *mirror_image;
-  PromotionState *promotion_state;
-  Context *on_finish = nullptr;
-
-  static GetInfoRequest* create(librbd::MockTestImageCtx &image_ctx,
-                                cls::rbd::MirrorImage *mirror_image,
-                                PromotionState *promotion_state,
-                                std::string* primary_mirror_uuid,
-                                Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->mirror_image = mirror_image;
-    s_instance->promotion_state = promotion_state;
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  GetInfoRequest() {
-    ceph_assert(s_instance == nullptr);
-    s_instance = this;
-  }
-  ~GetInfoRequest() {
-    s_instance = nullptr;
-  }
-
-  MOCK_METHOD0(send, void());
-};
-
-GetInfoRequest<librbd::MockTestImageCtx>* GetInfoRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace mirror
 } // namespace librbd
 
 namespace rbd {
@@ -366,7 +329,6 @@ public:
   typedef PrepareLocalImageRequest<librbd::MockTestImageCtx> MockPrepareLocalImageRequest;
   typedef PrepareRemoteImageRequest<librbd::MockTestImageCtx> MockPrepareRemoteImageRequest;
   typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
-  typedef librbd::mirror::GetInfoRequest<librbd::MockTestImageCtx> MockGetMirrorInfoRequest;
   typedef std::list<cls::journal::Tag> Tags;
 
   void SetUp() override {
@@ -460,20 +422,6 @@ public:
       .WillOnce(Invoke([this, &mock_close_image_request, r]() {
           *mock_close_image_request.image_ctx = nullptr;
           m_threads->work_queue->queue(mock_close_image_request.on_finish, r);
-        }));
-  }
-
-  void expect_get_remote_mirror_info(
-      MockGetMirrorInfoRequest &mock_get_mirror_info_request,
-      const cls::rbd::MirrorImage &mirror_image,
-      librbd::mirror::PromotionState promotion_state, int r) {
-    EXPECT_CALL(mock_get_mirror_info_request, send())
-      .WillOnce(Invoke([this, &mock_get_mirror_info_request, mirror_image,
-                        promotion_state, r]() {
-          *mock_get_mirror_info_request.mirror_image = mirror_image;
-          *mock_get_mirror_info_request.promotion_state = promotion_state;
-          m_threads->work_queue->queue(
-            mock_get_mirror_info_request.on_finish, r);
         }));
   }
 
@@ -572,13 +520,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, Success) {
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
 
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
-
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   MockOpenLocalImageRequest mock_open_local_image_request;
@@ -624,13 +565,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, OpenLocalImageError) {
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
 
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
-
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   MockOpenLocalImageRequest mock_open_local_image_request;
@@ -672,13 +606,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, OpenLocalImageDNE) {
   MockOpenImageRequest mock_open_image_request;
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
-
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
 
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -733,13 +660,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, OpenLocalImagePrimary) {
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
 
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
-
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   MockOpenLocalImageRequest mock_open_local_image_request;
@@ -782,13 +702,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, CreateLocalImageError) {
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
 
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
-
   // create local image
   expect_create_local_image(mock_state_builder, "local image id", -EINVAL);
 
@@ -826,13 +739,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayError) {
   MockOpenImageRequest mock_open_image_request;
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
-
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
 
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -878,13 +784,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayResyncRequested) {
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
 
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
-
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   MockOpenLocalImageRequest mock_open_local_image_request;
@@ -929,13 +828,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplaySyncing) {
   MockOpenImageRequest mock_open_image_request;
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
-
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
 
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -986,13 +878,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayDisconnected) {
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
 
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
-
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   MockOpenLocalImageRequest mock_open_local_image_request;
@@ -1037,13 +922,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ImageSyncError) {
   MockOpenImageRequest mock_open_image_request;
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
-
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
 
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -1094,13 +972,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ImageSyncCanceled) {
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
 
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
-
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   MockOpenLocalImageRequest mock_open_local_image_request;
@@ -1146,13 +1017,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, CloseRemoteImageError) {
   MockOpenImageRequest mock_open_image_request;
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
-
-  // test if remote image is primary
-  MockGetMirrorInfoRequest mock_get_mirror_info_request;
-  expect_get_remote_mirror_info(mock_get_mirror_info_request,
-                                {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid",
-                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
-                                librbd::mirror::PROMOTION_STATE_PRIMARY, 0);
 
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
