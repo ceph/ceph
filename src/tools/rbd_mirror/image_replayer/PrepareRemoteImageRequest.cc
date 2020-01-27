@@ -8,9 +8,10 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "journal/Journaler.h"
+#include "journal/Settings.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/journal/Types.h"
+#include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
@@ -63,33 +64,26 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_image_id(int r) {
     return;
   }
 
-  get_mirror_image();
+  get_mirror_info();
 }
 
 template <typename I>
-void PrepareRemoteImageRequest<I>::get_mirror_image() {
+void PrepareRemoteImageRequest<I>::get_mirror_info() {
   dout(10) << dendl;
 
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_image_get_start(&op, m_remote_image_id);
-
-  auto aio_comp = create_rados_callback<
+  auto ctx = create_context_callback<
     PrepareRemoteImageRequest<I>,
-    &PrepareRemoteImageRequest<I>::handle_get_mirror_image>(this);
-  m_out_bl.clear();
-  int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  aio_comp->release();
+    &PrepareRemoteImageRequest<I>::handle_get_mirror_info>(this);
+  auto req = librbd::mirror::GetInfoRequest<I>::create(
+    m_remote_io_ctx, m_threads->work_queue, m_remote_image_id,
+    &m_mirror_image, &m_promotion_state, &m_primary_mirror_uuid,
+    ctx);
+  req->send();
 }
 
 template <typename I>
-void PrepareRemoteImageRequest<I>::handle_get_mirror_image(int r) {
+void PrepareRemoteImageRequest<I>::handle_get_mirror_info(int r) {
   dout(10) << "r=" << r << dendl;
-  cls::rbd::MirrorImage mirror_image;
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
-  }
 
   if (r == -ENOENT) {
     dout(10) << "image " << m_global_image_id << " not mirrored" << dendl;
@@ -103,21 +97,21 @@ void PrepareRemoteImageRequest<I>::handle_get_mirror_image(int r) {
   }
 
   if (*m_state_builder != nullptr &&
-      (*m_state_builder)->get_mirror_image_mode() != mirror_image.mode) {
+      (*m_state_builder)->get_mirror_image_mode() != m_mirror_image.mode) {
     derr << "local and remote mirror image using different mirroring modes "
          << "for image " << m_global_image_id << ": split-brain" << dendl;
     finish(-EEXIST);
     return;
   }
 
-  switch (mirror_image.mode) {
+  switch (m_mirror_image.mode) {
   case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
     get_client();
     break;
   case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
     // TODO
   default:
-    derr << "unsupported mirror image mode " << mirror_image.mode << " "
+    derr << "unsupported mirror image mode " << m_mirror_image.mode << " "
          << "for image " << m_global_image_id << dendl;
     finish(-EOPNOTSUPP);
     break;
@@ -214,7 +208,7 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
   journal::StateBuilder<I>* state_builder = nullptr;
   if (*m_state_builder != nullptr) {
     // already verified that it's a matching builder in
-    // 'handle_get_mirror_image'
+    // 'handle_get_mirror_info'
     state_builder = dynamic_cast<journal::StateBuilder<I>*>(*m_state_builder);
     ceph_assert(state_builder != nullptr);
   } else {
