@@ -93,11 +93,11 @@ class TimeoutExpired(Error):
 
 ##################################
 
-
 class Ceph(object):
     daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror',
                'crash')
 
+##################################
 
 class Monitoring(object):
     """Define the configs for the monitoring containers"""
@@ -157,10 +157,30 @@ class Monitoring(object):
         },
     }  # type: ignore
 
+##################################
+
+class NFSGanesha(object):
+    """Defines a NFS-Ganesha container"""
+
+    daemon_type = 'nfs'
+    entrypoint = '/usr/bin/ganesha.nfsd'
+    daemon_args = ['-F', '-L', 'STDERR']
+
+    @staticmethod
+    def get_container_mounts(data_dir):
+        # type: (str) -> Dict[str, str]
+        mounts = dict()
+        mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
+        # TODO: `ceph auth get-or-create` instead of admin keyring?
+        mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
+        return mounts
+
+##################################
 
 def get_supported_daemons():
     supported_daemons = list(Ceph.daemons)
     supported_daemons.extend(Monitoring.components)
+    supported_daemons.append(NFSGanesha.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -1041,6 +1061,9 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ["--cluster.peer={}".format(peer)]
+    elif daemon_type == NFSGanesha.daemon_type:
+        r += NFSGanesha.daemon_args
+
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
@@ -1212,6 +1235,11 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         elif daemon_type == 'alertmanager':
             mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/alertmanager:Z'
 
+    if daemon_type == NFSGanesha.daemon_type:
+        assert daemon_id
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+        mounts.update(NFSGanesha.get_container_mounts(data_dir))
+
     return mounts
 
 def get_container(fsid, daemon_type, daemon_id, privileged=False,
@@ -1235,7 +1263,14 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
     elif daemon_type in Monitoring.components:
         entrypoint = ''
         name = ''
+    elif daemon_type == NFSGanesha.daemon_type:
+        entrypoint = NFSGanesha.entrypoint
+        name = '%s.%s' % (daemon_type, daemon_id)
+    else:
+        entrypoint = ''
+        name = ''
 
+    ceph_args = [] # type: List[str]
     if daemon_type in Monitoring.components:
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         m = Monitoring.components[daemon_type]  # type: ignore
@@ -1250,13 +1285,11 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
             #'--memory',
             #metadata.get('memory', '4GB')
         ]
-        ceph_args = []
         container_args.extend(monitoring_args)
     elif daemon_type == 'crash':
         ceph_args = ['-n', name]
-    else:
+    elif daemon_type in Ceph.daemons:
         ceph_args = ['-n', name, '-f']
-
 
     return CephContainer(
         image=args.image,
@@ -2185,6 +2218,15 @@ def command_deploy():
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
+                      reconfig=args.reconfig)
+
+    elif daemon_type == NFSGanesha.daemon_type:
+        (config, keyring) = get_config_and_keyring()
+        # TODO: extract ganesha uid/gid (997, 994) ?
+        (uid, gid) = extract_uid_gid()
+        c = get_container(args.fsid, daemon_type, daemon_id)
+        deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
+                      config=config, keyring=keyring,
                       reconfig=args.reconfig)
     else:
         raise Error("{} not implemented in command_deploy function".format(daemon_type))
