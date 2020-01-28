@@ -953,7 +953,14 @@ inline namespace v14_2_0 {
         _num(other._num) {
       _buffers.clone_from(other._buffers);
     }
-    list(list&& other) noexcept;
+
+    list(list&& other) noexcept
+      : _buffers(std::move(other._buffers)),
+        _carriage(other._carriage),
+        _len(other._len),
+        _num(other._num) {
+      other.clear();
+    }
 
     ~list() {
       _buffers.clear_and_dispose();
