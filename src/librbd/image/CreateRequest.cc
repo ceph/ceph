@@ -32,8 +32,7 @@ using util::create_context_callback;
 
 namespace {
 
-int validate_features(CephContext *cct, uint64_t features,
-                       bool force_non_primary) {
+int validate_features(CephContext *cct, uint64_t features) {
   if (features & ~RBD_FEATURES_ALL) {
     lderr(cct) << "librbd does not support requested features." << dendl;
     return -ENOSYS;
@@ -52,13 +51,10 @@ int validate_features(CephContext *cct, uint64_t features,
     lderr(cct) << "cannot use object map without exclusive lock" << dendl;
     return -EINVAL;
   }
-  if ((features & RBD_FEATURE_JOURNALING) != 0) {
-    if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-      lderr(cct) << "cannot use journaling without exclusive lock" << dendl;
-      return -EINVAL;
-    }
-  } else if (force_non_primary) {
-    ceph_abort();
+  if ((features & RBD_FEATURE_JOURNALING) != 0 &&
+      (features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+    lderr(cct) << "cannot use journaling without exclusive lock" << dendl;
+    return -EINVAL;
   }
 
   return 0;
@@ -228,7 +224,7 @@ template<typename I>
 void CreateRequest<I>::send() {
   ldout(m_cct, 20) << dendl;
 
-  int r = validate_features(m_cct, m_features, m_force_non_primary);
+  int r = validate_features(m_cct, m_features);
   if (r < 0) {
     complete(r);
     return;
