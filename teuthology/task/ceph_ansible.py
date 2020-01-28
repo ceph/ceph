@@ -466,9 +466,9 @@ class CephAnsible(Task):
             # copy extra vars to groups/all
             ceph_installer.put_file(self.extra_vars_file, 'ceph-ansible/group_vars/all')
             # print for debug info
-            ceph_installer.run(args=('cat', 'ceph-ansible/inven.yml'))
-            ceph_installer.run(args=('cat', 'ceph-ansible/site.yml'))
-            ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
+            ceph_installer.run(args=['cat', 'ceph-ansible/inven.yml'])
+            ceph_installer.run(args=['cat', 'ceph-ansible/site.yml'])
+            ceph_installer.run(args=['cat', 'ceph-ansible/group_vars/all'])
 
     def _create_rbd_pool(self):
         mon_node = self.ceph_first_mon
