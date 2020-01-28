@@ -66,11 +66,11 @@ or
 
 
 def get_ioengine_package_name(ioengine, remote):
-    system_type = teuthology.get_system_type(remote)
+    package_type = remote.os.package_type
     if ioengine == 'rbd':
-        return 'librbd1-devel' if system_type == 'rpm' else 'librbd-dev'
+        return 'librbd1-devel' if package_type == 'rpm' else 'librbd-dev'
     elif ioengine == 'libaio':
-        return 'libaio-devel' if system_type == 'rpm' else 'libaio-dev'
+        return 'libaio-devel' if package_type == 'rpm' else 'libaio-dev'
     else:
         return None
 
