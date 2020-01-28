@@ -8,6 +8,7 @@
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <string>
@@ -35,10 +36,12 @@ public:
                                     const std::string &local_image_name,
 				    const std::string &local_image_id,
                                     ImageCtxT *remote_image_ctx,
+                                    cls::rbd::MirrorImageMode mirror_image_mode,
                                     Context *on_finish) {
     return new CreateImageRequest(threads, local_io_ctx, global_image_id,
                                   remote_mirror_uuid, local_image_name,
-                                  local_image_id, remote_image_ctx, on_finish);
+                                  local_image_id, remote_image_ctx,
+                                  mirror_image_mode, on_finish);
   }
 
   CreateImageRequest(Threads<ImageCtxT> *threads, librados::IoCtx &local_io_ctx,
@@ -47,6 +50,7 @@ public:
                      const std::string &local_image_name,
 		     const std::string &local_image_id,
                      ImageCtxT *remote_image_ctx,
+                     cls::rbd::MirrorImageMode mirror_image_mode,
                      Context *on_finish);
 
   void send();
@@ -95,6 +99,7 @@ private:
   std::string m_local_image_name;
   std::string m_local_image_id;
   ImageCtxT *m_remote_image_ctx;
+  cls::rbd::MirrorImageMode m_mirror_image_mode;
   Context *m_on_finish;
 
   librados::IoCtx m_remote_parent_io_ctx;

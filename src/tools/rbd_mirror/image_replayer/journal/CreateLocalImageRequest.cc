@@ -115,7 +115,8 @@ void CreateLocalImageRequest<I>::create_local_image() {
   auto request = CreateImageRequest<I>::create(
     m_threads, m_local_io_ctx, m_global_image_id,
     m_state_builder->remote_mirror_uuid, image_name,
-    m_state_builder->local_image_id, m_remote_image_ctx, ctx);
+    m_state_builder->local_image_id, m_remote_image_ctx,
+    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, ctx);
   request->send();
 }
 template <typename I>

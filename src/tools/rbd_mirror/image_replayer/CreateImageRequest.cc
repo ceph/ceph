@@ -35,19 +35,22 @@ namespace mirror {
 namespace image_replayer {
 
 template <typename I>
-CreateImageRequest<I>::CreateImageRequest(Threads<I>* threads,
-                                          librados::IoCtx &local_io_ctx,
-                                          const std::string &global_image_id,
-                                          const std::string &remote_mirror_uuid,
-                                          const std::string &local_image_name,
-					  const std::string &local_image_id,
-                                          I *remote_image_ctx,
-                                          Context *on_finish)
+CreateImageRequest<I>::CreateImageRequest(
+    Threads<I>* threads,
+    librados::IoCtx &local_io_ctx,
+    const std::string &global_image_id,
+    const std::string &remote_mirror_uuid,
+    const std::string &local_image_name,
+    const std::string &local_image_id,
+    I *remote_image_ctx,
+    cls::rbd::MirrorImageMode mirror_image_mode,
+    Context *on_finish)
   : m_threads(threads), m_local_io_ctx(local_io_ctx),
     m_global_image_id(global_image_id),
     m_remote_mirror_uuid(remote_mirror_uuid),
     m_local_image_name(local_image_name), m_local_image_id(local_image_id),
-    m_remote_image_ctx(remote_image_ctx), m_on_finish(on_finish) {
+    m_remote_image_ctx(remote_image_ctx),
+    m_mirror_image_mode(mirror_image_mode), m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -83,9 +86,9 @@ void CreateImageRequest<I>::create_image() {
 
   auto req = librbd::image::CreateRequest<I>::create(
     config, m_local_io_ctx, m_local_image_name, m_local_image_id,
-    m_remote_image_ctx->size, image_options, false,
-    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, m_global_image_id,
-    m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue, ctx);
+    m_remote_image_ctx->size, image_options, false, m_mirror_image_mode,
+    m_global_image_id, m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue,
+    ctx);
   req->send();
 }
 
@@ -346,8 +349,8 @@ void CreateImageRequest<I>::clone_image() {
   librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
     config, m_local_parent_io_ctx, m_local_parent_spec.image_id, snap_name,
     CEPH_NOSNAP, m_local_io_ctx, m_local_image_name, m_local_image_id, opts,
-    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, m_global_image_id,
-    m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue, ctx);
+    m_mirror_image_mode, m_global_image_id, m_remote_mirror_uuid,
+    m_remote_image_ctx->op_work_queue, ctx);
   req->send();
 }
 
