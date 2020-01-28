@@ -45,6 +45,8 @@ struct rgw_http_req_data : public RefCountedObject {
   bool write_paused{false};
   bool read_paused{false};
 
+  optional<int> user_ret;
+
   ceph::mutex lock = ceph::make_mutex("rgw_http_req_data::lock");
   ceph::condition_variable cond;
 
@@ -314,7 +316,9 @@ size_t RGWHTTPClient::receive_http_header(void * const ptr,
 
   int ret = req_data->client->receive_header(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
+    dout(5) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
+    req_data->user_ret = ret;
+    return CURLE_WRITE_ERROR;
   }
 
   return len;
@@ -350,7 +354,9 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
 
   int ret = client->receive_data((char *)ptr + skip_bytes, len - skip_bytes, &pause);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(5) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    req_data->user_ret = ret;
+    return CURLE_WRITE_ERROR;
   }
 
   if (pause) {
@@ -389,7 +395,9 @@ size_t RGWHTTPClient::send_http_data(void * const ptr,
 
   int ret = client->send_data(ptr, size * nmemb, &pause);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(5) << "WARNING: client->send_data() returned ret=" << ret << dendl;
+    req_data->user_ret = ret;
+    return CURLE_READ_ERROR;
   }
 
   if (ret == 0 &&
@@ -1170,12 +1178,20 @@ void *RGWHTTPManager::reqs_thread_entry()
 	curl_multi_remove_handle((CURLM *)multi_handle, e);
 
 	long http_status;
-	curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
+        int status;
+        if (!req_data->user_ret) {
+          curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
 
-	int status = rgw_http_error_to_errno(http_status);
-        if (result != CURLE_OK && status == 0) {
-          dout(0) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << ", maybe network unstable" << dendl;
-          status = -EAGAIN;
+          status = rgw_http_error_to_errno(http_status);
+          if (result != CURLE_OK && status == 0) {
+            dout(0) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << ", maybe network unstable" << dendl;
+            status = -EAGAIN;
+          }
+        } else {
+          status = *req_data->user_ret;
+          rgw_err err;
+          set_req_state_err(err, status, 0);
+          http_status = err.http_ret;
         }
         int id = req_data->id;
 	finish_request(req_data, status, http_status);

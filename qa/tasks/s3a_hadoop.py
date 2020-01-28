@@ -136,7 +136,7 @@ def setup_user_bucket(client, dns_name, access_key, secret_key, bucket_name, tes
             'create',
             run.Raw('--uid'),
             's3a',
-            run.Raw('--display-name=s3a cephtests'),
+            run.Raw('--display-name="s3a cephtests"'),
             run.Raw('--access-key={access_key}'.format(access_key=access_key)),
             run.Raw('--secret-key={secret_key}'.format(secret_key=secret_key)),
             run.Raw('--email=s3a@ceph.com'),

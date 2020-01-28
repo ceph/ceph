@@ -114,6 +114,10 @@ namespace ceph {
     {
       dump_string(name, s);
     }
+
+    virtual void *get_external_feature_handler(const std::string& feature) {
+      return nullptr;
+    }
   };
 
   class copyable_sstream : public std::stringstream {

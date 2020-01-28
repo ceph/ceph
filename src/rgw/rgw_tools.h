@@ -63,6 +63,14 @@ void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key
 void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
 void rgw_shard_name(const string& prefix, unsigned shard_id, string& name);
 
+struct rgw_name_to_flag {
+  const char *type_name;
+  uint32_t flag;
+};
+
+int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
+			    const string& str, uint32_t *perm);
+
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,

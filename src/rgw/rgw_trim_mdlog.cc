@@ -144,8 +144,8 @@ connection_map make_peer_connections(rgw::sal::RGWRadosStore *store,
   for (auto& g : zonegroups) {
     for (auto& z : g.second.zones) {
       std::unique_ptr<RGWRESTConn> conn{
-        new RGWRESTConn(store->ctx(), store->svc()->zone, z.first, z.second.endpoints)};
-      connections.emplace(z.first, std::move(conn));
+        new RGWRESTConn(store->ctx(), store->svc()->zone, z.first.id, z.second.endpoints)};
+      connections.emplace(z.first.id, std::move(conn));
     }
   }
   return connections;
@@ -206,13 +206,13 @@ struct TrimEnv {
   rgw::sal::RGWRadosStore *const store;
   RGWHTTPManager *const http;
   int num_shards;
-  const std::string& zone;
+  const rgw_zone_id& zone;
   Cursor current; //< cursor to current period
   epoch_t last_trim_epoch{0}; //< epoch of last mdlog that was purged
 
   TrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWHTTPManager *http, int num_shards)
     : dpp(dpp), store(store), http(http), num_shards(num_shards),
-      zone(store->svc()->zone->get_zone_params().get_id()),
+      zone(store->svc()->zone->zone_id()),
       current(store->svc()->mdlog->get_period_history()->get_current())
   {}
 };
@@ -229,7 +229,7 @@ struct MasterTrimEnv : public TrimEnv {
   {
     auto& period = current.get_period();
     connections = make_peer_connections(store, period.get_map().zonegroups);
-    connections.erase(zone);
+    connections.erase(zone.id);
     peer_status.resize(connections.size());
   }
 };

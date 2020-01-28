@@ -42,6 +42,7 @@ you may write data with one API and retrieve it with the other.
    HTTP Frontends <frontends>
    Pool Placement and Storage Classes <placement>
    Multisite Configuration <multisite>
+   Multisite Sync Policy Configuration <multisite-sync-policy>
    Configuring Pools <pools>
    Config Reference <config-ref>
    Admin Guide <admin>

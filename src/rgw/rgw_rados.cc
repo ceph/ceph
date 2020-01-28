@@ -283,13 +283,13 @@ public:
     http_manager.start();
   }
 
-  int notify_all(map<string, RGWRESTConn *>& conn_map, set<int>& shards) {
+  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map, set<int>& shards) {
     rgw_http_param_pair pairs[] = { { "type", "metadata" },
                                     { "notify", NULL },
                                     { NULL, NULL } };
 
     list<RGWCoroutinesStack *> stacks;
-    for (map<string, RGWRESTConn *>::iterator iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
+    for (auto iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
       RGWRESTConn *conn = iter->second;
       RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
       stack->call(new RGWPostRESTResourceCR<set<int>, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
@@ -310,14 +310,14 @@ public:
     http_manager.start();
   }
 
-  int notify_all(map<string, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
+  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
     rgw_http_param_pair pairs[] = { { "type", "data" },
                                     { "notify", NULL },
                                     { "source-zone", store->svc.zone->get_zone_params().get_id().c_str() },
                                     { NULL, NULL } };
 
     list<RGWCoroutinesStack *> stacks;
-    for (map<string, RGWRESTConn *>::iterator iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
+    for (auto iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
       RGWRESTConn *conn = iter->second;
       RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
       stack->call(new RGWPostRESTResourceCR<map<int, set<string> >, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
@@ -625,11 +625,11 @@ void RGWRados::wakeup_meta_sync_shards(set<int>& shard_ids)
   }
 }
 
-void RGWRados::wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids)
+void RGWRados::wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids)
 {
   ldout(ctx(), 20) << __func__ << ": source_zone=" << source_zone << ", shard_ids=" << shard_ids << dendl;
   std::lock_guard l{data_sync_thread_lock};
-  map<string, RGWDataSyncProcessorThread *>::iterator iter = data_sync_processor_threads.find(source_zone);
+  auto iter = data_sync_processor_threads.find(source_zone);
   if (iter == data_sync_processor_threads.end()) {
     ldout(ctx(), 10) << __func__ << ": couldn't find sync thread for zone " << source_zone << ", skipping async data sync processing" << dendl;
     return;
@@ -649,7 +649,7 @@ RGWMetaSyncStatusManager* RGWRados::get_meta_sync_manager()
   return nullptr;
 }
 
-RGWDataSyncStatusManager* RGWRados::get_data_sync_manager(const std::string& source_zone)
+RGWDataSyncStatusManager* RGWRados::get_data_sync_manager(const rgw_zone_id& source_zone)
 {
   std::lock_guard l{data_sync_thread_lock};
   auto thread = data_sync_processor_threads.find(source_zone);
@@ -835,7 +835,7 @@ int RGWIndexCompletionThread::process()
       /* ignoring error, can't do anything about it */
       continue;
     }
-    r = store->svc.datalog_rados->add_entry(bs.bucket, bs.shard_id);
+    r = store->svc.datalog_rados->add_entry(bucket_info, bs.shard_id);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
     }
@@ -966,7 +966,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
   if (zones_trace) {
     entry->zones_trace = *zones_trace;
   } else {
-    entry->zones_trace.insert(store->svc.zone->get_zone().id);
+    entry->zones_trace.insert(store->svc.zone->get_zone().id, obj.bucket.get_key());
   }
 
   *result = entry;
@@ -1105,7 +1105,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   metadata["zonegroup_id"] = svc.zone->get_zonegroup().get_id();
   metadata["zonegroup_name"] = svc.zone->get_zonegroup().get_name();
   metadata["zone_name"] = svc.zone->zone_name();
-  metadata["zone_id"] = svc.zone->zone_id();
+  metadata["zone_id"] = svc.zone->zone_id().id;
   string name = cct->_conf->name.get_id();
   if (name.compare(0, 4, "rgw.") == 0) {
     name = name.substr(4);
@@ -1240,7 +1240,7 @@ int RGWRados::init_complete()
         return ret;
       }
       thread->start();
-      data_sync_processor_threads[source_zone->id] = thread;
+      data_sync_processor_threads[rgw_zone_id(source_zone->id)] = thread;
     }
     auto interval = cct->_conf->rgw_sync_log_trim_interval;
     if (interval > 0) {
@@ -2747,7 +2747,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   obj_ctx.set_atomic(dest_obj);
 
-  string no_zone;
+  rgw_zone_id no_zone;
 
   r = copy_obj(obj_ctx,
                user,
@@ -2819,7 +2819,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 
   /* This code will be executed on latest version of the object. */
   const auto handler = [&](const rgw_bucket_dir_entry& entry) -> int {
-    std::string no_zone;
+    rgw_zone_id no_zone;
 
     /* We don't support object versioning of Swift API on those buckets that
      * are already versioned using the S3 mechanism. This affects also bucket
@@ -3224,7 +3224,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
-  std::function<int(const map<string, bufferlist>&)> attrs_handler;
+  std::function<int(map<string, bufferlist>&)> attrs_handler;
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -3232,7 +3232,7 @@ public:
                  rgw::putobj::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data,
-                 std::function<int(const map<string, bufferlist>&)> _attrs_handler) :
+                 std::function<int(map<string, bufferlist>&)> _attrs_handler) :
                        cct(cct),
                        filter(p),
                        compressor(compressor),
@@ -3505,9 +3505,9 @@ public:
 int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
-               const string& source_zone,
+               const rgw_zone_id& source_zone,
                rgw_obj& src_obj,
-               RGWBucketInfo& src_bucket_info,
+               const RGWBucketInfo *src_bucket_info,
                real_time *src_mtime,
                uint64_t *psize,
                const real_time *mod_ptr,
@@ -3532,12 +3532,12 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWRESTConn *conn;
   if (source_zone.empty()) {
-    if (src_bucket_info.zonegroup.empty()) {
+    if (!src_bucket_info || src_bucket_info->zonegroup.empty()) {
       /* source is in the master zonegroup */
       conn = svc.zone->get_master_conn();
     } else {
       auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
-      map<string, RGWRESTConn *>::iterator iter = zonegroup_conn_map.find(src_bucket_info.zonegroup);
+      map<string, RGWRESTConn *>::iterator iter = zonegroup_conn_map.find(src_bucket_info->zonegroup);
       if (iter == zonegroup_conn_map.end()) {
         ldout(cct, 0) << "could not find zonegroup connection to zonegroup: " << source_zone << dendl;
         return -ENOENT;
@@ -3546,7 +3546,7 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
     }
   } else {
     auto& zone_conn_map = svc.zone->get_zone_conn_map();
-    map<string, RGWRESTConn *>::iterator iter = zone_conn_map.find(source_zone);
+    auto iter = zone_conn_map.find(source_zone);
     if (iter == zone_conn_map.end()) {
       ldout(cct, 0) << "could not find zone connection to zone: " << source_zone << dendl;
       return -ENOENT;
@@ -3616,14 +3616,37 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
   return 0;
 }
 
+int RGWFetchObjFilter_Default::filter(CephContext *cct,
+                                      const rgw_obj_key& source_key,
+                                      const RGWBucketInfo& dest_bucket_info,
+                                      std::optional<rgw_placement_rule> dest_placement_rule,
+                                      const map<string, bufferlist>& obj_attrs,
+				      std::optional<rgw_user> *poverride_owner,
+                                      const rgw_placement_rule **prule)
+{
+  const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
+  if (!ptail_rule) {
+    auto iter = obj_attrs.find(RGW_ATTR_STORAGE_CLASS);
+    if (iter != obj_attrs.end()) {
+      dest_rule.storage_class = iter->second.to_str();
+      dest_rule.inherit_from(dest_bucket_info.placement_rule);
+      ptail_rule = &dest_rule;
+    } else {
+      ptail_rule = &dest_bucket_info.placement_rule;
+    }
+  }
+  *prule = ptail_rule;
+  return 0;
+}
+
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
-               const string& source_zone,
+               const rgw_zone_id& source_zone,
                const rgw_obj& dest_obj,
                const rgw_obj& src_obj,
-               RGWBucketInfo& dest_bucket_info,
-               RGWBucketInfo& src_bucket_info,
+               const RGWBucketInfo& dest_bucket_info,
+               const RGWBucketInfo *src_bucket_info,
                std::optional<rgw_placement_rule> dest_placement_rule,
                real_time *src_mtime,
                real_time *mtime,
@@ -3643,6 +3666,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                const DoutPrefixProvider *dpp,
+               RGWFetchObjFilter *filter,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred)
 {
@@ -3658,18 +3682,17 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
-  AtomicObjectProcessor processor(&aio, this->store, dest_bucket_info, ptail_rule, user_id,
+  AtomicObjectProcessor processor(&aio, this->store, dest_bucket_info, nullptr, user_id,
                                   obj_ctx, dest_obj, olh_epoch, tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
   if (source_zone.empty()) {
-    if (dest_bucket_info.zonegroup.empty()) {
+    if (!src_bucket_info || src_bucket_info->zonegroup.empty()) {
       /* source is in the master zonegroup */
       conn = svc.zone->get_master_conn();
     } else {
-      map<string, RGWRESTConn *>::iterator iter = zonegroup_conn_map.find(src_bucket_info.zonegroup);
+      map<string, RGWRESTConn *>::iterator iter = zonegroup_conn_map.find(src_bucket_info->zonegroup);
       if (iter == zonegroup_conn_map.end()) {
         ldout(cct, 0) << "could not find zonegroup connection to zonegroup: " << source_zone << dendl;
         return -ENOENT;
@@ -3677,7 +3700,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
       conn = iter->second;
     }
   } else {
-    map<string, RGWRESTConn *>::iterator iter = zone_conn_map.find(source_zone);
+    auto iter = zone_conn_map.find(source_zone);
     if (iter == zone_conn_map.end()) {
       ldout(cct, 0) << "could not find zone connection to zone: " << source_zone << dendl;
       return -ENOENT;
@@ -3685,25 +3708,34 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     conn = iter->second;
   }
 
-  string obj_name = dest_obj.bucket.name + "/" + dest_obj.get_oid();
-
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
 
-  rgw_placement_rule dest_rule;
+  RGWFetchObjFilter_Default source_filter;
+  if (!filter) {
+    filter = &source_filter;
+  }
+
+  std::optional<rgw_user> override_owner;
+
   RGWRadosPutObj cb(cct, plugin, compressor, &processor, progress_cb, progress_data,
-                    [&](const map<string, bufferlist>& obj_attrs) {
-                      if (!ptail_rule) {
-                        auto iter = obj_attrs.find(RGW_ATTR_STORAGE_CLASS);
-                        if (iter != obj_attrs.end()) {
-                          dest_rule.storage_class = iter->second.to_str();
-                          dest_rule.inherit_from(dest_bucket_info.placement_rule);
-                          processor.set_tail_placement(std::move(dest_rule));
-                          ptail_rule = &dest_rule;
-                        } else {
-                          ptail_rule = &dest_bucket_info.placement_rule;
-                        }
+                    [&](map<string, bufferlist>& obj_attrs) {
+                      const rgw_placement_rule *ptail_rule;
+
+                      int ret = filter->filter(cct,
+                                               src_obj.key,
+                                               dest_bucket_info,
+                                               dest_placement_rule,
+                                               obj_attrs,
+					       &override_owner,
+                                               &ptail_rule);
+                      if (ret < 0) {
+                        ldout(cct, 5) << "Aborting fetch: source object filter returned ret=" << ret << dendl;
+                        return ret;
                       }
+
+                      processor.set_tail_placement(*ptail_rule);
+
                       const auto& compression_type = svc.zone->get_zone_params().get_compression_type(*ptail_rule);
                       if (compression_type != "none") {
                         plugin = Compressor::create(cct, compression_type);
@@ -3713,7 +3745,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                         }
                       }
 
-                      int ret = processor.prepare(null_yield);
+                      ret = processor.prepare(null_yield);
                       if (ret < 0) {
                         return ret;
                       }
@@ -3780,6 +3812,44 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     cs_info.blocks = move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;
+  }
+
+  if (override_owner) {
+    processor.set_owner(*override_owner);
+
+    auto& obj_attrs = cb.get_attrs();
+
+    RGWUserInfo owner_info;
+    if (ctl.user->get_info_by_uid(*override_owner, &owner_info, null_yield) < 0) {
+      ldout(cct, 10) << "owner info does not exist" << dendl;
+      return -EINVAL;
+    }
+
+    RGWAccessControlPolicy acl;
+
+    auto aiter = obj_attrs.find(RGW_ATTR_ACL);
+    if (aiter == obj_attrs.end()) {
+      ldout(cct, 0) << "WARNING: " << __func__ << "(): object doesn't have ACL attribute, setting default ACLs" << dendl;
+      acl.create_default(owner_info.user_id, owner_info.display_name);
+    } else {
+      auto iter = aiter->second.cbegin();
+      try {
+	acl.decode(iter);
+      } catch (buffer::error& err) {
+	ldout(cct, 0) << "ERROR: " << __func__ << "(): could not decode policy, caught buffer::error" << dendl;
+	return -EIO;
+      }
+    }
+
+    ACLOwner new_owner;
+    new_owner.set_id(*override_owner);
+    new_owner.set_name(owner_info.display_name);
+
+    acl.set_owner(new_owner);
+
+    bufferlist bl;
+    acl.encode(bl);
+    obj_attrs[RGW_ATTR_ACL] = std::move(bl);
   }
 
   if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */
@@ -3936,7 +4006,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
 int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
-               const string& source_zone,
+               const rgw_zone_id& source_zone,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
@@ -3988,11 +4058,12 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
-               dest_obj, src_obj, dest_bucket_info, src_bucket_info,
+               dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, dpp);
+               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, dpp,
+               nullptr /* filter */);
   }
 
   map<string, bufferlist> src_attrs;
@@ -4829,12 +4900,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
       return r;
     }
 
-    if (target->bucket_info.datasync_flag_enabled()) {
-      r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
-      if (r < 0) {
-        lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-        return r;
-      }
+    r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+      return r;
     }
 
     return 0;
@@ -5901,11 +5970,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
 
   ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
 
-  if (target->bucket_info.datasync_flag_enabled()) {
-    int r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-    }
+  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
 
   return ret;
@@ -5929,11 +5996,9 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
 
   ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace);
 
-  if (target->bucket_info.datasync_flag_enabled()) {
-    int r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-    }
+  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
 
   return ret;
@@ -5957,11 +6022,9 @@ int RGWRados::Bucket::UpdateIndex::cancel()
    * for following the specific bucket shard log. Otherwise they end up staying behind, and users
    * have no way to tell that they're all caught up
    */
-  if (target->bucket_info.datasync_flag_enabled()) {
-    int r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-    }
+  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
 
   return ret;
@@ -6580,7 +6643,7 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
   if (_zones_trace) {
     zones_trace = *_zones_trace;
   }
-  zones_trace.insert(svc.zone->get_zone().id);
+  zones_trace.insert(svc.zone->get_zone().id, bucket_info.bucket.get_key());
 
   BucketShard bs(this);
 
@@ -6601,8 +6664,9 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
     return r;
   }
 
-  if (log_data_change && bucket_info.datasync_flag_enabled()) {
-    svc.datalog_rados->add_entry(bs.bucket, bs.shard_id);
+  r = svc.datalog_rados->add_entry(bucket_info, bs.shard_id);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed writing data log" << dendl;
   }
 
   return 0;
@@ -6627,7 +6691,7 @@ int RGWRados::bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, con
   if (_zones_trace) {
     zones_trace = *_zones_trace;
   }
-  zones_trace.insert(svc.zone->get_zone().id);
+  zones_trace.insert(svc.zone->get_zone().id, bucket_info.bucket.get_key());
 
   BucketShard bs(this);
 
@@ -7021,7 +7085,7 @@ int RGWRados::update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBuc
   return 0;
 }
 
-int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
+int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
                       uint64_t olh_epoch, real_time unmod_since, bool high_precision_time,
                       optional_yield y, rgw_zone_set *zones_trace, bool log_data_change)
 {
@@ -7949,7 +8013,7 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
   if (_zones_trace) {
     zones_trace = *_zones_trace;
   }
-  zones_trace.insert(svc.zone->get_zone().id);
+  zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
 
   ObjectWriteOperation o;
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
@@ -7972,7 +8036,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   if (_zones_trace) {
     zones_trace = *_zones_trace;
   }
-  zones_trace.insert(svc.zone->get_zone().id);
+  zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
 
   rgw_bucket_entry_ver ver;
   ver.pool = pool;

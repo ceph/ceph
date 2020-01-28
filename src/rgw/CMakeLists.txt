@@ -25,6 +25,7 @@ set(librgw_common_srcs
   services/svc_bilog_rados.cc
   services/svc_bucket.cc
   services/svc_bucket_sobj.cc
+  services/svc_bucket_sync_sobj.cc
   services/svc_cls.cc
   services/svc_datalog_rados.cc
   services/svc_mdlog.cc
@@ -56,6 +57,7 @@ set(librgw_common_srcs
   rgw_arn.cc
   rgw_basic_types.cc
   rgw_bucket.cc
+  rgw_bucket_sync.cc
   rgw_cache.cc
   rgw_common.cc
   rgw_compression.cc
@@ -87,6 +89,7 @@ set(librgw_common_srcs
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
   rgw_sync_module_pubsub.cc
+  rgw_sync_policy.cc
   rgw_pubsub_push.cc
   rgw_notify.cc
   rgw_notify_event_type.cc

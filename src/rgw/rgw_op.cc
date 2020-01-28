@@ -1249,6 +1249,106 @@ void RGWDeleteBucketTags::execute()
   });
 }
 
+int RGWGetBucketReplication::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetReplicationConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketReplication::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketReplication::execute()
+{
+  send_response_data();
+}
+
+int RGWPutBucketReplication::verify_permission() {
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
+}
+
+void RGWPutBucketReplication::execute() {
+
+  op_ret = get_params();
+  if (op_ret < 0) 
+    return;
+
+  if (!store->svc()->zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+    auto sync_policy = (s->bucket_info.sync_policy ? *s->bucket_info.sync_policy : rgw_sync_policy_info());
+
+    for (auto& group : sync_policy_groups) {
+      sync_policy.groups[group.id] = group;
+    }
+
+    s->bucket_info.set_sync_policy(std::move(sync_policy));
+
+    int ret = store->getRados()->put_bucket_instance_info(s->bucket_info, false, real_time(),
+                                                          &s->bucket_attrs);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket_info.bucket.get_key() << ") returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    return 0;
+  });
+}
+
+void RGWDeleteBucketReplication::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWDeleteBucketReplication::verify_permission()
+{
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
+}
+
+void RGWDeleteBucketReplication::execute()
+{
+  if (!store->svc()->zone->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+    if (!s->bucket_info.sync_policy) {
+      return 0;
+    }
+
+    rgw_sync_policy_info sync_policy = *s->bucket_info.sync_policy;
+
+    update_sync_policy(&sync_policy);
+
+    s->bucket_info.set_sync_policy(std::move(sync_policy));
+
+    int ret = store->getRados()->put_bucket_instance_info(s->bucket_info, false, real_time(),
+                                                          &s->bucket_attrs);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket_info.bucket.get_key() << ") returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    return 0;
+  });
+}
+
 int RGWOp::do_aws4_auth_completion()
 {
   ldpp_dout(this, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;

@@ -193,6 +193,13 @@ class utime_t;
 void decode_xml_obj(utime_t& val, XMLObj *obj);
 
 template<class T>
+void decode_xml_obj(std::optional<T>& val, XMLObj *obj)
+{
+  val.emplace();
+  decode_xml_obj(*val, obj);
+}
+
+template<class T>
 void do_decode_xml_obj(list<T>& l, const string& name, XMLObj *obj)
 {
   l.clear();
@@ -346,6 +353,23 @@ static void do_encode_xml(const char *name, const std::list<T>& l, const char *e
   f->close_section();
 }
 
+template<class T>
+static void encode_xml(const char *name, const std::vector<T>& l, ceph::Formatter *f)
+{
+  for (typename std::vector<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+    encode_xml(name, *iter, f);
+  }
+}
+
+template<class T>
+static void encode_xml(const char *name, const std::optional<T>& o, ceph::Formatter *f)
+{
+  if (!o) {
+    return;
+  }
+
+  encode_xml(name, *o, f);
+}
 
 
 #endif

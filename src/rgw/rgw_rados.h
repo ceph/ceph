@@ -202,6 +202,34 @@ struct RGWObjState {
   }
 };
 
+class RGWFetchObjFilter {
+public:
+  virtual ~RGWFetchObjFilter() {}
+
+  virtual int filter(CephContext *cct,
+                     const rgw_obj_key& source_key,
+                     const RGWBucketInfo& dest_bucket_info,
+                     std::optional<rgw_placement_rule> dest_placement_rule,
+                     const map<string, bufferlist>& obj_attrs,
+                     std::optional<rgw_user> *poverride_owner,
+                     const rgw_placement_rule **prule) = 0;
+};
+
+class RGWFetchObjFilter_Default : public RGWFetchObjFilter {
+protected:
+  rgw_placement_rule dest_rule;
+public:
+  RGWFetchObjFilter_Default() {}
+
+  int filter(CephContext *cct,
+             const rgw_obj_key& source_key,
+             const RGWBucketInfo& dest_bucket_info,
+             std::optional<rgw_placement_rule> dest_placement_rule,
+             const map<string, bufferlist>& obj_attrs,
+             std::optional<rgw_user> *poverride_owner,
+             const rgw_placement_rule **prule) override;
+};
+
 class RGWObjectCtx {
   rgw::sal::RGWRadosStore *store;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
@@ -412,7 +440,7 @@ class RGWRados
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
   RGWSyncTraceManager *sync_tracer = nullptr;
-  map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
+  map<rgw_zone_id, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   boost::optional<rgw::BucketTrimManager> bucket_trim;
   RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
@@ -1058,9 +1086,9 @@ public:
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
-               const string& source_zone,
+               const rgw_zone_id& source_zone,
                rgw_obj& src_obj,
-               RGWBucketInfo& src_bucket_info,
+               const RGWBucketInfo *src_bucket_info,
                real_time *src_mtime,
                uint64_t *psize,
                const real_time *mod_ptr,
@@ -1077,11 +1105,11 @@ public:
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const rgw_user& user_id,
                        req_info *info,
-                       const string& source_zone,
+                       const rgw_zone_id& source_zone,
                        const rgw_obj& dest_obj,
                        const rgw_obj& src_obj,
-                       RGWBucketInfo& dest_bucket_info,
-                       RGWBucketInfo& src_bucket_info,
+                       const RGWBucketInfo& dest_bucket_info,
+                       const RGWBucketInfo *src_bucket_info,
 		       std::optional<rgw_placement_rule> dest_placement,
                        ceph::real_time *src_mtime,
                        ceph::real_time *mtime,
@@ -1101,6 +1129,7 @@ public:
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
                        const DoutPrefixProvider *dpp,
+                       RGWFetchObjFilter *filter,
                        rgw_zone_set *zones_trace= nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0);
   /**
@@ -1120,7 +1149,7 @@ public:
   int copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
-               const string& source_zone,
+               const rgw_zone_id& source_zone,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
@@ -1180,10 +1209,10 @@ public:
   int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty = true);
 
   void wakeup_meta_sync_shards(set<int>& shard_ids);
-  void wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids);
+  void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids);
 
   RGWMetaSyncStatusManager* get_meta_sync_manager();
-  RGWDataSyncStatusManager* get_data_sync_manager(const std::string& source_zone);
+  RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone);
 
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
@@ -1277,7 +1306,7 @@ public:
                     bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
   int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
-  int set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
+  int set_olh(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
               optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
   int repair_olh(RGWObjState* state, const RGWBucketInfo& bucket_info,
@@ -1397,8 +1426,8 @@ public:
 
   int get_target_shard_id(const RGWBucketInfo& bucket_info, const string& obj_key, int *shard_id);
 
-  int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
-  int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
+  int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, rgw_zone_id& zone_id, string& owner_id);
+  int unlock(const rgw_pool& pool, const string& oid, rgw_zone_id& zone_id, string& owner_id);
 
   void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
   int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag);
