@@ -383,7 +383,9 @@ public:
     return new MockCreateImageRequest(mock_threads, m_local_io_ctx,
                                       global_image_id, remote_mirror_uuid,
                                       local_image_name, local_image_id,
-                                      &mock_remote_image_ctx, on_finish);
+                                      &mock_remote_image_ctx,
+                                      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                                      on_finish);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
