@@ -411,7 +411,8 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
   }
 
   C_SaferCond ctx;
-  auto req = mirror::EnableRequest<ImageCtx>::create(ictx, mode, &ctx);
+  auto req = mirror::EnableRequest<ImageCtx>::create(
+    ictx, static_cast<cls::rbd::MirrorImageMode>(mode), &ctx);
   req->send();
 
   r = ctx.wait();
