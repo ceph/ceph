@@ -466,6 +466,48 @@ public:
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_TAGGING;}
 };
 
+struct rgw_sync_policy_group;
+
+class RGWGetBucketReplication : public RGWOp {
+public:
+  int verify_permission() override;
+  void execute() override;
+  void pre_exec() override;
+
+  virtual void send_response_data() = 0;
+  const char* name() const override { return "get_bucket_replication"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_REPLICATION; }
+};
+
+class RGWPutBucketReplication : public RGWOp {
+protected:
+  bufferlist in_data;
+  std::vector<rgw_sync_policy_group> sync_policy_groups;
+public:
+  int verify_permission() override;
+  void execute() override;
+
+  virtual void send_response() override = 0;
+  virtual int get_params() = 0;
+  const char* name() const override { return "put_bucket_replication"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_REPLICATION; }
+};
+
+class RGWDeleteBucketReplication : public RGWOp {
+protected:
+  virtual void update_sync_policy(rgw_sync_policy_info *policy) = 0;
+public:
+  void pre_exec() override;
+  int verify_permission() override;
+  void execute() override;
+
+  const char* name() const override { return "delete_bucket_replication"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_REPLICATION;}
+};
+
 class RGWBulkDelete : public RGWOp {
 public:
   struct acct_path_t {

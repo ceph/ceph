@@ -7,6 +7,7 @@
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"
 #include "rgw_sync_counters.h"
+#include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -529,8 +530,14 @@ bool RGWOmapAppend::finish() {
 
 int RGWAsyncGetBucketInstanceInfo::_send_request()
 {
-  RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr, null_yield);
+  int r;
+  if (!bucket.bucket_id.empty()) {
+    RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
+    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, &attrs, null_yield);
+  } else {
+    r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield,
+                                               RGWBucketCtl::BucketInstance::GetParams().set_attrs(&attrs));
+  }
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
         << bucket << dendl;
@@ -578,24 +585,23 @@ int RGWAsyncFetchRemoteObj::_send_request()
 {
   RGWObjectCtx obj_ctx(store);
 
-  string user_id;
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
   map<string, bufferlist> attrs;
 
-  rgw_obj src_obj(bucket_info.bucket, key);
+  rgw_obj src_obj(src_bucket, key);
 
-  rgw_obj dest_obj(bucket_info.bucket, dest_key.value_or(key));
+  rgw_obj dest_obj(dest_bucket_info.bucket, dest_key.value_or(key));
 
   std::optional<uint64_t> bytes_transferred;
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
-                       rgw_user(user_id),
+                       user_id.value_or(rgw_user()),
                        NULL, /* req_info */
                        source_zone,
                        dest_obj,
                        src_obj,
-                       bucket_info, /* dest */
-                       bucket_info, /* source */
+                       dest_bucket_info, /* dest */
+                       nullptr, /* source */
 		       dest_placement_rule,
                        NULL, /* real_time* src_mtime, */
                        NULL, /* real_time* mtime, */
@@ -615,6 +621,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL, /* void *progress_data*); */
                        dpp,
+                       filter.get(),
                        &zones_trace,
                        &bytes_transferred);
 
@@ -641,16 +648,14 @@ int RGWAsyncStatRemoteObj::_send_request()
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
-  rgw_obj src_obj(bucket_info.bucket, key);
-
-  rgw_obj dest_obj(src_obj);
+  rgw_obj src_obj(src_bucket, key);
 
   int r = store->getRados()->stat_remote_obj(obj_ctx,
                        rgw_user(user_id),
                        nullptr, /* req_info */
                        source_zone,
                        src_obj,
-                       bucket_info, /* source */
+                       nullptr, /* source */
                        pmtime, /* real_time* src_mtime, */
                        psize, /* uint64_t * */
                        nullptr, /* const real_time* mod_ptr, */

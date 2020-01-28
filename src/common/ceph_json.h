@@ -2,6 +2,7 @@
 #define CEPH_JSON_H
 
 #include <stdexcept>
+#include <typeindex>
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
 
@@ -135,6 +136,9 @@ public:
 
   template<class T>
   static bool decode_json(const char *name, boost::optional<T>& val, JSONObj *obj, bool mandatory = false);
+
+  template<class T>
+  static bool decode_json(const char *name, std::optional<T>& val, JSONObj *obj, bool mandatory = false);
 
 };
 
@@ -383,11 +387,89 @@ bool JSONDecoder::decode_json(const char *name, boost::optional<T>& val, JSONObj
 }
 
 template<class T>
-static void encode_json(const char *name, const T& val, ceph::Formatter *f)
+bool JSONDecoder::decode_json(const char *name, std::optional<T>& val, JSONObj *obj, bool mandatory)
+{
+  JSONObjIter iter = obj->find_first(name);
+  if (iter.end()) {
+    if (mandatory) {
+      std::string s = "missing mandatory field " + std::string(name);
+      throw err(s);
+    }
+    val.reset();
+    return false;
+  }
+
+  try {
+    val.emplace();
+    decode_json_obj(*val, *iter);
+  } catch (const err& e) {
+    val.reset();
+    std::string s = std::string(name) + ": ";
+    s.append(e.what());
+    throw err(s);
+  }
+
+  return true;
+}
+
+class JSONEncodeFilter
+{
+public:
+  class HandlerBase {
+  public:
+    virtual ~HandlerBase() {}
+
+    virtual std::type_index get_type() = 0;
+    virtual void encode_json(const char *name, const void *pval, ceph::Formatter *) const = 0;
+  };
+
+  template <class T>
+  class Handler : public HandlerBase {
+  public:
+    virtual ~Handler() {}
+
+    std::type_index get_type() override {
+      return std::type_index(typeid(const T&));
+    }
+  };
+
+private:
+  std::map<std::type_index, HandlerBase *> handlers;
+
+public:
+  void register_type(HandlerBase *h) {
+    handlers[h->get_type()] = h;
+  }
+
+  template <class T>
+  bool encode_json(const char *name, const T& val, ceph::Formatter *f) {
+    auto iter = handlers.find(std::type_index(typeid(val)));
+    if (iter == handlers.end()) {
+      return false;
+    }
+
+    iter->second->encode_json(name, (const void *)&val, f);
+    return true;
+  }
+};
+
+template<class T>
+static void encode_json_impl(const char *name, const T& val, ceph::Formatter *f)
 {
   f->open_object_section(name);
   val.dump(f);
   f->close_section();
+}
+
+template<class T>
+static void encode_json(const char *name, const T& val, ceph::Formatter *f)
+{
+  JSONEncodeFilter *filter = static_cast<JSONEncodeFilter *>(f->get_external_feature_handler("JSONEncodeFilter"));
+
+  if (!filter ||
+      !filter->encode_json(name, val, f)) {
+    encode_json_impl(name, val, f);
+  }
 }
 
 class utime_t;
@@ -541,6 +623,16 @@ void encode_json_map(const char *name, const char *index_name, const char *value
 {
   encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }
+
+template <class T>
+static void encode_json(const char *name, const std::optional<T>& o, ceph::Formatter *f)
+{
+  if (!o) {
+    return;
+  }
+  encode_json(name, *o, f);
+}
+
 
 class JSONFormattable : public ceph::JSONFormatter {
   JSONObj::data_val value;

@@ -26,10 +26,12 @@
 #include "rgw_string.h"
 #include "rgw_multi.h"
 #include "rgw_op.h"
+#include "rgw_bucket_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
+#include "services/svc_bucket_sync.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_user.h"
@@ -226,8 +228,10 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
   string err;
   auto id = strict_strtol(shard.data(), 10, &err);
   if (!err.empty()) {
-    ldout(cct, 0) << "ERROR: failed to parse bucket shard '"
-        << instance.data() << "': " << err << dendl;
+    if (cct) {
+      ldout(cct, 0) << "ERROR: failed to parse bucket shard '"
+          << instance.data() << "': " << err << dendl;
+    }
     return -EINVAL;
   }
 
@@ -1098,7 +1102,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *at
   }
 
   for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = store->svc()->datalog_rados->add_entry(bucket_info.bucket, shard_id);
+    r = store->svc()->datalog_rados->add_entry(bucket_info, shard_id);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing data log:" + cpp_strerror(-r));
       return r;
@@ -2178,9 +2182,21 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
-int RGWDataChangesLog::add_entry(const rgw_bucket& bucket, int shard_id) {
-  if (!svc.zone->need_to_log_data())
+bool RGWDataChangesLog::filter_bucket(const rgw_bucket& bucket, optional_yield y) const
+{
+  if (!bucket_filter) {
+    return true;
+  }
+
+  return bucket_filter->filter(bucket, y);
+}
+
+int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
+  auto& bucket = bucket_info.bucket;
+
+  if (!filter_bucket(bucket, null_yield)) {
     return 0;
+  }
 
   if (observer) {
     observer->on_bucket_changed(bucket.get_key());
@@ -2916,7 +2932,7 @@ public:
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    return svc.bucket->remove_bucket_instance_info(ctx, entry, &bci.info.objv_tracker, y);
+    return svc.bucket->remove_bucket_instance_info(ctx, entry, bci.info, &bci.info.objv_tracker, y);
   }
 
   int call(std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
@@ -3046,8 +3062,9 @@ int RGWMetadataHandlerPut_BucketInstance::put_post()
   objv_tracker = bci.info.objv_tracker;
 
   int ret = bihandler->svc.bi->init_index(bci.info);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   return STATUS_APPLIED;
 }
@@ -3062,19 +3079,27 @@ public:
   }
 };
 
+bool RGWBucketCtl::DataLogFilter::filter(const rgw_bucket& bucket, optional_yield y) const
+{
+  return bucket_ctl->bucket_exports_data(bucket, null_yield);
+}
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
-                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
+                           RGWSI_Bucket_Sync *bucket_sync_svc,
+                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx()),
+                                                        datalog_filter(this)
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
+  svc.bucket_sync = bucket_sync_svc;
   svc.bi = bi_svc;
 }
 
 void RGWBucketCtl::init(RGWUserCtl *user_ctl,
                         RGWBucketMetadataHandler *_bm_handler,
-                        RGWBucketInstanceMetadataHandler *_bmi_handler)
+                        RGWBucketInstanceMetadataHandler *_bmi_handler,
+                        RGWDataChangesLog *datalog)
 {
   ctl.user = user_ctl;
 
@@ -3083,6 +3108,8 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
 
   bucket_be_handler = bm_handler->get_be_handler();
   bi_be_handler = bmi_handler->get_be_handler();
+
+  datalog->set_bucket_filter(&datalog_filter);
 }
 
 int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {
@@ -3255,6 +3282,7 @@ int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
     return svc.bucket->remove_bucket_instance_info(ctx,
                                                    RGWSI_Bucket::get_bi_meta_key(bucket),
+                                                   info,
                                                    &info.objv_tracker,
                                                    y);
   });
@@ -3648,6 +3676,49 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
   }
 
   return ctl.user->flush_bucket_stats(user_id, *pent);
+}
+
+int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
+                                          std::optional<rgw_bucket> bucket,
+                                          RGWBucketSyncPolicyHandlerRef *phandler,
+                                          optional_yield y)
+{
+  int r = call([&](RGWSI_Bucket_X_Ctx& ctx) {
+    return svc.bucket_sync->get_policy_handler(ctx, zone, bucket, phandler, y);
+  });
+  if (r < 0) {
+    ldout(cct, 20) << __func__ << "(): failed to get policy handler for bucket=" << bucket << " (r=" << r << ")" << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int RGWBucketCtl::bucket_exports_data(const rgw_bucket& bucket,
+                                      optional_yield y)
+{
+
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = get_sync_policy_handler(std::nullopt, bucket, &handler, y);
+  if (r < 0) {
+    return r;
+  }
+
+  return handler->bucket_exports_data();
+}
+
+int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
+                                      optional_yield y)
+{
+
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = get_sync_policy_handler(std::nullopt, bucket, &handler, y);
+  if (r < 0) {
+    return r;
+  }
+
+  return handler->bucket_imports_data();
 }
 
 RGWBucketMetadataHandlerBase *RGWBucketMetaHandlerAllocator::alloc()

@@ -194,6 +194,24 @@ public:
   virtual ~RGWPutBucketTags_ObjStore() = default; 
 };
 
+class RGWGetBucketReplication_ObjStore : public RGWGetBucketReplication {
+public:
+  RGWGetBucketReplication_ObjStore() {};
+  ~RGWGetBucketReplication_ObjStore() {};
+};
+
+class RGWPutBucketReplication_ObjStore: public RGWPutBucketReplication {
+public:
+  RGWPutBucketReplication_ObjStore() = default;
+  virtual ~RGWPutBucketReplication_ObjStore() = default; 
+};
+
+class RGWDeleteBucketReplication_ObjStore: public RGWDeleteBucketReplication {
+public:
+  RGWDeleteBucketReplication_ObjStore() = default;
+  virtual ~RGWDeleteBucketReplication_ObjStore() = default; 
+};
+
 class RGWListBuckets_ObjStore : public RGWListBuckets {
 public:
   RGWListBuckets_ObjStore() {}
