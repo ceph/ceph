@@ -673,7 +673,7 @@ inline namespace v14_2_0 {
     // bufferlist holds have this trait -- if somebody ::push_back(const ptr&),
     // he expects it won't change.
     ptr* _carriage;
-    unsigned _len;
+    unsigned _len, _num;
 
     template <bool is_const>
     class CEPH_BUFFER_API iterator_impl {
@@ -953,19 +953,22 @@ inline namespace v14_2_0 {
     // cons/des
     list()
       : _carriage(&always_empty_bptr),
-        _len(0) {
+        _len(0),
+        _num(0) {
     }
     // cppcheck-suppress noExplicitConstructor
     // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc)
       : _carriage(&always_empty_bptr),
-        _len(0) {
+        _len(0),
+        _num(0) {
       reserve(prealloc);
     }
 
     list(const list& other)
       : _carriage(&always_empty_bptr),
-        _len(other._len) {
+        _len(other._len),
+        _num(other._num) {
       _buffers.clone_from(other._buffers);
     }
     list(list&& other) noexcept;
@@ -979,6 +982,7 @@ inline namespace v14_2_0 {
         _carriage = &always_empty_bptr;
         _buffers.clone_from(other._buffers);
         _len = other._len;
+        _num = other._num;
       }
       return *this;
     }
@@ -986,12 +990,20 @@ inline namespace v14_2_0 {
       _buffers = std::move(other._buffers);
       _carriage = other._carriage;
       _len = other._len;
+      _num = other._num;
       other.clear();
       return *this;
     }
 
     uint64_t get_wasted_space() const;
-    unsigned get_num_buffers() const { return _buffers.size(); }
+    unsigned get_num_buffers() const {
+#ifdef __CEPH__
+      ceph_assert(_buffers.size() == _num);
+#else
+      assert(_buffers.size() == _num);
+#endif // __CEPH__
+      return _num;
+    }
     const ptr_node& front() const { return _buffers.front(); }
     const ptr_node& back() const { return _buffers.back(); }
 
@@ -1041,17 +1053,20 @@ inline namespace v14_2_0 {
       _carriage = &always_empty_bptr;
       _buffers.clear_and_dispose();
       _len = 0;
+      _num = 0;
     }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
       _buffers.push_back(*ptr_node::create(bp).release());
       _len += bp.length();
+      _num += 1;
     }
     void push_back(ptr&& bp) {
       if (bp.length() == 0)
 	return;
       _len += bp.length();
+      _num += 1;
       _buffers.push_back(*ptr_node::create(std::move(bp)).release());
       _carriage = &always_empty_bptr;
     }
@@ -1063,6 +1078,7 @@ inline namespace v14_2_0 {
 	return;
       _carriage = bp.get();
       _len += bp->length();
+      _num += 1;
       _buffers.push_back(*bp.release());
     }
     void push_back(raw* const r) = delete;
@@ -1070,6 +1086,7 @@ inline namespace v14_2_0 {
       _buffers.push_back(*ptr_node::create(std::move(r)).release());
       _carriage = &_buffers.back();
       _len += _buffers.back().length();
+      _num += 1;
     }
 
     void zero();
@@ -1102,6 +1119,7 @@ inline namespace v14_2_0 {
           _buffers.push_back(*ptr_node::create(bp).release());
         }
         _len = bl._len;
+        _num = bl._num;
       }
     }
 
@@ -1184,11 +1202,11 @@ inline namespace v14_2_0 {
     template<typename VectorT>
     void prepare_iov(VectorT *piov) const {
 #ifdef __CEPH__
-      ceph_assert(_buffers.size() <= IOV_MAX);
+      ceph_assert(_num <= IOV_MAX);
 #else
-      assert(_buffers.size() <= IOV_MAX);
+      assert(_num <= IOV_MAX);
 #endif
-      piov->resize(_buffers.size());
+      piov->resize(_num);
       unsigned n = 0;
       for (auto& p : _buffers) {
 	(*piov)[n].iov_base = (void *)p.c_str();
