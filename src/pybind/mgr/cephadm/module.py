@@ -723,7 +723,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         ssh_options = []  # type: List[str]
 
         # ssh_config
-        ssh_config_fname = self.ssh_config_file
+        ssh_config_fname = self.ssh_config_file  # type: ignore
         ssh_config = self.get_store("ssh_config")
         if ssh_config is not None or ssh_config_fname is None:
             if not ssh_config:
@@ -764,9 +764,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self._ssh_options = None
         self.log.info('ssh_options %s' % ssh_options)
 
-        if self.mode == 'root':
+        if self.mode == 'root':  # type: ignore
             self.ssh_user = 'root'
-        elif self.mode == 'cephadm-package':
+        elif self.mode == 'cephadm-package':  # type: ignore
             self.ssh_user = 'cephadm'
 
     @staticmethod
@@ -957,7 +957,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
 
-            if self.mode == 'root':
+            if self.mode == 'root':  # type: ignore
                 self.log.debug('args: %s' % (' '.join(final_args)))
                 self.log.debug('stdin: %s' % stdin)
                 script = 'injected_argv = ' + json.dumps(final_args) + '\n'
@@ -978,7 +978,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     if error_ok:
                         return '', str(e), 1
                     raise
-            elif self.mode == 'cephadm-package':
+            elif self.mode == 'cephadm-package':  # type: ignore
                 try:
                     out, err, code = remoto.process.check(
                         conn,
@@ -988,6 +988,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     if error_ok:
                         return '', str(e), 1
                     raise
+            else:
+                assert False, 'unsupported mode'
+
             if code and not error_ok:
                 raise RuntimeError(
                     'cephadm exited with an error code: %d, stderr:%s' % (
@@ -1099,7 +1102,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             keys = [node_name]
         for host, host_info in self.service_cache.items_filtered(keys):
             hosts.append(host)
-            if host_info.outdated(self.service_cache_timeout) or refresh:
+            if host_info.outdated(self.service_cache_timeout) or refresh:  # type: ignore
                 self.log.info("refreshing stale services for '{}'".format(host))
                 wait_for_args.append((host,))
             else:
@@ -1240,7 +1243,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         def _get_inventory(host, host_info):
             # type: (str, orchestrator.OutdatableData) -> orchestrator.InventoryNode
 
-            if host_info.outdated(self.inventory_cache_timeout) or refresh:
+            if host_info.outdated(self.inventory_cache_timeout) or refresh:  # type: ignore
                 self.log.info("refresh stale inventory for '{}'".format(host))
                 out, err, code = self._run_cephadm(
                     host, 'osd',
@@ -1872,7 +1875,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def upgrade_check(self, image, version):
         if version:
-            target_name = self.container_image_base + ':v' + version
+            target_name = self.container_image_base + ':v' + version  # type: ignore
         elif image:
             target_name = image
         else:
@@ -1917,7 +1920,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def upgrade_start(self, image, version):
         if version:
-            target_name = self.container_image_base + ':v' + version
+            target_name = self.container_image_base + ':v' + version  # type: ignore
         elif image:
             target_name = image
         else:
