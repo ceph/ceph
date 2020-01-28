@@ -17,6 +17,7 @@ set(rbd_mirror_internal
   MirrorStatusUpdater.cc
   MirrorStatusWatcher.cc
   NamespaceReplayer.cc
+  PoolMetaCache.cc
   PoolReplayer.cc
   PoolWatcher.cc
   RemotePoolPoller.cc

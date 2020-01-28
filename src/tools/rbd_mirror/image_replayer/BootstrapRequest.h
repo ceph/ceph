@@ -27,6 +27,7 @@ class ProgressContext;
 
 template <typename> class ImageSync;
 template <typename> class InstanceWatcher;
+struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -47,14 +48,15 @@ public:
       const std::string& local_mirror_uuid,
       const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
-      local_mirror_uuid, remote_pool_meta, cache_manager_handler, progress_ctx,
-      state_builder, do_resync, on_finish);
+      local_mirror_uuid, remote_pool_meta, cache_manager_handler,
+      pool_meta_cache, progress_ctx, state_builder, do_resync, on_finish);
   }
 
   BootstrapRequest(
@@ -66,6 +68,7 @@ public:
       const std::string& local_mirror_uuid,
       const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
@@ -131,6 +134,7 @@ private:
   std::string m_local_mirror_uuid;
   RemotePoolMeta m_remote_pool_meta;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
   ProgressContext *m_progress_ctx;
   StateBuilder<ImageCtxT>** m_state_builder;
   bool *m_do_resync;
