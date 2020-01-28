@@ -330,6 +330,7 @@ The Ceph Dashboard can manage iSCSI targets using the REST API provided by the
 installed and enabled on the iSCSI gateways.
 
 .. note::
+
   The iSCSI management functionality of Ceph Dashboard depends on the latest
   version 3 of the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_ project.
   Make sure that your operating system provides the correct version, otherwise
@@ -341,13 +342,13 @@ verification when accessing ceph-iscsi API.
 
 To disable API SSL verification run the following command::
 
-    $ ceph dashboard set-iscsi-api-ssl-verification false
+  $ ceph dashboard set-iscsi-api-ssl-verification false
 
 The available iSCSI gateways must be defined using the following commands::
 
-    $ ceph dashboard iscsi-gateway-list
-    $ ceph dashboard iscsi-gateway-add <scheme>://<username>:<password>@<host>[:port]
-    $ ceph dashboard iscsi-gateway-rm <gateway_name>
+  $ ceph dashboard iscsi-gateway-list
+  $ ceph dashboard iscsi-gateway-add <scheme>://<username>:<password>@<host>[:port]
+  $ ceph dashboard iscsi-gateway-rm <gateway_name>
 
 
 .. _dashboard-grafana:
@@ -360,56 +361,66 @@ orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
 Grafana on your preferred hosts, proceed with the following steps.
 
-#. Enable the Ceph Exporter which comes as Ceph Manager module by running::
+1. Enable the Ceph Exporter which comes as Ceph Manager module by running::
 
     $ ceph mgr module enable prometheus
 
 More details can be found in the documentation of the :ref:`mgr-prometheus`.
 
-#. Add the corresponding scrape configuration to Prometheus. This may look
+2. Add the corresponding scrape configuration to Prometheus. This may look
    like::
 
-        global:
-          scrape_interval: 5s
+    global:
+      scrape_interval: 5s
 
-        scrape_configs:
-          - job_name: 'prometheus'
-            static_configs:
-              - targets: ['localhost:9090']
-          - job_name: 'ceph'
-            static_configs:
-              - targets: ['localhost:9283']
-          - job_name: 'node-exporter'
-            static_configs:
-              - targets: ['localhost:9100']
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+      - job_name: 'ceph'
+        static_configs:
+          - targets: ['localhost:9283']
+      - job_name: 'node-exporter'
+        static_configs:
+          - targets: ['localhost:9100']
 
-#. Add Prometheus as data source to Grafana
+3. Add Prometheus as data source to Grafana
 
-#. Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
+4. Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
 
-        grafana-cli plugins install vonage-status-panel
-        grafana-cli plugins install grafana-piechart-panel
+    grafana-cli plugins install vonage-status-panel
+    grafana-cli plugins install grafana-piechart-panel
 
-#. Add the Dashboards to Grafana:
+5. Add the Dashboards to Grafana:
 
-   Dashboards can be added to Grafana by importing dashboard jsons.
-   Following command can be used for downloading json files::
+  Dashboards can be added to Grafana by importing dashboard jsons.
+  Following command can be used for downloading json files::
 
-	wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
+    wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
 
-   You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
-   master/monitoring/grafana/dashboards>`_ .
+  You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
+  master/monitoring/grafana/dashboards>`_ .
 
-   For Example, for ceph-cluster overview you can use::
+  For Example, for ceph-cluster overview you can use::
 
-        wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+    wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
 
-#. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
+6. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
 
-        [auth.anonymous]
-        enabled = true
-        org_name = Main Org.
-        org_role = Viewer
+    [auth.anonymous]
+    enabled = true
+    org_name = Main Org.
+    org_role = Viewer
+
+  In newer versions of Grafana (starting with 6.2.0-beta1) a new setting named
+  ``allow_embedding`` has been introduced. This setting needs to be explicitly
+  set to ``true`` for the Grafana integration in Ceph Dashboard to work, as its
+  default is ``false``.
+
+  ::
+
+    [security]
+    allow_embedding = true
 
 After you have set up Grafana and Prometheus, you will need to configure the
 connection information that the Ceph Dashboard will use to access Grafana.
@@ -421,6 +432,7 @@ You need to tell the dashboard on which url Grafana instance is running/deployed
 The format of url is : `<protocol>:<IP-address>:<port>`
 
 .. note::
+
   Ceph Dashboard embeds the Grafana dashboards via ``iframe`` HTML elements.
   If Grafana is configured without SSL/TLS support, most browsers will block the
   embedding of insecure content into a secured web page, if the SSL support in
@@ -449,6 +461,7 @@ is still performed by the Dashboard. However, the authentication process can be
 performed by an existing Identity Provider (IdP).
 
 .. note::
+
   Ceph Dashboard SSO support relies on onelogin's
   `python-saml <https://pypi.org/project/python-saml/>`_ library.
   Please ensure that this library is installed on your system, either by using
@@ -467,6 +480,7 @@ Parameters:
 * **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
 
 .. note::
+
   The issuer value of SAML requests will follow this pattern:  **<ceph_dashboard_base_url>**/auth/saml2/metadata
 
 To display the current SAML 2.0 configuration, use the following command::
@@ -474,6 +488,7 @@ To display the current SAML 2.0 configuration, use the following command::
   $ ceph dashboard sso show saml2
 
 .. note::
+
   For more information about `onelogin_settings`, please check the `onelogin documentation <https://github.com/onelogin/python-saml>`_.
 
 To disable SSO::
@@ -512,80 +527,80 @@ All three methods are going to notify you about alerts. You won't be notified
 twice if you use both sources, but you need to consume at least the Alertmanager API
 in order to manage silences.
 
-#. Use the notification receiver of the dashboard:
+1. Use the notification receiver of the dashboard
 
-   This allows you to get notifications as `configured
-   <https://prometheus.io/docs/alerting/configuration/>`_ from the Alertmanager.
-   You will get notified inside the dashboard once a notification is send out,
-   but you are not able to manage alerts.
+  This allows you to get notifications as `configured
+  <https://prometheus.io/docs/alerting/configuration/>`_ from the Alertmanager.
+  You will get notified inside the dashboard once a notification is send out,
+  but you are not able to manage alerts.
 
-   Add the dashboard receiver and the new route to your Alertmanager configuration.
-   This should look like::
+  Add the dashboard receiver and the new route to your Alertmanager
+  configuration. This should look like::
 
-     route:
-       receiver: 'ceph-dashboard'
-     ...
-     receivers:
-       - name: 'ceph-dashboard'
-         webhook_configs:
-         - url: '<url-to-dashboard>/api/prometheus_receiver'
+    route:
+      receiver: 'ceph-dashboard'
+    ...
+    receivers:
+      - name: 'ceph-dashboard'
+        webhook_configs:
+        - url: '<url-to-dashboard>/api/prometheus_receiver'
 
 
-   Please make sure that the Alertmanager considers your SSL certificate in terms
-   of the dashboard as valid. For more information about the correct
-   configuration checkout the `<http_config> documentation
-   <https://prometheus.io/docs/alerting/configuration/#%3Chttp_config%3E>`_.
+  Please make sure that the Alertmanager considers your SSL certificate in terms
+  of the dashboard as valid. For more information about the correct
+  configuration checkout the `<http_config> documentation
+  <https://prometheus.io/docs/alerting/configuration/#%3Chttp_config%3E>`_.
 
-#. Use the API of Prometheus and the Alertmanager
+2. Use the API of Prometheus and the Alertmanager
 
-   This allows you to manage alerts and silences. This will enable the "Active
-   Alerts", "All Alerts" as well as the "Silences" tabs in the "Monitoring"
-   section of the "Cluster" menu entry.
+  This allows you to manage alerts and silences. This will enable the "Active
+  Alerts", "All Alerts" as well as the "Silences" tabs in the "Monitoring"
+  section of the "Cluster" menu entry.
 
-   Alerts can be sorted by name, job, severity, state and start time.
-   Unfortunately it's not possible to know when an alert
-   was sent out through a notification by the Alertmanager based on your
-   configuration, that's why the dashboard will notify the user on any visible
-   change to an alert and will notify the changed alert.
+  Alerts can be sorted by name, job, severity, state and start time.
+  Unfortunately it's not possible to know when an alert was sent out through a
+  notification by the Alertmanager based on your configuration, that's why the
+  dashboard will notify the user on any visible change to an alert and will
+  notify the changed alert.
 
-   Silences can be sorted by id, creator, status, start, updated and end time.
-   Silences can be created in various ways, it's also possible to expire them.
+  Silences can be sorted by id, creator, status, start, updated and end time.
+  Silences can be created in various ways, it's also possible to expire them.
 
-   #. Create from scratch
+  #. Create from scratch
 
-   #. Based on a selected alert
+  #. Based on a selected alert
 
-   #. Recreate from expired silence
+  #. Recreate from expired silence
 
-   #. Update a silence (which will recreate and expire it (default Alertmanager behaviour))
+  #. Update a silence (which will recreate and expire it (default Alertmanager behaviour))
 
-   To use it, specify the host and port of the Alertmanager server::
+  To use it, specify the host and port of the Alertmanager server::
 
-     $ ceph dashboard set-alertmanager-api-host <alertmanager-host:port>  # default: ''
+    $ ceph dashboard set-alertmanager-api-host <alertmanager-host:port>  # default: ''
 
-   For example::
+  For example::
 
-     $ ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
+    $ ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
 
-   To be able to see all configured alerts, you will need to configure the URL
-   to the Prometheus API. Using this API, the UI will also help you in verifying
-   that a new silence will match a corresponding alert.
+  To be able to see all configured alerts, you will need to configure the URL to
+  the Prometheus API. Using this API, the UI will also help you in verifying
+  that a new silence will match a corresponding alert.
 
-   ::
+  ::
 
-     $ ceph dashboard set-prometheus-api-host <prometheus-host:port>  # default: ''
+    $ ceph dashboard set-prometheus-api-host <prometheus-host:port>  # default: ''
 
-   For example::
+  For example::
 
-     $ ceph dashboard set-prometheus-api-host 'http://localhost:9090'
+    $ ceph dashboard set-prometheus-api-host 'http://localhost:9090'
 
-   After setting up the hosts, you have to refresh the dashboard in your browser window.
+  After setting up the hosts, you have to refresh the dashboard in your browser window.
 
-#. Use both methods
+3. Use both methods
 
-   The different behaviors of both methods are configured in a way that they
-   should not disturb each other through annoying duplicated notifications
-   popping up.
+  The different behaviors of both methods are configured in a way that they
+  should not disturb each other through annoying duplicated notifications
+  popping up.
 
 Accessing the Dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
