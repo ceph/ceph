@@ -539,7 +539,7 @@ public:
                                     local_mirror_uuid,
                                     {"remote mirror uuid",
                                      "remote mirror peer uuid"},
-                                    nullptr, nullptr,
+                                    nullptr, nullptr, nullptr,
                                     &m_mock_state_builder,
                                     &m_do_resync, on_finish);
   }

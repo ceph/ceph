@@ -37,6 +37,7 @@
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/MirrorStatusUpdater.h"
+#include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/Types.h"
@@ -161,7 +162,7 @@ public:
     m_replayer = new ImageReplayerT(m_local_ioctx, m_local_mirror_uuid,
                                     m_global_image_id, m_threads.get(),
                                     m_instance_watcher, m_local_status_updater,
-                                    nullptr);
+                                    nullptr, &m_pool_meta_cache);
     m_replayer->add_peer({"peer uuid", m_remote_ioctx, {}, nullptr});
   }
 
@@ -390,6 +391,8 @@ public:
   }
 
   static int _image_number;
+
+  rbd::mirror::PoolMetaCache m_pool_meta_cache{g_ceph_context};
 
   std::shared_ptr<librados::Rados> m_local_cluster;
   std::unique_ptr<rbd::mirror::Threads<>> m_threads;

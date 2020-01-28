@@ -24,6 +24,7 @@ namespace mirror {
 
 template <typename> struct InstanceWatcher;
 template <typename> struct MirrorStatusUpdater;
+struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -45,10 +46,11 @@ public:
       const std::string &global_image_id, Threads<ImageCtxT> *threads,
       InstanceWatcher<ImageCtxT> *instance_watcher,
       MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
                              threads, instance_watcher, local_status_updater,
-                             cache_manager_handler);
+                             cache_manager_handler, pool_meta_cache);
   }
   void destroy() {
     delete this;
@@ -60,7 +62,8 @@ public:
                 Threads<ImageCtxT> *threads,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-                journal::CacheManagerHandler *cache_manager_handler);
+                journal::CacheManagerHandler *cache_manager_handler,
+                PoolMetaCache* pool_meta_cache);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -181,6 +184,7 @@ private:
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
 
   Peers m_peers;
   Peer<ImageCtxT> m_remote_image_peer;
