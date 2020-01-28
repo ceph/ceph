@@ -29,14 +29,15 @@ public:
                                const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
+                               bool skip_mirror_enable,
+                               cls::rbd::MirrorImageMode mirror_image_mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               bool skip_mirror_enable,
                                ContextWQ *op_work_queue, Context *on_finish) {
     return new CreateRequest(config, ioctx, image_name, image_id, size,
-                             image_options, non_primary_global_image_id,
-                             primary_mirror_uuid, skip_mirror_enable,
-                             op_work_queue, on_finish);
+                             image_options, skip_mirror_enable,
+                             mirror_image_mode, non_primary_global_image_id,
+                             primary_mirror_uuid, op_work_queue, on_finish);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -90,9 +91,10 @@ private:
                 const std::string &image_name,
                 const std::string &image_id, uint64_t size,
                 const ImageOptions &image_options,
+                bool skip_mirror_enable,
+                cls::rbd::MirrorImageMode mirror_image_mode,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
-                bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
   const ConfigProxy& m_config;
@@ -110,9 +112,10 @@ private:
   std::string m_journal_pool;
   std::string m_data_pool;
   int64_t m_data_pool_id = -1;
+  bool m_skip_mirror_enable;
+  cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
-  bool m_skip_mirror_enable;
   bool m_negotiate_features = false;
 
   ContextWQ *m_op_work_queue;

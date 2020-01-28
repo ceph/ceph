@@ -615,7 +615,8 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     std::string dest_id = util::generate_image_id(dest_md_ctx);
     auto *req = image::CloneRequest<I>::create(
       config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
-      dest_md_ctx, destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
+      dest_md_ctx, destname, dest_id, opts, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+      "", "", src->op_work_queue, &ctx);
     req->send();
     r = ctx.wait();
   }

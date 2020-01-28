@@ -40,9 +40,10 @@ struct CreateRequest<librbd::MockTestImageCtx> {
                                const std::string &imgname,
                                const std::string &imageid, uint64_t size,
                                const librbd::ImageOptions &image_options,
+                               bool skip_mirror_enable,
+                               cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               bool skip_mirror_enable,
                                MockContextWQ *op_work_queue,
                                Context *on_finish) {
     ceph_assert(s_instance != nullptr);
@@ -80,6 +81,7 @@ struct CloneRequest<librbd::MockTestImageCtx> {
                               uint64_t p_snap_id,
 			      IoCtx &c_ioctx, const std::string &c_name,
 			      const std::string &c_id, ImageOptions c_options,
+                              cls::rbd::MirrorImageMode mode,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      MockContextWQ *op_work_queue,
