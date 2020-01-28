@@ -164,6 +164,9 @@ class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemO
     def tier_type(self):
         raise NotImplementedError
 
+    def syncs_from(self, zone_name):
+        return zone_name != self.name
+
     def has_buckets(self):
         return True
 

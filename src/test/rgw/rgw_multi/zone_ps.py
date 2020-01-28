@@ -49,6 +49,9 @@ class PSZone(Zone):  # pylint: disable=too-many-ancestors
     def tier_type(self):
         return "pubsub"
 
+    def syncs_from(self, zone_name):
+        return zone_name == self.master_zone.name
+
     def create(self, cluster, args=None, **kwargs):
         if args is None:
             args = ''
