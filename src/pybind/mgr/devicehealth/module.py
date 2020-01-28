@@ -429,7 +429,7 @@ class Module(MgrModule):
             return {}
         with ioctx:
             with rados.ReadOpCtx() as op:
-                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '',
+                omap_iter, ret = ioctx.get_omap_vals(op, min_sample or '', sample or '',
                                                      MAX_SAMPLES)  # fixme
                 assert ret == 0
                 try:
