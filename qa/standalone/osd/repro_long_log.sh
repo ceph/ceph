@@ -84,7 +84,7 @@ function setup_log_test() {
     done
 
     # log should have been trimmed down to min_entries with one extra
-    test_log_size $PGID 21 || return 1
+    test_log_size $PGID 31 || return 1
 }
 
 function TEST_repro_long_log1()
@@ -94,7 +94,7 @@ function TEST_repro_long_log1()
     setup_log_test $dir || return 1
     # regular write should trim the log
     rados -p test put foo $dir/foo || return 1
-    test_log_size $PGID 22 || return 1
+    test_log_size $PGID 32 || return 1
 }
 
 function TEST_repro_long_log2()
