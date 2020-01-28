@@ -4968,11 +4968,11 @@ int main(int argc, const char **argv)
                                         OPT_SUBUSER_MODIFY, OPT_SUBUSER_RM,
                                         OPT_BUCKET_LINK, OPT_BUCKET_UNLINK,
                                         OPT_BUCKET_RESHARD, OPT_BUCKET_RM,
-                                        OPT_METADATA_PUT, OPT_METADATA_RM,
-                                        OPT_RESHARD_CANCEL, OPT_RESHARD_ADD,
-                                        OPT_MFA_CREATE, OPT_MFA_REMOVE,
-                                        OPT_MFA_RESYNC, OPT_CAPS_ADD,
-                                        OPT_CAPS_RM};
+                                        OPT_BUCKET_CHOWN, OPT_METADATA_PUT,
+                                        OPT_METADATA_RM, OPT_RESHARD_CANCEL,
+                                        OPT_RESHARD_ADD, OPT_MFA_CREATE,
+                                        OPT_MFA_REMOVE, OPT_MFA_RESYNC,
+                                        OPT_CAPS_ADD, OPT_CAPS_RM};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
