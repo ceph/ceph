@@ -16,6 +16,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSubuser } from '../models/rgw-user-subuser';
@@ -378,6 +379,10 @@ export class RgwUserFormComponent implements OnInit {
     this.capabilities.splice(index, 1);
     // Mark the form as dirty to be able to submit it.
     this.userForm.markAsDirty();
+  }
+
+  hasAllCapabilities() {
+    return !_.difference(RgwUserCapabilities.getAll(), _.map(this.capabilities, 'type')).length;
   }
 
   /**

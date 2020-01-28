@@ -402,6 +402,11 @@
                 <div class="col-12">
                   <button type="button"
                           class="btn btn-light float-right tc_addCapButton"
+                          [disabled]="hasAllCapabilities()"
+                          i18n-tooltip
+                          tooltip="All capabilities are already added."
+                          [isDisabled]="!hasAllCapabilities()"
+                          triggers="pointerenter pointerleave"
                           (click)="showCapabilityModal()">
                     <i [ngClass]="[icons.add]"></i>
                     <ng-container i18n>{{ actionLabels.ADD | titlecase }}
