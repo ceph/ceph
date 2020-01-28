@@ -103,8 +103,7 @@ class SingleType(Strategy):
 
         # create the lvs from the vgs captured in the beginning
         for create in osd_vgs.values():
-            block_uuid = system.generate_uuid()
-            lvs = lvm.create_lvs('osd-data', block_uuid, vg=create['vg'], parts=create['parts'])
+            lvs = lvm.create_lvs(create['vg'], parts=create['parts'], name_prefix='osd-data')
             vg_name = create['vg'].name
             for lv in lvs:
                 command = ['--bluestore', '--data']
