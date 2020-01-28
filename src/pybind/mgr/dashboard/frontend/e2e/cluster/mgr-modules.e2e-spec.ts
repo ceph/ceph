@@ -52,7 +52,7 @@ describe('Manager modules page', () => {
     });
 
     it('should test editing on dashboard module', async () => {
-      const dashboardArr = [['rq', 'AUDIT_API_ENABLED'], ['rafa', 'GRAFANA_API_PASSWORD']];
+      const dashboardArr = [['rq', 'RGW_API_USER_ID'], ['rafa', 'GRAFANA_API_PASSWORD']];
       await mgrmodules.editMgrModule('dashboard', dashboardArr);
     });
 
