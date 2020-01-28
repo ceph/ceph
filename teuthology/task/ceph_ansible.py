@@ -432,6 +432,11 @@ class CephAnsible(Task):
             run.Raw(';'),
             'pip',
             'install',
+            '--upgrade',
+            'cryptography>=2.5',
+            run.Raw(';'),
+            'pip',
+            'install',
             run.Raw('setuptools>=11.3'),
             run.Raw('notario>=0.0.13'), # FIXME: use requirements.txt
             run.Raw('netaddr'),
