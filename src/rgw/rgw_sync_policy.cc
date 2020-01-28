@@ -338,7 +338,9 @@ void rgw_sync_bucket_pipes::get_potential_related_buckets(const rgw_bucket& buck
     auto expanded_sources = source.expand();
 
     for (auto& s : expanded_sources) {
-      sources->insert(*s.bucket);
+      if (s.bucket && !s.bucket->name.empty()) {
+        sources->insert(*s.bucket);
+      }
     }
   }
 
@@ -346,7 +348,9 @@ void rgw_sync_bucket_pipes::get_potential_related_buckets(const rgw_bucket& buck
     auto expanded_dests = dest.expand();
 
     for (auto& d : expanded_dests) {
-      dests->insert(*d.bucket);
+      if (d.bucket && !d.bucket->name.empty()) {
+        dests->insert(*d.bucket);
+      }
     }
   }
 }
