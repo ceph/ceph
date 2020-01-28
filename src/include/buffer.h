@@ -441,13 +441,6 @@ inline namespace v14_2_0 {
       // _root.next can be thought as _head
       ptr_hook _root;
       ptr_hook* _tail;
-      std::size_t _size;
-
-      // the presence size() is our implementation detail; we don't
-      // expose it via bufferlist::buffers()::size(). Client should
-      // use buffferlist::get_num_buffers() instead.
-      std::size_t size() const { return _size; }
-      friend list;
 
     public:
       template <class T>
@@ -516,17 +509,14 @@ inline namespace v14_2_0 {
 
       buffers_t()
         : _root(&_root),
-	  _tail(&_root),
-	  _size(0) {
+	  _tail(&_root) {
       }
       buffers_t(const buffers_t&) = delete;
       buffers_t(buffers_t&& other)
 	: _root(other._root.next == &other._root ? &_root : other._root.next),
-	  _tail(other._tail == &other._root ? &_root : other._tail),
-	  _size(other._size) {
+	  _tail(other._tail == &other._root ? &_root : other._tail) {
 	other._root.next = &other._root;
 	other._tail = &other._root;
-	other._size = 0;
 
 	_tail->next = &_root;
       }
@@ -543,14 +533,12 @@ inline namespace v14_2_0 {
 	// this updates _root.next when called on empty
 	_tail->next = &item;
 	_tail = &item;
-	_size++;
       }
 
       void push_front(reference item) {
 	item.next = _root.next;
 	_root.next = &item;
 	_tail = _tail == &_root ? &item : _tail;
-	_size++;
       }
 
       // *_after
@@ -560,7 +548,6 @@ inline namespace v14_2_0 {
 	it->next = to_erase->next;
 	_root.next = _root.next == to_erase ? to_erase->next : _root.next;
 	_tail = _tail == to_erase ? (ptr_hook*)&*it : _tail;
-	_size--;
 	return it->next;
       }
 
@@ -569,11 +556,10 @@ inline namespace v14_2_0 {
 	it->next = &item;
 	_root.next = it == end() ? &item : _root.next;
 	_tail = const_iterator(_tail) == it ? &item : _tail;
-	_size++;
       }
 
       void splice_back(buffers_t& other) {
-	if (other._size == 0) {
+	if (other.empty()) {
 	  return;
 	}
 
@@ -581,11 +567,9 @@ inline namespace v14_2_0 {
 	// will update root.next if empty() == true
 	_tail->next = other._root.next;
 	_tail = other._tail;
-	_size += other._size;
 
 	other._root.next = &other._root;
 	other._tail = &other._root;
-	other._size = 0;
       }
 
       bool empty() const { return _tail == &_root; }
@@ -637,7 +621,6 @@ inline namespace v14_2_0 {
 	}
 	_root.next = &_root;
 	_tail = &_root;
-	_size = 0;
       }
       iterator erase_after_and_dispose(iterator it) {
 	auto* to_dispose = &*std::next(it);
@@ -659,7 +642,6 @@ inline namespace v14_2_0 {
 
 	_tail->next = &_root;
 	other._tail->next = &other._root;
-	std::swap(_size, other._size);
       }
     };
 
@@ -996,14 +978,7 @@ inline namespace v14_2_0 {
     }
 
     uint64_t get_wasted_space() const;
-    unsigned get_num_buffers() const {
-#ifdef __CEPH__
-      ceph_assert(_buffers.size() == _num);
-#else
-      assert(_buffers.size() == _num);
-#endif // __CEPH__
-      return _num;
-    }
+    unsigned get_num_buffers() const { return _num; }
     const ptr_node& front() const { return _buffers.front(); }
     const ptr_node& back() const { return _buffers.back(); }
 
