@@ -6,6 +6,7 @@ overrides:
       ceph_stable_rh_storage: true
       ceph_repository: rhcs
       ceph_stable_release: nautilus
+      dashboard_enabled: false
       osd_scenario: collocated
       journal_size: 1024
       osd_auto_discovery: false

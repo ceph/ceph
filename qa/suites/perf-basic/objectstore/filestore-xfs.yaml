@@ -7,6 +7,7 @@ overrides:
       ceph_repository: rhcs
       copy_admin_key: true
       ceph_stable_release: nautilus
+      dashboard_enabled: false
       osd_scenario: collocated
       osd_auto_discovery: true
       ceph_test: true
