@@ -785,8 +785,10 @@ void PG::send_cluster_message(
 {
   ConnectionRef con = osd->get_con_osd_cluster(
     target, get_osdmap_epoch());
-  if (!con)
+  if (!con) {
+    m->put();
     return;
+  }
 
   if (share_map_update) {
     osd->maybe_share_map(con.get(), get_osdmap());
