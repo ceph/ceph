@@ -1433,6 +1433,24 @@ class CephFSShell(Cmd):
             perror(e)
             self.exit_code = e.get_error_code()
 
+    getxattr_parser = argparse.ArgumentParser(
+        description='Get extended attribute set for a file')
+    getxattr_parser.add_argument('path', type=str, action=path_to_bytes,
+                                 help='Name of the file')
+    getxattr_parser.add_argument('name', type=str, help='Extended attribute name')
+
+    @with_argparser(getxattr_parser)
+    def do_getxattr(self, args):
+        """
+        Get extended attribute for a file
+        """
+        try:
+            poutput('{}'.format(cephfs.getxattr(args.path,
+                                to_bytes(args.name)).decode('utf-8')))
+        except libcephfs.Error as e:
+            perror(e)
+            self.exit_code = e.get_error_code()
+
 #######################################################
 #
 # Following are methods that get cephfs-shell started.
