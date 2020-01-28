@@ -21,14 +21,15 @@ namespace mirror {
 template <typename ImageCtxT = ImageCtx>
 class EnableRequest {
 public:
-  static EnableRequest *create(ImageCtxT *image_ctx, mirror_image_mode_t mode,
+  static EnableRequest *create(ImageCtxT *image_ctx,
+                               cls::rbd::MirrorImageMode mode,
                                Context *on_finish) {
     return create(image_ctx->md_ctx, image_ctx->id, mode, "",
                   image_ctx->op_work_queue, on_finish);
   }
   static EnableRequest *create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
-                               mirror_image_mode_t mode,
+                               cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
                                ContextWQ *op_work_queue, Context *on_finish) {
     return new EnableRequest(io_ctx, image_id, mode,
@@ -60,7 +61,7 @@ private:
    */
 
   EnableRequest(librados::IoCtx &io_ctx, const std::string &image_id,
-                mirror_image_mode_t mode,
+                cls::rbd::MirrorImageMode mode,
                 const std::string &non_primary_global_image_id,
                 ContextWQ *op_work_queue, Context *on_finish);
 

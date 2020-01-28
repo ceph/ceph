@@ -24,12 +24,11 @@ using util::create_rados_callback;
 template <typename I>
 EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
                                 const std::string &image_id,
-                                mirror_image_mode_t mode,
+                                cls::rbd::MirrorImageMode mode,
                                 const std::string &non_primary_global_image_id,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_io_ctx(io_ctx), m_image_id(image_id),
-    m_mode(static_cast<cls::rbd::MirrorImageMode>(mode)),
-    m_non_primary_global_image_id(non_primary_global_image_id),
+    m_mode(mode), m_non_primary_global_image_id(non_primary_global_image_id),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish),
     m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())) {
 }
