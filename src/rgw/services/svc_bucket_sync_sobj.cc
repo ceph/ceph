@@ -543,6 +543,8 @@ int RGWSI_BS_SObj_HintIndexObj::update(const rgw_bucket& entity,
       ldout(cct, 0) << "ERROR: failed to flush hint index: obj=" << obj << " r=" << r << dendl;
       return r;
     }
+
+    invalidate();
   }
   ldout(cct, 0) << "ERROR: failed to flush hint index: too many retries (obj=" << obj << "), likely a bug" << dendl;
 
