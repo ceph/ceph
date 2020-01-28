@@ -1314,6 +1314,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'keyring': keyring,
         })
 
+        before_osd_uuid_map = self.get_osd_uuid_map()
+
         devices = drive_group.data_devices.paths
         for device in devices:
             out, err, code = self._run_cephadm(
@@ -1346,8 +1348,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     self.log.debug('mismatched fsid, skipping %s' % osd)
                     continue
-                if len(list(set(devices) & set(osd['devices']))) == 0 and osd.get('lv_path') not in devices:
-                    self.log.debug('mismatched devices, skipping %s' % osd)
+                if osd_id in before_osd_uuid_map:
+                    # this osd existed before we ran prepare
                     continue
                 if osd_id not in osd_uuid_map:
                     self.log.debug('osd id %d does not exist in cluster' % osd_id)
