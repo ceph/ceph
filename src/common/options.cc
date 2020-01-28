@@ -5391,7 +5391,10 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_override_bucket_index_max_shards", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("The default number of bucket index shards for newly-created "
+        "buckets. This value overrides bucket_index_max_shards stored in the zone. "
+        "Setting this value in the zone is preferred, because it applies globally "
+        "to all radosgw daemons running in the zone."),
 
     Option("rgw_bucket_index_max_aio", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128)
