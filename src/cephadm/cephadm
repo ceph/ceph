@@ -1974,7 +1974,8 @@ def command_bootstrap():
     logger.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(fsid, 'mgr', mgr_id)
-    deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
+    deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid,
+                  config=config, keyring=mgr_keyring)
 
     # output files
     with open(args.output_keyring, 'w') as f:
@@ -2145,7 +2146,7 @@ def command_deploy():
         make_var_run(args.fsid, uid, gid)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
-                      config, keyring,
+                      config=config, keyring=keyring,
                       osd_fsid=args.osd_fsid,
                       reconfig=args.reconfig)
 
