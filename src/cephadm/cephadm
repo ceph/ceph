@@ -157,6 +157,15 @@ class Monitoring(object):
         },
     }  # type: ignore
 
+
+def get_supported_daemons():
+    supported_daemons = list(Ceph.daemons)
+    supported_daemons.extend(Monitoring.components)
+    assert len(supported_daemons) == len(set(supported_daemons))
+    return supported_daemons
+
+##################################
+
 def attempt_bind(s, address, port):
     # type (str) -> None
     try:
@@ -2134,10 +2143,7 @@ def command_deploy():
     l = FileLock(args.fsid)
     l.acquire()
 
-    supported_daemons = list(Ceph.daemons)
-    supported_daemons.extend(Monitoring.components)
-
-    if daemon_type not in supported_daemons:
+    if daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % daemon_type)
 
     if daemon_type in Ceph.daemons:
@@ -2973,9 +2979,7 @@ class CustomValidation(argparse.Action):
             raise argparse.ArgumentError(self,
                                          "must be of the format <type>.<id>. For example, osd.1 or prometheus.myhost.com")
 
-        daemons = list(Ceph.daemons)
-        daemons.extend(Monitoring.components.keys())
-
+        daemons = get_supported_daemons()
         if daemon_type not in daemons:
             raise argparse.ArgumentError(self,
                                          "name must declare the type of daemon e.g. "
