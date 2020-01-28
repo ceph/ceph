@@ -926,7 +926,7 @@ static ceph::spinlock debug_lock;
 
   buffer::list::list(list&& other) noexcept
     : _buffers(std::move(other._buffers)),
-      _carriage(&always_empty_bptr),
+      _carriage(other._carriage),
       _len(other._len),
       _num(other._num) {
     other.clear();
