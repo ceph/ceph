@@ -8962,7 +8962,12 @@ bool OSD::advance_pg(
 		  << " is merge source, target is " << parent
 		   << dendl;
 	  pg->write_if_dirty(rctx);
-	  dispatch_context_transaction(*rctx, pg, &handle);
+	  if (!new_pgs.empty()) {
+	    rctx.transaction.register_on_applied(new C_FinishSplits(this,
+								    new_pgs));
+	    new_pgs.clear();
+	  }
+	  dispatch_context(rctx, pg, pg->get_osdmap(), &handle);
 	  pg->ch->flush();
 	  // release backoffs explicitly, since the on_shutdown path
 	  // aggressively tears down backoff state.
@@ -9034,6 +9039,12 @@ bool OSD::advance_pg(
 	  } else {
 	    dout(20) << __func__ << " not ready to merge yet" << dendl;
 	    pg->write_if_dirty(rctx);
+	    if (!new_pgs.empty()) {
+	      rctx.transaction.register_on_applied(new C_FinishSplits(this,
+								      new_pgs));
+	      new_pgs.clear();
+	    }
+	    dispatch_context(rctx, pg, pg->get_osdmap(), &handle);
 	    pg->unlock();
 	    // kick source(s) to get them ready
 	    for (auto& i : children) {
