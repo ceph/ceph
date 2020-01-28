@@ -1232,8 +1232,8 @@ int Migration<I>::create_dst_image() {
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
       config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
-      m_image_options, "", "", true /* skip_mirror_enable */, op_work_queue,
-      &on_create);
+      m_image_options, true /* skip_mirror_enable */,
+      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
     req->send();
   } else {
     r = util::create_ioctx(m_src_image_ctx->md_ctx, "destination image",
@@ -1245,8 +1245,8 @@ int Migration<I>::create_dst_image() {
 
     auto *req = image::CloneRequest<I>::create(
       config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
-      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options, "", "",
-      op_work_queue, &on_create);
+      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options,
+      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
     req->send();
   }
 

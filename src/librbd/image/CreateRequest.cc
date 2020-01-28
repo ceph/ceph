@@ -118,14 +118,16 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
                                 const std::string &image_name,
                                 const std::string &image_id, uint64_t size,
                                 const ImageOptions &image_options,
+                                bool skip_mirror_enable,
+                                cls::rbd::MirrorImageMode mirror_image_mode,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
-                                bool skip_mirror_enable,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_config(config), m_image_name(image_name), m_image_id(image_id),
-    m_size(size), m_non_primary_global_image_id(non_primary_global_image_id),
+    m_size(size), m_skip_mirror_enable(skip_mirror_enable),
+    m_mirror_image_mode(mirror_image_mode),
+    m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
-    m_skip_mirror_enable(skip_mirror_enable),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
 
   m_io_ctx.dup(ioctx);

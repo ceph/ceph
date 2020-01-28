@@ -25,13 +25,15 @@ public:
                               uint64_t parent_snap_id,
                               IoCtx &c_ioctx, const std::string &c_name,
                               const std::string &c_id, ImageOptions c_options,
+                              cls::rbd::MirrorImageMode mirror_image_mode,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      ContextWQ *op_work_queue, Context *on_finish) {
     return new CloneRequest(config, parent_io_ctx, parent_image_id,
                             parent_snap_name, parent_snap_id, c_ioctx, c_name,
-                            c_id, c_options, non_primary_global_image_id,
-                            primary_mirror_uuid, op_work_queue, on_finish);
+                            c_id, c_options, mirror_image_mode,
+                            non_primary_global_image_id, primary_mirror_uuid,
+                            op_work_queue, on_finish);
   }
 
   CloneRequest(ConfigProxy& config, IoCtx& parent_io_ctx,
@@ -40,6 +42,7 @@ public:
                uint64_t parent_snap_id,
                IoCtx &c_ioctx, const std::string &c_name,
                const std::string &c_id, ImageOptions c_options,
+               cls::rbd::MirrorImageMode mirror_image_mode,
                const std::string &non_primary_global_image_id,
                const std::string &primary_mirror_uuid,
                ContextWQ *op_work_queue, Context *on_finish);
@@ -108,6 +111,7 @@ private:
   cls::rbd::ParentImageSpec m_pspec;
   ImageCtxT *m_imctx;
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
+  cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
   NoOpProgressContext m_no_op;
