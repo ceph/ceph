@@ -7,9 +7,9 @@ node, and then adding additional nodes and daemons via the CLI or GUI
 dashboard.
 
 The following example installs a basic three-node cluster. Each
-node will be identified by its prompt. For example, "[monitor 1]"
-identifies the first monitor, "[monitor 2]" identifies the second
-monitor, and "[monitor 3]" identifies the third monitor. This
+node will be identified by its prompt. For example, "[node 1]"
+identifies the first node, "[node 2]" identifies the second
+node, and "[node 3]" identifies the third node. This
 information is provided in order to make clear which commands
 should be issued on which systems.
 
@@ -26,16 +26,16 @@ The ``cephadm`` utility is used to bootstrap a new Ceph Cluster.
 
 Use curl to fetch the standalone script::
 
-  [monitor 1] # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/cephadm/cephadm
-  [monitor 1] # chmod +x cephadm
+  [node 1] # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/ceph-daemon/ceph-daemon
+  [node 1] # chmod +x ceph-daemon
   
 You can also get the utility by installing a package provided by
 your Linux distribution::
 
-   [monitor 1] # apt install -y cephadm   # or
-   [monitor 1] # dnf install -y cephadm   # or
-   [monitor 1] # yum install -y cephadm   # or
-   [monitor 1] # zypper install -y cephadm
+   [node 1] # apt install -y ceph-daemon   # or
+   [node 1] # dnf install -y ceph-daemon   # or
+   [node 1] # yum install -y ceph-daemon   # or
+   [node 1] # zypper install -y ceph-daemon
 
 
 Bootstrap a new cluster
