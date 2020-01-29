@@ -2136,22 +2136,24 @@ static void get_md_sync_status(list<string>& status)
     if (ret < 0) {
       derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      ceph::real_time oldest;
+      std::optional<std::pair<int, ceph::real_time>> oldest;
+
       for (auto iter : master_pos) {
         rgw_mdlog_shard_data& shard_data = iter.second;
 
         if (!shard_data.entries.empty()) {
           rgw_mdlog_entry& entry = shard_data.entries.front();
-          if (ceph::real_clock::is_zero(oldest)) {
-            oldest = entry.timestamp;
-          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest) {
-            oldest = entry.timestamp;
+          if (!oldest) {
+            oldest.emplace(iter.first, entry.timestamp);
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest->second) {
+            oldest.emplace(iter.first, entry.timestamp);
           }
         }
       }
 
-      if (!ceph::real_clock::is_zero(oldest)) {
-        push_ss(ss, status) << "oldest incremental change not applied: " << oldest;
+      if (oldest) {
+        push_ss(ss, status) << "oldest incremental change not applied: "
+            << oldest->second << " [" << oldest->first << ']';
       }
     }
   }
@@ -2289,22 +2291,24 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     if (ret < 0) {
       derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      ceph::real_time oldest;
+      std::optional<std::pair<int, ceph::real_time>> oldest;
+
       for (auto iter : master_pos) {
         rgw_datalog_shard_data& shard_data = iter.second;
 
         if (!shard_data.entries.empty()) {
           rgw_datalog_entry& entry = shard_data.entries.front();
-          if (ceph::real_clock::is_zero(oldest)) {
-            oldest = entry.timestamp;
-          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest) {
-            oldest = entry.timestamp;
+          if (!oldest) {
+            oldest.emplace(iter.first, entry.timestamp);
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest->second) {
+            oldest.emplace(iter.first, entry.timestamp);
           }
         }
       }
 
-      if (!ceph::real_clock::is_zero(oldest)) {
-        push_ss(ss, status, tab) << "oldest incremental change not applied: " << oldest;
+      if (oldest) {
+        push_ss(ss, status, tab) << "oldest incremental change not applied: "
+            << oldest->second << " [" << oldest->first << ']';
       }
     }
   }
