@@ -156,6 +156,7 @@ void usage()
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
   cout << "  zonegroup placement list   list zonegroup's placement targets\n";
+  cout << "  zonegroup placement get    get a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement add    add a placement target id to a zonegroup\n";
   cout << "  zonegroup placement modify modify a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
@@ -168,6 +169,7 @@ void usage()
   cout << "  zone list                  list all zones set on this cluster\n";
   cout << "  zone rename                rename a zone\n";
   cout << "  zone placement list        list zone's placement targets\n";
+  cout << "  zone placement get         get a zone placement target\n";
   cout << "  zone placement add         add a zone placement target\n";
   cout << "  zone placement modify      modify a zone placement target\n";
   cout << "  zone placement rm          remove a zone placement target\n";
@@ -461,6 +463,7 @@ enum {
   OPT_ZONEGROUP_PLACEMENT_MODIFY,
   OPT_ZONEGROUP_PLACEMENT_RM,
   OPT_ZONEGROUP_PLACEMENT_LIST,
+  OPT_ZONEGROUP_PLACEMENT_GET,
   OPT_ZONEGROUP_PLACEMENT_DEFAULT,
   OPT_ZONE_CREATE,
   OPT_ZONE_DELETE,
@@ -474,6 +477,7 @@ enum {
   OPT_ZONE_PLACEMENT_MODIFY,
   OPT_ZONE_PLACEMENT_RM,
   OPT_ZONE_PLACEMENT_LIST,
+  OPT_ZONE_PLACEMENT_GET,
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
   OPT_METADATA_GET,
@@ -829,6 +833,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_PLACEMENT_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_PLACEMENT_LIST;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_GET;
     if (strcmp(cmd, "default") == 0)
       return OPT_ZONEGROUP_PLACEMENT_DEFAULT;
   } else if (strcmp(prev_cmd, "zonegroup") == 0) {
@@ -872,6 +878,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONE_PLACEMENT_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONE_PLACEMENT_LIST;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ZONE_PLACEMENT_GET;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (match_str(cmd, "rm", "delete"))
       return OPT_ZONE_DELETE;
@@ -3358,12 +3366,14 @@ int main(int argc, const char **argv)
 			 OPT_ZONEGROUP_REMOVE,
 			 OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
 			 OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
+			 OPT_ZONEGROUP_PLACEMENT_GET,
 			 OPT_ZONEGROUP_PLACEMENT_DEFAULT,
 			 OPT_ZONE_CREATE, OPT_ZONE_DELETE,
                          OPT_ZONE_GET, OPT_ZONE_SET, OPT_ZONE_RENAME,
                          OPT_ZONE_LIST, OPT_ZONE_MODIFY, OPT_ZONE_DEFAULT,
 			 OPT_ZONE_PLACEMENT_ADD, OPT_ZONE_PLACEMENT_RM,
 			 OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
+			 OPT_ZONE_PLACEMENT_GET,
 			 OPT_REALM_CREATE,
 			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
 			 OPT_PERIOD_PULL,
@@ -3398,9 +3408,11 @@ int main(int argc, const char **argv)
 			 OPT_ZONEGROUP_GET,
 			 OPT_ZONEGROUP_LIST,
 			 OPT_ZONEGROUP_PLACEMENT_LIST,
+			 OPT_ZONEGROUP_PLACEMENT_GET,
 			 OPT_ZONE_GET,
 			 OPT_ZONE_LIST,
 			 OPT_ZONE_PLACEMENT_LIST,
+			 OPT_ZONE_PLACEMENT_GET,
 			 OPT_METADATA_GET,
 			 OPT_METADATA_LIST,
 			 OPT_METADATA_SYNC_STATUS,
@@ -4324,6 +4336,29 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
+    case OPT_ZONEGROUP_PLACEMENT_GET:
+      {
+	if (placement_id.empty()) {
+	  cerr << "ERROR: --placement-id not specified" << std::endl;
+	  return EINVAL;
+	}
+
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	int ret = zonegroup.init(g_ceph_context, store->svc.sysobj);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	auto p = zonegroup.placement_targets.find(placement_id);
+	if (p == zonegroup.placement_targets.end()) {
+	  cerr << "failed to find a zonegroup placement target named '" << placement_id << "'" << std::endl;
+	  return -ENOENT;
+	}
+	encode_json("placement_targets", p->second, formatter);
+	formatter->flush(cout);
+      }
+      break;
     case OPT_ZONEGROUP_PLACEMENT_ADD:
     case OPT_ZONEGROUP_PLACEMENT_MODIFY:
     case OPT_ZONEGROUP_PLACEMENT_RM:
@@ -4897,6 +4932,28 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 	encode_json("placement_pools", zone.placement_pools, formatter);
+	formatter->flush(cout);
+      }
+      break;
+    case OPT_ZONE_PLACEMENT_GET:
+      {
+	if (placement_id.empty()) {
+	  cerr << "ERROR: --placement-id not specified" << std::endl;
+	  return EINVAL;
+	}
+
+	RGWZoneParams zone(zone_id, zone_name);
+	int ret = zone.init(g_ceph_context, store->svc.sysobj);
+	if (ret < 0) {
+	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	auto p = zone.placement_pools.find(placement_id);
+	if (p == zone.placement_pools.end()) {
+	  cerr << "ERROR: zone placement target '" << placement_id << "' not found" << std::endl;
+	  return -ENOENT;
+	}
+	encode_json("placement_pools", p->second, formatter);
 	formatter->flush(cout);
       }
       break;
