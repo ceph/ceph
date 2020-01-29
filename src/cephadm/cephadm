@@ -2218,18 +2218,19 @@ def list_daemons(detail=True, legacy_dir=None):
                         out, err, code = call(
                             [
                                 container_path, 'inspect',
-                                '--format', '{{.Id}},{{.Config.Image}},{{%s}}' % image_field,
+                                '--format', '{{.Id}},{{.Config.Image}},{{%s}},{{index .Config.Labels "io.ceph.version"}}' % image_field,
                                 'ceph-%s-%s' % (fsid, j)
                             ],
                             verbose_on_failure=False)
                         if not code:
-                            (container_id, image_name, image_id) = out.strip().split(',')
+                            (container_id, image_name, image_id, version) = out.strip().split(',')
                             image_id = normalize_container_id(image_id)
-                            out, err, code = call(
-                                [container_path, 'exec', container_id,
-                                 'ceph', '-v'])
-                            if not code and out.startswith('ceph version '):
-                                version = out.split(' ')[2]
+                            if not version:
+                                out, err, code = call(
+                                    [container_path, 'exec', container_id,
+                                     'ceph', '-v'])
+                                if not code and out.startswith('ceph version '):
+                                    version = out.split(' ')[2]
                         i['container_id'] = container_id
                         i['container_image_name'] = image_name
                         i['container_image_id'] = image_id
