@@ -6,68 +6,6 @@ To use the :term:`CephFS` Quick Start guide, you must have executed the
 procedures in the `Storage Cluster Quick Start`_ guide first. Execute this
 quick start on the admin host.
 
-Prerequisites
-=============
-
-#. Verify that you have an appropriate version of the Linux kernel.
-   See `OS Recommendations`_ for details. ::
-
-	lsb_release -a
-	uname -r
-
-#. On the admin node, use ``ceph-deploy`` to install Ceph on your
-   ``ceph-client`` node. ::
-
-	ceph-deploy install ceph-client
-
-#. Optionally, if you want a FUSE-mounted file system, you would need to
-   install ``ceph-fuse`` package as well.
-
-#. Ensure that the :term:`Ceph Storage Cluster` is running and in an ``active +
-   clean`` state. ::
-
-	ceph -s [-m {monitor-ip-address}] [-k {path/to/ceph.client.admin.keyring}]
-
-
-Deploy Metadata Server
-======================
-
-All metadata operations in CephFS happen via a metadata server, so you need at
-least one metadata server. Execute the following to create a metadata server::
-
-  ceph-deploy mds create {ceph-node}
-
-For example::
-
-  ceph-deploy mds create node1
-
-Now, your Ceph cluster would look like this:
-
-.. ditaa::
-           /------------------\         /----------------\
-           |    ceph-deploy   |         |     node1      |
-           |    Admin Node    |         | cCCC           |
-           |                  +-------->+   mon.node1    |
-           |                  |         |     osd.0      |
-           |                  |         |   mgr.node1    |
-           |                  |         |   mds.node1    |
-           \---------+--------/         \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node2      |
-                     |                  | cCCC           |
-                     +----------------->+                |
-                     |                  |     osd.1      |
-                     |                  |   mon.node2    |
-                     |                  \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node3      |
-                     |                  | cCCC           |
-                     +----------------->+                |
-                                        |     osd.2      |
-                                        |   mon.node3    |
-                                        \----------------/
 
 Create a File System
 ====================
