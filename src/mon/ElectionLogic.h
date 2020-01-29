@@ -164,8 +164,8 @@ class ElectionLogic {
    * Points at a stable copy of the peer_tracker we use to keep scores
    * throughout an election period.
    */
-  const ConnectionTracker *stable_peer_tracker;
-  const ConnectionTracker *leader_peer_tracker;
+  std::unique_ptr<ConnectionTracker> stable_peer_tracker;
+  std::unique_ptr<ConnectionTracker> leader_peer_tracker;
   /**
    * Indicates who we have acked
    */
@@ -212,8 +212,8 @@ public:
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
 				  last_election_winner(-1), last_voted_for(-1),
 				  ignore_propose_margin(ipm),
-				  stable_peer_tracker(NULL),
-				  leader_peer_tracker(NULL),
+				  stable_peer_tracker(),
+				  leader_peer_tracker(),
 				  leader_acked(-1),
 				  strategy(es),
 				  participating(true),
@@ -281,6 +281,9 @@ public:
    * @pre   Message epoch is from the current or a newer epoch
    * @param mepoch The epoch of the proposal
    * @param from The rank proposing itself as leader
+   * @param ct Any incoming ConnectionTracker data sent with the message.
+   *  Callers are responsible for deleting this -- we will copy it if we want
+   *  to keep the data.
    */
   void receive_propose(int from, epoch_t mepoch, const ConnectionTracker *ct);
   /**
