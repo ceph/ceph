@@ -26,11 +26,9 @@ For Debian and Ubuntu distributions, perform the following steps:
 
 	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 
-#. Add the Ceph packages to your repository. Use the command below and
-   replace ``{ceph-stable-release}`` with a stable Ceph release (e.g.,
-   ``luminous``.)  For example::
+#. Add the Ceph packages to your repository. For example::
 
-	echo deb https://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb https://download.ceph.com/debian-luminous/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 #. Update your repository and install ``ceph-deploy``::
 
