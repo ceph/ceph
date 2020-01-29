@@ -54,6 +54,7 @@ set(rbd_mirror_internal
   image_replayer/snapshot/StateBuilder.cc
   image_sync/SyncPointCreateRequest.cc
   image_sync/SyncPointPruneRequest.cc
+  image_sync/Utils.cc
   pool_watcher/RefreshImagesRequest.cc
   service_daemon/Types.cc)
 
