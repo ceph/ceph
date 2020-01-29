@@ -14,6 +14,7 @@ class CBT(Task):
     """
     Passes through a CBT configuration yaml fragment.
     """
+
     def __init__(self, ctx, config):
         super(CBT, self).__init__(ctx, config)
         self.log = log
@@ -42,13 +43,13 @@ class CBT(Task):
             iterations=self.config.get('cluster', {}).get('iterations', 1),
             tmp_dir='/tmp/cbt',
             pool_profiles=self.config.get('cluster', {}).get('pool_profiles'),
-            )
+        )
 
         benchmark_config = self.config.get('benchmarks')
         benchmark_type = benchmark_config.keys()[0]
         if benchmark_type == 'librbdfio':
-          testdir = misc.get_testdir(self.ctx)
-          benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
+            testdir = misc.get_testdir(self.ctx)
+            benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
         if benchmark_type == 'cosbench':
             # create cosbench_dir and cosbench_xml_dir
             testdir = misc.get_testdir(self.ctx)
@@ -61,23 +62,37 @@ class CBT(Task):
             remotes_and_roles = self.ctx.cluster.remotes.items()
             ips = [host for (host, port) in
                    (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
-            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:80/auth/v1.0;retry=9" %(ips[0])
+            benchmark_config['cosbench'][
+                'auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:80/auth/v1.0;retry=9" % (ips[0])
 
         return dict(
             cluster=cluster_config,
             benchmarks=benchmark_config,
-            )
+        )
 
     def install_dependencies(self):
-        system_type = misc.get_pkg_type("rhel")
+        system_type = misc.get_pkg_type('rhel')
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
+            # cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'collectl']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', "gcc"]
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
             cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
         self.first_mon.run(args=install_cmd + cbt_depends)
+
+        # install collectl
+        self.first_mon.run(args=[run.Raw(
+            'wget https://sourceforge.net/projects/collectl/files/collectl/collectl-4.1.0/collectl-4.1.0.src.tar.gz;tar'
+            ' -xvf collectl-4.1.0.src.tar.gz;cd collectl-4.1.0/;sudo ./INSTALL')])
+
+        # install pdsh
+        self.first_mon.run(args=[run.Raw(
+            'wget '
+            'https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/pdsh/pdsh-2.29.tar.bz2;'
+            ' bunzip2 -d pdsh-2.29.tar.bz2; tar -xvf pdsh-2.29.tar; cd pdsh-2.29;'
+            ' sudo ./configure --without-rsh --with-ssh; sudo make; sudo make install')])
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         self.log.info('benchmark: %s', benchmark_type)
@@ -267,3 +282,4 @@ class CBT(Task):
 
 
 task = CBT
+
