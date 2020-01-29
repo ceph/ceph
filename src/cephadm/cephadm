@@ -1400,7 +1400,7 @@ def deploy_crash(fsid, uid, gid, config, keyring):
     unit_name = 'ceph-%s-crash.service' % fsid
     with open(os.path.join(args.unit_dir, unit_name + '.new'), 'w') as f:
         f.write('[Unit]\n'
-                'Description=Ceph cluster {fsid} crash dump collector\n'
+                'Description=Ceph crash collector for {fsid}\n'
                 'PartOf=ceph-{fsid}.target\n'
                 'Before=ceph-{fsid}.target\n'
                 '\n'
@@ -1429,7 +1429,7 @@ def get_unit_file(fsid, uid, gid):
     # type: (str, int, int) -> str
     install_path = find_program('install')
     u = """[Unit]
-Description=Ceph daemon for {fsid}
+Description=Ceph %i for {fsid}
 
 # According to:
 #   http://www.freedesktop.org/wiki/Software/systemd/NetworkTarget
