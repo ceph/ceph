@@ -101,7 +101,13 @@ static constexpr std::uint64_t s3PutObjectLegalHold = 58;
 static constexpr std::uint64_t s3GetObjectLegalHold = 59;
 static constexpr std::uint64_t s3BypassGovernanceRetention = 60;
 static constexpr std::uint64_t s3GetBucketPolicyStatus = 61;
-static constexpr std::uint64_t s3All = 62;
+static constexpr std::uint64_t s3PutPublicAccessBlock = 62;
+static constexpr std::uint64_t s3GetPublicAccessBlock = 63;
+static constexpr std::uint64_t s3DeletePublicAccessBlock = 64;
+static constexpr std::uint64_t s3GetBucketPublicAccessBlock = 65;
+static constexpr std::uint64_t s3PutBucketPublicAccessBlock = 66;
+static constexpr std::uint64_t s3DeleteBucketPublicAccessBlock = 67;
+static constexpr std::uint64_t s3All = 68;
 
 static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
 static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
@@ -201,6 +207,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectVersionAcl:
   case s3GetReplicationConfiguration:
   case s3GetBucketObjectLockConfiguration:
+  case s3GetBucketPublicAccessBlock:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -221,6 +228,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectVersionAcl:
   case s3PutReplicationConfiguration:
   case s3PutBucketObjectLockConfiguration:
+  case s3PutBucketPublicAccessBlock:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:

@@ -66,5 +66,5 @@ class PublicAccessConfiguration {
   void dump_xml(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(PublicAccessConfiguration)
-
+ostream& operator<< (ostream& os, const PublicAccessConfiguration& access_conf);
 } // namespace rgw::IAM
