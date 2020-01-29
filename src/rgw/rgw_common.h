@@ -2122,18 +2122,24 @@ struct perm_state_base {
   const RGWBucketInfo& bucket_info;
   int perm_mask;
   bool defer_to_bucket_acls;
+  boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
 
   perm_state_base(CephContext *_cct,
                   const rgw::IAM::Environment& _env,
                   rgw::auth::Identity *_identity,
                   const RGWBucketInfo& _bucket_info,
                   int _perm_mask,
-                  bool _defer_to_bucket_acls) : cct(_cct),
+                  bool _defer_to_bucket_acls,
+                  boost::optional<PublicAccessBlockConfiguration> _bucket_acess_conf = boost::none) :
+                                                cct(_cct),
                                                 env(_env),
                                                 identity(_identity),
                                                 bucket_info(_bucket_info),
                                                 perm_mask(_perm_mask),
-                                                defer_to_bucket_acls(_defer_to_bucket_acls) {}
+                                                defer_to_bucket_acls(_defer_to_bucket_acls),
+                                                bucket_access_conf(_bucket_acess_conf)
+  {}
+
   virtual ~perm_state_base() {}
 
   virtual const char *get_referer() const = 0;

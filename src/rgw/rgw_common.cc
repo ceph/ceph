@@ -1006,7 +1006,9 @@ struct perm_state_from_req_state : public perm_state_base {
                                                                     _s->auth.identity.get(),
                                                                     _s->bucket_info,
                                                                     _s->perm_mask,
-                                                                    _s->defer_to_bucket_acls), s(_s) {}
+                                                                    _s->defer_to_bucket_acls,
+                                                                    _s->bucket_access_conf),
+                                                                    s(_s) {}
   std::optional<bool> get_request_payer() const override {
     const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
     if (!request_payer) {
@@ -1198,8 +1200,8 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct pe
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  if (bucket_acl->verify_permission(dpp, *s->auth.identity, perm, perm,
-                                    s->info.env->get("HTTP_REFERER"),
+  if (bucket_acl->verify_permission(dpp, *s->identity, perm, perm,
+                                    s->get_referer(),
                                     s->bucket_access_conf &&
                                     s->bucket_access_conf->ignore_public_acls()))
     return true;
@@ -1334,7 +1336,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     return false;
   }
 
-  bool ret = object_acl->verify_permission(dpp, *s->auth.identity, s->perm_mask, perm,
+  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm,
 					   nullptr, /* http_referrer */
 					   s->bucket_access_conf &&
 					   s->bucket_access_conf->ignore_public_acls());
@@ -1401,7 +1403,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
     return false;
   }
 
-  bool ret = object_acl->verify_permission(dpp, *s->auth.identity, s->perm_mask, perm,
+  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm,
 					   nullptr, /* http referrer */
 					   s->bucket_access_conf &&
 					   s->bucket_access_conf->ignore_public_acls());
