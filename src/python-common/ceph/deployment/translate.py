@@ -42,6 +42,16 @@ class to_ceph_volume(object):
 
             cmd += " --filestore"
 
+        # HORRIBLE HACK
+        if self.spec.objectstore == 'bluestore' and \
+           not self.spec.encrypted and \
+           not self.spec.osds_per_device and \
+           len(data_devices) == 1 and \
+           not db_devices and \
+           not wal_devices:
+            cmd = "lvm prepare --bluestore --data %s --no-systemd" % (' '.join(data_devices))
+            return cmd
+
         if self.spec.objectstore == 'bluestore':
 
             cmd = "lvm batch --no-auto {}".format(" ".join(data_devices))
