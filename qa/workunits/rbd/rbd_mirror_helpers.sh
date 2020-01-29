@@ -24,7 +24,7 @@
 # The cleanup can be done as a separate step, running the script with
 # `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
 #
-# Note, as other workunits tests, rbd_mirror.sh expects to find ceph binaries
+# Note, as other workunits tests, rbd_mirror_journal.sh expects to find ceph binaries
 # in PATH.
 #
 # Thus a typical troubleshooting session:
@@ -35,7 +35,7 @@
 #   cd $CEPH_SRC_PATH
 #   PATH=$CEPH_SRC_PATH:$PATH
 #   RBD_MIRROR_NOCLEANUP=1 RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd/rbd_mirror.sh
+#     ../qa/workunits/rbd/rbd_mirror_journal.sh
 #
 # After the test failure cd to TEMPDIR and check the current state:
 #
@@ -53,17 +53,17 @@
 #
 #   cd $CEPH_SRC_PATH
 #   export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
-#   ../qa/workunits/rbd/rbd_mirror.sh status
-#   ../qa/workunits/rbd/rbd_mirror.sh stop_mirror cluster1
-#   ../qa/workunits/rbd/rbd_mirror.sh start_mirror cluster2
-#   ../qa/workunits/rbd/rbd_mirror.sh flush cluster2
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh status
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh stop_mirror cluster1
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh start_mirror cluster2
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh flush cluster2
 #   ...
 #
 # Eventually, run the cleanup:
 #
 #   cd $CEPH_SRC_PATH
 #   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd/rbd_mirror.sh cleanup
+#     ../qa/workunits/rbd/rbd_mirror_journal.sh cleanup
 #
 
 if type xmlstarlet > /dev/null 2>&1; then
@@ -1132,8 +1132,9 @@ enable_mirror()
     local cluster=$1
     local pool=$2
     local image=$3
+    local mode=${4:-journal}
 
-    rbd --cluster=${cluster} mirror image enable ${pool}/${image}
+    rbd --cluster=${cluster} mirror image enable ${pool}/${image} ${mode}
 }
 
 test_image_present()

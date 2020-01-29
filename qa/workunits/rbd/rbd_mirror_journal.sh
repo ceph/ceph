@@ -1,6 +1,6 @@
 #!/bin/sh -ex
 #
-# rbd_mirror.sh - test rbd-mirror daemon
+# rbd_mirror_journal.sh - test rbd-mirror daemon in journal-based mirroring mode
 #
 # The scripts starts two ("local" and "remote") clusters using mstart.sh script,
 # creates a temporary directory, used for cluster configs, daemon logs, admin
@@ -230,7 +230,7 @@ clone_image=test_clone
 clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} ${clone_image}
 write_image ${CLUSTER2} ${POOL} ${clone_image} 100
 
-enable_mirror ${CLUSTER2} ${PARENT_POOL} ${parent_image}
+enable_mirror ${CLUSTER2} ${PARENT_POOL} ${parent_image} journal
 wait_for_image_replay_started ${CLUSTER1} ${PARENT_POOL} ${parent_image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} ${parent_image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${PARENT_POOL} ${parent_image} 'up+replaying' 'master_position'
@@ -398,7 +398,7 @@ testlog "TEST: non-default namespace image mirroring"
 testlog " - replay"
 create_image ${CLUSTER2} ${POOL}/${NS1} ${image}
 create_image ${CLUSTER2} ${POOL}/${NS2} ${image}
-enable_mirror ${CLUSTER2} ${POOL}/${NS2} ${image}
+enable_mirror ${CLUSTER2} ${POOL}/${NS2} ${image} journal
 wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS1} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL}/${NS2} ${image}
 write_image ${CLUSTER2} ${POOL}/${NS1} ${image} 100
