@@ -2384,6 +2384,18 @@ public:
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
 
+class RGWGetBucketPolicyStatus : public RGWOp {
+protected:
+  bool isPublic {false};
+public:
+  int verify_permission() override;
+  const char* name() const override { return "get_bucket_policy_status"; }
+  virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_POLICY_STATUS; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  void execute() override;
+  dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
+};
+
 static inline int parse_value_and_bound(
     const string &input,
     int &output,

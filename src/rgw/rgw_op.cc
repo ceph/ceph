@@ -8063,3 +8063,26 @@ void RGWGetClusterStat::execute()
 }
 
 
+int RGWGetBucketPolicyStatus::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicyStatus)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketPolicyStatus::execute()
+{
+  static constexpr auto public_groups = {ACL_GROUP_ALL_USERS,
+					 ACL_GROUP_AUTHENTICATED_USERS};
+
+  const auto& bucket_acl = s->bucket_acl->get_acl();
+  isPublic = std::any_of(public_groups.begin(), public_groups.end(),
+  			 [&bucket_acl](ACLGroupTypeEnum g) {
+  			    auto p = bucket_acl.get_group_perm(g, RGW_PERM_FULL_CONTROL);
+  			    return (p != RGW_PERM_NONE) && (p != RGW_PERM_INVALID);
+  			  }
+  			 );
+  ldout(s->cct,20) << __func__ << "ACL public status=" << isPublic << dendl;
+}
