@@ -158,6 +158,7 @@ class ElectionLogic {
    * The rank we voted for in the last election we voted in.
    */
   int last_voted_for = -1;
+  double ignore_propose_margin = 0.0001;
   /**
    * Only used in the connectivity handler.
    * Points at a stable copy of the peer_tracker we use to keep scores
@@ -207,8 +208,10 @@ public:
   std::set<int> acked_me;
 
   ElectionLogic(ElectionOwner *e, election_strategy es, ConnectionTracker *t,
+		double ipm,
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
 				  last_election_winner(-1), last_voted_for(-1),
+				  ignore_propose_margin(ipm),
 				  stable_peer_tracker(NULL),
 				  leader_peer_tracker(NULL),
 				  leader_acked(-1),

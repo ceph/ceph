@@ -470,7 +470,7 @@ COMMAND("mon enable-msgr2",
 	"mon", "rw")
 COMMAND("mon set election_strategy " \
 	"name=strategy,type=CephString", \
-	"set the election strategy to use; choices CLASSIC, DISALLOW, CONNECTIVITY", \
+	"set the election strategy to use; choices classic, disallow, connectivity", \
 	"mon", "rw")
 COMMAND("mon add disallowed_leader " \
 	"name=name,type=CephString", \
