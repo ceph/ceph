@@ -4,11 +4,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
 
-import _ = require('lodash');
+import * as _ from 'lodash';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { OsdService } from '../../../shared/api/osd.service';
+import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '../../../shared/models/smart';
 import { SharedModule } from '../../../shared/shared.module';
 import { SmartListComponent } from './smart-list.component';
 
@@ -17,24 +18,8 @@ describe('OsdSmartListComponent', () => {
   let fixture: ComponentFixture<SmartListComponent>;
   let osdService: OsdService;
 
-  const SMART_DATA_VERSION_1_0 = require('./fixtures/smart_data_version_1_0_response.json');
-
-  const spyOnGetSmartData = (fn: (id: number) => any) =>
-    spyOn(osdService, 'getSmartData').and.callFake(fn);
-
-  /**
-   * Initializes the component after it spied upon the `getSmartData()` method of `OsdService`.
-   * @param data The data to be used to return when `getSmartData()` is called.
-   * @param simpleChanges (optional) The changes to be used for `ngOnChanges()` method.
-   */
-  const initializeComponentWithData = (data?: any, simpleChanges?: SimpleChanges) => {
-    spyOnGetSmartData(() => of(data || SMART_DATA_VERSION_1_0));
-    component.ngOnInit();
-    const changes: SimpleChanges = simpleChanges || {
-      osdId: new SimpleChange(null, 0, true)
-    };
-    component.ngOnChanges(changes);
-  };
+  const SMART_DATA_HDD_VERSION_1_0: HddSmartDataV1 = require('./fixtures/smart_data_version_1_0_hdd_response.json');
+  const SMART_DATA_NVME_VERSION_1_0: NvmeSmartDataV1 = require('./fixtures/smart_data_version_1_0_nvme_response.json');
 
   /**
    * Sets attributes for _all_ returned devices according to the given path. The syntax is the same
@@ -51,13 +36,46 @@ describe('OsdSmartListComponent', () => {
    */
   const patchData = (path: string, newValue: any): any => {
     return _.reduce(
-      _.cloneDeep(SMART_DATA_VERSION_1_0),
+      _.cloneDeep(SMART_DATA_HDD_VERSION_1_0),
       (result, dataObj, deviceId) => {
-        result[deviceId] = _.set(dataObj, path, newValue);
+        result[deviceId] = _.set<any>(dataObj, path, newValue);
         return result;
       },
       {}
     );
+  };
+
+  /**
+   * Initializes the component after it spied upon the `getSmartData()` method
+   * of `OsdService`. Determines which data is returned.
+   */
+  const initializeComponentWithData = (
+    dataType: 'hdd_v1' | 'nvme_v1',
+    patch: { [path: string]: any } = null,
+    simpleChanges?: SimpleChanges
+  ) => {
+    let data = null;
+    switch (dataType) {
+      case 'hdd_v1':
+        data = SMART_DATA_HDD_VERSION_1_0;
+        break;
+      case 'nvme_v1':
+        data = SMART_DATA_NVME_VERSION_1_0;
+        break;
+    }
+
+    if (_.isObject(patch)) {
+      _.each(patch, (replacement, path) => {
+        data = patchData(path, replacement);
+      });
+    }
+
+    spyOn(osdService, 'getSmartData').and.callFake(() => of(data));
+    component.ngOnInit();
+    const changes: SimpleChanges = simpleChanges || {
+      osdId: new SimpleChange(null, 0, true)
+    };
+    component.ngOnChanges(changes);
   };
 
   configureTestBed({
@@ -78,8 +96,8 @@ describe('OsdSmartListComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('tests version 1.x', () => {
-    beforeEach(() => initializeComponentWithData());
+  describe('tests HDD version 1.x', () => {
+    beforeEach(() => initializeComponentWithData('hdd_v1'));
 
     it('should return with proper keys', () => {
       _.each(component.data, (smartData, _deviceId) => {
@@ -93,22 +111,39 @@ describe('OsdSmartListComponent', () => {
         'ata_smart_selective_self_test_log',
         'ata_smart_data'
       ];
+      _.each(component.data, (smartData: SmartDataResult, _deviceId) => {
+        _.each(excludes, (exclude) => expect(smartData.info[exclude]).toBeUndefined());
+      });
+    });
+  });
+
+  describe('tests NVMe version 1.x', () => {
+    beforeEach(() => initializeComponentWithData('nvme_v1'));
+
+    it('should return with proper keys', () => {
       _.each(component.data, (smartData, _deviceId) => {
+        expect(_.keys(smartData)).toEqual(['info', 'smart', 'device', 'identifier']);
+      });
+    });
+
+    it('should not contain excluded keys in `info`', () => {
+      const excludes = ['nvme_smart_health_information_log'];
+      _.each(component.data, (smartData: SmartDataResult, _deviceId) => {
         _.each(excludes, (exclude) => expect(smartData.info[exclude]).toBeUndefined());
       });
     });
   });
 
   it('should not work for version 2.x', () => {
-    initializeComponentWithData(patchData('json_format_version', [2, 0]));
+    initializeComponentWithData('nvme_v1', { json_format_version: [2, 0] });
     expect(component.data).toEqual({});
     expect(component.incompatible).toBeTruthy();
   });
 
   it('should display info panel for passed self test', () => {
-    initializeComponentWithData();
+    initializeComponentWithData('hdd_v1');
     fixture.detectChanges();
-    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
+    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel#alert-self-test-passed'));
     expect(component.incompatible).toBe(false);
     expect(component.loading).toBe(false);
     expect(alertPanel.attributes.size).toBe('slim');
@@ -117,9 +152,9 @@ describe('OsdSmartListComponent', () => {
   });
 
   it('should display warning panel for failed self test', () => {
-    initializeComponentWithData(patchData('ata_smart_data.self_test.status.passed', false));
+    initializeComponentWithData('hdd_v1', { 'smart_status.passed': false });
     fixture.detectChanges();
-    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
+    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel#alert-self-test-failed'));
     expect(component.incompatible).toBe(false);
     expect(component.loading).toBe(false);
     expect(alertPanel.attributes.size).toBe('slim');
