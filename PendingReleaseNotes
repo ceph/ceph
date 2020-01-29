@@ -43,3 +43,7 @@
   Alternatively, the warning can be silenced with::
 
     ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
+
+* Bucket notifications now support Kafka endpoints. This require librdkafka of version 0.9.2 and up.
+  Note that Ubuntu 16.04.6 LTS (Xenial Xerus) has an older version of librdkafka, and would
+￼ require an update to the library.
