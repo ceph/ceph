@@ -124,6 +124,7 @@ using ceph::crypto::MD5;
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
 #define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"
+#define RGW_ATTR_PUBLIC_ACCESS  RGW_ATTR_PREFIX "public-access"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -134,6 +135,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
 #define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
+
 
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
@@ -536,6 +538,12 @@ enum RGWOpType {
   RGW_OP_DELETE_BUCKET_REPLICATION,
 
   RGW_OP_GET_BUCKET_POLICY_STATUS
+
+  /* public access */
+  RGW_OP_GET_BUCKET_POLICY_STATUS,
+  RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK,
+  RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK,
+  RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK,
 };
 
 class RGWAccessControlPolicy;

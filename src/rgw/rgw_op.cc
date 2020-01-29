@@ -8088,3 +8088,126 @@ void RGWGetBucketPolicyStatus::execute()
   if (s->iam_policy)
     isPublic |= rgw::IAM::IsPublic(*s->iam_policy);
 }
+
+int RGWPutBucketPublicAccessBlock::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketPublicAccessBlock)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+int RGWPutBucketPublicAccessBlock::get_params()
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+void RGWPutBucketPublicAccessBlock::execute()
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    ldpp_dout(this,0) << "ERROR: malformed XML" << dendl;
+    ldpp_dout(this,20) << "xml: " << data.c_str() << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("PublicAccessBlockConfiguration", access_conf, &parser, true);
+  } catch (RGWXMLDecoder::err &err) {
+    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  if (!store->svc()->zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  bufferlist bl;
+  access_conf.encode(bl);
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &bl] {
+      map<string, bufferlist> attrs = s->bucket_attrs;
+      attrs[RGW_ATTR_PUBLIC_ACCESS] = bl;
+      return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs, &s->bucket_info.objv_tracker, s->yield);
+    });
+
+}
+
+int RGWGetBucketPublicAccessBlock::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicy)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketPublicAccessBlock::execute()
+{
+  auto attrs = s->bucket_attrs;
+  if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+      aiter == attrs.end()) {
+    ldpp_dout(this, 0) << "can't find bucket IAM POLICY attr bucket_name = "
+		       << s->bucket_name << dendl;
+    // return the default;
+    return;
+  } else {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      access_conf.decode(iter);
+    } catch (const buffer::error& e) {
+      ldout(s->cct, 0) << __func__ <<  "decode object legal hold config failed" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
+}
+
+
+void RGWDeleteBucketPublicAccessBlock::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWDeleteBucketPublicAccessBlock::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketPublicAccessBlock)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWDeleteBucketPublicAccessBlock::execute()
+{
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+      auto attrs = s->bucket_attrs;
+      attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
+      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							       &s->bucket_info.objv_tracker,
+							       s->yield);
+      return op_ret;
+    });
+}

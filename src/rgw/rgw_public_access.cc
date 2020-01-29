@@ -1,4 +1,4 @@
-#include "rgw_public_acess.h"
+#include "rgw_public_access.h"
 #include "rgw_xml.h"
 
 namespace rgw::IAM {
@@ -13,10 +13,27 @@ void PublicAccessConfiguration::decode_xml(XMLObj *obj) {
 
 void PublicAccessConfiguration::dump_xml(Formatter *f) const {
   Formatter::ObjectSection os(*f, "BlockPublicAccessConfiguration");
-  encode_xml("BlockPublicAcls", BlockPublicAcls, f);
-  encode_xml("IgnorePublicAcls", IgnorePublicAcls, f);
-  encode_xml("BlockPublicPolicy", BlockPublicPolicy, f);
-  encode_xml("RestrictPublicBuckets", RestrictPublicBuckets, f);
+  // AWS spec mentions the values to be ALL CAPs, but clients will not
+  // understand this or a mixed case like it is supposed to, hence the need to
+  // manually encode here
+  auto bool_val = [](bool b) -> auto { return b ? "true": "false"; };
+
+  f->dump_string("BlockPublicAcls", bool_val(BlockPublicAcls));
+  f->dump_string("IgnorePublicAcls", bool_val(IgnorePublicAcls));
+  f->dump_string("BlockPublicPolicy", bool_val(BlockPublicPolicy));
+  f->dump_string("RestrictPublicBuckets", bool_val(RestrictPublicBuckets));
+}
+
+
+ostream& operator<< (ostream& os, const PublicAccessConfiguration& access_conf)
+{
+    os << std::boolalpha
+       << "BlockPublicAcls: " << access_conf.get_block_public_acls() << std::endl
+       << "IgnorePublicAcls: " << access_conf.get_ignore_public_acls() << std::endl
+       << "BlockPublicPolicy" << access_conf.get_block_public_policy() << std::endl
+       << "RestrictPublicBuckets" << access_conf.get_restrict_public_buckets() << std::endl;
+
+    return os;
 }
 
 } // namespace rgw::IAM

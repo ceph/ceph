@@ -575,6 +575,16 @@ public:
   void send_response() override;
 };
 
+class RGWPutBucketPublicAccessBlock_ObjStore_S3 : public RGWPutBucketPublicAccessBlock {
+public:
+  void send_response() override;
+};
+
+class RGWGetBucketPublicAccessBlock_ObjStore_S3 : public RGWGetBucketPublicAccessBlock {
+public:
+  void send_response() override;
+};
+
 class RGW_Auth_S3 {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
@@ -683,6 +693,9 @@ protected:
   }
   bool is_policy_status_op() {
     return s->info.args.exists("policyStatus");
+  }
+  bool is_block_public_access_op() {
+    return s->info.args.exists("publicAccessBlock");
   }
 
   RGWOp *get_obj_op(bool get_data) const;
