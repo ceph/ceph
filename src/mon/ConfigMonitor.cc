@@ -678,7 +678,7 @@ update:
 
 void ConfigMonitor::tick()
 {
-  if (!is_active()) {
+  if (!is_active() || !mon->is_leader()) {
     return;
   }
   dout(10) << __func__ << dendl;
