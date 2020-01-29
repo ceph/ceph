@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { CdDevice } from '../models/devices';
+import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
 import { ApiModule } from './api.module';
 
@@ -35,6 +36,6 @@ export class HostService {
   }
 
   getSmartData(hostname) {
-    return this.http.get(`${this.baseURL}/${hostname}/smart`);
+    return this.http.get<SmartDataResponseV1>(`${this.baseURL}/${hostname}/smart`);
   }
 }
