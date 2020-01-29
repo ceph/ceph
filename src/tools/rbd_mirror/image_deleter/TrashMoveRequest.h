@@ -7,7 +7,7 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_types.h"
-#include <boost/optional.hpp>
+#include "librbd/mirror/Types.h"
 #include <string>
 
 struct Context;
@@ -47,18 +47,18 @@ private:
    * GET_MIRROR_IMAGE_ID
    *    |
    *    v
-   * GET_TAG_OWNER
+   * GET_MIRROR_INFO
    *    |
    *    v
    * DISABLE_MIRROR_IMAGE
    *    |
    *    v
-   * RESET_JOURNAL
-   *    |
-   *    v
    * OPEN_IMAGE
    *    |
-   *    v
+   *    v (skip if not needed)
+   * RESET_JOURNAL
+   *    |
+   *    v (skip if not needed)
    * ACQUIRE_LOCK
    *    |
    *    v
@@ -87,7 +87,9 @@ private:
 
   ceph::bufferlist m_out_bl;
   std::string m_image_id;
-  std::string m_mirror_uuid;
+  cls::rbd::MirrorImage m_mirror_image;
+  librbd::mirror::PromotionState m_promotion_state;
+  std::string m_primary_mirror_uuid;
   cls::rbd::TrashImageSpec m_trash_image_spec;
   ImageCtxT *m_image_ctx = nullptr;;
   int m_ret_val = 0;
@@ -96,17 +98,17 @@ private:
   void get_mirror_image_id();
   void handle_get_mirror_image_id(int r);
 
-  void get_tag_owner();
-  void handle_get_tag_owner(int r);
+  void get_mirror_info();
+  void handle_get_mirror_info(int r);
 
   void disable_mirror_image();
   void handle_disable_mirror_image(int r);
 
-  void reset_journal();
-  void handle_reset_journal(int r);
-
   void open_image();
   void handle_open_image(int r);
+
+  void reset_journal();
+  void handle_reset_journal(int r);
 
   void acquire_lock();
   void handle_acquire_lock(int r);
