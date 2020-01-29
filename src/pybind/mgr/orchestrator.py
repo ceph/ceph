@@ -4,6 +4,7 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+import copy
 import functools
 import logging
 import sys
@@ -629,27 +630,9 @@ def raise_if_exception(c):
     :raises OrchestratorError: Some user error or a config error.
     :raises Exception: Some internal error
     """
-    def copy_to_this_subinterpreter(r_obj):
-        # This is something like `return pickle.loads(pickle.dumps(r_obj))`
-        # Without importing anything.
-        r_cls = r_obj.__class__
-        if r_cls.__module__ in ('__builtin__', 'builtins'):
-            return r_obj
-        my_cls = getattr(sys.modules[r_cls.__module__], r_cls.__name__)
-        if id(my_cls) == id(r_cls):
-            return r_obj
-        if hasattr(r_obj, '__reduce__'):
-            reduce_tuple = r_obj.__reduce__()
-            if len(reduce_tuple) >= 2:
-                return my_cls(*[copy_to_this_subinterpreter(a) for a in reduce_tuple[1]])
-        my_obj = my_cls.__new__(my_cls)
-        for k,v in r_obj.__dict__.items():
-            setattr(my_obj, k, copy_to_this_subinterpreter(v))
-        return my_obj
-
     if c.exception is not None:
         try:
-            e = copy_to_this_subinterpreter(c.exception)
+            e = copy.deepcopy(c.exception)
         except (KeyError, AttributeError):
             raise Exception('{}: {}'.format(type(c.exception), c.exception))
         raise e
