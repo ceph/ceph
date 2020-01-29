@@ -61,7 +61,7 @@ struct Election {
   ~Election();
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
-  const set<int>& get_disallowed_leaders() { return disallowed_leaders; }
+  const set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
   void propose_to(int from, int to, epoch_t e, bufferlist& cbl);
   void defer_to(int from, int to, epoch_t e);
   void claim_victory(int from, int to, epoch_t e, const set<int>& members);
@@ -77,17 +77,17 @@ struct Election {
   int run_timesteps(int max);
   void start_one(int who);
   void start_all();
-  bool election_stable();
-  bool quorum_stable(int timesteps_stable);
-  bool check_leader_agreement();
-  bool check_epoch_agreement();
+  bool election_stable() const;
+  bool quorum_stable(int timesteps_stable) const;
+  bool all_agree_on_leader() const;
+  bool check_epoch_agreement() const;
   void block_messages(int from, int to);
   void block_bidirectional_messages(int a, int b);
   void unblock_messages(int from, int to);
   void unblock_bidirectional_messages(int a, int b);
   void add_disallowed_leader(int disallowed) { disallowed_leaders.insert(disallowed); }
-  const char* prefix_name() { return "Election:      "; }
-  int timestep_count() { return timesteps_run; }
+  const char* prefix_name() const { return "Election:      "; }
+  int timestep_count() const { return timesteps_run; }
 };
 struct Owner : public ElectionOwner, RankProvider {
   Election *parent;
@@ -138,7 +138,9 @@ struct Owner : public ElectionOwner, RankProvider {
   }
   bool ever_participated() const { return ever_joined; }
   unsigned paxos_size() const { return parent->get_paxos_size(); }
-  const set<int>& get_disallowed_leaders() const { return parent->get_disallowed_leaders(); }
+  const set<int>& get_disallowed_leaders() const {
+    return parent->get_disallowed_leaders();
+  }
   void cancel_timer() {
     timer_steps = -1;
   }
@@ -260,10 +262,10 @@ struct Owner : public ElectionOwner, RankProvider {
     }
     send_pings();
   }
-  const char *prefix_name() {
+  const char *prefix_name() const {
     return prefix_str.c_str();
   }
-  int timestep_count() { return parent->timesteps_run; }
+  int timestep_count() const { return parent->timesteps_run; }
 };
 
 Election::Election(int c, ElectionLogic::election_strategy es, int pingi,
@@ -406,7 +408,7 @@ void Election::start_all() {
   }
 }
 
-bool Election::election_stable()
+bool Election::election_stable() const
 {
   // see if anybody has a timer running
   for (auto i : electors) {
@@ -418,7 +420,7 @@ bool Election::election_stable()
   return (pending_election_messages == 0);
 }
 
-bool Election::quorum_stable(int timesteps_stable)
+bool Election::quorum_stable(int timesteps_stable) const
 {
   ldout(g_ceph_context, 1) << "quorum_stable? last formed:" << last_quorum_formed
 			    << ", last changed " << last_quorum_change
@@ -430,7 +432,7 @@ bool Election::quorum_stable(int timesteps_stable)
     return false;
   }
   for (auto i : last_quorum_reported) {
-    if (electors[i]->timer_steps != -1) {
+    if (electors.find(i)->second->timer_steps != -1) {
       return false;
     }
   }
@@ -439,11 +441,11 @@ bool Election::quorum_stable(int timesteps_stable)
   return election_stable();
 }
 
-bool Election::check_leader_agreement()
+bool Election::all_agree_on_leader() const
 {
-  int leader = electors[0]->logic.get_election_winner();
-  ldout(g_ceph_context, 10) << "check_leader_agreement on " << leader << dendl;
-  for (auto i: electors) {
+  int leader = electors.find(0)->second->logic.get_election_winner();
+  ldout(g_ceph_context, 10) << "all_agree_on_leader on " << leader << dendl;
+  for (auto& i: electors) {
     if (leader != i.second->logic.get_election_winner()) {
       ldout(g_ceph_context, 10) << "rank " << i.first << " has different leader "
 				<< i.second->logic.get_election_winner() << dendl;
@@ -458,10 +460,10 @@ bool Election::check_leader_agreement()
   return true;
 }
 
-bool Election::check_epoch_agreement()
+bool Election::check_epoch_agreement() const
 {
-  epoch_t epoch = electors[0]->logic.get_epoch();
-  for (auto i : electors) {
+  epoch_t epoch = electors.find(0)->second->logic.get_epoch();
+  for (auto& i : electors) {
     if (epoch != i.second->logic.get_epoch()) {
       return false;
     }
@@ -500,7 +502,7 @@ void single_startup_election_completes(ElectionLogic::election_strategy strategy
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
     ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
-    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.all_agree_on_leader());
     ASSERT_TRUE(election.check_epoch_agreement());
   }
 }
@@ -513,7 +515,7 @@ void everybody_starts_completes(ElectionLogic::election_strategy strategy)
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
   ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -532,7 +534,7 @@ void blocked_connection_continues_election(ElectionLogic::election_strategy stra
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
   ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -544,13 +546,13 @@ void blocked_connection_converges_election(ElectionLogic::election_strategy stra
   int steps = election.run_timesteps(100);
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
   election.unblock_bidirectional_messages(0, 1);
   steps = election.run_timesteps(100);
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -567,7 +569,7 @@ void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
     ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
-    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.all_agree_on_leader());
     ASSERT_TRUE(election.check_epoch_agreement());
     int leader = election.electors[0]->logic.get_election_winner();
     for (int j = 0; j <= i; ++j) {
@@ -584,7 +586,7 @@ void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
     ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
-    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.all_agree_on_leader());
     ASSERT_TRUE(election.check_epoch_agreement());
     int leader = election.electors[0]->logic.get_election_winner();
     for (int j = i; j < MON_COUNT; ++j) {
@@ -623,7 +625,7 @@ void converges_after_flapping(ElectionLogic::election_strategy strategy)
   election.run_timesteps(100);
   ASSERT_TRUE(election.election_stable());
   ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -654,14 +656,14 @@ void converges_while_flapping(ElectionLogic::election_strategy strategy)
     election.run_timesteps(5);
     block_cons();
     ASSERT_TRUE(election.election_stable());
-    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.all_agree_on_leader());
     ASSERT_TRUE(election.check_epoch_agreement());
   }
   unblock_cons();
   election.run_timesteps(100);
   ASSERT_TRUE(election.election_stable());
   ASSERT_TRUE(election.quorum_stable(6));
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -694,7 +696,7 @@ void netsplit_with_disallowed_tiebreaker_converges(ElectionLogic::election_strat
   election.run_timesteps(0);
   ASSERT_TRUE(election.election_stable());
   ASSERT_TRUE(election.quorum_stable(6));
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
   int starting_leader = election.last_leader;
   // do some netsplits, but leave disallowed tiebreaker alive
@@ -712,7 +714,7 @@ void netsplit_with_disallowed_tiebreaker_converges(ElectionLogic::election_strat
     ASSERT_EQ(starting_leader, election.last_leader);
     ASSERT_TRUE(election.quorum_stable(6));
     ASSERT_TRUE(election.election_stable());
-    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.all_agree_on_leader());
     ASSERT_TRUE(election.check_epoch_agreement());
   }
 
@@ -743,7 +745,7 @@ void netsplit_with_disallowed_tiebreaker_converges(ElectionLogic::election_strat
   election.run_timesteps(100);
   ASSERT_TRUE(election.quorum_stable(50));
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -764,7 +766,7 @@ void handles_singly_connected_peon(ElectionLogic::election_strategy strategy)
   election.run_timesteps(100);
   ASSERT_TRUE(election.quorum_stable(50));
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 
   election.block_bidirectional_messages(0, 1);
@@ -775,7 +777,7 @@ void handles_singly_connected_peon(ElectionLogic::election_strategy strategy)
   election.run_timesteps(15);
   ASSERT_TRUE(election.quorum_stable(50));
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -790,7 +792,7 @@ void handles_outdated_scoring(ElectionLogic::election_strategy strategy)
   election.run_timesteps(20);
   ASSERT_TRUE(election.quorum_stable(5));
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 
   // now mess up the scores to disagree
@@ -818,7 +820,7 @@ void handles_outdated_scoring(ElectionLogic::election_strategy strategy)
   election.run_timesteps(50);
   ASSERT_TRUE(election.quorum_stable(30));
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
@@ -831,7 +833,7 @@ void handles_disagreeing_connectivity(ElectionLogic::election_strategy strategy)
   election.run_timesteps(20);
   ASSERT_TRUE(election.quorum_stable(5));
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 
   // block all the connections
@@ -858,7 +860,7 @@ void handles_disagreeing_connectivity(ElectionLogic::election_strategy strategy)
   // these will pass if the nodes managed to converge on scores, but I expect failure
   ASSERT_TRUE(election.quorum_stable(5));
   ASSERT_TRUE(election.election_stable());
-  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.all_agree_on_leader());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
