@@ -288,9 +288,9 @@ void CreateImageRequest<I>::clone_image() {
 
   librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
     config, m_local_parent_io_ctx, m_local_parent_spec.image_id, snap_name,
-    CEPH_NOSNAP, m_local_io_ctx, m_local_image_name, m_local_image_id, opts,
-    m_mirror_image_mode, m_global_image_id, m_remote_mirror_uuid,
-    m_remote_image_ctx->op_work_queue, ctx);
+    snap_namespace, CEPH_NOSNAP, m_local_io_ctx, m_local_image_name,
+    m_local_image_id, opts, m_mirror_image_mode, m_global_image_id,
+    m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue, ctx);
   req->send();
 }
 
