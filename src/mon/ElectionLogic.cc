@@ -91,14 +91,12 @@ void ElectionLogic::clear_live_election_state()
   leader_acked = -1;
   electing_me = false;
   reset_stable_tracker();
-  delete leader_peer_tracker;
-  leader_peer_tracker = NULL;
+  leader_peer_tracker.reset();
 }
 
 void ElectionLogic::reset_stable_tracker()
 {
-  delete stable_peer_tracker;
-  stable_peer_tracker = new ConnectionTracker(*peer_tracker);
+  stable_peer_tracker.reset(new ConnectionTracker(*peer_tracker));
 }
 
 void ElectionLogic::connectivity_bump_epoch_in_election(epoch_t mepoch)
@@ -111,8 +109,7 @@ void ElectionLogic::connectivity_bump_epoch_in_election(epoch_t mepoch)
   lscore = connectivity_election_score(leader_acked);
   if (my_score > lscore) {
     leader_acked = -1;
-    delete leader_peer_tracker;
-    leader_peer_tracker = NULL;
+    leader_peer_tracker.reset();
   }
 }
 
@@ -423,8 +420,7 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
 	if ((from < leader_acked && leader_from_score >= leader_leader_score) ||
 	    (leader_from_score > leader_leader_score)) {
 	  defer(from);
-	  delete leader_peer_tracker;
-	  leader_peer_tracker = ct;
+	  leader_peer_tracker.reset(new ConnectionTracker(*ct));
 	} else { // we can't defer to them *this* round even though they should win...
 	  double cur_leader_score, cur_from_score;
 	  int cur_leader_live, cur_from_live;
@@ -445,8 +441,7 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
 	}
       } else {
 	defer(from);
-	delete leader_peer_tracker;
-	leader_peer_tracker = ct;
+	leader_peer_tracker.reset(new ConnectionTracker(*ct));
       }
     } else {
       // ignore them!
