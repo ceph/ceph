@@ -127,8 +127,8 @@ int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
   librados::Rados rados(src_io_ctx);
   int r = rados.ioctx_create2(pool_id, *dst_io_ctx);
   if (r == -ENOENT) {
-    lderr(cct) << pool_desc << " pool " << pool_id << " no longer exists"
-               << dendl;
+    ldout(cct, 1) << pool_desc << " pool " << pool_id << " no longer exists"
+                  << dendl;
     return r;
   } else if (r < 0) {
     lderr(cct) << "error accessing " << pool_desc << " pool " << pool_id

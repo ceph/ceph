@@ -414,7 +414,7 @@ int Image<I>::list_descendants(
     for (auto& image_id : image_ids) {
       images->push_back({
         it.first, "", ictx->md_ctx.get_namespace(), image_id, "", false});
-      r = list_descendants(ictx->md_ctx, image_id, child_max_level, images);
+      r = list_descendants(ioctx, image_id, child_max_level, images);
       if (r < 0) {
         return r;
       }
@@ -470,7 +470,11 @@ int Image<I>::list_descendants(
         child_io_ctx.get_namespace() != image.pool_namespace) {
       r = util::create_ioctx(ictx->md_ctx, "child image", image.pool_id,
                              image.pool_namespace, &child_io_ctx);
-      if (r < 0) {
+      if (r == -ENOENT) {
+        image.pool_name = "";
+        image.image_name = "";
+        continue;
+      } else if (r < 0) {
         return r;
       }
       child_pool_id = image.pool_id;
