@@ -17,10 +17,10 @@ overrides:
         debug ms: "0/0"
         debug osd: "0/0"
       global:
-        auth client required: none
-        auth cluster required: none
-        auth service required: none
-        auth supported: none
+        # auth client required: none
+        # auth cluster required: none
+        # auth service required: none
+        # auth supported: none
 
         debug lockdep: "0/0"
         debug context: "0/0"
@@ -53,7 +53,7 @@ overrides:
         debug monc: "0/0"
         debug paxos: "0/0"
         debug tp: "0/0"
-        debug auth: "0/0"
+        # debug auth: "0/0"
         debug crypto: "0/0"
         debug finisher: "0/0"
         debug heartbeatmap: "0/0"
