@@ -172,6 +172,7 @@ struct Owner : public ElectionOwner, RankProvider {
   bool is_current_member(int r) const { return quorum.count(r) != 0; }
   void receive_propose(int from, epoch_t e, ConnectionTracker *oct) {
     logic.receive_propose(from, e, oct);
+    delete oct;
   }
   void receive_ack(int from, epoch_t e) {
     if (e < logic.get_epoch())
@@ -336,7 +337,7 @@ void Election::defer_to(int from, int to, epoch_t e)
 void Election::propose_to(int from, int to, epoch_t e, bufferlist& cbl)
 {
   Owner *o = electors[to];
-  ConnectionTracker *oct;
+  ConnectionTracker *oct = NULL;
   if (cbl.length()) {
     oct = new ConnectionTracker(cbl); // we leak these on blocked cons, meh
   }

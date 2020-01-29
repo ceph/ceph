@@ -287,6 +287,7 @@ void Elector::handle_propose(MonOpRequestRef op)
     oct = new ConnectionTracker(m->sharing_bl);
   }
   logic.receive_propose(from, m->epoch, oct);
+  delete oct;
 }
 
 void Elector::handle_ack(MonOpRequestRef op)
