@@ -78,6 +78,7 @@ struct CloneRequest<librbd::MockTestImageCtx> {
   static CloneRequest *create(ConfigProxy& config, IoCtx &p_ioctx,
                               const std::string &p_id,
                               const std::string &p_snap_name,
+                              const cls::rbd::SnapshotNamespace& snap_ns,
                               uint64_t p_snap_id,
 			      IoCtx &c_ioctx, const std::string &c_name,
 			      const std::string &c_id, ImageOptions c_options,

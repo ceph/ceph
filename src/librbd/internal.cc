@@ -781,7 +781,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
-      config, p_ioctx, parent_id, p_snap_name, CEPH_NOSNAP, c_ioctx, c_name,
+      config, p_ioctx, parent_id, p_snap_name,
+      {cls::rbd::UserSnapshotNamespace{}}, CEPH_NOSNAP, c_ioctx, c_name,
       clone_id, c_opts, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
       non_primary_global_image_id, primary_mirror_uuid, op_work_queue, &cond);
     req->send();

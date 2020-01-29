@@ -19,26 +19,29 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class CloneRequest {
 public:
-  static CloneRequest *create(ConfigProxy& config, IoCtx& parent_io_ctx,
-                              const std::string& parent_image_id,
-                              const std::string& parent_snap_name,
-                              uint64_t parent_snap_id,
-                              IoCtx &c_ioctx, const std::string &c_name,
-                              const std::string &c_id, ImageOptions c_options,
-                              cls::rbd::MirrorImageMode mirror_image_mode,
-			      const std::string &non_primary_global_image_id,
-			      const std::string &primary_mirror_uuid,
-			      ContextWQ *op_work_queue, Context *on_finish) {
+  static CloneRequest *create(
+      ConfigProxy& config, IoCtx& parent_io_ctx,
+      const std::string& parent_image_id,
+      const std::string& parent_snap_name,
+      const cls::rbd::SnapshotNamespace& parent_snap_namespace,
+      uint64_t parent_snap_id,
+      IoCtx &c_ioctx, const std::string &c_name,
+      const std::string &c_id, ImageOptions c_options,
+      cls::rbd::MirrorImageMode mirror_image_mode,
+      const std::string &non_primary_global_image_id,
+      const std::string &primary_mirror_uuid,
+      ContextWQ *op_work_queue, Context *on_finish) {
     return new CloneRequest(config, parent_io_ctx, parent_image_id,
-                            parent_snap_name, parent_snap_id, c_ioctx, c_name,
-                            c_id, c_options, mirror_image_mode,
-                            non_primary_global_image_id, primary_mirror_uuid,
-                            op_work_queue, on_finish);
+                            parent_snap_name, parent_snap_namespace,
+                            parent_snap_id, c_ioctx, c_name, c_id, c_options,
+                            mirror_image_mode, non_primary_global_image_id,
+                            primary_mirror_uuid, op_work_queue, on_finish);
   }
 
   CloneRequest(ConfigProxy& config, IoCtx& parent_io_ctx,
                const std::string& parent_image_id,
                const std::string& parent_snap_name,
+               const cls::rbd::SnapshotNamespace& parent_snap_namespace,
                uint64_t parent_snap_id,
                IoCtx &c_ioctx, const std::string &c_name,
                const std::string &c_id, ImageOptions c_options,
@@ -101,6 +104,7 @@ private:
   IoCtx &m_parent_io_ctx;
   std::string m_parent_image_id;
   std::string m_parent_snap_name;
+  cls::rbd::SnapshotNamespace m_parent_snap_namespace;
   uint64_t m_parent_snap_id;
   ImageCtxT *m_parent_image_ctx;
 

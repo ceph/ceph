@@ -1244,7 +1244,7 @@ int Migration<I>::create_dst_image() {
     }
 
     auto *req = image::CloneRequest<I>::create(
-      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
+      config, parent_io_ctx, parent_spec.image_id, "", {}, parent_spec.snap_id,
       m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options,
       cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
     req->send();

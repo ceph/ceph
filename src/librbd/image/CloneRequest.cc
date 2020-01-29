@@ -30,21 +30,24 @@ using util::create_context_callback;
 using util::create_async_context_callback;
 
 template <typename I>
-CloneRequest<I>::CloneRequest(ConfigProxy& config,
-                              IoCtx& parent_io_ctx,
-                              const std::string& parent_image_id,
-                              const std::string& parent_snap_name,
-                              uint64_t parent_snap_id,
-                              IoCtx &c_ioctx,
-			      const std::string &c_name,
-			      const std::string &c_id,
-			      ImageOptions c_options,
-                              cls::rbd::MirrorImageMode mirror_image_mode,
-			      const std::string &non_primary_global_image_id,
-			      const std::string &primary_mirror_uuid,
-			      ContextWQ *op_work_queue, Context *on_finish)
+CloneRequest<I>::CloneRequest(
+    ConfigProxy& config,
+    IoCtx& parent_io_ctx,
+    const std::string& parent_image_id,
+    const std::string& parent_snap_name,
+    const cls::rbd::SnapshotNamespace& parent_snap_namespace,
+    uint64_t parent_snap_id,
+    IoCtx &c_ioctx,
+    const std::string &c_name,
+    const std::string &c_id,
+    ImageOptions c_options,
+    cls::rbd::MirrorImageMode mirror_image_mode,
+    const std::string &non_primary_global_image_id,
+    const std::string &primary_mirror_uuid,
+    ContextWQ *op_work_queue, Context *on_finish)
   : m_config(config), m_parent_io_ctx(parent_io_ctx),
     m_parent_image_id(parent_image_id), m_parent_snap_name(parent_snap_name),
+    m_parent_snap_namespace(parent_snap_namespace),
     m_parent_snap_id(parent_snap_id), m_ioctx(c_ioctx), m_name(c_name),
     m_id(c_id), m_opts(c_options), m_mirror_image_mode(mirror_image_mode),
     m_non_primary_global_image_id(non_primary_global_image_id),
@@ -138,8 +141,10 @@ void CloneRequest<I>::open_parent() {
                                    m_parent_io_ctx, true);
   } else {
     m_parent_image_ctx = I::create("", m_parent_image_id,
-                                   m_parent_snap_name.c_str(), m_parent_io_ctx,
+                                   m_parent_snap_name.c_str(),
+                                   m_parent_io_ctx,
                                    true);
+    m_parent_image_ctx->snap_namespace = m_parent_snap_namespace;
   }
 
   Context *ctx = create_context_callback<
