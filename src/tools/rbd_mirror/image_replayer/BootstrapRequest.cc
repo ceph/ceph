@@ -338,7 +338,8 @@ void BootstrapRequest<I>::create_local_image() {
     BootstrapRequest<I>,
     &BootstrapRequest<I>::handle_create_local_image>(this);
   auto request = (*m_state_builder)->create_local_image_request(
-    m_threads, m_local_io_ctx, m_global_image_id, m_progress_ctx, ctx);
+    m_threads, m_local_io_ctx, m_global_image_id, m_pool_meta_cache,
+    m_progress_ctx, ctx);
   request->send();
 }
 

@@ -10,8 +10,11 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
+#include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/ProgressContext.h"
+#include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/CreateImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
 #define dout_context g_ceph_context
@@ -26,11 +29,11 @@ namespace mirror {
 namespace image_replayer {
 namespace journal {
 
+using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 
 template <typename I>
 void CreateLocalImageRequest<I>::send() {
-  m_state_builder->local_image_id = "";
   unregister_client();
 }
 
@@ -55,6 +58,7 @@ void CreateLocalImageRequest<I>::handle_unregister_client(int r) {
     return;
   }
 
+  m_state_builder->local_image_id = "";
   m_state_builder->remote_client_meta = {};
   register_client();
 }
@@ -116,7 +120,7 @@ void CreateLocalImageRequest<I>::create_local_image() {
     m_threads, m_local_io_ctx, m_global_image_id,
     m_state_builder->remote_mirror_uuid, image_name,
     m_state_builder->local_image_id, m_remote_image_ctx,
-    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, ctx);
+    m_pool_meta_cache, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, ctx);
   request->send();
 }
 template <typename I>
@@ -126,8 +130,7 @@ void CreateLocalImageRequest<I>::handle_create_local_image(int r) {
   if (r == -EBADF) {
     dout(5) << "image id " << m_state_builder->local_image_id << " "
             << "already in-use" << dendl;
-    m_state_builder->local_image_id = "";
-    update_client_image();
+    unregister_client();
     return;
   } else if (r < 0) {
     if (r == -ENOENT) {
@@ -140,45 +143,6 @@ void CreateLocalImageRequest<I>::handle_create_local_image(int r) {
   }
 
   finish(0);
-}
-
-template <typename I>
-void CreateLocalImageRequest<I>::update_client_image() {
-  ceph_assert(m_state_builder->local_image_id.empty());
-  m_state_builder->local_image_id =
-    librbd::util::generate_image_id<I>(m_local_io_ctx);
-
-  dout(10) << "local_image_id=" << m_state_builder->local_image_id << dendl;
-  update_progress("UPDATE_CLIENT_IMAGE");
-
-  librbd::journal::MirrorPeerClientMeta client_meta{
-    m_state_builder->local_image_id};
-  client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
-
-  librbd::journal::ClientData client_data(client_meta);
-  bufferlist data_bl;
-  encode(client_data, data_bl);
-
-  auto ctx = create_context_callback<
-    CreateLocalImageRequest<I>,
-    &CreateLocalImageRequest<I>::handle_update_client_image>(this);
-  m_state_builder->remote_journaler->update_client(data_bl, ctx);
-}
-
-template <typename I>
-void CreateLocalImageRequest<I>::handle_update_client_image(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    derr << "failed to update client: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  m_state_builder->remote_client_meta = {m_state_builder->local_image_id};
-  m_state_builder->remote_client_meta.state =
-    librbd::journal::MIRROR_PEER_STATE_SYNCING;
-  create_local_image();
 }
 
 template <typename I>
