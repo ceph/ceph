@@ -862,11 +862,11 @@ n     *
       err = -EINVAL;
       goto reply;
     }
-    if (strat == "CLASSIC") {
+    if (strat == "classic") {
       strategy = MonMap::CLASSIC;
-    } else if (strat == "DISALLOW") {
+    } else if (strat == "disallow") {
       strategy = MonMap::DISALLOW;
-    } else if (strat == "CONNECTIVITY") {
+    } else if (strat == "connectivity") {
       strategy = MonMap::CONNECTIVITY;
     } else {
       err = -EINVAL;

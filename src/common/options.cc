@@ -1609,6 +1609,11 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("The 'halflife' used when updating/calculating peer connection scores"),
 
+    Option("mon_elector_ignore_propose_margin", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0005)
+    .add_service("mon")
+    .set_description("The difference in connection score allowed before a peon stops ignoring out-of-quorum PROPOSEs"),
+
     Option("mon_clock_drift_allowed", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.050)
     .add_service("mon")

@@ -330,17 +330,22 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
       last_election_winner != elector->get_my_rank() &&
       !elector->is_current_member(from)) {
     // To prevent election flapping, peons ignore proposals from out-of-quorum
-    // peers unless their vote would change from the last election
+    // peers unless their vote would materially change from the last election
     int best_scorer = 0;
     double best_score = 0;
+    double last_voted_for_score = 0;
     for (unsigned i = 0; i < elector->paxos_size(); ++i) {
       double score = connectivity_election_score(i);
       if (score > best_score) {
 	best_scorer = i;
 	best_score = score;
       }
+      if (last_voted_for >= 0 && i == static_cast<unsigned>(last_voted_for)) {
+	last_voted_for_score = score;
+      }
     }
-    if (best_scorer == last_voted_for) {
+    if (best_scorer == last_voted_for ||
+	(best_score - last_voted_for_score < ignore_propose_margin)) {
       // drop this message; it won't change our vote so we defer to leader
       return;
     }
