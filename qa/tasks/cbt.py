@@ -69,7 +69,7 @@ class CBT(Task):
             )
 
     def install_dependencies(self):
-        system_type = misc.get_system_type(self.first_mon)
+        system_type = misc.get_pkg_type("rhel")
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
