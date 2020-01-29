@@ -101,7 +101,7 @@ int CrushLocation::init_on_startup()
 
   // start with a sane default
   char hostname[HOST_NAME_MAX + 1];
-  int r = gethostname(hostname, sizeof(hostname)-1);
+  int r = gethostname(hostname, sizeof(hostname));
   if (r < 0)
     strcpy(hostname, "unknown_host");
   // use short hostname
