@@ -586,6 +586,7 @@ public:
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
     const bool isSTSenabled;
+    bool isIAMenabled;
     const bool isPSenabled;
     bool is_usage_op() {
     return s->info.args.exists("usage");
@@ -595,8 +596,8 @@ protected:
   RGWOp *op_post() override;
 public:
    RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
-                              bool _isSTSenabled, bool _isPSenabled) :
-      RGWHandler_REST_S3(auth_registry), isSTSenabled(_isSTSenabled), isPSenabled(_isPSenabled) {}
+                              bool _isSTSenabled, bool _isIAMenabled, bool _isPSenabled) :
+      RGWHandler_REST_S3(auth_registry), isSTSenabled(_isSTSenabled), isIAMenabled(_isIAMenabled), isPSenabled(_isPSenabled) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 
@@ -679,11 +680,13 @@ class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
   bool enable_s3website;
   bool enable_sts;
+  bool enable_iam;
   const bool enable_pubsub;
 public:
-  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false, bool _enable_pubsub = false)
+  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false, bool enable_iam = false, bool _enable_pubsub = false)
     : enable_s3website(enable_s3website),
       enable_sts(enable_sts),
+      enable_iam(enable_iam),
       enable_pubsub(_enable_pubsub) {
   }
 

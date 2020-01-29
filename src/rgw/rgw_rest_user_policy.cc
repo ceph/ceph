@@ -22,9 +22,9 @@ using rgw::IAM::Policy;
 
 void RGWRestUserPolicy::dump(Formatter *f) const
 {
-  encode_json("policyname", policy_name , f);
-  encode_json("username", user_name , f);
-  encode_json("policydocument", policy, f);
+  encode_json("Policyname", policy_name , f);
+  encode_json("Username", user_name , f);
+  encode_json("Policydocument", policy, f);
 }
 
 void RGWRestUserPolicy::send_response()
@@ -152,6 +152,14 @@ void RGWPutUserPolicy::execute()
     ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -ERR_MALFORMED_DOC;
   }
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section("PutUserPolicyResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
 }
 
 uint64_t RGWGetUserPolicy::get_op()
@@ -190,15 +198,18 @@ void RGWGetUserPolicy::execute()
   }
 
   if (op_ret == 0) {
+    s->formatter->open_object_section("GetUserPolicyResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->open_object_section("GetUserPolicyResult");
     map<string, string> policies;
     if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
       bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
       decode(policies, bl);
       if (auto it = policies.find(policy_name); it != policies.end()) {
         policy = policies[policy_name];
-        s->formatter->open_object_section("userpolicy");
         dump(s->formatter);
-        s->formatter->close_section();
       } else {
         ldout(s->cct, 0) << "ERROR: policy not found" << policy << dendl;
         op_ret = -ERR_NO_SUCH_ENTITY;
@@ -209,6 +220,8 @@ void RGWGetUserPolicy::execute()
       op_ret = -ERR_NO_SUCH_ENTITY;
       return;
     }
+    s->formatter->close_section();
+    s->formatter->close_section();
   }
   if (op_ret < 0) {
     op_ret = -ERR_INTERNAL_ERROR;
@@ -251,13 +264,20 @@ void RGWListUserPolicies::execute()
   if (op_ret == 0) {
     map<string, string> policies;
     if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+      s->formatter->open_object_section("ListUserPoliciesResponse");
+      s->formatter->open_object_section("ResponseMetadata");
+      s->formatter->dump_string("RequestId", s->trans_id);
+      s->formatter->close_section();
+      s->formatter->open_object_section("ListUserPoliciesResult");
       bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
       decode(policies, bl);
       for (const auto& p : policies) {
-        s->formatter->open_object_section("policies");
-        s->formatter->dump_string("policy", p.first);
+        s->formatter->open_object_section("PolicyNames");
+        s->formatter->dump_string("member", p.first);
         s->formatter->close_section();
       }
+      s->formatter->close_section();
+      s->formatter->close_section();
     } else {
       ldout(s->cct, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
       op_ret = -ERR_NO_SUCH_ENTITY;
@@ -324,6 +344,13 @@ void RGWDeleteUserPolicy::execute()
       op_ret = rgw_store_user_info(store, info, &info, &objv_tracker, real_time(), false, &uattrs);
       if (op_ret < 0) {
         op_ret = -ERR_INTERNAL_ERROR;
+      }
+      if (op_ret == 0) {
+        s->formatter->open_object_section("DeleteUserPoliciesResponse");
+        s->formatter->open_object_section("ResponseMetadata");
+        s->formatter->dump_string("RequestId", s->trans_id);
+        s->formatter->close_section();
+        s->formatter->close_section();
       }
     } else {
       op_ret = -ERR_NO_SUCH_ENTITY;
