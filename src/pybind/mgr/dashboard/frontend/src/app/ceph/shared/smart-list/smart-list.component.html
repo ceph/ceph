@@ -1,10 +1,16 @@
 <ng-container *ngIf="!loading; else isLoading">
-  <ng-container *ngIf="incompatible; else isCompatible">
-    <cd-alert-panel id="alert-wrong-format"
-                    type="warning"
-                    i18n>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</cd-alert-panel>
-  </ng-container>
-  <ng-template #isCompatible>
+  <cd-alert-panel *ngIf="error"
+                  type="error"
+                  i18n>Failed to retrieve SMART data.</cd-alert-panel>
+  <cd-alert-panel *ngIf="incompatible"
+                  type="warning"
+                  i18n>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</cd-alert-panel>
+
+  <ng-container *ngIf="!error && !incompatible">
+    <cd-alert-panel *ngIf="!(data | keyvalue).length"
+                    type="info"
+                    i18n>No SMART data available.</cd-alert-panel>
+
     <tabset *ngFor="let device of data | keyvalue">
       <tab [heading]="device.value.device + ' (' + device.value.identifier + ')'">
         <ng-container *ngIf="device.value.error; else noError">
@@ -55,7 +61,7 @@
         </ng-template>
       </tab>
     </tabset>
-  </ng-template>
+  </ng-container>
 </ng-container>
 <ng-template #isLoading>
   <cd-loading-panel i18n>SMART data is loading.</cd-loading-panel>

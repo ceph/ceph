@@ -27,6 +27,7 @@ export class SmartListComponent implements OnInit, OnChanges {
 
   loading = false;
   incompatible = false;
+  error = false;
 
   data: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
 
@@ -130,9 +131,17 @@ export class SmartListComponent implements OnInit, OnChanges {
     this.loading = true;
 
     if (this.osdId !== null) {
-      this.osdService.getSmartData(this.osdId).subscribe(this.fetchData.bind(this));
+      this.osdService.getSmartData(this.osdId).subscribe(this.fetchData.bind(this), (error) => {
+        error.preventDefault();
+        this.error = error;
+        this.loading = false;
+      });
     } else if (this.hostname !== null) {
-      this.hostService.getSmartData(this.hostname).subscribe(this.fetchData.bind(this));
+      this.hostService.getSmartData(this.hostname).subscribe(this.fetchData.bind(this), (error) => {
+        error.preventDefault();
+        this.error = error;
+        this.loading = false;
+      });
     }
   }
 
