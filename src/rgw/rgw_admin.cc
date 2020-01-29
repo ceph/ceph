@@ -5409,11 +5409,11 @@ int main(int argc, const char **argv)
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
                                         OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
                                         OPT::BUCKET_RESHARD, OPT::BUCKET_RM,
-                                        OPT::METADATA_PUT, OPT::METADATA_RM,
-                                        OPT::RESHARD_CANCEL, OPT::RESHARD_ADD,
-                                        OPT::MFA_CREATE, OPT::MFA_REMOVE,
-                                        OPT::MFA_RESYNC, OPT::CAPS_ADD,
-                                        OPT::CAPS_RM};
+                                        OPT::BUCKET_CHOWN, OPT::METADATA_PUT,
+                                        OPT::METADATA_RM, OPT::RESHARD_CANCEL,
+                                        OPT::RESHARD_ADD, OPT::MFA_CREATE,
+                                        OPT::MFA_REMOVE, OPT::MFA_RESYNC,
+                                        OPT::CAPS_ADD, OPT::CAPS_RM};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
