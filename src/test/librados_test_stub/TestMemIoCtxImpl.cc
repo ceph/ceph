@@ -444,6 +444,7 @@ int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
 int TestMemIoCtxImpl::set_alloc_hint(const std::string& oid,
                                      uint64_t expected_object_size,
                                      uint64_t expected_write_size,
+                                     uint32_t flags,
                                      const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
