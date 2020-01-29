@@ -10,6 +10,20 @@ from ceph_volume.util import templates, system
 from ceph_volume.exceptions import SizeAllocationError
 
 
+def devs_are_usable_lvs(devs):
+    for dev in devs:
+        if not dev.is_lv:
+            return False
+    return True
+
+
+class FakeNamespace(object):
+
+    def __init__(self, args):
+        for k, v in args.items():
+            setattr(self, k, v)
+
+
 class SingleType(Strategy):
     """
     Support for all SSDs, or all HDDS
@@ -17,7 +31,25 @@ class SingleType(Strategy):
 
     def __init__(self, args, data_devs):
         super(SingleType, self).__init__(args, data_devs)
-        self.validate_compute()
+        if not devs_are_usable_lvs(data_devs):
+            self.validate_compute()
+
+    def create_osds(self):
+        # This only deals with LVs for now
+        for dev in self.data_devs:
+            arg_dict = vars(self.args)
+            arg_dict['data'] = dev.path
+            arg_dict['osd_fsid'] = None
+            arg_dict['cluster_fsid'] = None
+            arg_dict['osd_id'] = None
+            arg_dict['block_wal'] = None
+            arg_dict['block_wal_size'] = None
+            arg_dict['block_db'] = None
+            arg_dict['block_db_size'] = None
+            args = FakeNamespace(arg_dict)
+            Create([]).create(args)
+
+
 
     @classmethod
     def with_auto_devices(cls, args, devices):
@@ -92,6 +124,10 @@ class SingleType(Strategy):
         (block, block.db, block.wal, etc..) and offload the OSD creation to
         ``lvm create``
         """
+        if devs_are_usable_lvs(self.data_devs):
+            self.create_osds()
+            return
+
         osd_vgs = dict([(osd['data']['path'], None) for osd in self.computed['osds']])
 
         # create the vgs first, mapping them to the device path
