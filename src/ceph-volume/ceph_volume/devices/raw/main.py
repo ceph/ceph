@@ -2,7 +2,6 @@ import argparse
 from textwrap import dedent
 from ceph_volume import terminal
 from . import list
-from . import create
 from . import prepare
 from . import activate
 
@@ -19,7 +18,6 @@ class Raw(object):
 
     mapper = {
         'list': list.List,
-        'create': create.Create,
         'prepare': prepare.Prepare,
         'activate': activate.Activate,
     }

@@ -11,9 +11,10 @@ from .list import direct_report
 
 logger = logging.getLogger(__name__)
 
-def activate_bluestore(meta, tmpfs, systemd):
+def activate_bluestore(meta, tmpfs, systemd, block_wal=None, block_db=None):
     # find the osd
     osd_id = meta['osd_id']
+    osd_uuid = meta['osd_uuid']
 
     # mount on tmpfs the osd directory
     osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
@@ -42,18 +43,15 @@ def activate_bluestore(meta, tmpfs, systemd):
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
-    process.run(['ln', '-snf', meta['device'], os.path.join(osd_path, 'block')])
-    system.chown(os.path.join(osd_path, 'block'))
+    prepare_utils.link_block( meta['device'], osd_id)
+
+    if block_wal:
+        prepare_utils.link_wal(block_wal, osd_id, osd_uuid)
+
+    if block_db:
+        prepare_utils.link_db(block_db, osd_id, osd_uuid)
+
     system.chown(osd_path)
-
-#    if systemd:
-        # write me
-        # enable the OSD
-        #systemctl.enable_osd(osd_id)
-
-        # start the OSD
-        #systemctl.start_osd(osd_id)
-
     terminal.success("ceph-volume raw activate successful for osd ID: %s" % osd_id)
 
 
@@ -66,7 +64,7 @@ class Activate(object):
         self.args = None
 
     @decorators.needs_root
-    def activate(self, devices, tmpfs, systemd):
+    def activate(self, devices, tmpfs, systemd, block_wal, block_db):
         """
         :param args: The parsed arguments coming from the CLI
         """
@@ -75,18 +73,19 @@ class Activate(object):
 
         for osd_id, meta in found.items():
             logger.info('Activating osd.%s uuid %s cluster %s' % (
-                    osd_id, meta['osd_uuid'], meta['ceph_fsid']))
+                        osd_id, meta['osd_uuid'], meta['ceph_fsid']))
             activate_bluestore(meta,
                                tmpfs=tmpfs,
-                               systemd=systemd)
+                               systemd=systemd,
+                               block_wal=block_wal,
+                               block_db=block_db)
 
     def main(self):
         sub_command_help = dedent("""
-        Activate (BlueStore) OSD on a raw block device based on the 
+        Activate (BlueStore) OSD on a raw block device based on the
         device label (normally the first block of the device).
 
             ceph-volume raw activate --device /dev/sdb
-            ceph-volume raw activate --osd-id 1 --osd-fsid f0327efd-c28e-40bb-9199-f2e61e54c12a
 
         The device(s) associated with the OSD needs to have been prepared
         previously, so that all needed tags and metadata exist.
@@ -96,22 +95,34 @@ class Activate(object):
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description=sub_command_help,
         )
-
         parser.add_argument(
             '--device',
             nargs='+',
-            help='The device(s) for the OSD to start')
+            help='The device for the OSD to start'
+            )
         parser.add_argument(
             '--no-systemd',
             dest='no_systemd',
             action='store_true',
-            help='Skip creating and enabling systemd units and starting OSD services',
+            help='Skip creating and enabling systemd units and starting OSD services'
+        )
+        parser.add_argument(
+            '--block.db',
+            dest='block_db',
+            help='Path to bluestore block.db block device'
+        )
+        parser.add_argument(
+            '--block.wal',
+            dest='block_wal',
+            help='Path to bluestore block.wal block device'
         )
         parser.add_argument(
             '--no-tmpfs',
             action='store_true',
-            help='Do not use a tmpfs mount for OSD data dir')
-        if len(self.argv) == 0:
+            help='Do not use a tmpfs mount for OSD data dir'
+            )
+
+        if not self.argv:
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
@@ -121,4 +132,6 @@ class Activate(object):
             raise SystemExit(1)
         self.activate(args.device,
                       tmpfs=not args.no_tmpfs,
-                      systemd=not self.args.no_systemd)
+                      systemd=not self.args.no_systemd,
+                      block_wal=self.args.block_wal,
+                      block_db=self.args.block_db)
