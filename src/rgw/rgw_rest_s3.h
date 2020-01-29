@@ -570,6 +570,11 @@ public:
   void send_response() override;
 };
 
+class RGWGetBucketPolicyStatus_ObjStore_S3 : public RGWGetBucketPolicyStatus {
+public:
+  void send_response() override;
+};
+
 class RGW_Auth_S3 {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
@@ -676,9 +681,11 @@ protected:
   bool is_replication_op() const {
     return s->info.args.exists("replication");
   }
+  bool is_policy_status_op() {
+    return s->info.args.exists("policyStatus");
+  }
 
   RGWOp *get_obj_op(bool get_data) const;
-
   RGWOp *op_get() override;
   RGWOp *op_head() override;
   RGWOp *op_put() override;

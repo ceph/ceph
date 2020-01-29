@@ -33,6 +33,7 @@ static const auto signed_subresources = {
   "notification",
   "partNumber",
   "policy",
+  "policyStatus",
   "requestPayment",
   "response-cache-control",
   "response-content-disposition",

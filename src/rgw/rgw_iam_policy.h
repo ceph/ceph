@@ -100,7 +100,8 @@ static constexpr std::uint64_t s3GetObjectRetention = 57;
 static constexpr std::uint64_t s3PutObjectLegalHold = 58;
 static constexpr std::uint64_t s3GetObjectLegalHold = 59;
 static constexpr std::uint64_t s3BypassGovernanceRetention = 60;
-static constexpr std::uint64_t s3All = 61;
+static constexpr std::uint64_t s3GetBucketPolicyStatus = 61;
+static constexpr std::uint64_t s3All = 62;
 
 static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
 static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
@@ -190,6 +191,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketLogging:
   case s3GetBucketNotification:
   case s3GetBucketPolicy:
+  case s3GetBucketPolicyStatus:
   case s3GetBucketRequestPayment:
   case s3GetBucketTagging:
   case s3GetBucketVersioning:
