@@ -1467,6 +1467,16 @@ class OrchestratorClientMixin(Orchestrator):
     ...        self._orchestrator_wait([completion])
     ...        self.log.debug(completion.result)
 
+    .. note:: Orchestrator implementations should not inherit from `OrchestratorClientMixin`.
+        Reason is, that OrchestratorClientMixin magically redirects all methods to the
+        "real" implementation of the orchestrator.
+
+
+    >>> import mgr_module
+    >>> class MyImplentation(mgr_module.MgrModule, Orchestrator):
+    ...     def __init__(self, ...):
+    ...         self.orch_client = OrchestratorClientMixin()
+    ...         self.orch_client.set_mgr(self.mgr))
     """
 
     def set_mgr(self, mgr):
