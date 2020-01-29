@@ -7,6 +7,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/CreateLocalImageRequest.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -70,9 +71,9 @@ BaseRequest* StateBuilder<I>::create_local_image_request(
     PoolMetaCache* pool_meta_cache,
     ProgressContext* progress_ctx,
     Context* on_finish) {
-  // TODO
-  ceph_assert(false);
-  return nullptr;
+  return CreateLocalImageRequest<I>::create(
+    threads, local_io_ctx, this->remote_image_ctx, global_image_id,
+    pool_meta_cache, progress_ctx, this, on_finish);
 }
 
 template <typename I>
