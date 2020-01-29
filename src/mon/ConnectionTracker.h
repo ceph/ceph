@@ -12,9 +12,7 @@
  * 
  */
 
-#ifndef CEPH_MON_CONNECTIONTRACKER2_H
-#define CEPH_MON_CONNECTIONTRACKER2_H
-
+#pragma once
 #include "include/types.h"
 
 struct ConnectionReport {
@@ -222,4 +220,3 @@ class ConnectionTracker {
 };
 
 WRITE_CLASS_ENCODER(ConnectionTracker);
-#endif
