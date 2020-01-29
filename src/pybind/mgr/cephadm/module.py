@@ -8,8 +8,9 @@ from functools import wraps
 import string
 try:
     from typing import List, Dict, Optional, Callable, TypeVar, Type, Any
+    from typing import TYPE_CHECKING
 except ImportError:
-    pass  # just for type checking
+    TYPE_CHECKING = False  # just for type checking
 
 
 import datetime
@@ -331,6 +332,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.run = True
         self.event = Event()
 
+        # for mypy which does not run the code
+        if TYPE_CHECKING:
+            self.ssh_config_file = None  # type: Optional[str]
+            self.inventory_cache_timeout = 0
+            self.service_cache_timeout = 0
+            self.mode = ''
+            self.container_image_base = ''
+            self.warn_on_stray_hosts = True
+            self.warn_on_stray_services = True
         self.config_notify()
 
         path = self.get_ceph_option('cephadm_path')
