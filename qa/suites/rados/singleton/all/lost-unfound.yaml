@@ -20,4 +20,5 @@ tasks:
       - \(OSD_
       - \(PG_
       - \(OBJECT_
+      - \(SLOW_OPS\)
 - lost_unfound:
