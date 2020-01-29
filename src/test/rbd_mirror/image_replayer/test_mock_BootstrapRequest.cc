@@ -236,10 +236,11 @@ struct StateBuilder<librbd::MockTestImageCtx> {
 
   MOCK_METHOD1(close_remote_image, void(Context*));
 
-  MOCK_METHOD5(create_local_image_request,
+  MOCK_METHOD6(create_local_image_request,
                BaseRequest*(Threads<librbd::MockTestImageCtx>*,
                             librados::IoCtx&,
                             const std::string&,
+                            PoolMetaCache*,
                             ProgressContext*,
                             Context*));
   MOCK_METHOD5(create_prepare_replay_request,
@@ -399,8 +400,8 @@ public:
   void expect_create_local_image(MockStateBuilder& mock_state_builder,
                                  const std::string& local_image_id, int r) {
     EXPECT_CALL(mock_state_builder,
-                create_local_image_request(_, _, _, _, _))
-      .WillOnce(WithArg<4>(
+                create_local_image_request(_, _, _, _, _, _))
+      .WillOnce(WithArg<5>(
         Invoke([this, &mock_state_builder, local_image_id, r](Context* ctx) {
           if (r >= 0) {
             mock_state_builder.local_image_id = local_image_id;

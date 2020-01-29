@@ -41,6 +41,7 @@ public:
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
       const std::string& global_image_id,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       Context* on_finish) override;
 
