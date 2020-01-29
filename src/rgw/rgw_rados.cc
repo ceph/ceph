@@ -4394,6 +4394,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   real_time read_mtime;
   uint64_t obj_size;
 
+  obj_ctx.set_atomic(obj);
+
   RGWRados::Object op_target(this, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
@@ -4410,6 +4412,9 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
     /* raced */
     return -ECANCELED;
   }
+
+  attrs.erase(RGW_ATTR_ID_TAG);
+  attrs.erase(RGW_ATTR_TAIL_TAG);
 
   ret = copy_obj_data(obj_ctx,
                       bucket_info,
