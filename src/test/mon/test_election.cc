@@ -105,7 +105,7 @@ struct Owner : public ElectionOwner, RankProvider {
        Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
     peer_tracker(this, rank, tracker_halflife, 5),
-    logic(this, es, &peer_tracker, g_ceph_context),
+    logic(this, es, &peer_tracker, 0.0005, g_ceph_context),
     victory_accepters(0),
     timer_steps(-1), timer_election(true) {
     std::stringstream str;
