@@ -97,9 +97,10 @@ class Monitoring(object):
     """Define the configs for the monitoring containers"""
 
     port_map = {
-        "prometheus": 9095,  # Avoid default 9090, due to conflict with cockpit UI
-        "node-exporter": 9100,
-        "grafana": 3000,
+        "prometheus": [9095],  # Avoid default 9090, due to conflict with cockpit UI
+        "node-exporter": [9100],
+        "grafana": [3000],
+        "alertmanager": [9093, 9094],
     }
 
     components = {
@@ -110,7 +111,7 @@ class Monitoring(object):
             "args": [
                 "--config.file=/etc/prometheus/prometheus.yml",
                 "--storage.tsdb.path=/prometheus",
-                "--web.listen-address=:{}".format(port_map['prometheus']),
+                "--web.listen-address=:{}".format(port_map['prometheus'][0]),
             ],
             "config-json": [
                 "prometheus.yml",
@@ -135,6 +136,17 @@ class Monitoring(object):
                 "certs/cert_file",
                 "certs/cert_key",
             ],
+        },
+        "alertmanager": {
+            "image": "prom/alertmanager",
+            "cpus": "2",
+            "memory": "2GB",
+            "args": [],
+            "config-json": [
+                "alertmanager.yml",
+                "_peers",
+            ],
+        },
         }
     }  # type: Dict[str, dict]
 
@@ -893,6 +905,11 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
     elif daemon_type in Monitoring.components:
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
+        if daemon_type == 'alertmanager':
+            config = get_parm(args.config_json)
+            peers = config.get('_peers', list())  # type: ignore
+            for peer in peers:
+                r += ["--cluster.peer={}".format(peer)]
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
@@ -937,9 +954,18 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'alertmanager':
+            data_dir_root = get_data_dir(fsid, daemon_type, daemon_id)
+            config_dir = 'etc/alertmanager'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
+
 
         # populate the config directory for the component from the config-json
         for fname in required_config:
+            # config entries prefixed by '_' denote a setting not a config file
+            if fname.startswith('_'):
+                continue
             if isinstance(received_config[fname], list):
                 content = '\n'.join(received_config[fname])
             else:
@@ -1085,6 +1111,8 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
             mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
+        elif daemon_type == 'alertmanager':
+            mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/alertmanager:Z'
 
     return mounts
 
@@ -1294,7 +1322,7 @@ def update_firewalld(daemon_type):
         fw_ports.append(8443)  # dashboard
         fw_ports.append(9283)  # mgr/prometheus exporter
     elif daemon_type in Monitoring.port_map.keys():
-        fw_ports.append(Monitoring.port_map[daemon_type])  # prometheus etc
+        fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
 
     for svc in fw_services:
         out, err, ret = call([cmd, '--permanent', '--query-service', svc])
@@ -1966,14 +1994,21 @@ def command_deploy():
         monitoring_args = []  # type: List[str]
 
         # Default Checks
-        daemon_port = Monitoring.port_map[daemon_type]
-        if port_in_use(daemon_port):
-            raise Error("TCP Port '{}' required for {} is already in use".format(daemon_port, daemon_type))
+        daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
+        if any([port_in_use(port) for port in daemon_ports]):
+            raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
         elif args.image == DEFAULT_IMAGE:
             raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
-        if daemon_type in ['prometheus', 'grafana'] and not args.config_json:
+        if daemon_type in ['prometheus', 'grafana', 'alertmanager']:
+            if not args.config_json:
                 raise Error("config-json parameter is needed when deploying {} service".format(daemon_type))
+            metadata = Monitoring.components[daemon_type]  # type: ignore
+            required_keys = metadata.get('config_json', list())  # type: ignore
+            received = get_parm(args.config_json)
+            if not all([req in received.keys()
+                        for req in required_keys]):
+                raise Error("config-json must contain {} section(s)".format(','.join(required_keys)))
 
         if daemon_type == 'prometheus':
             uid, gid = extract_uid_gid(file_path='/etc/prometheus')
@@ -1981,6 +2016,8 @@ def command_deploy():
             uid, gid = 65534, 65534
         elif daemon_type == 'grafana':
             uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
+        elif daemon_type == 'alertmanager':
+            uid, gid = extract_uid_gid(file_path='/alertmanager')
         else:
             raise Error("{} not implemented yet".format(daemon_type))
 
