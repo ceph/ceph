@@ -88,6 +88,7 @@ using rgw::IAM::iamCreateRole;
 using rgw::IAM::iamDeleteRole;
 using rgw::IAM::iamAll;
 using rgw::IAM::stsAll;
+using rgw::IAM::allCount;
 
 class FakeIdentity : public Identity {
   const Principal id;
@@ -1203,10 +1204,14 @@ TEST(MatchPolicy, String)
   EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }
 
-static const Action_t s3AllValuet("1111111111111111111111111111111111111111111111111111111111111");
-static const Action_t iamAllValuet("111111111111100000000000000000000000000000000000000000000000000000000000000");
-static const Action_t stsAllValuet("1110000000000000000000000000000000000000000000000000000000000000000000000000000");
-static const Action_t allValuet("11111111111111111111111111111111111111111111111111111111111111111111111111111111");
+Action_t set_range_bits(std::uint64_t start, std::uint64_t end)
+{
+  Action_t result;
+  for (uint64_t i = start; i < end; i++) {
+    result.set(i);
+  }
+  return result;
+}
 
 using rgw::IAM::s3AllValue;
 using rgw::IAM::stsAllValue;
@@ -1214,8 +1219,8 @@ using rgw::IAM::allValue;
 using rgw::IAM::iamAllValue;
 TEST(set_cont_bits, iamconsts)
 {
-  EXPECT_EQ(s3AllValue, s3AllValuet);
-  EXPECT_EQ(iamAllValue, iamAllValuet);
-  EXPECT_EQ(stsAllValue, stsAllValuet);
-  EXPECT_EQ(allValue , allValuet);
+  EXPECT_EQ(s3AllValue, set_range_bits(0, s3All));
+  EXPECT_EQ(iamAllValue, set_range_bits(s3All+1, iamAll));
+  EXPECT_EQ(stsAllValue, set_range_bits(iamAll+1, stsAll));
+  EXPECT_EQ(allValue , set_range_bits(0, allCount));
 }
