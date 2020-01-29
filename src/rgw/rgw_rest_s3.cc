@@ -2885,7 +2885,12 @@ int RGWPostObj_ObjStore_S3::get_policy()
       }
     }
 
-    part_str(parts, "x-amz-security-token", &s->auth.s3_postobj_creds.x_amz_security_token);
+    if (part_str(parts, "x-amz-security-token", &s->auth.s3_postobj_creds.x_amz_security_token)) {
+      if (s->auth.s3_postobj_creds.x_amz_security_token.size() == 0) {
+        err_msg = "Invalid token";
+        return -EINVAL;
+      }
+    }
 
     /* FIXME: this is a makeshift solution. The browser upload authentication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
@@ -5696,7 +5701,8 @@ rgw::auth::s3::STSEngine::authenticate(
   const req_state* const s) const
 {
   if (! s->info.args.exists("X-Amz-Security-Token") &&
-      ! s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+      ! s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN") &&
+      s->auth.s3_postobj_creds.x_amz_security_token.empty()) {
     return result_t::deny();
   }
 
