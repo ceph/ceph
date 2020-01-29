@@ -1,3 +1,5 @@
+.. _multisite_sync_policy:
+
 =====================
 Multisite Sync Policy
 =====================
