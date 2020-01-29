@@ -345,7 +345,7 @@ CLS_INIT(hello)
   // legacy alias for this method for pre-octopus clients
   cls_register_cxx_method(h_class, "writes_dont_return_data",
 			  CLS_METHOD_WR,
-			  write_return_data, &h_write_return_data);
+			  write_return_data, &h_writes_dont_return_data);
   cls_register_cxx_method(h_class, "write_too_much_return_data",
 			  CLS_METHOD_WR,
 			  write_too_much_return_data, &h_write_too_much_return_data);
