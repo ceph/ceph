@@ -13,6 +13,7 @@ except ImportError:
 import six
 
 from ceph.deployment import inventory
+from ceph.deployment.drive_group import DriveGroupSpec
 from mgr_module import CLICommand, HandleCommandResult
 from mgr_module import MgrModule
 
@@ -183,8 +184,23 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
-    def create_osds(self, drive_group):
-        # type: (orchestrator.DriveGroupSpec) -> TestCompletion
+    def create_osds(self, drive_groups):
+        # type: (List[DriveGroupSpec]) -> TestCompletion
+        """ Creates OSDs from a drive group specification.
+
+        Caveat: Currently limited to a single DriveGroup.
+        The orchestrator_cli expects a single completion which
+        ideally represents a set of operations. This orchestrator
+        doesn't support this notion, yet. Hence it's only accepting
+        a single DriveGroup for now.
+        You can work around it by invoking:
+
+        $: ceph orchestrator osd create -i <dg.file>
+
+        multiple times. The drivegroup file must only contain one spec at a time.
+        """
+        drive_group = drive_groups[0]
+
         def run(all_hosts):
             drive_group.validate(orchestrator.InventoryNode.get_host_names(all_hosts))
         return self.get_hosts().then(run).then(

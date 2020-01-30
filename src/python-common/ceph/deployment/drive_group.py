@@ -1,4 +1,5 @@
 import fnmatch
+from ceph.deployment.inventory import Device
 try:
     from typing import Optional, List, Dict, Any
 except ImportError:
@@ -31,8 +32,8 @@ class DeviceSelection(object):
         """
         ephemeral drive group device specification
         """
-        #: List of absolute paths to the devices.
-        self.paths = [] if paths is None else paths  # type: List[str]
+        #: List of Device objects for devices paths.
+        self.paths = [] if paths is None else [Device(path) for path in paths]  # type: List[Device]
 
         #: A wildcard string. e.g: "SDD*" or "SanDisk SD8SN8U5"
         self.model = model
@@ -106,6 +107,24 @@ class DriveGroupValidationError(Exception):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
 
 
+class DriveGroupSpecs(object):
+    """ Container class to parse drivegroups """
+
+    def __init__(self, drive_group_json):
+        # type: (dict) -> None
+        self.drive_group_json = drive_group_json
+        self.drive_groups = list()  # type: list
+        self.build_drive_groups()
+
+    def build_drive_groups(self):
+        for drive_group_name, drive_group_spec in self.drive_group_json.items():
+            self.drive_groups.append(DriveGroupSpec.from_json
+                                     (drive_group_spec, name=drive_group_name))
+
+    def __repr__(self):
+        return ", ".join([repr(x) for x in self.drive_groups])
+
+
 class DriveGroupSpec(object):
     """
     Describe a drive group in the same form that ceph-volume
@@ -121,7 +140,8 @@ class DriveGroupSpec(object):
     ]
 
     def __init__(self,
-                 host_pattern,  # type: str
+                 host_pattern=None,  # type: str
+                 name=None,  # type: str
                  data_devices=None,  # type: Optional[DeviceSelection]
                  db_devices=None,  # type: Optional[DeviceSelection]
                  wal_devices=None,  # type: Optional[DeviceSelection]
@@ -137,6 +157,10 @@ class DriveGroupSpec(object):
                  block_wal_size=None,  # type: Optional[int]
                  journal_size=None,  # type: Optional[int]
                  ):
+
+        #: A name for the drive group. Since we can have multiple
+        # drive groups in a cluster we need a way to identify them.
+        self.name = name
 
         # concept of applying a drive group to a (set) of hosts is tightly
         # linked to the drive group itself
@@ -190,8 +214,8 @@ class DriveGroupSpec(object):
         self.osd_id_claims = osd_id_claims
 
     @classmethod
-    def from_json(cls, json_drive_group):
-        # type: (dict) -> DriveGroupSpec
+    def from_json(cls, json_drive_group, name=None):
+        # type: (dict, Optional[str]) -> DriveGroupSpec
         """
         Initialize 'Drive group' structure
 
@@ -212,13 +236,15 @@ class DriveGroupSpec(object):
         try:
             args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
                     json_drive_group.items()}
-            return DriveGroupSpec(**args)
+            if not args:
+                raise DriveGroupValidationError("Didn't find Drivegroup specs")
+            return DriveGroupSpec(name=name, **args)
         except (KeyError, TypeError) as e:
             raise DriveGroupValidationError(str(e))
 
     def hosts(self, all_hosts):
         # type: (List[str]) -> List[str]
-        return fnmatch.filter(all_hosts, self.host_pattern)
+        return fnmatch.filter(all_hosts, self.host_pattern)  # type: ignore
 
     def validate(self, all_hosts):
         # type: (List[str]) -> None
@@ -251,7 +277,8 @@ class DriveGroupSpec(object):
             keys.remove('encrypted')
         if 'objectstore' in keys and self.objectstore == 'bluestore':
             keys.remove('objectstore')
-        return "DriveGroupSpec({})".format(
+        return "DriveGroupSpec(name={}->{})".format(
+            self.name,
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
 
