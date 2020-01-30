@@ -147,8 +147,8 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
       elector->trigger_new_election();
     } else {
       ldout(cct, 5) << " ignoring old propose" << dendl;
-      return;
     }
+    return;
   }
 
   if (elector->get_my_rank() < from) {
