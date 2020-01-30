@@ -4,40 +4,6 @@ from threading import Event
 import json
 import errno
 
-"""
-A module that holds a variety of useful utility to deal with OSDs
-
-Draining OSDs:
-
-This module can be used to drain osds from the commandline:
-
-$ ceph osd drain $osd_ids ([$osd_ids])
-
-You can monitor the progress with
-
-$ ceph osd drain status
-
-Gives you the status of scheduled and running osd drain operations
-
-[{'osd_id': 0, 'pgs': 1234}, ..]
-
-$ ceph osd drain stop ([$osd_ids])
-
-Stops all !SCHEDULED! osd drain operations (not the operations that have been started already)
-if no $osd_ids are give. If $osd_ids are present it only operates on them.
-To stop and reset the weight of already started operations we need to save the initial weight 
-(see 'Ideas for improvement')
-
-
-Ideas for improvement:
-- add health checks set_health_checks
-- use objects to represent OSDs
-  - allows timestamps, trending information etc
-- save osd drain state (at least the osd_ids in the mon store)
-  - resume after a mgr crash
-  - save the initial weight of a osd i.e. (set to initial weight on abort)
-"""
-
 
 class OSDSupport(MgrModule):
     # these are CLI commands we implement
@@ -59,14 +25,6 @@ class OSDSupport(MgrModule):
         },
     ]
 
-    # These are module options we understand.  These can be set with
-    #
-    #   ceph config set global mgr/hello/<name> <value>
-    #
-    # e.g.,
-    #
-    #   ceph config set global mgr/hello/place Earth
-    #
     MODULE_OPTIONS: List[dict] = []
 
     # These are "native" Ceph options that this module cares about.
