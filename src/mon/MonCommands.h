@@ -1269,6 +1269,14 @@ COMMAND_WITH_FLAG("heap "
             "show heap usage info (available only if compiled with tcmalloc)",
 	    "mon", "rw",
             FLAG(TELL))
+COMMAND_WITH_FLAG("connection scores dump",
+		  "show the scores used in connectivity-based elections",
+		  "mon", "rwx",
+		  FLAG(TELL))
+COMMAND_WITH_FLAG("connection scores reset",
+		  "reset the scores used in connectivity-based elections",
+		  "mon", "rwx",
+		  FLAG(TELL))
 COMMAND_WITH_FLAG("sync_force "
             "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
             "force sync of and clear monitor store",

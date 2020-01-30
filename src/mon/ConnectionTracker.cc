@@ -13,6 +13,7 @@
  */
 
 #include "ConnectionTracker.h"
+#include "common/Formatter.h"
 
 std::ostream& operator<<(std::ostream&o, const ConnectionReport& c) {
   o << "rank=" << c.rank << ",epoch=" << c.epoch << ",version=" << c.epoch_version
@@ -196,4 +197,60 @@ const bufferlist& ConnectionTracker::get_encoded_bl()
     encode(encoding);
   }
   return encoding;
+}
+
+void ConnectionReport::dump(ceph::Formatter *f) const
+{
+  f->dump_int("rank", rank);
+  f->dump_int("epoch", epoch);
+  f->dump_int("version", epoch_version);
+  f->open_object_section("peer_scores");
+  for (auto i : history) {
+    f->open_object_section("peer");
+    f->dump_int("peer_rank", i.first);
+    f->dump_float("peer_score", i.second);
+    f->dump_bool("peer_alive", current.find(i.first)->second);
+    f->close_section();
+  }
+  f->close_section(); // peer scores
+}
+
+void ConnectionReport::generate_test_instances(std::list<ConnectionReport*>& o)
+{
+  o.push_back(new ConnectionReport);
+  o.push_back(new ConnectionReport);
+  o.back()->rank = 1;
+  o.back()->epoch = 2;
+  o.back()->epoch_version = 3;
+  o.back()->current[0] = true;
+  o.back()->history[0] = .4;
+}
+
+void ConnectionTracker::dump(ceph::Formatter *f) const
+{
+  f->dump_int("rank", rank);
+  f->dump_int("epoch", epoch);
+  f->dump_int("version", version);
+  f->dump_float("half_life", half_life);
+  f->dump_int("persist_interval", persist_interval);
+  f->open_object_section("reports");
+  for (auto i : peer_reports) {
+    f->open_object_section("report");
+    i.second.dump(f);
+    f->close_section();
+  }
+  f->close_section(); // reports
+}
+
+void ConnectionTracker::generate_test_instances(std::list<ConnectionTracker*>& o)
+{
+  o.push_back(new ConnectionTracker);
+  o.push_back(new ConnectionTracker);
+  ConnectionTracker *e = o.back();
+  e->rank = 2;
+  e->epoch = 3;
+  e->version = 4;
+  e->peer_reports[0];
+  e->peer_reports[1];
+  e->my_reports = &e->peer_reports[2];
 }
