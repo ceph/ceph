@@ -393,12 +393,10 @@ int MultipartObjectProcessor::prepare_head()
     return r;
   }
   stripe_size = manifest_gen.cur_stripe_max_size();
-
-  uint64_t max_head_size = std::min(chunk_size, stripe_size);
-  set_head_chunk_size(max_head_size);
+  set_head_chunk_size(stripe_size);
 
   chunk = ChunkProcessor(&writer, chunk_size);
-  stripe = StripeProcessor(&chunk, this, max_head_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
   return 0;
 }
 
