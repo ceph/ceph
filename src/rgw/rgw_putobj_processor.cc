@@ -489,7 +489,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
       .set_must_exist(true)
       .set(p, bl, null_yield);
   if (r < 0) {
-    return r;
+    return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
 
   if (!obj_op.meta.canceled) {
