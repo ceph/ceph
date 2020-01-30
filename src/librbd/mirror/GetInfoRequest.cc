@@ -246,7 +246,7 @@ void GetInfoRequest<I>::finish(int r) {
 template <typename I>
 void GetInfoRequest<I>::calc_promotion_state(
     const std::map<librados::snap_t, SnapInfo> &snap_info) {
-  *m_promotion_state = PROMOTION_STATE_PRIMARY;
+  *m_promotion_state = PROMOTION_STATE_UNKNOWN;
   *m_primary_mirror_uuid = "";
 
   for (auto it = snap_info.rbegin(); it != snap_info.rend(); it++) {
@@ -255,6 +255,8 @@ void GetInfoRequest<I>::calc_promotion_state(
     if (primary != nullptr) {
       if (primary->demoted) {
         *m_promotion_state = PROMOTION_STATE_ORPHAN;
+      } else {
+        *m_promotion_state = PROMOTION_STATE_PRIMARY;
       }
       break;
     }
