@@ -2292,6 +2292,8 @@ def command_adopt():
         move_files(glob(os.path.join(data_dir_src, '*')),
                    data_dir_dst,
                    uid=uid, gid=gid)
+        logger.info('Chowning content...')
+        call_throws(['chown', '-c', '-R', '%d.%d' % (uid, gid), data_dir_dst])
         logger.debug('Remove dir \'%s\'' % (data_dir_src))
         if os.path.ismount(data_dir_src):
             call_throws(['umount', data_dir_src])
