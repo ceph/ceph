@@ -10,8 +10,6 @@ from .fs_util import create_pool
 
 log = logging.getLogger(__name__)
 
-exp_num = 0
-
 class GaneshaConf(object):
     # pylint: disable=R0902
 
@@ -184,105 +182,86 @@ class GaneshaConf(object):
             for daemon_id in daemons:
                 ioctx.notify("conf-{}".format(daemon_id))
 
-def create_instance(orch, pool_name):
-    return GaneshaConf("a", pool_name, "ganesha", orch)
+class NFSConfig(object):
+    exp_num = 0
 
-def create_export(ganesha_conf):
-    ex_id = ganesha_conf.create_export({
-        'path': "/",
-        'pseudo': "/cephfs",
-        'cluster_id': "cluster1",
-        'daemons': ["ganesha.a"],
-        'tag': "",
-        'access_type': "RW",
-        'squash': "no_root_squash",
-        'security_label': True,
-        'protocols': [4],
-        'transports': ["TCP"],
-        'fsal': {"name": "CEPH", "user_id":"admin", "fs_name": "a", "sec_label_xattr": ""},
-        'clients': []
-        })
+    def __init__(self, mgr, cluster_id):
+        self.cluster_id = cluster_id
+        self.pool_name = 'nfs-ganesha'
+        self.pool_ns = 'nfsgw'
+        self.mgr = mgr
 
-    log.info("Export ID is {}".format(ex_id))
-    global exp_num
-    exp_num += 1
-    return 0, "", ""
+    def create_instance(self, orch, pool_name):
+        return GaneshaConf("a", pool_name, "ganesha", orch)
 
-def delete_export(ganesha_conf, ex_id):
-    if not ganesha_conf.has_export(ex_id):
-        return 0, "No exports available",""
-    log.info("Export detected for id:{}".format(ex_id))
-    export = ganesha_conf.remove_export(ex_id)
-    ganesha_conf.reload_daemons(export.daemons)
-    return 0, "", ""
+    def create_export(self, ganesha_conf):
+        ex_id = ganesha_conf.create_export({
+            'path': "/",
+            'pseudo': "/cephfs",
+            'cluster_id': "cluster1",
+            'daemons': ["ganesha.a"],
+            'tag': "",
+            'access_type': "RW",
+            'squash': "no_root_squash",
+            'security_label': True,
+            'protocols': [4],
+            'transports': ["TCP"],
+            'fsal': {"name": "CEPH", "user_id":"admin", "fs_name": "a", "sec_label_xattr": ""},
+            'clients': []
+            })
 
-def check_fsal_valid(fs_map):
-    fsmap_res = [{'id': fs['id'], 'name': fs['mdsmap']['fs_name']}
-            for fs in fs_map['filesystems']]
+        log.info("Export ID is {}".format(ex_id))
+        NFSConfig.exp_num += 1
+        return 0, "", ""
 
-    #return 0, json.dumps(fsmap_res, indent=2), ""
-    return fsmap_res
+    def delete_export(self, ganesha_conf, ex_id):
+        if not ganesha_conf.has_export(ex_id):
+            return 0, "No exports available",""
+        log.info("Export detected for id:{}".format(ex_id))
+        export = ganesha_conf.remove_export(ex_id)
+        ganesha_conf.reload_daemons(export.daemons)
+        return 0, "", ""
 
-def create_rados_pool(vc_mgr, pool_name):
-    global exp_num
-    if not exp_num:
-        r, outb, outs = create_pool(vc_mgr, pool_name)
-    """
-    if r != 0:
-        #return r, outb, outs
+    def check_fsal_valid(self, fs_map):
+        fsmap_res = [{'id': fs['id'], 'name': fs['mdsmap']['fs_name']}
+                for fs in fs_map['filesystems']]
 
-    command = {'prefix': 'osd pool application enable', 'pool': pool_name, 'app': 'nfs'}
-    r, outb, outs = vc_mgr.mgr.mon_command(command)
+        #return 0, json.dumps(fsmap_res, indent=2), ""
+        return fsmap_res
 
-    if r != 0:
-        #return r, outb, outs
-    log.info("pool enable done r: {}".format(r))
-    """
-def create_nfs_cluster(fs_mgr, size, cluster_id):
-    mgr = fs_mgr.vc.mgr
-    pool_list = [p['pool_name'] for p in mgr.get_osdmap().dump().get('pools', [])]
-    pool_name = 'nfs-ganesha'
-    pool_ns = 'nfsgw'
-    client = 'client.ganesha-%s' % cluster_id
+    def create_rados_pool(self, vc_mgr, pool_name):
+        if not NFSConfig.exp_num:
+            r, outb, outs = create_pool(vc_mgr, pool_name)
 
-    if pool_name not in pool_list:
-        r, out, err = create_pool(mgr, pool_name)
+        """
         if r != 0:
-            return r, out, err
-        log.info("{}".format(out))
+        #return r, outb, outs
 
-    ret, out, err = mgr.mon_command({
-        'prefix': 'auth get-or-create',
-        'entity': client,
-        'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s' % (pool_name, pool_ns)],
-        })
+        command = {'prefix': 'osd pool application enable', 'pool': pool_name, 'app': 'nfs'}
+        r, outb, outs = vc_mgr.mgr.mon_command(command)
 
-    if ret!= 0:
-        return ret, out, err
+        if r != 0:
+        #return r, outb, outs
+        log.info("pool enable done r: {}".format(r))
+        """
 
-    ret, keyring, err = mgr.mon_command({
-        'prefix': 'auth print-key', 'entity': client,})
+    def create_nfs_cluster(self, size):
+        pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
+        client = 'client.ganesha-%s' % self.cluster_id
 
-    if ret!= 0:
-        return ret, out, err
+        if self.pool_name not in pool_list:
+            r, out, err = create_pool(self.mgr, self.pool_name)
+            if r != 0:
+                return r, out, err
+            log.info("{}".format(out))
 
-    ps = orchestrator.PlacementSpec(count=size)
-    spec = orchestrator.NFSServiceSpec(cluster_id, pool_name, pool_ns, ps)
-    try:
-        completion = mgr.add_nfs(spec)
-        mgr._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-    except Exception as e:
-        log.exception("Failed to create NFS Cluster")
-        return -errno.EINVAL, "", str(e)
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': client,
+            'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s' % (self.pool_name, self.pool_ns)],
+            })
 
-    if size > 1:
-        try:
-            completion = mgr.update_nfs(spec)
-            mgr._orchestrator_wait([completion])
-            orchestrator.raise_if_exception(completion)
-        except Exception as e:
-            log.exception("Failed to scale NFS Cluster")
-            return -errno.EINVAL, "", str(e)
+        if ret!= 0:
+            return ret, out, err
 
-    return 0,"","NFS Cluster Created Successfully"
+        return 0, "", "NFS Cluster Created Successfully"
