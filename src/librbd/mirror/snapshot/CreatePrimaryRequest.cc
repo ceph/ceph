@@ -172,9 +172,6 @@ void CreatePrimaryRequest<I>::unlink_peer() {
         prev_snap_id = 0;
         continue;
       }
-      if (info->mirror_peer_uuids.count(peer) == 0) {
-        continue;
-      }
       count++;
       if (count == max_snapshots - 1) {
         prev_snap_id = snap_it.first;
