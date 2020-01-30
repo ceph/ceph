@@ -32,6 +32,7 @@
 #include "events/ESlaveUpdate.h"
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
+#include "events/EPurged.h"
 
 #include "events/ETableClient.h"
 #include "events/ETableServer.h"
@@ -84,6 +85,7 @@ std::string_view LogEvent::get_type_str() const
   case EVENT_SLAVEUPDATE: return "SLAVEUPDATE";
   case EVENT_OPEN: return "OPEN";
   case EVENT_COMMITTED: return "COMMITTED";
+  case EVENT_PURGED: return "PURGED";
   case EVENT_TABLECLIENT: return "TABLECLIENT";
   case EVENT_TABLESERVER: return "TABLESERVER";
   case EVENT_NOOP: return "NOOP";
@@ -109,6 +111,7 @@ const std::map<std::string, LogEvent::EventType> LogEvent::types = {
   {"SLAVEUPDATE", EVENT_SLAVEUPDATE},
   {"OPEN", EVENT_OPEN},
   {"COMMITTED", EVENT_COMMITTED},
+  {"PURGED", EVENT_PURGED},
   {"TABLECLIENT", EVENT_TABLECLIENT},
   {"TABLESERVER", EVENT_TABLESERVER},
   {"NOOP", EVENT_NOOP}
@@ -179,6 +182,9 @@ std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, 
     break;
   case EVENT_COMMITTED:
     le = std::make_unique<ECommitted>();
+    break;
+  case EVENT_PURGED:
+    le = std::make_unique<EPurged>();
     break;
   case EVENT_TABLECLIENT:
     le = std::make_unique<ETableClient>();
