@@ -47,23 +47,19 @@ const ConnectionReport *ConnectionTracker::reports(int p) const
   return &i->second;
 }
 
-void ConnectionTracker::receive_peer_report(const ConnectionReport& report)
-{
-  if (report.rank == rank) return;
-  encoding.clear();
-  ConnectionReport& existing = *reports(report.rank);
-  if (report.epoch > existing.epoch ||
-      (report.epoch == existing.epoch &&
-       report.epoch_version > existing.epoch_version)) {
-    existing = report;
-  }
-}
-
 void ConnectionTracker::receive_peer_report(const ConnectionTracker& o)
 {
   for (auto& i : o.peer_reports) {
-    receive_peer_report(i.second);
+    const ConnectionReport& report = i.second;
+    if (report.rank == rank) continue;
+    ConnectionReport& existing = *reports(report.rank);
+    if (report.epoch > existing.epoch ||
+	(report.epoch == existing.epoch &&
+	 report.epoch_version > existing.epoch_version)) {
+      existing = report;
+    }
   }
+  encoding.clear();
 }
 
 bool ConnectionTracker::increase_epoch(epoch_t e)
@@ -85,11 +81,6 @@ void ConnectionTracker::increase_version()
   if ((version % persist_interval) == 0 ) {
     owner->persist_connectivity_scores();
   }
-}
-
-const ConnectionReport *ConnectionTracker::get_peer_view(int peer) const
-{
-  return reports(peer);
 }
 
 void ConnectionTracker::report_live_connection(int peer_rank, double units_alive)
@@ -124,19 +115,6 @@ void ConnectionTracker::report_dead_connection(int peer_rank, double units_dead)
   my_reports->current[peer_rank] = false;
   
   increase_version();
-}
-
-void ConnectionTracker::get_connection_score(int peer_rank, double *rating,
-					      bool *alive) const
-{
-  *rating = 0;
-  *alive = false;
-  const auto& i = my_reports->history.find(peer_rank);
-  if (i == my_reports->history.end()) {
-    return;
-  }
-  *rating = i->second;
-  *alive = my_reports->current[peer_rank];
 }
 
 void ConnectionTracker::get_total_connection_score(int peer_rank, double *rating,
