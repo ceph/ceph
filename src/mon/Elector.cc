@@ -458,6 +458,7 @@ void Elector::begin_peer_ping(int peer)
 
   peer_tracker.report_live_connection(peer, 0); // init this peer as existing
   live_pinging.insert(peer);
+  dead_pinging.erase(peer);
   peer_acked_ping[peer] = ceph_clock_now();
   send_peer_ping(peer);
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
@@ -481,8 +482,14 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
   peer_sent_ping[peer] = now;
 }
 
-void Elector::ping_check(int peer) {
+void Elector::ping_check(int peer)
+{
   dout(20) << __func__ << " to peer " << peer << dendl;
+  if (!live_pinging.count(peer) &&
+      !dead_pinging.count(peer)) {
+    dout(20) << __func__ << peer << " is no longer marked for pinging" << dendl;
+    return;
+  }
   utime_t now = ceph_clock_now();
   utime_t& acked_ping = peer_acked_ping[peer];
   utime_t& newest_ping = peer_sent_ping[peer];
@@ -490,6 +497,11 @@ void Elector::ping_check(int peer) {
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
     live_pinging.erase(peer);
+    dead_pinging.insert(peer);
+    mon->timer.add_event_after(ping_timeout,
+			       new C_MonContext{mon, [this, peer](int) {
+				   dead_ping(peer);
+				 }});
     return;
   }
 
@@ -501,6 +513,26 @@ void Elector::ping_check(int peer) {
 			     new C_MonContext{mon, [this, peer](int) {
 				 ping_check(peer);
 			       }});
+}
+
+void Elector::dead_ping(int peer)
+{
+  dout(20) << __func__ << " to peer " << peer << dendl;
+  if (!dead_pinging.count(peer)) {
+    dout(20) << __func__ << peer << " is no longer marked for dead pinging" << dendl;
+    return;
+  }
+  ceph_assert(!live_pinging.count(peer));
+
+  utime_t now = ceph_clock_now();
+  utime_t& acked_ping = peer_acked_ping[peer];
+
+  peer_tracker.report_dead_connection(peer, now - acked_ping);
+  acked_ping = now;
+  mon->timer.add_event_after(ping_timeout,
+			       new C_MonContext{mon, [this, peer](int) {
+				   dead_ping(peer);
+				 }});
 }
 
 void Elector::handle_ping(MonOpRequestRef op)
@@ -645,11 +677,17 @@ void Elector::notify_clear_peer_state()
 void Elector::notify_rank_changed(int new_rank)
 {
   peer_tracker.notify_rank_changed(new_rank);
+  live_pinging.erase(new_rank);
+  dead_pinging.erase(new_rank);
 }
 
 void Elector::notify_rank_removed(int rank_removed)
 {
-  peer_tracker.notify_rank_removed(rank_removed);
+  int rank_actually_gone; // if we remove rank 1 of 3, they shift
+  // over so we have ranks 0,1 rather than 0,3 left.
+  rank_actually_gone = peer_tracker.notify_rank_removed(rank_removed);
+  live_pinging.erase(rank_actually_gone);
+  dead_pinging.erase(rank_actually_gone);
 }
 
 void Elector::notify_strategy_maybe_changed(int strategy)
