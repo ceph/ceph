@@ -26,91 +26,17 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-CreatePrimaryRequest<I>::CreatePrimaryRequest(I *image_ctx, uint32_t flags,
-                                              uint64_t *snap_id,
-                                              Context *on_finish)
-  : m_image_ctx(image_ctx), m_flags(flags),
-    m_snap_id(snap_id), m_on_finish(on_finish) {
+CreatePrimaryRequest<I>::CreatePrimaryRequest(
+    I *image_ctx, const std::string& global_image_id, uint32_t flags,
+    uint64_t *snap_id, Context *on_finish)
+  : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
+    m_flags(flags), m_snap_id(snap_id), m_on_finish(on_finish) {
   m_default_ns_ctx.dup(m_image_ctx->md_ctx);
   m_default_ns_ctx.set_namespace("");
 }
 
 template <typename I>
 void CreatePrimaryRequest<I>::send() {
-  refresh_image();
-}
-
-template <typename I>
-void CreatePrimaryRequest<I>::refresh_image() {
-  if (!m_image_ctx->state->is_refresh_required()) {
-    get_mirror_image();
-    return;
-  }
-
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
-  auto ctx = create_context_callback<
-    CreatePrimaryRequest<I>,
-    &CreatePrimaryRequest<I>::handle_refresh_image>(this);
-  m_image_ctx->state->refresh(ctx);
-}
-
-template <typename I>
-void CreatePrimaryRequest<I>::handle_refresh_image(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  get_mirror_image();
-}
-
-template <typename I>
-void CreatePrimaryRequest<I>::get_mirror_image() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, m_image_ctx->id);
-
-  librados::AioCompletion *comp = create_rados_callback<
-    CreatePrimaryRequest<I>,
-    &CreatePrimaryRequest<I>::handle_get_mirror_image>(this);
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void CreatePrimaryRequest<I>::handle_get_mirror_image(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
-
-  cls::rbd::MirrorImage mirror_image;
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = cls_client::mirror_image_get_finish(&iter, &mirror_image);
-  }
-
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
-               << dendl;
-    finish(r);
-    return;
-  }
-
-  if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
-      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-    lderr(cct) << "snapshot based mirroring is not enabled" << dendl;
-    finish(-EINVAL);
-    return;
-  }
-
   if (!util::can_create_primary_snapshot(
         m_image_ctx,
         ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0),
@@ -121,7 +47,7 @@ void CreatePrimaryRequest<I>::handle_get_mirror_image(int r) {
 
   uuid_d uuid_gen;
   uuid_gen.generate_random();
-  m_snap_name = ".mirror.primary." + mirror_image.global_image_id + "." +
+  m_snap_name = ".mirror.primary." + m_global_image_id + "." +
     uuid_gen.to_string();
 
   get_mirror_peers();
@@ -136,7 +62,8 @@ void CreatePrimaryRequest<I>::get_mirror_peers() {
   cls_client::mirror_peer_list_start(&op);
 
   librados::AioCompletion *comp = create_rados_callback<
-    CreatePrimaryRequest<I>, &CreatePrimaryRequest<I>::handle_get_mirror_peers>(this);
+    CreatePrimaryRequest<I>,
+    &CreatePrimaryRequest<I>::handle_get_mirror_peers>(this);
   m_out_bl.clear();
   int r = m_default_ns_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   ceph_assert(r == 0);

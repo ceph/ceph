@@ -24,14 +24,17 @@ namespace snapshot {
 template <typename ImageCtxT = librbd::ImageCtx>
 class CreatePrimaryRequest {
 public:
-  static CreatePrimaryRequest *create(ImageCtxT *image_ctx, uint32_t flags,
-                                      uint64_t *snap_id,
+  static CreatePrimaryRequest *create(ImageCtxT *image_ctx,
+                                      const std::string& global_image_id,
+                                      uint32_t flags, uint64_t *snap_id,
                                       Context *on_finish) {
-    return new CreatePrimaryRequest(image_ctx, flags, snap_id, on_finish);
+    return new CreatePrimaryRequest(image_ctx, global_image_id, flags, snap_id,
+                                    on_finish);
   }
 
-  CreatePrimaryRequest(ImageCtxT *image_ctx, uint32_t flags, uint64_t *snap_id,
-                       Context *on_finish);
+  CreatePrimaryRequest(ImageCtxT *image_ctx,
+                       const std::string& global_image_id,
+                       uint32_t flags, uint64_t *snap_id, Context *on_finish);
 
   void send();
 
@@ -40,12 +43,6 @@ private:
    * @verbatim
    *
    * <start>
-   *    |
-   *    v
-   * REFRESH_IMAGE
-   *    |
-   *    v
-   * GET_MIRROR_IMAGE
    *    |
    *    v
    * GET_MIRROR_PEERS
@@ -63,6 +60,7 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
+  std::string m_global_image_id;
   const uint32_t m_flags;
   uint64_t *m_snap_id;
   Context *m_on_finish;
@@ -72,12 +70,6 @@ private:
   std::string m_snap_name;
 
   bufferlist m_out_bl;
-
-  void refresh_image();
-  void handle_refresh_image(int r);
-
-  void get_mirror_image();
-  void handle_get_mirror_image(int r);
 
   void get_mirror_peers();
   void handle_get_mirror_peers(int r);
