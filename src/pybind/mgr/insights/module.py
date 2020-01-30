@@ -130,6 +130,8 @@ class Module(MgrModule):
         for key in self._health_filter(lambda ts: ts <= cutoff):
             self.log.info("Removing old health slot key {}".format(key))
             self.set_store(key, None)
+        if not hours:
+            self._health_slot = health_util.HealthHistorySlot()
 
     def _health_report(self, hours):
         """
