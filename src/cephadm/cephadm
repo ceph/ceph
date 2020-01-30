@@ -2246,6 +2246,10 @@ def list_daemons(detail=True, legacy_dir=None):
 def command_adopt():
     # type: () -> None
 
+    if not args.skip_pull:
+        logger.info('Pulling latest %s container...' % args.image)
+        call_throws([container_path, 'pull', args.image])
+
     (daemon_type, daemon_id) = args.name.split('.', 1)
     (uid, gid) = extract_uid_gid()
     if args.style == 'legacy':
@@ -2558,6 +2562,10 @@ def _get_parser():
         '--skip-firewalld',
         action='store_true',
         help='Do not configure firewalld')
+    parser_adopt.add_argument(
+        '--skip-pull',
+        action='store_true',
+        help='do not pull the latest image before adopting')
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
