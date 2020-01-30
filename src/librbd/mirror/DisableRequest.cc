@@ -70,7 +70,8 @@ Context *DisableRequest<I>::handle_get_mirror_info(int *result) {
     return m_on_finish;
   }
 
-  m_is_primary = (m_promotion_state == PROMOTION_STATE_PRIMARY);
+  m_is_primary = (m_promotion_state == PROMOTION_STATE_PRIMARY ||
+                  m_promotion_state == PROMOTION_STATE_UNKNOWN);
 
   if (!m_is_primary && !m_force) {
     lderr(cct) << "mirrored image is not primary, "
