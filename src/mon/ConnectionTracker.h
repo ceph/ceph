@@ -75,7 +75,6 @@ class ConnectionTracker {
    * Receive a report from a peer and update our internal state
    * if the peer has newer data.
    */
-  void receive_peer_report(const ConnectionReport& report);
   void receive_peer_report(const ConnectionTracker& o);
   /**
    * Bump up the epoch to the specified number.
@@ -88,13 +87,6 @@ class ConnectionTracker {
    * If the new version is a multiple of ten, we also persist it.
    */
   void increase_version();
-  /**
-   * Get the latest report we have of what a given peer (ourselves included!)
-   * has seen.
-   * If you don't want to share an encoded ConnectionReport directly,
-   * you can get the view of every rank and share them instead.
-   */
-  const ConnectionReport *get_peer_view(int peer) const;
   
   /**
    * Report a connection to a peer rank has been considered alive for
@@ -121,11 +113,6 @@ class ConnectionTracker {
   void set_half_life(double d) {
     half_life = d;
   }
-  /**
-   * Get the connection score and whether it has most recently
-   * been reported alive for a peer rank.
-   */
-  void get_connection_score(int peer_rank, double *rating, bool *alive) const;
   /**
    * Get the total connection score of a rank across
    * all peers, and the count of how many electors think it's alive.
