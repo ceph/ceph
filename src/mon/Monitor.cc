@@ -374,6 +374,10 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
+  } else if (command == "connection scores dump") {
+    elector.dump_connection_scores(f.get());
+  } else if (command == "connection scores reset") {
+    elector.notify_clear_peer_state();
   } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
