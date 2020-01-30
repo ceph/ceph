@@ -404,6 +404,10 @@ int Monitor::do_admin_command(
     } else {
       err << "needs a valid 'quorum' command" << std::endl;
     }
+  } else if (command == "connection scores dump") {
+    elector.dump_connection_scores(f);
+  } else if (command == "connection scores reset") {
+    elector.notify_clear_peer_state();
   } else if (command == "smart") {
     string want_devid;
     cmd_getval(cmdmap, "devid", want_devid);

@@ -370,6 +370,11 @@ class Elector : public ElectionOwner, RankProvider {
     disallowed_leaders = dl;
     call_election();
   }
+  void dump_connection_scores(Formatter *f) {
+    f->open_object_section("connection scores");
+    peer_tracker.dump(f);
+    f->close_section();
+  }
   /**
    * @}
    */
