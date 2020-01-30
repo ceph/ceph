@@ -576,13 +576,14 @@ def ceph_osds(ctx, config):
             devs = devs_by_remote[remote]
             assert devs   ## FIXME ##
             dev = devs.pop()
+            short_dev = dev.replace('/dev/', '')
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
             _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
             _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'osd', 'create',
-                remote.shortname + ':' + dev
+                remote.shortname + ':' + short_dev
             ])
             ctx.daemons.register_daemon(
                 remote, 'osd', id_,

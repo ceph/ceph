@@ -23,10 +23,18 @@ class DriveSelection(object):
         self.disks = disks.copy()
         self.spec = spec
 
-        self._data = self.assign_devices(self.spec.data_devices)
-        self._wal = self.assign_devices(self.spec.wal_devices)
-        self._db = self.assign_devices(self.spec.db_devices)
-        self._jornal = self.assign_devices(self.spec.journal_devices)
+        if self.spec.data_devices.paths:  # type: ignore
+            # re: type: ignore there is *always* a path attribute assigned to DeviceSelection
+            # it's just None if actual drivegroups are used
+            self._data = self.spec.data_devices.paths  # type: ignore
+            self._db = []  # type: List
+            self._wal = []  # type: List
+            self._journal = []  # type: List
+        else:
+            self._data = self.assign_devices(self.spec.data_devices)
+            self._wal = self.assign_devices(self.spec.wal_devices)
+            self._db = self.assign_devices(self.spec.db_devices)
+            self._journal = self.assign_devices(self.spec.journal_devices)
 
     def data_devices(self):
         # type: () -> List[Device]
@@ -42,7 +50,7 @@ class DriveSelection(object):
 
     def journal_devices(self):
         # type: () -> List[Device]
-        return self._jornal
+        return self._journal
 
     @staticmethod
     def _limit_reached(device_filter, len_devices,
@@ -71,7 +79,7 @@ class DriveSelection(object):
     @staticmethod
     def _has_mandatory_idents(disk):
         # type: (Device) -> bool
-        """ Check for mandatory indentification fields
+        """ Check for mandatory identification fields
         """
         if disk.path:
             logger.debug("Found matching disk: {}".format(disk.path))
@@ -95,9 +103,15 @@ class DriveSelection(object):
 
         return a sorted(by path) list of devices
         """
-        if device_filter is None:
+
+        if not device_filter:
             logger.debug('device_filter is None')
             return []
+
+        if not self.spec.data_devices:
+            logger.debug('data_devices is None')
+            return []
+
         devices = list()  # type: List[Device]
         for _filter in FilterGenerator(device_filter):
             if not _filter.is_matchable:
@@ -109,8 +123,14 @@ class DriveSelection(object):
             for disk in self.disks.devices:
                 logger.debug("Processing disk {}".format(disk.path))
 
-                # continue criterias
+                # continue criteria
                 assert _filter.matcher is not None
+
+                if not disk.available:
+                    logger.debug(
+                        "Ignoring disk {}. Disk is not available".format(disk.path))
+                    continue
+
                 if not _filter.matcher.compare(disk):
                     logger.debug(
                         "Ignoring disk {}. Filter did not match".format(

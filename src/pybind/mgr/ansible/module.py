@@ -348,14 +348,26 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return op
 
-    def create_osds(self, drive_group):
+    def create_osds(self, drive_groups):
         """Create one or more OSDs within a single Drive Group.
         If no host provided the operation affects all the host in the OSDS role
 
 
-        :param drive_group: (ceph.deployment.drive_group.DriveGroupSpec),
+        :param drive_groups: List[(ceph.deployment.drive_group.DriveGroupSpec)],
                             Drive group with the specification of drives to use
+
+        Caveat: Currently limited to a single DriveGroup.
+        The orchestrator_cli expects a single completion which
+        ideally represents a set of operations. This orchestrator
+        doesn't support this notion, yet. Hence it's only accepting
+        a single DriveGroup for now.
+            You can work around it by invoking:
+
+        $: ceph orchestrator osd create -i <dg.file>
+
+        multiple times. The drivegroup file must only contain one spec at a time.
         """
+        drive_group = drive_groups[0]
 
         # Transform drive group specification to Ansible playbook parameters
         host, osd_spec = dg_2_ansible(drive_group)
