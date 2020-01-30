@@ -40,6 +40,9 @@
 	url = https://github.com/ceph/lua.git
 	branch = lua-5.3-ceph
 	ignore = dirty
+[submodule "src/dpdk"]
+	path = src/dpdk
+	url = https://github.com/ceph/dpdk
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
