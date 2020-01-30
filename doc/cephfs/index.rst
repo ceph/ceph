@@ -204,4 +204,3 @@ Additional Details
    :hidden:
 
     Experimental Features <experimental-features>
-    Using Ceph with Hadoop <hadoop>
