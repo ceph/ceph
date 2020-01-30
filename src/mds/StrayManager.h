@@ -25,104 +25,8 @@ class CDentry;
 
 class StrayManager
 {
-  protected:
-  // Has passed through eval_stray and still has refs
-  elist<CDentry*> delayed_eval_stray;
-
-  // strays that have been trimmed from cache
-  std::set<std::string> trimmed_strays;
-
-  // Global references for doing I/O
-  MDSRank *mds;
-  PerfCounters *logger;
-
-  bool started;
-
-  // Stray dentries for this rank (including those not in cache)
-  uint64_t num_strays;
-
-  // Stray dentries
-  uint64_t num_strays_delayed;
-
-  // Entries that have entered enqueue() but not been persistently
-  // recorded by PurgeQueue yet
-  uint64_t num_strays_enqueuing;
-
-  PurgeQueue &purge_queue;
-
-  void truncate(CDentry *dn);
-
-  /**
-   * Purge a dentry from a stray directory.  This function
-   * is called once eval_stray is satisfied and StrayManager
-   * throttling is also satisfied.  There is no going back
-   * at this stage!
-   */
-  void purge(CDentry *dn);
-
-  /**
-   * Completion handler for a Filer::purge on a stray inode.
-   */
-  void _purge_stray_purged(CDentry *dn, bool only_head);
-
-  void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
-
-  /**
-   * Callback: we have logged the update to an inode's metadata
-   * reflecting it's newly-zeroed length.
-   */
-  void _truncate_stray_logged(CDentry *dn, LogSegment *ls);
-
-  friend class StrayManagerIOContext;
-  friend class StrayManagerLogContext;
-  friend class StrayManagerContext;
-
-  friend class C_StraysFetched;
-  friend class C_OpenSnapParents;
-  friend class C_PurgeStrayLogged;
-  friend class C_TruncateStrayLogged;
-  friend class C_IO_PurgeStrayPurged;
-
-
-  // Call this on a dentry that has been identified as
-  // eligible for purging.  It will be passed on to PurgeQueue.
-  void enqueue(CDentry *dn, bool trunc);
-
-  // Final part of enqueue() which we may have to retry
-  // after opening snap parents.
-  void _enqueue(CDentry *dn, bool trunc);
-
-
-  /**
-   * When hard links exist to an inode whose primary dentry
-   * is unlinked, the inode gets a stray primary dentry.
-   *
-   * We may later "reintegrate" the inode into a remaining
-   * non-stray dentry (one of what was previously a remote
-   * dentry) by issuing a rename from the stray to the other
-   * dentry.
-   */
-  void reintegrate_stray(CDentry *dn, CDentry *rlink);
-
-  /**
-   * Evaluate a stray dentry for purging or reintegration.
-   *
-   * purging: If the inode has no linkage, and no more references, then
-   *          we may decide to purge it.
-   *
-   * reintegration: If the inode still has linkage, then it means someone else
-   *                (a hard link) is still referring to it, and we should
-   *                think about reintegrating that inode into the remote dentry.
-   *
-   * @returns true if the dentry will be purged (caller should never
-   *          take more refs after this happens), else false.
-   */
-  bool _eval_stray(CDentry *dn);
-
-  void _eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn);
-
   // My public interface is for consumption by MDCache
-  public:
+public:
   explicit StrayManager(MDSRank *mds, PurgeQueue &purge_queue_);
   void set_logger(PerfCounters *l) {logger = l;}
   void activate();
@@ -177,21 +81,117 @@ class StrayManager
   void migrate_stray(CDentry *dn, mds_rank_t dest);
 
   /**
-   * Update stats to reflect a newly created stray dentry.  Needed
+   * Update stats to reflect a newly created stray dentry. Needed
    * because stats on strays live here, but creation happens
-   * in Server or MDCache.  For our purposes "creation" includes
+   * in Server or MDCache. For our purposes "creation" includes
    * loading a stray from a dirfrag and migrating a stray from
    * another MDS, in addition to creations per-se.
    */
   void notify_stray_created();
 
   /**
-   * Update stats to reflect a removed stray dentry.  Needed because
+   * Update stats to reflect a removed stray dentry. Needed because
    * stats on strays live here, but removal happens in Server or
-   * MDCache.  Also includes migration (rename) of strays from
+   * MDCache. Also includes migration (rename) of strays from
    * this MDS to another MDS.
    */
   void notify_stray_removed();
-};
 
+protected:
+  friend class StrayManagerIOContext;
+  friend class StrayManagerLogContext;
+  friend class StrayManagerContext;
+
+  friend class C_StraysFetched;
+  friend class C_OpenSnapParents;
+  friend class C_PurgeStrayLogged;
+  friend class C_TruncateStrayLogged;
+  friend class C_IO_PurgeStrayPurged;
+
+  void truncate(CDentry *dn);
+
+  /**
+   * Purge a dentry from a stray directory. This function
+   * is called once eval_stray is satisfied and StrayManager
+   * throttling is also satisfied. There is no going back
+   * at this stage!
+   */
+  void purge(CDentry *dn);
+
+  /**
+   * Completion handler for a Filer::purge on a stray inode.
+   */
+  void _purge_stray_purged(CDentry *dn, bool only_head);
+
+  void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
+
+  /**
+   * Callback: we have logged the update to an inode's metadata
+   * reflecting it's newly-zeroed length.
+   */
+  void _truncate_stray_logged(CDentry *dn, LogSegment *ls);
+  /**
+   * Call this on a dentry that has been identified as
+   * eligible for purging. It will be passed on to PurgeQueue.
+   */
+  void enqueue(CDentry *dn, bool trunc);
+  /**
+   * Final part of enqueue() which we may have to retry
+   * after opening snap parents.
+   */
+  void _enqueue(CDentry *dn, bool trunc);
+
+  /**
+   * When hard links exist to an inode whose primary dentry
+   * is unlinked, the inode gets a stray primary dentry.
+   *
+   * We may later "reintegrate" the inode into a remaining
+   * non-stray dentry (one of what was previously a remote
+   * dentry) by issuing a rename from the stray to the other
+   * dentry.
+   */
+  void reintegrate_stray(CDentry *dn, CDentry *rlink);
+
+  /**
+   * Evaluate a stray dentry for purging or reintegration.
+   *
+   * purging: If the inode has no linkage, and no more references, then
+   *          we may decide to purge it.
+   *
+   * reintegration: If the inode still has linkage, then it means someone else
+   *                (a hard link) is still referring to it, and we should
+   *                think about reintegrating that inode into the remote dentry.
+   *
+   * @returns true if the dentry will be purged (caller should never
+   *          take more refs after this happens), else false.
+   */
+  bool _eval_stray(CDentry *dn);
+
+  void _eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn);
+
+  // Has passed through eval_stray and still has refs
+  elist<CDentry*> delayed_eval_stray;
+
+  // strays that have been trimmed from cache
+  std::set<std::string> trimmed_strays;
+
+  // Global references for doing I/O
+  MDSRank *mds;
+  PerfCounters *logger = nullptr;
+
+  bool started = false;
+
+  // Stray dentries for this rank (including those not in cache)
+  uint64_t num_strays = 0;
+
+  // Stray dentries
+  uint64_t num_strays_delayed = 0;
+  /**
+   * Entries that have entered enqueue() but not been persistently
+   * recorded by PurgeQueue yet
+   */
+  uint64_t num_strays_enqueuing = 0;
+
+  PurgeQueue &purge_queue;
+};
 #endif  // STRAY_MANAGER_H
