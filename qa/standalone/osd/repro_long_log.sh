@@ -62,6 +62,8 @@ function setup_log_test() {
     POOL_ID=$(ceph osd dump --format json | jq '.pools[] | select(.pool_name == "test") | .pool')
     PGID="${POOL_ID}.0"
 
+    # With 1 PG setting entries per osd 20 results in a target log of 20
+    ceph tell osd.\* injectargs -- --osd_target_pg_log_entries_per_osd 20 || return 1
     ceph tell osd.\* injectargs -- --osd-min-pg-log-entries 20 || return 1
     ceph tell osd.\* injectargs -- --osd-max-pg-log-entries 30 || return 1
     ceph tell osd.\* injectargs -- --osd-pg-log-trim-min 10 || return 1
@@ -116,33 +118,34 @@ function TEST_trim_max_entries()
 
     setup_log_test $dir || return 1
 
-    ceph tell osd.\* injectargs -- --osd-min-pg-log-entries 1
+    ceph tell osd.\* injectargs -- --osd_target_pg_log_entries_per_osd 2 || return 1
+    ceph tell osd.\* injectargs -- --osd-min-pg-log-entries 2
     ceph tell osd.\* injectargs -- --osd-pg-log-trim-min 2
     ceph tell osd.\* injectargs -- --osd-pg-log-trim-max 4
 
     # adding log entries, should only trim 4 and add one each time
     rados -p test rm foo
-    test_log_size $PGID 17
+    test_log_size $PGID 18 || return 1
     rados -p test rm foo
-    test_log_size $PGID 14
+    test_log_size $PGID 15 || return 1
     rados -p test rm foo
-    test_log_size $PGID 11
+    test_log_size $PGID 12 || return 1
     rados -p test rm foo
-    test_log_size $PGID 8
+    test_log_size $PGID 9 || return 1
     rados -p test rm foo
-    test_log_size $PGID 5
+    test_log_size $PGID 6 || return 1
     rados -p test rm foo
-    test_log_size $PGID 2
+    test_log_size $PGID 3 || return 1
 
     # below trim_min
     rados -p test rm foo
-    test_log_size $PGID 3
+    test_log_size $PGID 4 || return 1
     rados -p test rm foo
-    test_log_size $PGID 3
+    test_log_size $PGID 3 || return 1
     rados -p test rm foo
-    test_log_size $PGID 3
+    test_log_size $PGID 4 || return 1
     rados -p test rm foo
-    test_log_size $PGID 3
+    test_log_size $PGID 3 || return 1
 }
 
 main repro-long-log "$@"
