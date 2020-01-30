@@ -72,27 +72,32 @@ class CBT(Task):
 
     def install_dependencies(self):
         system_type = misc.get_pkg_type('rhel')
+        os_version = misc.get_system_type(self.first_mon, False, True)
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            # cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'collectl']
-            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', "gcc"]
+            cbt_depends = None
+            if os.version.startswith('8'):
+                cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', "gcc"]
+
+                # install collectl
+                self.first_mon.run(args=[run.Raw(
+                    'wget https://sourceforge.net/projects/collectl/files/collectl/collectl-4.1.0/collectl-4.1.0.src.tar.gz;tar'
+                    ' -xvf collectl-4.1.0.src.tar.gz;cd collectl-4.1.0/;sudo ./INSTALL')])
+
+                # install pdsh
+                self.first_mon.run(args=[run.Raw(
+                    'wget '
+                    'https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/pdsh/pdsh-2.29.tar.bz2;'
+                    ' bunzip2 -d pdsh-2.29.tar.bz2; tar -xvf pdsh-2.29.tar; cd pdsh-2.29;'
+                    ' sudo ./configure --without-rsh --with-ssh; sudo make; sudo make install')])
+
+            elif os.version.startswith('7'):
+                cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
             cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
         self.first_mon.run(args=install_cmd + cbt_depends)
-
-        # install collectl
-        self.first_mon.run(args=[run.Raw(
-            'wget https://sourceforge.net/projects/collectl/files/collectl/collectl-4.1.0/collectl-4.1.0.src.tar.gz;tar'
-            ' -xvf collectl-4.1.0.src.tar.gz;cd collectl-4.1.0/;sudo ./INSTALL')])
-
-        # install pdsh
-        self.first_mon.run(args=[run.Raw(
-            'wget '
-            'https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/pdsh/pdsh-2.29.tar.bz2;'
-            ' bunzip2 -d pdsh-2.29.tar.bz2; tar -xvf pdsh-2.29.tar; cd pdsh-2.29;'
-            ' sudo ./configure --without-rsh --with-ssh; sudo make; sudo make install')])
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         self.log.info('benchmark: %s', benchmark_type)
@@ -118,8 +123,12 @@ class CBT(Task):
         if benchmark_type == 'cosbench':
             # install cosbench
             self.log.info('install dependencies for cosbench')
+            cosbench_depends = []
             if system_type == 'rpm':
-                cosbench_depends = ['wget', 'unzip', 'java-1.7.0-openjdk', 'curl']
+                if os_version.startswith('8'):
+                    cosbench_depends = ['wget', 'unzip', 'java-1.8.0-openjdk', 'curl']
+                elif os_version.startswith('7'):
+                    cosbench_depends = ['wget', 'unzip', 'java-1.7.0-openjdk', 'curl']
             else:
                 cosbench_depends = ['wget', 'unzip', 'openjdk-8-jre', 'curl']
             self.first_mon.run(args=install_cmd + cosbench_depends)
