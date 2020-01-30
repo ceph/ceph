@@ -808,16 +808,10 @@ class CephFSShell(Cmd):
                 is_dir = item.is_dir()
 
                 if args.long and args.H:
-                    print_long(cephfs.getcwd()
-                               + path
-                               + b'/'
-                               + filepath,
+                    print_long(os.path.join(cephfs.getcwd(), path, filepath),
                                is_dir, True)
                 elif args.long:
-                    print_long(cephfs.getcwd()
-                               + path
-                               + b'/'
-                               + filepath,
+                    print_long(os.path.join(cephfs.getcwd(), path, filepath),
                                is_dir, False)
                 elif is_dir:
                     values.append(colorama.Style.BRIGHT
