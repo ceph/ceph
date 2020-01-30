@@ -45,6 +45,7 @@ class Elector : public ElectionOwner, RankProvider {
   map<int, utime_t> peer_acked_ping; // rank -> last ping stamp they acked
   map<int, utime_t> peer_sent_ping; // rank -> last ping stamp we sent
   set<int> live_pinging; // ranks which we are currently pinging
+  set<int> dead_pinging; // ranks which didn't answer (degrading scores)
   double ping_timeout; // the timeout after which we consider a ping to be dead
   int PING_DIVISOR = 2;  // we time out pings
 
@@ -193,6 +194,11 @@ class Elector : public ElectionOwner, RankProvider {
    * "tick" for heartbeating; scheduled by itself and begin_peer_ping().
    */
   void ping_check(int peer);
+  /**
+   * Checks that the peer is still marked for dead pinging,
+   * and then marks it as dead for the appropriate interval.
+   */
+  void dead_ping(int peer);
   /**
    * Handle a ping from another monitor and assimilate the data it contains.
    */
