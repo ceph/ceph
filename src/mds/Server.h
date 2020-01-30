@@ -115,7 +115,8 @@ public:
 
   void handle_client_session(const cref_t<MClientSession> &m);
   void _session_logged(Session *session, uint64_t state_seq, 
-		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
+		       bool open, version_t pv, const interval_set<inodeno_t>& inos,version_t piv,
+		       const interval_set<inodeno_t>& purge_inos, LogSegment *ls);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
 					map<client_t,client_metadata_t>& cmm,
 					map<client_t,pair<Session*,uint64_t> >& smap);
@@ -125,9 +126,9 @@ public:
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
-  void kill_session(Session *session, Context *on_safe);
+  void kill_session(Session *session, Context *on_safe, bool need_purge_inos = false);
   size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
-  void journal_close_session(Session *session, int state, Context *on_safe);
+  void journal_close_session(Session *session, int state, Context *on_safe, bool need_purge_inos = false);
 
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
   Session *find_session_by_uuid(std::string_view uuid);

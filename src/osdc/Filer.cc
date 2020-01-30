@@ -323,6 +323,7 @@ int Filer::purge_range(inodeno_t ino,
   if (num_obj == 1) {
     object_t oid = file_object_t(ino, first_obj);
     object_locator_t oloc = OSDMap::file_to_object_locator(*layout);
+    ldout(cct, 10) << "purge_range removing " << oid << dendl;
     objecter->remove(oid, oloc, snapc, mtime, flags, oncommit);
     return 0;
   }

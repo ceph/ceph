@@ -726,6 +726,10 @@ class MDCache {
   void remove_recovered_truncate(CInode *in, LogSegment *ls);
   void start_recovered_truncates();
 
+  // purge unsafe inodes
+  void start_purge_inodes();
+  void purge_inodes(const interval_set<inodeno_t>& i, LogSegment *ls);
+
   CDir *get_auth_container(CDir *in);
   CDir *get_export_container(CDir *dir);
   void find_nested_exports(CDir *dir, set<CDir*>& s);
