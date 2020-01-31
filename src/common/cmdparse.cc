@@ -558,7 +558,7 @@ bool validate_arg(CephContext* cct,
 {
   Value v;
   try {
-    if (!cmd_getval(cct, cmdmap, string(name), v)) {
+    if (!cmd_getval(cmdmap, string(name), v)) {
       if constexpr (is_vector) {
 	  // an empty list is acceptable.
 	  return true;
@@ -631,7 +631,7 @@ bool validate_cmd(CephContext* cct,
   });
 }
 
-bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+bool cmd_getval(const cmdmap_t& cmdmap,
 		const std::string& k, bool& val)
 {
   /*

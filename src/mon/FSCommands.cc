@@ -43,13 +43,13 @@ class FlagSetHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     string flag_name;
-    cmd_getval(g_ceph_context, cmdmap, "flag_name", flag_name);
+    cmd_getval(cmdmap, "flag_name", flag_name);
 
     string flag_val;
-    cmd_getval(g_ceph_context, cmdmap, "val", flag_val);
+    cmd_getval(cmdmap, "val", flag_val);
 
     bool sure = false;
-    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
 
     if (flag_name == "enable_multiple") {
       bool flag_bool = false;
@@ -93,7 +93,7 @@ class FailHandler : public FileSystemCommandHandler
     }
 
     std::string fs_name;
-    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+    if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
     }
@@ -150,7 +150,7 @@ class FsNewHandler : public FileSystemCommandHandler
     ceph_assert(m_paxos->is_plugged());
 
     string metadata_name;
-    cmd_getval(g_ceph_context, cmdmap, "metadata", metadata_name);
+    cmd_getval(cmdmap, "metadata", metadata_name);
     int64_t metadata = mon->osdmon()->osdmap.lookup_pg_pool_name(metadata_name);
     if (metadata < 0) {
       ss << "pool '" << metadata_name << "' does not exist";
@@ -158,7 +158,7 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     string data_name;
-    cmd_getval(g_ceph_context, cmdmap, "data", data_name);
+    cmd_getval(cmdmap, "data", data_name);
     int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
     if (data < 0) {
       ss << "pool '" << data_name << "' does not exist";
@@ -170,7 +170,7 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(cmdmap, "fs_name", fs_name);
     if (fs_name.empty()) {
         // Ensure fs name is not empty so that we can implement
         // commmands that refer to FS by name in future.
@@ -192,7 +192,7 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     bool force = false;
-    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    cmd_getval(cmdmap, "force", force);
 
     const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
     if (stat) {
@@ -216,7 +216,7 @@ class FsNewHandler : public FileSystemCommandHandler
       const std::vector<int64_t> &data_pools = fs->mds_map.get_data_pools();
 
       bool sure = false;
-      cmd_getval(g_ceph_context, cmdmap,
+      cmd_getval(cmdmap,
                  "allow_dangerous_metadata_overlay", sure);
 
       if ((std::find(data_pools.begin(), data_pools.end(), data) != data_pools.end()
@@ -304,7 +304,7 @@ public:
       std::stringstream &ss) override
   {
     std::string fs_name;
-    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+    if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
     }
@@ -316,14 +316,14 @@ public:
     }
 
     string var;
-    if (!cmd_getval(g_ceph_context, cmdmap, "var", var) || var.empty()) {
+    if (!cmd_getval(cmdmap, "var", var) || var.empty()) {
       ss << "Invalid variable";
       return -EINVAL;
     }
     string val;
     string interr;
     int64_t n = 0;
-    if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+    if (!cmd_getval(cmdmap, "val", val)) {
       return -EINVAL;
     }
     // we got a string.  see if it contains an int.
@@ -367,7 +367,7 @@ public:
 
       if (enable_inline) {
         bool confirm = false;
-        cmd_getval(g_ceph_context, cmdmap, "yes_i_really_really_mean_it", confirm);
+        cmd_getval(cmdmap, "yes_i_really_really_mean_it", confirm);
 	if (!confirm) {
 	  ss << "Inline data support is deprecated and will be removed in a future release. "
 	     << "Add --yes-i-really-really-mean-it if you are certain you want this enabled.";
@@ -460,7 +460,7 @@ public:
       }
 
       string confirm;
-      if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+      if (!cmd_getval(cmdmap, "confirm", confirm) ||
 	  confirm != "--yes-i-am-really-a-mds") {
 	ss << "Warning! This command is for MDS only. Do not run it manually";
 	return -EPERM;
@@ -648,10 +648,10 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     ceph_assert(m_paxos->is_plugged());
 
     string poolname;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+    cmd_getval(cmdmap, "pool", poolname);
 
     std::string fs_name;
-    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name)
+    if (!cmd_getval(cmdmap, "fs_name", fs_name)
         || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
@@ -725,7 +725,7 @@ class SetDefaultHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     std::string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(cmdmap, "fs_name", fs_name);
     auto fs = fsmap.get_filesystem(fs_name);
     if (fs == nullptr) {
         ss << "filesystem '" << fs_name << "' does not exist";
@@ -762,7 +762,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
     // (redundant while there is only one FS, but command
     //  syntax should apply to multi-FS future)
     string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(cmdmap, "fs_name", fs_name);
     auto fs = fsmap.get_filesystem(fs_name);
     if (fs == nullptr) {
         // Consider absence success to make deletes idempotent
@@ -778,7 +778,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
 
     // Check for confirmation flag
     bool sure = false;
-    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
     if (!sure) {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
             " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
@@ -826,7 +826,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(cmdmap, "fs_name", fs_name);
     auto fs = fsmap.get_filesystem(fs_name);
     if (fs == nullptr) {
         ss << "filesystem '" << fs_name << "' does not exist";
@@ -843,7 +843,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
 
     // Check for confirmation flag
     bool sure = false;
-    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
     if (!sure) {
       ss << "this is a potentially destructive operation, only for use by experts in disaster recovery.  "
         "Add --yes-i-really-mean-it if you are sure you wish to continue.";
@@ -871,10 +871,10 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     string poolname;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+    cmd_getval(cmdmap, "pool", poolname);
 
     std::string fs_name;
-    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name)
+    if (!cmd_getval(cmdmap, "fs_name", fs_name)
         || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;

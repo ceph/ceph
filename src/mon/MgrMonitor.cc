@@ -898,17 +898,17 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format);
+  cmd_getval(cmdmap, "format", format);
   boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
 						   "json-pretty"));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
   int r = 0;
 
   if (prefix == "mgr dump") {
     int64_t epoch = 0;
-    cmd_getval(g_ceph_context, cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
+    cmd_getval(cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
     if (epoch == (int64_t)map.get_epoch()) {
       f->dump_object("mgrmap", map);
     } else {
@@ -964,14 +964,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "mgr metadata") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "who", name);
+    cmd_getval(cmdmap, "who", name);
     if (name.size() > 0 && !map.have_name(name)) {
       ss << "mgr." << name << " does not exist";
       r = -ENOENT;
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval(cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name.size()) {
       f->open_object_section("mgr_metadata");
@@ -1006,7 +1006,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "mgr count-metadata") {
     string field;
-    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    cmd_getval(cmdmap, "property", field);
     count_metadata(field, f.get());
     f->flush(rdata);
     r = 0;
@@ -1042,17 +1042,17 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   int r = 0;
 
   if (prefix == "mgr fail") {
     string who;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval(cmdmap, "who", who);
 
     std::string err;
     uint64_t gid = strict_strtol(who.c_str(), 10, &err);
@@ -1102,7 +1102,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
   } else if (prefix == "mgr module enable") {
     string module;
-    cmd_getval(g_ceph_context, cmdmap, "module", module);
+    cmd_getval(cmdmap, "module", module);
     if (module.empty()) {
       r = -EINVAL;
       goto out;
@@ -1112,7 +1112,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       goto out;
     }
     string force;
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval(cmdmap, "force", force);
     if (!pending_map.all_support_module(module) &&
 	force != "--force") {
       ss << "all mgr daemons do not support module '" << module << "', pass "
@@ -1138,7 +1138,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
-    cmd_getval(g_ceph_context, cmdmap, "module", module);
+    cmd_getval(cmdmap, "module", module);
     if (module.empty()) {
       r = -EINVAL;
       goto out;

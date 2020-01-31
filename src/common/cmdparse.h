@@ -56,11 +56,11 @@ struct bad_cmd_get : public std::exception {
   }
 };
 
-bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+bool cmd_getval(const cmdmap_t& cmdmap,
 		const std::string& k, bool& val);
 
 template <typename T>
-bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+bool cmd_getval(const cmdmap_t& cmdmap,
 		const std::string& k, T& val)
 {
   if (cmdmap.count(k)) {
@@ -78,7 +78,7 @@ bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
 
 template <typename T>
 bool cmd_getval(
-  CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
+  const cmdmap_t& cmdmap, const std::string& k,
   T& val, const T& defval)
 {
   if (cmdmap.count(k)) {
