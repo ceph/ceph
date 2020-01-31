@@ -395,9 +395,9 @@ class Module(MgrModule):
                                                            host, anon_host))
 
             # anonymize the smartctl report itself
-            for k in ['serial_number']:
-                if k in m:
-                    m.pop(k)
+            serial = devid.rsplit('_', 1)[1]
+            m_str = json.dumps(m)
+            m = json.loads(m_str.replace(serial, 'deleted'))
 
             if anon_host not in res:
                 res[anon_host] = {}
