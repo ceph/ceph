@@ -2410,7 +2410,7 @@ void OSD::asok_command(
     ) {
     string pgidstr;
     pg_t pgid;
-    if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
+    if (!cmd_getval(cmdmap, "pgid", pgidstr)) {
       ss << "no pgid specified";
       ret = -EINVAL;
       goto out;
@@ -2478,7 +2478,7 @@ will start to track new ops received afterwards.";
 
     set<string> filters;
     vector<string> filter_str;
-    if (cmd_getval(cct, cmdmap, "filterstr", filter_str)) {
+    if (cmd_getval(cmdmap, "filterstr", filter_str)) {
         copy(filter_str.begin(), filter_str.end(),
            inserter(filters, filters.end()));
     }
@@ -2594,10 +2594,10 @@ will start to track new ops received afterwards.";
     int64_t value = 0;
     string error;
     bool success = false;
-    if (!cmd_getval(cct, cmdmap, "property", property)) {
+    if (!cmd_getval(cmdmap, "property", property)) {
       error = "unable to get property";
       success = false;
-    } else if (!cmd_getval(cct, cmdmap, "value", value)) {
+    } else if (!cmd_getval(cmdmap, "value", value)) {
       error = "unable to get value";
       success = false;
     } else if (value < 0) {
@@ -2618,7 +2618,7 @@ will start to track new ops received afterwards.";
     size_t value = 0;
     string error;
     bool success = false;
-    if (!cmd_getval(cct, cmdmap, "property", property)) {
+    if (!cmd_getval(cmdmap, "property", property)) {
       error = "unable to get property";
       success = false;
     } else if (!ceph_heap_get_numeric_property(property.c_str(), &value)) {
@@ -2675,7 +2675,7 @@ will start to track new ops received afterwards.";
     f->close_section();
   } else if (prefix == "smart") {
     string devid;
-    cmd_getval(cct, cmdmap, "devid", devid);
+    cmd_getval(cmdmap, "devid", devid);
     ostringstream out;
     probe_smart(devid, out);
     outbl.append(out.str());
@@ -2703,7 +2703,7 @@ will start to track new ops received afterwards.";
 
   else if (prefix == "cluster_log") {
     vector<string> msg;
-    cmd_getval(cct, cmdmap, "message", msg);
+    cmd_getval(cmdmap, "message", msg);
     if (msg.empty()) {
       ret = -EINVAL;
       ss << "ignoring empty log message";
@@ -2713,7 +2713,7 @@ will start to track new ops received afterwards.";
     for (vector<string>::iterator a = ++msg.begin(); a != msg.end(); ++a)
       message += " " + *a;
     string lvl;
-    cmd_getval(cct, cmdmap, "level", lvl);
+    cmd_getval(cmdmap, "level", lvl);
     clog_type level = string_to_clog_type(lvl);
     if (level < 0) {
       ret = -EINVAL;
@@ -2729,10 +2729,10 @@ will start to track new ops received afterwards.";
     int64_t bsize;
     int64_t osize, onum;
     // default count 1G, size 4MB
-    cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
-    cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
-    cmd_getval(cct, cmdmap, "object_size", osize, (int64_t)0);
-    cmd_getval(cct, cmdmap, "object_num", onum, (int64_t)0);
+    cmd_getval(cmdmap, "count", count, (int64_t)1 << 30);
+    cmd_getval(cmdmap, "size", bsize, (int64_t)4 << 20);
+    cmd_getval(cmdmap, "object_size", osize, (int64_t)0);
+    cmd_getval(cmdmap, "object_num", onum, (int64_t)0);
 
     uint32_t duration = cct->_conf->osd_bench_duration;
 
@@ -2901,7 +2901,7 @@ will start to track new ops received afterwards.";
 
   else if (prefix == "debug kick_recovery_wq") {
     int64_t delay;
-    cmd_getval(cct, cmdmap, "delay", delay);
+    cmd_getval(cmdmap, "delay", delay);
     ostringstream oss;
     oss << delay;
     ret = cct->_conf.set_val("osd_recovery_delay_start", oss.str().c_str());
@@ -2919,7 +2919,7 @@ will start to track new ops received afterwards.";
   else if (prefix == "cpu_profiler") {
     ostringstream ds;
     string arg;
-    cmd_getval(cct, cmdmap, "arg", arg);
+    cmd_getval(cmdmap, "arg", arg);
     vector<string> argvec;
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ds);
@@ -2939,8 +2939,8 @@ will start to track new ops received afterwards.";
   else if (prefix == "perf histogram dump") {
     std::string logger;
     std::string counter;
-    cmd_getval(cct, cmdmap, "logger", logger);
-    cmd_getval(cct, cmdmap, "counter", counter);
+    cmd_getval(cmdmap, "logger", logger);
+    cmd_getval(cmdmap, "counter", counter);
     cct->get_perfcounters_collection()->dump_formatted_histograms(
       f, false, logger, counter);
   }
@@ -2985,7 +2985,7 @@ will start to track new ops received afterwards.";
   else if (prefix == "dump_osd_network") {
     lock_guard l(osd_lock);
     int64_t value = 0;
-    if (!(cmd_getval(cct, cmdmap, "value", value))) {
+    if (!(cmd_getval(cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
       value = static_cast<double>(g_conf().get_val<double>(
 				    "mon_warn_on_slow_ping_time")) * 1000;
@@ -5945,7 +5945,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
     string poolstr;
 
-    cmd_getval(service->cct, cmdmap, "pool", poolstr);
+    cmd_getval(cmdmap, "pool", poolstr);
     pool = curmap->lookup_pg_pool_name(poolstr);
     //If we can't find it by name then maybe id specified
     if (pool < 0 && isdigit(poolstr[0]))
@@ -5956,7 +5956,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     }
 
     string objname, nspace;
-    cmd_getval(service->cct, cmdmap, "objname", objname);
+    cmd_getval(cmdmap, "objname", objname);
     std::size_t found = objname.find_first_of('/');
     if (found != string::npos) {
       nspace = objname.substr(0, found);
@@ -5971,7 +5971,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     }
 
     int64_t shardid;
-    cmd_getval(service->cct, cmdmap, "shardid", shardid, int64_t(shard_id_t::NO_SHARD));
+    cmd_getval(cmdmap, "shardid", shardid, int64_t(shard_id_t::NO_SHARD));
     hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
     ghobject_t gobj(obj, ghobject_t::NO_GEN, shard_id_t(uint8_t(shardid)));
     spg_t pgid(curmap->raw_pg_to_pg(rawpg), shard_id_t(shardid));
@@ -5988,8 +5988,8 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       map<string, bufferlist> newattrs;
       bufferlist val;
       string key, valstr;
-      cmd_getval(service->cct, cmdmap, "key", key);
-      cmd_getval(service->cct, cmdmap, "val", valstr);
+      cmd_getval(cmdmap, "key", key);
+      cmd_getval(cmdmap, "val", valstr);
 
       val.append(valstr);
       newattrs[key] = val;
@@ -6001,7 +6001,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         ss << "ok";
     } else if (command == "rmomapkey") {
       string key;
-      cmd_getval(service->cct, cmdmap, "key", key);
+      cmd_getval(cmdmap, "key", key);
 
       t.omap_rmkey(coll_t(pgid), ghobject_t(obj), key);
       r = store->queue_transaction(service->meta_ch, std::move(t));
@@ -6013,7 +6013,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       bufferlist newheader;
       string headerstr;
 
-      cmd_getval(service->cct, cmdmap, "header", headerstr);
+      cmd_getval(cmdmap, "header", headerstr);
       newheader.append(headerstr);
       t.omap_setheader(coll_t(pgid), ghobject_t(obj), newheader);
       r = store->queue_transaction(service->meta_ch, std::move(t));
@@ -6043,7 +6043,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       }
     } else if (command == "truncobj") {
       int64_t trunclen;
-      cmd_getval(service->cct, cmdmap, "len", trunclen);
+      cmd_getval(cmdmap, "len", trunclen);
       t.truncate(coll_t(pgid), ghobject_t(obj), trunclen);
       r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
@@ -6061,7 +6061,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
   }
   if (command == "set_recovery_delay") {
     int64_t delay;
-    cmd_getval(service->cct, cmdmap, "utime", delay, (int64_t)0);
+    cmd_getval(cmdmap, "utime", delay, (int64_t)0);
     ostringstream oss;
     oss << delay;
     int r = service->cct->_conf.set_val("osd_recovery_delay_start",
@@ -6081,8 +6081,8 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     int64_t count;
     string type;
     OSDService::s_names state;
-    cmd_getval(service->cct, cmdmap, "type", type, string("full"));
-    cmd_getval(service->cct, cmdmap, "count", count, (int64_t)-1);
+    cmd_getval(cmdmap, "type", type, string("full"));
+    cmd_getval(cmdmap, "count", count, (int64_t)-1);
     if (type == "none" || count == 0) {
       type = "none";
       count = 0;
@@ -10752,7 +10752,7 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
   }
   
   string cmd;
-  if (!cmd_getval(&cct, cmdmap, "heapcmd", cmd)) {
+  if (!cmd_getval(cmdmap, "heapcmd", cmd)) {
         os << "unable to get value for command \"" << cmd << "\"";
        return -EINVAL;
   }
@@ -10761,7 +10761,7 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
   get_str_vec(cmd, cmd_vec);
 
   string val;
-  if (cmd_getval(&cct, cmdmap, "value", val)) {
+  if (cmd_getval(cmdmap, "value", val)) {
     cmd_vec.push_back(val);
   }
   

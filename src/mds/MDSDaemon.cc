@@ -169,18 +169,18 @@ void MDSDaemon::asok_command(
       r = -EOPNOTSUPP;
     } else {
       string heapcmd;
-      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
+      cmd_getval(cmdmap, "heapcmd", heapcmd);
       vector<string> heapcmd_vec;
       get_str_vec(heapcmd, heapcmd_vec);
       string value;
-      if (cmd_getval(cct, cmdmap, "value", value)) {
+      if (cmd_getval(cmdmap, "value", value)) {
 	heapcmd_vec.push_back(value);
       }
       ceph_heap_profiler_handle_command(heapcmd_vec, ss);
     }
   } else if (command == "cpu_profiler") {
     string arg;
-    cmd_getval(cct, cmdmap, "arg", arg);
+    cmd_getval(cmdmap, "arg", arg);
     vector<string> argvec;
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ss);

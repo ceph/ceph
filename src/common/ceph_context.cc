@@ -488,8 +488,8 @@ int CephContext::_do_command(
       command == "perf dump") {
     std::string logger;
     std::string counter;
-    cmd_getval(this, cmdmap, "logger", logger);
-    cmd_getval(this, cmdmap, "counter", counter);
+    cmd_getval(cmdmap, "logger", logger);
+    cmd_getval(cmdmap, "counter", counter);
     _perf_counters_collection->dump_formatted(f, false, logger, counter);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
@@ -499,8 +499,8 @@ int CephContext::_do_command(
   else if (command == "perf histogram dump") {
     std::string logger;
     std::string counter;
-    cmd_getval(this, cmdmap, "logger", logger);
-    cmd_getval(this, cmdmap, "counter", counter);
+    cmd_getval(cmdmap, "logger", logger);
+    cmd_getval(cmdmap, "counter", counter);
     _perf_counters_collection->dump_formatted_histograms(f, false, logger,
                                                          counter);
   }
@@ -511,7 +511,7 @@ int CephContext::_do_command(
     std::string var;
     std::string section(command);
     f->open_object_section(section.c_str());
-    if (!cmd_getval(this, cmdmap, "var", var)) {
+    if (!cmd_getval(cmdmap, "var", var)) {
       f->dump_string("error", "syntax error: 'perf reset <var>'");
     } else {
      if(!_perf_counters_collection->reset(var))
@@ -530,7 +530,7 @@ int CephContext::_do_command(
     }
     else if (command == "config unset") {
       std::string var;
-      if (!(cmd_getval(this, cmdmap, "var", var))) {
+      if (!(cmd_getval(cmdmap, "var", var))) {
 	r = -EINVAL;
       } else {
         r = _conf.rm_val(var.c_str());
@@ -548,8 +548,8 @@ int CephContext::_do_command(
       std::string var;
       std::vector<std::string> val;
 
-      if (!(cmd_getval(this, cmdmap, "var", var)) ||
-          !(cmd_getval(this, cmdmap, "val", val))) {
+      if (!(cmd_getval(cmdmap, "var", var)) ||
+          !(cmd_getval(cmdmap, "val", val))) {
 	r = -EINVAL;
       } else {
 	// val may be multiple words
@@ -566,7 +566,7 @@ int CephContext::_do_command(
       }
     } else if (command == "config get") {
       std::string var;
-      if (!cmd_getval(this, cmdmap, "var", var)) {
+      if (!cmd_getval(cmdmap, "var", var)) {
 	r = -EINVAL;
       } else {
 	char buf[4096];
@@ -582,7 +582,7 @@ int CephContext::_do_command(
       }
     } else if (command == "config help") {
       std::string var;
-      if (cmd_getval(this, cmdmap, "var", var)) {
+      if (cmd_getval(cmdmap, "var", var)) {
         // Output a single one
         std::string key = ConfFile::normalize_key_name(var);
 	auto schema = _conf.get_schema(key);
@@ -612,7 +612,7 @@ int CephContext::_do_command(
     }
     else if (command == "injectargs") {
       vector<string> argsvec;
-      cmd_getval(this, cmdmap, "injected_args", argsvec);
+      cmd_getval(cmdmap, "injected_args", argsvec);
       if (!argsvec.empty()) {
 	string args = joinify<std::string>(argsvec.begin(),
 					   argsvec.end(),
