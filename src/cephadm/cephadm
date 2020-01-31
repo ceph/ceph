@@ -1085,9 +1085,9 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
 def get_container(fsid, daemon_type, daemon_id, privileged=False,
                   container_args=[]):
     # type: (str, str, Union[int, str], bool, List[str]) -> CephContainer
-    if daemon_type in ['mon', 'osd'] or privileged:
+    if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
-        container_args += ['--privileged']
+        privileged = True
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
@@ -1113,6 +1113,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
+        privileged=privileged,
     )
 
 def extract_uid_gid(img='', file_path='/var/lib/ceph'):
@@ -1209,7 +1210,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                     str(daemon_id), osd_fsid,
                     '--no-systemd'
                 ],
-                container_args=['--privileged'],
+                privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
             )
@@ -1226,7 +1227,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                     'lvm', 'deactivate',
                     str(daemon_id), osd_fsid,
                 ],
-                container_args=['--privileged'],
+                privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                                     daemon_id),
@@ -1477,14 +1478,16 @@ class CephContainer:
                  args=[],
                  volume_mounts={},
                  cname='',
-                 container_args=[]):
-        # type: (str, str, List[str], Dict[str, str], str, List[str]) -> None
+                 container_args=[],
+                 privileged=False):
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[bool]) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
         self.cname = cname
         self.container_args = container_args
+        self.privileged = privileged
 
     def run_cmd(self):
         # type: () -> List[str]
@@ -1495,6 +1498,9 @@ class CephContainer:
         if self.entrypoint:
             entrypoint = ['--entrypoint', self.entrypoint]
 
+        priv = [] # type: List[str]
+        if self.privileged:
+            priv = ['--privileged']
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -1508,7 +1514,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
-        ] + self.container_args + \
+        ] + self.container_args + priv + \
         cname + envs + \
         vols + entrypoint + \
         [
@@ -1517,6 +1523,9 @@ class CephContainer:
 
     def shell_cmd(self, cmd):
         # type: (List[str]) -> List[str]
+        priv = [] # type: List[str]
+        if self.privileged:
+            priv = ['--privileged']
         vols = [] # type: List[str]
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
@@ -1533,7 +1542,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
-        ] + self.container_args + envs + vols + [
+        ] + self.container_args + priv + envs + vols + [
             '--entrypoint', cmd[0],
             self.image
         ] + cmd[1:]
@@ -2034,13 +2043,13 @@ def command_shell():
     if daemon_id and not args.fsid:
         raise Error('must pass --fsid to specify cluster')
 
+    container_args = [] # type: List[str]
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
                                   no_config=True if args.config else False)
     if args.config:
         mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
     if args.keyring:
         mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
-    container_args = ['--privileged']
     if args.command:
         command = args.command
     else:
@@ -2056,7 +2065,8 @@ def command_shell():
         entrypoint='doesnotmatter',
         args=[],
         container_args=container_args,
-        volume_mounts=mounts)
+        volume_mounts=mounts,
+        privileged=True)
     command = c.shell_cmd(command)
 
     return call_timeout(command, args.timeout)
@@ -2116,7 +2126,7 @@ def command_ceph_volume():
         image=args.image,
         entrypoint='/usr/sbin/ceph-volume',
         args=args.command,
-        container_args=['--privileged'],
+        privileged=True,
         volume_mounts=mounts,
     )
     out, err, code = call_throws(c.run_cmd(), verbose=True)
