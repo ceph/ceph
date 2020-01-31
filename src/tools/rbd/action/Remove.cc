@@ -150,6 +150,44 @@ int execute(const po::variables_map &vm,
     }
     return r;
   }
+  
+  std::vector<string> image_list;
+  r = rbd.list(io_ctx, image_list);
+  if(r == -ENOENT) {
+    std::cerr << "rbd error: list rbd image(ENOENT)" << cpp_strerror(r) << std::endl;
+    return 0;
+  }
+  if(r < 0) {
+    std::cerr << "rbd error list rbd image:" << cpp_strerror(r) << std::endl;
+    return 0;
+  }
+  if(0 == image_list.size()) {
+    std::vector<librbd::trash_image_info_t> trash_entries;
+    r = rbd.trash_list(io_ctx, trash_entries);
+    if (r < 0) {
+      return 0;
+    }
+    if(trash_entries.empty()) {
+      r = io_ctx.remove(RBD_DIRECTORY);
+      if(r < 0) {
+        std::cerr << "rbd error: fail to clear up directory object: " << cpp_strerror(r) << std::endl;
+        return 0;
+      }
+      
+      r = io_ctx.remove(RBD_INFO);
+      if(r < 0) {
+        std::cerr << "rbd error: fail to clear up rbd_info object: " << cpp_strerror(r) << std::endl;
+        return 0;
+      }
+
+      r = io_ctx.remove(RBD_TRASH);
+      if(r < 0) {
+        std::cerr << "rbd error: fail to clear up rbd_trash object: " << cpp_strerror(r) << std::endl;
+        return 0;
+      }
+    }
+  }
+  
   return 0;
 }
 
