@@ -93,7 +93,8 @@ class CBT(Task):
                         'https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/pdsh/pdsh-2.29.tar.bz2;'
                         ' bunzip2 -d pdsh-2.29.tar.bz2; tar -xvf pdsh-2.29.tar; cd pdsh-2.29;'
                         ' sudo ./configure --without-rsh --with-ssh; sudo make; sudo make install')])
-
+		    # start httpd service
+		    host.run(args=[run.Raw("sudo systemctl restart httpd")])
                 elif os_version.startswith('7'):
                     cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
             else:
