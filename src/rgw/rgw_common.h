@@ -1371,6 +1371,14 @@ struct rgw_obj_key {
     return instance;
   }
 
+  void set_ns(const std::string& _ns) {
+    ns = _ns;
+  }
+
+  const std::string& get_ns() const {
+    return ns;
+  }
+
   string get_index_key_name() const {
     if (ns.empty()) {
       if (name.size() < 1 || name[0] != '_') {
