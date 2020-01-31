@@ -46,7 +46,7 @@ class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
   }
   void Skip(size_t n) override {
     ceph_assert(n <= remaining);
-    pb.advance(n);
+    pb += n;
     remaining -= n;
   }
 

@@ -1590,7 +1590,7 @@ inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
     t.copy_shallow(remaining, tmp);
     auto cp = std::cbegin(tmp);
     traits::decode(o, cp);
-    p.advance(cp.get_offset());
+    p += cp.get_offset();
   }
 }
 
@@ -1611,7 +1611,7 @@ inline std::enable_if_t<traits::supported && traits::need_contiguous> decode(
   t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
   auto cp = std::cbegin(tmp);
   traits::decode(o, cp);
-  p.advance(cp.get_offset());
+  p += cp.get_offset();
 }
 
 // nohead variants
@@ -1650,7 +1650,7 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     }
     auto cp = std::cbegin(tmp);
     traits::decode_nohead(num, o, cp);
-    p.advance(cp.get_offset());
+    p += cp.get_offset();
   } else {
     traits::decode_nohead(num, o, p);
   }
@@ -1715,7 +1715,7 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     char *end = *start_pos + *struct_len;				\
     ceph_assert(pos <= end);							\
     if (pos < end) {							\
-      p.advance(end - pos);						\
+      p += end - pos;							\
     }									\
   }
 

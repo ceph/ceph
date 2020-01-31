@@ -201,7 +201,7 @@ TEST_P(CompressorTest, compress_decompress)
   prefix.claim_append(out);
   out.swap(prefix);
   it = out.cbegin();
-  it.advance(prefix_len);
+  it += prefix_len;
   res = compressor->decompress(it, compressed_len, after);
   EXPECT_EQ(res, 0);
   EXPECT_TRUE(exp.contents_equal(after));

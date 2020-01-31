@@ -214,7 +214,7 @@ inline namespace v14_2_0 {
       using pointer = typename std::conditional<is_const, const char*, char *>::type;
       pointer get_pos_add(size_t n) {
 	auto r = pos;
-	advance(n);
+	*this += n;
 	return r;
       }
       ptr get_ptr(size_t len) {
@@ -222,18 +222,15 @@ inline namespace v14_2_0 {
 	  return buffer::copy(get_pos_add(len), len);
 	} else {
 	  size_t off = pos - bp->c_str();
-	  advance(len);
+	  *this += len;
 	  return ptr(*bp, off, len);
 	}
       }
 
-      void advance(size_t len) {
+      iterator_impl& operator+=(size_t len) {
 	pos += len;
 	if (pos > end_ptr)
 	  throw end_of_buffer();
-      }
-      iterator_impl& operator+=(size_t len) {
-        advance(len);
         return *this;
       }
 
@@ -721,13 +718,9 @@ inline namespace v14_2_0 {
 	return p == ls->end();
 	//return off == bl->length();
       }
-      void advance(unsigned o);
       void seek(unsigned o);
       char operator*() const;
-      iterator_impl& operator+=(unsigned o) {
-        advance(o);
-        return *this;
-      }
+      iterator_impl& operator+=(unsigned o);
       iterator_impl& operator++();
       ptr get_current_ptr() const;
       bool is_pointing_same_raw(const ptr& other) const;

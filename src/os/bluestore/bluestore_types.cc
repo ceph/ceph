@@ -36,7 +36,7 @@ void bluestore_bdev_label_t::encode(bufferlist& bl) const
 
 void bluestore_bdev_label_t::decode(bufferlist::const_iterator& p)
 {
-  p.advance(60u); // see above
+  p += 60u; // see above
   DECODE_START(2, p);
   decode(osd_uuid, p);
   decode(size, p);
