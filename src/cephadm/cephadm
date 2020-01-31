@@ -2335,6 +2335,23 @@ def command_adopt():
                 if os.path.exists(p):
                     logger.info('Chowning %s...' % p)
                     os.chown(p, uid, gid)
+            # disable the ceph-volume 'simple' mode files on the host
+            simple_fn = os.path.join('/etc/ceph/osd',
+                                     '%s-%s.json' % (daemon_id, osd_fsid))
+            if os.path.exists(simple_fn):
+                new_fn = simple_fn + '.adopted-by-cephadm'
+                logger.info('Renaming %s -> %s', simple_fn, new_fn)
+                os.rename(simple_fn, new_fn)
+                logger.info('Disabling host unit ceph-volume@ simple unit...')
+                call_throws(['systemctl', 'disable',
+                             'ceph-volume@simple-%s-%s.service' % (
+                                 daemon_id, osd_fsid)])
+            else:
+                # assume this is an 'lvm' c-v for now, but don't error
+                # out if it's not.
+                logger.info('Disabling host unit ceph-volume@ lvm unit...')
+                call(['systemctl', 'disable',
+                      'ceph-volume@lvm-%s-%s.service' % (daemon_id, osd_fsid)])
 
         # config
         config_src = '/etc/ceph/%s.conf' % (args.cluster)
