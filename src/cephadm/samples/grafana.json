@@ -12,7 +12,7 @@
             "  cert_file = /etc/grafana/certs/cert_file",
             "  cert_key = /etc/grafana/certs/cert_key",
             "  http_port = 3000",
-            "  http_addr = 10.90.90.150",
+            "  http_addr = localhost",
             "[security]",
             "  admin_user = admin",
             "  admin_password = admin",
@@ -28,7 +28,7 @@
             "    type: 'prometheus'",
             "    access: 'proxy'",
             "    orgId: 1",
-            "    url: 'http://10.90.90.150:9095'",
+            "    url: 'http://localhost:9095'",
             "    basicAuth: false",
             "    isDefault: true",
             "    editable: false"
