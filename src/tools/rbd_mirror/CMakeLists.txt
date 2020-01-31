@@ -52,6 +52,7 @@ set(rbd_mirror_internal
   image_replayer/journal/StateBuilder.cc
   image_replayer/journal/SyncPointHandler.cc
   image_replayer/snapshot/CreateLocalImageRequest.cc
+  image_replayer/snapshot/PrepareReplayRequest.cc
   image_replayer/snapshot/StateBuilder.cc
   image_sync/SyncPointCreateRequest.cc
   image_sync/SyncPointPruneRequest.cc
