@@ -102,7 +102,7 @@ $SUDO $CEPHADM_BIN --image $IMAGE_MIMIC version \
 $SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
-which docker && ( $CEPHADM --docker version | grep 'ceph version' )
+systemctl status docker && ( $CEPHADM --docker version | grep 'ceph version' )
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
