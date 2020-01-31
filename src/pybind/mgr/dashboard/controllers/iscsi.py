@@ -16,6 +16,7 @@ from ..rest_client import RequestException
 from ..security import Scope
 from ..services.iscsi_client import IscsiClient
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.iscsi_config import IscsiGatewayDoesNotExist
 from ..services.rbd import format_bitmask
 from ..services.tcmu_service import TcmuService
 from ..exceptions import DashboardException
@@ -848,7 +849,7 @@ class IscsiTarget(RESTController):
         for portal in target['portals']:
             try:
                 IscsiClient.instance(gateway_name=portal['host']).ping()
-            except RequestException:
+            except (IscsiGatewayDoesNotExist, RequestException):
                 return
         gateway_name = target['portals'][0]['host']
         try:
