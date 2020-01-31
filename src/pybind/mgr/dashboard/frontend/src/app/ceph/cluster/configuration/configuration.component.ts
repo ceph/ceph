@@ -61,6 +61,22 @@ export class ConfigurationComponent implements OnInit {
         }
         return row.source.includes(value);
       }
+    },
+    {
+      name: this.i18n('Modified'),
+      prop: 'modified',
+      filterOptions: ['yes', 'no'],
+      filterPredicate: (row, value) => {
+        if (value === 'yes' && row.hasOwnProperty('value')) {
+          return true;
+        }
+
+        if (value === 'no' && !row.hasOwnProperty('value')) {
+          return true;
+        }
+
+        return false;
+      }
     }
   ];
 
