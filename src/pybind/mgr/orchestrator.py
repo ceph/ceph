@@ -872,7 +872,7 @@ class Orchestrator(object):
         #assert not (service_name and service_id)
         raise NotImplementedError()
 
-    def create_osds(self, drive_group):
+    def create_osds(self, drive_groups):
         # type: (DriveGroupSpec) -> Completion
         """
         Create one or more OSDs within a single Drive Group.
@@ -882,7 +882,7 @@ class Orchestrator(object):
         finer-grained OSD feature enablement (choice of backing store,
         compression/encryption, etc).
 
-        :param drive_group: DriveGroupSpec
+        :param drive_groups: a list of DriveGroupSpec
         :param all_hosts: TODO, this is required because the orchestrator methods are not composable
                 Probably this parameter can be easily removed because each orchestrator can use
                 the "get_inventory" method and the "drive_group.host_pattern" attribute
