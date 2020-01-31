@@ -9,6 +9,7 @@
 #include "librbd/ImageCtx.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/CreateLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/PrepareReplayRequest.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/Replayer.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -94,9 +95,8 @@ image_replayer::Replayer* StateBuilder<I>::create_replayer(
    Threads<I>* threads,
     const std::string& local_mirror_uuid,
     ReplayerListener* replayer_listener) {
-  // TODO
-  ceph_assert(false);
-  return nullptr;
+  return Replayer<I>::create(
+    threads, local_mirror_uuid, this, replayer_listener);
 }
 
 } // namespace snapshot
