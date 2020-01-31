@@ -109,6 +109,23 @@ struct MonSession : public RefCountedObject {
   const entity_addr_t& get_peer_socket_addr() {
     return socket_addr;
   }
+
+  void dump(Formatter *f) const {
+    f->dump_stream("name") << name;
+    f->dump_stream("entity_name") << entity_name;
+    f->dump_object("addrs", addrs);
+    f->dump_object("socket_addr", socket_addr);
+    f->dump_string("con_type", ceph_entity_type_name(con_type));
+    f->dump_unsigned("con_features", con_features);
+    f->dump_stream("con_features_hex") << std::hex << con_features << std::dec;
+    f->dump_string("con_features_release",
+		   ceph_release_name(ceph_release_from_features(con_features)));
+    f->dump_bool("open", !closed);
+    f->dump_object("caps", caps);
+    f->dump_bool("authenticated", authenticated);
+    f->dump_unsigned("osd_epoch", osd_epoch);
+    f->dump_string("remote_host", remote_host);
+  }
 };
 
 
