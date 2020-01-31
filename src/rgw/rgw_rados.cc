@@ -1746,21 +1746,23 @@ int RGWRados::Bucket::List::list_objects_ordered(
 
   result->clear();
 
+  // use a local marker; either the marker will have a previous entry
+  // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.ns);
+			 params.marker.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-                             params.ns);
+			     params.end_marker.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
 
   rgw_obj_key prefix_obj(params.prefix);
-  prefix_obj.ns = params.ns;
+  prefix_obj.set_ns(params.ns);
   string cur_prefix = prefix_obj.get_index_key_name();
   string after_delim_s; /* needed in !params.delim.empty() AND later */
 
@@ -1858,8 +1860,8 @@ int RGWRados::Bucket::List::list_objects_ordered(
       }
 
       if (count < max) {
-        params.marker = index_key;
-        next_marker = index_key;
+	params.marker = index_key;
+	next_marker = index_key;
       }
 
       if (params.filter &&
@@ -2038,21 +2040,23 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
 
   result->clear();
 
+  // use a local marker; either the marker will have a previous entry
+  // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.ns);
+			 params.marker.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-                             params.ns);
+			     params.end_marker.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
 
   rgw_obj_key prefix_obj(params.prefix);
-  prefix_obj.ns = params.ns;
+  prefix_obj.set_ns(params.ns);
   string cur_prefix = prefix_obj.get_index_key_name();
 
   while (truncated && count <= max) {
@@ -2077,6 +2081,11 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
     for (auto& entry : ent_list) {
       rgw_obj_index_key index_key = entry.key;
       rgw_obj_key obj(index_key);
+
+      if (count < max) {
+	params.marker.set(index_key);
+	next_marker.set(index_key);
+      }
 
       /* note that parse_raw_oid() here will not set the correct
        * object's instance, as rgw_obj_index_key encodes that
@@ -2103,11 +2112,6 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
 	// we're not guaranteed items will come in order, so we have
 	// to loop through all
 	continue;
-      }
-
-      if (count < max) {
-	params.marker.set(index_key);
-        next_marker.set(index_key);
       }
 
       if (params.filter && !params.filter->filter(obj.name, index_key.name))
