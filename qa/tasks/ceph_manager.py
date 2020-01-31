@@ -761,6 +761,8 @@ class OSDThrasher(Thrasher):
         """
         if pool is None:
             pool = self.ceph_manager.get_pool()
+            if not pool:
+                return
             force = False
         else:
             force = True
