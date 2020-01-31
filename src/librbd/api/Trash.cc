@@ -547,6 +547,17 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
                << dendl;
   }
 
+  std::vector<librbd::trash_image_info_t> trash_entries;
+  r = librbd::api::Trash<I>::list(io_ctx, trash_entries, true);
+  if (r < 0) {
+    return r;
+  }
+  if(trash_entries.empty()) {
+    r = io_ctx.remove(RBD_TRASH);
+    if(r < 0) {
+      lderr(cct) << "error: faile remove rbd_trash:" << cpp_strerror(r) << dendl;
+    }
+  }
   return 0;
 }
 
