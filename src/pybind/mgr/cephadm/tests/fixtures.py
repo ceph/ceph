@@ -58,12 +58,17 @@ def wait(m, c):
 
     try:
         import pydevd  # if in debugger
+        in_debug = True
+    except ImportError:
+        in_debug = False
+
+    if in_debug:
         while True:    # don't timeout
             if c.is_finished:
                 raise_if_exception(c)
                 return c.result
             time.sleep(0.1)
-    except ImportError:  # not in debugger
+    else:
         for i in range(30):
             if i % 10 == 0:
                 m.process([c])
