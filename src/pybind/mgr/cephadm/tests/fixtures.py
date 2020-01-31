@@ -49,6 +49,7 @@ def cephadm_module():
             'upgrade_state': None,
         }
         m.__init__('cephadm', 0, 0)
+        m._cluster_fsid = "fsid"
         yield m
 
 

@@ -85,7 +85,6 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_service_action(self, _send_command, _get_connection, cephadm_module):
-        cephadm_module._cluster_fsid = "fsid"
         cephadm_module.service_cache_timeout = 10
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.describe_service(refresh=True)
@@ -143,7 +142,6 @@ class TestCephadm(object):
         ])
     ))
     def test_remove_osds(self, cephadm_module):
-        cephadm_module._cluster_fsid = "fsid"
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.describe_service(refresh=True)
             wait(cephadm_module, c)
@@ -168,6 +166,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_rgw(self, _send_command, _get_connection, cephadm_module):
+
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
@@ -188,7 +187,6 @@ class TestCephadm(object):
         ])
     ))
     def test_remove_rgw(self, cephadm_module):
-        cephadm_module._cluster_fsid = "fsid"
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.describe_service(refresh=True)
             wait(cephadm_module, c)
