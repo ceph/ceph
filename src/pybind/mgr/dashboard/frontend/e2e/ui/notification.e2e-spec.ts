@@ -15,12 +15,12 @@ describe('Notification page', () => {
 
     if (await notification.getCloseBtn().isPresent()) {
       await notification.waitClickableAndClick(notification.getCloseBtn());
-      await notification.waitStaleness(notification.getSidebar());
+      await notification.waitInvisibility(notification.getSidebar());
     }
   });
 
   it('should open notification sidebar', async () => {
-    await notification.waitStaleness(notification.getSidebar());
+    await notification.waitInvisibility(notification.getSidebar());
     await notification.open();
     await notification.waitVisibility(notification.getSidebar());
   });
