@@ -73,6 +73,15 @@ Options
 :Type: Integer (0 or 1)
 :Default: 0
 
+``max_connection_backlog``
+
+:Description: Optional value to define the maximum size for the queue of
+              connections waiting to be accepted. If not configured, the value
+              from ``boost::asio::socket_base::max_connections`` will be used.
+
+:Type: Integer
+:Default: None
+
 
 Civetweb
 ========
