@@ -64,8 +64,10 @@ void DemoteRequest<I>::create_snapshot() {
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_create_snapshot>(this);
 
-  auto req = CreatePrimaryRequest<I>::create(m_image_ctx, true, false, nullptr,
-                                             ctx);
+  auto req = CreatePrimaryRequest<I>::create(
+    m_image_ctx,
+    (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
+     snapshot::CREATE_PRIMARY_FLAG_DEMOTED), nullptr, ctx);
   req->send();
 }
 

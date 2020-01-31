@@ -7,6 +7,7 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/mirror/snapshot/Types.h"
 
 #include <string>
 #include <set>
@@ -23,15 +24,14 @@ namespace snapshot {
 template <typename ImageCtxT = librbd::ImageCtx>
 class CreatePrimaryRequest {
 public:
-  static CreatePrimaryRequest *create(ImageCtxT *image_ctx, bool demoted,
-                                      bool force, uint64_t *snap_id,
+  static CreatePrimaryRequest *create(ImageCtxT *image_ctx, uint32_t flags,
+                                      uint64_t *snap_id,
                                       Context *on_finish) {
-    return new CreatePrimaryRequest(image_ctx, demoted, force, snap_id,
-                                    on_finish);
+    return new CreatePrimaryRequest(image_ctx, flags, snap_id, on_finish);
   }
 
-  CreatePrimaryRequest(ImageCtxT *image_ctx, bool demoted, bool force,
-                       uint64_t *snap_id, Context *on_finish);
+  CreatePrimaryRequest(ImageCtxT *image_ctx, uint32_t flags, uint64_t *snap_id,
+                       Context *on_finish);
 
   void send();
 
@@ -63,8 +63,7 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
-  const bool m_demoted;
-  const bool m_force;
+  const uint32_t m_flags;
   uint64_t *m_snap_id;
   Context *m_on_finish;
 
