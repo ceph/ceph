@@ -237,8 +237,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, Success) {
   expect_create_snapshot(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, false, false,
-                                          nullptr, &ctx);
+  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, 0U, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -257,8 +256,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, RefreshError) {
   expect_refresh_image(mock_image_ctx, true, -EINVAL);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, false, false,
-                                          nullptr, &ctx);
+  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, 0U, nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -280,8 +278,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, GetMirrorImageError) {
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, -EINVAL);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, false, false,
-                                          nullptr, &ctx);
+  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, 0U, nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -305,8 +302,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, CanNotError) {
   expect_can_create_primary_snapshot(mock_utils, false, false, false);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, false, false,
-                                          nullptr, &ctx);
+  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, 0U, nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -333,8 +329,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, GetMirrorPeersError) {
                             "mirror", "fsid"}}, -EINVAL);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, false, false,
-                                          nullptr, &ctx);
+  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, 0U, nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -362,8 +357,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, CreateSnapshotError) {
   expect_create_snapshot(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, false, false,
-                                          nullptr, &ctx);
+  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, 0U, nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -400,8 +394,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPeer) {
   expect_unlink_peer(mock_image_ctx, mock_unlink_peer_request, snap_id, "uuid",
                      0);
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, false, false,
-                                          nullptr, &ctx);
+  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, 0U, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }

@@ -322,8 +322,10 @@ void PromoteRequest<I>::create_promote_snapshot() {
     PromoteRequest<I>,
     &PromoteRequest<I>::handle_create_promote_snapshot>(this);
 
-  auto req = CreatePrimaryRequest<I>::create(m_image_ctx, false, true, nullptr,
-                                             ctx);
+  auto req = CreatePrimaryRequest<I>::create(
+    m_image_ctx,
+    (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
+     snapshot::CREATE_PRIMARY_FLAG_FORCE), nullptr, ctx);
   req->send();
 }
 

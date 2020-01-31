@@ -26,10 +26,10 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-CreatePrimaryRequest<I>::CreatePrimaryRequest(I *image_ctx, bool demoted,
-                                              bool force, uint64_t *snap_id,
+CreatePrimaryRequest<I>::CreatePrimaryRequest(I *image_ctx, uint32_t flags,
+                                              uint64_t *snap_id,
                                               Context *on_finish)
-  : m_image_ctx(image_ctx), m_demoted(demoted), m_force(force),
+  : m_image_ctx(image_ctx), m_flags(flags),
     m_snap_id(snap_id), m_on_finish(on_finish) {
   m_default_ns_ctx.dup(m_image_ctx->md_ctx);
   m_default_ns_ctx.set_namespace("");
@@ -111,8 +111,10 @@ void CreatePrimaryRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  if (!util::can_create_primary_snapshot(m_image_ctx, m_demoted, m_force,
-                                         nullptr)) {
+  if (!util::can_create_primary_snapshot(
+        m_image_ctx,
+        ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0),
+        ((m_flags & CREATE_PRIMARY_FLAG_FORCE) != 0), nullptr)) {
     finish(-EINVAL);
     return;
   }
@@ -166,7 +168,8 @@ void CreatePrimaryRequest<I>::handle_get_mirror_peers(int r) {
     m_mirror_peer_uuids.insert(peer.uuid);
   }
 
-  if (m_mirror_peer_uuids.empty()) {
+  if (m_mirror_peer_uuids.empty() &&
+      ((m_flags & CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS) == 0)) {
     lderr(cct) << "no mirror tx peers configured for the pool" << dendl;
     finish(-EINVAL);
     return;
@@ -180,7 +183,8 @@ void CreatePrimaryRequest<I>::create_snapshot() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{m_demoted, m_mirror_peer_uuids};
+  cls::rbd::MirrorPrimarySnapshotNamespace ns{
+    ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0), m_mirror_peer_uuids};
   auto ctx = create_context_callback<
     CreatePrimaryRequest<I>,
     &CreatePrimaryRequest<I>::handle_create_snapshot>(this);
@@ -201,7 +205,8 @@ void CreatePrimaryRequest<I>::handle_create_snapshot(int r) {
 
   if (m_snap_id != nullptr) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
-    cls::rbd::MirrorPrimarySnapshotNamespace ns{m_demoted, m_mirror_peer_uuids};
+    cls::rbd::MirrorPrimarySnapshotNamespace ns{
+      ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0), m_mirror_peer_uuids};
     *m_snap_id = m_image_ctx->get_snap_id(ns, m_snap_name);
   }
 

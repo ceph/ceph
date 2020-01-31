@@ -116,12 +116,12 @@ struct CreatePrimaryRequest<MockTestImageCtx> {
   bool force = false;
   Context* on_finish = nullptr;
   static CreatePrimaryRequest* s_instance;
-  static CreatePrimaryRequest *create(MockTestImageCtx *image_ctx, bool demoted,
-                                      bool force, uint64_t *snap_id,
+  static CreatePrimaryRequest *create(MockTestImageCtx *image_ctx,
+                                      uint32_t flags, uint64_t *snap_id,
                                       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
-    s_instance->demoted = demoted;
-    s_instance->force = force;
+    s_instance->demoted = ((flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0);
+    s_instance->force = ((flags & CREATE_PRIMARY_FLAG_FORCE) != 0);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

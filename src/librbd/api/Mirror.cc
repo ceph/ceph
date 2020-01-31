@@ -1818,7 +1818,7 @@ int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
 
   C_SaferCond on_finish;
   auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
-    ictx, false, false, snap_id, &on_finish);
+    ictx, 0U, snap_id, &on_finish);
   req->send();
   return on_finish.wait();
 }
