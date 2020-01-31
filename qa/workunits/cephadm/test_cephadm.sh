@@ -24,10 +24,13 @@ OSD_TO_CREATE=6
 OSD_VG_NAME=${SCRIPT_NAME%.*}
 OSD_LV_NAME=${SCRIPT_NAME%.*}
 
+CEPHADM_SRC_DIR=${SCRIPT_DIR}/../../../src/cephadm
+CEPHADM_SAMPLES_DIR=${CEPHADM_SRC_DIR}/samples
+
 [ -z "$SUDO" ] && SUDO=sudo
 
 if [ -z "$CEPHADM" ]; then
-    CEPHADM=${SCRIPT_DIR}/../../../src/cephadm/cephadm
+    CEPHADM=${CEPHADM_SRC_DIR}/cephadm
 fi
 
 # at this point, we need $CEPHADM set
@@ -203,6 +206,31 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
             ceph orchestrator osd create \
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
+
+# add node-exporter
+$CEPHADM --image 'prom/node-exporter:latest' \
+    deploy --name node-exporter.a --fsid $FSID
+sleep 90
+out=$(curl 'http://localhost:9100')
+echo $out | grep -q 'Node Exporter'
+
+# add prometheus
+cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
+        $CEPHADM --image 'prom/prometheus:latest' \
+            deploy --name prometheus.a --fsid $FSID \
+                   --config-json -
+sleep 90
+out=$(curl 'localhost:9095/api/v1/query?query=up')
+echo $out | jq -e '.["status"] == "success"'
+
+# add grafana
+cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
+        $CEPHADM --image 'pcuzner/ceph-grafana-el8:latest' \
+            deploy --name grafana.a --fsid $FSID \
+                   --config-json -
+sleep 90
+out=$(curl --insecure option 'https://localhost:3000')
+echo $out | grep -q 'grafana'
 
 ## run
 # WRITE ME
