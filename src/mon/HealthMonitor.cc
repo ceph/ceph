@@ -217,9 +217,9 @@ bool HealthMonitor::preprocess_command(MonOpRequestRef op)
   // more sanity checks
   try {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval(cmdmap, "format", format);
     string prefix;
-    cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+    cmd_getval(cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
     mon->reply_command(op, -EINVAL, e.what(), rdata, get_last_committed());
     return true;
@@ -248,27 +248,27 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   int r = 0;
 
   if (prefix == "health mute") {
     string code;
     bool sticky = false;
-    if (!cmd_getval(g_ceph_context, cmdmap, "code", code) ||
+    if (!cmd_getval(cmdmap, "code", code) ||
 	code == "") {
       r = -EINVAL;
       ss << "must specify an alert code to mute";
       goto out;
     }
-    cmd_getval(g_ceph_context, cmdmap, "sticky", sticky);
+    cmd_getval(cmdmap, "sticky", sticky);
     string ttl_str;
     utime_t ttl;
-    if (cmd_getval(g_ceph_context, cmdmap, "ttl", ttl_str)) {
+    if (cmd_getval(cmdmap, "ttl", ttl_str)) {
       auto secs = parse_timespan(ttl_str);
       if (secs == 0s) {
 	r = -EINVAL;
@@ -300,7 +300,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     m.count = count;
   } else if (prefix == "health unmute") {
     string code;
-    if (cmd_getval(g_ceph_context, cmdmap, "code", code)) {
+    if (cmd_getval(cmdmap, "code", code)) {
       pending_mutes.erase(code);
     } else {
       pending_mutes.clear();

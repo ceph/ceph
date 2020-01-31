@@ -226,7 +226,7 @@ bool ClusterState::asok_command(
   if (admin_command == "dump_osd_network") {
     int64_t value = 0;
     // Default to health warning level if nothing specified
-    if (!(cmd_getval(g_ceph_context, cmdmap, "value", value))) {
+    if (!(cmd_getval(cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
       value = static_cast<int64_t>(g_ceph_context->_conf.get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {

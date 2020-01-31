@@ -56,22 +56,22 @@ static const string MDS_HEALTH_PREFIX("mds_health");
  * Specialized implementation of cmd_getval to allow us to parse
  * out strongly-typedef'd types
  */
-template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+template<> bool cmd_getval(const cmdmap_t& cmdmap,
 			   const std::string& k, mds_gid_t &val)
 {
-  return cmd_getval(cct, cmdmap, k, (int64_t&)val);
+  return cmd_getval(cmdmap, k, (int64_t&)val);
 }
 
-template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+template<> bool cmd_getval(const cmdmap_t& cmdmap,
 			   const std::string& k, mds_rank_t &val)
 {
-  return cmd_getval(cct, cmdmap, k, (int64_t&)val);
+  return cmd_getval(cmdmap, k, (int64_t&)val);
 }
 
-template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+template<> bool cmd_getval(const cmdmap_t& cmdmap,
 			   const std::string& k, MDSMap::DaemonState &val)
 {
-  return cmd_getval(cct, cmdmap, k, (int64_t&)val);
+  return cmd_getval(cmdmap, k, (int64_t&)val);
 }
 
 // my methods
@@ -925,9 +925,9 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   std::unique_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = op->get_session();
@@ -948,7 +948,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "mds ok-to-stop") {
     vector<string> ids;
-    if (!cmd_getval(g_ceph_context, cmdmap, "ids", ids)) {
+    if (!cmd_getval(cmdmap, "ids", ids)) {
       r = -EINVAL;
       ss << "must specify mds id";
       goto out;
@@ -1003,7 +1003,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 
     const FSMap *fsmapp = &fsmap;
     FSMap dummy;
-    if (cmd_getval(g_ceph_context, cmdmap, "epoch", epocharg)) {
+    if (cmd_getval(cmdmap, "epoch", epocharg)) {
       epoch = epocharg;
       bufferlist b;
       int err = get_version(epoch, b);
@@ -1037,7 +1037,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
 
     string who;
-    bool all = !cmd_getval(g_ceph_context, cmdmap, "who", who);
+    bool all = !cmd_getval(cmdmap, "who", who);
     dout(1) << "all = " << all << dendl;
     if (all) {
       r = 0;
@@ -1083,7 +1083,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     string field;
-    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    cmd_getval(cmdmap, "property", field);
     count_metadata(field, f.get());
     f->flush(ds);
     r = 0;
@@ -1099,7 +1099,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       r = 0;
   } else if (prefix == "fs get") {
     string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(cmdmap, "fs_name", fs_name);
     const auto &fs = fsmap.get_filesystem(fs_name);
     if (fs == nullptr) {
       ss << "filesystem '" << fs_name << "' not found";
@@ -1291,7 +1291,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   /* Refuse access if message not associated with a valid session */
   MonSession *session = op->get_session();
@@ -1376,17 +1376,17 @@ int MDSMonitor::filesystem_command(
   op->mark_mdsmon_event(__func__);
   int r = 0;
   string whostr;
-  cmd_getval(g_ceph_context, cmdmap, "role", whostr);
+  cmd_getval(cmdmap, "role", whostr);
 
   if (prefix == "mds set_state") {
     mds_gid_t gid;
-    if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
+    if (!cmd_getval(cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
     }
     MDSMap::DaemonState state;
-    if (!cmd_getval(g_ceph_context, cmdmap, "state", state)) {
+    if (!cmd_getval(cmdmap, "state", state)) {
       ss << "error parsing 'state' string value '"
          << cmd_vartype_stringify(cmdmap.at("state")) << "'";
       return -EINVAL;
@@ -1401,7 +1401,7 @@ int MDSMonitor::filesystem_command(
     }
   } else if (prefix == "mds fail") {
     string who;
-    cmd_getval(g_ceph_context, cmdmap, "role_or_gid", who);
+    cmd_getval(cmdmap, "role_or_gid", who);
 
     MDSMap::mds_info_t failed_info;
     r = fail_mds(fsmap, ss, who, &failed_info);
@@ -1417,7 +1417,7 @@ int MDSMonitor::filesystem_command(
     }
   } else if (prefix == "mds rm") {
     mds_gid_t gid;
-    if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
+    if (!cmd_getval(cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
@@ -1440,7 +1440,7 @@ int MDSMonitor::filesystem_command(
     }
   } else if (prefix == "mds rmfailed") {
     bool confirm = false;
-    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", confirm);
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
     if (!confirm) {
          ss << "WARNING: this can make your filesystem inaccessible! "
                "Add --yes-i-really-mean-it if you are sure you wish to continue.";
@@ -1448,7 +1448,7 @@ int MDSMonitor::filesystem_command(
     }
     
     std::string role_str;
-    cmd_getval(g_ceph_context, cmdmap, "role", role_str);
+    cmd_getval(cmdmap, "role", role_str);
     mds_role_t role;
     int r = fsmap.parse_role(role_str, &role, ss);
     if (r < 0) {
@@ -1467,7 +1467,7 @@ int MDSMonitor::filesystem_command(
     return 0;
   } else if (prefix == "mds compat rm_compat") {
     int64_t f;
-    if (!cmd_getval(g_ceph_context, cmdmap, "feature", f)) {
+    if (!cmd_getval(cmdmap, "feature", f)) {
       ss << "error parsing feature value '"
          << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
@@ -1483,7 +1483,7 @@ int MDSMonitor::filesystem_command(
     r = 0;
   } else if (prefix == "mds compat rm_incompat") {
     int64_t f;
-    if (!cmd_getval(g_ceph_context, cmdmap, "feature", f)) {
+    if (!cmd_getval(cmdmap, "feature", f)) {
       ss << "error parsing feature value '"
          << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
@@ -1499,7 +1499,7 @@ int MDSMonitor::filesystem_command(
     r = 0;
   } else if (prefix == "mds repaired") {
     std::string role_str;
-    cmd_getval(g_ceph_context, cmdmap, "role", role_str);
+    cmd_getval(cmdmap, "role", role_str);
     mds_role_t role;
     r = fsmap.parse_role(role_str, &role, ss);
     if (r < 0) {
@@ -1516,7 +1516,7 @@ int MDSMonitor::filesystem_command(
     r = 0;
   } else if (prefix == "mds freeze") {
     std::string who;
-    cmd_getval(g_ceph_context, cmdmap, "role_or_gid", who);
+    cmd_getval(cmdmap, "role_or_gid", who);
     mds_gid_t gid = gid_from_arg(fsmap, who, ss);
     if (gid == MDS_GID_NONE) {
       return -EINVAL;
@@ -1525,7 +1525,7 @@ int MDSMonitor::filesystem_command(
     bool freeze = false;
     {
       std::string str;
-      cmd_getval(g_ceph_context, cmdmap, "val", str);
+      cmd_getval(cmdmap, "val", str);
       if ((r = parse_bool(str, &freeze, ss)) != 0) {
         return r;
       }

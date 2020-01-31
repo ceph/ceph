@@ -154,17 +154,17 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   bufferlist odata;
   if (prefix == "config help") {
     stringstream ss;
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "key", name);
+    cmd_getval(cmdmap, "key", name);
     const Option *opt = g_conf().find_option(name);
     if (!opt) {
       opt = mon->mgrmon()->find_module_option(name);
@@ -263,7 +263,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "config get") {
     string who, name;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval(cmdmap, "who", who);
 
     EntityName entity;
     if (!entity.from_str(who) &&
@@ -294,7 +294,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       device_class,
       &src);
 
-    if (cmd_getval(g_ceph_context, cmdmap, "key", name)) {
+    if (cmd_getval(cmdmap, "key", name)) {
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon->mgrmon()->find_module_option(name);
@@ -374,7 +374,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "config log") {
     int64_t num = 10;
-    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    cmd_getval(cmdmap, "num", num);
     ostringstream ds;
     if (f) {
       f->open_array_section("changesets");
@@ -490,7 +490,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
   bufferlist odata;
 
   if (prefix == "config set" ||
@@ -498,10 +498,10 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     string who;
     string name, value;
     bool force = false;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    cmd_getval(g_ceph_context, cmdmap, "value", value);
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval(cmdmap, "who", who);
+    cmd_getval(cmdmap, "name", name);
+    cmd_getval(cmdmap, "value", value);
+    cmd_getval(cmdmap, "force", force);
 
     if (prefix == "config set" && !force) {
       const Option *opt = g_conf().find_option(name);
@@ -559,7 +559,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     goto update;
   } else if (prefix == "config reset") {
     int64_t revert_to = -1;
-    cmd_getval(g_ceph_context, cmdmap, "num", revert_to);
+    cmd_getval(cmdmap, "num", revert_to);
     if (revert_to < 0 ||
         revert_to > (int64_t)version) {
       err = -EINVAL;

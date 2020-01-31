@@ -956,7 +956,7 @@ void PrimaryLogPG::do_command(
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
   string format;
-  cmd_getval(cct, cmdmap, "format", format);
+  cmd_getval(cmdmap, "format", format);
   std::unique_ptr<Formatter> f(Formatter::create(
 				 format, "json-pretty", "json-pretty"));
   int ret = 0;
@@ -968,7 +968,7 @@ void PrimaryLogPG::do_command(
   // - ceph tell <pgid> foo -> prefix=foo
   string prefix(orig_prefix);
   string command;
-  cmd_getval(cct, cmdmap, "cmd", command);
+  cmd_getval(cmdmap, "cmd", command);
   if (command.size()) {
     prefix = command;
   }
@@ -994,7 +994,7 @@ void PrimaryLogPG::do_command(
 
   else if (prefix == "mark_unfound_lost") {
     string mulcmd;
-    cmd_getval(cct, cmdmap, "mulcmd", mulcmd);
+    cmd_getval(cmdmap, "mulcmd", mulcmd);
     int mode = -1;
     if (mulcmd == "revert") {
       if (pool.info.is_erasure()) {
@@ -1040,7 +1040,7 @@ void PrimaryLogPG::do_command(
     hobject_t offset;
     string offset_json;
     bool show_offset = false;
-    if (cmd_getval(cct, cmdmap, "offset", offset_json)) {
+    if (cmd_getval(cmdmap, "offset", offset_json)) {
       json_spirit::Value v;
       try {
 	if (!json_spirit::read(offset_json, v))
@@ -1101,7 +1101,7 @@ void PrimaryLogPG::do_command(
 	   prefix == "deep_scrub") {
     bool deep = (prefix == "deep_scrub");
     int64_t time;
-    cmd_getval(cct, cmdmap, "time", time, (int64_t)0);
+    cmd_getval(cmdmap, "time", time, (int64_t)0);
 
     if (is_primary()) {
       const pg_pool_t *p = &pool.info;

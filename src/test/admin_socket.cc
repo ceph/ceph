@@ -120,7 +120,7 @@ class MyTest : public AdminSocketHook {
 	   std::ostream& ss,
 	   bufferlist& result) override {
     std::vector<std::string> args;
-    cmd_getval(g_ceph_context, cmdmap, "args", args);
+    cmd_getval(cmdmap, "args", args);
     result.append(command);
     result.append("|");
     string resultstr;
@@ -155,7 +155,7 @@ class MyTest2 : public AdminSocketHook {
 	   std::ostream& ss,
 	   bufferlist& result) override {
     std::vector<std::string> args;
-    cmd_getval(g_ceph_context, cmdmap, "args", args);
+    cmd_getval(cmdmap, "args", args);
     result.append(command);
     result.append("|");
     string resultstr;
