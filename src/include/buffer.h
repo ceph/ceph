@@ -232,6 +232,10 @@ inline namespace v14_2_0 {
 	if (pos > end_ptr)
 	  throw end_of_buffer();
       }
+      iterator_impl& operator+=(size_t len) {
+        advance(len);
+        return *this;
+      }
 
       const char *get_pos() {
 	return pos;
@@ -717,10 +721,13 @@ inline namespace v14_2_0 {
 	return p == ls->end();
 	//return off == bl->length();
       }
-
       void advance(unsigned o);
       void seek(unsigned o);
       char operator*() const;
+      iterator_impl& operator+=(unsigned o) {
+        advance(o);
+        return *this;
+      }
       iterator_impl& operator++();
       ptr get_current_ptr() const;
       bool is_pointing_same_raw(const ptr& other) const;
