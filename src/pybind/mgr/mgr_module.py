@@ -584,6 +584,15 @@ class MgrModule(ceph_module.BaseMgrModule):
     def version(self):
         return self._version
 
+    @property
+    def release_name(self):
+        """
+        Get the release name of the Ceph version, e.g. 'nautilus' or 'octopus'.
+        :return: Returns the release name of the Ceph version in lower case.
+        :rtype: str
+        """
+        return self._ceph_get_release_name()
+
     def get_context(self):
         """
         :return: a Python capsule containing a C++ CephContext pointer
@@ -1317,6 +1326,17 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param int query_id: query ID
         """
         return self._ceph_get_osd_perf_counters(query_id)
+
+    def is_authorized(self, arguments):
+        """
+        Verifies that the current session caps permit executing the py service
+        or current module with the provided arguments. This provides a generic
+        way to allow modules to restrict by more fine-grained controls (e.g.
+        pools).
+
+        :param arguments: dict of key/value arguments to test
+        """
+        return self._ceph_is_authorized(arguments)
 
 
 class PersistentStoreDict(object):

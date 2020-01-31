@@ -126,8 +126,11 @@ template <typename I>
 void ObjectRequest<I>::add_write_hint(I& image_ctx,
                                       librados::ObjectWriteOperation *wr) {
   if (image_ctx.enable_alloc_hint) {
-    wr->set_alloc_hint(image_ctx.get_object_size(),
-                       image_ctx.get_object_size());
+    wr->set_alloc_hint2(image_ctx.get_object_size(),
+                        image_ctx.get_object_size(),
+                        image_ctx.alloc_hint_flags);
+  } else if (image_ctx.alloc_hint_flags != 0U) {
+    wr->set_alloc_hint2(0, 0, image_ctx.alloc_hint_flags);
   }
 }
 

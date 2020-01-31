@@ -393,6 +393,7 @@ public:
    */
   void cull(const std::string& svc_name,
 	    const std::set<std::string>& names_exist);
+  void cull_services(const std::set<std::string>& types_exist);
 };
 
 #endif

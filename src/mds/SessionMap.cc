@@ -549,16 +549,19 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
       auto p2 = p;
       Session *s = new Session(ConnectionRef());
       s->info.decode(p);
-      if (session_map.count(s->info.inst.name)) {
-	// eager client connected too fast!  aie.
-	dout(10) << " already had session for " << s->info.inst.name << ", recovering" << dendl;
-	entity_name_t n = s->info.inst.name;
-	delete s;
-	s = session_map[n];
-	p = p2;
-	s->info.decode(p);
-      } else {
-	session_map[s->info.inst.name] = s;
+      {
+        auto& name = s->info.inst.name;
+        auto it = session_map.find(name);
+        if (it != session_map.end()) {
+	  // eager client connected too fast!  aie.
+	  dout(10) << " already had session for " << name << ", recovering" << dendl;
+	  delete s;
+	  s = it->second;
+	  p = p2;
+	  s->info.decode(p);
+        } else {
+	  it->second = s;
+        }
       }
       s->set_state(Session::STATE_OPEN);
       s->set_load_avg_decay_rate(decay_rate);
@@ -567,21 +570,33 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
   }
 }
 
+void Session::dump(Formatter *f) const
+{
+  f->dump_int("id", info.inst.name.num());
+  f->dump_object("entity", info.inst);
+  f->dump_string("state", get_state_name());
+  f->dump_int("num_leases", leases.size());
+  f->dump_int("num_caps", caps.size());
+  if (is_open() || is_stale()) {
+    f->dump_unsigned("request_load_avg", get_load_avg());
+  }
+  f->dump_float("uptime", get_session_uptime());
+  f->dump_unsigned("requests_in_flight", get_request_count());
+  f->dump_unsigned("completed_requests", get_num_completed_requests());
+  f->dump_bool("reconnecting", reconnecting);
+  f->dump_object("recall_caps", recall_caps);
+  f->dump_object("release_caps", release_caps);
+  f->dump_object("recall_caps_throttle", recall_caps_throttle);
+  f->dump_object("recall_caps_throttle2o", recall_caps_throttle2o);
+  f->dump_object("session_cache_liveness", session_cache_liveness);
+  info.dump(f);
+}
+
 void SessionMapStore::dump(Formatter *f) const
 {
-  f->open_array_section("Sessions");
-  for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-       p != session_map.end();
-       ++p)  {
-    f->open_object_section("Session");
-    f->open_object_section("entity name");
-    p->first.dump(f);
-    f->close_section(); // entity name
-    f->dump_string("state", p->second->get_state_name());
-    f->open_object_section("Session info");
-    p->second->info.dump(f);
-    f->close_section(); // Session info
-    f->close_section(); // Session
+  f->open_array_section("sessions");
+  for (const auto& p : session_map) {
+    f->dump_object("session", *p.second);
   }
   f->close_section(); // Sessions
 }
@@ -871,18 +886,16 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
  * Calculate the length of the `requests` member list,
  * because elist does not have a size() method.
  *
- * O(N) runtime.  This would be const, but elist doesn't
- * have const iterators.
+ * O(N) runtime.
  */
-size_t Session::get_request_count()
+size_t Session::get_request_count() const
 {
   size_t result = 0;
 
-  elist<MDRequestImpl*>::iterator p = requests.begin(
-      member_offset(MDRequestImpl, item_session_request));
-  while (!p.end()) {
+  auto it = requests.begin(member_offset(MDRequestImpl, item_session_request));
+  while (!it.end()) {
     ++result;
-    ++p;
+    ++it;
   }
 
   return result;
@@ -998,7 +1011,7 @@ int Session::check_access(CInode *in, unsigned mask,
   if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
-			    socket_addr)) {
+			    info.inst.addr)) {
     return -EACCES;
   }
   return 0;
@@ -1019,8 +1032,7 @@ void SessionMap::hit_session(Session *session) {
   session->hit_session();
 }
 
-void SessionMap::handle_conf_change(const ConfigProxy &conf,
-                                    const std::set <std::string> &changed)
+void SessionMap::handle_conf_change(const std::set<std::string>& changed)
 {
   auto apply_to_open_sessions = [this](auto f) {
     if (auto it = by_state.find(Session::STATE_OPEN); it != by_state.end()) {
@@ -1037,7 +1049,6 @@ void SessionMap::handle_conf_change(const ConfigProxy &conf,
 
   if (changed.count("mds_request_load_average_decay_rate")) {
     auto d = g_conf().get_val<double>("mds_request_load_average_decay_rate");
-    dout(20) << __func__ << " decay rate changed to " << d << dendl;
 
     decay_rate = d;
     total_load_avg = DecayCounter(d);
@@ -1059,6 +1070,14 @@ void SessionMap::handle_conf_change(const ConfigProxy &conf,
     auto mut = [d](auto s) {
       s->recall_caps = DecayCounter(d);
       s->release_caps = DecayCounter(d);
+    };
+    apply_to_open_sessions(mut);
+  }
+  if (changed.count("mds_session_cache_liveness_decay_rate")) {
+    auto d = g_conf().get_val<double>("mds_session_cache_liveness_decay_rate");
+    auto mut = [d](auto s) {
+      s->session_cache_liveness = DecayCounter(d);
+      s->session_cache_liveness.hit(s->caps.size()); /* so the MDS doesn't immediately start trimming a new session */
     };
     apply_to_open_sessions(mut);
   }

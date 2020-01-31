@@ -1423,9 +1423,6 @@ void PG::calc_replicated_acting(
       acting_backfill->insert(up_cand);
       ss << " osd." << i << " (up) accepted " << cur_info << std::endl;
     }
-    if (want->size() >= size) {
-      break;
-    }
   }
 
   if (want->size() >= size) {
@@ -1790,6 +1787,14 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     } else {
       choose_async_recovery_replicated(all_info, auth_log_shard->second, &want, &want_async_recovery, get_osdmap());
     }
+  }
+  while (want.size() > pool.info.size) {
+    // async recovery should have taken out as many osds as it can.
+    // if not, then always evict the last peer
+    // (will get synchronously recovered later)
+    dout(10) << __func__ << " evicting osd." << want.back()
+               << " from oversized want " << want << dendl;
+    want.pop_back();
   }
   if (want != acting) {
     dout(10) << __func__ << " want " << want << " != acting " << acting
@@ -4146,6 +4151,9 @@ void PG::read_state(ObjectStore *store)
     else
       set_role(-1);
   }
+
+  // init pool options
+  store->set_collection_opts(ch, pool.info.opts);
 
   PG::RecoveryCtx rctx(0, 0, 0, new ObjectStore::Transaction);
   handle_initialize(&rctx);
@@ -6992,12 +7000,17 @@ void PG::handle_query_state(Formatter *f)
   recovery_state.handle_event(q, 0);
 }
 
-void PG::update_store_with_options()
+void PG::init_collection_pool_opts()
 {
   auto r = osd->store->set_collection_opts(ch, pool.info.opts);
-  if(r < 0 && r != -EOPNOTSUPP) {
+  if (r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << " set_collection_opts returns error:" << r << dendl;
   }
+}
+
+void PG::update_store_with_options()
+{
+  init_collection_pool_opts();
 }
 
 struct C_DeleteMore : public Context {

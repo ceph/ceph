@@ -17,7 +17,6 @@
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
 #include "rgw_rest_sts.h"
-#include "rgw_auth_s3.h"
 
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
@@ -359,7 +358,6 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
            if (key == "RoleArn" || key == "Policy") {
             value = url_decode(value);
            }
-           ldout(s->cct, 10) << "Key: " << key << "Value: " << value << dendl;
            s->info.args.append(key, value);
          }
        }
@@ -416,7 +414,7 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
   string req;
   string first;
 
-  s->prot_flags |= RGW_REST_STS;
+  s->prot_flags = RGW_REST_STS;
 
   const char *p, *req_name;
   if (req_name = s->relative_uri.c_str(); *req_name == '?') {

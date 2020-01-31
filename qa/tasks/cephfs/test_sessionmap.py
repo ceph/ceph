@@ -106,7 +106,7 @@ class TestSessionMap(CephFSTestCase):
         table_json = json.loads(self.fs.table_tool(["0", "show", "session"]))
         log.info("SessionMap: {0}".format(json.dumps(table_json, indent=2)))
         self.assertEqual(table_json['0']['result'], 0)
-        self.assertEqual(len(table_json['0']['data']['Sessions']), 2)
+        self.assertEqual(len(table_json['0']['data']['sessions']), 2)
 
         # Now, induce a "force_open_sessions" event by exporting a dir
         self.mount_a.run_shell(["mkdir", "bravo"])
@@ -147,7 +147,7 @@ class TestSessionMap(CephFSTestCase):
         table_json = json.loads(self.fs.table_tool(["0", "show", "session"]))
         log.info("SessionMap: {0}".format(json.dumps(table_json, indent=2)))
         self.assertEqual(table_json['0']['result'], 0)
-        self.assertEqual(len(table_json['0']['data']['Sessions']), 0)
+        self.assertEqual(len(table_json['0']['data']['sessions']), 0)
 
     def _sudo_write_file(self, remote, path, data):
         """

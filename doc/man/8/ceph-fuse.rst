@@ -50,6 +50,10 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
+.. option:: -k <path-to-keyring>
+
+   Provide path to keyring; useful when it's absent in standard locations.
+
 .. option:: --client_mountpoint/-r root_directory
 
    Use root_directory as the mounted root, rather than the full Ceph tree.

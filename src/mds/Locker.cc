@@ -2155,6 +2155,7 @@ bool Locker::revoke_stale_caps(Session *session)
   // invalidate all caps
   session->inc_cap_gen();
 
+  bool ret = true;
   std::vector<CInode*> to_eval;
 
   for (auto p = session->caps.begin(); !p.end(); ) {
@@ -2171,8 +2172,10 @@ bool Locker::revoke_stale_caps(Session *session)
     if (!revoking)
       continue;
 
-    if (revoking & CEPH_CAP_ANY_WR)
-      return false;
+    if (revoking & CEPH_CAP_ANY_WR) {
+      ret = false;
+      break;
+    }
 
     int issued = cap->issued();
     CInode *in = cap->get_inode();
@@ -2207,7 +2210,7 @@ bool Locker::revoke_stale_caps(Session *session)
       request_inode_file_caps(in);
   }
 
-  return true;
+  return ret;
 }
 
 void Locker::resume_stale_caps(Session *session)
@@ -3041,14 +3044,14 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
       if (dn) {
 	ClientLease *l = dn->get_client_lease(client);
 	if (l) {
-	  dout(10) << "process_cap_release removing lease on " << *dn << dendl;
+	  dout(10) << __func__ << " removing lease on " << *dn << dendl;
 	  dn->remove_client_lease(l, this);
 	} else {
-	  dout(7) << "process_cap_release client." << client
+	  dout(7) << __func__ << " client." << client
 		  << " doesn't have lease on " << *dn << dendl;
 	}
       } else {
-	dout(7) << "process_cap_release client." << client << " released lease on dn "
+	dout(7) << __func__ << " client." << client << " released lease on dn "
 		<< dir->dirfrag() << "/" << dname << " which dne" << dendl;
       }
     }
@@ -3058,7 +3061,7 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
   if (!cap)
     return;
 
-  dout(10) << "process_cap_release client." << client << " " << ccap_string(caps) << " on " << *in
+  dout(10) << __func__ << " client." << client << " " << ccap_string(caps) << " on " << *in
 	   << (mdr ? "" : " (DEFERRED, no mdr)")
 	   << dendl;
     

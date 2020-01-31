@@ -154,6 +154,8 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
   /* get sha1 */
   for (off_t i = 0; i < num; i++)
   {
+    // FIPS zeroization audit 20191116: this memset is not intended to
+    // wipe out a secret after use.
     memset(sha, 0x00, sizeof(sha));
     h->Update((unsigned char *)pstr, info.piece_length);
     h->Final((unsigned char *)sha);
@@ -164,11 +166,14 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
   /* process remain */
   if (0 != remain)
   {
+    // FIPS zeroization audit 20191116: this memset is not intended to
+    // wipe out a secret after use.
     memset(sha, 0x00, sizeof(sha));
     h->Update((unsigned char *)pstr, remain);
     h->Final((unsigned char *)sha);
     set_info_pieces(sha);
   }
+  ::ceph::crypto::zeroize_for_security(sha, sizeof(sha));
 }
 
 int seed::get_params()

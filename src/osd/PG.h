@@ -3138,6 +3138,9 @@ protected:
   // abstract bits
   friend class FlushState;
 
+public:
+  void init_collection_pool_opts();
+protected:
   virtual void on_role_change() = 0;
   virtual void on_pool_change() = 0;
   virtual void on_change(ObjectStore::Transaction *t) = 0;

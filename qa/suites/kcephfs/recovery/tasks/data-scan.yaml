@@ -11,6 +11,7 @@ overrides:
       - Scrub error on inode
       - Metadata damage detected
       - inconsistent rstat on inode
+      - Error recovering journal
 
 tasks:
   - cephfs_test_runner:

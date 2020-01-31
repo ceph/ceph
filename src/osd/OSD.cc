@@ -2462,7 +2462,7 @@ int OSD::set_numa_affinity()
 	      << " cpus "
 	      << cpu_set_to_str_list(numa_cpu_set_size, &numa_cpu_set)
 	      << dendl;
-      r = sched_setaffinity(getpid(), numa_cpu_set_size, &numa_cpu_set);
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
       if (r < 0) {
 	r = -errno;
 	derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
@@ -3983,6 +3983,12 @@ void OSD::create_recoverystate_perf()
 
 int OSD::shutdown()
 {
+  if (cct->_conf->osd_fast_shutdown) {
+    derr << "*** Immediate shutdown (osd_fast_shutdown=true) ***" << dendl;
+    cct->_log->flush();
+    _exit(0);
+  }
+
   if (!service.prepare_to_stop())
     return 0; // already shutting down
   osd_lock.Lock();
@@ -4756,6 +4762,8 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     info->past_intervals,
     false,
     rctx.transaction);
+
+  pg->init_collection_pool_opts();
 
   if (pg->is_primary()) {
     Mutex::Locker locker(m_perf_queries_lock);
@@ -9405,6 +9413,8 @@ void OSD::split_pgs(
       i->pgid,
       child,
       split_bits);
+
+    child->init_collection_pool_opts();
 
     child->finish_split_stats(*stat_iter, rctx->transaction);
     child->unlock();

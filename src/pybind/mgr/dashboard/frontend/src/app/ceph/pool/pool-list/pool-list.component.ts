@@ -95,14 +95,18 @@ export class PoolListComponent implements OnInit {
       }
     ];
 
-    this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
-      if (_.has(data, 'value')) {
-        const monSection = _.find(data.value, (v) => {
-          return v.section === 'mon';
-        }) || { value: false };
-        this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
-      }
-    });
+    // Note, we need read permissions to get the 'mon_allow_pool_delete'
+    // configuration option.
+    if (this.permissions.configOpt.read) {
+      this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
+        if (_.has(data, 'value')) {
+          const monSection = _.find(data.value, (v) => {
+            return v.section === 'mon';
+          }) || { value: false };
+          this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
+        }
+      });
+    }
   }
 
   ngOnInit() {

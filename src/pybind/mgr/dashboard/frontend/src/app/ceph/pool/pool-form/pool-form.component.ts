@@ -168,7 +168,6 @@ export class PoolFormComponent implements OnInit {
 
   private initInfo(info: PoolFormInfo) {
     this.form.silentSet('algorithm', info.bluestore_compression_algorithm);
-    info.compression_modes.push('unset');
     this.info = info;
   }
 
@@ -580,7 +579,7 @@ export class PoolFormComponent implements OnInit {
             externalFieldName: 'compression_mode',
             formControlName: 'mode',
             editable: true,
-            replaceFn: () => 'unset'
+            replaceFn: () => 'unset' // Is used if no compression is set
           },
           {
             externalFieldName: 'srcpool',

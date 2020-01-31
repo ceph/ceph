@@ -53,6 +53,7 @@
 #include "include/ceph_assert.h"
 #include "rgw_role.h"
 #include "rgw_rest_sts.h"
+#include "rgw_rest_iam.h"
 #include "rgw_sts.h"
 
 #define dout_context g_ceph_context
@@ -742,18 +743,11 @@ return 0;
 
 void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 {
-  
   if (!s->bucket_tenant.empty()) {
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
   s->formatter->dump_string("Name", s->bucket_name);
   s->formatter->dump_string("Prefix", prefix);
-  s->formatter->dump_string("KeyMarker", marker.name);
-  s->formatter->dump_string("VersionIdMarker", marker.instance);
-  if (is_truncated && !next_marker.empty()) {
-    s->formatter->dump_string("NextKeyMarker", next_marker.name);
-    s->formatter->dump_string("NextVersionIdMarker", next_marker.instance);
-  }
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty()) {
     s->formatter->dump_string("Delimiter", delimiter);
@@ -766,7 +760,12 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      s->formatter->dump_string("Prefix", pref_iter->first);
+      if (encode_key) {
+        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
+      } else {
+        s->formatter->dump_string("Prefix", pref_iter->first);
+      }
+
       s->formatter->close_section();
       }
     }
@@ -775,6 +774,10 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 void RGWListBucket_ObjStore_S3::send_versioned_response()
 {
   s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
+  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
+    s->formatter->dump_string("EncodingType", "url");
+    encode_key = true;
+  }
   RGWListBucket_ObjStore_S3::send_common_versioned_response();
   s->formatter->dump_string("KeyMarker", marker.name);
   s->formatter->dump_string("VersionIdMarker", marker.instance);
@@ -786,12 +789,6 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     else {
       s->formatter->dump_string("NextVersionIdMarker", next_marker.instance);
     }
-  }
-
-  bool encode_key = false;
-  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
-    s->formatter->dump_string("EncodingType", "url");
-    encode_key = true;
   }
 
   if (op_ret >= 0) {
@@ -873,7 +870,11 @@ void RGWListBucket_ObjStore_S3::send_common_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      s->formatter->dump_string("Prefix", pref_iter->first);
+      if (encode_key) {
+        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
+      } else {
+        s->formatter->dump_string("Prefix", pref_iter->first);
+      }
       s->formatter->close_section();
       }
     }
@@ -899,12 +900,11 @@ void RGWListBucket_ObjStore_S3::send_response()
   }
 
   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
-  RGWListBucket_ObjStore_S3::send_common_response();
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
+  RGWListBucket_ObjStore_S3::send_common_response();
     if (op_ret >= 0) {
       vector<rgw_bucket_dir_entry>::iterator iter;
       for (iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -953,7 +953,6 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
     s->formatter->dump_string("NextVersionIdContinuationToken", next_marker.instance);
   }
 
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
@@ -1018,7 +1017,12 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      s->formatter->dump_string("Prefix", pref_iter->first);
+      if (encode_key) {
+        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
+      } else {
+        s->formatter->dump_string("Prefix", pref_iter->first);
+      }
+
       s->formatter->dump_int("KeyCount",objs.size());
       if (start_after_exist) {
         s->formatter->dump_string("StartAfter", startAfter);
@@ -1052,13 +1056,12 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   }
 
   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
-
-  RGWListBucket_ObjStore_S3::send_common_response();
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
+
+  RGWListBucket_ObjStore_S3::send_common_response();
   if (op_ret >= 0) {
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -1557,15 +1560,6 @@ void RGWDeleteBucket_ObjStore_S3::send_response()
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s, this);
-
-  if (s->system_request) {
-    JSONFormatter f; /* use json formatter for system requests output */
-
-    f.open_object_section("info");
-    encode_json("object_ver", objv_tracker.read_version, &f);
-    f.close_section();
-    rgw_flush_formatter_and_reset(s, &f);
-  }
 }
 
 static inline void map_qs_metadata(struct req_state* s)
@@ -3461,46 +3455,12 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
-  int ret;
+  int ret = 0;
   bufferlist data;
   std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
-  if (ret < 0) {
-      return nullptr;
-  }
+  string post_body = data.to_str();
 
-  const auto post_body = data.to_str();
-
-  if (s->info.args.exists("Action")) {
-    string action = s->info.args.get("Action");
-    if (action.compare("CreateRole") == 0)
-      return new RGWCreateRole;
-    if (action.compare("DeleteRole") == 0)
-      return new RGWDeleteRole;
-    if (action.compare("GetRole") == 0)
-      return new RGWGetRole;
-    if (action.compare("UpdateAssumeRolePolicy") == 0)
-      return new RGWModifyRole;
-    if (action.compare("ListRoles") == 0)
-      return new RGWListRoles;
-    if (action.compare("PutRolePolicy") == 0)
-      return new RGWPutRolePolicy;
-    if (action.compare("GetRolePolicy") == 0)
-      return new RGWGetRolePolicy;
-    if (action.compare("ListRolePolicies") == 0)
-      return new RGWListRolePolicies;
-    if (action.compare("DeleteRolePolicy") == 0)
-      return new RGWDeleteRolePolicy;
-    if (action.compare("PutUserPolicy") == 0)
-      return new RGWPutUserPolicy;
-    if (action.compare("GetUserPolicy") == 0)
-      return new RGWGetUserPolicy;
-    if (action.compare("ListUserPolicies") == 0)
-      return new RGWListUserPolicies;
-    if (action.compare("DeleteUserPolicy") == 0)
-      return new RGWDeleteUserPolicy;
-  }
-
-  if (isSTSenabled) {
+  if (this->isSTSenabled) {
     RGWHandler_REST_STS sts_handler(auth_registry, post_body);
     sts_handler.init(store, s, s->cio);
     auto op = sts_handler.get_op(store);
@@ -3508,13 +3468,20 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
       return op;
     }
   }
+
+  if (this->isIAMenabled) {
+    RGWHandler_REST_IAM iam_handler(auth_registry, post_body);
+    iam_handler.init(store, s, s->cio);
+    auto op = iam_handler.get_op(store);
+    if (op) {
+      return op;
+    }
+  }
+
   if (isPSenabled) {
     RGWHandler_REST_PSTopic_AWS topic_handler(auth_registry, post_body);
     topic_handler.init(store, s, s->cio);
     auto op = topic_handler.get_op(store);
-    if (op) {
-      return op;
-    }
   }
 
   return NULL;
@@ -4052,7 +4019,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
     }
   } else {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts, enable_pubsub);
+      handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts, enable_iam, enable_pubsub);
     } else if (s->object.empty()) {
       handler = new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
     } else {
@@ -4401,7 +4368,20 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   bool is_non_s3_op = false;
   if (s->op_type == RGW_STS_GET_SESSION_TOKEN ||
       s->op_type == RGW_STS_ASSUME_ROLE ||
-      s->op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY) {
+      s->op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY ||
+      s->op_type == RGW_OP_CREATE_ROLE ||
+      s->op_type == RGW_OP_DELETE_ROLE ||
+      s->op_type == RGW_OP_GET_ROLE ||
+      s->op_type == RGW_OP_MODIFY_ROLE ||
+      s->op_type == RGW_OP_LIST_ROLES ||
+      s->op_type == RGW_OP_PUT_ROLE_POLICY ||
+      s->op_type == RGW_OP_GET_ROLE_POLICY ||
+      s->op_type == RGW_OP_LIST_ROLE_POLICIES ||
+      s->op_type == RGW_OP_DELETE_ROLE_POLICY ||
+      s->op_type == RGW_OP_PUT_USER_POLICY ||
+      s->op_type == RGW_OP_GET_USER_POLICY ||
+      s->op_type == RGW_OP_LIST_USER_POLICIES ||
+      s->op_type == RGW_OP_DELETE_USER_POLICY) {
     is_non_s3_op = true;
   }
 
@@ -4922,7 +4902,13 @@ int
 rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_token,
                                             STS::SessionToken& token) const
 {
-  string decodedSessionToken = rgw::from_base64(session_token);
+  string decodedSessionToken;
+  try {
+    decodedSessionToken = rgw::from_base64(session_token);
+  } catch (...) {
+    ldout(cct, 0) << "ERROR: Invalid session token, not base64 encoded." << dendl;
+    return -EINVAL;
+  }
 
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {

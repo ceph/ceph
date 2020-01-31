@@ -149,11 +149,7 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
-%ifarch x86_64
 BuildRequires:	devtoolset-8-gcc-c++ >= 8.2.1
-%else
-BuildRequires:	devtoolset-7-gcc-c++ >= 7.3.1-5.13
-%endif
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -296,6 +292,7 @@ BuildRequires:	python%{_python_buildid}-PyJWT
 BuildRequires:	python%{_python_buildid}-Routes
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-numpy-devel
+BuildRequires:	rpm-build
 BuildRequires:  xmlsec1-devel
 %endif
 %endif
@@ -1554,6 +1551,7 @@ fi
 %files mgr
 %{_bindir}/ceph-mgr
 %dir %{_datadir}/ceph/mgr
+%{_datadir}/ceph/mgr/alerts
 %{_datadir}/ceph/mgr/ansible
 %{_datadir}/ceph/mgr/balancer
 %{_datadir}/ceph/mgr/crash

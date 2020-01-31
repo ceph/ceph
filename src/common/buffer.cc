@@ -673,6 +673,7 @@ static ceph::spinlock debug_lock;
     ceph_assert(_raw);
     ceph_assert(l <= unused_tail_length());
     char* c = _raw->data + _off + _len;
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c, 0, l);
     _len += l;
     return _len + _off;
@@ -693,6 +694,7 @@ static ceph::spinlock debug_lock;
   {
     if (crc_reset)
         _raw->invalidate_crc();
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c_str(), 0, _len);
   }
 
@@ -701,6 +703,7 @@ static ceph::spinlock debug_lock;
     ceph_assert(o+l <= _len);
     if (crc_reset)
         _raw->invalidate_crc();
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c_str()+o, 0, l);
   }
 
@@ -1781,7 +1784,6 @@ void buffer::list::decode_base64(buffer::list& e)
   push_back(std::move(bp));
 }
 
-  
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
@@ -1795,6 +1797,7 @@ int buffer::list::read_file(const char *fn, std::string *error)
   }
 
   struct stat st;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&st, 0, sizeof(st));
   if (::fstat(fd, &st) < 0) {
     int err = errno;

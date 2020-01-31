@@ -187,6 +187,9 @@ class TestClientRecovery(CephFSTestCase):
         # The mount goes away while the MDS is offline
         self.mount_a.kill()
 
+        # wait for it to die
+        time.sleep(5)
+
         self.fs.mds_restart()
 
         # Enter reconnect phase
@@ -609,3 +612,22 @@ class TestClientRecovery(CephFSTestCase):
         self.assertLess(time.time(), time_at_beg + SESSION_AUTOCLOSE)
 
         self.mount_a.send_signal('sigcont')
+
+    def test_config_session_timeout(self):
+        self.fs.mds_asok(['config', 'set', 'mds_defer_session_stale', 'false'])
+        session_timeout = self.fs.get_var("session_timeout")
+        mount_a_gid = self.mount_a.get_global_id()
+
+        self.fs.mds_asok(['session', 'config', '%s' % mount_a_gid, 'timeout', '%s' % (session_timeout * 2)])
+
+        self.mount_a.kill();
+
+        self.assert_session_count(2)
+
+        time.sleep(session_timeout * 1.5)
+        self.assert_session_state(mount_a_gid, "open")
+
+        time.sleep(session_timeout)
+        self.assert_session_count(1)
+
+        self.mount_a.kill_cleanup()

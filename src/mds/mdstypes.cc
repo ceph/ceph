@@ -462,8 +462,8 @@ void client_metadata_t::decode(bufferlist::const_iterator& p)
 void client_metadata_t::dump(Formatter *f) const
 {
   f->dump_stream("features") << features;
-  for (const auto& p : kv_map)
-    f->dump_string(p.first.c_str(), p.second);
+  for (const auto& [name, val] : kv_map)
+    f->dump_string(name.c_str(), val);
 }
 
 /*
@@ -520,41 +520,33 @@ void session_info_t::dump(Formatter *f) const
   f->dump_stream("inst") << inst;
 
   f->open_array_section("completed_requests");
-  for (map<ceph_tid_t,inodeno_t>::const_iterator p = completed_requests.begin();
-       p != completed_requests.end();
-       ++p) {
+  for (const auto& [tid, ino] : completed_requests) {
     f->open_object_section("request");
-    f->dump_unsigned("tid", p->first);
-    f->dump_stream("created_ino") << p->second;
+    f->dump_unsigned("tid", tid);
+    f->dump_stream("created_ino") << ino;
     f->close_section();
   }
   f->close_section();
 
   f->open_array_section("prealloc_inos");
-  for (interval_set<inodeno_t>::const_iterator p = prealloc_inos.begin();
-       p != prealloc_inos.end();
-       ++p) {
+  for (const auto& [start, len] : prealloc_inos) {
     f->open_object_section("ino_range");
-    f->dump_unsigned("start", p.get_start());
-    f->dump_unsigned("length", p.get_len());
+    f->dump_unsigned("start", start);
+    f->dump_unsigned("length", len);
     f->close_section();
   }
   f->close_section();
 
   f->open_array_section("used_inos");
-  for (interval_set<inodeno_t>::const_iterator p = prealloc_inos.begin();
-       p != prealloc_inos.end();
-       ++p) {
+  for (const auto& [start, len] : used_inos) {
     f->open_object_section("ino_range");
-    f->dump_unsigned("start", p.get_start());
-    f->dump_unsigned("length", p.get_len());
+    f->dump_unsigned("start", start);
+    f->dump_unsigned("length", len);
     f->close_section();
   }
   f->close_section();
 
-  f->open_array_section("client_metadata");
-  client_metadata.dump(f);
-  f->close_section();
+  f->dump_object("client_metadata", client_metadata);
 }
 
 void session_info_t::generate_test_instances(list<session_info_t*>& ls)

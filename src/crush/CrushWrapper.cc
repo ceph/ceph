@@ -3785,11 +3785,13 @@ int CrushWrapper::_choose_type_stack(
   const vector<pair<int,int>>& stack,
   const set<int>& overfull,
   const vector<int>& underfull,
+  const vector<int>& more_underfull,
   const vector<int>& orig,
   vector<int>::const_iterator& i,
   set<int>& used,
   vector<int> *pw,
-  int root_bucket) const
+  int root_bucket,
+  int rule) const
 {
   vector<int> w = *pw;
   vector<int> o;
@@ -3824,7 +3826,7 @@ int CrushWrapper::_choose_type_stack(
     int item = osd;
     for (int j = (int)stack.size() - 2; j >= 0; --j) {
       int type = stack[j].first;
-      item = get_parent_of_type(item, type);
+      item = get_parent_of_type(item, type, rule);
       ldout(cct, 10) << __func__ << " underfull " << osd << " type " << type
 		     << " is " << item << dendl;
       if (!subtree_contains(root_bucket, item)) {
@@ -3859,7 +3861,7 @@ int CrushWrapper::_choose_type_stack(
       for (int pos = 0; pos < fanout; ++pos) {
 	if (type > 0) {
 	  // non-leaf
-	  int item = get_parent_of_type(*tmpi, type);
+	  int item = get_parent_of_type(*tmpi, type, rule);
 	  o.push_back(item);
 	  int n = cum_fanout;
 	  while (n-- && tmpi != orig.end()) {
@@ -3896,6 +3898,33 @@ int CrushWrapper::_choose_type_stack(
 	      ++i;
 	      break;
 	    }
+	      if (!replaced) {
+	      for (auto item : more_underfull) {
+	        ldout(cct, 10) << __func__ << " more underfull pos " << pos
+			       << " was " << *i << " considering " << item
+			       << dendl;
+	        if (used.count(item)) {
+		  ldout(cct, 20) << __func__ << "   in used " << used << dendl;
+		  continue;
+	        }
+	        if (!subtree_contains(from, item)) {
+		  ldout(cct, 20) << __func__ << "   not in subtree " << from << dendl;
+		  continue;
+	        }
+	        if (std::find(orig.begin(), orig.end(), item) != orig.end()) {
+		  ldout(cct, 20) << __func__ << "   in orig " << orig << dendl;
+		  continue;
+	        }
+	        o.push_back(item);
+	        used.insert(item);
+	        ldout(cct, 10) << __func__ << " pos " << pos << " replace "
+			       << *i << " -> " << item << dendl;
+	        replaced = true;
+                assert(i != orig.end());
+	        ++i;
+	        break;
+	      }
+	    }
 	  }
 	  if (!replaced) {
 	    ldout(cct, 10) << __func__ << " pos " << pos << " keep " << *i
@@ -3931,13 +3960,13 @@ int CrushWrapper::_choose_type_stack(
 		if (std::find(o.begin(), o.end(), alt) == o.end()) {
 		  // see if alt has the same parent
 		  if (j == 0 ||
-		      get_parent_of_type(o[pos], stack[j-1].first) ==
-		      get_parent_of_type(alt, stack[j-1].first)) {
+		      get_parent_of_type(o[pos], stack[j-1].first, rule) ==
+		      get_parent_of_type(alt, stack[j-1].first, rule)) {
 		    if (j)
 		      ldout(cct, 10) << "  replacing " << o[pos]
 				     << " (which has no underfull leaves) with " << alt
 				     << " (same parent "
-				     << get_parent_of_type(alt, stack[j-1].first) << " type "
+				     << get_parent_of_type(alt, stack[j-1].first, rule) << " type "
 				     << type << ")" << dendl;
 		    else
 		      ldout(cct, 10) << "  replacing " << o[pos]
@@ -3973,6 +4002,7 @@ int CrushWrapper::try_remap_rule(
   int maxout,
   const set<int>& overfull,
   const vector<int>& underfull,
+  const vector<int>& more_underfull,
   const vector<int>& orig,
   vector<int> *out) const
 {
@@ -3982,7 +4012,9 @@ int CrushWrapper::try_remap_rule(
 
   ldout(cct, 10) << __func__ << " ruleno " << ruleno
 		<< " numrep " << maxout << " overfull " << overfull
-		<< " underfull " << underfull << " orig " << orig
+		<< " underfull " << underfull
+		<< " more_underfull " << more_underfull
+		<< " orig " << orig
 		<< dendl;
   vector<int> w; // working set
   out->clear();
@@ -4019,8 +4051,8 @@ int CrushWrapper::try_remap_rule(
 	type_stack.push_back(make_pair(type, numrep));
         if (type > 0)
 	  type_stack.push_back(make_pair(0, 1));
-	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
-				   i, used, &w, root_bucket);
+	int r = _choose_type_stack(cct, type_stack, overfull, underfull, more_underfull, orig,
+				   i, used, &w, root_bucket, ruleno);
 	if (r < 0)
 	  return r;
 	type_stack.clear();
@@ -4041,8 +4073,8 @@ int CrushWrapper::try_remap_rule(
     case CRUSH_RULE_EMIT:
       ldout(cct, 10) << " emit " << w << dendl;
       if (!type_stack.empty()) {
-	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
-				   i, used, &w, root_bucket);
+	int r = _choose_type_stack(cct, type_stack, overfull, underfull, more_underfull, orig,
+				   i, used, &w, root_bucket, ruleno);
 	if (r < 0)
 	  return r;
 	type_stack.clear();

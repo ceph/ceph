@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { forkJoin as observableForkJoin, Observable } from 'rxjs';
+import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
@@ -238,17 +238,17 @@ export class RgwUserFormComponent implements OnInit {
       const bucketQuotaArgs = this._getBucketQuotaArgs();
       this.submitObservables.push(this.rgwUserService.updateQuota(uid, bucketQuotaArgs));
     }
-    // Finally execute all observables.
-    observableForkJoin(this.submitObservables).subscribe(
-      () => {
-        this.notificationService.show(NotificationType.success, notificationTitle);
-        this.goToListView();
-      },
-      () => {
+    // Finally execute all observables one by one in serial.
+    observableConcat(...this.submitObservables).subscribe({
+      error: () => {
         // Reset the 'Submit' button.
         this.userForm.setErrors({ cdSubmitButton: true });
+      },
+      complete: () => {
+        this.notificationService.show(NotificationType.success, notificationTitle);
+        this.goToListView();
       }
-    );
+    });
   }
 
   /**
@@ -390,10 +390,16 @@ export class RgwUserFormComponent implements OnInit {
       const uid = userMatches[1];
       const args = {
         subuser: userMatches[2] ? userMatches[3] : '',
-        generate_key: key.generate_key ? 'true' : 'false',
-        access_key: key.access_key,
-        secret_key: key.secret_key
+        generate_key: key.generate_key ? 'true' : 'false'
       };
+      if (args['generate_key'] === 'false') {
+        if (!_.isNil(key.access_key)) {
+          args['access_key'] = key.access_key;
+        }
+        if (!_.isNil(key.secret_key)) {
+          args['secret_key'] = key.secret_key;
+        }
+      }
       this.submitObservables.push(this.rgwUserService.addS3Key(uid, args));
       // If the access and the secret key are auto-generated, then visualize
       // this to the user by displaying a notification instead of the key.

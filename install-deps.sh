@@ -148,25 +148,33 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     local codename=$1
+    if dpkg -s ceph-libboost1.67-dev &> /dev/null; then
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.67.*'
+	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.67.list
+    fi
+    local project=libboost
+    local ver=1.72
+    local sha1=1d7c7a00cc3f37e340bae0360191a757b44ec80c
     install_pkg_on_ubuntu \
-	ceph-libboost1.67 \
-	dd38c27740c1f9a9e6719a07eef84a1369dc168b \
+	$project \
+	$sha1 \
 	$codename \
-	ceph-libboost-atomic1.67-dev \
-	ceph-libboost-chrono1.67-dev \
-	ceph-libboost-container1.67-dev \
-	ceph-libboost-context1.67-dev \
-	ceph-libboost-coroutine1.67-dev \
-	ceph-libboost-date-time1.67-dev \
-	ceph-libboost-filesystem1.67-dev \
-	ceph-libboost-iostreams1.67-dev \
-	ceph-libboost-program-options1.67-dev \
-	ceph-libboost-python1.67-dev \
-	ceph-libboost-random1.67-dev \
-	ceph-libboost-regex1.67-dev \
-	ceph-libboost-system1.67-dev \
-	ceph-libboost-thread1.67-dev \
-	ceph-libboost-timer1.67-dev
+	ceph-libboost-atomic$ver-dev \
+	ceph-libboost-chrono$ver-dev \
+	ceph-libboost-container$ver-dev \
+	ceph-libboost-context$ver-dev \
+	ceph-libboost-coroutine$ver-dev \
+	ceph-libboost-date-time$ver-dev \
+	ceph-libboost-filesystem$ver-dev \
+	ceph-libboost-iostreams$ver-dev \
+	ceph-libboost-program-options$ver-dev \
+	ceph-libboost-python$ver-dev \
+	ceph-libboost-random$ver-dev \
+	ceph-libboost-regex$ver-dev \
+	ceph-libboost-system$ver-dev \
+	ceph-libboost-test$ver-dev \
+	ceph-libboost-thread$ver-dev \
+	ceph-libboost-timer$ver-dev
 }
 
 function version_lt {
@@ -350,7 +358,7 @@ else
 			    $SUDO yum -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=7
+			    dts_ver=8
 			    ;;
 		    esac
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
@@ -375,7 +383,11 @@ else
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
-        $SUDO $zypp_install systemd-rpm-macros
+        $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
+        if [ -e /usr/bin/python2 ] ; then
+            # see https://tracker.ceph.com/issues/23981
+            $SUDO $zypp_install python2-virtualenv python2-devel || exit 1
+        fi
         munge_ceph_spec_in $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel

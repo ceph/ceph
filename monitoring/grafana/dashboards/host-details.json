@@ -38,17 +38,7 @@
   "graphTooltip": 0,
   "id": null,
   "iteration": 1557386759572,
-  "links": [
-    {
-      "asDropdown": true,
-      "icon": "external link",
-      "tags": [
-        "overview"
-      ],
-      "title": "Shortcuts",
-      "type": "dashboards"
-    }
-  ],
+  "links": [],
   "panels": [
     {
       "gridPos": {
@@ -527,7 +517,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": "15m",
+      "timeFrom": null,
       "timeShift": null,
       "title": "Network drop rate",
       "tooltip": {
@@ -711,7 +701,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": "15m",
+      "timeFrom": null,
       "timeShift": null,
       "title": "Network error rate",
       "tooltip": {
@@ -1221,5 +1211,5 @@
   "timezone": "browser",
   "title": "Host Details",
   "uid": "rtOg0AiWz",
-  "version": 3
+  "version": 4
 }

@@ -467,7 +467,7 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
 
         class Root(object):
             @cherrypy.expose
-            def index(self):
+            def default(self, *args, **kwargs):
                 if module.get_module_option('standby_behaviour', 'redirect') == 'redirect':
                     active_uri = module.get_active_uri()
                     if active_uri:

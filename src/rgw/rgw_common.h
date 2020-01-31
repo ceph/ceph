@@ -146,6 +146,7 @@ using ceph::crypto::MD5;
 #define RGW_REST_S3             0x4
 #define RGW_REST_WEBSITE     0x8
 #define RGW_REST_STS            0x10
+#define RGW_REST_IAM            0x20
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 

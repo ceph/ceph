@@ -425,6 +425,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
+    dout(20) << "updating existing DaemonState for " << key << dendl;
     daemon = daemon_state.get(key);
   }
   if (m->service_daemon && !daemon) {
@@ -435,12 +436,16 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     daemon_state.insert(daemon);
   }
   if (daemon) {
-    dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
+    if (m->service_daemon) {
+      // update the metadata through the daemon state index to
+      // ensure it's kept up-to-date
+      daemon_state.update_metadata(daemon, m->daemon_metadata);
+    }
+
     std::lock_guard l(daemon->lock);
     daemon->perf_counters.clear();
 
     if (m->service_daemon) {
-      daemon->set_metadata(m->daemon_metadata);
       daemon->service_status = m->daemon_status;
 
       utime_t now = ceph_clock_now();
@@ -681,6 +686,7 @@ const MonCommand *DaemonServer::_get_mgrcommand(
 
 bool DaemonServer::_allowed_command(
   MgrSession *s,
+  const string &service,
   const string &module,
   const string &prefix,
   const cmdmap_t& cmdmap,
@@ -699,9 +705,8 @@ bool DaemonServer::_allowed_command(
 
   bool capable = s->caps.is_capable(
     g_ceph_context,
-    CEPH_ENTITY_TYPE_MGR,
     s->entity_name,
-    module, prefix, param_str_map,
+    service, module, prefix, param_str_map,
     cmd_r, cmd_w, cmd_x,
     s->get_peer_addr());
 
@@ -786,6 +791,18 @@ bool DaemonServer::handle_command(MCommand *m)
   }
 }
 
+void DaemonServer::log_access_denied(
+    std::shared_ptr<CommandContext>& cmdctx,
+    MgrSession* session, std::stringstream& ss) {
+  dout(1) << " access denied" << dendl;
+  audit_clog->info() << "from='" << session->inst << "' "
+                     << "entity='" << session->entity_name << "' "
+                     << "cmd=" << cmdctx->cmdmap << ":  access denied";
+  ss << "access denied: does your client key have mgr caps? "
+        "See http://docs.ceph.com/docs/master/mgr/administrator/"
+        "#client-authentication";
+}
+
 bool DaemonServer::_handle_command(
   MCommand *m,
   std::shared_ptr<CommandContext>& cmdctx)
@@ -855,24 +872,32 @@ bool DaemonServer::_handle_command(
   const MonCommand *mgr_cmd = _get_mgrcommand(prefix, mgr_commands);
   _generate_command_map(cmdctx->cmdmap, param_str_map);
 
-  bool is_allowed;
+  bool is_allowed = false;
+  ModuleCommand py_command;
   if (!mgr_cmd) {
-    MonCommand py_command = {"", "", "py", "rw"};
-    is_allowed = _allowed_command(session, py_command.module,
-      prefix, cmdctx->cmdmap, param_str_map, &py_command);
+    // Resolve the command to the name of the module that will
+    // handle it (if the command exists)
+    auto py_commands = py_modules.get_py_commands();
+    for (const auto &pyc : py_commands) {
+      auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
+      if (pyc_prefix == prefix) {
+        py_command = pyc;
+        break;
+      }
+    }
+
+    MonCommand pyc = {"", "", "py", py_command.perm};
+    is_allowed = _allowed_command(session, "py", py_command.module_name,
+                                  prefix, cmdctx->cmdmap, param_str_map,
+                                  &pyc);
   } else {
     // validate user's permissions for requested command
-    is_allowed = _allowed_command(session, mgr_cmd->module,
+    is_allowed = _allowed_command(session, mgr_cmd->module, "",
       prefix, cmdctx->cmdmap,  param_str_map, mgr_cmd);
   }
+
   if (!is_allowed) {
-      dout(1) << " access denied" << dendl;
-      audit_clog->info() << "from='" << session->inst << "' "
-                         << "entity='" << session->entity_name << "' "
-                         << "cmd=" << m->cmd << ":  access denied";
-      ss << "access denied: does your client key have mgr caps? "
-            "See http://docs.ceph.com/docs/master/mgr/administrator/"
-            "#client-authentication";
+      log_access_denied(cmdctx, session, ss);
       cmdctx->reply(-EACCES, ss);
       return true;
   }
@@ -2181,37 +2206,27 @@ bool DaemonServer::_handle_command(
     }
   }
 
-  // Resolve the command to the name of the module that will
-  // handle it (if the command exists)
-  std::string handler_name;
-  auto py_commands = py_modules.get_py_commands();
-  for (const auto &pyc : py_commands) {
-    auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
-    if (pyc_prefix == prefix) {
-      handler_name = pyc.module_name;
-      break;
-    }
-  }
-
   // Was the command unfound?
-  if (handler_name.empty()) {
+  if (py_command.cmdstring.empty()) {
     ss << "No handler found for '" << prefix << "'";
     dout(4) << "No handler found for '" << prefix << "'" << dendl;
     cmdctx->reply(-EINVAL, ss);
     return true;
   }
 
-  dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
-  finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
+  dout(10) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  finisher.queue(new FunctionContext([this, cmdctx, session, py_command, prefix]
+                                     (int r_) mutable {
     std::stringstream ss;
 
     // Validate that the module is enabled
-    PyModuleRef module = py_modules.get_module(handler_name);
+    auto& py_handler_name = py_command.module_name;
+    PyModuleRef module = py_modules.get_module(py_handler_name);
     ceph_assert(module);
     if (!module->is_enabled()) {
-      ss << "Module '" << handler_name << "' is not enabled (required by "
+      ss << "Module '" << py_handler_name << "' is not enabled (required by "
             "command '" << prefix << "'): use `ceph mgr module enable "
-            << handler_name << "` to enable it";
+            << py_handler_name << "` to enable it";
       dout(4) << ss.str() << dendl;
       cmdctx->reply(-EOPNOTSUPP, ss);
       return;
@@ -2220,7 +2235,7 @@ bool DaemonServer::_handle_command(
     // Hack: allow the self-test method to run on unhealthy modules.
     // Fix this in future by creating a special path for self test rather
     // than having the hook be a normal module command.
-    std::string self_test_prefix = handler_name + " " + "self-test";
+    std::string self_test_prefix = py_handler_name + " " + "self-test";
 
     // Validate that the module is healthy
     bool accept_command;
@@ -2233,13 +2248,13 @@ bool DaemonServer::_handle_command(
         accept_command = true;
       } else {
         accept_command = false;
-        ss << "Module '" << handler_name << "' has experienced an error and "
+        ss << "Module '" << py_handler_name << "' has experienced an error and "
               "cannot handle commands: " << module->get_error_string();
       }
     } else {
       // Module not loaded
       accept_command = false;
-      ss << "Module '" << handler_name << "' failed to load and "
+      ss << "Module '" << py_handler_name << "' failed to load and "
             "cannot handle commands: " << module->get_error_string();
     }
 
@@ -2251,7 +2266,12 @@ bool DaemonServer::_handle_command(
 
     std::stringstream ds;
     bufferlist inbl = cmdctx->m->get_data();
-    int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, inbl, &ds, &ss);
+    int r = py_modules.handle_command(py_command, *session, cmdctx->cmdmap,
+                                      inbl, &ds, &ss);
+    if (r == -EACCES) {
+      log_access_denied(cmdctx, session, ss);
+    }
+
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
   }));
@@ -2694,7 +2714,10 @@ void DaemonServer::got_service_map()
     });
 
   // cull missing daemons, populate new ones
+  std::set<std::string> types;
   for (auto& p : pending_service_map.services) {
+    types.insert(p.first);
+
     std::set<std::string> names;
     for (auto& q : p.second.daemons) {
       names.insert(q.first);
@@ -2710,6 +2733,7 @@ void DaemonServer::got_service_map()
     }
     daemon_state.cull(p.first, names);
   }
+  daemon_state.cull_services(types);
 }
 
 void DaemonServer::got_mgr_map()

@@ -95,7 +95,6 @@ struct MonSession : public RefCountedObject {
     map<string,string> args;
     return caps.is_capable(
       g_ceph_context,
-      CEPH_ENTITY_TYPE_MON,
       entity_name,
       service, "", args,
       mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X,

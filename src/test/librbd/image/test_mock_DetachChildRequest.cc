@@ -118,6 +118,10 @@ public:
       .WillOnce(WithArg<1>(Invoke([this, r](Context* ctx) {
                              image_ctx->op_work_queue->queue(ctx, r);
                            })));
+    if (r == 0) {
+      EXPECT_CALL(mock_image_ctx, test_features(_))
+        .WillOnce(Return(false));
+    }
   }
 
   void expect_close(MockImageCtx &mock_image_ctx, int r) {

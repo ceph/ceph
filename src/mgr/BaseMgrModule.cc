@@ -562,7 +562,13 @@ ceph_get_version(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject *
-ceph_get_context(BaseMgrModule *self, PyObject *args)
+ceph_get_release_name(BaseMgrModule *self, PyObject *args)
+{
+  return PyString_FromString(ceph_release_to_str());
+}
+
+static PyObject *
+ceph_get_context(BaseMgrModule *self)
 {
   return self->py_modules->get_context();
 }
@@ -1001,6 +1007,42 @@ ceph_get_osd_perf_counters(BaseMgrModule *self, PyObject *args)
   return self->py_modules->get_osd_perf_counters(query_id);
 }
 
+static PyObject*
+ceph_is_authorized(BaseMgrModule *self, PyObject *args)
+{
+  PyObject *args_dict = NULL;
+  if (!PyArg_ParseTuple(args, "O:ceph_is_authorized", &args_dict)) {
+    return nullptr;
+  }
+
+  if (!PyDict_Check(args_dict)) {
+    derr << __func__ << " arg not a dict" << dendl;
+    Py_RETURN_FALSE;
+  }
+
+  std::map<std::string, std::string> arguments;
+
+  PyObject *args_list = PyDict_Items(args_dict);
+  for (int i = 0; i < PyList_Size(args_list); ++i) {
+    PyObject *kv = PyList_GET_ITEM(args_list, i);
+
+    char *arg_key = nullptr;
+    char *arg_value = nullptr;
+    if (!PyArg_ParseTuple(kv, "ss:pair", &arg_key, &arg_value)) {
+      derr << __func__ << " dict item " << i << " not a size 2 tuple" << dendl;
+      continue;
+    }
+
+    arguments[arg_key] = arg_value;
+  }
+
+  if (self->this_module->is_authorized(arguments)) {
+    Py_RETURN_TRUE;
+  }
+
+  Py_RETURN_FALSE;
+}
+
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
@@ -1056,8 +1098,11 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_cluster_log", (PyCFunction)ceph_cluster_log, METH_VARARGS,
    "Emit a cluster log message"},
 
-  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_VARARGS,
+  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_NOARGS,
    "Get the ceph version of this process"},
+
+  {"_ceph_get_release_name", (PyCFunction)ceph_get_release_name, METH_NOARGS,
+   "Get the ceph release name of this process"},
 
   {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
     "Get a CephContext* in a python capsule"},
@@ -1090,6 +1135,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_osd_perf_counters", (PyCFunction)ceph_get_osd_perf_counters,
     METH_VARARGS, "Get osd perf counters"},
+
+  {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized,
+    METH_VARARGS, "Verify the current session caps are valid"},
 
   {NULL, NULL, 0, NULL}
 };

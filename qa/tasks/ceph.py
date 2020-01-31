@@ -174,7 +174,7 @@ def ceph_log(ctx, config):
                 except SSHException as e:
                     log.debug("Missed logrotate, SSHException")
                 except socket.error as e:
-                    if e.errno == errno.EHOSTUNREACH:
+                    if e.errno in (errno.EHOSTUNREACH, errno.ECONNRESET):
                         log.debug("Missed logrotate, host unreachable")
                     else:
                         raise

@@ -3589,14 +3589,12 @@ Migrator::Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
   inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
 }
 
-void Migrator::handle_conf_change(const ConfigProxy& conf,
-                                  const std::set <std::string> &changed,
-                                  const MDSMap &mds_map)
+void Migrator::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
   if (changed.count("mds_max_export_size"))
     max_export_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
   if (changed.count("mds_inject_migrator_session_race")) {
-    inject_session_race = conf.get_val<bool>("mds_inject_migrator_session_race");
+    inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
     dout(0) << "mds_inject_migrator_session_race is " << inject_session_race << dendl;
   }
 }

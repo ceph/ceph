@@ -133,7 +133,7 @@ export class RbdService {
     });
   }
 
-  restoreTrash(poolName, imageId, newImageName) {
+  restoreTrash(poolName, imageId, @cdEncodeNot newImageName) {
     return this.http.post(
       `api/block/image/trash/${poolName}/${imageId}/restore`,
       { new_image_name: newImageName },
