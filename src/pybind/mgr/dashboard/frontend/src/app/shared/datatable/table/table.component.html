@@ -26,9 +26,9 @@
     <div *ngIf="columnFilters.length !== 0"
          class="btn-group widget-toolbar">
       <div dropdown
-           class="btn-group">
+           class="btn-group tc_filter_name">
         <a dropdownToggle
-           class="btn btn-light dropdown-toggle tc_columnBtn"
+           class="btn btn-light dropdown-toggle"
            data-toggle="dropdown">
           <i [ngClass]="[icons.large, icons.filter]"></i>
           {{ selectedFilter.column.name }}
@@ -45,7 +45,7 @@
         </ul>
       </div>
       <div dropdown
-           class="btn-group">
+           class="btn-group tc_filter_option">
         <a dropdownToggle
            class="btn btn-light dropdown-toggle"
            [class.disabled]="selectedFilter.options.length === 0"

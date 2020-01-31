@@ -92,6 +92,14 @@ export abstract class PageHelper {
     return Number(text.match(/(\d+)\s+selected/)[1]);
   }
 
+  async getTableFoundCount(): Promise<number> {
+    const text = await $$('.datatable-footer-inner .page-count span')
+      .filter(async (e) => (await e.getText()).includes('found'))
+      .first()
+      .getText();
+    return Number(text.match(/(\d+)\s+found/)[1]);
+  }
+
   getFirstTableCellWithText(content: string): ElementFinder {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
@@ -315,5 +323,17 @@ export abstract class PageHelper {
     await $$('.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked').each(
       (e: ElementFinder) => e.click()
     );
+  }
+
+  async filterTable(name: string, option: string) {
+    await this.waitClickableAndClick($('.tc_filter_name > a'));
+    await element(by.cssContainingText(`.tc_filter_name .dropdown-item`, name)).click();
+
+    await this.waitClickableAndClick($('.tc_filter_option > a'));
+    await element(by.cssContainingText(`.tc_filter_option .dropdown-item`, option)).click();
+  }
+
+  async clearTableSearchInput() {
+    return this.waitClickableAndClick($('cd-table .search button'));
   }
 }
