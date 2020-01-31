@@ -101,7 +101,7 @@ public:
   bool rdlock_try_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
-  bool wrlock_try(SimpleLock *lock, MutationRef& mut);
+  bool wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client=-1);
   bool wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut);
   void wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 

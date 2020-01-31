@@ -530,20 +530,23 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  continue;
 	}
 	client_t _client = p.is_state_pin() ? lock->get_excl_client() : client;
-	if (p.is_remote_wrlock() && !lock->can_wrlock(_client)) {
-	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
-	  // can't take the wrlock because the scatter lock is gathering. need to
-	  // release the remote wrlock, so that the gathering process can finish.
-	  ceph_assert(it != mdr->locks.end());
-	  remote_wrlock_finish(it, mdr.get());
-	  remote_wrlock_start(lock, p.wrlock_target, mdr);
-	  goto out;
-	}
-	// nowait if we have already gotten remote wrlock
-	if (!wrlock_start(lock, mdr)) {
-	  ceph_assert(!p.is_remote_wrlock());
-	  marker.message = "failed to wrlock, waiting";
-	  goto out;
+	if (p.is_remote_wrlock()) {
+	  // nowait if we have already gotten remote wrlock
+	  if (!wrlock_try(lock, mdr, _client)) {
+	    marker.message = "failed to wrlock, dropping remote wrlock and waiting";
+	    // can't take the wrlock because the scatter lock is gathering. need to
+	    // release the remote wrlock, so that the gathering process can finish.
+	    ceph_assert(it != mdr->locks.end());
+	    remote_wrlock_finish(it, mdr.get());
+	    remote_wrlock_start(lock, p.wrlock_target, mdr);
+	    goto out;
+	  }
+	} else {
+	  if (!wrlock_start(lock, mdr)) {
+	    ceph_assert(!p.is_remote_wrlock());
+	    marker.message = "failed to wrlock, waiting";
+	    goto out;
+	  }
 	}
 	dout(10) << " got wrlock on " << *lock << " " << *lock->get_parent() << dendl;
       }
@@ -1704,14 +1707,17 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
 }
 
-bool Locker::wrlock_try(SimpleLock *lock, MutationRef& mut)
+bool Locker::wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client)
 {
   dout(10) << "wrlock_try " << *lock << " on " << *lock->get_parent() << dendl;
+  if (client == -1)
+    client = mut->get_client();
 
   while (1) {
-    if (lock->can_wrlock(mut->get_client())) {
+    if (lock->can_wrlock(client)) {
       lock->get_wrlock();
-      mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+      auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+      it->flags |= MutationImpl::LockOp::WRLOCK; // may already remote_wrlocked
       return true;
     }
     if (!lock->is_stable())
@@ -1719,16 +1725,18 @@ bool Locker::wrlock_try(SimpleLock *lock, MutationRef& mut)
     CInode *in = static_cast<CInode *>(lock->get_parent());
     if (!in->is_auth())
       break;
-    // don't do nested lock state change if we have dirty scatterdata and
-    // may scatter_writebehind or start_scatter, because nowait==true implies
-    // that the caller already has a log entry open!
+    // caller may already has a log entry open. To avoid calling
+    // scatter_writebehind or start_scatter. don't change nest lock
+    // state if it has dirty scatterdata.
     if (lock->is_dirty())
-      return false;
+      break;
+    // To avoid calling scatter_writebehind or start_scatter. don't
+    // change nest lock state to MIX.
     ScatterLock *slock = static_cast<ScatterLock*>(lock);
-    if (in->has_subtree_or_exporting_dirfrag() || slock->get_scatter_wanted())
-      scatter_mix(slock);
-    else
-      simple_lock(lock);
+    if (slock->get_scatter_wanted() || in->has_subtree_or_exporting_dirfrag())
+      break;
+
+    simple_lock(lock);
   }
   return false;
 }
