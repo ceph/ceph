@@ -1581,6 +1581,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             }
             data = self.service_cache[host].data
             if data:
+                data = [d for d in data if d['name'] != sd['name']]
                 data.append(sd)
             else:
                 data = [sd]
