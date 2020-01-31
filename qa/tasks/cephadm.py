@@ -417,6 +417,11 @@ def ceph_bootstrap(ctx, config):
                 'ceph', 'orchestrator', 'host', 'add',
                 remote.shortname
             ])
+            r = _shell(ctx, cluster_name, remote,
+                       ['ceph', 'orchestrator', 'host', 'ls', '--format=json'],
+                       stdout=StringIO())
+            hosts = [node['host'] for node in json.loads(r.stdout.getvalue())]
+            assert remote.shortname in hosts
 
         yield
 
