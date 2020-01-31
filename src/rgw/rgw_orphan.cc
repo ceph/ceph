@@ -1192,7 +1192,7 @@ int RGWRadosList::process_bucket(
   list_op.params.marker = rgw_obj_key(marker);
   list_op.params.list_versions = true;
   list_op.params.enforce_ns = false;
-  list_op.params.allow_unordered = true;
+  list_op.params.allow_unordered = false;
   list_op.params.prefix = prefix;
 
   bool truncated;
@@ -1478,10 +1478,13 @@ int RGWRadosList::do_incomplete_multipart(
 			       &is_listing_truncated);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
+      ldout(store->ctx(), 20) << "RGWRadosList::" << __func__ <<
+	": WARNING: call to list_objects of multipart namespace got ENOENT; "
+	"assuming bucket removal race" << dendl;
       break;
     } else if (ret < 0) {
       lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
-	": ERROR: list_objects op  returned ret=" << ret << dendl;
+	": ERROR: list_objects op returned ret=" << ret << dendl;
       return ret;
     }
 
@@ -1491,6 +1494,7 @@ int RGWRadosList::do_incomplete_multipart(
       for (const rgw_bucket_dir_entry& obj : objs) {
 	const rgw_obj_key& key = obj.key;
 	if (!entry.mp.from_meta(key.name)) {
+	  // we only want the meta objects, so skip all the components
 	  continue;
 	}
 	entry.obj = obj;
