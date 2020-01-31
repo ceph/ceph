@@ -1333,7 +1333,13 @@ public:
       return r == 0 || (r > 0 && h < end);
     }
 
-    void dump(Formatter *f) const;
+    bool respects_full() const {
+      return
+	(flags & (CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_RWORDERED)) &&
+	!(flags & (CEPH_OSD_FLAG_FULL_TRY | CEPH_OSD_FLAG_FULL_FORCE));
+    }
+
+    void dump(ceph::Formatter *f) const;
   };
 
   struct Op : public RefCountedObject {
@@ -1430,12 +1436,6 @@ public:
 
     bool operator<(const Op& other) const {
       return tid < other.tid;
-    }
-
-    bool respects_full() const {
-      return
-	(target.flags & (CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_RWORDERED)) &&
-	!(target.flags & (CEPH_OSD_FLAG_FULL_TRY | CEPH_OSD_FLAG_FULL_FORCE));
     }
 
   private:
