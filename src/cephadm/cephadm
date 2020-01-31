@@ -96,37 +96,31 @@ class Monitoring(object):
 
     components = {
         "prometheus": {
-            "image": {
-                "image": "prom/prometheus:latest",
-                "cpus": '2',
-                "memory": '4GB',
-                "args": [
-                    "--config.file=/etc/prometheus/prometheus.yml",
-                    "--storage.tsdb.path=/prometheus",
-                    "--web.listen-address=:{}".format(port_map['prometheus']),
-                ]
-            },
+            "image": "prom/prometheus:latest",
+            "cpus": '2',
+            "memory": '4GB',
+            "args": [
+                "--config.file=/etc/prometheus/prometheus.yml",
+                "--storage.tsdb.path=/prometheus",
+                "--web.listen-address=:{}".format(port_map['prometheus']),
+            ],
             "config-json": [
                 "prometheus.yml",
             ],
         },
         "node-exporter": {
-            "image": {
-                "image": "prom/node-exporter",
-                "cpus": "1",
-                "memory": "1GB",
-                "args": [
-                    "--no-collector.timex",
-                ],
-            }
+            "image": "prom/node-exporter",
+            "cpus": "1",
+            "memory": "1GB",
+            "args": [
+                "--no-collector.timex",
+            ],
         },
         "grafana": {
-            "image": {
-                "image": "pcuzner/ceph-grafana-el8:latest",
-                "cpus": "2",
-                "memory": "4GB",
-                "args": [],
-            },
+            "image": "pcuzner/ceph-grafana-el8:latest",
+            "cpus": "2",
+            "memory": "4GB",
+            "args": [],
             "config-json": [
                 "grafana.ini",
                 "provisioning/datasources/ceph-dashboard.yml",
@@ -885,8 +879,7 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
                 '--default-mon-cluster-log-to-stderr=true',
             ]
     elif daemon_type in Monitoring.components:
-        component = Monitoring.components[daemon_type]
-        metadata = component.get('image', list())
+        metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
     return r
 
@@ -1986,10 +1979,9 @@ def command_deploy():
             uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
         else:
             raise Error("{} not implemented yet".format(daemon_type))
-        
+
         # Monitoring metadata is nested dicts, so asking mypy to ignore
-        m = Monitoring.components[daemon_type]
-        metadata = m.get('image', dict())
+        metadata = Monitoring.components[daemon_type]
         monitoring_args = [
             '--user',
             str(uid),
