@@ -481,8 +481,8 @@ void AdminSocket::execute_command(
   }
   string prefix;
   try {
-    cmd_getval(m_cct, cmdmap, "format", format);
-    cmd_getval(m_cct, cmdmap, "prefix", prefix);
+    cmd_getval(cmdmap, "format", format);
+    cmd_getval(cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
     return on_finish(-EINVAL, "invalid json, missing format and/or prefix",
 		     empty);

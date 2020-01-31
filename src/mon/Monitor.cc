@@ -314,7 +314,7 @@ int Monitor::do_admin_command(
     _quorum_status(f, out);
   } else if (command == "sync_force") {
     string validate;
-    if ((!cmd_getval(g_ceph_context, cmdmap, "validate", validate)) ||
+    if ((!cmd_getval(cmdmap, "validate", validate)) ||
 	(validate != "--yes-i-really-mean-it")) {
       err << "are you SURE? this will mean the monitor store will be erased "
 	"the next time the monitor is restarted.  pass "
@@ -360,7 +360,7 @@ int Monitor::do_admin_command(
     }
   } else if (command == "quorum") {
     string quorumcmd;
-    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
+    cmd_getval(cmdmap, "quorumcmd", quorumcmd);
     if (quorumcmd == "exit") {
       start_election();
       elector.stop_participating();
@@ -374,7 +374,7 @@ int Monitor::do_admin_command(
     }
   } else if (command == "smart") {
     string want_devid;
-    cmd_getval(cct, cmdmap, "devid", want_devid);
+    cmd_getval(cmdmap, "devid", want_devid);
 
     string devname = store->get_devname();
     set<string> devnames;
@@ -406,7 +406,7 @@ int Monitor::do_admin_command(
       goto abort;
     }
     string cmd;
-    if (!cmd_getval(cct, cmdmap, "heapcmd", cmd)) {
+    if (!cmd_getval(cmdmap, "heapcmd", cmd)) {
       err << "unable to get value for command \"" << cmd << "\"";
       r = -EINVAL;
       goto abort;
@@ -414,7 +414,7 @@ int Monitor::do_admin_command(
     std::vector<std::string> cmd_vec;
     get_str_vec(cmd, cmd_vec);
     string val;
-    if (cmd_getval(cct, cmdmap, "value", val)) {
+    if (cmd_getval(cmdmap, "value", val)) {
       cmd_vec.push_back(val);
     }
     ceph_heap_profiler_handle_command(cmd_vec, out);
@@ -1218,7 +1218,7 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
 
   entity_addrvec_t addrs;
   string addrstr;
-  if (cmd_getval(g_ceph_context, cmdmap, "addr", addrstr)) {
+  if (cmd_getval(cmdmap, "addr", addrstr)) {
     dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' addr '"
 	     << addrstr << "'" << dendl;
 
@@ -1244,7 +1244,7 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
 	addrs.v[0].set_type(entity_addr_t::TYPE_MSGR2);
       }
     }
-  } else if (cmd_getval(g_ceph_context, cmdmap, "addrv", addrstr)) {
+  } else if (cmd_getval(cmdmap, "addrv", addrstr)) {
     dout(10) << "_add_bootstrap_peer_hintv '" << cmd << "' addrv '"
 	     << addrstr << "'" << dendl;
     const char *end = 0;
@@ -3009,7 +3009,7 @@ void Monitor::_generate_command_map(cmdmap_t& cmdmap,
       continue;
     if (p->first == "caps") {
       vector<string> cv;
-      if (cmd_getval(g_ceph_context, cmdmap, "caps", cv) &&
+      if (cmd_getval(cmdmap, "caps", cv) &&
 	  cv.size() % 2 == 0) {
 	for (unsigned i = 0; i < cv.size(); i += 2) {
 	  string k = string("caps_") + cv[i];
@@ -3118,7 +3118,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
   map<string,string> param_str_map;
   _generate_command_map(cmdmap, param_str_map);
   string prefix;
-  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+  if (!cmd_getval(cmdmap, "prefix", prefix)) {
     return reply_tell_command(op, -EINVAL, "no prefix");
   }
   if (auto cmd = _get_moncommand(prefix,
@@ -3187,7 +3187,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // check return value. If no prefix parameter provided,
   // return value will be false, then return error info.
-  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+  if (!cmd_getval(cmdmap, "prefix", prefix)) {
     reply_command(op, -EINVAL, "command prefix not found", 0);
     return;
   }
@@ -3237,7 +3237,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   dout(0) << "handle_command " << *m << dendl;
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   get_str_vec(prefix, fullcmd);
@@ -3486,7 +3486,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 	     prefix == "health" ||
 	     prefix == "df") {
     string detail;
-    cmd_getval(g_ceph_context, cmdmap, "detail", detail);
+    cmd_getval(cmdmap, "detail", detail);
 
     if (prefix == "status") {
       // get_cluster_status handles f == NULL
@@ -3540,7 +3540,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->dump_stream("timestamp") << ceph_clock_now();
 
     vector<string> tagsvec;
-    cmd_getval(g_ceph_context, cmdmap, "tags", tagsvec);
+    cmd_getval(cmdmap, "tags", tagsvec);
     string tagstr = str_join(tagsvec, " ");
     if (!tagstr.empty())
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
@@ -3565,7 +3565,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "osd last-stat-seq") {
     int64_t osd;
-    cmd_getval(g_ceph_context, cmdmap, "id", osd);
+    cmd_getval(cmdmap, "id", osd);
     uint64_t seq = mgrstatmon()->get_last_osd_stat_seq(osd);
     if (f) {
       f->dump_unsigned("seq", seq);
@@ -3578,7 +3578,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "node ls") {
     string node_type("all");
-    cmd_getval(g_ceph_context, cmdmap, "type", node_type);
+    cmd_getval(cmdmap, "type", node_type);
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     if (node_type == "all") {
@@ -3624,7 +3624,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
 
     string name;
-    bool all = !cmd_getval(g_ceph_context, cmdmap, "id", name);
+    bool all = !cmd_getval(cmdmap, "id", name);
     if (!all) {
       // Dump a single mon's metadata
       int mon = monmap->get_rank(name);
@@ -3675,7 +3675,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     string field;
-    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    cmd_getval(cmdmap, "property", field);
     count_metadata(field, f.get());
     f->flush(ds);
     rdata.append(ds);
@@ -3694,7 +3694,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "mon ok-to-stop") {
     vector<string> ids;
-    if (!cmd_getval(g_ceph_context, cmdmap, "ids", ids)) {
+    if (!cmd_getval(cmdmap, "ids", ids)) {
       r = -EINVAL;
       goto out;
     }
@@ -3726,7 +3726,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "mon ok-to-rm") {
     string id;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+    if (!cmd_getval(cmdmap, "id", id)) {
       r = -EINVAL;
       rs = "must specify a monitor id";
       goto out;

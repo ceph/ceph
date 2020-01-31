@@ -86,7 +86,7 @@ private:
 	   bufferlist& out) override {
     if (command == "bluestore bluefs available") {
       int64_t alloc_size = 0;
-      cmd_getval(bluefs->cct, cmdmap, "alloc_size", alloc_size);
+      cmd_getval(cmdmap, "alloc_size", alloc_size);
       if ((alloc_size & (alloc_size - 1)) != 0) {
 	ss << "Invalid allocation size:'" << alloc_size << std::endl;
 	return -EINVAL;
