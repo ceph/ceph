@@ -8,6 +8,7 @@
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/CreateLocalImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/PrepareReplayRequest.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -83,9 +84,9 @@ BaseRequest* StateBuilder<I>::create_prepare_replay_request(
     bool* resync_requested,
     bool* syncing,
     Context* on_finish) {
-  // TODO
-  ceph_assert(false);
-  return nullptr;
+  return PrepareReplayRequest<I>::create(
+    local_mirror_uuid, this->remote_promotion_state, progress_ctx, this,
+    resync_requested, syncing, on_finish);
 }
 
 template <typename I>
