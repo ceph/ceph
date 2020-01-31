@@ -2319,6 +2319,12 @@ def command_adopt():
             if num_renamed:
                 logger.info('Renamed %d leveldb *.ldb files to *.sst',
                             num_renamed)
+        if daemon_type == 'osd':
+            for n in ['block', 'block.db', 'block.wal']:
+                p = os.path.join(data_dir_dst, n)
+                if os.path.exists(p):
+                    logger.info('Chowning %s...' % p)
+                    os.chown(p, uid, gid)
 
         # config
         config_src = '/etc/ceph/%s.conf' % (args.cluster)
