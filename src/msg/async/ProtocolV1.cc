@@ -2066,6 +2066,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     // incoming lossy client, no need to register this connection
     // new session
     ldout(cct, 10) << __func__ << " accept new session" << dendl;
+    connection->lock.lock();
     return open(reply, authorizer_reply);
   }
 
