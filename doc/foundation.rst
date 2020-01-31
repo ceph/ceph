@@ -27,6 +27,7 @@ Members
 Premier
 -------
 
+* `Amihan <https://amihan.net>`_
 * `Canonical <https://www.canonical.com/>`_
 * `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
@@ -42,7 +43,6 @@ Premier
 General
 -------
 
-* `Amihan <https://amihan.net>`_
 * `ARM <http://www.arm.com/>`_
 * `BoCloud <http://bocloud.com.cn/>`_
 * `Catalyst Cloud <https://catalystcloud.nz/>`_
