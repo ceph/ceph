@@ -2695,11 +2695,6 @@ bool Objecter::_osdmap_has_pool_full() const
   return false;
 }
 
-bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
-{
-  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_osdmap_full;
-}
-
 /**
  * Wrapper around osdmap->test_flag for special handling of the FULL flag.
  */

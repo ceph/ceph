@@ -1867,6 +1867,7 @@ public:
   bool osdmap_full_flag() const;
   bool osdmap_pool_full(const int64_t pool_id) const;
 
+
  private:
 
   /**
@@ -1876,8 +1877,10 @@ public:
    *         the global full flag is set, else false
    */
   bool _osdmap_pool_full(const int64_t pool_id) const;
-  bool _osdmap_pool_full(const pg_pool_t &p) const;
-  void update_pool_full_map(map<int64_t, bool>& pool_full_map);
+  bool _osdmap_pool_full(const pg_pool_t &p) const {
+    return p.has_flag(pg_pool_t::FLAG_FULL) && honor_pool_full;
+  }
+  void update_pool_full_map(std::map<int64_t, bool>& pool_full_map);
 
   map<uint64_t, LingerOp*> linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
