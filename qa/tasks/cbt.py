@@ -73,31 +73,33 @@ class CBT(Task):
     def install_dependencies(self):
         system_type = misc.get_pkg_type('rhel')
         os_version = misc.get_system_type(self.first_mon, False, True)
+        install_cmd = list()
 
-        if system_type == 'rpm':
-            install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = None
-            if os.version.startswith('8'):
-                cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', "gcc"]
+        for host in self.ctx.cluster.remotes.keys():
+            if system_type == 'rpm':
+                install_cmd = ['sudo', 'yum', '-y', 'install']
+                cbt_depends = None
+                if os_version.startswith('8'):
+                    cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', "gcc"]
 
-                # install collectl
-                self.first_mon.run(args=[run.Raw(
-                    'wget https://sourceforge.net/projects/collectl/files/collectl/collectl-4.1.0/collectl-4.1.0.src.tar.gz;tar'
-                    ' -xvf collectl-4.1.0.src.tar.gz;cd collectl-4.1.0/;sudo ./INSTALL')])
+                    # install collectl
+                    host.run(args=[run.Raw(
+                        'wget https://sourceforge.net/projects/collectl/files/collectl/collectl-4.1.0/collectl-4.1.0.src.tar.gz;tar'
+                        ' -xvf collectl-4.1.0.src.tar.gz;cd collectl-4.1.0/;sudo ./INSTALL')])
 
-                # install pdsh
-                self.first_mon.run(args=[run.Raw(
-                    'wget '
-                    'https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/pdsh/pdsh-2.29.tar.bz2;'
-                    ' bunzip2 -d pdsh-2.29.tar.bz2; tar -xvf pdsh-2.29.tar; cd pdsh-2.29;'
-                    ' sudo ./configure --without-rsh --with-ssh; sudo make; sudo make install')])
+                    # install pdsh
+                    host.run(args=[run.Raw(
+                        'wget '
+                        'https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/pdsh/pdsh-2.29.tar.bz2;'
+                        ' bunzip2 -d pdsh-2.29.tar.bz2; tar -xvf pdsh-2.29.tar; cd pdsh-2.29;'
+                        ' sudo ./configure --without-rsh --with-ssh; sudo make; sudo make install')])
 
-            elif os.version.startswith('7'):
-                cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
-        else:
-            install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
-        self.first_mon.run(args=install_cmd + cbt_depends)
+                elif os_version.startswith('7'):
+                    cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
+            else:
+                install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
+                cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
+            host.run(args=install_cmd + cbt_depends)
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         self.log.info('benchmark: %s', benchmark_type)
