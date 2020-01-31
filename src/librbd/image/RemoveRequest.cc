@@ -218,6 +218,14 @@ void RemoveRequest<I>::handle_disable_mirror(int r) {
                  << cpp_strerror(r) << dendl;
   }
 
+  // one last chance to ensure all snapshots have been deleted
+  m_image_ctx->image_lock.lock_shared();
+  if (!m_image_ctx->snap_info.empty()) {
+    ldout(m_cct, 5) << "image has snapshots - not removing" << dendl;
+    m_ret_val = -ENOTEMPTY;
+  }
+  m_image_ctx->image_lock.unlock_shared();
+
   send_close_image(r);
 }
 
