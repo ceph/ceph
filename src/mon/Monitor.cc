@@ -340,7 +340,7 @@ int Monitor::do_admin_command(
   } else if (command == "sessions") {
     f->open_array_section("sessions");
     for (auto p : session_map.sessions) {
-      f->dump_stream("session") << *p;
+      f->dump_object("session", *p);
     }
     f->close_section();
   } else if (command == "dump_historic_ops") {
