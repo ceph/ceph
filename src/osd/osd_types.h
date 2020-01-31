@@ -491,7 +491,7 @@ struct pg_t {
     decode(v, bl);
     decode(m_pool, bl);
     decode(m_seed, bl);
-    bl.advance(sizeof(int32_t)); // was preferred
+    bl += sizeof(int32_t); // was preferred
   }
   void decode_old(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;

@@ -314,7 +314,7 @@ void request_redirect_t::decode(ceph::buffer::list::const_iterator& bl)
   decode(redirect_object, bl);
   decode(legacy_osd_instructions_len, bl);
   if (legacy_osd_instructions_len) {
-    bl.advance(legacy_osd_instructions_len);
+    bl += legacy_osd_instructions_len;
   }
   DECODE_FINISH(bl);
 }
@@ -5578,7 +5578,7 @@ void SnapSet::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(seq, bl);
-  bl.advance(1u);  // skip legacy head_exists (always true)
+  bl += 1u;  // skip legacy head_exists (always true)
   decode(snaps, bl);
   decode(clones, bl);
   decode(clone_overlap, bl);

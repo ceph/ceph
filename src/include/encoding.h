@@ -1382,7 +1382,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   } else if (skip_v) {							\
     if (bl.get_remaining() < skip_v)					\
       throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
-    bl.advance(skip_v);							\
+    bl +=  skip_v;							\
   }									\
   unsigned struct_end = 0;						\
   if (struct_v >= lenv) {						\
@@ -1467,7 +1467,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     if (bl.get_off() > struct_end)					\
       throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     if (bl.get_off() < struct_end)					\
-      bl.advance(struct_end - bl.get_off());				\
+      bl += struct_end - bl.get_off();					\
   }
 
 namespace ceph {
