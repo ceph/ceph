@@ -142,6 +142,7 @@ Release timeline
 .. _13.2.0: ../mimic#v13-2-0-mimic
 
 .. _Luminous: ../luminous
+.. _12.2.13: ../luminous#v12-2-13-luminous
 .. _12.2.12: ../luminous#v12-2-12-luminous
 .. _12.2.11: ../luminous#v12-2-11-luminous
 .. _12.2.10: ../luminous#v12-2-10-luminous

@@ -53,6 +53,8 @@ releases:
   
   luminous:
     releases:
+      - version: 12.2.13
+        released: 2020-01-31
       - version: 12.2.12
         released: 2019-04-12
       - version: 12.2.11
