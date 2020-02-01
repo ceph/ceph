@@ -2,14 +2,12 @@
 Automatically scale pg_num based on how much data is stored in each pool.
 """
 
-import errno
 import json
 import mgr_util
 import threading
 import uuid
 from six import itervalues, iteritems
-from collections import defaultdict
-from prettytable import PrettyTable, PLAIN_COLUMNS
+from prettytable import PrettyTable
 from mgr_module import MgrModule
 
 """
