@@ -429,21 +429,12 @@ class PgAutoscaler(MgrModule):
         too_many = []
         health_checks = {}
 
-        total_ratio = dict([(r, 0.0) for r in iter(root_map)])
-        total_target_ratio = dict([(r, 0.0) for r in iter(root_map)])
-        target_ratio_pools = dict([(r, []) for r in iter(root_map)])
-
         total_bytes = dict([(r, 0) for r in iter(root_map)])
         total_target_bytes = dict([(r, 0.0) for r in iter(root_map)])
         target_bytes_pools = dict([(r, []) for r in iter(root_map)])
 
         for p in ps:
             pool_id = str(p['pool_id'])
-            total_ratio[p['crush_root_id']] += max(p['actual_capacity_ratio'],
-                                                   p['target_ratio'])
-            if p['target_ratio'] > 0:
-                total_target_ratio[p['crush_root_id']] += p['target_ratio']
-                target_ratio_pools[p['crush_root_id']].append(p['pool_name'])
             total_bytes[p['crush_root_id']] += max(
                 p['actual_raw_used'],
                 p['target_bytes'] * p['raw_used_rate'])
@@ -523,34 +514,6 @@ class PgAutoscaler(MgrModule):
                 'summary': summary,
                 'count': len(too_many),
                 'detail': too_many
-            }
-
-        too_much_target_ratio = []
-        for root_id, total in iteritems(total_ratio):
-            total_target = total_target_ratio[root_id]
-            if total_target > 0 and total > 1.0:
-                too_much_target_ratio.append(
-                    'Pools %s overcommit available storage by %.03fx due to '
-                    'target_size_ratio %.03f on pools %s' % (
-                        root_map[root_id].pool_names,
-                        total,
-                        total_target,
-                        target_ratio_pools[root_id]
-                    )
-                )
-            elif total_target > 1.0:
-                too_much_target_ratio.append(
-                    'Pools %s have collective target_size_ratio %.03f > 1.0' % (
-                        root_map[root_id].pool_names,
-                        total_target
-                    )
-                )
-        if too_much_target_ratio:
-            health_checks['POOL_TARGET_SIZE_RATIO_OVERCOMMITTED'] = {
-                'severity': 'warning',
-                'summary': "%d subtrees have overcommitted pool target_size_ratio" % len(too_much_target_ratio),
-                'count': len(too_much_target_ratio),
-                'detail': too_much_target_ratio,
             }
 
         too_much_target_bytes = []
