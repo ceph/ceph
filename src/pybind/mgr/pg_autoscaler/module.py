@@ -136,6 +136,7 @@ class PgAutoscaler(MgrModule):
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',
                                  'RATIO', 'TARGET RATIO',
+                                 'EFFECTIVE RATIO',
                                  'BIAS',
                                  'PG_NUM',
 #                                 'IDEAL',
@@ -150,6 +151,7 @@ class PgAutoscaler(MgrModule):
             table.align['RAW CAPACITY'] = 'r'
             table.align['RATIO'] = 'r'
             table.align['TARGET RATIO'] = 'r'
+            table.align['EFFECTIVE RATIO'] = 'r'
             table.align['BIAS'] = 'r'
             table.align['PG_NUM'] = 'r'
 #            table.align['IDEAL'] = 'r'
@@ -168,6 +170,10 @@ class PgAutoscaler(MgrModule):
                     tr = '%.4f' % p['target_ratio']
                 else:
                     tr = ''
+                if p['effective_target_ratio'] > 0.0:
+                    etr = '%.4f' % p['effective_target_ratio']
+                else:
+                    etr = ''
                 table.add_row([
                     p['pool_name'],
                     mgr_util.format_bytes(p['logical_used'], 6),
@@ -176,6 +182,7 @@ class PgAutoscaler(MgrModule):
                     mgr_util.format_bytes(p['subtree_capacity'], 6),
                     '%.4f' % p['capacity_ratio'],
                     tr,
+                    etr,
                     p['bias'],
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
@@ -376,6 +383,7 @@ class PgAutoscaler(MgrModule):
                 'actual_capacity_ratio': actual_capacity_ratio,
                 'capacity_ratio': capacity_ratio,
                 'target_ratio': p['options'].get('target_size_ratio', 0.0),
+                'effective_target_ratio': target_ratio,
                 'pg_num_ideal': int(pool_pg_target),
                 'pg_num_final': final_pg_target,
                 'would_adjust': adjust,
