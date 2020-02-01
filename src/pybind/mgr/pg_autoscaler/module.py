@@ -76,7 +76,7 @@ class PgAdjustmentProgress(object):
     def update(self, module, progress):
         desc = 'increasing' if self.pg_num < self.pg_num_target else 'decreasing'
         module.remote('progress', 'update', self.ev_id,
-                      ev_msg="PG autoscaler %s pool %s PGs from %d to %d" %
+                      ev_msg="PG autoscaler %s pool %d PGs from %d to %d" %
                             (desc, self.pool_id, self.pg_num, self.pg_num_target),
                       ev_progress=progress,
                       refs=[("pool", self.pool_id)])
@@ -256,7 +256,7 @@ class PgAutoscaler(MgrModule):
             result[root_id] = s
             s.root_ids.append(root_id)
             s.osds |= osds
-            s.pool_ids.append(int(pool_id))
+            s.pool_ids.append(pool_id)
             s.pool_names.append(pool['pool_name'])
             s.pg_current += pool['pg_num_target'] * pool['size']
             target_ratio = pool['options'].get('target_size_ratio', 0.0)
@@ -408,7 +408,7 @@ class PgAutoscaler(MgrModule):
         pools = osdmap.get_pools()
         for pool_id in list(self._event):
             ev = self._event[pool_id]
-            pool_data = pools.get(int(pool_id))
+            pool_data = pools.get(pool_id)
             if pool_data is None or pool_data['pg_num'] == pool_data['pg_num_target']:
                 # pool is gone or we've reached our target
                 self.remote('progress', 'complete', ev.ev_id)
@@ -436,7 +436,7 @@ class PgAutoscaler(MgrModule):
         target_bytes_pools = dict([(r, []) for r in iter(root_map)])
 
         for p in ps:
-            pool_id = str(p['pool_id'])
+            pool_id = p['pool_id']
             pool_opts = pools[p['pool_name']]['options']
             if pool_opts.get('target_size_ratio', 0) > 0 and pool_opts.get('target_size_bytes', 0) > 0:
                     bytes_and_ratio.append('Pool %s has target_size_bytes and target_size_ratio set' % p['pool_name'])
@@ -476,7 +476,7 @@ class PgAutoscaler(MgrModule):
                 if pool_id in self._event:
                     self._event[pool_id].reset(pg_num, new_target)
                 else:
-                    self._event[pool_id] = PgAdjustmentProgress(int(pool_id), pg_num, new_target)
+                    self._event[pool_id] = PgAdjustmentProgress(pool_id, pg_num, new_target)
                 self._event[pool_id].update(self, 0.0)
 
                 if r[0] != 0:
