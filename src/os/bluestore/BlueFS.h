@@ -412,6 +412,9 @@ private:
     size_t dev_count,
     boost::dynamic_bitset<uint64_t>* owned_blocks,
     boost::dynamic_bitset<uint64_t>* used_blocks);
+  int _verify_alloc_granularity(
+    __u8 id, uint64_t offset, uint64_t length,
+    const char *op);
   int _adjust_granularity(
     __u8 id, uint64_t *offset, uint64_t *length, const char *op);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
