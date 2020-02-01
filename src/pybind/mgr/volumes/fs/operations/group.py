@@ -30,6 +30,10 @@ class Group(GroupTemplate):
         return os.path.join(self.vol_spec.base_dir.encode('utf-8'), self.groupname.encode('utf-8'))
 
     @property
+    def group_name(self):
+        return self.groupname
+
+    @property
     def uid(self):
         return self.user_id
 

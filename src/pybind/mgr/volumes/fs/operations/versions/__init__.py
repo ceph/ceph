@@ -5,6 +5,7 @@ import importlib
 import cephfs
 
 from .subvolume_base import SubvolumeBase
+from ..op_sm import OpSm
 from ...exception import VolumeException, MetadataMgrException
 
 log = logging.getLogger(__name__)
@@ -49,8 +50,13 @@ class SubvolumeLoader(object):
             fs.mkdirs(subvolume.legacy_dir, 0o700)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], "error accessing subvolume")
+        subvolume_type = SubvolumeBase.SUBVOLUME_TYPE_NORMAL
+        try:
+            initial_state = OpSm.get_init_state(subvolume_type)
+        except OpSmException as oe:
+            raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
         qpath = subvolume.base_path.decode('utf-8')
-        subvolume.init_config(self.max_version, SubvolumeBase.SUBVOLUME_TYPE_NORMAL, qpath, "complete")
+        subvolume.init_config(self.max_version, subvolume_type, qpath, initial_state)
 
     def get_subvolume_object(self, fs, vol_spec, group, subvolname, upgrade=True):
         subvolume = SubvolumeBase(fs, vol_spec, group, subvolname)

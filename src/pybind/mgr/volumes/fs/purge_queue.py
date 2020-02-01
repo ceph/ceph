@@ -1,176 +1,46 @@
-import sys
-import time
 import errno
 import logging
-import threading
-import traceback
-from collections import deque
 
+from .async_job import AsyncJobs
 from .exception import VolumeException
 from .operations.volume import open_volume, open_volume_lockless
 from .operations.trash import open_trashcan
 
 log = logging.getLogger(__name__)
 
-class PurgeQueueBase(object):
-    """
-    Base class for implementing purge queue strategies.
-    """
+# helper for fetching a trash entry for a given volume
+def get_trash_entry_for_volume(volume_client, volname, running_jobs):
+    log.debug("fetching trash entry for volume '{0}'".format(volname))
 
-    # this is "not" configurable and there is no need for it to be
-    # configurable. if a purge thread encounters an exception, we
-    # retry, till it hits this many consecutive exceptions after
-    # which a warning is sent to `ceph status`.
-    MAX_RETRIES_ON_EXCEPTION = 10
+    try:
+        with open_volume(volume_client, volname) as fs_handle:
+            try:
+                with open_trashcan(fs_handle, volume_client.volspec) as trashcan:
+                    path = trashcan.get_trash_entry(running_jobs)
+                    return 0, path
+            except VolumeException as ve:
+                if ve.errno == -errno.ENOENT:
+                    return 0, None
+                raise ve
+    except VolumeException as ve:
+        log.error("error fetching trash entry for volume '{0}' ({1})".format(volname), ve)
+        return ve.errno, None
+    return ret
 
-    class PurgeThread(threading.Thread):
-        def __init__(self, volume_client, name, purge_fn):
-            self.vc = volume_client
-            self.purge_fn = purge_fn
-            # event object to cancel ongoing purge
-            self.cancel_event = threading.Event()
-            threading.Thread.__init__(self, name=name)
+# helper for starting a purge operation on a trash entry
+def purge_trash_entry_for_volume(volume_client, volname, purge_dir, should_cancel):
+    log.debug("purging trash entry '{0}' for volume '{1}'".format(purge_dir, volname))
 
-        def run(self):
-            retries = 0
-            thread_name = threading.currentThread().getName()
-            while retries < PurgeQueueBase.MAX_RETRIES_ON_EXCEPTION:
-                try:
-                    self.purge_fn()
-                    retries = 0
-                except Exception:
-                    retries += 1
-                    log.warning("purge thread [{0}] encountered fatal error: (attempt#" \
-                                " {1}/{2})".format(thread_name, retries,
-                                                   PurgeQueueBase.MAX_RETRIES_ON_EXCEPTION))
-                    exc_type, exc_value, exc_traceback = sys.exc_info()
-                    log.warning("traceback: {0}".format("".join(
-                        traceback.format_exception(exc_type, exc_value, exc_traceback))))
-                    time.sleep(1)
-            log.error("purge thread [{0}] reached exception limit, bailing out...".format(thread_name))
-            self.vc.cluster_log("purge thread {0} bailing out due to exception".format(thread_name))
+    ret = 0
+    try:
+        with open_volume_lockless(volume_client, volname) as fs_handle:
+            with open_trashcan(fs_handle, volume_client.volspec) as trashcan:
+                trashcan.purge(purge_dir, should_cancel)
+    except VolumeException as ve:
+        ret = ve.errno
+    return ret
 
-        def cancel_job(self):
-            self.cancel_event.set()
-
-        def should_cancel(self):
-            return self.cancel_event.isSet()
-
-        def reset_cancel(self):
-            self.cancel_event.clear()
-
-    def __init__(self, volume_client):
-        self.vc = volume_client
-        # volumes whose subvolumes need to be purged
-        self.q = deque()
-        # job tracking
-        self.jobs = {}
-        # lock, cv for kickstarting purge
-        self.lock = threading.Lock()
-        self.cv = threading.Condition(self.lock)
-        # lock, cv for purge cancellation
-        self.waiting = False
-        self.c_lock = threading.Lock()
-        self.c_cv = threading.Condition(self.c_lock)
-
-    def queue_purge_job(self, volname):
-        with self.lock:
-            if not self.q.count(volname):
-                self.q.append(volname)
-                self.jobs[volname] = []
-            self.cv.notifyAll()
-
-    def _cancel_purge_job(self, volname):
-        log.info("cancelling purge jobs for volume '{0}'".format(volname))
-        locked = True
-        try:
-            if not self.q.count(volname):
-                return
-            self.q.remove(volname)
-            if not self.jobs.get(volname, []):
-                return
-            # cancel in-progress purge operation and wait until complete
-            for j in self.jobs[volname]:
-                j[1].cancel_job()
-            # wait for cancellation to complete
-            with self.c_lock:
-                locked = False
-                self.waiting = True
-                self.lock.release()
-                while self.waiting:
-                    log.debug("waiting for {0} in-progress purge jobs for volume '{1}' to " \
-                             "cancel".format(len(self.jobs[volname]), volname))
-                    self.c_cv.wait()
-        finally:
-            if not locked:
-                self.lock.acquire()
-
-    def cancel_purge_job(self, volname):
-        self.lock.acquire()
-        self._cancel_purge_job(volname)
-        self.lock.release()
-
-    def cancel_all_jobs(self):
-        self.lock.acquire()
-        for volname in list(self.q):
-            self._cancel_purge_job(volname)
-        self.lock.release()
-
-    def register_job(self, volname, purge_dir):
-        log.debug("registering purge job: {0}.{1}".format(volname, purge_dir))
-
-        thread_id = threading.currentThread()
-        self.jobs[volname].append((purge_dir, thread_id))
-
-    def unregister_job(self, volname, purge_dir):
-        log.debug("unregistering purge job: {0}.{1}".format(volname, purge_dir))
-
-        thread_id = threading.currentThread()
-        self.jobs[volname].remove((purge_dir, thread_id))
-
-        cancelled = thread_id.should_cancel()
-        thread_id.reset_cancel()
-
-        # wake up cancellation waiters if needed
-        if not self.jobs[volname] and cancelled:
-            logging.info("waking up cancellation waiters")
-            self.jobs.pop(volname)
-            with self.c_lock:
-                self.waiting = False
-                self.c_cv.notifyAll()
-
-    def get_trash_entry_for_volume(self, volname):
-        log.debug("fetching trash entry for volume '{0}'".format(volname))
-
-        exclude_entries = [v[0] for v in self.jobs[volname]]
-        fs_handle = None
-        try:
-            with open_volume(self.vc, volname) as fs_handle:
-                with open_trashcan(fs_handle, self.vc.volspec) as trashcan:
-                    path = trashcan.get_trash_entry(exclude_entries)
-                    ret = 0, path
-        except VolumeException as ve:
-            if ve.errno == -errno.ENOENT and fs_handle:
-                ret = 0, None
-            else:
-                log.error("error fetching trash entry for volume '{0}' ({1})".format(volname), ve)
-                ret = ve.errno, None
-        return ret
-
-    def purge_trash_entry_for_volume(self, volname, purge_dir):
-        log.debug("purging trash entry '{0}' for volume '{1}'".format(purge_dir, volname))
-
-        ret = 0
-        thread_id = threading.currentThread()
-        try:
-            with open_volume_lockless(self.vc, volname) as fs_handle:
-                with open_trashcan(fs_handle, self.vc.volspec) as trashcan:
-                    trashcan.purge(purge_dir, should_cancel=lambda: thread_id.should_cancel())
-        except VolumeException as ve:
-            ret = ve.errno
-        return ret
-
-class ThreadPoolPurgeQueueMixin(PurgeQueueBase):
+class ThreadPoolPurgeQueueMixin(AsyncJobs):
     """
     Purge queue mixin class maintaining a pool of threads for purging trash entries.
     Subvolumes are chosen from volumes in a round robin fashion. If some of the purge
@@ -179,68 +49,11 @@ class ThreadPoolPurgeQueueMixin(PurgeQueueBase):
     _all_ threads purging entries for one volume (starving other volumes).
     """
     def __init__(self, volume_client, tp_size):
-        super(ThreadPoolPurgeQueueMixin, self).__init__(volume_client)
-        self.threads = []
-        for i in range(tp_size):
-            self.threads.append(
-                PurgeQueueBase.PurgeThread(volume_client, name="purgejob.{}".format(i), purge_fn=self.run))
-            self.threads[-1].start()
+        self.vc = volume_client
+        super(ThreadPoolPurgeQueueMixin, self).__init__(volume_client, "puregejob", tp_size)
 
-    def pick_purge_dir_from_volume(self):
-        log.debug("processing {0} purge job entries".format(len(self.q)))
-        nr_vols = len(self.q)
-        to_remove = []
-        to_purge = None, None
-        while nr_vols > 0:
-            volname = self.q[0]
-            # do this now so that the other thread picks up trash entry
-            # for next volume.
-            self.q.rotate(1)
-            ret, purge_dir = self.get_trash_entry_for_volume(volname)
-            if purge_dir:
-                to_purge = volname, purge_dir
-                break
-            # this is an optimization when for a given volume there are no more
-            # entries in trash and no purge operations are in progress. in such
-            # a case we remove the volume from the tracking list so as to:
-            #
-            # a. not query the filesystem for trash entries over and over again
-            # b. keep the filesystem connection idle so that it can be freed
-            #    from the connection pool
-            #
-            # if at all there are subvolume deletes, the volume gets added again
-            # to the tracking list and the purge operations kickstarts.
-            # note that, we do not iterate the volume list fully if there is a
-            # purge entry to process (that will take place eventually).
-            if ret == 0 and not purge_dir and not self.jobs[volname]:
-                to_remove.append(volname)
-            nr_vols -= 1
-        for vol in to_remove:
-            log.debug("auto removing volume '{0}' from purge job".format(vol))
-            self.q.remove(vol)
-            self.jobs.pop(vol)
-        return to_purge
+    def get_next_job(self, volname, running_jobs):
+        return get_trash_entry_for_volume(self.vc, volname, running_jobs)
 
-    def get_next_trash_entry(self):
-        while True:
-            # wait till there's a purge job
-            while not self.q:
-                log.debug("purge job list empty, waiting...")
-                self.cv.wait()
-            volname, purge_dir = self.pick_purge_dir_from_volume()
-            if purge_dir:
-                return volname, purge_dir
-            log.debug("no purge jobs available, waiting...")
-            self.cv.wait()
-
-    def run(self):
-        while True:
-            with self.lock:
-                volname, purge_dir = self.get_next_trash_entry()
-                self.register_job(volname, purge_dir)
-            ret = self.purge_trash_entry_for_volume(volname, purge_dir)
-            if ret != 0:
-                log.warn("failed to purge {0}.{1} ({2})".format(volname, purge_dir, ret))
-            with self.lock:
-                self.unregister_job(volname, purge_dir)
-            time.sleep(1)
+    def execute_job(self, volname, job, should_cancel):
+        purge_trash_entry_for_volume(self.vc, volname, job, should_cancel)

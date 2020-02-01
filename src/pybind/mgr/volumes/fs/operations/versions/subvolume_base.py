@@ -17,14 +17,42 @@ class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
 
     SUBVOLUME_TYPE_NORMAL = "subvolume"
+    SUBVOLUME_TYPE_CLONE  = "clone"
 
     def __init__(self, fs, vol_spec, group, subvolname, legacy=False):
         self.fs = fs
+        self.cmode = None
+        self.user_id = None
+        self.group_id = None
         self.vol_spec = vol_spec
         self.group = group
         self.subvolname = subvolname
         self.legacy_mode = legacy
         self.load_config()
+
+    @property
+    def uid(self):
+        return self.user_id
+
+    @property
+    def gid(self):
+        return self.group_id
+
+    @property
+    def mode(self):
+        return self.cmode
+
+    @uid.setter
+    def uid(self, val):
+        self.user_id = val
+
+    @gid.setter
+    def gid(self, val):
+        self.group_id = val
+
+    @mode.setter
+    def mode(self, val):
+        self.cmode = val
 
     @property
     def base_path(self):
@@ -50,6 +78,14 @@ class SubvolumeBase(object):
         return "{0}{1}".format(self.vol_spec.fs_namespace, self.subvolname)
 
     @property
+    def group_name(self):
+        return self.group.group_name
+
+    @property
+    def subvol_name(self):
+        return self.subvolname
+
+    @property
     def legacy_mode(self):
         return self.legacy
 
@@ -63,7 +99,7 @@ class SubvolumeBase(object):
         else:
             self.metadata_mgr = MetadataManager(self.fs, self.config_path, 0o640)
 
-    def _set_attrs(self, path, size, isolate_namespace, pool, mode, uid, gid):
+    def _set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
         # set size
         if size is not None:
             try:

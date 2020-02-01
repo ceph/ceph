@@ -163,6 +163,46 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Resize a CephFS subvolume",
             'perm': 'rw'
         },
+        {
+            'cmd': 'fs subvolume snapshot protect '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Protect snapshot of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot unprotect '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Unprotect a snapshot of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot clone '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=target_sub_name,type=CephString '
+                   'name=pool_layout,type=CephString,req=false '
+                   'name=group_name,type=CephString,req=false '
+                   'name=target_group_name,type=CephString,req=false ',
+            'desc': "Clone a snapshot to target subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs clone status '
+                   'name=vol_name,type=CephString '
+                   'name=clone_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get status on a cloned subvolume.",
+            'perm': 'r'
+        },
 
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -304,3 +344,21 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.resize_subvolume(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                         new_size=cmd['new_size'], group_name=cmd.get('group_name', None),
                                         no_shrink=cmd.get('no_shrink', False))
+
+    def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
+        return self.vc.protect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
+                                                  snap_name=cmd['snap_name'], group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_subvolume_snapshot_unprotect(self, inbuf, cmd):
+        return self.vc.unprotect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
+                                                    snap_name=cmd['snap_name'], group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_subvolume_snapshot_clone(self, inbuf, cmd):
+        return self.vc.clone_subvolume_snapshot(
+            vol_name=cmd['vol_name'], sub_name=cmd['sub_name'], snap_name=cmd['snap_name'],
+            group_name=cmd.get('group_name', None), pool_layout=cmd.get('pool_layout', None),
+            target_sub_name=cmd['target_sub_name'], target_group_name=cmd.get('target_group_name', None))
+
+    def _cmd_fs_clone_status(self, inbuf, cmd):
+        return self.vc.clone_status(
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
