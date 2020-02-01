@@ -528,6 +528,7 @@ void BlueFS::_init_alloc()
   alloc.resize(MAX_BDEV);
   alloc_size.resize(MAX_BDEV, 0);
   pending_release.resize(MAX_BDEV);
+  block_unused_too_granular.resize(MAX_BDEV);
 
   if (bdev[BDEV_WAL]) {
     alloc_size[BDEV_WAL] = cct->_conf->bluefs_alloc_size;
@@ -586,6 +587,7 @@ void BlueFS::_stop_alloc()
     }
   }
   alloc.clear();
+  block_unused_too_granular.clear();
 }
 
 int BlueFS::mount()
@@ -833,20 +835,36 @@ int BlueFS::_check_new_allocations(const bluefs_fnode_t& fnode,
 }
 
 int BlueFS::_adjust_granularity(
-  __u8 id, uint64_t *offset, uint64_t *length, const char *op)
+  __u8 id, uint64_t *offset, uint64_t *length, bool alloc)
 {
+  const char *op = alloc ? "op_alloc_add" : "op_alloc_rm";
   auto oldo = *offset;
   auto oldl = *length;
   if (*offset & (alloc_size[id] - 1)) {
     *offset &= ~(alloc_size[id] - 1);
     *offset += alloc_size[id];
     if (*length > *offset - oldo) {
+      if (alloc) {
+	block_unused_too_granular[id].insert(oldo, *offset - oldo);
+      } else {
+	block_unused_too_granular[id].erase(oldo, *offset - oldo);
+      }
       *length -= (*offset - oldo);
     } else {
+      if (alloc) {
+	block_unused_too_granular[id].insert(oldo, *length);
+      } else {
+	block_unused_too_granular[id].erase(oldo, *length);
+      }
       *length = 0;
     }
   }
-  *length &= ~(alloc_size[id] - 1);
+  if (*length & (alloc_size[id] - 1)) {
+    *length &= ~(alloc_size[id] - 1);
+    block_unused_too_granular[id].insert(
+      *offset + *length,
+      oldo + oldl - *offset - *length);
+  }
   if (oldo != *offset || oldl != *length) {
     derr << __func__ << " " << op << " "
 	 << (int)id << ":" << std::hex << oldo << "~" << oldl
@@ -894,6 +912,11 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
   FileRef log_file;
   log_file = _get_file(1);
+
+  // sanity check
+  for (auto& a : block_unused_too_granular) {
+    ceph_assert(a.empty());
+  }
 
   if (!noop) {
     log_file->fnode = super.log_fnode;
@@ -1107,7 +1130,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
           }
 	  if (!noop) {
 	    block_all[id].insert(offset, length);
-	    _adjust_granularity(id, &offset, &length, "op_alloc_add");
+	    _adjust_granularity(id, &offset, &length, true);
 	    if (length) {
 	      alloc[id]->init_add_free(offset, length);
 	    }
@@ -1166,7 +1189,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
           }
 	  if (!noop) {
 	    block_all[id].erase(offset, length);
-	    _adjust_granularity(id, &offset, &length, "op_alloc_rm");
+	    _adjust_granularity(id, &offset, &length, false);
 	    if (length) {
 	      alloc[id]->init_rm_free(offset, length);
 	    }
@@ -1474,6 +1497,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     }
   }
 
+  for (unsigned id = 0; id < MAX_BDEV; ++id) {
+    dout(10) << __func__ << " block_unused_too_granular " << id << ": "
+	     << block_unused_too_granular[id] << dendl;
+  }
   dout(10) << __func__ << " done" << dendl;
   return 0;
 }

@@ -320,6 +320,7 @@ private:
   vector<Allocator*> alloc;                   ///< allocators for bdevs
   vector<uint64_t> alloc_size;                ///< alloc size for each device
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
+  vector<interval_set<uint64_t>> block_unused_too_granular;
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
@@ -416,7 +417,7 @@ private:
     __u8 id, uint64_t offset, uint64_t length,
     const char *op);
   int _adjust_granularity(
-    __u8 id, uint64_t *offset, uint64_t *length, const char *op);
+    __u8 id, uint64_t *offset, uint64_t *length, bool alloc);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
