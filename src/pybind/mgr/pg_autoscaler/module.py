@@ -44,6 +44,22 @@ def nearest_power_of_two(n):
 
     return x if (v - n) > (n - x) else v
 
+def effective_target_ratio(target_ratio, total_target_ratio, total_target_bytes, capacity):
+    """
+    Returns the target ratio after normalizing for ratios across pools and
+    adjusting for capacity reserved by pools that have target_size_bytes set.
+    """
+    target_ratio = float(target_ratio)
+    if total_target_ratio:
+        target_ratio = target_ratio / total_target_ratio
+
+    if total_target_bytes and capacity:
+        fraction_available = 1.0 - min(1.0, float(total_target_bytes) / capacity)
+        target_ratio *= fraction_available
+
+    return target_ratio
+
+
 class PgAdjustmentProgress(object):
     """
     Keeps the initial and target pg_num values
@@ -200,6 +216,8 @@ class PgAutoscaler(MgrModule):
                 self.capacity = None  # Total capacity of OSDs in subtree
                 self.pool_ids = []
                 self.pool_names = []
+                self.total_target_ratio = 0.0
+                self.total_target_bytes = 0 # including replication / EC overhead
 
         # identify subtrees (note that they may overlap!)
         for pool_id, pool in osdmap.get_pools().items():
@@ -223,7 +241,13 @@ class PgAutoscaler(MgrModule):
             s.pool_ids.append(int(pool_id))
             s.pool_names.append(pool['pool_name'])
             s.pg_current += pool['pg_num_target'] * pool['size']
-
+            target_ratio = pool['options'].get('target_size_ratio', 0.0)
+            if target_ratio:
+                s.total_target_ratio += target_ratio
+            else:
+                target_bytes = pool['options'].get('target_size_bytes', 0)
+                if target_bytes:
+                    s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool_id)
 
         # finish subtrees
         all_stats = self.get('osd_stats')
@@ -249,7 +273,6 @@ class PgAutoscaler(MgrModule):
                            s.pg_target)
 
         return result, pool_root
-
 
     def _get_pool_status(
             self,
@@ -290,7 +313,10 @@ class PgAutoscaler(MgrModule):
 
             pool_logical_used = pool_stats[pool_id]['stored']
             bias = p['options'].get('pg_autoscale_bias', 1.0)
-            target_bytes = p['options'].get('target_size_bytes', 0)
+            target_bytes = 0
+            # ratio takes precedence if both are set
+            if p['options'].get('target_size_ratio', 0.0) == 0.0:
+                target_bytes = p['options'].get('target_size_bytes', 0)
 
             # What proportion of space are we using?
             actual_raw_used = pool_logical_used * raw_used_rate
@@ -299,7 +325,16 @@ class PgAutoscaler(MgrModule):
             pool_raw_used = max(pool_logical_used, target_bytes) * raw_used_rate
             capacity_ratio = float(pool_raw_used) / capacity
 
-            target_ratio = p['options'].get('target_size_ratio', 0.0)
+            self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
+                p['options'].get('target_size_ratio', 0.0),
+                root_map[root_id].total_target_ratio,
+                root_map[root_id].total_target_bytes,
+                capacity))
+            target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
+                                                  root_map[root_id].total_target_ratio,
+                                                  root_map[root_id].total_target_bytes,
+                                                  capacity)
+
             final_ratio = max(capacity_ratio, target_ratio)
 
             # So what proportion of pg allowance should we be using?
@@ -340,7 +375,7 @@ class PgAutoscaler(MgrModule):
                 'raw_used': pool_raw_used,
                 'actual_capacity_ratio': actual_capacity_ratio,
                 'capacity_ratio': capacity_ratio,
-                'target_ratio': target_ratio,
+                'target_ratio': p['options'].get('target_size_ratio', 0.0),
                 'pg_num_ideal': int(pool_pg_target),
                 'pg_num_final': final_pg_target,
                 'would_adjust': adjust,
