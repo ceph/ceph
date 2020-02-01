@@ -55,6 +55,11 @@ class MetadataManager(object):
                 self.fs.close(fd)
 
     def flush(self):
+        # cull empty sections
+        for section in list(self.config.sections()):
+            if len(self.config.items(section)) == 0:
+                self.config.remove_section(section)
+
         conf_data = StringIO()
         self.config.write(conf_data)
         conf_data.seek(0)
@@ -116,6 +121,9 @@ class MetadataManager(object):
         for key,value in dct.items():
             self.config.set(section, key, str(value))
 
+    def update_global_section(self, key, value):
+        self.update_section(MetadataManager.GLOBAL_SECTION, key, str(value))
+
     def get_option(self, section, key):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
@@ -125,3 +133,8 @@ class MetadataManager(object):
 
     def get_global_option(self, key):
         return self.get_option(MetadataManager.GLOBAL_SECTION, key)
+
+    def section_has_item(self, section, item):
+        if not self.config.has_section(section):
+            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
+        return item in [v[1] for v in self.config.items(section)]

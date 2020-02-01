@@ -28,7 +28,24 @@ def create_subvol(fs, vol_spec, group, subvolname, size, isolate_nspace, pool, m
     subvolume = loaded_subvolumes.get_subvolume_object_max(fs, vol_spec, group, subvolname)
     subvolume.create(size, isolate_nspace, pool, mode, uid, gid)
 
-def remove_subvol(fs, vol_spec, group, subvolname):
+def create_clone(fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname):
+    """
+    create a cloned subvolume.
+
+    :param fs: ceph filesystem handle
+    :param vol_spec: volume specification
+    :param group: group object for the clone
+    :param subvolname: clone subvolume nam
+    :param pool: the RADOS pool where the data objects of the cloned subvolume will be stored
+    :param source_volume: source subvolumes volume name
+    :param source_subvolume: source (parent) subvolume object
+    :param snapname: source subvolume snapshot
+    :return None
+    """
+    subvolume = loaded_subvolumes.get_subvolume_object_max(fs, vol_spec, group, subvolname)
+    subvolume.create_clone(pool, source_volume, source_subvolume, snapname)
+
+def remove_subvol(fs, vol_spec, group, subvolname, force=False):
     """
     remove a subvolume.
 
@@ -36,15 +53,17 @@ def remove_subvol(fs, vol_spec, group, subvolname):
     :param vol_spec: volume specification
     :param group: group object for the subvolume
     :param subvolname: subvolume name
+    :param force: force remove subvolumes
     :return: None
     """
-    with open_subvol(fs, vol_spec, group, subvolname) as subvolume:
+    nc_flag = True if not force else False
+    with open_subvol(fs, vol_spec, group, subvolname, need_complete=nc_flag) as subvolume:
         if subvolume.list_snapshots():
             raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(subvolname))
         subvolume.remove()
 
 @contextmanager
-def open_subvol(fs, vol_spec, group, subvolname):
+def open_subvol(fs, vol_spec, group, subvolname, need_complete=True, expected_types=[]):
     """
     open a subvolume. This API is to be used as a context manager.
 
@@ -52,8 +71,12 @@ def open_subvol(fs, vol_spec, group, subvolname):
     :param vol_spec: volume specification
     :param group: group object for the subvolume
     :param subvolname: subvolume name
+    :param need_complete: check if the subvolume is usable (since cloned subvolumes can
+                          be in transient state). defaults to True.
+    :param expected_types: check if the subvolume is one the provided types. defaults to
+                           all.
     :return: yields a subvolume object (subclass of SubvolumeTemplate)
     """
     subvolume = loaded_subvolumes.get_subvolume_object(fs, vol_spec, group, subvolname)
-    subvolume.open()
+    subvolume.open(need_complete, expected_types)
     yield subvolume
