@@ -832,6 +832,29 @@ int BlueFS::_check_new_allocations(const bluefs_fnode_t& fnode,
   return 0;
 }
 
+int BlueFS::_adjust_granularity(
+  __u8 id, uint64_t *offset, uint64_t *length, const char *op)
+{
+  auto oldo = *offset;
+  auto oldl = *length;
+  if (*offset & (alloc_size[id] - 1)) {
+    *offset &= ~(alloc_size[id] - 1);
+    *offset += alloc_size[id];
+    if (*length > *offset - oldo) {
+      *length -= (*offset - oldo);
+    } else {
+      *length = 0;
+    }
+  }
+  *length &= ~(alloc_size[id] - 1);
+  if (oldo != *offset || oldl != *length) {
+    derr << __func__ << " " << op << " "
+	 << (int)id << ":" << std::hex << oldo << "~" << oldl
+	 << " -> " << (int)id << ":" << *offset << "~" << *length << dendl;
+  }
+  return 0;
+}
+
 int BlueFS::_replay(bool noop, bool to_stdout)
 {
   dout(10) << __func__ << (noop ? " NO-OP" : "") << dendl;
@@ -1051,10 +1074,12 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << ":0x" << std::hex << offset << "~" << length << std::dec
                       << std::endl;
           }
-
 	  if (!noop) {
 	    block_all[id].insert(offset, length);
-	    alloc[id]->init_add_free(offset, length);
+	    _adjust_granularity(id, &offset, &length, "op_alloc_add");
+	    if (length) {
+	      alloc[id]->init_add_free(offset, length);
+	    }
 
             if (cct->_conf->bluefs_log_replay_check_allocations) {
               bool fail = false;
@@ -1108,10 +1133,12 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << ":0x" << std::hex << offset << "~" << length << std::dec
                       << std::endl;
           }
-
 	  if (!noop) {
 	    block_all[id].erase(offset, length);
-	    alloc[id]->init_rm_free(offset, length);
+	    _adjust_granularity(id, &offset, &length, "op_alloc_rm");
+	    if (length) {
+	      alloc[id]->init_rm_free(offset, length);
+	    }
             if (cct->_conf->bluefs_log_replay_check_allocations) {
               bool fail = false;
               apply_for_bitset_range(offset, length, alloc_size[id], owned_blocks[id],
