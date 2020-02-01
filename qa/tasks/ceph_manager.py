@@ -319,15 +319,8 @@ class OSDThrasher(Thrasher):
                     "exp.{pg}.{id}".format(
                         pg=pg,
                         id=exp_osd))
-                exp_host_path_dirs = [
-                    os.path.join(
-                        '/var/log/ceph',
-                        self.ceph_manager.ctx.ceph[self.ceph_manager.cluster].fsid),
-                    '/var/log/ceph',
-                ]
             else:
                 exp_host_path = exp_path
-                exp_host_path_dirs = ['/var/log/ceph']
 
             # export
             # Can't use new export-remove op since this is part of upgrade testing
@@ -382,11 +375,20 @@ class OSDThrasher(Thrasher):
                         self.log("Transfer export file from {srem} to {trem}".
                                  format(srem=exp_remote, trem=imp_remote))
                         # just in case an upgrade make /var/log/ceph unreadable by non-root,
-                        for d in exp_host_path_dirs:
-                            exp_remote.run(args=['sudo', 'chmod', '777', d])
-                            imp_remote.run(args=['sudo', 'chmod', '777', d])
-                        tmpexport = Remote.get_file(exp_remote, exp_host_path)
-                        Remote.put_file(imp_remote, tmpexport, exp_host_path)
+                        exp_remote.run(args=['sudo', 'chmod', '777',
+                                             '/var/log/ceph'])
+                        imp_remote.run(args=['sudo', 'chmod', '777',
+                                             '/var/log/ceph'])
+                        tmpexport = Remote.get_file(exp_remote, exp_host_path,
+                                                    sudo=True)
+                        if exp_host_path != exp_path:
+                            # push to /var/log/ceph, then rename (we can't
+                            # chmod 777 the /var/log/ceph/$fsid mountpoint)
+                            Remote.put_file(imp_remote, tmpexport, exp_path)
+                            imp_remote.run(args=[
+                                'sudo', 'mv', exp_path, exp_host_path])
+                        else:
+                            Remote.put_file(imp_remote, tmpexport, exp_host_path)
                         os.remove(tmpexport)
                 else:
                     # Can't move the pg after all
