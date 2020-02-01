@@ -427,6 +427,7 @@ class PgAutoscaler(MgrModule):
         # drop them from consideration.
         too_few = []
         too_many = []
+        bytes_and_ratio = []
         health_checks = {}
 
         total_bytes = dict([(r, 0) for r in iter(root_map)])
@@ -435,6 +436,9 @@ class PgAutoscaler(MgrModule):
 
         for p in ps:
             pool_id = str(p['pool_id'])
+            pool_opts = pools[p['pool_name']]['options']
+            if pool_opts.get('target_size_ratio', 0) > 0 and pool_opts.get('target_size_bytes', 0) > 0:
+                    bytes_and_ratio.append('Pool %s has target_size_bytes and target_size_ratio set' % p['pool_name'])
             total_bytes[p['crush_root_id']] += max(
                 p['actual_raw_used'],
                 p['target_bytes'] * p['raw_used_rate'])
@@ -546,5 +550,12 @@ class PgAutoscaler(MgrModule):
                 'detail': too_much_target_bytes,
             }
 
+        if bytes_and_ratio:
+            health_checks['POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO'] = {
+                'severity': 'warning',
+                'summary': "%d pools have both target_size_bytes and target_size_ratio set" % len(bytes_and_ratio),
+                'count': len(bytes_and_ratio),
+                'detail': bytes_and_ratio,
+            }
 
         self.set_health_checks(health_checks)

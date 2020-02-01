@@ -848,6 +848,21 @@ the pool is too large and should be reduced or set to zero with::
 
 For more information, see :ref:`specifying_pool_target_size`.
 
+POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO
+____________________________________
+
+One or more pools have both ``target_size_bytes`` and
+``target_size_ratio`` set to estimate the expected size of the pool.
+Only one of these properties should be non-zero. If both are set,
+``target_size_ratio`` takes precedence and ``target_size_bytes`` is
+ignored.
+
+To reset ``target_size_bytes`` to zero::
+
+  ceph osd pool set <pool-name> target_size_bytes 0
+
+For more information, see :ref:`specifying_pool_target_size`.
+
 TOO_FEW_OSDS
 ____________
 

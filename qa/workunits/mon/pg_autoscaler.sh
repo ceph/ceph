@@ -68,6 +68,11 @@ ceph osd pool set a target_size_ratio 0
 ceph osd pool set b target_size_ratio 0
 wait_for 60 "ceph health detail | grep POOL_TARGET_SIZE_BYTES_OVERCOMMITTED"
 
+ceph osd pool set a target_size_bytes 1000
+ceph osd pool set b target_size_bytes 1000
+ceph osd pool set a target_size_ratio 1
+wait_for 60 "ceph health detail | grep POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO"
+
 ceph osd pool rm a a --yes-i-really-really-mean-it
 ceph osd pool rm b b --yes-i-really-really-mean-it
 
