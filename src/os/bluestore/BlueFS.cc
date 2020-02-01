@@ -336,24 +336,44 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
           << " want 0x" << std::hex << want << std::dec << dendl;
   ceph_assert(id < alloc.size());
   ceph_assert(alloc[id]);
+  int64_t got = 0;
 
-  int64_t got = alloc[id]->allocate(want, alloc_size[id], 0, extents);
-  ceph_assert(got != 0);
-  if (got < 0) {
-    derr << __func__ << " failed to allocate space to return to bluestore"
-      << dendl;
-    alloc[id]->dump();
-    return got;
+  interval_set<uint64_t> granular;
+  while (want > 0 && !block_unused_too_granular[id].empty()) {
+    auto p = block_unused_too_granular[id].begin();
+    dout(20) << __func__ << " unused " << (int)id << ":"
+	     << std::hex << p.get_start() << "~" << p.get_len() << dendl;
+    extents->push_back({p.get_start(), p.get_len()});
+    granular.insert(p.get_start(), p.get_len());
+    if (want >= p.get_len()) {
+      want -= p.get_len();
+    } else {
+      want = 0;
+    }
+    got += p.get_len();
+    block_unused_too_granular[id].erase(p);
   }
 
-  for (auto& p : *extents) {
-    block_all[id].erase(p.offset, p.length);
-    log_t.op_alloc_rm(id, p.offset, p.length);
-  }
+  if (want > 0) {
+    got += alloc[id]->allocate(want, alloc_size[id], 0, extents);
+    ceph_assert(got != 0);
+    if (got < 0) {
+      derr << __func__ << " failed to allocate space to return to bluestore"
+	   << dendl;
+      alloc[id]->dump();
+      block_unused_too_granular[id].insert(granular);
+      return got;
+    }
 
-  flush_bdev();
-  int r = _flush_and_sync_log(l);
-  ceph_assert(r == 0);
+    for (auto& p : *extents) {
+      block_all[id].erase(p.offset, p.length);
+      log_t.op_alloc_rm(id, p.offset, p.length);
+    }
+
+    flush_bdev();
+    int r = _flush_and_sync_log(l);
+    ceph_assert(r == 0);
+  }
 
   logger->inc(l_bluefs_reclaim_bytes, got);
   dout(1) << __func__ << " bdev " << id << " want 0x" << std::hex << want
@@ -861,9 +881,15 @@ int BlueFS::_adjust_granularity(
   }
   if (*length & (alloc_size[id] - 1)) {
     *length &= ~(alloc_size[id] - 1);
-    block_unused_too_granular[id].insert(
-      *offset + *length,
-      oldo + oldl - *offset - *length);
+    if (alloc) {
+      block_unused_too_granular[id].insert(
+	*offset + *length,
+	oldo + oldl - *offset - *length);
+    } else {
+      block_unused_too_granular[id].erase(
+	*offset + *length,
+	oldo + oldl - *offset - *length);
+    }
   }
   if (oldo != *offset || oldl != *length) {
     derr << __func__ << " " << op << " "
