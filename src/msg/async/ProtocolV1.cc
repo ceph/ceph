@@ -1051,7 +1051,10 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
   middle.clear();
   data.clear();
 
-  if (need_dispatch_writer && connection->is_connected()) {
+  // Because this and write_event in the same thread, So it's safe use write_in_progress
+  // w/o write_lock.
+  if (need_dispatch_writer && !write_in_progress && connection->is_connected()) {
+    write_in_progress = true;
     connection->center->dispatch_event_external(connection->write_handler);
   }
 
