@@ -855,6 +855,37 @@ int BlueFS::_adjust_granularity(
   return 0;
 }
 
+int BlueFS::_verify_alloc_granularity(
+  __u8 id, uint64_t offset, uint64_t length, const char *op)
+{
+  if ((offset & (alloc_size[id] - 1)) ||
+      (length & (alloc_size[id] - 1))) {
+    derr << __func__ << " " << op << " of " << (int)id
+	 << ":0x" << std::hex << offset << "~" << length << std::dec
+	 << " does not align to alloc_size 0x"
+	 << std::hex << alloc_size[id] << std::dec << dendl;
+    // be helpful
+    auto need = alloc_size[id];
+    while (need && ((offset & (need - 1)) ||
+		    (length & (need - 1)))) {
+      need >>= 1;
+    }
+    if (need) {
+      const char *which;
+      if (id == BDEV_SLOW ||
+	  (id == BDEV_DB && !bdev[BDEV_SLOW])) {
+	which = "bluefs_shared_alloc_size";
+      } else {
+	which = "bluefs_alloc_size";
+      }
+      derr << "work-around by setting " << which << " = " << need
+	   << " for this OSD" << dendl;
+    }
+    return -EFAULT;
+  }
+  return 0;
+}
+
 int BlueFS::_replay(bool noop, bool to_stdout)
 {
   dout(10) << __func__ << (noop ? " NO-OP" : "") << dendl;
@@ -1287,7 +1318,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
             std::cout << " 0x" << std::hex << pos << std::dec
                       << ":  op_file_update " << " " << fnode << std::endl;
           }
-
           if (!noop) {
 	    FileRef f = _get_file(fnode.ino);
             if (cct->_conf->bluefs_log_replay_check_allocations) {
@@ -1304,7 +1334,12 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               auto& fnode_extents = f->fnode.extents;
               for (auto e : fnode_extents) {
                 auto id = e.bdev;
-                apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
+		if (int r = _verify_alloc_granularity(id, e.offset, e.length,
+						      "OP_FILE_UPDATE"); r < 0) {
+		  return r;
+		}
+                apply_for_bitset_range(e.offset, e.length, alloc_size[id],
+				       used_blocks[id],
                   [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
                     ceph_assert(bs.test(pos));
                     bs.reset(pos);
