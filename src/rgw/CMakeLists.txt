@@ -124,6 +124,17 @@ set(librgw_common_srcs
   rgw_url.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
+  find_package(RabbitMQ REQUIRED)
+endif()
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  find_package(RDKafka 1.9.2)
+  if(NOT RDKafka_FOUND)
+      set(WITH_RADOSGW_KAFKA_ENDPOINT OFF CACHE BOOL "Rados Gateway's pubsub support for Kafka push endpoint" FORCE)
+      message(STATUS "Disabling Kafka endpoint support")
+  endif()
+endif()
+
+if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
@@ -186,13 +197,6 @@ add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
-
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  find_package(RabbitMQ REQUIRED)
-endif()
-if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  find_package(RDKafka 0.9.2 REQUIRED)
-endif()
 
 target_link_libraries(rgw_a
   PRIVATE
