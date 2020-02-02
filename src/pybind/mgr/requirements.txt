@@ -5,3 +5,4 @@ ipaddress; python_version < '3.3'
 kubernetes
 requests-mock
 pyyaml
+prettytable
