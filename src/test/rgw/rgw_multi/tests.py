@@ -354,7 +354,7 @@ def compare_bucket_status(target_zone, source_zone, bucket_name, log_status, syn
     return True
 
 def zone_data_checkpoint(target_zone, source_zone):
-    if not target_zone.syncs_from(source_zone):
+    if not target_zone.syncs_from(source_zone.name):
         return
 
     log_status = data_source_log_status(source_zone)
@@ -384,7 +384,7 @@ def zonegroup_data_checkpoint(zonegroup_conns):
             zone_data_checkpoint(target_conn.zone, source_conn.zone)
 
 def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
-    if not target_zone.syncs_from(source_zone):
+    if not target_zone.syncs_from(source_zone.name):
         return
 
     log_status = bucket_source_log_status(source_zone, bucket_name)
