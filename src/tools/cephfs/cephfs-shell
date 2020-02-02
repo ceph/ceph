@@ -1409,6 +1409,67 @@ class CephFSShell(Cmd):
                 perror(e)
                 self.exit_code = e.get_error_code()
 
+    setxattr_parser = argparse.ArgumentParser(
+        description='Set extended attribute for a file')
+    setxattr_parser.add_argument('path', type=str, action=path_to_bytes, help='Name of the file')
+    setxattr_parser.add_argument('name', type=str, help='Extended attribute name')
+    setxattr_parser.add_argument('value', type=str, help='Extended attribute value')
+
+    @with_argparser(setxattr_parser)
+    def do_setxattr(self, args):
+        """
+        Set extended attribute for a file
+        """
+        val_bytes = to_bytes(args.value)
+        name_bytes = to_bytes(args.name)
+        try:
+            cephfs.setxattr(args.path, name_bytes, val_bytes, os.XATTR_CREATE)
+            poutput('{} is successfully set to {}'.format(args.name, args.value))
+        except libcephfs.ObjectExists:
+            cephfs.setxattr(args.path, name_bytes, val_bytes, os.XATTR_REPLACE)
+            poutput('{} is successfully reset to {}'.format(args.name, args.value))
+        except libcephfs.Error as e:
+            perror(e)
+            self.exit_code = e.get_error_code()
+
+    getxattr_parser = argparse.ArgumentParser(
+        description='Get extended attribute set for a file')
+    getxattr_parser.add_argument('path', type=str, action=path_to_bytes,
+                                 help='Name of the file')
+    getxattr_parser.add_argument('name', type=str, help='Extended attribute name')
+
+    @with_argparser(getxattr_parser)
+    def do_getxattr(self, args):
+        """
+        Get extended attribute for a file
+        """
+        try:
+            poutput('{}'.format(cephfs.getxattr(args.path,
+                                to_bytes(args.name)).decode('utf-8')))
+        except libcephfs.Error as e:
+            perror(e)
+            self.exit_code = e.get_error_code()
+
+    listxattr_parser = argparse.ArgumentParser(
+        description='List extended attributes set for a file')
+    listxattr_parser.add_argument('path', type=str, action=path_to_bytes,
+                                  help='Name of the file')
+
+    @with_argparser(listxattr_parser)
+    def do_listxattr(self, args):
+        """
+        List extended attributes for a file
+        """
+        try:
+            size, xattr_list = cephfs.listxattr(args.path)
+            if size > 0:
+                poutput('{}'.format(xattr_list.replace(b'\x00', b' ').decode('utf-8')))
+            else:
+                poutput('No extended attribute is set')
+        except libcephfs.Error as e:
+            perror(e)
+            self.exit_code = e.get_error_code()
+
 
 #######################################################
 #

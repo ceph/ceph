@@ -844,6 +844,45 @@ class TestQuota(TestCephFSShell):
             else:
                 raise
 
+
+class TestXattr(TestCephFSShell):
+    dir_name = 'testdir'
+
+    def create_dir(self):
+        self.run_cephfs_shell_cmd('mkdir ' + self.dir_name)
+
+    def set_get_list_xattr_vals(self, input_val):
+        setxattr_output = self.get_cephfs_shell_cmd_output('setxattr '
+                                                           + self.dir_name
+                                                           + ' '
+                                                           + input_val[0]
+                                                           + ' ' + input_val[1])
+        log.info("cephfs-shell setxattr output:\n{}".format(setxattr_output))
+
+        getxattr_output = self.get_cephfs_shell_cmd_output('getxattr '
+                                                           + self.dir_name
+                                                           + ' ' + input_val[0])
+        log.info("cephfs-shell getxattr output:\n{}".format(getxattr_output))
+
+        listxattr_output = self.get_cephfs_shell_cmd_output('listxattr '+ self.dir_name)
+        log.info("cephfs-shell listxattr output:\n{}".format(listxattr_output))
+
+        return listxattr_output, getxattr_output
+
+    def test_set(self):
+        self.create_dir()
+        set_values = ('user.key', '2')
+        self.assertTupleEqual(self.set_get_list_xattr_vals(set_values), set_values)
+
+    def test_reset(self):
+        self.test_set()
+        set_values = ('user.key', '4')
+        self.assertTupleEqual(self.set_get_list_xattr_vals(set_values), set_values)
+
+    def test_non_existing_dir(self):
+        set_values = ('user.key', '9')
+        self.assertTupleEqual(self.set_get_list_xattr_vals(set_values), (u'', u''))
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
