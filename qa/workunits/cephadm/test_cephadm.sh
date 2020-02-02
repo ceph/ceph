@@ -277,6 +277,20 @@ cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
 cond="curl --insecure 'https://localhost:3000' | grep -q 'grafana'"
 is_available "grafana" "$cond" 30
 
+# add nfs-ganesha
+nfs_rados_pool=$(cat ${CEPHADM_SAMPLES_DIR}/nfs.json | jq -r '.["pool"]')
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+        ceph osd pool create $nfs_rados_pool 64
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+        rados --pool nfs-ganesha --namespace nfs-ns create conf-nfs.a
+$CEPHADM deploy --name nfs.a \
+      --fsid $FSID \
+      --keyring $KEYRING \
+      --config $CONFIG \
+      --config-json ${CEPHADM_SAMPLES_DIR}/nfs.json
+cond="$SUDO ss -tlnp '( sport = :nfs )' | grep 'ganesha.nfsd'"
+is_available "nfs" "$cond" 10
+
 ## run
 # WRITE ME
 
