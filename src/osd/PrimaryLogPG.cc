@@ -1871,6 +1871,15 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
+  if (m->has_flag(CEPH_OSD_FLAG_FLUSH)) {
+    if (m->get_map_epoch() < info.flushed_thru) {
+      osd->reply_op_error(op, -EAGAIN);
+      return;
+    } else if (m->get_map_epoch() != info.flushed_thru) {
+      info.flushed_thru = m->get_map_epoch();
+    }
+  }
+
   if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
 			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
@@ -10140,6 +10149,7 @@ int PrimaryLogPG::start_flush(
       dsnapc,
       ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
+       CEPH_OSD_FLAG_FLUSH |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
   }

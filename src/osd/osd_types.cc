@@ -3375,7 +3375,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(32, 26, bl);
+  ENCODE_START(33, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3391,6 +3391,7 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_backfill, bl);
   encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
+  encode(flushed_thru, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3424,6 +3425,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
     decode(last_interval_started, bl);
   } else {
     last_interval_started = last_epoch_started;
+  }
+  if (struct_v >= 33) { 
+    decode(flushed_thru, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -3459,6 +3463,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_int("dne", dne());
   f->dump_int("incomplete", is_incomplete());
   f->dump_int("last_epoch_started", last_epoch_started);
+  f->dump_int("flushed_thru", flushed_thru);
 
   f->open_object_section("hit_set_history");
   hit_set.dump(f);
