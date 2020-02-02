@@ -44,20 +44,22 @@ wait_for 120 "ceph osd pool get a pg_num | grep 4"
 wait_for 120 "ceph osd pool get b pg_num | grep 2"
 
 # target ratio
-ceph osd pool set a target_size_ratio .5
-ceph osd pool set b target_size_ratio .1
-sleep 30
-APGS=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num')
-BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num')
+ceph osd pool set a target_size_ratio 5
+ceph osd pool set b target_size_ratio 1
+sleep 10
+APGS=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
+BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
 test $APGS -gt 100
 test $BPGS -gt 10
 
 # small ratio change does not change pg_num
-ceph osd pool set a target_size_ratio .7
-ceph osd pool set b target_size_ratio .2
+ceph osd pool set a target_size_ratio 7
+ceph osd pool set b target_size_ratio 2
 sleep 10
-ceph osd pool get a pg_num | grep $APGS
-ceph osd pool get b pg_num | grep $BPGS
+APGS2=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
+BPGS2=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
+test $APGS -eq $APGS2
+test $BPGS -eq $BPGS2
 
 # too much ratio
 ceph osd pool set a target_size_ratio .9
