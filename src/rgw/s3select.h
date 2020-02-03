@@ -580,8 +580,184 @@ protected:
 
 public:
     base_s3object(const char *obj_name, scratch_area *m) : m_sa(m), m_obj_name(obj_name) {}
+    base_s3object(scratch_area *m) : m_sa(m), m_obj_name("") {}
 
     virtual int getNextRow(char **) = 0; //fetch next row
 
     virtual ~base_s3object(){}
+};
+
+#include <boost/algorithm/string.hpp>
+
+class csv_object : public base_s3object
+{
+
+private:
+  std::vector<std::string> m_csv_lines;
+  base_statement *m_where_clause;
+  list<base_statement *> m_projections;
+  bool m_aggr_flow = false; //TODO once per query
+  int line_index;
+
+  int getNextRow(char **tokens) //TODO add delimiter
+  {                             //purpose: simple csv parser, not handling escape rules
+
+    if (line_index >= (int)m_csv_lines.size()) return -1;
+    if(m_csv_lines[line_index].empty()) return -1;
+    
+    char *p = (char *)m_csv_lines[line_index].c_str(); //TODO another boost splitter
+    int i = 0;
+    while (*p)
+    {
+      char *t = p;
+      while (*p && (*(p) != ',')) //TODO delimiter
+        p++;
+      *p = 0;
+      tokens[i++] = t;
+      p++;
+      if (*t == 10)
+        break; //trimming newline
+    }
+    tokens[i] = 0; //last token
+    line_index++;
+    return i;
+  }
+
+public:
+  csv_object(s3select *s3_query,std::string query,char *csv_stream) : base_s3object(s3_query->get_scratch_area())
+  {
+
+  parse_info<> info = parse(query.c_str(), *s3_query, space_p);
+  auto x = info.stop;
+
+  if (!info.full)
+  {
+    std::cout << "failure -->" << x << "<---" << std::endl; //TODO exception??
+  }
+
+    std::string __stream(csv_stream);
+    boost::split(m_csv_lines, __stream, [](char c) { return c == '\n'; }); //splitting the stream (should be 4->128 mb)
+    line_index = 0;
+    m_projections = s3_query->get_projections_list();
+    m_where_clause = s3_query->get_filter();
+
+    if (m_where_clause)
+      m_where_clause->traverse_and_apply(m_sa);
+
+    for (auto p : m_projections)
+      p->traverse_and_apply(m_sa);
+
+    for (auto e : m_projections) //TODO for tests only, should be in semantic
+    {
+      base_statement *aggr = 0;
+
+      if ((aggr = e->get_aggregate()) != 0)
+      {
+        if (aggr->is_nested_aggregate(aggr))
+        {
+          throw base_s3select_exception("nested aggregation function is illegal i.e. sum(...sum ...)", base_s3select_exception::s3select_exp_en_t::FATAL);
+        }
+
+        m_aggr_flow = true;
+      }
+    }
+    if (m_aggr_flow == true)
+      for (auto e : m_projections)
+      {
+        base_statement *skip_expr = e->get_aggregate();
+
+        if (e->is_binop_aggregate_and_column(skip_expr))
+        {
+          throw base_s3select_exception("illegal expression. /select sum(c1) + c1 ..../ is not allow type of query", base_s3select_exception::s3select_exp_en_t::FATAL);
+        }
+      }
+  }
+
+virtual ~csv_object(){}
+
+public:
+  int getMatchRow(std::list<string> &result) //TODO virtual ? getResult
+  {
+    int number_of_tokens = 0;
+    char *row_tokens[128]; //TODO typedef for it
+
+    if (m_aggr_flow == true)
+    {
+      do
+      {
+
+        number_of_tokens = getNextRow(row_tokens);
+        if (number_of_tokens < 0) //end of stream
+        {
+          for (auto i : m_projections)
+          {
+            i->set_last_call();
+            result.push_back((i->eval().to_string()));
+          }
+          return number_of_tokens;
+        }
+
+        m_sa->update((const char **)row_tokens, number_of_tokens);
+
+        if (!m_where_clause || m_where_clause->eval().get_num() == true)
+          for (auto i : m_projections)
+            i->eval();
+
+      } while (1);
+    }
+    else
+    {
+
+      do
+      {
+
+        number_of_tokens = getNextRow(row_tokens);
+        if (number_of_tokens < 0)
+          return number_of_tokens;
+
+        m_sa->update((const char **)row_tokens, number_of_tokens);
+      } while (m_where_clause && m_where_clause->eval().get_num() == false);
+
+      for (auto i : m_projections)
+      {
+        result.push_back(i->eval().to_string());
+      }
+    }
+
+    return number_of_tokens; //TODO wrong
+  }
+
+
+int run_s3select_on_object(std::string & o_result)//,s3select &s3select_syntax)
+{
+  try
+  {
+    //csv_object my_input(&s3select_syntax, input_stream);
+
+    do
+    {
+      std::list<string> result;
+      int num = getMatchRow(result);
+
+      for (std::list<string>::iterator it = result.begin(); it != result.end(); it++)
+      {
+        if (std::next(it) != result.end())
+          {o_result.append(*it);o_result.append(",");}
+        else
+          {o_result.append(*it);o_result.append("\n");}
+      }
+
+      if (num < 0)
+        break;
+
+    } while (1);
+  }
+  catch (base_s3select_exception & e)
+  {
+    std::cout << e.what() << std::endl;
+    return -1;
+  }
+
+  return 0;
+}
 };
