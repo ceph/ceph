@@ -538,7 +538,7 @@ def call_timeout(command, timeout):
 
 ##################################
 
-def is_available(what, func, retry_max=5):
+def is_available(what, func, retry_max=10):
     # type (str, func, Optional[int]) -> func
     """
     Wait for a service to become available
