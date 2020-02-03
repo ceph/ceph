@@ -47,6 +47,7 @@ you may write data with one API and retrieve it with the other.
    Config Reference <config-ref>
    Admin Guide <admin>
    S3 API <s3>
+   Data caching and CDN <rgw-cache.rst>
    Swift API <swift>
    Admin Ops API <adminops>
    Python binding <api>
