@@ -1,0 +1,4 @@
+tasks:
+        - exec:
+                mon.a:
+                        - 'ceph -s'

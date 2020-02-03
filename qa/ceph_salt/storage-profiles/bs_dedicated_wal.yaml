@@ -1,0 +1,15 @@
+overrides:
+  deepsea:
+    storage_profile:
+        ceph:
+          storage:
+            osds:
+              /dev/vdb:
+                format: bluestore
+                wal: /dev/vde
+              /dev/vdc:
+                format: bluestore
+                wal: /dev/vde
+              /dev/vdd:
+                format: bluestore
+                wal: /dev/vde

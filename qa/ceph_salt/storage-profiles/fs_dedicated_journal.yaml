@@ -1,0 +1,15 @@
+overrides:
+  deepsea:
+    storage_profile:
+        ceph:
+          storage:
+            osds:
+              /dev/vdb:
+                format: filestore
+                journal: /dev/vde
+              /dev/vdc:
+                format: filestore
+                journal: /dev/vde
+              /dev/vdd:
+                format: filestore
+                journal: /dev/vde

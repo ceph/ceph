@@ -132,6 +132,16 @@ class SaltManager(object):
         self.all_minions_zypper_lu()
         self.all_minions_zypper_ps()
 
+    def all_minions_zypper_up_if_needed(self):
+        """
+        List updates and perform update if needed
+        """
+        zypper_lu = "sudo salt \\* cmd.run \'zypper lu || true\' 2>/dev/null"
+        zypper_up = "sudo zypper -n up || true"
+        output = self.master_remote.sh(zypper_lu)
+        if 'Nothing to do' not in output:
+            self.all_minions_cmd_run(zypper_up)
+
     def cat_salt_master_conf(self):
         self.__cat_file_remote(self.master_remote, filename="/etc/salt/master")
 
