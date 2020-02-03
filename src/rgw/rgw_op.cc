@@ -2139,7 +2139,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 bool RGWGetObj::prefetch_data()
 {
   /* HEAD request, stop prefetch*/
-  if (!get_data) {
+  if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
     return false;
   }
 
@@ -2241,7 +2241,10 @@ void RGWGetObj::execute()
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
-
+  if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
+    op_ret = 0;
+    goto done_err;
+  }
   /* start gettorrent */
   if (torrent.get_flag())
   {

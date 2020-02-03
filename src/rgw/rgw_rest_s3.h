@@ -46,6 +46,8 @@ public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() override {}
 
+  int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) override;
+  int override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry);
   int get_params() override;
   int send_response_data_error() override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
