@@ -138,14 +138,25 @@ address in network ``10.1.2.0/24``,::
 Deploying OSDs
 ==============
 
-To add an OSD to the cluster, you need to know the device name for the
-block device (hard disk or SSD) that will be used.  Then,::
+To add OSDs to the cluster, you have two options:
+1) You need to know the device name for the block device (hard disk or SSD)
+that will be used.  Then,::
 
   [monitor 1] # ceph orch osd create *<host>*:*<path-to-device>*
 
 For example, to deploy an OSD on host *newhost*'s SSD,::
 
   [monitor 1] # ceph orch osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
+
+
+2) You need to describe your disk setup by it's properties (Drive Groups)
+
+Link to DriveGroup docs.::
+
+  [monitor 1] # ceph orchestrator osd create -i my_drivegroups.yml
+
+
+.. _drivegroups: drivegroups::
 
 Deploying manager daemons
 =========================
@@ -193,5 +204,6 @@ Further Reading
 
     Cephadm administration <administration>
     Cephadm CLI <../mgr/orchestrator>
+    DriveGroups <drivegroups>
     OS recommendations <../start/os-recommendations>
     

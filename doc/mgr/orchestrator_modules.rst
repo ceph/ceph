@@ -263,17 +263,6 @@ OSD management
 
 .. automethod:: Orchestrator.create_osds
 
-.. py:currentmodule:: ceph.deployment.drive_group
-
-.. autoclass:: DeviceSelection
-   :members:
-
-.. autoclass:: DriveGroupSpec
-   :members:
-   :exclude-members: from_json
-
-.. py:currentmodule:: orchestrator
-
 .. automethod:: Orchestrator.blink_device_light
 .. autoclass:: DeviceLightLoc
 
