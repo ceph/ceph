@@ -1159,10 +1159,10 @@ TEST_F(TestMirroring, Snapshot)
 
   librbd::snap_namespace_type_t snap_ns_type;
   ASSERT_EQ(0, image.snap_get_namespace_type(snap_id, &snap_ns_type));
-  ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY, snap_ns_type);
-  librbd::snap_mirror_primary_namespace_t mirror_snap;
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_MIRROR, snap_ns_type);
+  librbd::snap_mirror_namespace_t mirror_snap;
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(1U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer_uuid));
 
@@ -1242,9 +1242,9 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   uint64_t snap_id;
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
-  librbd::snap_mirror_primary_namespace_t mirror_snap;
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  librbd::snap_mirror_namespace_t mirror_snap;
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(3U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
@@ -1264,8 +1264,8 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   req->send();
   ASSERT_EQ(0, cond1.wait());
 
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(2U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer3_uuid));
@@ -1283,22 +1283,22 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ASSERT_EQ(0, ns_image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   uint64_t ns_snap_id;
   ASSERT_EQ(0, ns_image.mirror_image_create_snapshot(&ns_snap_id));
-  ASSERT_EQ(0, ns_image.snap_get_mirror_primary_namespace(
-              ns_snap_id, &mirror_snap, sizeof(mirror_snap)));
+  ASSERT_EQ(0, ns_image.snap_get_mirror_namespace(ns_snap_id, &mirror_snap,
+                                                  sizeof(mirror_snap)));
   ASSERT_EQ(3U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer3_uuid));
-  
+
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer3_uuid));
 
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(1U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
 
-  ASSERT_EQ(0, ns_image.snap_get_mirror_primary_namespace(
-              ns_snap_id, &mirror_snap, sizeof(mirror_snap)));
+  ASSERT_EQ(0, ns_image.snap_get_mirror_namespace(ns_snap_id, &mirror_snap,
+                                                  sizeof(mirror_snap)));
   ASSERT_EQ(2U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
@@ -1309,8 +1309,8 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   req->send();
   ASSERT_EQ(0, cond2.wait());
 
-  ASSERT_EQ(-ENOENT, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                             sizeof(mirror_snap)));
+  ASSERT_EQ(-ENOENT, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                                     sizeof(mirror_snap)));
   ictx->state->close();
   ictx = nullptr;
   ASSERT_EQ(0, image.close());
