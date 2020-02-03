@@ -626,8 +626,8 @@ def get_fqdn():
 
 def generate_service_id():
     # type: () -> str
-    return ''.join(random.choice(string.ascii_lowercase)
-                   for _ in range(6))
+    return get_hostname() + '.' + ''.join(random.choice(string.ascii_lowercase)
+                                          for _ in range(6))
 
 def generate_password():
     # type: () -> str
