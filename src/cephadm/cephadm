@@ -1500,7 +1500,9 @@ class CephContainer:
 
         priv = [] # type: List[str]
         if self.privileged:
-            priv = ['--privileged']
+            priv = ['--privileged',
+                    # let OSD etc read block devs that haven't been chowned
+                    '--group-add=disk']
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -1525,7 +1527,9 @@ class CephContainer:
         # type: (List[str]) -> List[str]
         priv = [] # type: List[str]
         if self.privileged:
-            priv = ['--privileged']
+            priv = ['--privileged',
+                    # let OSD etc read block devs that haven't been chowned
+                    '--group-add=disk']
         vols = [] # type: List[str]
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
