@@ -1,0 +1,2 @@
+roles:
+  - [client.salt_master, osd.0, osd.1, osd.2, osd.3, mon.a, mgr.x]

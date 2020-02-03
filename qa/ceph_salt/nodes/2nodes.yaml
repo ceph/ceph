@@ -1,0 +1,3 @@
+roles:
+- [salt.master]
+- [node.1]
