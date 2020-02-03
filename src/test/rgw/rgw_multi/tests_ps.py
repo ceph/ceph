@@ -9,6 +9,7 @@ import subprocess
 import socket
 import time
 import os
+from random import randint
 from .tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
@@ -28,7 +29,8 @@ from .zone_ps import PSTopic, \
     print_connection_info, \
     delete_all_s3_topics, \
     put_object_tagging, \
-    get_object_tagging
+    get_object_tagging, \
+    delete_all_objects
 from multisite import User
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
@@ -157,6 +159,13 @@ class StreamingHTTPServer:
         for worker in self.workers:
             worker.close()
             worker.join()
+    
+    def get_and_reset_events(self):
+        events = []
+        for worker in self.workers:
+            events += worker.get_events()
+            worker.reset_events()
+        return events
 
 
 # AMQP endpoint functions
@@ -1719,6 +1728,74 @@ def test_ps_s3_notification_push_kafka_security_ssl_sasl():
     kafka_security('SSL_SASL')
 
 
+def test_ps_s3_notification_multi_delete_on_master():
+    """ test deletion of multiple keys on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 10
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectRemoved:*']
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    client_threads = []
+    for i in range(number_of_objects):
+        obj_size = randint(1, 1024)
+        content = str(os.urandom(obj_size))
+        key = bucket.new_key(str(i))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    keys = list(bucket.list())
+
+    start_time = time.time()
+    delete_all_objects(zones[0].conn, bucket_name)
+    time_diff = time.time() - start_time
+    print 'average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+    
+    # check http receiver
+    http_server.verify_s3_events(keys, exact_match=True, deletions=True)
+    
+    # cleanup
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    http_server.close()
+
+
 def test_ps_s3_notification_push_http_on_master():
     """ test pushing http s3 notification on master """
     if skip_push_tests:
@@ -2888,7 +2965,7 @@ def test_ps_s3_tags_on_master():
     expected_tags = [{'val': 'world', 'key': 'hello'}, {'val': 'boom', 'key': 'ka'}]
     # check amqp receiver
     for event in receiver.get_and_reset_events():
-        obj_tags =  event['s3']['object']['tags']
+        obj_tags =  event['Records'][0]['s3']['object']['tags']
         assert_equal(obj_tags[0], expected_tags[0])
 
     # delete the objects
@@ -2898,7 +2975,7 @@ def test_ps_s3_tags_on_master():
     time.sleep(5)
     # check amqp receiver
     for event in receiver.get_and_reset_events():
-        obj_tags =  event['s3']['object']['tags']
+        obj_tags =  event['Records'][0]['s3']['object']['tags']
         assert_equal(obj_tags[0], expected_tags[0])
 
     # cleanup

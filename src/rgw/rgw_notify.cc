@@ -15,6 +15,8 @@ namespace rgw::notify {
 
 // populate record from request
 void populate_record_from_request(const req_state *s, 
+        const rgw_obj_key& key,
+        uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
@@ -28,10 +30,10 @@ void populate_record_from_request(const req_state *s,
   record.bucket_name = s->bucket_name;
   record.bucket_ownerIdentity = s->bucket_owner.get_id().id;
   record.bucket_arn = to_string(rgw::ARN(s->bucket));
-  record.object_key = s->object.name;
-  record.object_size = s->obj_size;
+  record.object_key = key.name;
+  record.object_size = size;
   record.object_etag = etag;
-  record.object_versionId = s->object.instance;
+  record.object_versionId = key.instance;
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
@@ -62,6 +64,8 @@ bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, EventType 
 }
 
 int publish(const req_state* s, 
+        const rgw_obj_key& key,
+        uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
@@ -75,7 +79,7 @@ int publish(const req_state* s,
         return rc;
     }
     rgw_pubsub_s3_record record;
-    populate_record_from_request(s, mtime, etag, event_type, record);
+    populate_record_from_request(s, key, size, mtime, etag, event_type, record);
     bool event_handled = false;
     bool event_should_be_handled = false;
     for (const auto& bucket_topic : bucket_topics.topics) {
