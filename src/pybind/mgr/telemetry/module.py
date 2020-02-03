@@ -184,7 +184,11 @@ class Module(MgrModule):
             metadata[key] = defaultdict(int)
 
         for osd in osd_map['osds']:
-            for k, v in self.get_metadata('osd', str(osd['osd'])).items():
+            res = self.get_metadata('osd', str(osd['osd'])).items()
+            if res is None:
+                self.log.debug('Could not get metadata for osd.%s' % str(osd['osd']))
+                continue
+            for k, v in res:
                 if k not in keys:
                     continue
 
@@ -201,7 +205,11 @@ class Module(MgrModule):
             metadata[key] = defaultdict(int)
 
         for mon in mon_map['mons']:
-            for k, v in self.get_metadata('mon', mon['name']).items():
+            res = self.get_metadata('mon', mon['name']).items()
+            if res is None:
+                self.log.debug('Could not get metadata for mon.%s' % (mon['name']))
+                continue
+            for k, v in res:
                 if k not in keys:
                     continue
 
