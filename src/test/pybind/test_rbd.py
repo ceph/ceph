@@ -31,14 +31,14 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
-                 RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
-                 RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY,
+                 RBD_SNAP_NAMESPACE_TYPE_MIRROR,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
                  RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
                  RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX,
-                 RBD_SNAP_REMOVE_UNPROTECT)
+                 RBD_SNAP_REMOVE_UNPROTECT, RBD_SNAP_MIRROR_STATE_PRIMARY,
+                 RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)
 
 rados = None
 ioctx = None
@@ -2083,8 +2083,8 @@ class TestMirroring(object):
         snaps = list(self.image.list_snaps())
         eq(1, len(snaps))
         snap = snaps[0]
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
-        eq(False, snap['mirror_primary']['demoted'])
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
 
         info = self.image.mirror_image_get_info()
         eq(True, info['primary'])
@@ -2099,19 +2099,19 @@ class TestMirroring(object):
         snaps = list(self.image.list_snaps())
         eq(2, len(snaps))
         snap = snaps[0]
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
-        eq(False, snap['mirror_primary']['demoted'])
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
         snap = snaps[1]
         eq(snap['id'], snap_id)
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
-        eq(False, snap['mirror_primary']['demoted'])
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
         eq(sorted([peer1_uuid, peer2_uuid]),
-           sorted(snap['mirror_primary']['mirror_peer_uuids']))
+           sorted(snap['mirror']['mirror_peer_uuids']))
 
-        eq(RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
+        eq(RBD_SNAP_NAMESPACE_TYPE_MIRROR,
            self.image.snap_get_namespace_type(snap_id))
-        mirror_snap = self.image.snap_get_mirror_primary_namespace(snap_id)
-        eq(mirror_snap, snap['mirror_primary'])
+        mirror_snap = self.image.snap_get_mirror_namespace(snap_id)
+        eq(mirror_snap, snap['mirror'])
 
         self.image.mirror_image_demote()
 
@@ -2120,15 +2120,15 @@ class TestMirroring(object):
         snaps = list(self.image.list_snaps())
         eq(3, len(snaps))
         snap = snaps[0]
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
         snap = snaps[1]
         eq(snap['id'], snap_id)
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
         snap = snaps[2]
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
-        eq(True, snap['mirror_primary']['demoted'])
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED, snap['mirror']['state'])
         eq(sorted([peer1_uuid, peer2_uuid]),
-           sorted(snap['mirror_primary']['mirror_peer_uuids']))
+           sorted(snap['mirror']['mirror_peer_uuids']))
 
         self.rbd.mirror_peer_remove(ioctx, peer1_uuid)
         self.rbd.mirror_peer_remove(ioctx, peer2_uuid)

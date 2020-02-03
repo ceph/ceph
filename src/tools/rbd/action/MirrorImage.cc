@@ -316,6 +316,7 @@ int execute_status(const po::variables_map &vm,
   librados::IoCtx default_ns_io_ctx;
   default_ns_io_ctx.dup(io_ctx);
   default_ns_io_ctx.set_namespace("");
+
   std::vector<librbd::mirror_peer_site_t> mirror_peers;
   utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
 
@@ -384,7 +385,7 @@ int execute_status(const po::variables_map &vm,
                     if (r < 0) {
                       return false;
                     }
-                    return type != RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY;
+                    return type != RBD_SNAP_NAMESPACE_TYPE_MIRROR;
                   }),
         snaps.end());
     }
@@ -428,16 +429,18 @@ int execute_status(const po::variables_map &vm,
     if (!snaps.empty()) {
       formatter->open_array_section("snapshots");
       for (auto &snap : snaps) {
-        librbd::snap_mirror_primary_namespace_t info;
-        r = image.snap_get_mirror_primary_namespace(snap.id, &info,
-                                                    sizeof(info));
-        if (r < 0) {
+        librbd::snap_mirror_namespace_t info;
+        r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
+        if (r < 0 ||
+            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
+             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
           continue;
         }
         formatter->open_object_section("snapshot");
         formatter->dump_unsigned("id", snap.id);
         formatter->dump_string("name", snap.name);
-        formatter->dump_bool("demoted", info.demoted);
+        formatter->dump_bool("demoted",
+                             info.state == RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED);
         formatter->open_array_section("mirror_peer_uuids");
         for (auto &peer : info.mirror_peer_uuids) {
           formatter->dump_string("peer_uuid", peer);
@@ -490,10 +493,11 @@ int execute_status(const po::variables_map &vm,
 
       bool first_site = true;
       for (auto &snap : snaps) {
-        librbd::snap_mirror_primary_namespace_t info;
-        r = image.snap_get_mirror_primary_namespace(snap.id, &info,
-                                                    sizeof(info));
-        if (r < 0) {
+        librbd::snap_mirror_namespace_t info;
+        r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
+        if (r < 0 ||
+            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
+             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
           continue;
         }
 
@@ -503,8 +507,9 @@ int execute_status(const po::variables_map &vm,
 
         first_site = false;
         std::cout << "    " << snap.id << " " << snap.name << " ("
-                  << (info.demoted ? "demoted " : "") << "peer_uuids:["
-                  << info.mirror_peer_uuids << "])";
+                  << (info.state == RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED ?
+                        "demoted " : "")
+                  << "peer_uuids:[" << info.mirror_peer_uuids << "])";
       }
       std::cout << std::endl;
     }
