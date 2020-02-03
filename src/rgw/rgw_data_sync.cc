@@ -2768,21 +2768,35 @@ public:
       yield {
         auto store = sync_env->store;
         rgw_raw_obj obj(sync_env->svc->zone->get_zone_params().log_pool, sync_status_oid);
+        const bool stopped = status.state == rgw_bucket_shard_sync_info::StateStopped;
+        bool write_status = false;
 
         if (info.syncstopped) {
-          call(new RGWRadosRemoveCR(store, obj));
+          if (stopped && !sync_env->sync_module->should_full_sync()) {
+            // preserve our current incremental marker position
+            write_status = true;
+          }
         } else {
           // whether or not to do full sync, incremental sync will follow anyway
           if (sync_env->sync_module->should_full_sync()) {
             status.state = rgw_bucket_shard_sync_info::StateFullSync;
             status.inc_marker.position = info.max_marker;
           } else {
+            // clear the marker position unless we're resuming from SYNCSTOP
+            if (!stopped) {
+              status.inc_marker.position = "";
+            }
             status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
-            status.inc_marker.position = "";
           }
+          write_status = true;
+        }
+
+        if (write_status) {
           map<string, bufferlist> attrs;
           status.encode_all_attrs(attrs);
           call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, sync_env->svc->sysobj, obj, attrs));
+        } else {
+          call(new RGWRadosRemoveCR(store, obj));
         }
       }
       if (info.syncstopped) {
@@ -4085,11 +4099,11 @@ int RGWBucketShardIncrementalSyncCR::operate()
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
     if (syncstopped) {
-      // transition back to StateInit in RGWRunBucketSyncCoroutine. if sync is
+      // transition to StateStopped in RGWRunBucketSyncCoroutine. if sync is
       // still disabled, we'll delete the sync status object. otherwise we'll
       // restart full sync to catch any changes that happened while sync was
       // disabled
-      sync_info.state = rgw_bucket_shard_sync_info::StateInit;
+      sync_info.state = rgw_bucket_shard_sync_info::StateStopped;
       return set_cr_done();
     }
 
@@ -4695,7 +4709,8 @@ int RGWRunBucketSyncCoroutine::operate()
     sync_pipe.info = sync_pair;
 
     do {
-      if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
+      if (sync_status.state == rgw_bucket_shard_sync_info::StateInit ||
+          sync_status.state == rgw_bucket_shard_sync_info::StateStopped) {
         yield call(new RGWInitBucketShardSyncStatusCoroutine(sc, sync_pair, sync_status));
         if (retcode == -ENOENT) {
           tn->log(0, "bucket sync disabled");
