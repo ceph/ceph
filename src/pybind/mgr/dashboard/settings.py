@@ -91,13 +91,7 @@ class Options(object):
 class SettingsMeta(type):
     def __getattr__(cls, attr):
         default, stype = getattr(Options, attr)
-        if stype == bool and str(mgr.get_module_option(
-                attr,
-                default)).lower() == 'false':
-            value = False
-        else:
-            value = stype(mgr.get_module_option(attr, default))
-        return value
+        return stype(mgr.get_module_option(attr, default))
 
     def __setattr__(cls, attr, value):
         if not attr.startswith('_') and hasattr(Options, attr):
