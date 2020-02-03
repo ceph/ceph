@@ -96,37 +96,31 @@ class Monitoring(object):
 
     components = {
         "prometheus": {
-            "image": {
-                "image": "prom/prometheus:latest",
-                "cpus": '2',
-                "memory": '4GB',
-                "args": [
-                    "--config.file=/etc/prometheus/prometheus.yml",
-                    "--storage.tsdb.path=/prometheus",
-                    "--web.listen-address=:{}".format(port_map['prometheus']),
-                ]
-            },
+            "image": "prom/prometheus:latest",
+            "cpus": '2',
+            "memory": '4GB',
+            "args": [
+                "--config.file=/etc/prometheus/prometheus.yml",
+                "--storage.tsdb.path=/prometheus",
+                "--web.listen-address=:{}".format(port_map['prometheus']),
+            ],
             "config-json": [
                 "prometheus.yml",
             ],
         },
         "node-exporter": {
-            "image": {
-                "image": "prom/node-exporter",
-                "cpus": "1",
-                "memory": "1GB",
-                "args": [
-                    "--no-collector.timex",
-                ],
-            }
+            "image": "prom/node-exporter",
+            "cpus": "1",
+            "memory": "1GB",
+            "args": [
+                "--no-collector.timex",
+            ],
         },
         "grafana": {
-            "image": {
-                "image": "pcuzner/ceph-grafana-el8:latest",
-                "cpus": "2",
-                "memory": "4GB",
-                "args": [],
-            },
+            "image": "pcuzner/ceph-grafana-el8:latest",
+            "cpus": "2",
+            "memory": "4GB",
+            "args": [],
             "config-json": [
                 "grafana.ini",
                 "provisioning/datasources/ceph-dashboard.yml",
@@ -134,7 +128,7 @@ class Monitoring(object):
                 "certs/cert_key",
             ],
         }
-    }
+    }  # type: Dict[str, dict]
 
 def attempt_bind(s, address, port):
     # type (str) -> None
@@ -885,9 +879,8 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
                 '--default-mon-cluster-log-to-stderr=true',
             ]
     elif daemon_type in Monitoring.components:
-        component = Monitoring.components[daemon_type]  # type: ignore
-        metadata = component.get('image', list())  # type: ignore
-        r += metadata.get('args', list())  # type: ignore
+        metadata = Monitoring.components[daemon_type]
+        r += metadata.get('args', list())
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
@@ -911,7 +904,7 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
     if daemon_type in Monitoring.components.keys():
 
         received_config = get_parm(args.config_json)
-        required_config = Monitoring.components[daemon_type].get('config-json', list())  # type: ignore
+        required_config = Monitoring.components[daemon_type].get('config-json', list())
         if required_config:
             if not received_config or not all(c in received_config.keys() for c in required_config):
                 raise Error("{} deployment requires config-json which must "
@@ -1986,17 +1979,16 @@ def command_deploy():
             uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
         else:
             raise Error("{} not implemented yet".format(daemon_type))
-        
+
         # Monitoring metadata is nested dicts, so asking mypy to ignore
-        m = Monitoring.components[daemon_type]  # type: ignore
-        metadata = m.get('image', dict())  # type: ignore
+        metadata = Monitoring.components[daemon_type]
         monitoring_args = [
             '--user',
             str(uid),
             '--cpus',
-            metadata.get('cpus', '2'),  # type: ignore
+            metadata.get('cpus', '2'),
             '--memory',
-            metadata.get('memory', '4GB')  # type: ignore
+            metadata.get('memory', '4GB')
         ]
 
         c = get_container(args.fsid, daemon_type, daemon_id, container_args=monitoring_args)
