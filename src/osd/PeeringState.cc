@@ -5653,6 +5653,34 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
       ps->discover_all_missing(
 	context<PeeringMachine>().get_recovery_ctx().msgs);
     }
+
+    // find valid stray pg to join acting set iff the pg in peered state
+    if (ps->acting.size() < ps->pool.info.min_size) {
+      if (notevt.notify.info.is_incomplete() ||
+          notevt.notify.info.last_update < ps->info.log_tail) {
+        return discard_event(); 
+      }
+
+      vector<int> newacting(ps->acting);
+      if (ps->pool.info.is_replicated()) {
+        for (vector<int>::const_iterator i = ps->acting.begin();
+             i != ps->acting.end();
+             ++i) {
+          if (notevt.from.osd == *i) {
+            return discard_event();
+          }
+        }
+        newacting.push_back(notevt.from.osd);
+      } else {
+        auto &shard = ps->acting[notevt.from.shard];
+        if (shard != CRUSH_ITEM_NONE || shard == notevt.from.osd) {
+          return discard_event();
+        }
+        newacting[notevt.from.shard] = notevt.from.osd;
+      }
+
+      pl->queue_want_pg_temp(newacting);
+    }
   }
   return discard_event();
 }
