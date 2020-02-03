@@ -195,7 +195,7 @@ export class RgwUserFormComponent implements OnInit {
 
           // Process the capabilities.
           const mapPerm = { 'read, write': '*' };
-          resp[0].caps.forEach((cap) => {
+          resp[0].caps.forEach((cap: any) => {
             if (cap.perm in mapPerm) {
               cap.perm = mapPerm[cap.perm];
             }
@@ -278,7 +278,7 @@ export class RgwUserFormComponent implements OnInit {
    * Add/Update a subuser.
    */
   setSubuser(subuser: RgwUserSubuser, index?: number) {
-    const mapPermissions = {
+    const mapPermissions: Record<string, string> = {
       'full-control': 'full',
       'read-write': 'readwrite'
     };
@@ -592,7 +592,7 @@ export class RgwUserFormComponent implements OnInit {
    * configuration has been modified.
    */
   private _getUpdateArgs() {
-    const result = {};
+    const result: Record<string, string> = {};
     const keys = ['display_name', 'email', 'max_buckets', 'suspended'];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
@@ -604,7 +604,7 @@ export class RgwUserFormComponent implements OnInit {
    * Helper function to get the arguments for the API request when the user
    * quota configuration has been modified.
    */
-  private _getUserQuotaArgs(): object {
+  private _getUserQuotaArgs(): Record<string, any> {
     const result = {
       quota_type: 'user',
       enabled: this.userForm.getValue('user_quota_enabled'),
@@ -627,7 +627,7 @@ export class RgwUserFormComponent implements OnInit {
    * Helper function to get the arguments for the API request when the bucket
    * quota configuration has been modified.
    */
-  private _getBucketQuotaArgs(): object {
+  private _getBucketQuotaArgs(): Record<string, any> {
     const result = {
       quota_type: 'bucket',
       enabled: this.userForm.getValue('bucket_quota_enabled'),

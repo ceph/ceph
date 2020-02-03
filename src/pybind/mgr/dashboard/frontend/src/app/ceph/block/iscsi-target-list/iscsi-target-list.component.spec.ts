@@ -29,7 +29,7 @@ describe('IscsiTargetListComponent', () => {
   let summaryService: SummaryService;
   let iscsiService: IscsiService;
 
-  const refresh = (data) => {
+  const refresh = (data: any) => {
     summaryService['summaryDataSource'].next(data);
   };
 
@@ -91,7 +91,7 @@ describe('IscsiTargetListComponent', () => {
   describe('handling of executing tasks', () => {
     let targets: any[];
 
-    const addTarget = (name) => {
+    const addTarget = (name: string) => {
       const model: any = {
         target_iqn: name,
         portals: [{ host: 'node1', ip: '192.168.100.201' }],

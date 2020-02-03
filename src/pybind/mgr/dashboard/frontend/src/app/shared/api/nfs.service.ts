@@ -57,29 +57,29 @@ export class NfsService {
     return this.http.get(`${this.apiPath}/export`);
   }
 
-  get(clusterId, exportId) {
+  get(clusterId: string, exportId: string) {
     return this.http.get(`${this.apiPath}/export/${clusterId}/${exportId}`);
   }
 
-  create(nfs) {
+  create(nfs: any) {
     return this.http.post(`${this.apiPath}/export`, nfs, { observe: 'response' });
   }
 
-  update(clusterId, id, nfs) {
+  update(clusterId: string, id: string, nfs: any) {
     return this.http.put(`${this.apiPath}/export/${clusterId}/${id}`, nfs, { observe: 'response' });
   }
 
-  delete(clusterId, exportId) {
+  delete(clusterId: string, exportId: string) {
     return this.http.delete(`${this.apiPath}/export/${clusterId}/${exportId}`, {
       observe: 'response'
     });
   }
 
-  lsDir(root_dir) {
+  lsDir(root_dir: string) {
     return this.http.get(`${this.uiApiPath}/lsdir?root_dir=${root_dir}`);
   }
 
-  buckets(user_id) {
+  buckets(user_id: string) {
     return this.http.get(`${this.uiApiPath}/rgw/buckets?user_id=${user_id}`);
   }
 

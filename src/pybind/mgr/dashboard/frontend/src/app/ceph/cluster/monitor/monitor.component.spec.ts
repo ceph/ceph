@@ -23,7 +23,7 @@ describe('MonitorComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(MonitorComponent);
     component = fixture.componentInstance;
-    const getMonitorPayload = {
+    const getMonitorPayload: Record<string, any> = {
       in_quorum: [
         {
           stats: { num_sessions: [[1, 5]] }

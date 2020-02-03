@@ -89,7 +89,10 @@ export class ConfigOptionTypes {
       return;
     }
 
-    const typeValidators = { validators: [], patternHelpText: typeParams.patternHelpText };
+    const typeValidators: Record<string, any> = {
+      validators: [],
+      patternHelpText: typeParams.patternHelpText
+    };
 
     if (typeParams.isNumberType) {
       if (configOption.max && configOption.max !== '') {

@@ -47,11 +47,11 @@ export class RbdTrashMoveModalComponent implements OnInit {
       expiresAt: [
         '',
         [
-          CdValidators.custom('format', (expiresAt) => {
+          CdValidators.custom('format', (expiresAt: string) => {
             const result = expiresAt === '' || moment(expiresAt, 'YYYY-MM-DD HH:mm:ss').isValid();
             return !result;
           }),
-          CdValidators.custom('expired', (expiresAt) => {
+          CdValidators.custom('expired', (expiresAt: string) => {
             const result = moment().isAfter(expiresAt);
             return result;
           })

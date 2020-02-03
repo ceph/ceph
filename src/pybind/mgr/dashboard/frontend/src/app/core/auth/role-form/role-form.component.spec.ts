@@ -24,7 +24,7 @@ describe('RoleFormComponent', () => {
   let httpTesting: HttpTestingController;
   let roleService: RoleService;
   let router: Router;
-  const setUrl = (url) => Object.defineProperty(router, 'url', { value: url });
+  const setUrl = (url: string) => Object.defineProperty(router, 'url', { value: url });
 
   @Component({ selector: 'cd-fake', template: '' })
   class FakeComponent {}

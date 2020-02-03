@@ -11,7 +11,7 @@ export class UsersPageHelper extends PageHelper {
   pages = pages;
 
   @PageHelper.restrictTo(pages.create)
-  async create(username, fullname, email, maxbuckets) {
+  async create(username: string, fullname: string, email: string, maxbuckets: string) {
     // Enter in  username
     await element(by.id('uid')).sendKeys(username);
 
@@ -34,7 +34,7 @@ export class UsersPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.index)
-  async edit(name, new_fullname, new_email, new_maxbuckets) {
+  async edit(name: string, new_fullname: string, new_email: string, new_maxbuckets: string) {
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 

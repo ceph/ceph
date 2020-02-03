@@ -117,7 +117,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
     this.modalRef = this.modalService.show(PoolEditModeModalComponent, { initialState });
   }
 
-  editPeersModal(mode) {
+  editPeersModal(mode: string) {
     const initialState = {
       poolName: this.selection.first().name,
       mode: mode
@@ -158,12 +158,14 @@ export class PoolListComponent implements OnInit, OnDestroy {
     });
   }
 
-  getPeerUUID() {
+  getPeerUUID(): any {
     const selection = this.selection.first();
     const pool = this.data.find((o) => selection && selection.name === o['name']);
     if (pool && pool['peer_uuids']) {
       return pool['peer_uuids'][0];
     }
+
+    return undefined;
   }
 
   updateSelection(selection: CdTableSelection) {

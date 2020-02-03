@@ -24,7 +24,7 @@ describe('MgrSummaryPipe', () => {
   });
 
   it('transforms with active_name undefined', () => {
-    const payload = {
+    const payload: Record<string, any> = {
       active_name: undefined,
       standbys: []
     };

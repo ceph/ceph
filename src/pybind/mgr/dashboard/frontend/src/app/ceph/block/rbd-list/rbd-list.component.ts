@@ -18,6 +18,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { ImageSpec } from '../../../shared/models/image-spec';
 import { Permission } from '../../../shared/models/permissions';
+import { Task } from '../../../shared/models/task';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -62,16 +63,16 @@ export class RbdListComponent implements OnInit {
   modalRef: BsModalRef;
 
   builders = {
-    'rbd/create': (metadata) =>
+    'rbd/create': (metadata: object) =>
       this.createRbdFromTask(metadata['pool_name'], metadata['namespace'], metadata['image_name']),
-    'rbd/delete': (metadata) => this.createRbdFromTaskImageSpec(metadata['image_spec']),
-    'rbd/clone': (metadata) =>
+    'rbd/delete': (metadata: object) => this.createRbdFromTaskImageSpec(metadata['image_spec']),
+    'rbd/clone': (metadata: object) =>
       this.createRbdFromTask(
         metadata['child_pool_name'],
         metadata['child_namespace'],
         metadata['child_image_name']
       ),
-    'rbd/copy': (metadata) =>
+    'rbd/copy': (metadata: object) =>
       this.createRbdFromTask(
         metadata['dest_pool_name'],
         metadata['dest_namespace'],
@@ -226,7 +227,7 @@ export class RbdListComponent implements OnInit {
       }
     ];
 
-    const itemFilter = (entry, task) => {
+    const itemFilter = (entry: Record<string, any>, task: Task) => {
       let taskImageSpec: string;
       switch (task.name) {
         case 'rbd/copy':
@@ -259,7 +260,7 @@ export class RbdListComponent implements OnInit {
       );
     };
 
-    const taskFilter = (task) => {
+    const taskFilter = (task: Task) => {
       return [
         'rbd/clone',
         'rbd/copy',
@@ -288,7 +289,7 @@ export class RbdListComponent implements OnInit {
   }
 
   prepareResponse(resp: any[]): any[] {
-    let images = [];
+    let images: any[] = [];
     const viewCacheStatusMap = {};
     resp.forEach((pool) => {
       if (_.isUndefined(viewCacheStatusMap[pool.status])) {
@@ -297,7 +298,7 @@ export class RbdListComponent implements OnInit {
       viewCacheStatusMap[pool.status].push(pool.pool_name);
       images = images.concat(pool.value);
     });
-    const viewCacheStatusList = [];
+    const viewCacheStatusList: any[] = [];
     _.forEach(viewCacheStatusMap, (value: any, key) => {
       viewCacheStatusList.push({
         status: parseInt(key, 10),

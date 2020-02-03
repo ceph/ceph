@@ -36,7 +36,7 @@ export class MgrModuleService {
    * @param {object} config The configuration.
    * @return {Observable<Object>}
    */
-  updateConfig(module: string, config: Object): Observable<Object> {
+  updateConfig(module: string, config: object): Observable<Object> {
     return this.http.put(`${this.url}/${module}`, { config: config });
   }
 

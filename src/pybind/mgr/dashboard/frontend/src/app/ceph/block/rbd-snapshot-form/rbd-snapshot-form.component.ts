@@ -57,7 +57,7 @@ export class RbdSnapshotFormComponent implements OnInit {
     this.onSubmit = new Subject();
   }
 
-  setSnapName(snapName) {
+  setSnapName(snapName: string) {
     this.snapName = snapName;
     this.snapshotForm.get('snapshotName').setValue(snapName);
   }

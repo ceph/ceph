@@ -83,7 +83,7 @@ export class OsdService {
     return this.http.get<SmartDataResponseV1>(`${this.path}/${id}/smart`);
   }
 
-  scrub(id, deep) {
+  scrub(id: string, deep: boolean) {
     return this.http.post(`${this.path}/${id}/scrub?deep=${deep}`, null);
   }
 

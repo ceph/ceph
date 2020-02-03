@@ -39,7 +39,7 @@ describe('SettingsService', () => {
   });
 
   describe('getSettingsValue', () => {
-    const testMethod = (data, expected: string) => {
+    const testMethod = (data: object, expected: string) => {
       expect(service['getSettingsValue'](data)).toBe(expected);
     };
 
@@ -65,7 +65,7 @@ describe('SettingsService', () => {
   describe('isSettingConfigured', () => {
     let increment: number;
 
-    const testConfig = (url, value) => {
+    const testConfig = (url: string, value: string) => {
       service.ifSettingConfigured(
         url,
         (setValue) => {

@@ -20,7 +20,7 @@ import { HostsComponent } from './hosts.component';
 describe('HostsComponent', () => {
   let component: HostsComponent;
   let fixture: ComponentFixture<HostsComponent>;
-  let hostListSpy;
+  let hostListSpy: jasmine.Spy;
 
   const fakeAuthStorageService = {
     getPermissions: () => {

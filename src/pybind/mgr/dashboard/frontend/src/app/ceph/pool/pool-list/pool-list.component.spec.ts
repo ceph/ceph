@@ -32,7 +32,7 @@ describe('PoolListComponent', () => {
   let fixture: ComponentFixture<PoolListComponent>;
   let poolService: PoolService;
 
-  const createPool = (name, id): Pool => {
+  const createPool = (name: string, id: number): Pool => {
     return _.merge(new Pool(name), {
       pool: id,
       pg_num: 256,
@@ -149,7 +149,7 @@ describe('PoolListComponent', () => {
       deletion.submitActionObservable();
     };
 
-    const testPoolDeletion = (poolName) => {
+    const testPoolDeletion = (poolName: string) => {
       setSelectedPool(poolName);
       callDeletion();
       expect(poolService.delete).toHaveBeenCalledWith(poolName);
@@ -243,7 +243,7 @@ describe('PoolListComponent', () => {
   });
 
   describe('getPgStatusCellClass', () => {
-    const testMethod = (value, expected) =>
+    const testMethod = (value: string, expected: string) =>
       expect(component.getPgStatusCellClass('', '', value)).toEqual({
         'text-right': true,
         [expected]: true
@@ -271,7 +271,7 @@ describe('PoolListComponent', () => {
 
   describe('custom row comparators', () => {
     const expectCorrectComparator = (statsAttribute: string) => {
-      const mockPool = (v) => ({ stats: { [statsAttribute]: { latest: v } } });
+      const mockPool = (v: number) => ({ stats: { [statsAttribute]: { latest: v } } });
       const columnDefinition = _.find(
         component.columns,
         (column) => column.prop === `stats.${statsAttribute}.rates`
@@ -292,7 +292,7 @@ describe('PoolListComponent', () => {
   describe('transformPoolsData', () => {
     let pool: Pool;
 
-    const getPoolData = (o) => [
+    const getPoolData = (o: object) => [
       _.merge(
         _.merge(createPool('a', 0), {
           cdIsBinary: true,
@@ -411,7 +411,7 @@ describe('PoolListComponent', () => {
     });
 
     it('returns empty string', () => {
-      const pgStatus = undefined;
+      const pgStatus: any = undefined;
       const expected = '';
 
       expect(component.transformPgStatus(pgStatus)).toEqual(expected);

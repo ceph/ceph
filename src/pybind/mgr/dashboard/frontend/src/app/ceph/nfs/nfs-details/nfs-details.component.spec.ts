@@ -14,7 +14,7 @@ describe('NfsDetailsComponent', () => {
   let component: NfsDetailsComponent;
   let fixture: ComponentFixture<NfsDetailsComponent>;
 
-  const elem = (css) => fixture.debugElement.query(By.css(css));
+  const elem = (css: string) => fixture.debugElement.query(By.css(css));
 
   configureTestBed({
     declarations: [NfsDetailsComponent],

@@ -17,6 +17,7 @@ import { RbdService } from '../../../shared/api/rbd.service';
 import { ImageSpec } from '../../../shared/models/image-spec';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationFormComponent } from '../rbd-configuration-form/rbd-configuration-form.component';
+import { RbdImageFeature } from './rbd-feature.interface';
 import { RbdFormMode } from './rbd-form-mode.enum';
 import { RbdFormComponent } from './rbd-form.component';
 
@@ -25,7 +26,7 @@ describe('RbdFormComponent', () => {
   let fixture: ComponentFixture<RbdFormComponent>;
   let activatedRoute: ActivatedRouteStub;
 
-  const queryNativeElement = (cssSelector) =>
+  const queryNativeElement = (cssSelector: string) =>
     fixture.debugElement.query(By.css(cssSelector)).nativeElement;
 
   configureTestBed({
@@ -59,11 +60,11 @@ describe('RbdFormComponent', () => {
   });
 
   describe('create/edit/clone/copy image', () => {
-    let createAction;
-    let editAction;
-    let cloneAction;
-    let copyAction;
-    let rbdServiceGetSpy;
+    let createAction: jasmine.Spy;
+    let editAction: jasmine.Spy;
+    let cloneAction: jasmine.Spy;
+    let copyAction: jasmine.Spy;
+    let rbdServiceGetSpy: jasmine.Spy;
 
     beforeEach(() => {
       createAction = spyOn(component, 'createAction').and.stub();
@@ -211,7 +212,12 @@ describe('RbdFormComponent', () => {
   });
 
   describe('tests for feature flags', () => {
-    let deepFlatten, layering, exclusiveLock, objectMap, journaling, fastDiff;
+    let deepFlatten: any,
+      layering: any,
+      exclusiveLock: any,
+      objectMap: any,
+      journaling: any,
+      fastDiff: any;
     const defaultFeatures = [
       // Supposed to be enabled by default
       'deep-flatten',
@@ -228,7 +234,7 @@ describe('RbdFormComponent', () => {
       'journaling',
       'fast-diff'
     ];
-    const setFeatures = (features) => {
+    const setFeatures = (features: Record<string, RbdImageFeature>) => {
       component.features = features;
       component.featuresList = component.objToArray(features);
       component.createForm();

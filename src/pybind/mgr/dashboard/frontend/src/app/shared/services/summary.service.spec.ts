@@ -13,7 +13,7 @@ describe('SummaryService', () => {
   let summaryService: SummaryService;
   let authStorageService: AuthStorageService;
 
-  const summary = {
+  const summary: Record<string, any> = {
     executing_tasks: [],
     health_status: 'HEALTH_OK',
     mgr_id: 'x',
@@ -49,7 +49,7 @@ describe('SummaryService', () => {
   it('should call refresh', fakeAsync(() => {
     summaryService.enablePolling();
     authStorageService.set('foobar', undefined, undefined);
-    const calledWith = [];
+    const calledWith: any[] = [];
     summaryService.subscribe((data) => {
       calledWith.push(data);
     });

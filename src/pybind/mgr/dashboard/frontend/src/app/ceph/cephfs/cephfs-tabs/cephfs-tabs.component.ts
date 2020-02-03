@@ -1,7 +1,7 @@
 import { Component, Input, NgZone, OnChanges, OnDestroy } from '@angular/core';
 
 import * as _ from 'lodash';
-import { timer } from 'rxjs';
+import { Subscription, timer } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -25,13 +25,13 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
 
   // Client tab
   id: number;
-  clients = {
+  clients: Record<string, any> = {
     data: [],
     status: ViewCacheStatus.ValueNone
   };
 
   // Details tab
-  details = {
+  details: Record<string, any> = {
     standbys: '',
     pools: [],
     ranks: [],
@@ -40,7 +40,7 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
   };
 
   private data: any;
-  private reloadSubscriber;
+  private reloadSubscriber: Subscription;
 
   constructor(
     private ngZone: NgZone,
@@ -61,9 +61,9 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
     }
   }
 
-  private setupSelected(id, mdsInfo) {
+  private setupSelected(id: number, mdsInfo: any) {
     this.id = id;
-    const firstMds = _.first(Object.values(mdsInfo));
+    const firstMds: any = _.first(Object.values(mdsInfo));
     this.grafanaId = firstMds && firstMds['name'];
     this.details = {
       standbys: '',

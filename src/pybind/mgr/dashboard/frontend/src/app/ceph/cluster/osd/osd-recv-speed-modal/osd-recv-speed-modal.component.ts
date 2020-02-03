@@ -23,7 +23,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   osdRecvSpeedForm: CdFormGroup;
   permissions: Permissions;
 
-  priorities = [];
+  priorities: any[] = [];
   priorityAttrs = {};
 
   constructor(
@@ -82,7 +82,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   ngOnInit() {
     this.configService.filter(Object.keys(this.priorityAttrs)).subscribe((data: any) => {
       const config_option_values = this.getCurrentValues(data);
-      this.detectPriority(config_option_values.values, (priority) => {
+      this.detectPriority(config_option_values.values, (priority: any) => {
         this.setPriority(priority);
       });
       this.setDescription(config_option_values.configOptions);
@@ -112,12 +112,12 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   }
 
   getCurrentValues(configOptions: any) {
-    const currentValues = { values: {}, configOptions: [] };
-    configOptions.forEach((configOption) => {
+    const currentValues: Record<string, any> = { values: {}, configOptions: [] };
+    configOptions.forEach((configOption: any) => {
       currentValues.configOptions.push(configOption);
 
       if ('value' in configOption) {
-        configOption.value.forEach((value) => {
+        configOption.value.forEach((value: any) => {
           if (value.section === 'osd') {
             currentValues.values[configOption.name] = Number(value.value);
           }
@@ -194,13 +194,13 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       };
       this.setPriority(customPriority);
     } else {
-      this.detectPriority(values, (priority) => {
+      this.detectPriority(values, (priority: any) => {
         this.setPriority(priority);
       });
     }
   }
 
-  onPriorityChange(selectedPriorityName) {
+  onPriorityChange(selectedPriorityName: string) {
     const selectedPriority =
       _.find(this.priorities, (p) => {
         return p.name === selectedPriorityName;

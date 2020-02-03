@@ -111,7 +111,7 @@ describe('PrometheusNotificationService', () => {
       tick(20);
     };
 
-    const expectShown = (expected: {}[]) => {
+    const expectShown = (expected: object[]) => {
       tick(500);
       expect(shown.length).toBe(expected.length);
       expected.forEach((e, i) =>

@@ -25,8 +25,8 @@ import { HealthComponent } from './health.component';
 describe('HealthComponent', () => {
   let component: HealthComponent;
   let fixture: ComponentFixture<HealthComponent>;
-  let getHealthSpy;
-  const healthPayload = {
+  let getHealthSpy: jasmine.Spy;
+  const healthPayload: Record<string, any> = {
     health: { status: 'HEALTH_OK' },
     mon_status: { monmap: { mons: [] }, quorum: [] },
     osd_map: { osds: [] },
@@ -46,7 +46,7 @@ describe('HealthComponent', () => {
       return new Permissions({ log: ['read'] });
     }
   };
-  let fakeFeatureTogglesService;
+  let fakeFeatureTogglesService: jasmine.Spy;
 
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
@@ -176,7 +176,7 @@ describe('HealthComponent', () => {
   });
 
   it('should render all groups and 1 card per group', () => {
-    const payload = { hosts: 0, scrub_status: 'Inactive', pools: [] };
+    const payload: Record<string, any> = { hosts: 0, scrub_status: 'Inactive', pools: [] };
 
     getHealthSpy.and.returnValue(of(payload));
     fixture.detectChanges();
@@ -256,7 +256,7 @@ describe('HealthComponent', () => {
   });
 
   describe('preparePgStatus', () => {
-    const calcPercentage = (data) => Math.round((data / 10) * 100) || 0;
+    const calcPercentage = (data: number) => Math.round((data / 10) * 100) || 0;
 
     const expectedChart = (data: number[]) => ({
       labels: [

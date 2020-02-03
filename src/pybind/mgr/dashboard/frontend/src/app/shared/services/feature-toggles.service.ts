@@ -4,7 +4,7 @@ import { Injectable, NgZone } from '@angular/core';
 import { Observable } from 'rxjs';
 import { shareReplay } from 'rxjs/operators';
 
-export type FeatureTogglesMap = Map<string, boolean>;
+export type FeatureTogglesMap = Record<string, boolean>;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
 
 @Injectable({

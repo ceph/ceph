@@ -3,7 +3,7 @@ export class CdPwdExpirationSettings {
   pwdExpirationWarning1: number;
   pwdExpirationWarning2: number;
 
-  constructor(data) {
+  constructor(data: any) {
     this.pwdExpirationSpan = data.user_pwd_expiration_span;
     this.pwdExpirationWarning1 = data.user_pwd_expiration_warning_1;
     this.pwdExpirationWarning2 = data.user_pwd_expiration_warning_2;

@@ -2,9 +2,9 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SimpleChange, SimpleChanges } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
 
 import * as _ from 'lodash';
+import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -37,7 +37,7 @@ describe('OsdSmartListComponent', () => {
   const patchData = (path: string, newValue: any): any => {
     return _.reduce(
       _.cloneDeep(SMART_DATA_HDD_VERSION_1_0),
-      (result, dataObj, deviceId) => {
+      (result: object, dataObj, deviceId) => {
         result[deviceId] = _.set<any>(dataObj, path, newValue);
         return result;
       },
@@ -54,7 +54,7 @@ describe('OsdSmartListComponent', () => {
     patch: { [path: string]: any } = null,
     simpleChanges?: SimpleChanges
   ) => {
-    let data = null;
+    let data: HddSmartDataV1 | NvmeSmartDataV1;
     switch (dataType) {
       case 'hdd_v1':
         data = SMART_DATA_HDD_VERSION_1_0;

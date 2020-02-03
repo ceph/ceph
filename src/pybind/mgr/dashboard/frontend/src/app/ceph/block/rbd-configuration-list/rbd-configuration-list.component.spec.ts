@@ -88,7 +88,7 @@ describe('RbdConfigurationListComponent', () => {
         value: '100'
       }
     ];
-    const filter = (keyword) => {
+    const filter = (keyword: string) => {
       poolConfTable.search = keyword;
       poolConfTable.updateFilter();
       return poolConfTable.rows;

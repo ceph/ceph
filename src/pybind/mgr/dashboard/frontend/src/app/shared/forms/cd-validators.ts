@@ -103,7 +103,7 @@ export class CdValidators {
    *   argument. The function must return true to set the validation error.
    * @return {ValidatorFn} Returns the validator function.
    */
-  static requiredIf(prerequisites: Object, condition?: Function | undefined): ValidatorFn {
+  static requiredIf(prerequisites: object, condition?: Function | undefined): ValidatorFn {
     let isWatched = false;
 
     return (control: AbstractControl): ValidationErrors | null => {
@@ -150,7 +150,7 @@ export class CdValidators {
    *   into action when the prerequisites are met.
    * @return {ValidatorFn} Returns the validator function.
    */
-  static composeIf(prerequisites: Object, validators: ValidatorFn[]): ValidatorFn {
+  static composeIf(prerequisites: object, validators: ValidatorFn[]): ValidatorFn {
     let isWatched = false;
     return (control: AbstractControl): ValidationErrors | null => {
       if (!isWatched && control.parent) {

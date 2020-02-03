@@ -136,7 +136,7 @@ export class HostsComponent implements OnInit {
     this.hostService.list().subscribe(
       (resp: any[]) => {
         resp.map((host) => {
-          host.services.map((service) => {
+          host.services.map((service: any) => {
             service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
             const permission = this.permissions[typeToPermissionKey[service.type]];
             service.canRead = permission ? permission.read : false;
@@ -158,5 +158,7 @@ export class HostsComponent implements OnInit {
     if (!this.orchestratorAvailable) {
       return this.i18n('Host operation is disabled because orchestrator is unavailable');
     }
+
+    return undefined;
   }
 }
