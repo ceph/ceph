@@ -11017,13 +11017,23 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   } else {
     dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
     // check disk
+    map<string, bufferlist> attr_cache;
     bufferlist bv;
     if (attrs) {
       auto it_oi = attrs->find(OI_ATTR);
       ceph_assert(it_oi != attrs->end());
       bv = it_oi->second;
     } else {
-      int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      int r;
+      if (pool.info.is_erasure()) {
+	r = pgbackend->objects_get_attrs(
+	  soid,
+	  &attr_cache);
+	if (r >= 0)
+	  bv = attr_cache[OI_ATTR];
+      } else {
+	r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      }
       if (r < 0) {
 	if (!can_create) {
 	  dout(10) << __func__ << ": no obc for soid "
@@ -11077,10 +11087,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       if (attrs) {
 	obc->attr_cache = *attrs;
       } else {
-	int r = pgbackend->objects_get_attrs(
-	  soid,
-	  &obc->attr_cache);
-	ceph_assert(r == 0);
+	obc->attr_cache = std::move(attr_cache);
       }
     }
 
