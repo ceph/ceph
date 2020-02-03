@@ -633,6 +633,7 @@ public:
     if (!has_unused()) {
       return false;
     }
+    ceph_assert(!is_compressed());
     uint64_t blob_len = get_logical_length();
     ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
     ceph_assert(offset + length <= blob_len);
@@ -648,6 +649,7 @@ public:
 
   /// mark a range that has never been used
   void add_unused(uint64_t offset, uint64_t length) {
+    ceph_assert(!is_compressed());
     uint64_t blob_len = get_logical_length();
     ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
     ceph_assert(offset + length <= blob_len);
@@ -665,6 +667,7 @@ public:
   /// indicate that a range has (now) been used.
   void mark_used(uint64_t offset, uint64_t length) {
     if (has_unused()) {
+      ceph_assert(!is_compressed());
       uint64_t blob_len = get_logical_length();
       ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
       ceph_assert(offset + length <= blob_len);
