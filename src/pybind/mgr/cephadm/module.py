@@ -768,7 +768,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def notify(self, notify_type, notify_id):
         pass
 
-    def get_unique_name(self, existing, prefix=None, forcename=None):
+    def get_unique_name(self, host, existing, prefix=None, forcename=None):
         """
         Generate a unique random service name
         """
@@ -777,12 +777,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 raise RuntimeError('specified name %s already in use', forcename)
             return forcename
 
+        if '.' in host:
+            host = host.split('.')[0]
         while True:
             if prefix:
                 name = prefix + '.'
             else:
                 name = ''
-            name += ''.join(random.choice(string.ascii_lowercase)
+            name += host + '.' + ''.join(random.choice(string.ascii_lowercase)
                             for _ in range(6))
             if len([d for d in existing if d.service_instance == name]):
                 self.log('name %s exists, trying again', name)
@@ -1821,8 +1823,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
             args = []
             for host_spec in spec.placement.hosts:
-                name = host_spec.name or self.get_unique_name(services)
                 host = host_spec.hostname
+                name = host_spec.name or self.get_unique_name(host, services)
                 args.append((host, name))
             c = self._create_mgr(args)
             c.add_progress('Creating MGRs', self)
@@ -1847,7 +1849,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         for host, _, name in spec.placement.hosts:
             if num_added >= spec.count:
                 break
-            mds_id = self.get_unique_name(daemons, spec.name, name)
+            mds_id = self.get_unique_name(host, daemons, spec.name, name)
             self.log.debug('placing mds.%s on host %s' % (mds_id, host))
             args.append((mds_id, host))
             # add to daemon list so next name(s) will also be unique
@@ -1913,7 +1915,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for host, _, name in spec.placement.hosts:
                 if num_added >= spec.count:
                     break
-                rgw_id = self.get_unique_name(daemons, spec.name, name)
+                rgw_id = self.get_unique_name(host, daemons, spec.name, name)
                 self.log.debug('placing rgw.%s on host %s' % (rgw_id, host))
                 args.append((rgw_id, host))
                 # add to daemon list so next name(s) will also be unique
@@ -1967,7 +1969,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for host, _, name in spec.placement.hosts:
                 if num_added >= spec.count:
                     break
-                daemon_id = self.get_unique_name(daemons, None, name)
+                daemon_id = self.get_unique_name(host, daemons, None, name)
                 self.log.debug('placing rbd-mirror.%s on host %s' % (daemon_id,
                                                                      host))
                 args.append((daemon_id, host))

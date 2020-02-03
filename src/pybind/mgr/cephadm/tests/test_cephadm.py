@@ -45,9 +45,10 @@ class TestCephadm(object):
         existing = [
             ServiceDescription(service_instance='mon.a')
         ]
-        new_mon = cephadm_module.get_unique_name(existing, 'mon')
+        new_mon = cephadm_module.get_unique_name('myhost', existing, 'mon')
         assert new_mon.startswith('mon.')
         assert new_mon != 'mon.a'
+        assert '.myhost.' in new_mon
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
