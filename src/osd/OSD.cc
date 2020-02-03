@@ -6417,9 +6417,10 @@ bool OSD::_is_healthy()
 
   if (is_waiting_for_healthy()) {
      utime_t now = ceph_clock_now();
-     if (osd_markdown_log.size() <= 1) {
-       dout(5) << __func__ << " first time marked as down,"
-               << " try reboot unconditionally" << dendl;
+     if (osd_markdown_log.empty()) {
+       dout(5) << __func__ << " force returning true since last markdown"
+               << " was " << cct->_conf->osd_max_markdown_period
+               << "s ago" << dendl;
        return true;
     }
     std::lock_guard l(heartbeat_lock);
