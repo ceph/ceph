@@ -2002,6 +2002,7 @@ static void rados_aio_getxattr_completepp(rados_completion_t c, void *arg) {
     rc = cdata->bl->length();
   }
   cdata->completion.finish(rc);
+  ((librados::AioCompletionImpl*)c)->put();
   delete cdata;
 }
 
