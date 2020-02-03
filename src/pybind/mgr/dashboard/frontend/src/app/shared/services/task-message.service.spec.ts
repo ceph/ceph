@@ -168,6 +168,7 @@ describe('TaskManagerMessageService', () => {
       it('tests rbd/delete messages', () => {
         finishedTask.name = 'rbd/delete';
         testDelete(defaultMsg);
+        testErrorCode(16, `${defaultMsg} is busy.`);
         testErrorCode(39, `${defaultMsg} contains snapshots.`);
       });
 

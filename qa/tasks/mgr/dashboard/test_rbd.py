@@ -459,9 +459,9 @@ class RbdTest(DashboardTestCase):
 
     def test_delete_non_existent_image(self):
         res = self.remove_image('rbd', None, 'i_dont_exist')
-        self.assertStatus(400)
-        self.assertEqual(res, {u'code': u'2', "status": 400, "component": "rbd",
-                               "detail": "[errno 2] RBD image not found (error removing image)",
+        self.assertStatus(404)
+        self.assertEqual(res, {u'code': 404, "status": 404, "component": None,
+                               "detail": "(404, 'Image not found')",
                                'task': {'name': 'rbd/delete',
                                         'metadata': {'image_spec': 'rbd/i_dont_exist'}}})
 
@@ -487,6 +487,22 @@ class RbdTest(DashboardTestCase):
         self.assertStatus(200)
         self._validate_image(img, name='delete_me', size=2**30)
         self.assertEqual(len(img['snapshots']), 0)
+
+        self.remove_image('rbd', None, 'delete_me')
+        self.assertStatus(204)
+
+    def test_image_delete_with_snapshot(self):
+        self.create_image('rbd', None, 'delete_me', 2**30)
+        self.assertStatus(201)
+        self.create_snapshot('rbd', None, 'delete_me', 'snap1')
+        self.assertStatus(201)
+        self.create_snapshot('rbd', None, 'delete_me', 'snap2')
+        self.assertStatus(201)
+
+        img = self.get_image('rbd', None, 'delete_me')
+        self.assertStatus(200)
+        self._validate_image(img, name='delete_me', size=2**30)
+        self.assertEqual(len(img['snapshots']), 2)
 
         self.remove_image('rbd', None, 'delete_me')
         self.assertStatus(204)
@@ -672,13 +688,9 @@ class RbdTest(DashboardTestCase):
         res = self.remove_image('rbd', None, 'cimg')
         self.assertStatus(400)
         self.assertIn('code', res)
-        self.assertEqual(res['code'], '39')
+        self.assertEqual(res['code'], '16')
 
         self.remove_image('rbd', None, 'cimg-clone')
-        self.assertStatus(204)
-        self.update_snapshot('rbd', None, 'cimg', 'snap1', None, False)
-        self.assertStatus(200)
-        self.remove_snapshot('rbd', None, 'cimg', 'snap1')
         self.assertStatus(204)
         self.remove_image('rbd', None, 'cimg')
         self.assertStatus(204)
