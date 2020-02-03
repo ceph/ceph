@@ -338,16 +338,9 @@ void PoolReplayer<I>::init(const std::string& site_name) {
   m_image_deletion_throttler.reset(
       Throttler<I>::create(cct, "rbd_mirror_concurrent_image_deletions"));
 
-  std::string local_fsid;
-  r = m_local_rados->cluster_fsid(&local_fsid);
-  if (r < 0) {
-    derr << "failed to retrieve local fsid: " << cpp_strerror(r) << dendl;
-    return;
-  }
-
   m_remote_pool_poller_listener.reset(new RemotePoolPollerListener(this));
   m_remote_pool_poller.reset(RemotePoolPoller<I>::create(
-    m_threads, m_remote_io_ctx, m_site_name, local_fsid,
+    m_threads, m_remote_io_ctx, m_site_name, m_local_mirror_uuid,
     *m_remote_pool_poller_listener));
 
   C_SaferCond on_pool_poller_init;

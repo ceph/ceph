@@ -124,7 +124,7 @@ void RemotePoolPoller<I>::mirror_peer_ping() {
   dout(10) << dendl;
 
   librados::ObjectWriteOperation op;
-  librbd::cls_client::mirror_peer_ping(&op, m_site_name, m_local_fsid);
+  librbd::cls_client::mirror_peer_ping(&op, m_site_name, m_local_mirror_uuid);
 
   auto aio_comp = create_rados_callback<
     RemotePoolPoller<I>, &RemotePoolPoller<I>::handle_mirror_peer_ping>(this);
@@ -187,7 +187,7 @@ void RemotePoolPoller<I>::handle_mirror_peer_list(int r) {
       continue;
     }
 
-    if (peer.fsid == m_local_fsid) {
+    if (peer.mirror_uuid == m_local_mirror_uuid) {
       matched_peer = &peer;
       break;
     } else if (peer.site_name == m_site_name) {

@@ -85,9 +85,10 @@ struct MirrorPeer {
              MirrorPeerDirection mirror_peer_direction,
              const std::string& site_name,
              const std::string& client_name,
-             const std::string& fsid)
+             const std::string& mirror_uuid)
     : uuid(uuid), mirror_peer_direction(mirror_peer_direction),
-      site_name(site_name), client_name(client_name), fsid(fsid) {
+      site_name(site_name), client_name(client_name),
+      mirror_uuid(mirror_uuid) {
   }
 
   std::string uuid;
@@ -95,7 +96,7 @@ struct MirrorPeer {
   MirrorPeerDirection mirror_peer_direction = MIRROR_PEER_DIRECTION_RX_TX;
   std::string site_name;
   std::string client_name;  // RX property
-  std::string fsid;
+  std::string mirror_uuid;
   utime_t last_seen;
 
   inline bool is_valid() const {
@@ -200,16 +201,16 @@ inline void decode(MirrorImageStatusState &state,
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 struct MirrorImageSiteStatus {
-  static const std::string LOCAL_FSID;
+  static const std::string LOCAL_MIRROR_UUID;
 
   MirrorImageSiteStatus() {}
-  MirrorImageSiteStatus(const std::string& fsid,
+  MirrorImageSiteStatus(const std::string& mirror_uuid,
                         MirrorImageStatusState state,
                         const std::string &description)
-    : fsid(fsid), state(state), description(description) {
+    : mirror_uuid(mirror_uuid), state(state), description(description) {
   }
 
-  std::string fsid = LOCAL_FSID;
+  std::string mirror_uuid = LOCAL_MIRROR_UUID;
   MirrorImageStatusState state = MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
   std::string description;
   utime_t last_update;

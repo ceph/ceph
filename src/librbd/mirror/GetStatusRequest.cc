@@ -25,7 +25,7 @@ using librbd::util::create_rados_callback;
 template <typename I>
 void GetStatusRequest<I>::send() {
   *m_mirror_image_status = cls::rbd::MirrorImageStatus(
-    {{cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
+    {{cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID,
       cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found"}});
 
   get_info();

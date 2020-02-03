@@ -87,7 +87,8 @@ public:
     auto it = std::find_if(status.site_statuses.begin(),
                            status.site_statuses.end(),
                            [](auto& site_status) {
-        return (site_status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+        return (site_status.mirror_uuid ==
+                  RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
       });
     if (it == status.site_statuses.end()) {
       return -ENOENT;
