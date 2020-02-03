@@ -7,7 +7,7 @@ from functools import wraps
 
 import string
 try:
-    from typing import List, Dict, Optional, Callable, TypeVar, Type, Any
+    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, Any
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
@@ -325,6 +325,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'desc': 'raise a health warning if services are detected '
                     'that are not managed by cephadm',
         },
+        {
+            'name': 'warn_on_failed_host_check',
+            'type': 'bool',
+            'default': True,
+            'desc': 'raise a health warning if the host check fails',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -344,6 +350,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.container_image_base = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_services = True
+            self.warn_on_failed_host_check = True
+
+        self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
+
         self.config_notify()
 
         path = self.get_ceph_option('cephadm_path')
@@ -630,7 +640,31 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self._save_upgrade_state()
         return None
 
-    def _check_for_strays(self):
+    def _check_hosts(self):
+        self.log.debug('_check_hosts')
+        bad_hosts = []
+        for host, v in self.inventory.items():
+            self.log.debug(' checking %s' % host)
+            out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
+                                               error_ok=True, no_fsid=True)
+            if code:
+                self.log.debug(' host %s failed check' % host)
+                if self.warn_on_failed_host_check:
+                    bad_hosts.append('host %s failed check: %s' % (host, err))
+            else:
+                self.log.debug(' host %s ok' % host)
+        if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
+            del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
+        if bad_hosts:
+            self.health_checks['CEPHADM_HOST_CHECK_FAILED'] = {
+                'severity': 'warning',
+                'summary': '%d hosts fail cephadm check' % len(bad_hosts),
+                'count': len(bad_hosts),
+                'detail': bad_hosts,
+            }
+        self.set_health_checks(self.health_checks)
+
+    def _check_for_strays(self, services):
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_SERVICE']:
@@ -639,14 +673,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if self.warn_on_stray_hosts or self.warn_on_stray_services:
             ls = self.list_servers()
             managed = []
-            if self.warn_on_stray_services:
-                completion = self._get_services()
-                self._orchestrator_wait([completion])
-                orchestrator.raise_if_exception(completion)
-                self.log.debug('services %s' % completion.result)
-                for s in completion.result:
-                    managed.append(s.name())
-                self.log.debug('cephadm daemons %s' % managed)
+            for s in services:
+                managed.append(s.name())
+            self.log.debug('cephadm daemons %s' % managed)
             host_detail = []     # type: List[str]
             host_num_services = 0
             service_detail = []  # type: List[str]
@@ -689,13 +718,20 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         # type: () -> None
         self.log.info("serve starting")
         while self.run:
+            self._check_hosts()
+
+            # refresh services
+            self.log.debug('refreshing services')
+            completion = self._get_services(maybe_refresh=True)
+            self._orchestrator_wait([completion])
+            orchestrator.raise_if_exception(completion)
+            services = completion.result
+            self.log.debug('services %s' % services)
+
+            self._check_for_strays(services)
+
             while self.upgrade_state and not self.upgrade_state.get('paused'):
-                self.log.debug('Upgrade in progress, refreshing services')
-                completion = self._get_services()
-                self._orchestrator_wait([completion])
-                orchestrator.raise_if_exception(completion)
-                self.log.debug('services %s' % completion.result)
-                completion = self._do_upgrade(completion.result)
+                completion = self._do_upgrade(services)
                 if completion:
                     while not completion.has_result:
                         self.process([completion])
@@ -705,8 +741,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             break
                     orchestrator.raise_if_exception(completion)
                 self.log.debug('did _do_upgrade')
-
-            self._check_for_strays()
 
             sleep_interval = 600
             self.log.debug('Sleeping for %d seconds', sleep_interval)
@@ -732,7 +766,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.event.set()
 
     def notify(self, notify_type, notify_id):
-        self.event.set()
+        pass
 
     def get_unique_name(self, existing, prefix=None, forcename=None):
         """
@@ -811,6 +845,22 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.ssh_user = 'root'
         elif self.mode == 'cephadm-package':
             self.ssh_user = 'cephadm'
+
+        self._reset_cons()
+
+    def _reset_con(self, host):
+        conn, r = self._cons.get(host, (None, None))
+        if conn:
+            self.log.debug('_reset_con close %s' % host)
+            conn.exit()
+            del self._cons[host]
+
+    def _reset_cons(self):
+        for host, conn_and_r in self._cons.items():
+            self.log.debug('_reset_cons close %s' % host)
+            conn, r = conn_and_r
+            conn.exit()
+        self._cons = {}
 
     @staticmethod
     def can_run():
@@ -933,16 +983,27 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         'name=host,type=CephString',
         'Check whether we can access and manage a remote host')
     def _check_host(self, host):
-        out, err, code = self._run_cephadm(host, '', 'check-host', [],
+        out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
                                            error_ok=True, no_fsid=True)
         if code:
-            return 1, '', err
+            return 1, '', ('check-host failed:\n' + '\n'.join(err))
+        # if we have an outstanding health alert for this host, give the
+        # serve thread a kick
+        if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
+            for item in self.health_checks['CEPHADM_HOST_CHECK_FAILED']['detail']:
+                if item.startswith('host %s ' % host):
+                    self.log.debug('kicking serve thread')
+                    self.event.set()
         return 0, '%s ok' % host, err
 
     def _get_connection(self, host):
         """
         Setup a connection for running commands on remote host.
         """
+        conn_and_r = self._cons.get(host)
+        if conn_and_r:
+            self.log.debug('Have connection to %s' % host)
+            return conn_and_r
         n = self.ssh_user + '@' + host
         self.log.info("Opening connection to {} with ssh options '{}'".format(
             n, self._ssh_options))
@@ -952,6 +1013,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             ssh_options=self._ssh_options)
 
         r = conn.import_module(remotes)
+        self._cons[host] = conn, r
 
         return conn, r
 
@@ -1018,6 +1080,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         [python, '-u'],
                         stdin=script.encode('utf-8'))
                 except RuntimeError as e:
+                    self._reset_con(host)
                     if error_ok:
                         return '', str(e), 1
                     raise
@@ -1028,6 +1091,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         ['sudo', '/usr/bin/cephadm'] + final_args,
                         stdin=stdin)
                 except RuntimeError as e:
+                    self._reset_con(host)
                     if error_ok:
                         return '', str(e), 1
                     raise
@@ -1044,9 +1108,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.log.exception(ex)
             raise
 
-        finally:
-            conn.exit()
-
     def _get_hosts(self, wanted=None):
         return self.inventory_cache.items_filtered(wanted)
 
@@ -1057,7 +1118,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         :param host: host name
         """
-        out, err, code = self._run_cephadm(host, '', 'check-host', [],
+        out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
                                            error_ok=True, no_fsid=True)
         if code:
             raise OrchestratorError('New host %s failed check: %s' % (host, err))
@@ -1080,6 +1141,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self._save_inventory()
         del self.inventory_cache[host]
         del self.service_cache[host]
+        self._reset_con(host)
         self.event.set()  # refresh stray health check
         return "Removed host '{}'".format(host)
 
@@ -1136,7 +1198,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                       service_name=None,
                       service_id=None,
                       node_name=None,
-                      refresh=False):
+                      refresh=False,
+                      maybe_refresh=False):
         hosts = []
         wait_for_args = []
         services = {}
@@ -1145,9 +1208,22 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             keys = [node_name]
         for host, host_info in self.service_cache.items_filtered(keys):
             hosts.append(host)
-            if host_info.outdated(self.service_cache_timeout) or refresh:
+            if refresh:
+                self.log.info("refreshing services for '{}'".format(host))
+                wait_for_args.append((host,))
+            elif maybe_refresh and host_info.outdated(self.service_cache_timeout):  # type: ignore
                 self.log.info("refreshing stale services for '{}'".format(host))
                 wait_for_args.append((host,))
+            elif not host_info.last_refresh:
+                services[host] = [
+                    {
+                        'name': '*',
+                        'service_type': '*',
+                        'service_instance': '*',
+                        'style': 'cephadm:v1',
+                        'fsid': self._cluster_fsid,
+                    },
+                ]
             else:
                 self.log.debug('have recent services for %s: %s' % (
                     host, host_info.data))
@@ -1168,14 +1244,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         continue
                     self.log.debug('including %s %s' % (host, d))
                     sd = orchestrator.ServiceDescription()
-                    sd.last_refresh = datetime.datetime.strptime(
-                        d.get('last_refresh'), DATEFMT)
+                    if 'last_refresh' in d:
+                        sd.last_refresh = datetime.datetime.strptime(
+                            d['last_refresh'], DATEFMT)
                     sd.service_type = d['name'].split('.')[0]
                     if service_type and service_type != sd.service_type:
                         continue
                     if '.' in d['name']:
                         sd.service_instance = '.'.join(d['name'].split('.')[1:])
-                    else:
+                    elif d['name'] != '*':
                         sd.service_instance = host  # e.g., crash
                     if service_id and service_id != sd.service_instance:
                         continue
@@ -1186,13 +1263,17 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     sd.container_image_name = d.get('container_image_name')
                     sd.container_image_id = d.get('container_image_id')
                     sd.version = d.get('version')
-                    sd.status_desc = d['state']
-                    sd.status = {
-                        'running': 1,
-                        'stopped': 0,
-                        'error': -1,
-                        'unknown': -1,
-                    }[d['state']]
+                    if 'state' in d:
+                        sd.status_desc = d['state']
+                        sd.status = {
+                            'running': 1,
+                            'stopped': 0,
+                            'error': -1,
+                            'unknown': -1,
+                        }[d['state']]
+                    else:
+                        sd.status_desc = 'unknown'
+                        sd.status = None
                     result.append(sd)
             return result
 
@@ -1518,7 +1599,25 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             ] + extra_args,
             stdin=j)
         self.log.debug('create_daemon code %s out %s' % (code, out))
+        if not code:
+            # prime cached service state with what we (should have)
+            # just created
+            sd = {
+                'style': 'cephadm:v1',
+                'name': '%s.%s' % (daemon_type, daemon_id),
+                'fsid': self._cluster_fsid,
+                'enabled': True,
+                'state': 'running',
+            }
+            data = self.service_cache[host].data
+            if data:
+                data = [d for d in data if d['name'] != sd['name']]
+                data.append(sd)
+            else:
+                data = [sd]
+            self.service_cache[host] = orchestrator.OutdatableData(data)
         self.service_cache.invalidate(host)
+        self.event.set()
         return "{} {} on host '{}'".format(
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
