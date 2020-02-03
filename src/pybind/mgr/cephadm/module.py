@@ -802,6 +802,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         pass
 
     def get_unique_name(self, host, existing, prefix=None, forcename=None):
+        # type: (str, List[orchestrator.ServiceDescription], Optional[str], Optional[str]) -> str
         """
         Generate a unique random service name
         """
@@ -1903,9 +1904,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return c
 
     def add_mds(self, spec):
-        if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:
-            raise RuntimeError("must specify at least %d hosts" % spec.placement.count)
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        if not spec.placement.hosts or spec.placement.count is None or len(spec.placement.hosts) < spec.placement.count:
+            raise RuntimeError("must specify at least %s hosts" % spec.placement.count)
         # ensure mds_join_fs is set for these daemons
+        assert spec.name
         ret, out, err = self.mon_command({
             'prefix': 'config set',
             'who': 'mds.' + spec.name,
@@ -1915,6 +1918,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._get_services('mds').then(lambda ds: self._add_mds(ds, spec))
 
     def _add_mds(self, daemons, spec):
+        # type: (List[orchestrator.ServiceDescription], orchestrator.ServiceSpec) -> AsyncCompletion
         args = []
         num_added = 0
         for host, _, name in spec.placement.hosts:
@@ -1933,7 +1937,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._create_mds(args)
 
     def update_mds(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
+
         return self._update_service('mds', self.add_mds, spec)
 
     @async_map_completion
