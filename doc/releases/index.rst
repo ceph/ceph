@@ -7,6 +7,14 @@ Ceph Releases (index)
 .. toctree::
    :maxdepth: 1
 
+Pending Release
+---------------
+
+.. toctree::
+   :maxdepth: 1
+
+   Octopus <octopus>
+
 Active Releases
 ---------------
 
