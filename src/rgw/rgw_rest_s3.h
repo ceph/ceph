@@ -873,6 +873,34 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
   return 0;
 }
 
+class RGWS3Select : public RGWGetObj_ObjStore_S3
+{
+
+  public:
+    RGWS3Select()
+    {
+      set_get_data(true);
+    }
+
+    std::string get_s3select_query()
+    {
+      return m_s3select_query;
+    }
+
+//public:
+  //virtual int get_params(){ return RGWGetObj_ObjStore_S3::get_params() ;}
+
+  //virtual int send_response_data_error() { return RGWGetObj_ObjStore_S3::send_response_data_error();}
+  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len);
+
+
+#if 0
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    return op->get_data_cb(bl, bl_ofs, bl_len);
+  }
+#endif
+
+};
 
 namespace rgw::auth::s3 {
 

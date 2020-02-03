@@ -331,6 +331,15 @@ public:
     get_legal_hold = false;
  }
 
+ protected:
+ std::string m_s3select_query;
+
+ public:
+ std::string get_s3select_query()
+ {
+   return m_s3select_query;
+ }
+
   bool prefetch_data() override;
 
   void set_get_data(bool get_data) {

@@ -2213,6 +2213,21 @@ void RGWGetObj::execute()
   gc_invalidate_time = ceph_clock_now();
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
+  if (s->info.args.exists("select-type"))
+  {
+    //fetch payload , the query - string if (s->info.args("select")) query=....
+    bufferlist data;
+    int ret;
+    int max_size = 4096;
+    std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+    string post_body = data.to_str();
+    if (data.length() > 0)
+    {
+      ldout(s->cct, 10) << "s3-select query: " << post_body << dendl;
+      m_s3select_query = post_body;
+    }
+  }
+
   bool need_decompress;
   int64_t ofs_x, end_x;
 

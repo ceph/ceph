@@ -4516,6 +4516,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
 
   if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
+  
+  if (s->info.args.exists("select-type"))
+    return new RGWS3Select;
 
   return new RGWPostObj_ObjStore_S3;
 }
@@ -5281,6 +5284,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
+	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
@@ -5869,4 +5873,325 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   std::tie(version, route) = discover_aws_flavour(s->info);
 
   return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
+}
+
+
+typedef enum {EVENT_TYPE,CONTENT_TYPE,MESSAGE_TYPE} header_name_en_t;
+const char * header_name_str[]={":event-type",":content-type",":message-type"};
+
+typedef enum {RECORDS,OCTET_STREAM,EVENT} header_value_en_t;
+const char * header_value_str[]={"Records","application/octet-stream","event"};
+
+#define X_COPY(dst,src)  {auto s = src;if(sizeof(s)==4){s=__builtin_bswap32(s);}else{s= src>>8| src<<8;}; memcpy(&dst,&s, sizeof(s)); i+=sizeof(s);}
+
+static int s_creare_header_records(char *buff)
+{
+        int i=0;
+
+        //1
+        buff[ i++ ] = (char)strlen( header_name_str[EVENT_TYPE] );
+        memcpy(&buff[i],header_name_str[EVENT_TYPE],strlen( header_name_str[EVENT_TYPE] ));
+        i+= strlen( header_name_str[EVENT_TYPE] );
+        buff[ i++ ] = (char)7;
+        X_COPY(buff[ i ] , (short)strlen( header_value_str[RECORDS] ) );
+        memcpy(&buff[i],header_value_str[RECORDS],strlen(header_value_str[RECORDS]) );
+        i+= strlen(header_value_str[RECORDS]);
+
+        //2
+        buff[ i++ ] = (char)strlen( header_name_str[CONTENT_TYPE] );
+        memcpy(&buff[i],header_name_str[CONTENT_TYPE],strlen( header_name_str[CONTENT_TYPE] ));
+        i+= strlen( header_name_str[CONTENT_TYPE] );
+        buff[ i++ ] = (char)7;
+        X_COPY(buff[ i ],(short)strlen( header_value_str[OCTET_STREAM] ));
+        memcpy(&buff[i],header_value_str[OCTET_STREAM],strlen(header_value_str[OCTET_STREAM]) );
+        i+= strlen(header_value_str[OCTET_STREAM]);
+
+        //3
+        buff[ i++ ] = (char)strlen( header_name_str[MESSAGE_TYPE] );
+        memcpy(&buff[i],header_name_str[MESSAGE_TYPE],strlen( header_name_str[MESSAGE_TYPE] ));
+        i+= strlen( header_name_str[MESSAGE_TYPE] );
+        buff[ i++ ] = (char)7;
+        X_COPY( buff[ i ] , (short)strlen( header_value_str[EVENT] ) );
+        memcpy(&buff[i],header_value_str[EVENT],strlen(header_value_str[EVENT]) );
+        i+= strlen(header_value_str[EVENT]);
+
+        return i;
+}
+
+//crc32 calculation align with python calculation 
+typedef unsigned int UInt32;//TODO change types 
+typedef unsigned char UInt8;
+typedef int SInt;
+
+static UInt32
+s_crc32(UInt32 crc, UInt8 *p, SInt len)
+{
+  crc = ~crc;
+  while (--len >= 0) {
+    crc = crc ^ *p++;
+    for (SInt i = 8; --i >= 0;) {
+      crc = (crc >> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return ~crc;
+}
+
+static int s_create_message(const char* payload , char * buff)
+{
+
+u_int32_t total_byte_len=0;
+u_int32_t preload_crc=0;
+u_int32_t message_crc=0;
+int i=0;
+
+        u_int32_t header_len = s_creare_header_records(buff + 12);//headet satrt 
+
+        total_byte_len = strlen(payload) + header_len + 16;//TODO buff size should be >= total_byte_len
+        
+        X_COPY(buff[i],total_byte_len);
+        X_COPY(buff[i],header_len);
+        char crc_buff[8];
+        memcpy(&crc_buff[0],&total_byte_len,4);
+        memcpy(&crc_buff[4],&header_len,4);
+
+        preload_crc = s_crc32(0, (UInt8*)buff, 8) ;
+        X_COPY(buff[i],preload_crc);
+
+        i+= header_len;
+        memcpy(&buff[i],payload,strlen(payload));i += strlen(payload);
+
+        message_crc = s_crc32(0,(UInt8*)buff,i);    
+        X_COPY(buff[i],message_crc);
+
+        return i;
+}
+
+
+#include "s3select.h"
+#include <boost/algorithm/string.hpp>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+class csv_object : public base_s3object
+{
+
+private:
+  std::vector<std::string> m_csv_lines;
+  base_statement *m_where_clause;
+  list<base_statement *> m_projections;
+  bool m_aggr_flow = false; //TODO once per query
+  int line_index;
+
+  int getNextRow(char **tokens) //TODO add delimiter
+  {                             //purpose: simple csv parser, not handling escape rules
+
+    if (line_index >= (int)m_csv_lines.size()) return -1;
+    if(m_csv_lines[line_index].empty()) return -1;
+    
+    char *p = (char *)m_csv_lines[line_index].c_str(); //TODO another boost splitter
+    int i = 0;
+    while (*p)
+    {
+      char *t = p;
+      while (*p && (*(p) != ',')) //TODO delimiter
+        p++;
+      *p = 0;
+      tokens[i++] = t;
+      p++;
+      if (*t == 10)
+        break; //trimming newline
+    }
+    tokens[i] = 0; //last token
+    line_index++;
+    return i;
+  }
+
+public:
+  csv_object(s3select *s3_query, char *csv_stream /*TODO replace with stringstream*/) : base_s3object(s3_query->get_from_clause().c_str(), s3_query->get_scratch_area())
+  {
+
+    std::string __stream(csv_stream);
+    boost::split(m_csv_lines, __stream, [](char c) { return c == '\n'; }); //splitting the stream (should be 4->128 mb)
+    line_index = 0;
+    m_projections = s3_query->get_projections_list();
+    m_where_clause = s3_query->get_filter();
+
+    if (m_where_clause)
+      m_where_clause->traverse_and_apply(m_sa);
+
+    for (auto p : m_projections)
+      p->traverse_and_apply(m_sa);
+
+    for (auto e : m_projections) //TODO for tests only, should be in semantic
+    {
+      base_statement *aggr = 0;
+
+      if ((aggr = e->get_aggregate()) != 0)
+      {
+        if (aggr->is_nested_aggregate(aggr))
+        {
+          throw base_s3select_exception("nested aggregation function is illegal i.e. sum(...sum ...)", base_s3select_exception::s3select_exp_en_t::FATAL);
+        }
+
+        m_aggr_flow = true;
+      }
+    }
+    if (m_aggr_flow == true)
+      for (auto e : m_projections)
+      {
+        base_statement *skip_expr = e->get_aggregate();
+
+        if (e->is_binop_aggregate_and_column(skip_expr))
+        {
+          throw base_s3select_exception("illegal expression. /select sum(c1) + c1 ..../ is not allow type of query", base_s3select_exception::s3select_exp_en_t::FATAL);
+        }
+      }
+  }
+
+virtual ~csv_object(){}
+
+public:
+  int getMatchRow(std::list<string> &result) //TODO virtual ? getResult
+  {
+    int number_of_tokens = 0;
+    char *row_tokens[128]; //TODO typedef for it
+
+    if (m_aggr_flow == true)
+    {
+      do
+      {
+
+        number_of_tokens = getNextRow(row_tokens);
+        if (number_of_tokens < 0) //end of stream
+        {
+          for (auto i : m_projections)
+          {
+            i->set_last_call();
+            result.push_back((i->eval().to_string()));
+          }
+          return number_of_tokens;
+        }
+
+        m_sa->update((const char **)row_tokens, number_of_tokens);
+
+        if (!m_where_clause || m_where_clause->eval().get_num() == true)
+          for (auto i : m_projections)
+            i->eval();
+
+      } while (1);
+    }
+    else
+    {
+
+      do
+      {
+
+        number_of_tokens = getNextRow(row_tokens);
+        if (number_of_tokens < 0)
+          return number_of_tokens;
+
+        m_sa->update((const char **)row_tokens, number_of_tokens);
+      } while (m_where_clause && m_where_clause->eval().get_num() == false);
+
+      for (auto i : m_projections)
+      {
+        result.push_back(i->eval().to_string());
+      }
+    }
+
+    return number_of_tokens; //TODO wrong
+  }
+};
+
+static int s_run_s3select_on_object(char *input_stream,const char * input_query,std::string & o_result)
+{
+  s3select s3select_syntax;//TODO should leave in request-cycle 
+  parse_info<> info = parse(input_query, s3select_syntax, space_p); //TODO object
+  auto x = info.stop;
+
+  if (!info.full)
+  {
+    std::cout << "failure -->" << x << "<---" << std::endl; //TODO create error mesage 
+    return -1;
+  }
+
+
+  try
+  {
+    csv_object my_input(&s3select_syntax, input_stream);
+
+    do
+    {
+      std::list<string> result;
+      int num = my_input.getMatchRow(result);
+
+      for (std::list<string>::iterator it = result.begin(); it != result.end(); it++)
+      {
+        if (std::next(it) != result.end())
+          {o_result.append(*it);o_result.append(",");}
+        else
+          {o_result.append(*it);o_result.append("\n");}
+      }
+
+      if (num < 0)
+        break;
+
+    } while (1);
+  }
+  catch (base_s3select_exception & e)
+  {
+    std::cout << e.what() << std::endl;
+    return -1;
+  }
+
+  return 0;
+}
+
+int RGWS3Select::send_response_data(bufferlist& bl, off_t ofs, off_t len)
+{
+  if (len == 0)
+    return 0;
+
+  if (op_ret < 0)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+
+  // Explicitly use chunked transfer encoding so that we can stream the result
+  // to the user without having to wait for the full length of it.
+  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  char *buff=0;//TODO should by dynamic (up to 4m at this stage)
+
+  #define GT "&gt;"
+  #define LT "&lt;"
+  if (m_s3select_query.find(GT) != std::string::npos) boost::replace_all(m_s3select_query,GT,">");
+  if (m_s3select_query.find(LT) != std::string::npos) boost::replace_all(m_s3select_query,LT,"<");
+
+  size_t _qs = m_s3select_query.find("<Expression>", 0) + strlen("<Expression>");
+  size_t _qe = m_s3select_query.find("</Expression>", _qs);
+
+  std::string query = m_s3select_query.substr(_qs, _qe - _qs);
+
+  std::string res;
+  s_run_s3select_on_object((char*)bl.c_str(),query.c_str(),res);
+
+  std::string return_payload;//TODO not efficient 
+  return_payload.append("\n<Payload>\n<Records>\n<Payload>\n");
+  return_payload.append(res);
+  return_payload.append("\n</Payload></Records></Payload>");
+  
+  buff = (char*)malloc(return_payload.size() + 1000);
+  int buff_len = s_create_message(return_payload.c_str(),buff);
+  //dump_start(s);
+  s->formatter->write_bin_data(buff,buff_len);
+  if (op_ret < 0)
+    return op_ret;
+
+  //s->formatter->open_object_section_in_ns("Payload", XMLNS_AWS_S3);
+
+  rgw_flush_formatter_and_reset(s, s->formatter);
+
+  if(buff) free(buff);
+  
+  return 0;
 }
