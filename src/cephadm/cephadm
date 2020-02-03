@@ -1577,6 +1577,8 @@ def update_firewalld(daemon_type):
         fw_ports.append(9283)  # mgr/prometheus exporter
     elif daemon_type in Monitoring.port_map.keys():
         fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
+    elif daemon_type == NFSGanesha.daemon_type:
+        fw_services.append('nfs')
 
     for svc in fw_services:
         out, err, ret = call([cmd, '--permanent', '--query-service', svc])
