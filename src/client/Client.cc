@@ -3124,6 +3124,10 @@ void Client::send_reconnect(MetaSession *session)
 	cap.gen = session->cap_gen;
 	cap.issued = cap.implemented = CEPH_CAP_PIN;
       } else {
+	if (in->is_dir()) {
+	  // drop caps for async dir operations
+	  cap.implemented &= (CEPH_CAP_ANY_SHARED | CEPH_CAP_ANY_EXCL);
+	}
 	cap.issued = cap.implemented;
       }
       snapid_t snap_follows = 0;
@@ -3186,8 +3190,20 @@ void Client::resend_unsafe_requests(MetaSession *session)
 {
   for (xlist<MetaRequest*>::iterator iter = session->unsafe_requests.begin();
        !iter.end();
-       ++iter)
-    send_request(*iter, session);
+       ++iter) {
+    MetaRequest *req = *iter;
+    // Recovering MDS does not rebuild lock caches, caps for dir
+    // operations are stale. Besides the recovering MDS may revoke Fx
+    // when replaying async/unsafe requests. So we need to drop cap
+    // refs of async dir operations. Similar to unsafe requests,
+    // re-sent async requests are handled by the recovering MDS at
+    // clientreplay stage. They won't be affected by other operations.
+    if (req->async & ~CEPH_CAP_PIN) {
+      put_cap_ref(req->inode(), req->async & ~CEPH_CAP_PIN, true);
+      req->async = CEPH_CAP_PIN;
+    }
+    send_request(req, session);
+  }
 
   // also re-send old requests when MDS enters reconnect stage. So that MDS can
   // process completed requests in clientreplay stage.
@@ -3517,7 +3533,7 @@ void Client::get_cap_ref(Inode *in, int cap)
   in->get_cap_ref(cap);
 }
 
-void Client::put_cap_ref(Inode *in, int cap)
+void Client::put_cap_ref(Inode *in, int cap, bool nocheck)
 {
   int last = in->put_cap_ref(cap);
   if (last) {
@@ -3544,7 +3560,7 @@ void Client::put_cap_ref(Inode *in, int cap)
       ldout(cct, 5) << __func__ << " dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
     }
-    if (drop)
+    if (drop && !nocheck)
       check_caps(in);
     if (put_nref)
       put_inode(in, put_nref);
@@ -13094,7 +13110,10 @@ void Client::_async_create_cb(MetaRequest *req, MetaSession *session, int err)
       diri->set_async_err(err);
       in->set_async_err(err);
     }
-    put_cap_ref(diri, want);
+    if (req->async & ~CEPH_CAP_PIN) {
+      put_cap_ref(diri, req->async & ~CEPH_CAP_PIN);
+      req->async = CEPH_CAP_PIN;
+    }
 
     auto ret = diri->async_dirops.erase(dn->name);
     ceph_assert(ret);
@@ -13173,7 +13192,7 @@ void Client::_async_create_cb(MetaRequest *req, MetaSession *session, int err)
   dn->primary_link = true;
 
   get_cap_ref(diri, want);
-  req->async = true;
+  req->async = CEPH_CAP_PIN | want;
   req->resend_mds = session->mds_num;
   uint32_t orig_flags = req->head.args.open.flags;
   req->head.args.open.flags = orig_flags | CEPH_O_EXCL;
@@ -13587,7 +13606,10 @@ void Client::_async_unlink_cb(MetaRequest *req, MetaSession *session, int err)
 		 << req->tid << " " << diri->ino  << " " << dn->name << dendl;
       diri->set_async_err(err);
     }
-    put_cap_ref(diri, want);
+    if (req->async & ~CEPH_CAP_PIN) {
+      put_cap_ref(diri, req->async & ~CEPH_CAP_PIN);
+      req->async = CEPH_CAP_PIN;
+    }
 
     auto ret = diri->async_dirops.erase(dn->name);
     ceph_assert(ret);
@@ -13613,7 +13635,7 @@ void Client::_async_unlink_cb(MetaRequest *req, MetaSession *session, int err)
   unlink(dn, true, true);  // keep dir, dentry
 
   get_cap_ref(diri, want);
-  req->async = true;
+  req->async = CEPH_CAP_PIN | want;
   req->resend_mds = session->mds_num;
   register_unsafe_request(req, session);
   auto ret = diri->async_dirops.emplace(dn->name, req);

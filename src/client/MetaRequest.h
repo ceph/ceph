@@ -55,13 +55,13 @@ public:
   ceph::cref_t<MClientReply> reply;
   bool kick = false;
   bool success = false;
-  bool async = false;
   //possible responses
   bool got_unsafe = false;
 
   // readdir result
   dir_result_t *dirp = nullptr;
 
+  int async = 0;
   void (Client::*async_dirop_cb)(MetaRequest *req, MetaSession *session, int err) = nullptr;
 
   xlist<MetaRequest*>::item item;
