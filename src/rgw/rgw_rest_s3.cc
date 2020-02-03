@@ -418,6 +418,56 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   }
   return res;
 }
+int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry) 
+{
+  int ret = -EINVAL;
+  ret = RGWOp::verify_requester(auth_registry);
+  if(!s->user->get_caps().check_cap("amz-cache", RGW_CAP_READ) && !ret && s->info.env->exists("HTTP_X_AMZ_CACHE"))
+    ret = override_range_hdr(auth_registry);
+  return ret;
+}
+int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry)
+{
+  int ret = -EINVAL;
+  ldpp_dout(this,2) << "cache override headers" << dendl;
+  try {
+      RGWEnv* rgw_env = const_cast<RGWEnv *>(s->info.env);
+      // Maybe we need to change env inside req_info to non const var, maybe we can use const_cast or maybe keep it that way (changing rgw_env from the ref)
+      const char *backup_range = rgw_env->get("HTTP_RANGE");
+      const char hdrs_split[2] = {(char)178,'\0'};
+      const char kv_split[2] = {(char)177,'\0'};
+      std::string cache_hdr(rgw_env->get("HTTP_X_AMZ_CACHE")); // we are calling process_cache_request method only if the header exists 
+      vector<string> cache_hdrs, cache_kvs;
+      boost::split(cache_hdrs,cache_hdr,boost::is_any_of(hdrs_split));
+      cache_hdrs.erase(cache_hdrs.begin());
+      ldpp_dout(this,2) << "starting parse cache headers" << dendl;
+      for (auto i = 0; i < cache_hdrs.size(); ++i)
+      {
+        boost::split(cache_kvs,cache_hdrs[i],boost::is_any_of(kv_split));
+        ldpp_dout(this,2) << "after splitting cache kv " << dendl;
+        if(cache_kvs.size() == 2) {
+          boost::replace_all(cache_kvs[0],"-","_");
+          rgw_env->set("HTTP_" + cache_kvs[0],cache_kvs[1]);
+          ldpp_dout(this,2) << "after splitting cache kv key: " << "HTTP_" + cache_kvs[0] << rgw_env->get((std::string("HTTP_") + cache_kvs[0]).c_str()) << dendl;
+        } else {
+          return -EINVAL;
+        }
+      }
+      ret = RGWOp::verify_requester(auth_registry);
+          if(!ret && backup_range) {
+            rgw_env->set("HTTP_RANGE",backup_range);
+          } else {
+            rgw_env->remove("HTTP_RANGE");
+          }
+      
+  }
+  catch(const ceph::crypto::DigestException& e) {
+    dout(0) << "cache authentication failed" << e.what() << dendl;
+    abort_early(s, this, -EINVAL, dialect_handler);
+  }
+  return ret;
+}
+
 
 void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {
