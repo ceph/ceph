@@ -261,7 +261,7 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def _task_request(cls, method, url, data, timeout):
         res = cls._request(url, method, data)
-        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 400, 403])
+        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 400, 403, 404])
 
         if cls._resp.status_code == 403:
             return None

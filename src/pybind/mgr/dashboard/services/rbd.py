@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=unused-argument
 from __future__ import absolute_import
 
 import six
+
+import cherrypy
 
 import rbd
 
@@ -81,6 +84,20 @@ def parse_image_spec(image_spec):
     return pool_name, namespace, image_name
 
 
+def rbd_call(pool_name, namespace, func, *args, **kwargs):
+    with mgr.rados.open_ioctx(pool_name) as ioctx:
+        ioctx.set_namespace(namespace if namespace is not None else '')
+        func(ioctx, *args, **kwargs)
+
+
+def rbd_image_call(pool_name, namespace, image_name, func, *args, **kwargs):
+    def _ioctx_func(ioctx, image_name, func, *args, **kwargs):
+        with rbd.Image(ioctx, image_name) as img:
+            func(ioctx, img, *args, **kwargs)
+
+    return rbd_call(pool_name, namespace, _ioctx_func, image_name, func, *args, **kwargs)
+
+
 class RbdConfiguration(object):
     _rbd = rbd.RBD()
 
@@ -103,8 +120,11 @@ class RbdConfiguration(object):
         # type: () -> List[dict]
         def _list(ioctx):
             if self._image_name:  # image config
-                with rbd.Image(ioctx, self._image_name) as image:
-                    result = image.config_list()
+                try:
+                    with rbd.Image(ioctx, self._image_name) as image:
+                        result = image.config_list()
+                except rbd.ImageNotFound:
+                    result = []
             else:  # pool config
                 result = self._rbd.config_list(ioctx)
             return list(result)
@@ -214,7 +234,7 @@ class RbdService(object):
         return total_used_size, snap_map
 
     @classmethod
-    def rbd_image(cls, ioctx, pool_name, namespace, image_name):
+    def _rbd_image(cls, ioctx, pool_name, namespace, image_name):
         with rbd.Image(ioctx, image_name) as img:
 
             stat = img.stat()
@@ -298,7 +318,7 @@ class RbdService(object):
 
     @classmethod
     def _rbd_image_stat(cls, ioctx, pool_name, namespace, image_name):
-        return cls.rbd_image(ioctx, pool_name, namespace, image_name)
+        return cls._rbd_image(ioctx, pool_name, namespace, image_name)
 
     @classmethod
     @ViewCache()
@@ -323,3 +343,28 @@ class RbdService(object):
                         continue
                     result.append(stat)
             return result
+
+    @classmethod
+    def get_image(cls, image_spec):
+        pool_name, namespace, image_name = parse_image_spec(image_spec)
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        if namespace:
+            ioctx.set_namespace(namespace)
+        try:
+            return cls._rbd_image(ioctx, pool_name, namespace, image_name)
+        except rbd.ImageNotFound:
+            raise cherrypy.HTTPError(404, 'Image not found')
+
+
+class RbdSnapshotService(object):
+
+    @classmethod
+    def remove_snapshot(cls, image_spec, snapshot_name, unprotect=False):
+        def _remove_snapshot(ioctx, img, snapshot_name, unprotect):
+            if unprotect:
+                img.unprotect_snap(snapshot_name)
+            img.remove_snap(snapshot_name)
+
+        pool_name, namespace, image_name = parse_image_spec(image_spec)
+        return rbd_image_call(pool_name, namespace, image_name,
+                              _remove_snapshot, snapshot_name, unprotect)
