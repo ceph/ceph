@@ -1315,6 +1315,99 @@ TEST_P(StoreTest, SimpleObjectTest) {
 
 #if defined(WITH_BLUESTORE)
 
+TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
+  if(string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  g_conf().apply_changes(nullptr);
+  StartDeferred(65536);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  const PerfCounters* logger = store->get_perf_counters();
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(ch, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(ch, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(4096, 'a');
+    bl.append(s);
+    t.write(cid, hoid, 0x11000, bl.length(), bl);
+    cerr << "write1" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(4096 * 3, 'a');
+    bl.append(s);
+    t.write(cid, hoid, 0x15000, bl.length(), bl);
+    cerr << "write2" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_small), 2u);
+  ASSERT_EQ(logger->get(l_bluestore_write_small_unused), 1u);
+
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(4096 * 2, 'a');
+    bl.append(s);
+    t.write(cid, hoid, 0xe000, bl.length(), bl);
+    cerr << "write3" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_small), 3u);
+  ASSERT_EQ(logger->get(l_bluestore_write_small_unused), 2u);
+
+
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(4096, 'a');
+    bl.append(s);
+    t.write(cid, hoid, 0xf000, bl.length(), bl);
+    t.write(cid, hoid, 0x10000, bl.length(), bl);
+    cerr << "write3" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_small), 5u);
+  ASSERT_EQ(logger->get(l_bluestore_write_small_unused), 2u);
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;

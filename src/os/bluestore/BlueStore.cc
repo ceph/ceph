@@ -13520,12 +13520,14 @@ int BlueStore::_do_alloc_write(
     }
 
     if (wi.mark_unused) {
+      ceph_assert(!dblob.is_compressed());
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
         dblob.add_unused(0, b_off);
       }
-      if (b_end < wi.blob_length) {
-        dblob.add_unused(b_end, wi.blob_length - b_end);
+      uint64_t llen = dblob.get_logical_length();
+      if (b_end < llen) {
+        dblob.add_unused(b_end, llen - b_end);
       }
     }
 
