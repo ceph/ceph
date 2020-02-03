@@ -14,6 +14,8 @@
 releases:
   nautilus:
     releases:
+      - version: 14.2.7
+        released: 2020-01-31
       - version: 14.2.6
         released: 2020-01-09
       - version: 14.2.5
