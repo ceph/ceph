@@ -103,7 +103,7 @@ namespace librbd {
     std::string uuid;
     mirror_peer_direction_t direction;
     std::string site_name;
-    std::string fsid;
+    std::string mirror_uuid;
     std::string client_name;
     time_t last_seen;
   } mirror_peer_site_t;
@@ -129,7 +129,7 @@ namespace librbd {
   } mirror_image_status_t CEPH_RBD_DEPRECATED;
 
   typedef struct {
-    std::string fsid;
+    std::string mirror_uuid;
     mirror_image_status_state_t state;
     std::string description;
     time_t last_update;

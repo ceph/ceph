@@ -219,7 +219,8 @@ int get_local_mirror_image_site_status(
   auto it = std::find_if(status.site_statuses.begin(),
                          status.site_statuses.end(),
                          [](const librbd::mirror_image_site_status_t& s) {
-      return (s.fsid == cls::rbd::MirrorImageSiteStatus::LOCAL_FSID);
+      return (s.mirror_uuid ==
+                cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID);
     });
   if (it == status.site_statuses.end()) {
     return -ENOENT;
@@ -267,7 +268,7 @@ void mirror_image_global_status_cpp_to_c(
   for (auto it = cpp_status.site_statuses.begin();
        it != cpp_status.site_statuses.end(); ++it) {
     auto& s_status = c_status->site_statuses[idx++];
-    s_status.fsid = strdup(it->fsid.c_str());
+    s_status.mirror_uuid = strdup(it->mirror_uuid.c_str());
     s_status.state = it->state;
     s_status.description = strdup(it->description.c_str());
     s_status.last_update = it->last_update;
@@ -1144,8 +1145,8 @@ namespace librbd {
     images->clear();
     for (auto &[id, global_status] : global_statuses) {
       if (global_status.site_statuses.empty() ||
-          global_status.site_statuses[0].fsid !=
-            cls::rbd::MirrorImageSiteStatus::LOCAL_FSID) {
+          global_status.site_statuses[0].mirror_uuid !=
+            cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
         continue;
       }
 
@@ -3220,7 +3221,7 @@ extern "C" int rbd_mirror_peer_site_list(
     peers[i].uuid = strdup(peer_vector[i].uuid.c_str());
     peers[i].direction = peer_vector[i].direction;
     peers[i].site_name = strdup(peer_vector[i].site_name.c_str());
-    peers[i].fsid = strdup(peer_vector[i].fsid.c_str());
+    peers[i].mirror_uuid = strdup(peer_vector[i].mirror_uuid.c_str());
     peers[i].client_name = strdup(peer_vector[i].client_name.c_str());
   }
   *max_peers = static_cast<int>(peer_vector.size());
@@ -3232,7 +3233,7 @@ extern "C" void rbd_mirror_peer_site_list_cleanup(rbd_mirror_peer_site_t *peers,
   for (int i = 0; i < max_peers; ++i) {
     free(peers[i].uuid);
     free(peers[i].site_name);
-    free(peers[i].fsid);
+    free(peers[i].mirror_uuid);
     free(peers[i].client_name);
   }
 }
@@ -3351,7 +3352,7 @@ extern "C" void rbd_mirror_image_global_status_cleanup(
   free(global_status->name);
   rbd_mirror_image_get_info_cleanup(&global_status->info);
   for (auto idx = 0U; idx < global_status->site_statuses_count; ++idx) {
-    free(global_status->site_statuses[idx].fsid);
+    free(global_status->site_statuses[idx].mirror_uuid);
     free(global_status->site_statuses[idx].description);
   }
   free(global_status->site_statuses);

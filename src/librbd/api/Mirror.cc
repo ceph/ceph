@@ -341,7 +341,7 @@ struct C_ImageGetGlobalStatus : public C_ImageGetInfo {
     for (auto& site_status :
            mirror_image_status_internal.mirror_image_site_statuses) {
       mirror_image_global_status->site_statuses.push_back({
-        site_status.fsid,
+        site_status.mirror_uuid,
         static_cast<mirror_image_status_state_t>(site_status.state),
         site_status.description, site_status.last_update.sec(),
         site_status.up});
@@ -1498,7 +1498,7 @@ int Mirror<I>::peer_site_list(librados::IoCtx& io_ctx,
     peer.direction = static_cast<mirror_peer_direction_t>(
       mirror_peer.mirror_peer_direction);
     peer.site_name = mirror_peer.site_name;
-    peer.fsid = mirror_peer.fsid;
+    peer.mirror_uuid = mirror_peer.mirror_uuid;
     peer.client_name = mirror_peer.client_name;
     peer.last_seen = mirror_peer.last_seen.sec();
     peers->push_back(peer);
@@ -1712,7 +1712,7 @@ int Mirror<I>::image_global_status_list(
         status.mirror_image_site_statuses.size());
       for (auto& site_status : status.mirror_image_site_statuses) {
         global_status.site_statuses.push_back(mirror_image_site_status_t{
-          site_status.fsid,
+          site_status.mirror_uuid,
           static_cast<mirror_image_status_state_t>(site_status.state),
           site_status.state == cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN ?
             STATUS_NOT_FOUND : site_status.description,
@@ -1721,7 +1721,7 @@ int Mirror<I>::image_global_status_list(
     } else {
       // older OSD that only returns local status
       global_status.site_statuses.push_back(mirror_image_site_status_t{
-        cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
+        cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID,
         MIRROR_IMAGE_STATUS_STATE_UNKNOWN, STATUS_NOT_FOUND, 0, false});
     }
   }

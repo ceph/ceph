@@ -61,7 +61,7 @@ extern "C" {
 #define RBD_FLAG_OBJECT_MAP_INVALID   (1<<0)
 #define RBD_FLAG_FAST_DIFF_INVALID    (1<<1)
 
-#define RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID ""
+#define RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID ""
 
 typedef void *rbd_image_t;
 typedef void *rbd_image_options_t;
@@ -163,7 +163,7 @@ typedef struct {
   char *uuid;
   rbd_mirror_peer_direction_t direction;
   char *site_name;
-  char *fsid;
+  char *mirror_uuid;
   char *client_name;
   time_t last_seen;
 } rbd_mirror_peer_site_t;
@@ -208,7 +208,7 @@ typedef struct {
 } rbd_mirror_image_status_t CEPH_RBD_DEPRECATED;
 
 typedef struct {
-  char *fsid;
+  char *mirror_uuid;
   rbd_mirror_image_status_state_t state;
   char *description;
   time_t last_update;

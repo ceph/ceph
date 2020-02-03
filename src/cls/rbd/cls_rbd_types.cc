@@ -37,7 +37,7 @@ void MirrorPeer::encode(bufferlist &bl) const {
 
   // v2
   encode(static_cast<uint8_t>(mirror_peer_direction), bl);
-  encode(fsid, bl);
+  encode(mirror_uuid, bl);
   encode(last_seen, bl);
   ENCODE_FINISH(bl);
 }
@@ -54,7 +54,7 @@ void MirrorPeer::decode(bufferlist::const_iterator &it) {
     uint8_t mpd;
     decode(mpd, it);
     mirror_peer_direction = static_cast<MirrorPeerDirection>(mpd);
-    decode(fsid, it);
+    decode(mirror_uuid, it);
     decode(last_seen, it);
   }
 
@@ -65,7 +65,7 @@ void MirrorPeer::dump(Formatter *f) const {
   f->dump_string("uuid", uuid);
   f->dump_stream("direction") << mirror_peer_direction;
   f->dump_string("site_name", site_name);
-  f->dump_string("fsid", fsid);
+  f->dump_string("mirror_uuid", mirror_uuid);
   f->dump_string("client_name", client_name);
   f->dump_stream("last_seen") << last_seen;
 }
@@ -75,9 +75,9 @@ void MirrorPeer::generate_test_instances(std::list<MirrorPeer*> &o) {
   o.push_back(new MirrorPeer("uuid-123", MIRROR_PEER_DIRECTION_RX, "site A",
                              "client name", ""));
   o.push_back(new MirrorPeer("uuid-234", MIRROR_PEER_DIRECTION_TX, "site B",
-                             "", "fsid"));
+                             "", "mirror_uuid"));
   o.push_back(new MirrorPeer("uuid-345", MIRROR_PEER_DIRECTION_RX_TX, "site C",
-                             "client name", "fsid"));
+                             "client name", "mirror_uuid"));
 }
 
 bool MirrorPeer::operator==(const MirrorPeer &rhs) const {
@@ -85,7 +85,7 @@ bool MirrorPeer::operator==(const MirrorPeer &rhs) const {
           mirror_peer_direction == rhs.mirror_peer_direction &&
           site_name == rhs.site_name &&
           client_name == rhs.client_name &&
-          fsid == rhs.fsid &&
+          mirror_uuid == rhs.mirror_uuid &&
           last_seen == rhs.last_seen);
 }
 
@@ -113,7 +113,7 @@ std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer) {
      << "direction=" << peer.mirror_peer_direction << ", "
      << "site_name=" << peer.site_name << ", "
      << "client_name=" << peer.client_name << ", "
-     << "fsid=" << peer.fsid << ", "
+     << "mirror_uuid=" << peer.mirror_uuid << ", "
      << "last_seen=" << peer.last_seen
      << "]";
   return os;
@@ -242,11 +242,11 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
-const std::string MirrorImageSiteStatus::LOCAL_FSID(""); // empty fsid
+const std::string MirrorImageSiteStatus::LOCAL_MIRROR_UUID(""); // empty mirror uuid
 
 void MirrorImageSiteStatus::encode_meta(uint8_t version, bufferlist &bl) const {
   if (version >= 2) {
-    ceph::encode(fsid, bl);
+    ceph::encode(mirror_uuid, bl);
   }
   cls::rbd::encode(state, bl);
   ceph::encode(description, bl);
@@ -257,9 +257,9 @@ void MirrorImageSiteStatus::encode_meta(uint8_t version, bufferlist &bl) const {
 void MirrorImageSiteStatus::decode_meta(uint8_t version,
                                         bufferlist::const_iterator &it) {
   if (version < 2) {
-    fsid = LOCAL_FSID;
+    mirror_uuid = LOCAL_MIRROR_UUID;
   } else {
-    ceph::decode(fsid, it);
+    ceph::decode(mirror_uuid, it);
   }
 
   cls::rbd::decode(state, it);
@@ -270,7 +270,7 @@ void MirrorImageSiteStatus::decode_meta(uint8_t version,
 
 void MirrorImageSiteStatus::encode(bufferlist &bl) const {
   // break compatibility when site-name is provided
-  uint8_t version = (fsid == LOCAL_FSID ? 1 : 2);
+  uint8_t version = (mirror_uuid == LOCAL_MIRROR_UUID ? 1 : 2);
   ENCODE_START(version, version, bl);
   encode_meta(version, bl);
   ENCODE_FINISH(bl);
@@ -360,7 +360,7 @@ int MirrorImageStatus::get_local_mirror_image_site_status(
     mirror_image_site_statuses.begin(),
     mirror_image_site_statuses.end(),
     [](const MirrorImageSiteStatus& status) {
-      return status.fsid == MirrorImageSiteStatus::LOCAL_FSID;
+      return status.mirror_uuid == MirrorImageSiteStatus::LOCAL_MIRROR_UUID;
     });
   if (it == mirror_image_site_statuses.end()) {
     return -ENOENT;
@@ -390,7 +390,7 @@ void MirrorImageStatus::encode(bufferlist &bl) const {
   encode(n, bl);
 
   for (auto& status : mirror_image_site_statuses) {
-    if (status.fsid == MirrorImageSiteStatus::LOCAL_FSID) {
+    if (status.mirror_uuid == MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
       continue;
     }
     status.encode_meta(2, bl);
@@ -442,7 +442,7 @@ void MirrorImageStatus::dump(Formatter *f) const {
 
   f->open_array_section("remotes");
   for (auto& status : mirror_image_site_statuses) {
-    if (status.fsid == MirrorImageSiteStatus::LOCAL_FSID) {
+    if (status.mirror_uuid == MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
       continue;
     }
 
@@ -478,12 +478,12 @@ std::ostream& operator<<(std::ostream& os,
 
   os << "remotes=[";
   for (auto& remote_status : status.mirror_image_site_statuses) {
-    if (remote_status.fsid == MirrorImageSiteStatus::LOCAL_FSID) {
+    if (remote_status.mirror_uuid == MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
       continue;
     }
 
     os << "{"
-       << "fsid=" << remote_status.fsid << ", "
+       << "mirror_uuid=" << remote_status.mirror_uuid<< ", "
        << "state=" << remote_status.state_to_string() << ", "
        << "description=" << remote_status.description << ", "
        << "last_update=" << remote_status.last_update

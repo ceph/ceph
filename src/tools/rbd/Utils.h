@@ -212,7 +212,7 @@ uint64_t get_rbd_default_features(CephContext* cct);
 void get_mirror_peer_sites(
     librados::IoCtx& io_ctx,
     std::vector<librbd::mirror_peer_site_t>* mirror_peers);
-void get_mirror_peer_fsid_to_names(
+void get_mirror_peer_mirror_uuids_to_names(
     const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
     std::map<std::string, std::string>* fsid_to_name);
 void populate_unknown_mirror_image_site_statuses(
