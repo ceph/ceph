@@ -160,7 +160,7 @@ export class RoleListComponent implements OnInit {
         ],
         titleText: this.i18n('Clone Role'),
         submitButtonText: this.i18n('Clone Role'),
-        onSubmit: (values) => {
+        onSubmit: (values: object) => {
           this.roleService.clone(name, values['newName']).subscribe(() => {
             this.getRoles();
             this.notificationService.show(

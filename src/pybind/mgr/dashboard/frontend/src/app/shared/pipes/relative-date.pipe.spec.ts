@@ -10,8 +10,7 @@ describe('RelativeDatePipe', () => {
   });
 
   it('transforms without value', () => {
-    const value = undefined;
-    expect(pipe.transform(value)).toBe('unknown');
+    expect(pipe.transform(undefined)).toBe('unknown');
   });
 
   it('transforms "in 7 days"', () => {

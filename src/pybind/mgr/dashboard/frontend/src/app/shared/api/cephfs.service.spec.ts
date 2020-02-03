@@ -51,7 +51,7 @@ describe('CephfsService', () => {
   });
 
   it('should call getMdsCounters', () => {
-    service.getMdsCounters(1).subscribe();
+    service.getMdsCounters('1').subscribe();
     const req = httpTesting.expectOne('api/cephfs/1/mds_counters');
     expect(req.request.method).toBe('GET');
   });

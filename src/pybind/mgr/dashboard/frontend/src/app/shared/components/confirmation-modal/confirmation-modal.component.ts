@@ -32,7 +32,7 @@ export class ConfirmationModalComponent implements OnInit, OnDestroy {
 
   constructor(public modalRef: BsModalRef, private modalService: BsModalService) {
     this.confirmationForm = new FormGroup({});
-    this.onHide = this.modalService.onHide.subscribe((e) => {
+    this.onHide = this.modalService.onHide.subscribe((e: any) => {
       if (this.onCancel && (e || this.canceled)) {
         this.onCancel();
       }

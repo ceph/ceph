@@ -19,7 +19,7 @@ describe('PrometheusSilenceMatcherService', () => {
     providers: [i18nProviders]
   });
 
-  const addMatcher = (name, value) => ({
+  const addMatcher = (name: string, value: any) => ({
     name: name,
     value: value,
     isRegex: false
@@ -40,7 +40,12 @@ describe('PrometheusSilenceMatcherService', () => {
   });
 
   describe('test rule matching with one matcher', () => {
-    const expectSingleMatch = (name, value, helpText, successClass: boolean) => {
+    const expectSingleMatch = (
+      name: string,
+      value: any,
+      helpText: string,
+      successClass: boolean
+    ) => {
       const match = service.singleMatch(addMatcher(name, value), rules);
       expect(match.status).toBe(helpText);
       expect(match.cssClass).toBe(successClass ? 'has-success' : 'has-warning');
@@ -85,7 +90,7 @@ describe('PrometheusSilenceMatcherService', () => {
   });
 
   describe('test rule matching with multiple matcher', () => {
-    const expectMultiMatch = (matchers, helpText, successClass: boolean) => {
+    const expectMultiMatch = (matchers: any[], helpText: string, successClass: boolean) => {
       const match = service.multiMatch(matchers, rules);
       expect(match.status).toBe(helpText);
       expect(match.cssClass).toBe(successClass ? 'has-success' : 'has-warning');

@@ -25,7 +25,7 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { Pool } from '../pool';
-import { PoolStats } from '../pool-stat';
+import { PoolStat, PoolStats } from '../pool-stat';
 
 const BASE_URL = 'pool';
 
@@ -169,7 +169,7 @@ export class PoolListComponent implements OnInit {
       {
         prop: 'stats.rd_bytes.rates',
         name: this.i18n('Read bytes'),
-        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
           compare('stats.rd_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
         flexGrow: 3
@@ -177,7 +177,7 @@ export class PoolListComponent implements OnInit {
       {
         prop: 'stats.wr_bytes.rates',
         name: this.i18n('Write bytes'),
-        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
           compare('stats.wr_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
         flexGrow: 3
@@ -232,7 +232,7 @@ export class PoolListComponent implements OnInit {
     });
   }
 
-  getPgStatusCellClass(_row, _column, value): object {
+  getPgStatusCellClass(_row: any, _column: any, value: string): object {
     return {
       'text-right': true,
       [`pg-${this.pgCategoryService.getTypeByStates(value)}`]: true
@@ -241,7 +241,7 @@ export class PoolListComponent implements OnInit {
 
   transformPoolsData(pools: any) {
     const requiredStats = ['bytes_used', 'max_avail', 'rd_bytes', 'wr_bytes', 'rd', 'wr'];
-    const emptyStat = { latest: 0, rate: 0, rates: [] };
+    const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
@@ -261,7 +261,7 @@ export class PoolListComponent implements OnInit {
       }
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
-        pool.stats[stat].rates = pool.stats[stat].rates.map((point) => point[1]);
+        pool.stats[stat].rates = pool.stats[stat].rates.map((point: any) => point[1]);
       });
       pool.cdIsBinary = true;
     });
@@ -270,7 +270,7 @@ export class PoolListComponent implements OnInit {
   }
 
   transformPgStatus(pgStatus: any): string {
-    const strings = [];
+    const strings: string[] = [];
     _.forEach(pgStatus, (count, state) => {
       strings.push(`${count} ${state}`);
     });
@@ -291,5 +291,7 @@ export class PoolListComponent implements OnInit {
         'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
       );
     }
+
+    return undefined;
   }
 }

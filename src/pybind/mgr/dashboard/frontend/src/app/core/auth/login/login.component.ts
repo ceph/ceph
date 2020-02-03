@@ -40,7 +40,7 @@ export class LoginComponent implements OnInit {
       // Make sure notification sidebar is closed.
       this.notificationService.toggleSidebar(true);
 
-      let token = null;
+      let token: string = null;
       if (window.location.hash.indexOf('access_token=') !== -1) {
         token = window.location.hash.split('access_token=')[1];
         const uri = window.location.toString();

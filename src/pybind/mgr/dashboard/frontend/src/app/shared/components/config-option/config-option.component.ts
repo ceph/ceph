@@ -58,7 +58,7 @@ export class ConfigOptionComponent implements OnInit {
 
   private loadStoredData() {
     this.configService.filter(this.optionNames).subscribe((data: any) => {
-      this.options = data.map((configOption) => {
+      this.options = data.map((configOption: any) => {
         const formControl = this.optionsForm.get(configOption.name);
         const typeValidators = ConfigOptionTypes.getTypeValidators(configOption);
         configOption.additionalTypeInfo = ConfigOptionTypes.getType(configOption.type);

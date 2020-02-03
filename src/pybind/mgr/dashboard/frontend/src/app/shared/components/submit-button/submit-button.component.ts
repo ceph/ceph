@@ -55,7 +55,7 @@ export class SubmitButtonComponent implements OnInit {
     });
   }
 
-  submit($event) {
+  submit($event: any) {
     this.focusButton();
 
     // Special handling for Template driven forms.

@@ -81,6 +81,8 @@ export class ConfigurationFormComponent implements OnInit {
 
       return typeValidators.validators;
     }
+
+    return undefined;
   }
 
   getStep(type: string, value: number): number | undefined {
@@ -131,7 +133,7 @@ export class ConfigurationFormComponent implements OnInit {
   }
 
   createRequest(): ConfigFormCreateRequestModel | null {
-    const values = [];
+    const values: any[] = [];
 
     this.availSections.forEach((section) => {
       const sectionValue = this.configForm.getValue(section);

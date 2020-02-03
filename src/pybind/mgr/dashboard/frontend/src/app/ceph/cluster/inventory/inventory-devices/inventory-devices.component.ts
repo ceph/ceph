@@ -179,7 +179,7 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
           }
         ],
         submitButtonText: this.i18n('Execute'),
-        onSubmit: (values) => {
+        onSubmit: (values: any) => {
           this.orchService.identifyDevice(hostname, device, values.duration).subscribe(() => {
             this.notificationService.show(
               NotificationType.success,

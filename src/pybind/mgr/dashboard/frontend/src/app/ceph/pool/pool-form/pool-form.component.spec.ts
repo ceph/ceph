@@ -45,13 +45,13 @@ describe('PoolFormComponent', () => {
   let router: Router;
   let ecpService: ErasureCodeProfileService;
 
-  const setPgNum = (pgs): AbstractControl => {
+  const setPgNum = (pgs: number): AbstractControl => {
     const control = formHelper.setValue('pgNum', pgs);
     fixture.debugElement.query(By.css('#pgNum')).nativeElement.dispatchEvent(new Event('blur'));
     return control;
   };
 
-  const testPgUpdate = (pgs, jump, returnValue) => {
+  const testPgUpdate = (pgs: number, jump: number, returnValue: number) => {
     if (pgs) {
       setPgNum(pgs);
     }
@@ -278,7 +278,7 @@ describe('PoolFormComponent', () => {
       component.ngOnInit(); // Switches form into edit mode
       formHelper.setValue('poolType', 'erasure');
       fixture.detectChanges();
-      formHelper.expectValid(setPgNum('8'));
+      formHelper.expectValid(setPgNum(8));
     });
 
     it('is valid if pgNum, poolType and name are valid', () => {
@@ -379,7 +379,7 @@ describe('PoolFormComponent', () => {
       });
 
       it('validates that odd size validator works as expected', () => {
-        const odd = (min, max) => component['oddBlobSize'](min, max);
+        const odd = (min: string, max: string) => component['oddBlobSize'](min, max);
         expect(odd('10', '8')).toBe(true);
         expect(odd('8', '-')).toBe(false);
         expect(odd('8', '10')).toBe(false);
@@ -683,7 +683,7 @@ describe('PoolFormComponent', () => {
         expected: 256
       });
 
-      const testPgCalc = ({ type, osds, size, ecp, expected }) => {
+      const testPgCalc = ({ type, osds, size, ecp, expected }: Record<string, any>) => {
         component.info.osd_count = osds;
         formHelper.setValue('poolType', type);
         if (type === 'replicated') {
@@ -813,7 +813,7 @@ describe('PoolFormComponent', () => {
         deletion.submitActionObservable();
       };
 
-      const testPoolDeletion = (name) => {
+      const testPoolDeletion = (name: string) => {
         setSelectedEcp(name);
         callDeletion();
         expect(ecpService.delete).toHaveBeenCalledWith(name);
@@ -848,12 +848,12 @@ describe('PoolFormComponent', () => {
   });
 
   describe('submit - create', () => {
-    const setMultipleValues = (settings: {}) => {
+    const setMultipleValues = (settings: object) => {
       Object.keys(settings).forEach((name) => {
         formHelper.setValue(name, settings[name]);
       });
     };
-    const testCreate = (pool) => {
+    const testCreate = (pool: object) => {
       expectValidSubmit(pool, 'pool/create', 'create');
     };
 
@@ -1006,7 +1006,7 @@ describe('PoolFormComponent', () => {
   });
 
   describe('edit mode', () => {
-    const setUrl = (url) => {
+    const setUrl = (url: string) => {
       Object.defineProperty(router, 'url', { value: url });
       setUpPoolComponent(); // Renew of component needed because the constructor has to be called
     };
@@ -1071,12 +1071,9 @@ describe('PoolFormComponent', () => {
       });
 
       it('should include the custom app as valid option', () => {
-        expect(component.data.applications.available.map((app) => app.name)).toEqual([
-          'cephfs',
-          'ownApp',
-          'rbd',
-          'rgw'
-        ]);
+        expect(
+          component.data.applications.available.map((app: Record<string, any>) => app.name)
+        ).toEqual(['cephfs', 'ownApp', 'rbd', 'rgw']);
       });
 
       it('set all control values to the given pool', () => {
@@ -1105,7 +1102,8 @@ describe('PoolFormComponent', () => {
       });
 
       describe('submit', () => {
-        const markControlAsPreviouslySet = (controlName) => form.get(controlName).markAsPristine();
+        const markControlAsPreviouslySet = (controlName: string) =>
+          form.get(controlName).markAsPristine();
 
         beforeEach(() => {
           ['algorithm', 'maxBlobSize', 'minBlobSize', 'mode', 'pgNum', 'ratio', 'name'].forEach(

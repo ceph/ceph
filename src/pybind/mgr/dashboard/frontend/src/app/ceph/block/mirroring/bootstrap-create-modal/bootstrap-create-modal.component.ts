@@ -10,6 +10,7 @@ import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.servic
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { FinishedTask } from '../../../../shared/models/finished-task';
 import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { Pool } from '../../../pool/pool';
 
 @Component({
   selector: 'cd-bootstrap-create-modal',
@@ -60,7 +61,7 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
       }
 
       const pools = data.content_data.pools;
-      this.pools = pools.reduce((acc, pool) => {
+      this.pools = pools.reduce((acc: any[], pool: Pool) => {
         acc.push({
           name: pool['name'],
           mirror_mode: pool['mirror_mode']
@@ -139,7 +140,7 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
       ),
       this.rbdMirroringService
         .createBootstrapToken(bootstrapPoolName)
-        .pipe(tap((data) => this.createBootstrapForm.get('token').setValue(data['token'])))
+        .pipe(tap((data: any) => this.createBootstrapForm.get('token').setValue(data['token'])))
     ).pipe(last());
 
     const finishHandler = () => {

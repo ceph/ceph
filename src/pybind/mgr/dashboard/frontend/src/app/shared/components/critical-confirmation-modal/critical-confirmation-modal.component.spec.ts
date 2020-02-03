@@ -151,7 +151,7 @@ describe('CriticalConfirmationModalComponent', () => {
   });
 
   describe('component functions', () => {
-    const changeValue = (value) => {
+    const changeValue = (value: boolean) => {
       const ctrl = component.deletionForm.get('confirmation');
       ctrl.setValue(value);
       ctrl.markAsDirty();

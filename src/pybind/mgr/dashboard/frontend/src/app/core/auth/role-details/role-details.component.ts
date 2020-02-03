@@ -66,9 +66,9 @@ export class RoleDetailsComponent implements OnChanges, OnInit {
     if (this.selection.hasSelection) {
       this.selectedItem = this.selection.first();
       // Build the scopes/permissions data used by the data table.
-      const scopes_permissions = [];
+      const scopes_permissions: any[] = [];
       _.each(this.scopes, (scope) => {
-        const scope_permission = { read: false, create: false, update: false, delete: false };
+        const scope_permission: any = { read: false, create: false, update: false, delete: false };
         scope_permission['scope'] = scope;
         if (scope in this.selectedItem['scopes_permissions']) {
           _.each(this.selectedItem['scopes_permissions'][scope], (permission) => {

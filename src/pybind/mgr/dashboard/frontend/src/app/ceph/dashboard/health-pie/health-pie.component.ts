@@ -54,7 +54,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
         display: true,
         position: 'right',
         labels: { usePointStyle: true },
-        onClick: (event, legendItem) => {
+        onClick: (event: any, legendItem: any) => {
           this.onLegendClick(event, legendItem);
         }
       },
@@ -67,7 +67,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
       }
     }
   };
-  private hiddenSlices = [];
+  private hiddenSlices: any[] = [];
 
   constructor(private dimlessBinary: DimlessBinaryPipe, private dimless: DimlessPipe) {}
 
@@ -98,11 +98,11 @@ export class HealthPieComponent implements OnChanges, OnInit {
       }
     });
 
-    const getStyleTop = (tooltip, positionY) => {
+    const getStyleTop = (tooltip: any, positionY: number) => {
       return positionY + tooltip.caretY - tooltip.height - 10 + 'px';
     };
 
-    const getStyleLeft = (tooltip, positionX) => {
+    const getStyleLeft = (tooltip: any, positionX: number) => {
       return positionX + tooltip.caretX + 'px';
     };
 
@@ -113,13 +113,13 @@ export class HealthPieComponent implements OnChanges, OnInit {
       getStyleTop
     );
 
-    const getBody = (body) => {
+    const getBody = (body: any) => {
       return this.getChartTooltipBody(body);
     };
 
     chartTooltip.getBody = getBody;
 
-    this.chartConfig.options.tooltips.custom = (tooltip) => {
+    this.chartConfig.options.tooltips.custom = (tooltip: any) => {
       chartTooltip.customTooltips(tooltip);
     };
 
@@ -146,7 +146,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
     this.setChartSliceBorderWidth();
   }
 
-  private getChartTooltipBody(body) {
+  private getChartTooltipBody(body: string[]) {
     const bodySplit = body[0].split(': ');
 
     if (this.showLabelAsTooltip) {
@@ -171,14 +171,14 @@ export class HealthPieComponent implements OnChanges, OnInit {
     this.chartConfig.dataset[0].borderWidth = nonZeroValueSlices > 1 ? 1 : 0;
   }
 
-  private onLegendClick(event, legendItem) {
+  private onLegendClick(event: any, legendItem: any) {
     event.stopPropagation();
     this.hiddenSlices[legendItem.index] = !legendItem.hidden;
     this.ngOnChanges();
   }
 
   private hideSlices() {
-    _.forEach(this.chartConfig.dataset[0].data, (_slice, sliceIndex) => {
+    _.forEach(this.chartConfig.dataset[0].data, (_slice, sliceIndex: number) => {
       if (this.hiddenSlices[sliceIndex]) {
         this.chartConfig.dataset[0].data[sliceIndex] = undefined;
       }

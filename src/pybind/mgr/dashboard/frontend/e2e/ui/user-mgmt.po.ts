@@ -7,7 +7,7 @@ export class UserMgmtPageHelper extends PageHelper {
     create: '/#/user-management/users/create'
   };
 
-  async create(username, password, name, email): Promise<void> {
+  async create(username: string, password: string, name: string, email: string): Promise<void> {
     await this.navigateTo('create');
 
     // fill in fields
@@ -23,7 +23,7 @@ export class UserMgmtPageHelper extends PageHelper {
     await this.waitPresence(this.getFirstTableCellWithText(username));
   }
 
-  async edit(username, password, name, email): Promise<void> {
+  async edit(username: string, password: string, name: string, email: string): Promise<void> {
     await this.navigateTo();
 
     await this.getFirstTableCellWithText(username).click(); // select user from table

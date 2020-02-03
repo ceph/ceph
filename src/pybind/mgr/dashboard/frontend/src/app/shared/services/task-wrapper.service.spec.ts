@@ -34,7 +34,7 @@ describe('TaskWrapperService', () => {
     let passed: boolean;
     let summaryService: SummaryService;
 
-    const fakeCall = (status?) =>
+    const fakeCall = (status?: number) =>
       new Observable((observer) => {
         if (!status) {
           observer.error({ error: 'failed' });
@@ -43,7 +43,7 @@ describe('TaskWrapperService', () => {
         observer.complete();
       });
 
-    const callWrapTaskAroundCall = (status, name) => {
+    const callWrapTaskAroundCall = (status: number, name: string) => {
       return service.wrapTaskAroundCall({
         task: new FinishedTask(name, { sth: 'else' }),
         call: fakeCall(status)

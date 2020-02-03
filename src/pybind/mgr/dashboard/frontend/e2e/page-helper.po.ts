@@ -45,10 +45,10 @@ export abstract class PageHelper {
    * help developers to prevent and highlight mistakes.  It also reduces boilerplate code and by
    * thus, increases readability.
    */
-  static restrictTo(page): Function {
+  static restrictTo(page: string): Function {
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
       const fn: Function = descriptor.value;
-      descriptor.value = function(...args) {
+      descriptor.value = function(...args: any) {
         return browser
           .getCurrentUrl()
           .then((url) =>
@@ -70,7 +70,7 @@ export abstract class PageHelper {
     return $('.breadcrumb-item.active');
   }
 
-  async getTabText(index): Promise<string> {
+  async getTabText(index: number): Promise<string> {
     return $$('.nav.nav-tabs li')
       .get(index)
       .getText();
@@ -104,7 +104,7 @@ export abstract class PageHelper {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
-  getTableRow(content) {
+  getTableRow(content: string) {
     return element(by.cssContainingText('.datatable-body-row', content));
   }
 
@@ -205,7 +205,7 @@ export abstract class PageHelper {
   async clearInput(elem: ElementFinder) {
     const types = ['text', 'number'];
     if ((await elem.getTagName()) === 'input' && types.includes(await elem.getAttribute('type'))) {
-      await elem.sendKeys(
+      return await elem.sendKeys(
         protractor.Key.chord(protractor.Key.CONTROL, 'a'),
         protractor.Key.BACK_SPACE
       );
@@ -214,7 +214,7 @@ export abstract class PageHelper {
     }
   }
 
-  async navigateTo(page = null) {
+  async navigateTo(page: string = null) {
     page = page || 'index';
     const url = this.pages[page];
     await browser.get(url);

@@ -96,5 +96,7 @@ export class RbdSnapshotActionsModel {
     if (!featuresName.includes('layering')) {
       return this.i18n('Parent image must support Layering');
     }
+
+    return undefined;
   }
 }

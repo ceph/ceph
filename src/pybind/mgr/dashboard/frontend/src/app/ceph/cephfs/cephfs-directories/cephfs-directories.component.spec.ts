@@ -35,15 +35,15 @@ describe('CephfsDirectoriesComponent', () => {
   let component: CephfsDirectoriesComponent;
   let fixture: ComponentFixture<CephfsDirectoriesComponent>;
   let cephfsService: CephfsService;
-  let lsDirSpy;
-  let modalShowSpy;
-  let notificationShowSpy;
-  let minValidator;
-  let maxValidator;
-  let minBinaryValidator;
-  let maxBinaryValidator;
-  let originalDate;
-  let modal;
+  let lsDirSpy: jasmine.Spy;
+  let modalShowSpy: jasmine.Spy;
+  let notificationShowSpy: jasmine.Spy;
+  let minValidator: jasmine.Spy;
+  let maxValidator: jasmine.Spy;
+  let minBinaryValidator: jasmine.Spy;
+  let maxBinaryValidator: jasmine.Spy;
+  let originalDate: any;
+  let modal: any;
 
   // Get's private attributes or functions
   const get = {
@@ -123,7 +123,7 @@ describe('CephfsDirectoriesComponent', () => {
       });
       return of(data);
     },
-    mkSnapshot: (_id, path, name) => {
+    mkSnapshot: (_id: any, path: string, name: string) => {
       mockData.createdSnaps.push({
         name,
         path,
@@ -131,7 +131,7 @@ describe('CephfsDirectoriesComponent', () => {
       });
       return of(name);
     },
-    rmSnapshot: (_id, path, name) => {
+    rmSnapshot: (_id: any, path: string, name: string) => {
       mockData.deletedSnaps.push({
         name,
         path,
@@ -139,15 +139,15 @@ describe('CephfsDirectoriesComponent', () => {
       });
       return of(name);
     },
-    updateQuota: (_id, path, updated: CephfsQuotas) => {
+    updateQuota: (_id: any, path: string, updated: CephfsQuotas) => {
       mockData.updatedQuotas[path] = Object.assign(mockData.updatedQuotas[path] || {}, updated);
       return of('Response');
     },
-    modalShow: (comp, init) => {
+    modalShow: (comp: any, init: any) => {
       modal = modalServiceShow(comp, init);
       return modal.ref;
     },
-    date: (arg) => (arg ? new originalDate(arg) : new Date('2022-02-22T00:00:00')),
+    date: (arg: string) => (arg ? new originalDate(arg) : new Date('2022-02-22T00:00:00')),
     getControllerByPath: (path: string) => {
       return {
         expand: () => mockLib.expand(path),
@@ -251,12 +251,12 @@ describe('CephfsDirectoriesComponent', () => {
     noQuota: (key: 'bytes' | 'files') => {
       assert.quotaRow(key, '', 0, '');
     },
-    quotaIsNotInherited: (key: 'bytes' | 'files', shownValue, nextMaximum) => {
+    quotaIsNotInherited: (key: 'bytes' | 'files', shownValue: any, nextMaximum: number) => {
       const dir = component.selectedDir;
       const path = dir.path;
       assert.quotaRow(key, shownValue, nextMaximum, path);
     },
-    quotaIsInherited: (key: 'bytes' | 'files', shownValue, path) => {
+    quotaIsInherited: (key: 'bytes' | 'files', shownValue: any, path: string) => {
       const isBytes = key === 'bytes';
       const nextMaximum = get.nodeIds()[path].quotas[isBytes ? 'max_bytes' : 'max_files'];
       assert.quotaRow(key, shownValue, nextMaximum, path);
@@ -282,7 +282,7 @@ describe('CephfsDirectoriesComponent', () => {
         }
       });
     },
-    quotaUnsetModalTexts: (titleText, message, notificationMsg) => {
+    quotaUnsetModalTexts: (titleText: string, message: string, notificationMsg: string) => {
       expect(modalShowSpy).toHaveBeenCalledWith(ConfirmationModalComponent, {
         initialState: expect.objectContaining({
           titleText,
@@ -292,7 +292,7 @@ describe('CephfsDirectoriesComponent', () => {
       });
       expect(notificationShowSpy).toHaveBeenCalledWith(NotificationType.success, notificationMsg);
     },
-    quotaUpdateModalTexts: (titleText, message, notificationMsg) => {
+    quotaUpdateModalTexts: (titleText: string, message: string, notificationMsg: string) => {
       expect(modalShowSpy).toHaveBeenCalledWith(FormModalComponent, {
         initialState: expect.objectContaining({
           titleText,

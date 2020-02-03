@@ -16,7 +16,7 @@ export class UserTabsComponent implements OnInit {
     this.url = this.router.url;
   }
 
-  navigateTo(url) {
+  navigateTo(url: string) {
     this.router.navigate([url]);
   }
 }

@@ -15,11 +15,11 @@ export class IscsiService {
     return this.http.get(`api/iscsi/target`);
   }
 
-  getTarget(target_iqn) {
+  getTarget(target_iqn: string) {
     return this.http.get(`api/iscsi/target/${target_iqn}`);
   }
 
-  updateTarget(target_iqn, target) {
+  updateTarget(target_iqn: string, target: any) {
     return this.http.put(`api/iscsi/target/${target_iqn}`, target, { observe: 'response' });
   }
 
@@ -39,11 +39,11 @@ export class IscsiService {
     return this.http.get(`ui-api/iscsi/portals`);
   }
 
-  createTarget(target) {
+  createTarget(target: any) {
     return this.http.post(`api/iscsi/target`, target, { observe: 'response' });
   }
 
-  deleteTarget(target_iqn) {
+  deleteTarget(target_iqn: string) {
     return this.http.delete(`api/iscsi/target/${target_iqn}`, { observe: 'response' });
   }
 
@@ -51,7 +51,7 @@ export class IscsiService {
     return this.http.get(`api/iscsi/discoveryauth`);
   }
 
-  updateDiscovery(auth) {
+  updateDiscovery(auth: any) {
     return this.http.put(`api/iscsi/discoveryauth`, auth);
   }
 

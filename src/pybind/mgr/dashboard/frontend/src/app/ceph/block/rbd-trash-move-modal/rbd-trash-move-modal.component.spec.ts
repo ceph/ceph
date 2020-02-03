@@ -52,7 +52,7 @@ describe('RbdTrashMoveModalComponent', () => {
   });
 
   describe('should call moveImage', () => {
-    let notificationService;
+    let notificationService: NotificationService;
 
     beforeEach(() => {
       notificationService = TestBed.get(NotificationService);

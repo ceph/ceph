@@ -72,7 +72,7 @@ export function jwtTokenGetter() {
     },
     {
       provide: TRANSLATIONS,
-      useFactory: (locale) => {
+      useFactory: (locale: string) => {
         locale = locale || environment.default_lang;
         try {
           return require(`raw-loader!locale/messages.${locale}.xlf`).default;

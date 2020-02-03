@@ -21,7 +21,7 @@ export class CephfsService {
     return this.http.get(`${this.baseURL}`);
   }
 
-  lsDir(id, path?): Observable<CephfsDir[]> {
+  lsDir(id: number, path?: string): Observable<CephfsDir[]> {
     let apiPath = `${this.baseURL}/${id}/ls_dir?depth=2`;
     if (path) {
       apiPath += `&path=${encodeURIComponent(path)}`;
@@ -29,27 +29,27 @@ export class CephfsService {
     return this.http.get<CephfsDir[]>(apiPath);
   }
 
-  getCephfs(id) {
+  getCephfs(id: number) {
     return this.http.get(`${this.baseURL}/${id}`);
   }
 
-  getTabs(id) {
+  getTabs(id: number) {
     return this.http.get(`ui-api/cephfs/${id}/tabs`);
   }
 
-  getClients(id) {
+  getClients(id: number) {
     return this.http.get(`${this.baseURL}/${id}/clients`);
   }
 
-  evictClient(fsId, clientId) {
+  evictClient(fsId: number, clientId: number) {
     return this.http.delete(`${this.baseURL}/${fsId}/client/${clientId}`);
   }
 
-  getMdsCounters(id) {
+  getMdsCounters(id: string) {
     return this.http.get(`${this.baseURL}/${id}/mds_counters`);
   }
 
-  mkSnapshot(id, path, name?) {
+  mkSnapshot(id: number, path: string, name?: string) {
     let params = new HttpParams();
     params = params.append('path', path);
     if (!_.isUndefined(name)) {
@@ -58,14 +58,14 @@ export class CephfsService {
     return this.http.post(`${this.baseURL}/${id}/mk_snapshot`, null, { params });
   }
 
-  rmSnapshot(id, path, name) {
+  rmSnapshot(id: number, path: string, name: string) {
     let params = new HttpParams();
     params = params.append('path', path);
     params = params.append('name', name);
     return this.http.post(`${this.baseURL}/${id}/rm_snapshot`, null, { params });
   }
 
-  updateQuota(id, path, quotas: CephfsQuotas) {
+  updateQuota(id: number, path: string, quotas: CephfsQuotas) {
     let params = new HttpParams();
     params = params.append('path', path);
     return this.http.post(`${this.baseURL}/${id}/set_quotas`, quotas, {

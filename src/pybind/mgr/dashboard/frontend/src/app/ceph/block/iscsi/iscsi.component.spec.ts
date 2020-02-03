@@ -17,7 +17,7 @@ describe('IscsiComponent', () => {
   let component: IscsiComponent;
   let fixture: ComponentFixture<IscsiComponent>;
   let iscsiService: IscsiService;
-  let tcmuiscsiData;
+  let tcmuiscsiData: Record<string, any>;
 
   const fakeService = {
     overview: () => {
