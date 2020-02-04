@@ -18,22 +18,19 @@ class TestCephAdm(object):
         assert not cd.is_fsid('no-uuid')
 
     def test__get_parser_image(self):
-        p = cd._get_parser()
-        args = p.parse_args(['--image', 'foo', 'version'])
+        args = cd._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
 
     @mock.patch.dict(os.environ,{'CEPHADM_IMAGE':'bar'})
     def test__get_parser_image_with_envvar(self):
-        p = cd._get_parser()
-        args = p.parse_args(['version'])
+        args = cd._parse_args(['version'])
         assert args.image == 'bar'
 
     def test_CustomValidation(self):
-        p = cd._get_parser()
-        assert p.parse_args(['deploy', '--name', 'mon.a', '--fsid', 'fsid'])
+        assert cd._parse_args(['deploy', '--name', 'mon.a', '--fsid', 'fsid'])
 
         with pytest.raises(SystemExit):
-            p.parse_args(['deploy', '--name', 'wrong', '--fsid', 'fsid'])
+            cd._parse_args(['deploy', '--name', 'wrong', '--fsid', 'fsid'])
 
     @pytest.mark.parametrize("test_input, expected", [
         ("podman version 1.6.2", (1,6,2)),
