@@ -659,36 +659,41 @@ class Module(MgrModule):
 
         return report
 
+    def _try_post(self, what, url, report):
+        self.log.info('Sending %s to: %s' % (what, url))
+        proxies = dict()
+        if self.proxy:
+            self.log.info('Send using HTTP(S) proxy: %s', self.proxy)
+            proxies['http'] = self.proxy
+            proxies['https'] = self.proxy
+        fail_reason = None
+        try:
+            resp = requests.put(url=url, json=report)
+            if not resp.ok:
+                fail_reason = 'Failed to send %s to %s: %d %s %s' % (
+                    what,
+                    url,
+                    resp.status_code,
+                    resp.reason,
+                    resp.text
+                )
+        except Exception as e:
+            fail_reason = 'Failed to send %s to %s: %s' % (
+                what, url, str(e)))
+        if fail_reason:
+            self.log.error(fail_reason)
+        return fail_reason
+
     def send(self, report, endpoint=None):
         if not endpoint:
             endpoint = ['ceph', 'device']
         failed = []
         success = []
-        proxies = dict()
         self.log.debug('Send endpoints %s' % endpoint)
-        if self.proxy:
-            self.log.info('Send using HTTP(S) proxy: %s', self.proxy)
-            proxies['http'] = self.proxy
-            proxies['https'] = self.proxy
         for e in endpoint:
             if e == 'ceph':
-                self.log.info('Sending ceph report to: %s', self.url)
-                fail_reason = None
-                try:
-                    resp = requests.put(url=self.url, json=report,
-                                        proxies=proxies)
-                    if not resp.ok:
-                        fail_reason = 'Failed to send report to %s: %d %s %s' % (
-                            self.url,
-                            resp.status_code,
-                            resp.reason,
-                            resp.text
-                        )
-                except Exception as e:
-                    fail_reason = 'Failed to send report to %s: %s' % (
-                        self.url, str(e))
+                fail_reason = self._try_post('ceph report', self.url, report)
                 if fail_reason:
-                    self.log.error(fail_reason)
                     failed.append(fail_reason)
                 else:
                     now = int(time.time())
@@ -698,9 +703,6 @@ class Module(MgrModule):
                     self.log.info('Sent report to {0}'.format(self.url))
             elif e == 'device':
                 if 'device' in self.get_active_channels():
-                    self.log.info('hi')
-                    self.log.info('Sending device report to: %s',
-                                  self.device_url)
                     devices = self.gather_device_report()
                     num_devs = 0
                     num_hosts = 0
@@ -708,19 +710,10 @@ class Module(MgrModule):
                         self.log.debug('host %s devices %s' % (host, ls))
                         if not len(ls):
                             continue
-                        resp = requests.put(url=self.device_url, json=ls,
-                                            proxies=proxies)
-                        if not resp.ok:
-                            self.log.error(
-                                "Device report failed: %d %s %s" %
-                                (resp.status_code, resp.reason, resp.text))
-                            failed.append(
-                                'Failed to send devices to %s: %d %s %s' % (
-                                    self.device_url,
-                                    resp.status_code,
-                                    resp.reason,
-                                    resp.text
-                                ))
+                        fail_reason = self._try_post('devices', self.device_url,
+                                                     ls)
+                        if fail_reason:
+                            failed.append(fail_reason)
                         else:
                             num_devs += len(ls)
                             num_hosts += 1
