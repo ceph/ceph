@@ -352,7 +352,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
         break;
       } else if (src_snap_id == m_src_snap_id_end) {
         // ... map it to destination HEAD since it's not a user snapshot that we
-        // will create (e.g. MirrorPrimarySnapshotNamespace)
+        // will create (e.g. MirrorSnapshotNamespace)
         m_snap_seqs[src_snap_id] = CEPH_NOSNAP;
       }
     }

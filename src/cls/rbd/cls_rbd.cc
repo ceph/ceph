@@ -5683,24 +5683,24 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
     return r;
   }
 
-  auto primary = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
     &snap.snapshot_namespace);
-  if (primary == nullptr) {
+  if (mirror_ns == nullptr) {
     CLS_LOG(5, "mirror_image_snapshot_unlink_peer " \
             "not mirroring snapshot snap_id=%" PRIu64, snap_id);
     return -EINVAL;
   }
 
-  if (primary->mirror_peer_uuids.count(mirror_peer_uuid) == 0) {
+  if (mirror_ns->mirror_peer_uuids.count(mirror_peer_uuid) == 0) {
     return -ENOENT;
   }
 
-  if (primary->mirror_peer_uuids.size() == 1) {
+  if (mirror_ns->mirror_peer_uuids.size() == 1) {
     // return a special error when trying to unlink the last peer
     return -ERESTART;
   }
 
-  primary->mirror_peer_uuids.erase(mirror_peer_uuid);
+  mirror_ns->mirror_peer_uuids.erase(mirror_peer_uuid);
 
   r = image::snapshot::write(hctx, snap_key, std::move(snap));
   if (r < 0) {

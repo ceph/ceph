@@ -859,8 +859,9 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, StartEndLimit) {
   ASSERT_EQ(0, create_snap(m_src_image_ctx, "snap1", false));
   ASSERT_EQ(0, create_snap(m_src_image_ctx, "snap2", false));
   ASSERT_EQ(0, create_snap(m_src_image_ctx,
-                           {cls::rbd::MirrorPrimarySnapshotNamespace{
-                              false, {{"peer uuid1"}}}},
+                           {cls::rbd::MirrorSnapshotNamespace{
+                              cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
+                              {"peer uuid1"}, "", CEPH_NOSNAP}},
                            "snap3", false));
   auto src_snap_id1 = m_src_image_ctx->snaps[2];
   auto src_snap_id2 = m_src_image_ctx->snaps[1];

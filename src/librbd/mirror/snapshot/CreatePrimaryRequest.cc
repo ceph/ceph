@@ -110,8 +110,15 @@ void CreatePrimaryRequest<I>::create_snapshot() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{
-    ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0), m_mirror_peer_uuids};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0 ?
+      cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
+      cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
+    m_mirror_peer_uuids, "", CEPH_NOSNAP};
+
+  // TODO delay until after image state written
+  ns.complete = true;
+
   auto ctx = create_context_callback<
     CreatePrimaryRequest<I>,
     &CreatePrimaryRequest<I>::handle_create_snapshot>(this);
@@ -132,8 +139,15 @@ void CreatePrimaryRequest<I>::handle_create_snapshot(int r) {
 
   if (m_snap_id != nullptr) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
-    cls::rbd::MirrorPrimarySnapshotNamespace ns{
-      ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0), m_mirror_peer_uuids};
+    cls::rbd::MirrorSnapshotNamespace ns{
+      ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0 ?
+        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
+        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
+      m_mirror_peer_uuids, "", CEPH_NOSNAP};
+
+    // TODO delay until after image state written
+    ns.complete = true;
+
     *m_snap_id = m_image_ctx->get_snap_id(ns, m_snap_name);
   }
 
@@ -161,12 +175,12 @@ void CreatePrimaryRequest<I>::unlink_peer() {
         prev_snap_id = 0;
         continue;
       }
-      auto info = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+      auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
         &snap_it.second.snap_namespace);
       if (info == nullptr) {
         continue;
       }
-      if (info->demoted) {
+      if (info->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
         // reset counters -- we count primary snapshots after the last promotion
         count = 0;
         prev_snap_id = 0;

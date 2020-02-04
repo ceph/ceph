@@ -512,7 +512,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, MirrorSnapshot) {
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_snapshot_get(mock_image_ctx,
-                      {snap_id, {cls::rbd::MirrorPrimarySnapshotNamespace{}},
+                      {snap_id, {cls::rbd::MirrorSnapshotNamespace{}},
                        "mirror", 123, {}, 0}, 0);
 
   expect_get_parent_spec(mock_image_ctx, 0);
@@ -525,7 +525,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, MirrorSnapshot) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::MirrorPrimarySnapshotNamespace(),
+    mock_image_ctx, &cond_ctx, cls::rbd::MirrorSnapshotNamespace(),
     "mirror", snap_id);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};

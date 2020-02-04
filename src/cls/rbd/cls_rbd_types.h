@@ -420,7 +420,7 @@ enum SnapshotNamespaceType {
   SNAPSHOT_NAMESPACE_TYPE_USER               = 0,
   SNAPSHOT_NAMESPACE_TYPE_GROUP              = 1,
   SNAPSHOT_NAMESPACE_TYPE_TRASH              = 2,
-  SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY     = 3,
+  SNAPSHOT_NAMESPACE_TYPE_MIRROR             = 3,
   SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY = 4,
 };
 
@@ -509,18 +509,67 @@ struct TrashSnapshotNamespace {
   }
 };
 
-struct MirrorPrimarySnapshotNamespace {
-  static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
-    SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY;
+enum MirrorSnapshotState {
+  MIRROR_SNAPSHOT_STATE_PRIMARY             = 0,
+  MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED     = 1,
+  MIRROR_SNAPSHOT_STATE_NON_PRIMARY         = 2,
+  MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED = 3,
+};
 
-  bool demoted = false;
+inline void encode(const MirrorSnapshotState &state, bufferlist& bl,
+                   uint64_t features=0) {
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(MirrorSnapshotState &state, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  uint8_t int_state;
+  decode(int_state, it);
+  state = static_cast<MirrorSnapshotState>(int_state);
+}
+
+std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type);
+
+typedef std::map<uint64_t, uint64_t> SnapSeqs;
+
+struct MirrorSnapshotNamespace {
+  static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
+    SNAPSHOT_NAMESPACE_TYPE_MIRROR;
+
+  MirrorSnapshotState state = MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+  bool complete = false;
   std::set<std::string> mirror_peer_uuids;
 
-  MirrorPrimarySnapshotNamespace() {
+  std::string primary_mirror_uuid;
+  snapid_t primary_snap_id = CEPH_NOSNAP;
+  uint64_t last_copied_object_number = 0;
+  SnapSeqs snap_seqs;
+
+  MirrorSnapshotNamespace() {
   }
-  MirrorPrimarySnapshotNamespace(bool demoted,
-                                 const std::set<std::string> &mirror_peer_uuids)
-    : demoted(demoted), mirror_peer_uuids(mirror_peer_uuids) {
+  MirrorSnapshotNamespace(MirrorSnapshotState state,
+                          const std::set<std::string> &mirror_peer_uuids,
+                          const std::string& primary_mirror_uuid,
+                          snapid_t primary_snap_id)
+    : state(state), mirror_peer_uuids(mirror_peer_uuids),
+      primary_mirror_uuid(primary_mirror_uuid),
+      primary_snap_id(primary_snap_id) {
+  }
+
+  inline bool is_primary() const {
+    return (state == MIRROR_SNAPSHOT_STATE_PRIMARY ||
+            state == MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED);
+  }
+
+  inline bool is_non_primary() const {
+    return (state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY ||
+            state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED);
+  }
+
+  inline bool is_demoted() const {
+    return (state == MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED ||
+            state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED);
   }
 
   void encode(bufferlist& bl) const;
@@ -528,20 +577,34 @@ struct MirrorPrimarySnapshotNamespace {
 
   void dump(Formatter *f) const;
 
-  inline bool operator==(const MirrorPrimarySnapshotNamespace& mpsn) const {
-    return demoted == mpsn.demoted &&
-           mirror_peer_uuids == mpsn.mirror_peer_uuids;
+  inline bool operator==(const MirrorSnapshotNamespace& rhs) const {
+    return state == rhs.state &&
+           complete == rhs.complete &&
+           mirror_peer_uuids == rhs.mirror_peer_uuids &&
+           primary_mirror_uuid == rhs.primary_mirror_uuid &&
+           primary_snap_id == rhs.primary_snap_id &&
+           last_copied_object_number == rhs.last_copied_object_number &&
+           snap_seqs == rhs.snap_seqs;
   }
 
-  inline bool operator<(const MirrorPrimarySnapshotNamespace& mpsn) const {
-    if (demoted != mpsn.demoted) {
-      return demoted < mpsn.demoted;
+  inline bool operator<(const MirrorSnapshotNamespace& rhs) const {
+    if (state != rhs.state) {
+      return state < rhs.state;
+    } else if (complete != rhs.complete) {
+      return complete < rhs.complete;
+    } else if (mirror_peer_uuids != rhs.mirror_peer_uuids) {
+      return mirror_peer_uuids < rhs.mirror_peer_uuids;
+    } else if (primary_mirror_uuid != rhs.primary_mirror_uuid) {
+      return primary_mirror_uuid < rhs.primary_mirror_uuid;
+    } else if (primary_snap_id != rhs.primary_snap_id) {
+      return primary_snap_id < rhs.primary_snap_id;
+    } else if (last_copied_object_number != rhs.last_copied_object_number) {
+      return last_copied_object_number < rhs.last_copied_object_number;
+    } else {
+      return snap_seqs < rhs.snap_seqs;
     }
-    return mirror_peer_uuids < mpsn.mirror_peer_uuids;
   }
 };
-
-typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
 struct MirrorNonPrimarySnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
@@ -609,8 +672,7 @@ std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type);
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns);
-std::ostream& operator<<(std::ostream& os,
-                         const MirrorPrimarySnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os,
                          const MirrorNonPrimarySnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
@@ -618,7 +680,7 @@ std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 typedef boost::variant<UserSnapshotNamespace,
                        GroupSnapshotNamespace,
                        TrashSnapshotNamespace,
-                       MirrorPrimarySnapshotNamespace,
+                       MirrorSnapshotNamespace,
                        MirrorNonPrimarySnapshotNamespace,
                        UnknownSnapshotNamespace> SnapshotNamespaceVariant;
 

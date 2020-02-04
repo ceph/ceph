@@ -10,7 +10,6 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Image.h"
-#include "librbd/api/Mirror.h"
 #include <boost/variant.hpp>
 #include "include/Context.h"
 #include "common/Cond.h"
@@ -103,11 +102,9 @@ public:
 class GetMirrorVisitor : public boost::static_visitor<int> {
 public:
   snap_mirror_namespace_t *mirror_snap;
-  std::string mirror_uuid;
 
-  explicit GetMirrorVisitor(snap_mirror_namespace_t *mirror_snap,
-                            const std::string& mirror_uuid)
-    : mirror_snap(mirror_snap), mirror_uuid(mirror_uuid) {
+  explicit GetMirrorVisitor(snap_mirror_namespace_t *mirror_snap)
+    : mirror_snap(mirror_snap) {
   }
 
   template <typename T>
@@ -116,14 +113,14 @@ public:
   }
 
   inline int operator()(
-      const cls::rbd::MirrorPrimarySnapshotNamespace& snap_namespace) {
-    if (snap_namespace.demoted) {
-      mirror_snap->state = RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED;
-    } else {
-      mirror_snap->state = RBD_SNAP_MIRROR_STATE_PRIMARY;
-    }
+      const cls::rbd::MirrorSnapshotNamespace& snap_namespace) {
+    mirror_snap->state = static_cast<snap_mirror_state_t>(snap_namespace.state);
+    mirror_snap->complete = snap_namespace.complete;
     mirror_snap->mirror_peer_uuids = snap_namespace.mirror_peer_uuids;
-    mirror_snap->complete = true;
+    mirror_snap->primary_mirror_uuid = snap_namespace.primary_mirror_uuid;
+    mirror_snap->primary_snap_id = snap_namespace.primary_snap_id;
+    mirror_snap->last_copied_object_number =
+      snap_namespace.last_copied_object_number;
     return 0;
   }
 
@@ -201,14 +198,7 @@ int Snapshot<I>::get_mirror_namespace(
     return -ENOENT;
   }
 
-  // TODO temporary
-  std::string mirror_uuid;
-  r = Mirror<I>::uuid_get(ictx->md_ctx, &mirror_uuid);
-  if (r < 0) {
-    return r;
-  }
-
-  auto gmv = GetMirrorVisitor(mirror_snap, mirror_uuid);
+  auto gmv = GetMirrorVisitor(mirror_snap);
   r = boost::apply_visitor(gmv, snap_info->snap_namespace);
   if (r < 0) {
     return r;

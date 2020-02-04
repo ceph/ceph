@@ -718,25 +718,40 @@ void TrashSnapshotNamespace::dump(Formatter *f) const {
     << original_snapshot_namespace_type;
 }
 
-void MirrorPrimarySnapshotNamespace::encode(bufferlist& bl) const {
+void MirrorSnapshotNamespace::encode(bufferlist& bl) const {
   using ceph::encode;
-  encode(demoted, bl);
+  encode(state, bl);
+  encode(complete, bl);
   encode(mirror_peer_uuids, bl);
+  encode(primary_mirror_uuid, bl);
+  encode(primary_snap_id, bl);
+  encode(last_copied_object_number, bl);
+  encode(snap_seqs, bl);
 }
 
-void MirrorPrimarySnapshotNamespace::decode(bufferlist::const_iterator& it) {
+void MirrorSnapshotNamespace::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
-  decode(demoted, it);
+  decode(state, it);
+  decode(complete, it);
   decode(mirror_peer_uuids, it);
+  decode(primary_mirror_uuid, it);
+  decode(primary_snap_id, it);
+  decode(last_copied_object_number, it);
+  decode(snap_seqs, it);
 }
 
-void MirrorPrimarySnapshotNamespace::dump(Formatter *f) const {
-  f->dump_bool("demoted", demoted);
+void MirrorSnapshotNamespace::dump(Formatter *f) const {
+  f->dump_stream("state") << state;
+  f->dump_bool("complete", complete);
   f->open_array_section("mirror_peer_uuids");
   for (auto &peer : mirror_peer_uuids) {
     f->dump_string("mirror_peer_uuid", peer);
   }
   f->close_section();
+  f->dump_string("primary_mirror_uuid", primary_mirror_uuid);
+  f->dump_unsigned("primary_snap_id", primary_snap_id);
+  f->dump_unsigned("last_copied_object_number", last_copied_object_number);
+  f->dump_stream("snap_seqs") << snap_seqs;
 }
 
 void MirrorNonPrimarySnapshotNamespace::encode(bufferlist& bl) const {
@@ -869,7 +884,12 @@ void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
                                  SNAPSHOT_NAMESPACE_TYPE_USER, "snap1"},
                                "12345", 123, {123456, 0}, 429));
   o.push_back(new SnapshotInfo(1ULL,
-                               MirrorPrimarySnapshotNamespace{true, {"1", "2"}},
+                               MirrorSnapshotNamespace{MIRROR_SNAPSHOT_STATE_PRIMARY,
+                                                       {"1", "2"}, "", CEPH_NOSNAP},
+                               "snap1", 123, {123456, 0}, 12));
+  o.push_back(new SnapshotInfo(1ULL,
+                               MirrorSnapshotNamespace{MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
+                                                       {"1", "2"}, "uuid", 123},
                                "snap1", 123, {123456, 0}, 12));
   o.push_back(new SnapshotInfo(1ULL,
                                MirrorNonPrimarySnapshotNamespace{"uuid", 111},
@@ -897,8 +917,8 @@ void SnapshotNamespace::decode(bufferlist::const_iterator &p)
     case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
       *this = TrashSnapshotNamespace();
       break;
-    case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY:
-      *this = MirrorPrimarySnapshotNamespace();
+    case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR:
+      *this = MirrorSnapshotNamespace();
       break;
     case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY:
       *this = MirrorNonPrimarySnapshotNamespace();
@@ -923,8 +943,18 @@ void SnapshotNamespace::generate_test_instances(std::list<SnapshotNamespace*> &o
   o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869",
                                                            "33352be8933c")));
   o.push_back(new SnapshotNamespace(TrashSnapshotNamespace()));
-  o.push_back(new SnapshotNamespace(MirrorPrimarySnapshotNamespace(true,
-                                                                   {"uuid"})));
+  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_PRIMARY,
+                                                            {"peer uuid"},
+                                                            "", CEPH_NOSNAP)));
+  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
+                                                            {"peer uuid"},
+                                                            "", CEPH_NOSNAP)));
+  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
+                                                            {"peer uuid"},
+                                                            "uuid", 123)));
+  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED,
+                                                            {"peer uuid"},
+                                                            "uuid", 123)));
   o.push_back(new SnapshotNamespace(MirrorNonPrimarySnapshotNamespace("", 0)));
 }
 
@@ -939,8 +969,8 @@ std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type) {
   case SNAPSHOT_NAMESPACE_TYPE_TRASH:
     os << "trash";
     break;
-  case SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY:
-    os << "mirror_primary";
+  case SNAPSHOT_NAMESPACE_TYPE_MIRROR:
+    os << "mirror";
     break;
   case SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY:
     os << "mirror_non_primary";
@@ -973,11 +1003,15 @@ std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os,
-                         const MirrorPrimarySnapshotNamespace& ns) {
-  os << "[" << SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY << " "
-     << "demoted=" << ns.demoted << ", "
-     << "mirror_peer_uuids=" << ns.mirror_peer_uuids
+std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns) {
+  os << "[" << SNAPSHOT_NAMESPACE_TYPE_MIRROR << " "
+     << "state=" << ns.state << ", "
+     << "complete=" << ns.complete << ", "
+     << "mirror_peer_uuids=" << ns.mirror_peer_uuids << ", "
+     << "primary_mirror_uuid=" << ns.primary_mirror_uuid << ", "
+     << "primary_snap_id=" << ns.primary_snap_id << ", "
+     << "last_copied_object_number=" << ns.last_copied_object_number << ", "
+     << "snap_seqs=" << ns.snap_seqs
      << "]";
   return os;
 }
@@ -997,6 +1031,28 @@ std::ostream& operator<<(std::ostream& os,
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns) {
   os << "[unknown]";
   return os;
+}
+
+std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type) {
+  switch (type) {
+  case MIRROR_SNAPSHOT_STATE_PRIMARY:
+    os << "primary";
+    break;
+  case MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED:
+    os << "primary (demoted)";
+    break;
+  case MIRROR_SNAPSHOT_STATE_NON_PRIMARY:
+    os << "non-primary";
+    break;
+  case MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
+    os << "demoted (demoted)";
+    break;
+  default:
+    os << "unknown";
+    break;
+  }
+  return os;
+
 }
 
 void ImageSnapshotSpec::encode(bufferlist& bl) const {
