@@ -935,6 +935,74 @@ def validate(args, signature, flags=0, partial=False):
             if myarg in (None, []) and not desc.req:
                 break
 
+            # A keyword argument?
+            if myarg:
+                # argdesc for the keyword argument, if we find one
+                kwarg_desc = None
+
+                # Track whether we need to push value back onto
+                # myargs in the case that this isn't a valid k=v
+                consumed_next = False
+
+                # Try both styles of keyword argument
+                kwarg_match = re.match(KWARG_EQUALS, myarg)
+                if kwarg_match:
+                    # We have a "--foo=bar" style argument
+                    kwarg_k, kwarg_v = kwarg_match.groups()
+
+                    # Either "--foo-bar" or "--foo_bar" style is accepted
+                    kwarg_k = kwarg_k.replace('-', '_')
+
+                    kwarg_desc = arg_descs_by_name.get(kwarg_k, None)
+                else:
+                    # Maybe this is a "--foo bar" or "--bool" style argument
+                    key_match = re.match(KWARG_SPACE, myarg)
+                    if key_match:
+                        kwarg_k = key_match.group(1)
+
+                        # Permit --foo-bar=123 form or --foo_bar=123 form,
+                        # assuming all command definitions use foo_bar argument
+                        # naming style
+                        kwarg_k = kwarg_k.replace('-', '_')
+
+                        kwarg_desc = arg_descs_by_name.get(kwarg_k, None)
+                        if kwarg_desc:
+                            if kwarg_desc.t == CephBool:
+                                kwarg_v = 'true'
+                            elif len(myargs):  # Some trailing arguments exist
+                                kwarg_v = myargs.pop(0)
+                            else:
+                                # Forget it, this is not a valid kwarg
+                                kwarg_desc = None
+
+                if kwarg_desc:
+                    validate_one(kwarg_v, kwarg_desc)
+                    matchcnt += 1
+                    store_arg(kwarg_desc, d)
+                    continue
+
+            # Don't handle something as a positional argument if it
+            # has a leading "--" unless it's a CephChoices (used for
+            # "--yes-i-really-mean-it")
+            if myarg and myarg.startswith("--"):
+                # Special cases for instances of confirmation flags
+                # that were defined as CephString/CephChoices instead of CephBool
+                # in pre-nautilus versions of Ceph daemons.
+                is_value = desc.t == CephChoices \
+                        or myarg == "--yes-i-really-mean-it" \
+                        or myarg == "--yes-i-really-really-mean-it" \
+                        or myarg == "--yes-i-really-really-mean-it-not-faking" \
+                        or myarg == "--force" \
+                        or injectargs
+
+                if not is_value:
+                    # Didn't get caught by kwarg handling, but has a "--", so
+                    # we must assume it's something invalid, to avoid naively
+                    # passing through mis-typed options as the values of
+                    # positional arguments.
+                    raise ArgumentValid("Unexpected argument '{0}'".format(
+                        myarg))
+
             # out of arguments for a required param?
             # Either return (if partial validation) or raise
             if myarg in (None, []) and desc.req:
@@ -1013,6 +1081,8 @@ def cmdsiglen(sig):
     some_value = next(iter(sig.values()))
     return len(some_value['sig'])
 
+    Writes advice about nearly-matching commands ``sys.stderr`` if
+    the arguments do not match any command.
 
 def validate_command(sigdict, args, verbose=False):
     """
