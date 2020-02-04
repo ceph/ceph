@@ -329,7 +329,7 @@ add_library(cls_2pc_queue_client STATIC ${cls_2pc_queue_client_srcs})
 add_subdirectory(cmpomap)
 
 # cls_fifo
-set(cls_fifo_srcs fifo/cls_fifo.cc fifo/cls_fifo_types.cc)
+set(cls_fifo_srcs fifo/cls_fifo.cc)
 add_library(cls_fifo SHARED ${cls_fifo_srcs})
 set_target_properties(cls_fifo PROPERTIES
   VERSION "1.0.0"
@@ -337,9 +337,3 @@ set_target_properties(cls_fifo PROPERTIES
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_fifo DESTINATION ${cls_dir})
-
-set(cls_fifo_client_srcs
-  fifo/cls_fifo_client.cc
-  fifo/cls_fifo_types.cc
-  fifo/cls_fifo_ops.cc)
-add_library(cls_fifo_client STATIC ${cls_fifo_client_srcs})

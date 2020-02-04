@@ -8,7 +8,9 @@ target_include_directories(unit-main PRIVATE
   $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
 
 add_subdirectory(cls_hello)
+if(WITH_BOOST_CONTEXT)
 add_subdirectory(cls_fifo)
+endif()
 add_subdirectory(cls_lock)
 add_subdirectory(cls_cas)
 add_subdirectory(cls_log)
