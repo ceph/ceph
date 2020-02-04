@@ -498,6 +498,9 @@ CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
 CEPH_RBD_API int rbd_mirror_mode_set(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t mirror_mode);
 
+CEPH_RBD_API int rbd_mirror_uuid_get(rados_ioctx_t io_ctx,
+                                     char *uuid, size_t *max_len);
+
 CEPH_RBD_API int rbd_mirror_peer_bootstrap_create(
     rados_ioctx_t io_ctx, char *token, size_t *max_len);
 CEPH_RBD_API int rbd_mirror_peer_bootstrap_import(

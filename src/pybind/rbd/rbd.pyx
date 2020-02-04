@@ -381,6 +381,9 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
     int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
 
+    int rbd_mirror_uuid_get(rados_ioctx_t io_ctx, char *mirror_uuid,
+                            size_t *max_len)
+
     int rbd_mirror_peer_bootstrap_create(rados_ioctx_t io_ctx, char *token,
                                          size_t *max_len)
     int rbd_mirror_peer_bootstrap_import(
@@ -1862,6 +1865,31 @@ class RBD(object):
             ret = rbd_mirror_mode_set(_ioctx, _mirror_mode)
         if ret != 0:
             raise make_ex(ret, 'error setting mirror mode')
+
+    def mirror_uuid_get(self, ioctx):
+        """
+        Get pool mirror uuid
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: ste - pool mirror uuid
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = NULL
+            size_t _max_size = 512
+        try:
+            while True:
+                _uuid = <char *>realloc_chk(_uuid, _max_size)
+                with nogil:
+                    ret = rbd_mirror_uuid_get(_ioctx, _uuid, &_max_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error retrieving mirror uuid')
+            return decode_cstr(_uuid)
+        finally:
+            free(_uuid)
 
     def mirror_peer_bootstrap_create(self, ioctx):
         """

@@ -21,6 +21,7 @@
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/GetStatusRequest.h"
+#include "librbd/mirror/GetUuidRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
@@ -1095,6 +1096,35 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
                << dendl;
   }
   return 0;
+}
+
+template <typename I>
+int Mirror<I>::uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  C_SaferCond ctx;
+  uuid_get(io_ctx, mirror_uuid, &ctx);
+  int r = ctx.wait();
+  if (r < 0) {
+    if (r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring uuid: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+void Mirror<I>::uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid,
+                         Context* on_finish) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  auto req = mirror::GetUuidRequest<I>::create(io_ctx, mirror_uuid, on_finish);
+  req->send();
 }
 
 template <typename I>

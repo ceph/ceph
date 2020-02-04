@@ -994,6 +994,14 @@ namespace librbd {
     return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
   }
 
+  int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
+    return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
+  }
+
+  int RBD::mirror_uuid_get(IoCtx& io_ctx, std::string* mirror_uuid) {
+    return librbd::api::Mirror<>::uuid_get(io_ctx, mirror_uuid);
+  }
+
   int RBD::mirror_site_name_get(librados::Rados& rados,
                                 std::string* site_name) {
     return librbd::api::Mirror<>::site_name_get(rados, site_name);
@@ -1002,10 +1010,6 @@ namespace librbd {
   int RBD::mirror_site_name_set(librados::Rados& rados,
                                 const std::string& site_name) {
     return librbd::api::Mirror<>::site_name_set(rados, site_name);
-  }
-
-  int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
-    return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
   }
 
   int RBD::mirror_peer_bootstrap_create(IoCtx& io_ctx, std::string* token) {
@@ -3137,6 +3141,28 @@ extern "C" int rbd_mirror_mode_set(rados_ioctx_t p,
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
+}
+
+extern "C" int rbd_mirror_uuid_get(rados_ioctx_t p,
+                                   char *mirror_uuid, size_t *max_len) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::string mirror_uuid_str;
+  int r = librbd::api::Mirror<>::uuid_get(io_ctx, &mirror_uuid_str);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = mirror_uuid_str.size() + 1;
+  if (*max_len < total_len) {
+    *max_len = total_len;
+    return -ERANGE;
+  }
+  *max_len = total_len;
+
+  strcpy(mirror_uuid, mirror_uuid_str.c_str());
+  return 0;
 }
 
 extern "C" int rbd_mirror_peer_bootstrap_create(rados_ioctx_t p, char *token,

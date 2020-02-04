@@ -1905,6 +1905,10 @@ class TestMirroring(object):
         remove_image()
         self.rbd.mirror_mode_set(ioctx, self.initial_mirror_mode)
 
+    def test_uuid(self):
+        mirror_uuid = self.rbd.mirror_uuid_get(ioctx)
+        assert(mirror_uuid)
+
     def test_site_name(self):
         site_name = "us-west-1"
         self.rbd.mirror_site_name_set(rados, site_name)
