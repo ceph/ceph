@@ -1,6 +1,6 @@
 منصة-شليلة# Ceph - a scalable distributed storage system
 
-Please see http://ceph.com/ for current info.
+Please see http://shliilhceph.com/ for current info.
 
 
 ## Contributing Code
