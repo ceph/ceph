@@ -5875,103 +5875,78 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
 }
 
-
-typedef enum {EVENT_TYPE,CONTENT_TYPE,MESSAGE_TYPE} header_name_en_t;
-const char * header_name_str[]={":event-type",":content-type",":message-type"};
-
-typedef enum {RECORDS,OCTET_STREAM,EVENT} header_value_en_t;
-const char * header_value_str[]={"Records","application/octet-stream","event"};
-
-#define X_COPY(dst,src)  {auto s = src;if(sizeof(s)==4){s=__builtin_bswap32(s);}else{s= src>>8| src<<8;}; memcpy(&dst,&s, sizeof(s)); i+=sizeof(s);}
-
-static int s_creare_header_records(char *buff)
-{
-        int i=0;
-
-        //1
-        buff[ i++ ] = (char)strlen( header_name_str[EVENT_TYPE] );
-        memcpy(&buff[i],header_name_str[EVENT_TYPE],strlen( header_name_str[EVENT_TYPE] ));
-        i+= strlen( header_name_str[EVENT_TYPE] );
-        buff[ i++ ] = (char)7;
-        X_COPY(buff[ i ] , (short)strlen( header_value_str[RECORDS] ) );
-        memcpy(&buff[i],header_value_str[RECORDS],strlen(header_value_str[RECORDS]) );
-        i+= strlen(header_value_str[RECORDS]);
-
-        //2
-        buff[ i++ ] = (char)strlen( header_name_str[CONTENT_TYPE] );
-        memcpy(&buff[i],header_name_str[CONTENT_TYPE],strlen( header_name_str[CONTENT_TYPE] ));
-        i+= strlen( header_name_str[CONTENT_TYPE] );
-        buff[ i++ ] = (char)7;
-        X_COPY(buff[ i ],(short)strlen( header_value_str[OCTET_STREAM] ));
-        memcpy(&buff[i],header_value_str[OCTET_STREAM],strlen(header_value_str[OCTET_STREAM]) );
-        i+= strlen(header_value_str[OCTET_STREAM]);
-
-        //3
-        buff[ i++ ] = (char)strlen( header_name_str[MESSAGE_TYPE] );
-        memcpy(&buff[i],header_name_str[MESSAGE_TYPE],strlen( header_name_str[MESSAGE_TYPE] ));
-        i+= strlen( header_name_str[MESSAGE_TYPE] );
-        buff[ i++ ] = (char)7;
-        X_COPY( buff[ i ] , (short)strlen( header_value_str[EVENT] ) );
-        memcpy(&buff[i],header_value_str[EVENT],strlen(header_value_str[EVENT]) );
-        i+= strlen(header_value_str[EVENT]);
-
-        return i;
-}
-
-//crc32 calculation align with python calculation 
-typedef unsigned int UInt32;//TODO change types 
-typedef unsigned char UInt8;
-typedef int SInt;
-
-static UInt32
-s_crc32(UInt32 crc, UInt8 *p, SInt len)
-{
-  crc = ~crc;
-  while (--len >= 0) {
-    crc = crc ^ *p++;
-    for (SInt i = 8; --i >= 0;) {
-      crc = (crc >> 1) ^ (0xedb88320 & -(crc & 1));
-    }
-  }
-  return ~crc;
-}
-
-static int s_create_message(const char* payload , char * buff)
-{
-
-u_int32_t total_byte_len=0;
-u_int32_t preload_crc=0;
-u_int32_t message_crc=0;
-int i=0;
-
-        u_int32_t header_len = s_creare_header_records(buff + 12);//headet satrt 
-
-        total_byte_len = strlen(payload) + header_len + 16;//TODO buff size should be >= total_byte_len
-        
-        X_COPY(buff[i],total_byte_len);
-        X_COPY(buff[i],header_len);
-        char crc_buff[8];
-        memcpy(&crc_buff[0],&total_byte_len,4);
-        memcpy(&crc_buff[4],&header_len,4);
-
-        preload_crc = s_crc32(0, (UInt8*)buff, 8) ;
-        X_COPY(buff[i],preload_crc);
-
-        i+= header_len;
-        memcpy(&buff[i],payload,strlen(payload));i += strlen(payload);
-
-        message_crc = s_crc32(0,(UInt8*)buff,i);    
-        X_COPY(buff[i],message_crc);
-
-        return i;
-}
-
-
 #include "s3select.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+const char *RGWS3Select::header_name_str[3] = {":event-type", ":content-type", ":message-type"};
+const char *RGWS3Select::header_value_str[3] = {"Records", "application/octet-stream", "event"};
+
+int RGWS3Select::creare_header_records(char *buff)
+{
+  int i = 0;
+
+  //1
+  buff[i++] = (char)strlen(header_name_str[EVENT_TYPE]);
+  memcpy(&buff[i], header_name_str[EVENT_TYPE], strlen(header_name_str[EVENT_TYPE]));
+  i += strlen(header_name_str[EVENT_TYPE]);
+  buff[i++] = (char)7;
+  ENCODE_NUMBER(buff[i], (short)strlen(header_value_str[RECORDS]), i);
+  memcpy(&buff[i], header_value_str[RECORDS], strlen(header_value_str[RECORDS]));
+  i += strlen(header_value_str[RECORDS]);
+
+  //2
+  buff[i++] = (char)strlen(header_name_str[CONTENT_TYPE]);
+  memcpy(&buff[i], header_name_str[CONTENT_TYPE], strlen(header_name_str[CONTENT_TYPE]));
+  i += strlen(header_name_str[CONTENT_TYPE]);
+  buff[i++] = (char)7;
+  ENCODE_NUMBER(buff[i], (short)strlen(header_value_str[OCTET_STREAM]), i);
+  memcpy(&buff[i], header_value_str[OCTET_STREAM], strlen(header_value_str[OCTET_STREAM]));
+  i += strlen(header_value_str[OCTET_STREAM]);
+
+  //3
+  buff[i++] = (char)strlen(header_name_str[MESSAGE_TYPE]);
+  memcpy(&buff[i], header_name_str[MESSAGE_TYPE], strlen(header_name_str[MESSAGE_TYPE]));
+  i += strlen(header_name_str[MESSAGE_TYPE]);
+  buff[i++] = (char)7;
+  ENCODE_NUMBER(buff[i], (short)strlen(header_value_str[EVENT]), i);
+  memcpy(&buff[i], header_value_str[EVENT], strlen(header_value_str[EVENT]));
+  i += strlen(header_value_str[EVENT]);
+
+  return i;
+}
+
+int RGWS3Select::create_message(const char *payload, char *buff)
+{
+
+  u_int32_t total_byte_len = 0;
+  u_int32_t preload_crc = 0;
+  u_int32_t message_crc = 0;
+  int i = 0;
+
+  u_int32_t header_len = creare_header_records(buff + 12);
+
+  total_byte_len = strlen(payload) + header_len + 16;
+
+  ENCODE_NUMBER(buff[i], total_byte_len, i);
+  ENCODE_NUMBER(buff[i], header_len, i);
+  char crc_buff[8];
+  memcpy(&crc_buff[0], &total_byte_len, 4);
+  memcpy(&crc_buff[4], &header_len, 4);
+
+  preload_crc = __crc32(0, (u_int8_t *)buff, 8);
+  ENCODE_NUMBER(buff[i], preload_crc, i);
+
+  i += header_len;
+  memcpy(&buff[i], payload, strlen(payload));
+  i += strlen(payload);
+
+  message_crc = __crc32(0, (u_int8_t *)buff, i);
+  ENCODE_NUMBER(buff[i], message_crc, i);
+
+  return i;
+}
 
 int RGWS3Select::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
@@ -6008,13 +5983,11 @@ int RGWS3Select::send_response_data(bufferlist& bl, off_t ofs, off_t len)
   return_payload.append("\n</Payload></Records></Payload>");
   
   buff = (char*)malloc(return_payload.size() + 1000);
-  int buff_len = s_create_message(return_payload.c_str(),buff);
-  //dump_start(s);
+  int buff_len = create_message(return_payload.c_str(),buff);
+
   s->formatter->write_bin_data(buff,buff_len);
   if (op_ret < 0)
     return op_ret;
-
-  //s->formatter->open_object_section_in_ns("Payload", XMLNS_AWS_S3);
 
   rgw_flush_formatter_and_reset(s, s->formatter);
 
