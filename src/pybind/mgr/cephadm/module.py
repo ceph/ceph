@@ -1831,10 +1831,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             # otherwise, remove *any* mgr
             if num_to_remove > 0:
                 for d in services:
-                    to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance), d.nodename))
-                    num_to_remove -= 1
-                    if num_to_remove == 0:
-                        break
+                    if d.service_instance != self.get_mgr_id():
+                        to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance), d.nodename))
+                        num_to_remove -= 1
+                        if num_to_remove == 0:
+                            break
             c = self._remove_daemon(to_remove_damons)
             c.add_progress('Removing MGRs', self)
             c.update_progress = True
