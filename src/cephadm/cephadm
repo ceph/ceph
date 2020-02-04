@@ -1078,9 +1078,9 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
 def get_container(fsid, daemon_type, daemon_id, privileged=False,
                   container_args=[]):
     # type: (str, str, Union[int, str], bool, List[str]) -> CephContainer
-    if daemon_type in ['mon', 'osd'] or privileged:
+    if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
-        container_args += ['--privileged']
+        privileged = True
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
@@ -1106,6 +1106,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
+        privileged=privileged,
     )
 
 def extract_uid_gid(img='', file_path='/var/lib/ceph'):
@@ -1202,7 +1203,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                     str(daemon_id), osd_fsid,
                     '--no-systemd'
                 ],
-                container_args=['--privileged'],
+                privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
             )
@@ -1219,7 +1220,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                     'lvm', 'deactivate',
                     str(daemon_id), osd_fsid,
                 ],
-                container_args=['--privileged'],
+                privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                                     daemon_id),
@@ -1470,14 +1471,16 @@ class CephContainer:
                  args=[],
                  volume_mounts={},
                  cname='',
-                 container_args=[]):
-        # type: (str, str, List[str], Dict[str, str], str, List[str]) -> None
+                 container_args=[],
+                 privileged=False):
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[bool]) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
         self.cname = cname
         self.container_args = container_args
+        self.privileged = privileged
 
     def run_cmd(self):
         # type: () -> List[str]
@@ -1488,6 +1491,11 @@ class CephContainer:
         if self.entrypoint:
             entrypoint = ['--entrypoint', self.entrypoint]
 
+        priv = [] # type: List[str]
+        if self.privileged:
+            priv = ['--privileged',
+                    # let OSD etc read block devs that haven't been chowned
+                    '--group-add=disk']
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -1501,7 +1509,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
-        ] + self.container_args + \
+        ] + self.container_args + priv + \
         cname + envs + \
         vols + entrypoint + \
         [
@@ -1510,6 +1518,11 @@ class CephContainer:
 
     def shell_cmd(self, cmd):
         # type: (List[str]) -> List[str]
+        priv = [] # type: List[str]
+        if self.privileged:
+            priv = ['--privileged',
+                    # let OSD etc read block devs that haven't been chowned
+                    '--group-add=disk']
         vols = [] # type: List[str]
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
@@ -1526,7 +1539,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
-        ] + self.container_args + envs + vols + [
+        ] + self.container_args + priv + envs + vols + [
             '--entrypoint', cmd[0],
             self.image
         ] + cmd[1:]
@@ -2026,13 +2039,13 @@ def command_shell():
     if daemon_id and not args.fsid:
         raise Error('must pass --fsid to specify cluster')
 
+    container_args = [] # type: List[str]
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
                                   no_config=True if args.config else False)
     if args.config:
         mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
     if args.keyring:
         mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
-    container_args = ['--privileged']
     if args.command:
         command = args.command
     else:
@@ -2048,7 +2061,8 @@ def command_shell():
         entrypoint='doesnotmatter',
         args=[],
         container_args=container_args,
-        volume_mounts=mounts)
+        volume_mounts=mounts,
+        privileged=True)
     command = c.shell_cmd(command)
 
     return call_timeout(command, args.timeout)
@@ -2108,7 +2122,7 @@ def command_ceph_volume():
         image=args.image,
         entrypoint='/usr/sbin/ceph-volume',
         args=args.command,
-        container_args=['--privileged'],
+        privileged=True,
         volume_mounts=mounts,
     )
     out, err, code = call_throws(c.run_cmd(), verbose=True)
@@ -2238,6 +2252,10 @@ def list_daemons(detail=True, legacy_dir=None):
 def command_adopt():
     # type: () -> None
 
+    if not args.skip_pull:
+        logger.info('Pulling latest %s container...' % args.image)
+        call_throws([container_path, 'pull', args.image])
+
     (daemon_type, daemon_id) = args.name.split('.', 1)
     (uid, gid) = extract_uid_gid()
     if args.style == 'legacy':
@@ -2288,6 +2306,48 @@ def command_adopt():
         if os.path.ismount(data_dir_src):
             call_throws(['umount', data_dir_src])
         os.rmdir(data_dir_src)
+
+        logger.info('Chowning content...')
+        call_throws(['chown', '-c', '-R', '%d.%d' % (uid, gid), data_dir_dst])
+
+        if daemon_type == 'mon':
+            # rename *.ldb -> *.sst, in case they are coming from ubuntu
+            store = os.path.join(data_dir_dst, 'store.db')
+            num_renamed = 0
+            if os.path.exists(store):
+                for oldf in os.listdir(store):
+                    if oldf.endswith('.ldb'):
+                        newf = oldf.replace('.ldb', '.sst')
+                        oldp = os.path.join(store, oldf)
+                        newp = os.path.join(store, newf)
+                        logger.debug('Renaming %s -> %s' % (oldp, newp))
+                        os.rename(oldp, newp)
+            if num_renamed:
+                logger.info('Renamed %d leveldb *.ldb files to *.sst',
+                            num_renamed)
+        if daemon_type == 'osd':
+            for n in ['block', 'block.db', 'block.wal']:
+                p = os.path.join(data_dir_dst, n)
+                if os.path.exists(p):
+                    logger.info('Chowning %s...' % p)
+                    os.chown(p, uid, gid)
+            # disable the ceph-volume 'simple' mode files on the host
+            simple_fn = os.path.join('/etc/ceph/osd',
+                                     '%s-%s.json' % (daemon_id, osd_fsid))
+            if os.path.exists(simple_fn):
+                new_fn = simple_fn + '.adopted-by-cephadm'
+                logger.info('Renaming %s -> %s', simple_fn, new_fn)
+                os.rename(simple_fn, new_fn)
+                logger.info('Disabling host unit ceph-volume@ simple unit...')
+                call_throws(['systemctl', 'disable',
+                             'ceph-volume@simple-%s-%s.service' % (
+                                 daemon_id, osd_fsid)])
+            else:
+                # assume this is an 'lvm' c-v for now, but don't error
+                # out if it's not.
+                logger.info('Disabling host unit ceph-volume@ lvm unit...')
+                call(['systemctl', 'disable',
+                      'ceph-volume@lvm-%s-%s.service' % (daemon_id, osd_fsid)])
 
         # config
         config_src = '/etc/ceph/%s.conf' % (args.cluster)
@@ -2548,6 +2608,10 @@ def _get_parser():
         '--skip-firewalld',
         action='store_true',
         help='Do not configure firewalld')
+    parser_adopt.add_argument(
+        '--skip-pull',
+        action='store_true',
+        help='do not pull the latest image before adopting')
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
