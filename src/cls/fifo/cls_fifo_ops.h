@@ -16,29 +16,37 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "include/buffer.h"
+#include "include/encoding.h"
 #include "include/types.h"
-#include "include/utime.h"
+
 #include "cls/fifo/cls_fifo_types.h"
 
-struct cls_fifo_meta_create_op
+namespace rados::cls::fifo::op {
+struct create_meta
 {
-  string id;
-  std::optional<rados::cls::fifo::fifo_objv_t> objv;
+  std::string id;
+  std::optional<objv> version;
   struct {
-    string name;
-    string ns;
+    std::string name;
+    std::string ns;
   } pool;
-  std::optional<string> oid_prefix;
+  std::optional<std::string> oid_prefix;
 
-  uint64_t max_part_size{0};
-  uint64_t max_entry_size{0};
+  std::uint64_t max_part_size{0};
+  std::uint64_t max_entry_size{0};
 
   bool exclusive{false};
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(id, bl);
-    encode(objv, bl);
+    encode(version, bl);
     encode(pool.name, bl);
     encode(pool.ns, bl);
     encode(oid_prefix, bl);
@@ -47,10 +55,10 @@ struct cls_fifo_meta_create_op
     encode(exclusive, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(id, bl);
-    decode(objv, bl);
+    decode(version, bl);
     decode(pool.name, bl);
     decode(pool.ns, bl);
     decode(oid_prefix, bl);
@@ -60,39 +68,40 @@ struct cls_fifo_meta_create_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_meta_create_op)
+WRITE_CLASS_ENCODER(create_meta)
 
-struct cls_fifo_meta_get_op
+struct get_meta
 {
-  std::optional<rados::cls::fifo::fifo_objv_t> objv;
+  std::optional<objv> version;
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(objv, bl);
+    encode(version, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(objv, bl);
+    decode(version, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_meta_get_op)
+WRITE_CLASS_ENCODER(get_meta)
 
-struct cls_fifo_meta_get_op_reply
+struct get_meta_reply
 {
-  rados::cls::fifo::fifo_info_t info;
-  uint32_t part_header_size{0};
-  uint32_t part_entry_overhead{0}; /* per entry extra data that is stored */
+  fifo::info info;
+  std::uint32_t part_header_size{0};
+  /* per entry extra data that is stored */
+  std::uint32_t part_entry_overhead{0};
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(info, bl);
     encode(part_header_size, bl);
     encode(part_entry_overhead, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(info, bl);
     decode(part_header_size, bl);
@@ -100,22 +109,22 @@ struct cls_fifo_meta_get_op_reply
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_meta_get_op_reply)
+WRITE_CLASS_ENCODER(get_meta_reply)
 
-struct cls_fifo_meta_update_op
+struct update_meta
 {
-  rados::cls::fifo::fifo_objv_t objv;
+  objv version;
 
-  std::optional<uint64_t> tail_part_num;
-  std::optional<uint64_t> head_part_num;
-  std::optional<uint64_t> min_push_part_num;
-  std::optional<uint64_t> max_push_part_num;
-  std::vector<rados::cls::fifo::fifo_journal_entry_t> journal_entries_add;
-  std::vector<rados::cls::fifo::fifo_journal_entry_t> journal_entries_rm;
+  std::optional<std::uint64_t> tail_part_num;
+  std::optional<std::uint64_t> head_part_num;
+  std::optional<std::uint64_t> min_push_part_num;
+  std::optional<std::uint64_t> max_push_part_num;
+  std::vector<journal_entry> journal_entries_add;
+  std::vector<journal_entry> journal_entries_rm;
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(objv, bl);
+    encode(version, bl);
     encode(tail_part_num, bl);
     encode(head_part_num, bl);
     encode(min_push_part_num, bl);
@@ -124,9 +133,9 @@ struct cls_fifo_meta_update_op
     encode(journal_entries_rm, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(objv, bl);
+    decode(version, bl);
     decode(tail_part_num, bl);
     decode(head_part_num, bl);
     decode(min_push_part_num, bl);
@@ -136,42 +145,42 @@ struct cls_fifo_meta_update_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_meta_update_op)
+WRITE_CLASS_ENCODER(update_meta)
 
-struct cls_fifo_part_init_op
+struct init_part
 {
-  string tag;
-  rados::cls::fifo::fifo_data_params_t data_params;
+  std::string tag;
+  data_params params;
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
-    encode(data_params, bl);
+    encode(params, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
-    decode(data_params, bl);
+    decode(params, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_init_op)
+WRITE_CLASS_ENCODER(init_part)
 
-struct cls_fifo_part_push_op
+struct push_part
 {
-  string tag;
-  std::vector<bufferlist> data_bufs;
-  uint64_t total_len{0};
+  std::string tag;
+  std::deque<ceph::buffer::list> data_bufs;
+  std::uint64_t total_len{0};
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
     encode(data_bufs, bl);
     encode(total_len, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(data_bufs, bl);
@@ -179,42 +188,42 @@ struct cls_fifo_part_push_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_push_op)
+WRITE_CLASS_ENCODER(push_part)
 
-struct cls_fifo_part_trim_op
+struct trim_part
 {
-  std::optional<string> tag;
-  uint64_t ofs{0};
+  std::optional<std::string> tag;
+  std::uint64_t ofs{0};
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
     encode(ofs, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(ofs, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_trim_op)
+WRITE_CLASS_ENCODER(trim_part)
 
-struct cls_fifo_part_list_op
+struct list_part
 {
   std::optional<string> tag;
-  uint64_t ofs{0};
+  std::uint64_t ofs{0};
   int max_entries{100};
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
     encode(ofs, bl);
     encode(max_entries, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(ofs, bl);
@@ -222,17 +231,18 @@ struct cls_fifo_part_list_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_list_op)
+WRITE_CLASS_ENCODER(list_part)
+inline constexpr int MAX_LIST_ENTRIES = 512;
 
-struct cls_fifo_part_list_op_reply
+struct list_part_reply
 {
-  string tag;
-  vector<rados::cls::fifo::cls_fifo_part_list_entry_t> entries;
+  std::string tag;
+  std::vector<part_list_entry> entries;
   bool more{false};
   bool full_part{false}; /* whether part is full or still can be written to.
                             A non full part is by definition head part */
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
     encode(entries, bl);
@@ -240,7 +250,7 @@ struct cls_fifo_part_list_op_reply
     encode(full_part, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(entries, bl);
@@ -249,34 +259,45 @@ struct cls_fifo_part_list_op_reply
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_list_op_reply)
+WRITE_CLASS_ENCODER(list_part_reply)
 
-struct cls_fifo_part_get_info_op
+struct get_part_info
 {
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_get_info_op)
+WRITE_CLASS_ENCODER(get_part_info)
 
-struct cls_fifo_part_get_info_op_reply
+struct get_part_info_reply
 {
-  rados::cls::fifo::fifo_part_header_t header;
+  part_header header;
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
     encode(header, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(header, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_get_info_op_reply)
+WRITE_CLASS_ENCODER(get_part_info_reply)
+
+inline constexpr auto CLASS = "fifo";
+inline constexpr auto CREATE_META = "create_meta";
+inline constexpr auto GET_META = "get_meta";
+inline constexpr auto UPDATE_META = "update_meta";
+inline constexpr auto INIT_PART = "init_part";
+inline constexpr auto PUSH_PART = "push_part";
+inline constexpr auto TRIM_PART = "trim_part";
+inline constexpr auto LIST_PART = "part_list";
+inline constexpr auto GET_PART_INFO = "get_part_info";
+} // namespace rados::cls::fifo::op
