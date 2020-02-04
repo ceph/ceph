@@ -532,7 +532,7 @@ def call_timeout(command, timeout):
 
 ##################################
 
-def is_available(what, func, retry_max=5):
+def is_available(what, func, retry_max=10):
     # type (str, func, Optional[int]) -> func
     """
     Wait for a service to become available
@@ -2478,17 +2478,18 @@ def command_check_host():
     # caller already checked for docker/podman
     logger.info('podman|docker (%s) is present' % container_path)
 
-    if not find_program('systemctl'):
-        raise RuntimeError('unable to location systemctl')
-    logger.info('systemctl is present')
+    commands = ['systemctl', 'lvcreate']
 
-    if not find_program('lvcreate'):
-        raise RuntimeError('LVM does not appear to be installed')
-    logger.info('LVM2 is present')
+    for command in commands:
+        try:
+            find_program(command)
+            logger.info('%s is present' % command)
+        except ValueError:
+            raise Error('%s binary does not appear to be installed' % command)
 
     # check for configured+running chronyd or ntp
     if not check_time_sync():
-        raise RuntimeError('No time synchronization is active')
+        raise Error('No time synchronization is active')
 
     logger.info('Host looks OK')
 
