@@ -37,6 +37,34 @@
             }
         },
         "AllowUnordered":{"type":"boolean"},
+        "PutObjectRequest": {
+            "members": {
+                "AppendPosition": {
+                    "shape":"AppendPosition",
+                    "documentation": "<p>Position to allow appending</p>",
+                    "location": "querystring",
+                    "locationName": "position"
+                },
+                "Append": {
+                    "shape":"Append",
+                    "documentation":"<p>Append Object</p>",
+                    "location": "querystring",
+                    "locationName": "append"
+                }
+            }
+        },
+        "Append": {"type":"boolean"},
+        "AppendPosition":{"type":"integer"},
+        "PutObjectOutput": {
+            "members": {
+                "AppendPosition": {
+                    "shape":"AppendPosition",
+                    "documentation": "<p>Position to allow appending</p>",
+                    "location": "header",
+                    "locationName": "x-rgw-next-append-position"
+                }
+            }
+        },
         "GetBucketNotificationConfigurationRequest":{
             "type":"structure",
             "required":["Bucket"],
