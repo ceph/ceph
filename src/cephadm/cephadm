@@ -2491,6 +2491,13 @@ def command_check_host():
     if not check_time_sync():
         raise Error('No time synchronization is active')
 
+    if args.expect_hostname:
+        if get_hostname() != args.expect_hostname:
+            raise Error('hostname "%s" does not match expected hostname "%s"' % (
+                get_hostname(), args.expect_hostname))
+        logger.info('Hostname "%s" matches what is expected.',
+                    args.expect_hostname)
+
     logger.info('Host looks OK')
 
 
@@ -2831,6 +2838,9 @@ def _get_parser():
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
     parser_check_host.set_defaults(func=command_check_host)
+    parser_check_host.add_argument(
+        '--expect-hostname',
+        help='Check that hostname matches an expected value')
 
     return parser
 
