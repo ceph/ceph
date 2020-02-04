@@ -454,6 +454,11 @@ void Elector::begin_peer_ping(int peer)
     return;
   }
 
+  if (!mon->get_quorum_mon_features().contains_all(
+				      ceph::features::mon::FEATURE_PINGING)) {
+    return;
+  }
+
   dout(5) << __func__ << " against " << peer << dendl;
 
   peer_tracker.report_live_connection(peer, 0); // init this peer as existing
