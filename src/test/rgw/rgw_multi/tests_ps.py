@@ -2222,6 +2222,60 @@ def test_ps_subscription():
     topic_conf.del_config()
     master_zone.delete_bucket(bucket_name)
 
+def test_ps_incremental_sync():
+    """ test that events are only sent on incremental sync """
+    master_zone, ps_zone = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create topic
+    topic_conf = PSTopic(ps_zone.conn, topic_name)
+    topic_conf.set_config()
+    # create bucket on the first of the rados zones
+    bucket = master_zone.create_bucket(bucket_name)
+    # create objects in the bucket
+    number_of_objects = 10
+    for i in range(0, number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('foo')
+    # wait for sync
+    zone_bucket_checkpoint(ps_zone.zone, master_zone.zone, bucket_name)
+    # create notifications
+    notification_conf = PSNotification(ps_zone.conn, bucket_name,
+                                       topic_name)
+    _, status = notification_conf.set_config()
+    assert_equal(status/100, 2)
+    # create subscription
+    sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
+                              topic_name)
+    _, status = sub_conf.set_config()
+    assert_equal(status/100, 2)
+    
+    # create more objects in the bucket
+    for i in range(number_of_objects, 2*number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+    # wait for sync
+    zone_bucket_checkpoint(ps_zone.zone, master_zone.zone, bucket_name)
+
+    # get the create events from the subscription
+    result, _ = sub_conf.get_events()
+    events = json.loads(result)
+    count = 0
+    for event in events['events']:
+        log.debug('Event: objname: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
+        count += 1
+   
+    # make sure we have 10 and not 20 events
+    assert_equal(count, number_of_objects)
+
+    # cleanup
+    for key in bucket.list():
+        key.delete()
+    sub_conf.del_config()
+    notification_conf.del_config()
+    topic_conf.del_config()
+    master_zone.delete_bucket(bucket_name)
 
 def test_ps_event_type_subscription():
     """ test subscriptions for different events """
