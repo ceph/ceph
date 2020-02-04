@@ -3234,7 +3234,10 @@ void PGMap::get_health_checks(
 	summary += " have dangerous mismatch between BlueStore block device and free list sizes";
       } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
 	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
+      } else if (asum.first == "BLUESTORE_SPURIOUS_READ_ERRORS") {
+        summary += " have spurious read errors";
       }
+
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);
       for (auto& s : asum.second.second) {
         d.detail.push_back(s);
