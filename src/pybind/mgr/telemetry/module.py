@@ -673,16 +673,23 @@ class Module(MgrModule):
         for e in endpoint:
             if e == 'ceph':
                 self.log.info('Sending ceph report to: %s', self.url)
-                resp = requests.put(url=self.url, json=report, proxies=proxies)
-                if not resp.ok:
-                    self.log.error("Report send failed: %d %s %s" %
-                                   (resp.status_code, resp.reason, resp.text))
-                    failed.append('Failed to send report to %s: %d %s %s' % (
-                        self.url,
-                        resp.status_code,
-                        resp.reason,
-                        resp.text
-                    ))
+                fail_reason = None
+                try:
+                    resp = requests.put(url=self.url, json=report,
+                                        proxies=proxies)
+                    if not resp.ok:
+                        fail_reason = 'Failed to send report to %s: %d %s %s' % (
+                            self.url,
+                            resp.status_code,
+                            resp.reason,
+                            resp.text
+                        )
+                except Exception as e:
+                    fail_reason = 'Failed to send report to %s: %s' % (
+                        self.url, str(e))
+                if fail_reason:
+                    self.log.error(fail_reason)
+                    failed.append(fail_reason)
                 else:
                     now = int(time.time())
                     self.last_upload = now
