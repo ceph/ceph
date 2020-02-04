@@ -501,33 +501,36 @@ class Module(MgrModule):
 
         return report
 
-    def send(self, report):
-        self.log.info('Upload report to: %s', self.config['url'])
+    def _try_post(self, what, url, report):
+        self.log.info('Sending %s to: %s' % (what, url))
         proxies = dict()
         if 'proxy' in self.config:
             self.log.info('Using HTTP(S) proxy: %s', self.config['proxy'])
             proxies['http'] = self.config['proxy']
             proxies['https'] = self.config['proxy']
-
         fail_reason = None
         try:
-            resp = requests.put(url=self.config['url'],
-                                json=report, proxies=proxies)
+            resp = requests.put(url=url, json=report)
             if not resp.ok:
-                fail_reason = 'Failed to send report to %s: %d %s %s' % (
-                    self.config['url'],
+                fail_reason = 'Failed to send %s to %s: %d %s %s' % (
+                    what,
+                    url,
                     resp.status_code,
                     resp.reason,
                     resp.text
                 )
         except Exception as e:
-            fail_reason = 'Failed to send report to %s: %s' % (
-                self.config['url'], str(e))
+            fail_reason = 'Failed to send %s to %s: %s' % (
+                what, url, str(e))
         if fail_reason:
             self.log.error(fail_reason)
+        return fail_reason
+
+    def send(self, report):
+        fail_reason = self._try_post('ceph report', self.config['url'], report)
+        if fail_reason:
             return 1, '', fail_reason
         return 0, 'Report sent to {0}'.format(self.config['url']), ''
-
 
     def handle_command(self, command):
         if command['prefix'] == 'telemetry config-show':
