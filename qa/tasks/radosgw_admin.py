@@ -548,6 +548,12 @@ def task(ctx, config):
     assert out['usage']['rgw.main']['num_objects'] == 1
     assert out['usage']['rgw.main']['size_kb'] > 0
 
+    #validate we have a positive user stats now
+    (err, out) = rgwadmin(ctx, client,
+                          ['user', 'stats','--uid', user1, '--sync-stats'],
+                          check_status=True)
+    assert out['stats']['size'] > 0
+
     # reclaim it
     key.delete()
     rl.log_and_clear("delete_obj", bucket_name, user1)
