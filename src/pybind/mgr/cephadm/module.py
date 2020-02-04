@@ -985,7 +985,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         'name=host,type=CephString',
         'Check whether we can access and manage a remote host')
     def _check_host(self, host):
-        out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
+        out, err, code = self._run_cephadm(host, 'client', 'check-host',
+                                           ['--expect-hostname', host],
                                            error_ok=True, no_fsid=True)
         if code:
             return 1, '', ('check-host failed:\n' + '\n'.join(err))
@@ -1120,7 +1121,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         :param host: host name
         """
-        out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
+        out, err, code = self._run_cephadm(host, 'client', 'check-host',
+                                           ['--expect-hostname', host],
                                            error_ok=True, no_fsid=True)
         if code:
             raise OrchestratorError('New host %s failed check: %s' % (host, err))
