@@ -132,8 +132,8 @@ public:
   int _init(bool format);
 
   int do_open(std::ostream &out, bool create);
-  int open(std::ostream &out, const std::vector<ColumnFamily>&) override;
-  int create_and_open(std::ostream &out, const std::vector<ColumnFamily>&) override;
+  int open(std::ostream &out, const std::string& cfs="") override;
+  int create_and_open(std::ostream &out, const std::string& cfs="") override;
   using KeyValueDB::create_and_open;
 
   KeyValueDB::Transaction get_transaction() override {
