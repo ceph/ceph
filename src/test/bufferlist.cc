@@ -745,7 +745,7 @@ TEST(BufferListIterator, empty_create_append_copy) {
   bl2.append("xxx");
   bl.append(bl2);
   bl.rebuild();
-  bl.copy(0, 6, out);
+  bl.begin().copy(6, out);
   ASSERT_TRUE(out.contents_equal(bl));
 }
 
@@ -1072,6 +1072,19 @@ TEST(BufferListIterator, copy) {
     free(copy);
   }
   //
+  // void copy(unsigned len, char *dest) via begin(size_t offset)
+  //
+  {
+    bufferlist bl;
+    EXPECT_THROW(bl.begin((unsigned)100).copy((unsigned)100, (char*)0), buffer::end_of_buffer);
+    const char *expected = "ABC";
+    bl.append(expected);
+    char *dest = new char[2];
+    bl.begin(1).copy(2, dest);
+    EXPECT_EQ(0, ::memcmp(expected + 1, dest, 2));
+    delete [] dest;
+  }
+  //
   // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
   //
   {
@@ -1115,6 +1128,18 @@ TEST(BufferListIterator, copy) {
     EXPECT_EQ((unsigned)(2 + 3), copy.length());
   }
   //
+  // void buffer::list::iterator::copy(unsigned len, list &dest) via begin(size_t offset)
+  //
+  {
+    bufferlist bl;
+    bufferlist dest;
+    EXPECT_THROW(bl.begin((unsigned)100).copy((unsigned)100, dest), buffer::end_of_buffer);
+    const char *expected = "ABC";
+    bl.append(expected);
+    bl.begin(1).copy(2, dest);
+    EXPECT_EQ(0, ::memcmp(expected + 1, dest.c_str(), 2));
+  }
+  //
   // void buffer::list::iterator::copy_all(list &dest)
   //
   {
@@ -1151,6 +1176,18 @@ TEST(BufferListIterator, copy) {
     EXPECT_EQ('C', copy[4]);
     EXPECT_EQ((unsigned)(2 + 3), copy.length());
   }
+  //
+  // void copy(unsigned len, std::string &dest) via begin(size_t offset)
+  //
+  {
+    bufferlist bl;
+    std::string dest;
+    EXPECT_THROW(bl.begin((unsigned)100).copy((unsigned)100, dest), buffer::end_of_buffer);
+    const char *expected = "ABC";
+    bl.append(expected);
+    bl.begin(1).copy(2, dest);
+    EXPECT_EQ(0, ::memcmp(expected + 1, dest.c_str(), 2));
+  }
 }
 
 TEST(BufferListIterator, copy_in) {
@@ -1175,6 +1212,16 @@ TEST(BufferListIterator, copy_in) {
     EXPECT_EQ((unsigned)3, bl.length());
   }
   //
+  // void copy_in(unsigned len, const char *src) via begin(size_t offset)
+  //
+  {
+    bufferlist bl;
+    bl.append("XXX");
+    EXPECT_THROW(bl.begin((unsigned)100).copy_in((unsigned)100, (char*)0), buffer::end_of_buffer);
+    bl.begin(1).copy_in(2, "AB");
+    EXPECT_EQ(0, ::memcmp("XAB", bl.c_str(), 3));
+  }
+  //
   // void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
   //
   {
@@ -1191,6 +1238,18 @@ TEST(BufferListIterator, copy_in) {
     EXPECT_EQ('B', bl[1]);
     EXPECT_EQ('C', bl[2]);
     EXPECT_EQ((unsigned)3, bl.length());
+  }
+  //
+  // void copy_in(unsigned len, const list& src) via begin(size_t offset)
+  //
+  {
+    bufferlist bl;
+    bl.append("XXX");
+    bufferlist src;
+    src.append("ABC");
+    EXPECT_THROW(bl.begin((unsigned)100).copy_in((unsigned)100, src), buffer::end_of_buffer);
+    bl.begin(1).copy_in(2, src);
+    EXPECT_EQ(0, ::memcmp("XAB", bl.c_str(), 3));
   }
 }
 
@@ -1328,13 +1387,13 @@ TEST(BufferList, operator_equal) {
   bl.append("ABC", 3);
   {
     std::string dest;
-    bl.copy(1, 1, dest);
+    bl.begin(1).copy(1, dest);
     ASSERT_EQ('B', dest[0]);
   }
   {
     bufferlist copy = bl;
     std::string dest;
-    copy.copy(1, 1, dest);
+    copy.begin(1).copy(1, dest);
     ASSERT_EQ('B', dest[0]);
   }
 
@@ -1344,7 +1403,7 @@ TEST(BufferList, operator_equal) {
   bufferlist move = std::move(bl);
   {
     std::string dest;
-    move.copy(1, 1, dest);
+    move.begin(1).copy(1, dest);
     ASSERT_EQ('B', dest[0]);
   }
   EXPECT_TRUE(move.length());
@@ -1386,11 +1445,11 @@ TEST(BufferList, swap) {
   b1.swap(b2);
 
   std::string s1;
-  b1.copy(0, 1, s1);
+  b1.begin().copy(1, s1);
   ASSERT_EQ('B', s1[0]);
 
   std::string s2;
-  b2.copy(0, 1, s2);
+  b2.begin().copy(1, s2);
   ASSERT_EQ('A', s2[0]);
 }
 
@@ -1873,71 +1932,6 @@ TEST(BufferList, end) {
   bufferlist::iterator i = bl.end();
   bl.append("C");
   EXPECT_EQ('C', bl[i.get_off()]);
-}
-
-TEST(BufferList, copy) {
-  //
-  // void copy(unsigned off, unsigned len, char *dest) const;
-  //
-  {
-    bufferlist bl;
-    EXPECT_THROW(bl.copy((unsigned)100, (unsigned)100, (char*)0), buffer::end_of_buffer);
-    const char *expected = "ABC";
-    bl.append(expected);
-    char *dest = new char[2];
-    bl.copy(1, 2, dest);
-    EXPECT_EQ(0, ::memcmp(expected + 1, dest, 2));
-    delete [] dest;
-  }
-  //
-  // void copy(unsigned off, unsigned len, list &dest) const;
-  //
-  {
-    bufferlist bl;
-    bufferlist dest;
-    EXPECT_THROW(bl.copy((unsigned)100, (unsigned)100, dest), buffer::end_of_buffer);
-    const char *expected = "ABC";
-    bl.append(expected);
-    bl.copy(1, 2, dest);
-    EXPECT_EQ(0, ::memcmp(expected + 1, dest.c_str(), 2));
-  }
-  //
-  // void copy(unsigned off, unsigned len, std::string &dest) const;
-  //
-  {
-    bufferlist bl;
-    std::string dest;
-    EXPECT_THROW(bl.copy((unsigned)100, (unsigned)100, dest), buffer::end_of_buffer);
-    const char *expected = "ABC";
-    bl.append(expected);
-    bl.copy(1, 2, dest);
-    EXPECT_EQ(0, ::memcmp(expected + 1, dest.c_str(), 2));
-  }
-}
-
-TEST(BufferList, copy_in) {
-  //
-  // void copy_in(unsigned off, unsigned len, const char *src);
-  //
-  {
-    bufferlist bl;
-    bl.append("XXX");
-    EXPECT_THROW(bl.copy_in((unsigned)100, (unsigned)100, (char*)0), buffer::end_of_buffer);
-    bl.copy_in(1, 2, "AB");
-    EXPECT_EQ(0, ::memcmp("XAB", bl.c_str(), 3));
-  }
-  //
-  // void copy_in(unsigned off, unsigned len, const list& src);
-  //
-  {
-    bufferlist bl;
-    bl.append("XXX");
-    bufferlist src;
-    src.append("ABC");
-    EXPECT_THROW(bl.copy_in((unsigned)100, (unsigned)100, src), buffer::end_of_buffer);
-    bl.copy_in(1, 2, src);
-    EXPECT_EQ(0, ::memcmp("XAB", bl.c_str(), 3));    
-  }
 }
 
 TEST(BufferList, append) {
@@ -2816,7 +2810,7 @@ TEST(BufferList, TestCopyAll) {
   ASSERT_EQ(bl2.length(), BIG_SZ);
   std::shared_ptr <unsigned char> big2(
       (unsigned char*)malloc(BIG_SZ), free);
-  bl2.copy(0, BIG_SZ, (char*)big2.get());
+  bl2.begin().copy(BIG_SZ, (char*)big2.get());
   ASSERT_EQ(memcmp(big.get(), big2.get(), BIG_SZ), 0);
 }
 
@@ -2881,7 +2875,7 @@ TEST(BufferList, DanglingLastP) {
     EXPECT_EQ(0, ::memcmp("XXX", bl.c_str(), 3));
 
     // let `copy_in` to set `last_p` member of bufferlist
-    bl.copy_in(0, 2, "AB");
+    bl.begin().copy_in(2, "AB");
     EXPECT_EQ(0, ::memcmp("ABX", bl.c_str(), 3));
   }
 
@@ -2894,7 +2888,7 @@ TEST(BufferList, DanglingLastP) {
 
   // we must continue from where the previous copy_in had finished.
   // Otherwise `bl::copy_in` will call `seek()` and refresh `last_p`.
-  bl.copy_in(2, 1, "C");
+  bl.begin(2).copy_in(1, "C");
   EXPECT_EQ(0, ::memcmp("12C", bl.c_str(), 3));
 }
 

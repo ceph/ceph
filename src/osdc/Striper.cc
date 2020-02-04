@@ -474,11 +474,11 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer,
     curr -= p->second.second;
     if (len < p->second.second) {
       if (len)
-	p->second.first.copy(0, len, buffer + curr);
+	p->second.first.begin().copy(len, buffer + curr);
       // FIPS zeroization audit 20191117: this memset is not security related.
       memset(buffer + curr + len, 0, p->second.second - len);
     } else {
-      p->second.first.copy(0, len, buffer + curr);
+      p->second.first.begin().copy(len, buffer + curr);
     }
     ++p;
   }

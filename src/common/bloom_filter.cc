@@ -38,7 +38,7 @@ void bloom_filter::decode(bufferlist::const_iterator& p)
   delete[] bit_table_;
   if (table_size_) {
     bit_table_ = new cell_type[table_size_];
-    t.copy(0, table_size_, (char *)bit_table_);
+    t.begin().copy(table_size_, (char *)bit_table_);
   } else {
     bit_table_ = NULL;
   }
