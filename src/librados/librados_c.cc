@@ -1274,7 +1274,7 @@ extern "C" int _rados_read(rados_ioctx_t io, const char *o, char *buf, size_t le
       return -ERANGE;
     }
     if (!bl.is_provided_buffer(buf))
-      bl.copy(0, bl.length(), buf);
+      bl.begin().copy(bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
 
@@ -1307,7 +1307,7 @@ extern "C" int _rados_checksum(rados_ioctx_t io, const char *o,
       return -ERANGE;
     }
 
-    checksum_bl.copy(0, checksum_bl.length(), pchecksum);
+    checksum_bl.begin().copy(checksum_bl.length(), pchecksum);
   }
   tracepoint(librados, rados_checksum_exit, retval, pchecksum, checksum_len);
   return retval;
@@ -1754,7 +1754,7 @@ extern "C" int _rados_getxattr(rados_ioctx_t io, const char *o, const char *name
       return -ERANGE;
     }
     if (!bl.is_provided_buffer(buf))
-      bl.copy(0, bl.length(), buf);
+      bl.begin().copy(bl.length(), buf);
     ret = bl.length();
   }
 
@@ -1947,7 +1947,7 @@ extern "C" int _rados_exec(rados_ioctx_t io, const char *o, const char *cls, con
 	tracepoint(librados, rados_exec_exit, -ERANGE, buf, 0);
 	return -ERANGE;
       }
-      outbl.copy(0, outbl.length(), buf);
+      outbl.begin().copy(outbl.length(), buf);
       ret = outbl.length();   // hrm :/
     }
   }
@@ -2539,7 +2539,7 @@ static void rados_aio_getxattr_complete(rados_completion_t c, void *arg) {
       rc = -ERANGE;
     } else {
       if (!cdata->bl.is_provided_buffer(cdata->user_buf))
-	cdata->bl.copy(0, cdata->bl.length(), cdata->user_buf);
+	cdata->bl.begin().copy(cdata->bl.length(), cdata->user_buf);
       rc = cdata->bl.length();
     }
   }
@@ -3691,7 +3691,7 @@ public:
     if (bytes_read)
       *bytes_read = out_bl.length();
     if (out_buf && !out_bl.is_provided_buffer(out_buf))
-      out_bl.copy(0, out_bl.length(), out_buf);
+      out_bl.begin().copy(out_bl.length(), out_buf);
   }
 };
 

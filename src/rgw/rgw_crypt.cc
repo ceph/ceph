@@ -472,7 +472,7 @@ int RGWGetObj_BlockDecrypt::process(bufferlist& in, size_t part_ofs, size_t size
 
 int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
   ldout(cct, 25) << "Decrypt " << bl_len << " bytes" << dendl;
-  bl.copy(bl_ofs, bl_len, cache);
+  bl.begin(bl_ofs).copy(bl_len, cache);
 
   int res = 0;
   size_t part_ofs = ofs;

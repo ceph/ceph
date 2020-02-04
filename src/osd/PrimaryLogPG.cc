@@ -3025,8 +3025,9 @@ struct C_ProxyChunkRead : public Context {
 	} else {
 	  copy_offset = 0;
 	}
-	prdop->ops[op_index].outdata.copy_in(copy_offset, obj_op->ops[0].outdata.length(),
-					     obj_op->ops[0].outdata.c_str());
+	prdop->ops[op_index].outdata.begin(copy_offset).copy_in(
+          obj_op->ops[0].outdata.length(),
+          obj_op->ops[0].outdata.c_str());
       } 	
       
       pg->finish_proxy_read(oid, tid, r);

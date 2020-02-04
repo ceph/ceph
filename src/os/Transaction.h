@@ -543,7 +543,7 @@ public:
     ceph::buffer::list other_op_bl;
     {
       ceph::buffer::ptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+      other.op_bl.begin().copy(other.op_bl.length(), other_op_bl_ptr.c_str());
       other_op_bl.append(std::move(other_op_bl_ptr));
     }
 

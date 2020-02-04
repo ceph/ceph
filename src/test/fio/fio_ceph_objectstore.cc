@@ -867,7 +867,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       u->error = r;
       td_verror(td, u->error, "xfer");
     } else {
-      bl.copy(0, bl.length(), static_cast<char*>(u->xfer_buf));
+      bl.begin().copy(bl.length(), static_cast<char*>(u->xfer_buf));
       u->resid = u->xfer_buflen - r;
     }
     return FIO_Q_COMPLETED;
