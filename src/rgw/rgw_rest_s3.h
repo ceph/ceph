@@ -876,31 +876,71 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
 class RGWS3Select : public RGWGetObj_ObjStore_S3
 {
 
-  public:
-    RGWS3Select()
-    {
-      set_get_data(true);
-    }
+public:
+  typedef enum
+  {
+    EVENT_TYPE,
+    CONTENT_TYPE,
+    MESSAGE_TYPE
+  } header_name_en_t;
+  static const char *header_name_str[3];
 
-    std::string get_s3select_query()
-    {
-      return m_s3select_query;
-    }
+  typedef enum
+  {
+    RECORDS,
+    OCTET_STREAM,
+    EVENT
+  } header_value_en_t;
+  static const char *header_value_str[3];
 
-//public:
-  //virtual int get_params(){ return RGWGetObj_ObjStore_S3::get_params() ;}
-
-  //virtual int send_response_data_error() { return RGWGetObj_ObjStore_S3::send_response_data_error();}
-  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len);
-
-
-#if 0
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
-    return op->get_data_cb(bl, bl_ofs, bl_len);
+  RGWS3Select()
+  {
+    set_get_data(true);
   }
-#endif
 
+//encoding into big-endian
+#define ENCODE_NUMBER(dst, src, idx) \
+  {                                  \
+    auto s = src;                    \
+    if (sizeof(s) == 4)              \
+    {                                \
+      s = __builtin_bswap32(s);      \
+    }                                \
+    else                             \
+    {                                \
+      s = src >> 8 | src << 8;       \
+    };                               \
+    memcpy(&dst, &s, sizeof(s));     \
+    idx += sizeof(s);                \
+  }
+
+  std::string get_s3select_query()
+  {
+    return m_s3select_query;
+  }
+
+  int creare_header_records(char *buff);
+
+  //crc32 calculation align with python calculation
+  u_int32_t __crc32(u_int32_t crc, u_int8_t *p, int len)
+  {
+    crc = ~crc;
+    while (--len >= 0)
+    {
+      crc = crc ^ *p++;
+      for (int i = 8; --i >= 0;)
+      {
+        crc = (crc >> 1) ^ (0xedb88320 & -(crc & 1));
+      }
+    }
+    return ~crc;
+  }
+
+  int create_message(const char *payload, char *buff);
+
+  virtual int send_response_data(bufferlist &bl, off_t ofs, off_t len);
 };
+
 
 namespace rgw::auth::s3 {
 
