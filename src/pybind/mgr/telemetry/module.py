@@ -509,12 +509,25 @@ class Module(MgrModule):
             proxies['http'] = self.config['proxy']
             proxies['https'] = self.config['proxy']
 
-        resp = requests.put(url=self.config['url'],
-                            json=report, proxies=proxies)
-        if not resp.ok:
-            self.log.error("Report send failed: %d %s %s" %
-                           (resp.status_code, resp.reason, resp.text))
-        return resp
+        fail_reason = None
+        try:
+            resp = requests.put(url=self.config['url'],
+                                json=report, proxies=proxies)
+            if not resp.ok:
+                fail_reason = 'Failed to send report to %s: %d %s %s' % (
+                    self.config['url'],
+                    resp.status_code,
+                    resp.reason,
+                    resp.text
+                )
+        except Exception as e:
+            fail_reason = 'Failed to send report to %s: %s' % (
+                self.config['url'], str(e))
+        if fail_reason:
+            self.log.error(fail_reason)
+            return 1, '', fail_reason
+        return 0, 'Report sent to {0}'.format(self.config['url']), ''
+
 
     def handle_command(self, command):
         if command['prefix'] == 'telemetry config-show':
@@ -541,15 +554,7 @@ class Module(MgrModule):
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
-            resp = self.send(self.last_report)
-            if resp.ok:
-                return 0, 'Report sent to {0}'.format(self.config['url']), ''
-            return 1, '', 'Failed to send report to %s: %d %s %s' % (
-                self.config['url'],
-                resp.status_code,
-                resp.reason,
-                resp.text
-            )
+            return self.send(self.last_report)
         elif command['prefix'] == 'telemetry show':
             report = self.compile_report(
                 channels=command.get('channels', None)
@@ -618,15 +623,10 @@ class Module(MgrModule):
                 except:
                     self.log.exception('Exception while compiling report:')
 
-                try:
-                    resp = self.send(self.last_report)
-                    # self.send logs on failure; only update last_upload
-                    # if we succeed
-                    if resp.ok:
-                        self.last_upload = now
-                        self.set_config('last_upload', str(now))
-                except:
-                    self.log.exception('Exception while sending report:')
+                res = self.send(self.last_report)
+                if res[0] == 0:
+                    self.last_upload = now
+                    self.set_config('last_upload', str(now))
             else:
                 self.log.debug('Interval for sending new report has not expired')
 
