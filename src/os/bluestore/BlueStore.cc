@@ -5648,7 +5648,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
 
   string kv_backend;
-  std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::string sharding_def;
 
   if (create) {
     kv_backend = cct->_conf->bluestore_kvbackend;
@@ -5793,15 +5793,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
-
-    map<string,string> cf_map;
-    cct->_conf.with_val<string>("bluestore_rocksdb_cfs",
-                                 get_str_map,
-                                 &cf_map,
-                                 " \t");
-    for (auto& i : cf_map) {
-      dout(10) << "column family " << i.first << ": " << i.second << dendl;
-      cfs.push_back(KeyValueDB::ColumnFamily(i.first, i.second));
+    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+      sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
     }
   }
 
@@ -5809,17 +5802,13 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   if (to_repair_db)
     return 0;
   if (create) {
-    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
-      r = db->create_and_open(err, cfs);
-    } else {
-      r = db->create_and_open(err);
-    }
+    r = db->create_and_open(err, sharding_def);
   } else {
     // we pass in cf list here, but it is only used if the db already has
     // column families created.
     r = read_only ?
-      db->open_read_only(err, cfs) :
-      db->open(err, cfs);
+      db->open_read_only(err, sharding_def) :
+      db->open(err, sharding_def);
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
