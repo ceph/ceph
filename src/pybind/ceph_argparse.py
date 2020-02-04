@@ -1010,6 +1010,7 @@ def validate(args, signature, flags=0, partial=False):
 
                 if kwarg_desc:
                     validate_one(kwarg_v, kwarg_desc)
+                    matchcnt += 1
                     store_arg(kwarg_desc, d)
                     continue
 
@@ -1111,7 +1112,7 @@ def validate_command(sigdict, args, verbose=False):
     Parse positional arguments into a parameter dict, according to
     the command descriptions.
 
-    Writes advice about nearly-matching commands ``sys.stderr`` if 
+    Writes advice about nearly-matching commands ``sys.stderr`` if
     the arguments do not match any command.
 
     :param sigdict: A command description dictionary, as returned
