@@ -298,12 +298,71 @@ class Module(MgrModule):
     def send(self, report):
         self.log.info('Upload report to: %s', self.config['url'])
         proxies = dict()
-        if self.config['proxy']:
-            self.log.info('Using HTTP(S) proxy: %s', self.config['proxy'])
-            proxies['http'] = self.config['proxy']
-            proxies['https'] = self.config['proxy']
-
-        requests.put(url=self.config['url'], json=report, proxies=proxies)
+        self.log.debug('Send endpoints %s' % endpoint)
+        if self.proxy:
+            self.log.info('Send using HTTP(S) proxy: %s', self.proxy)
+            proxies['http'] = self.proxy
+            proxies['https'] = self.proxy
+        for e in endpoint:
+            if e == 'ceph':
+                self.log.info('Sending ceph report to: %s', self.url)
+                fail_reason = None
+                try:
+                    resp = requests.put(url=self.url, json=report,
+                                        proxies=proxies)
+                    if not resp.ok:
+                        fail_reason = 'Failed to send report to %s: %d %s %s' % (
+                            self.url,
+                            resp.status_code,
+                            resp.reason,
+                            resp.text
+                        )
+                except Exception as e:
+                    fail_reason = 'Failed to send report to %s: %s' % (
+                        self.url, str(e))
+                if fail_reason:
+                    self.log.error(fail_reason)
+                    failed.append(fail_reason)
+                else:
+                    now = int(time.time())
+                    self.last_upload = now
+                    self.set_store('last_upload', str(now))
+                    success.append('Ceph report sent to {0}'.format(self.url))
+                    self.log.info('Sent report to {0}'.format(self.url))
+            elif e == 'device':
+                if 'device' in self.get_active_channels():
+                    self.log.info('hi')
+                    self.log.info('Sending device report to: %s',
+                                  self.device_url)
+                    devices = self.gather_device_report()
+                    num_devs = 0
+                    num_hosts = 0
+                    for host, ls in devices.items():
+                        self.log.debug('host %s devices %s' % (host, ls))
+                        if not len(ls):
+                            continue
+                        resp = requests.put(url=self.device_url, json=ls,
+                                            proxies=proxies)
+                        if not resp.ok:
+                            self.log.error(
+                                "Device report failed: %d %s %s" %
+                                (resp.status_code, resp.reason, resp.text))
+                            failed.append(
+                                'Failed to send devices to %s: %d %s %s' % (
+                                    self.device_url,
+                                    resp.status_code,
+                                    resp.reason,
+                                    resp.text
+                                ))
+                        else:
+                            num_devs += len(ls)
+                            num_hosts += 1
+                    if num_devs:
+                        success.append('Reported %d devices across %d hosts' % (
+                            num_devs, len(devices)))
+        if failed:
+            return 1, '', '\n'.join(success + failed)
+        return 0, '', '\n'.join(success)
 
     def handle_command(self, inbuf, command):
         if command['prefix'] == 'telemetry config-show':
