@@ -1094,7 +1094,7 @@ void Objecter::_scan_requests(
 			 op->session ? op->session->con.get() : nullptr);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!skipped_map && !(force_resend_writes && op->respects_full()))
+      if (!skipped_map && !(force_resend_writes && op->target.respects_full()))
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -2421,30 +2421,9 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   }
 
   bool need_send = false;
-
-  if (osdmap->get_epoch() < epoch_barrier) {
-    ldout(cct, 10) << " barrier, paused " << op << " tid " << op->tid
+  if (op->target.paused) {
+    ldout(cct, 10) << " tid " << op->tid << " op " << op << " is paused"
 		   << dendl;
-    op->target.paused = true;
-    _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
-             osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
-    ldout(cct, 10) << " paused modify " << op << " tid " << op->tid
-		   << dendl;
-    op->target.paused = true;
-    _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_READ) &&
-	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
-    ldout(cct, 10) << " paused read " << op << " tid " << op->tid
-		   << dendl;
-    op->target.paused = true;
-    _maybe_request_map();
-  } else if (op->respects_full() &&
-	     (_osdmap_full_flag() ||
-	      _osdmap_pool_full(op->target.base_oloc.pool))) {
-    ldout(cct, 0) << " FULL, paused modify " << op << " tid "
-		  << op->tid << dendl;
-    op->target.paused = true;
     _maybe_request_map();
   } else if (!s->is_homeless()) {
     need_send = true;
@@ -2656,7 +2635,7 @@ bool Objecter::target_should_be_paused(op_target_t *t)
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
   bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) ||
-    _osdmap_full_flag() || _osdmap_pool_full(*pi);
+    (t->respects_full() && (_osdmap_full_flag() || _osdmap_pool_full(*pi)));
 
   return (t->flags & CEPH_OSD_FLAG_READ && pauserd) ||
     (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) ||
@@ -2704,11 +2683,6 @@ bool Objecter::_osdmap_has_pool_full() const
       return true;
   }
   return false;
-}
-
-bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
-{
-  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_pool_full;
 }
 
 /**
