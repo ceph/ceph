@@ -238,7 +238,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
       image_spec: new ImageSpec(this.poolName, this.namespace, this.rbdName).toString(),
       snapshot_name: snapshotName
     };
-    this.rbdService[task](this.poolName, this.namespace, this.rbdName, snapshotName)
+    const imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName);
+    this.rbdService[task](imageSpec, snapshotName)
       .toPromise()
       .then(() => {
         const executingTask = new ExecutingTask();
