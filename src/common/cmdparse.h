@@ -39,7 +39,7 @@ void dump_cmddesc_to_json(ceph::Formatter *jf,
 		          const std::string& module,
 		          const std::string& perm,
 		          uint64_t flags);
-bool cmdmap_from_json(std::vector<std::string> cmd, cmdmap_t *mapp,
+bool cmdmap_from_json(const std::vector<std::string>& cmd, cmdmap_t *mapp,
 		      std::stringstream &ss);
 void cmdmap_dump(const cmdmap_t &cmdmap, ceph::Formatter *f);
 void handle_bad_get(CephContext *cct, const std::string& k, const char *name);
