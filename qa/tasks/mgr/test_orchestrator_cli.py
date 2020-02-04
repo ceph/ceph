@@ -85,12 +85,14 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("osd", "create", "*:device")
         self._orch_cmd("osd", "create", "*:device,device2")
 
-        drive_group = {
-            "host_pattern": "*",
-            "data_devices": {"paths": ["/dev/sda"]}
+        drive_groups = {
+            'test': {
+                "host_pattern": "*",
+                "data_devices": {"paths": ["/dev/sda"]}
+            }
         }
 
-        res = self._orch_cmd_result("osd", "create", "-i", "-", stdin=json.dumps(drive_group))
+        res = self._orch_cmd_result("osd", "create", "-i", "-", stdin=json.dumps(drive_groups))
         self.assertEqual(res, 0)
 
         with self.assertRaises(CommandFailedError):
