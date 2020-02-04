@@ -654,10 +654,8 @@ void CreateRequest<I>::mirror_image_enable() {
   auto ctx = create_context_callback<
     CreateRequest<I>, &CreateRequest<I>::handle_mirror_image_enable>(this);
 
-  // TODO: in future rbd-mirror will want to enable mirroring
-  // not only in journal mode.
   auto req = mirror::EnableRequest<I>::create(
-    m_io_ctx, m_image_id, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+    m_io_ctx, m_image_id, m_mirror_image_mode,
     m_non_primary_global_image_id, m_op_work_queue, ctx);
   req->send();
 }
