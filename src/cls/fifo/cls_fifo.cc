@@ -8,26 +8,32 @@
  *
  */
 
-#include <errno.h>
+#include <cerrno>
+#include <optional>
+#include <string>
+
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
+#include "include/buffer.h"
+#include "include/types.h"
 
 #include "objclass/objclass.h"
 
 #include "cls/fifo/cls_fifo_ops.h"
 #include "cls/fifo/cls_fifo_types.h"
 
-
-using namespace rados::cls::fifo;
-
-
 CLS_VER(1,0)
 CLS_NAME(fifo)
 
+namespace rados::cls::fifo {
 
-#define CLS_FIFO_MAX_PART_HEADER_SIZE 512
+static constexpr auto CLS_FIFO_MAX_PART_HEADER_SIZE = 512;
 
-static uint32_t part_entry_overhead;
+static std::uint32_t part_entry_overhead;
 
-struct cls_fifo_entry_header_pre {
+struct entry_header_pre {
   __le64 magic;
   __le64 pre_size;
   __le64 header_size;
@@ -36,66 +42,64 @@ struct cls_fifo_entry_header_pre {
   __le32 reserved;
 } __attribute__ ((packed));
 
-struct cls_fifo_entry_header {
+struct entry_header {
   ceph::real_time mtime;
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(mtime, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(mtime, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_entry_header)
+WRITE_CLASS_ENCODER(entry_header)
 
+namespace {
 
-static string new_oid_prefix(string id, std::optional<string>& val)
+std::string new_oid_prefix(std::string id, std::optional<std::string>& val)
 {
+  static constexpr auto PREFIX_RND_SIZE = 12;
   if (val) {
     return *val;
   }
-
-#define PREFIX_RND_SIZE 12
 
   char buf[PREFIX_RND_SIZE + 1];
   buf[PREFIX_RND_SIZE] = 0;
 
   cls_gen_rand_base64(buf, sizeof(buf) - 1);
 
-  char s[id.size() + 1 + sizeof(buf) + 16];
-  snprintf(s, sizeof(s), "%s.%s", id.c_str(), buf);
-  return s;
+  return fmt::format("{}.{}", id, buf);
 }
 
-static int write_header(cls_method_context_t hctx,
-                        fifo_info_t& header,
-                        bool inc_ver = true)
+int write_header(cls_method_context_t hctx,
+		 info& header,
+		 bool inc_ver = true)
 {
-  if (header.objv.instance.empty()) {
-#define HEADER_INSTANCE_SIZE 16
-  char buf[HEADER_INSTANCE_SIZE + 1];
-  buf[HEADER_INSTANCE_SIZE] = 0;
-  cls_gen_rand_base64(buf, sizeof(buf) - 1);
-
-    header.objv.instance = buf;
+  static constexpr auto HEADER_INSTANCE_SIZE = 16;
+  if (header.version.instance.empty()) {
+    char buf[HEADER_INSTANCE_SIZE + 1];
+    buf[HEADER_INSTANCE_SIZE] = 0;
+    cls_gen_rand_base64(buf, sizeof(buf) - 1);
+    header.version.instance = buf;
   }
   if (inc_ver) {
-    ++header.objv.ver;
+    ++header.version.ver;
   }
-  bufferlist bl;
+  ceph::buffer::list bl;
   encode(header, bl);
   return cls_cxx_write_full(hctx, &bl);
 }
 
-static int read_part_header(cls_method_context_t hctx,
-                            fifo_part_header_t *part_header)
+int read_part_header(cls_method_context_t hctx,
+		     part_header* part_header)
 {
-  bufferlist bl;
-  int r = cls_cxx_read2(hctx, 0, CLS_FIFO_MAX_PART_HEADER_SIZE, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+  ceph::buffer::list bl;
+  int r = cls_cxx_read2(hctx, 0, CLS_FIFO_MAX_PART_HEADER_SIZE, &bl,
+			CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
     return r;
@@ -104,34 +108,40 @@ static int read_part_header(cls_method_context_t hctx,
   auto iter = bl.cbegin();
   try {
     decode(*part_header, iter);
-  } catch (buffer::error& err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_ERR("ERROR: %s(): failed decoding part header", __func__);
     return -EIO;
   }
 
-  CLS_LOG(20, "%s():%d read part_header:\n"
-           "\ttag=%s\n"
-           "\tmagic=0x%llx\n"
-           "\tmin_ofs=%lld\n"
-           "\tmax_ofs=%lld\n"
-           "\tmin_index=%lld\n"
-           "\tmax_index=%lld\n",
-           __func__, __LINE__,
-           part_header->tag.c_str(), 
-           (long long)part_header->magic,
-           (long long)part_header->min_ofs,
-           (long long)part_header->max_ofs,
-           (long long)part_header->min_index,
-           (long long)part_header->max_index);
+  using ceph::operator <<;
+  std::ostringstream ss;
+  ss << part_header->max_time;
+  CLS_LOG(10, "%s():%d read part_header:\n"
+	  "\ttag=%s\n"
+	  "\tmagic=0x%" PRIx64 "\n"
+	  "\tmin_ofs=%" PRId64 "\n"
+	  "\tlast_ofs=%" PRId64 "\n"
+	  "\tnext_ofs=%" PRId64 "\n"
+	  "\tmin_index=%" PRId64 "\n"
+	  "\tmax_index=%" PRId64 "\n"
+	  "\tmax_time=%s\n",
+	  __func__, __LINE__,
+	  part_header->tag.c_str(),
+	  part_header->magic,
+	  part_header->min_ofs,
+	  part_header->last_ofs,
+	  part_header->next_ofs,
+	  part_header->min_index,
+	  part_header->max_index,
+	  ss.str().c_str());
 
   return 0;
-
 }
 
-static int write_part_header(cls_method_context_t hctx,
-                             fifo_part_header_t& part_header)
+int write_part_header(cls_method_context_t hctx,
+		      part_header& part_header)
 {
-  bufferlist bl;
+  ceph::buffer::list bl;
   encode(part_header, bl);
 
   if (bl.length() > CLS_FIFO_MAX_PART_HEADER_SIZE) {
@@ -140,7 +150,7 @@ static int write_part_header(cls_method_context_t hctx,
   }
 
   int r = cls_cxx_write2(hctx, 0, bl.length(),
-                     &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+			 &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to write part header: r=%d",
             __func__, r);
@@ -150,11 +160,11 @@ static int write_part_header(cls_method_context_t hctx,
   return 0;
 }
 
-static int read_header(cls_method_context_t hctx,
-                       std::optional<fifo_objv_t> objv,
-                       fifo_info_t *info)
+int read_header(cls_method_context_t hctx,
+		std::optional<objv> objv,
+		info* info)
 {
-  uint64_t size;
+  std::uint64_t size;
 
   int r = cls_cxx_stat2(hctx, &size, nullptr);
   if (r < 0) {
@@ -162,47 +172,64 @@ static int read_header(cls_method_context_t hctx,
     return r;
   }
 
-  bufferlist bl;
+  ceph::buffer::list bl;
   r = cls_cxx_read2(hctx, 0, size, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
     return r;
   }
 
+  if (r == 0) {
+    CLS_ERR("ERROR: %s(): Zero length object, returning ENODATA", __func__);
+    return -ENODATA;
+  }
+
   try {
     auto iter = bl.cbegin();
     decode(*info, iter);
-  } catch (buffer::error& err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_ERR("ERROR: %s(): failed decoding header", __func__);
     return -EIO;
   }
 
-  if (objv &&
-      !(info->objv == *objv)) {
-    string s1 = info->objv.to_str();
-    string s2 = objv->to_str();
-    CLS_LOG(10, "%s(): version mismatch (header=%s, req=%s), cancelled operation", __func__, s1.c_str(), s2.c_str());
+  if (objv && !(info->version== *objv)) {
+    auto s1 = info->version.to_str();
+    auto s2 = objv->to_str();
+    CLS_LOG(10, "%s(): version mismatch (header=%s, req=%s), canceled operation",
+	    __func__, s1.c_str(), s2.c_str());
     return -ECANCELED;
   }
 
   return 0;
 }
 
-static int fifo_meta_create_op(cls_method_context_t hctx,
-                          bufferlist *in, bufferlist *out)
+int create_meta(cls_method_context_t hctx,
+		ceph::buffer::list* in, ceph::buffer::list* out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_meta_create_op op;
+  op::create_meta op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
 
-  uint64_t size;
+  if (op.id.empty()) {
+    CLS_LOG(10, "%s(): ID cannot be empty", __func__);
+    return -EINVAL;
+  }
+
+  if (op.max_part_size == 0 ||
+      op.max_entry_size == 0 ||
+      op.max_entry_size > op.max_part_size) {
+    CLS_ERR("ERROR: %s(): invalid dimensions.", __func__);
+    return -EINVAL;
+  }
+
+  std::uint64_t size;
 
   int r = cls_cxx_stat2(hctx, &size, nullptr);
   if (r < 0 && r != -ENOENT) {
@@ -215,18 +242,18 @@ static int fifo_meta_create_op(cls_method_context_t hctx,
   }
 
   if (r == 0) {
-    bufferlist bl;
+    ceph::buffer::list bl;
     r = cls_cxx_read2(hctx, 0, size, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
       CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
       return r;
     }
 
-    fifo_info_t header;
+    info header;
     try {
       auto iter = bl.cbegin();
       decode(header, iter);
-    } catch (buffer::error& err) {
+    } catch (const ceph::buffer::error& err) {
       CLS_ERR("ERROR: %s(): failed decoding header", __func__);
       return -EIO;
     }
@@ -234,32 +261,33 @@ static int fifo_meta_create_op(cls_method_context_t hctx,
     if (!(header.id == op.id &&
           (!op.oid_prefix ||
            header.oid_prefix == *op.oid_prefix) &&
-          (!op.objv ||
-           header.objv == *op.objv))) {
-      CLS_LOG(10, "%s(): failed to re-create existing queue with different params", __func__);
+          (!op.version ||
+           header.version == *op.version))) {
+      CLS_LOG(10, "%s(): failed to re-create existing queue "
+	      "with different params", __func__);
       return -EEXIST;
     }
 
     return 0; /* already exists */
   }
-  fifo_info_t header;
-  
+  info header;
+
   header.id = op.id;
-  if (op.objv) {
-    header.objv = *op.objv;
+  if (op.version) {
+    header.version = *op.version;
   } else {
-#define DEFAULT_INSTANCE_SIZE 16
+    static constexpr auto DEFAULT_INSTANCE_SIZE = 16;
     char buf[DEFAULT_INSTANCE_SIZE + 1];
     cls_gen_rand_base64(buf, sizeof(buf));
     buf[DEFAULT_INSTANCE_SIZE] = '\0';
-    header.objv.instance = buf;
-    header.objv.ver = 1;
+    header.version.instance = buf;
+    header.version.ver = 1;
   }
   header.oid_prefix = new_oid_prefix(op.id, op.oid_prefix);
 
-  header.data_params.max_part_size = op.max_part_size;
-  header.data_params.max_entry_size = op.max_entry_size;
-  header.data_params.full_size_threshold = op.max_part_size - op.max_entry_size - part_entry_overhead;
+  header.params.max_part_size = op.max_part_size;
+  header.params.max_entry_size = op.max_entry_size;
+  header.params.full_size_threshold = op.max_part_size - op.max_entry_size - part_entry_overhead;
 
   r = write_header(hctx, header, false);
   if (r < 0) {
@@ -270,39 +298,44 @@ static int fifo_meta_create_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_meta_update_op(cls_method_context_t hctx,
-                                bufferlist *in, bufferlist *out)
+int update_meta(cls_method_context_t hctx, ceph::buffer::list* in,
+		ceph::buffer::list* out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_meta_update_op op;
+  op::update_meta op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
 
-  fifo_info_t header;
+  if (op.version.empty()) {
+    CLS_LOG(10, "%s(): no version supplied", __func__);
+    return -EINVAL;
+  }
 
-  int r = read_header(hctx, op.objv, &header);
+  info header;
+
+  int r = read_header(hctx, op.version, &header);
   if (r < 0) {
     return r;
   }
 
-  string err;
-
-  r = header.apply_update(op.tail_part_num,
-                          op.head_part_num,
-                          op.min_push_part_num,
-                          op.max_push_part_num,
-                          op.journal_entries_add,
-                          op.journal_entries_rm,
-                          &err);
-  if (r < 0) {
-    CLS_LOG(10, "%s(): %s", __func__, err.c_str());
-    return r;
+  auto err = header.apply_update(fifo::update()
+				 .tail_part_num(op.tail_part_num)
+				 .head_part_num(op.head_part_num)
+				 .min_push_part_num(op.min_push_part_num)
+				 .max_push_part_num(op.max_push_part_num)
+				 .journal_entries_add(
+				   std::move(op.journal_entries_add))
+				 .journal_entries_rm(
+				   std::move(op.journal_entries_rm)));
+  if (err) {
+    CLS_LOG(10, "%s(): %s", __func__, err->c_str());
+    return -EINVAL;
   }
 
   r = write_header(hctx, header);
@@ -314,22 +347,22 @@ static int fifo_meta_update_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_meta_get_op(cls_method_context_t hctx,
-                          bufferlist *in, bufferlist *out)
+int get_meta(cls_method_context_t hctx, ceph::buffer::list* in,
+	     ceph::buffer::list* out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_meta_get_op op;
+  op::get_meta op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
 
-  cls_fifo_meta_get_op_reply reply;
-  int r = read_header(hctx, op.objv, &reply.info);
+  op::get_meta_reply reply;
+  int r = read_header(hctx, op.version, &reply.info);
   if (r < 0) {
     return r;
   }
@@ -342,21 +375,26 @@ static int fifo_meta_get_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_part_init_op(cls_method_context_t hctx,
-                             bufferlist *in, bufferlist *out)
+int init_part(cls_method_context_t hctx, ceph::buffer::list* in,
+	      ceph::buffer::list *out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_part_init_op op;
+  op::init_part op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
 
-  uint64_t size;
+  std::uint64_t size;
+
+  if (op.tag.empty()) {
+    CLS_LOG(10, "%s(): tag required", __func__);
+    return -EINVAL;
+  }
 
   int r = cls_cxx_stat2(hctx, &size, nullptr);
   if (r < 0 && r != -ENOENT) {
@@ -364,7 +402,7 @@ static int fifo_part_init_op(cls_method_context_t hctx,
     return r;
   }
   if (r == 0 && size > 0) {
-    fifo_part_header_t part_header;
+    part_header part_header;
     r = read_part_header(hctx, &part_header);
     if (r < 0) {
       CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -372,23 +410,27 @@ static int fifo_part_init_op(cls_method_context_t hctx,
     }
 
     if (!(part_header.tag == op.tag &&
-          part_header.params == op.data_params)) {
-      CLS_LOG(10, "%s(): failed to re-create existing part with different params", __func__);
+          part_header.params == op.params)) {
+      CLS_LOG(10, "%s(): failed to re-create existing part with different "
+	      "params", __func__);
       return -EEXIST;
     }
 
     return 0; /* already exists */
   }
 
-  fifo_part_header_t part_header;
-  
+  part_header part_header;
+
   part_header.tag = op.tag;
-  part_header.params = op.data_params;
+  part_header.params = op.params;
 
   part_header.min_ofs = CLS_FIFO_MAX_PART_HEADER_SIZE;
-  part_header.max_ofs = part_header.min_ofs;
+  part_header.last_ofs = 0;
+  part_header.next_ofs = part_header.min_ofs;
+  part_header.max_time = ceph::real_clock::now();
 
-  cls_gen_random_bytes((char *)&part_header.magic, sizeof(part_header.magic));
+  cls_gen_random_bytes(reinterpret_cast<char *>(&part_header.magic),
+		       sizeof(part_header.magic));
 
   r = write_part_header(hctx, part_header);
   if (r < 0) {
@@ -399,26 +441,31 @@ static int fifo_part_init_op(cls_method_context_t hctx,
   return 0;
 }
 
-static bool full_part(const fifo_part_header_t& part_header)
+bool full_part(const part_header& part_header)
 {
-  return (part_header.max_ofs > part_header.params.full_size_threshold);
+  return (part_header.next_ofs > part_header.params.full_size_threshold);
 }
 
-static int fifo_part_push_op(cls_method_context_t hctx,
-                             bufferlist *in, bufferlist *out)
+int push_part(cls_method_context_t hctx, ceph::buffer::list* in,
+	      ceph::buffer::list* out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_part_push_op op;
+  op::push_part op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
 
-  fifo_part_header_t part_header;
+  if (op.tag.empty()) {
+    CLS_LOG(10, "%s(): tag required", __func__);
+    return -EINVAL;
+  }
+
+  part_header part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -430,9 +477,10 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  uint64_t effective_len = op.total_len + op.data_bufs.size() * part_entry_overhead;
+  std::uint64_t effective_len = op.total_len + op.data_bufs.size() *
+    part_entry_overhead;
 
-  if (effective_len > part_header.params.max_entry_size + part_entry_overhead) {
+  if (effective_len > part_header.params.max_part_size) {
     return -EINVAL;
   }
 
@@ -440,57 +488,69 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return -ERANGE;
   }
 
-  struct cls_fifo_entry_header entry_header;
-  entry_header.mtime = real_clock::now();
-
-  bufferlist entry_header_bl;
+  auto now = ceph::real_clock::now();
+  struct entry_header entry_header = { now };
+  ceph::buffer::list entry_header_bl;
   encode(entry_header, entry_header_bl);
 
   auto max_index = part_header.max_index;
-  auto ofs = part_header.max_ofs;
+  const auto write_ofs = part_header.next_ofs;
+  auto ofs = part_header.next_ofs;
 
-  cls_fifo_entry_header_pre pre_header;
+  entry_header_pre pre_header;
   pre_header.magic = part_header.magic;
   pre_header.pre_size = sizeof(pre_header);
   pre_header.reserved = 0;
 
-  uint64_t total_data = 0;
-
+  std::uint64_t total_data = 0;
   for (auto& data : op.data_bufs) {
     total_data += data.length();
+  }
+  if (total_data != op.total_len) {
+    CLS_LOG(10, "%s(): length mismatch: op.total_len=%" PRId64
+	    " total data received=%" PRId64,
+            __func__, op.total_len, total_data);
+    return -EINVAL;
+  }
+
+
+  int entries_pushed = 0;
+  ceph::buffer::list all_data;
+  for (auto& data : op.data_bufs) {
+    if (full_part(part_header))
+      break;
 
     pre_header.header_size = entry_header_bl.length();
     pre_header.data_size = data.length();
     pre_header.index = max_index;
 
-    bufferptr pre((char *)&pre_header, sizeof(pre_header));
-    bufferlist all_data;
+    bufferptr pre(reinterpret_cast<char*>(&pre_header), sizeof(pre_header));
+    auto entry_write_len = pre.length() + entry_header_bl.length() + data.length();
     all_data.append(pre);
     all_data.append(entry_header_bl);
     all_data.claim_append(data);
 
-    auto write_len = all_data.length();
-
-    r = cls_cxx_write2(hctx, ofs, write_len,
-                       &all_data, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
-    if (r < 0) {
-      CLS_LOG(10, "%s(): failed to write entry (ofs=%lld len=%lld): r=%d",
-              __func__, (long long)part_header.max_ofs, (long long)write_len, r);
-      return r;
-    }
-
-    ofs += write_len;
+    part_header.last_ofs = ofs;
+    ofs += entry_write_len;
     ++max_index;
+    ++entries_pushed;
+    part_header.max_index = max_index;
+    part_header.next_ofs = ofs;
+  }
+  part_header.max_time = now;
+
+  auto write_len = all_data.length();
+
+  r = cls_cxx_write2(hctx, write_ofs, write_len,
+		     &all_data, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+
+  if (r < 0) {
+    CLS_LOG(10,"%s(): failed to write entries (ofs=%" PRIu64
+	    " len=%u): r=%d", __func__, write_ofs,
+	    write_len, r);
+    return r;
   }
 
-  if (total_data != op.total_len) {
-    CLS_LOG(10, "%s(): length mismatch: op.total_len=%lld total data received=%lld",
-            __func__, (long long)op.total_len, (long long)total_data);
-    return -EINVAL;
-  }
-
-  part_header.max_index = max_index;
-  part_header.max_ofs = ofs;
 
   r = write_part_header(hctx, part_header);
   if (r < 0) {
@@ -498,56 +558,60 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return r;
   }
 
-  return 0;
+  if (entries_pushed == 0) {
+    CLS_LOG(0, "%s(): pushed no entries? Can't happen!", __func__);
+    return -EFAULT;
+  }
+
+  return entries_pushed;
 }
 
 class EntryReader {
-  static constexpr uint64_t prefetch_len = (128 * 1024);
+  static constexpr std::uint64_t prefetch_len = (128 * 1024);
 
   cls_method_context_t hctx;
 
-  fifo_part_header_t& part_header;
+  const fifo::part_header& part_header;
 
-  uint64_t ofs;
-  bufferlist data;
+  std::uint64_t ofs;
+  ceph::buffer::list data;
 
-  int fetch(uint64_t num_bytes);
-  int read(uint64_t num_bytes, bufferlist *pbl);
-  int peek(uint64_t num_bytes, char *dest);
-  int seek(uint64_t num_bytes);
+  int fetch(std::uint64_t num_bytes);
+  int read(std::uint64_t num_bytes, ceph::buffer::list* pbl);
+  int peek(std::uint64_t num_bytes, char *dest);
+  int seek(std::uint64_t num_bytes);
 
 public:
-  EntryReader(cls_method_context_t _hctx,
-              fifo_part_header_t& _part_header,
-              uint64_t _ofs) : hctx(_hctx),
-                               part_header(_part_header),
-                               ofs(_ofs) {
-    if (ofs < part_header.min_ofs) {
-      ofs = part_header.min_ofs;
-    }
-  }
+  EntryReader(cls_method_context_t hctx,
+              const fifo::part_header& part_header,
+              uint64_t ofs) : hctx(hctx),
+			      part_header(part_header),
+			      ofs(ofs < part_header.min_ofs ?
+				  part_header.min_ofs :
+				  ofs) {}
 
-  uint64_t get_ofs() const {
+  std::uint64_t get_ofs() const {
     return ofs;
   }
 
   bool end() const {
-    return (ofs >= part_header.max_ofs);
+    return (ofs >= part_header.next_ofs);
   }
 
-  int peek_pre_header(cls_fifo_entry_header_pre *pre_header);
-  int get_next_entry(bufferlist *pbl,
-                     uint64_t *pofs,
-                     ceph::real_time *pmtime);
+  int peek_pre_header(entry_header_pre* pre_header);
+  int get_next_entry(ceph::buffer::list* pbl,
+                     std::uint64_t* pofs,
+                     ceph::real_time* pmtime);
 };
 
 
-int EntryReader::fetch(uint64_t num_bytes)
+int EntryReader::fetch(std::uint64_t num_bytes)
 {
-  CLS_LOG(20, "%s(): fetch %d bytes, ofs=%d data.length()=%d", __func__, (int)num_bytes, (int)ofs, (int)data.length());
+  CLS_LOG(10, "%s(): fetch %d bytes, ofs=%d data.length()=%d", __func__, (int)num_bytes, (int)ofs, (int)data.length());
   if (data.length() < num_bytes) {
-    bufferlist bl;
-    CLS_LOG(20, "%s(): reading %d bytes at ofs=%d", __func__, (int)prefetch_len, (int)ofs + data.length());
+    ceph::buffer::list bl;
+    CLS_LOG(10, "%s(): reading % " PRId64 " bytes at ofs=%" PRId64, __func__,
+	    prefetch_len, ofs + data.length());
     int r = cls_cxx_read2(hctx, ofs + data.length(), prefetch_len, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
       CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
@@ -556,15 +620,16 @@ int EntryReader::fetch(uint64_t num_bytes)
     data.claim_append(bl);
   }
 
-  if ((unsigned)num_bytes > data.length()) {
-    CLS_LOG(20, "%s(): requested %lld bytes, but only %lld were available", __func__, (long long)num_bytes, (long long)data.length());
+  if (static_cast<unsigned>(num_bytes) > data.length()) {
+    CLS_LOG(10, "%s(): requested %" PRId64 " bytes, but only "
+	    "%u were available", __func__, num_bytes, data.length());
     return -ERANGE;
   }
 
   return 0;
 }
 
-int EntryReader::read(uint64_t num_bytes, bufferlist *pbl)
+int EntryReader::read(std::uint64_t num_bytes, ceph::buffer::list* pbl)
 {
   int r = fetch(num_bytes);
   if (r < 0) {
@@ -577,7 +642,7 @@ int EntryReader::read(uint64_t num_bytes, bufferlist *pbl)
   return 0;
 }
 
-int EntryReader::peek(uint64_t num_bytes, char *dest)
+int EntryReader::peek(std::uint64_t num_bytes, char* dest)
 {
   int r = fetch(num_bytes);
   if (r < 0) {
@@ -589,23 +654,25 @@ int EntryReader::peek(uint64_t num_bytes, char *dest)
   return 0;
 }
 
-int EntryReader::seek(uint64_t num_bytes)
+int EntryReader::seek(std::uint64_t num_bytes)
 {
-  bufferlist bl;
+  ceph::buffer::list bl;
 
-  CLS_LOG(20, "%s():%d: num_bytes=%d", __func__, __LINE__, (int)num_bytes);
+  CLS_LOG(10, "%s():%d: num_bytes=%" PRIu64, __func__, __LINE__, num_bytes);
   return read(num_bytes, &bl);
 }
 
-int EntryReader::peek_pre_header(cls_fifo_entry_header_pre *pre_header)
+int EntryReader::peek_pre_header(entry_header_pre* pre_header)
 {
   if (end()) {
     return -ENOENT;
   }
 
-  int r = peek(sizeof(*pre_header), (char *)pre_header);
+  int r = peek(sizeof(*pre_header),
+	       reinterpret_cast<char*>(pre_header));
   if (r < 0) {
-    CLS_ERR("ERROR: %s(): peek() size=%d failed: r=%d", __func__, (int)sizeof(pre_header), r);
+    CLS_ERR("ERROR: %s(): peek() size=%zu failed: r=%d", __func__,
+	    sizeof(pre_header), r);
     return r;
   }
 
@@ -618,11 +685,11 @@ int EntryReader::peek_pre_header(cls_fifo_entry_header_pre *pre_header)
 }
 
 
-int EntryReader::get_next_entry(bufferlist *pbl,
-                                uint64_t *pofs,
-                                ceph::real_time *pmtime)
+int EntryReader::get_next_entry(ceph::buffer::list* pbl,
+                                std::uint64_t* pofs,
+                                ceph::real_time* pmtime)
 {
-  cls_fifo_entry_header_pre pre_header;
+  entry_header_pre pre_header;
   int r = peek_pre_header(&pre_header);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): peek_pre_header() failed: r=%d", __func__, r);
@@ -633,26 +700,27 @@ int EntryReader::get_next_entry(bufferlist *pbl,
     *pofs = ofs;
   }
 
-  CLS_LOG(20, "%s():%d: pre_header.pre_size=%d", __func__, __LINE__, (int)pre_header.pre_size);
+  CLS_LOG(10, "%s():%d: pre_header.pre_size=%llu", __func__, __LINE__,
+	  pre_header.pre_size);
   r = seek(pre_header.pre_size);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): failed to seek: r=%d", __func__, r);
     return r;
   }
 
-  bufferlist header;
-  CLS_LOG(20, "%s():%d: pre_header.header_size=%d", __func__, __LINE__, (int)pre_header.header_size);
+  ceph::buffer::list header;
+  CLS_LOG(10, "%s():%d: pre_header.header_size=%d", __func__, __LINE__, (int)pre_header.header_size);
   r = read(pre_header.header_size, &header);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): failed to read entry header: r=%d", __func__, r);
     return r;
   }
 
-  cls_fifo_entry_header entry_header;
+  entry_header entry_header;
   auto iter = header.cbegin();
   try {
     decode(entry_header, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_ERR("%s(): failed decoding entry header", __func__);
     return -EIO;
   }
@@ -678,21 +746,21 @@ int EntryReader::get_next_entry(bufferlist *pbl,
   return 0;
 }
 
-static int fifo_part_trim_op(cls_method_context_t hctx,
-                             bufferlist *in, bufferlist *out)
+int trim_part(cls_method_context_t hctx,
+	      ceph::buffer::list *in, ceph::buffer::list *out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_part_trim_op op;
+  op::trim_part op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
 
-  fifo_part_header_t part_header;
+  part_header part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -709,7 +777,7 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
     return 0;
   }
 
-  if (op.ofs >= part_header.max_ofs) {
+  if (op.ofs >= part_header.next_ofs) {
     if (full_part(part_header)) {
       /*
        * trim full part completely: remove object
@@ -718,18 +786,18 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
       r = cls_cxx_remove(hctx);
       if (r < 0) {
         CLS_LOG(0, "%s(): ERROR: cls_cxx_remove() returned r=%d", __func__, r);
-        return r;
+	return r;
       }
 
       return 0;
     }
-    
-    part_header.min_ofs = part_header.max_ofs;
+
+    part_header.min_ofs = part_header.next_ofs;
     part_header.min_index = part_header.max_index;
   } else {
     EntryReader reader(hctx, part_header, op.ofs);
 
-    cls_fifo_entry_header_pre pre_header;
+    entry_header_pre pre_header;
     int r = reader.peek_pre_header(&pre_header);
     if (r < 0) {
       return r;
@@ -737,7 +805,8 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
 
     r = reader.get_next_entry(nullptr, nullptr, nullptr);
     if (r < 0) {
-      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d", __func__, r);
+      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d",
+	      __func__, r);
       return r;
     }
 
@@ -754,12 +823,12 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_part_list_op(cls_method_context_t hctx,
-                             bufferlist *in, bufferlist *out)
+int list_part(cls_method_context_t hctx, ceph::buffer::list* in,
+	      ceph::buffer::list* out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_part_list_op op;
+  op::list_part op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -768,7 +837,7 @@ static int fifo_part_list_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  fifo_part_header_t part_header;
+  part_header part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -792,22 +861,21 @@ static int fifo_part_list_op(cls_method_context_t hctx,
     }
   }
 
-  cls_fifo_part_list_op_reply reply;
+  op::list_part_reply reply;
 
   reply.tag = part_header.tag;
 
-#define LIST_MAX_ENTRIES 512
-
-  auto max_entries = std::min(op.max_entries, (int)LIST_MAX_ENTRIES);
+  auto max_entries = std::min(op.max_entries, op::MAX_LIST_ENTRIES);
 
   for (int i = 0; i < max_entries && !reader.end(); ++i) {
-    bufferlist data;
+    ceph::buffer::list data;
     ceph::real_time mtime;
-    uint64_t ofs;
+    std::uint64_t ofs;
 
     r = reader.get_next_entry(&data, &ofs, &mtime);
     if (r < 0) {
-      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d", __func__, r);
+      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d",
+	      __func__, r);
       return r;
     }
 
@@ -822,21 +890,21 @@ static int fifo_part_list_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_part_get_info_op(cls_method_context_t hctx,
-                                 bufferlist *in, bufferlist *out)
+int get_part_info(cls_method_context_t hctx, ceph::buffer::list *in,
+		  ceph::buffer::list *out)
 {
-  CLS_LOG(20, "%s", __func__);
+  CLS_LOG(10, "%s", __func__);
 
-  cls_fifo_part_get_info_op op;
+  op::get_part_info op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
 
-  cls_fifo_part_get_info_op_reply reply;
+  op::get_part_info_reply reply;
 
   int r = read_part_header(hctx, &reply.header);
   if (r < 0) {
@@ -848,60 +916,63 @@ static int fifo_part_get_info_op(cls_method_context_t hctx,
 
   return 0;
 }
+}
+} // namespace rados::cls::fifo
 
 CLS_INIT(fifo)
 {
-  CLS_LOG(20, "Loaded fifo class!");
+  using namespace rados::cls::fifo;
+  CLS_LOG(10, "Loaded fifo class!");
 
   cls_handle_t h_class;
-  cls_method_handle_t h_fifo_meta_create_op;
-  cls_method_handle_t h_fifo_meta_get_op;
-  cls_method_handle_t h_fifo_meta_update_op;
-  cls_method_handle_t h_fifo_part_init_op;
-  cls_method_handle_t h_fifo_part_push_op;
-  cls_method_handle_t h_fifo_part_trim_op;
-  cls_method_handle_t h_fifo_part_list_op;
-  cls_method_handle_t h_fifo_part_get_info_op;
+  cls_method_handle_t h_create_meta;
+  cls_method_handle_t h_get_meta;
+  cls_method_handle_t h_update_meta;
+  cls_method_handle_t h_init_part;
+  cls_method_handle_t h_push_part;
+  cls_method_handle_t h_trim_part;
+  cls_method_handle_t h_list_part;
+  cls_method_handle_t h_get_part_info;
 
-  cls_register("fifo", &h_class);
-  cls_register_cxx_method(h_class, "fifo_meta_create",
+  cls_register(op::CLASS, &h_class);
+  cls_register_cxx_method(h_class, op::CREATE_META,
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_meta_create_op, &h_fifo_meta_create_op);
+                          create_meta, &h_create_meta);
 
-  cls_register_cxx_method(h_class, "fifo_meta_get",
+  cls_register_cxx_method(h_class, op::GET_META,
                           CLS_METHOD_RD,
-                          fifo_meta_get_op, &h_fifo_meta_get_op);
+                          get_meta, &h_get_meta);
 
-  cls_register_cxx_method(h_class, "fifo_meta_update",
+  cls_register_cxx_method(h_class, op::UPDATE_META,
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_meta_update_op, &h_fifo_meta_update_op);
+                          update_meta, &h_update_meta);
 
-  cls_register_cxx_method(h_class, "fifo_part_init",
+  cls_register_cxx_method(h_class, op::INIT_PART,
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_part_init_op, &h_fifo_part_init_op);
+                          init_part, &h_init_part);
 
-  cls_register_cxx_method(h_class, "fifo_part_push",
+  cls_register_cxx_method(h_class, op::PUSH_PART,
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_part_push_op, &h_fifo_part_push_op);
+                          push_part, &h_push_part);
 
-  cls_register_cxx_method(h_class, "fifo_part_trim",
+  cls_register_cxx_method(h_class, op::TRIM_PART,
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_part_trim_op, &h_fifo_part_trim_op);
+                          trim_part, &h_trim_part);
 
-  cls_register_cxx_method(h_class, "fifo_part_list",
+  cls_register_cxx_method(h_class, op::LIST_PART,
                           CLS_METHOD_RD,
-                          fifo_part_list_op, &h_fifo_part_list_op);
+                          list_part, &h_list_part);
 
-  cls_register_cxx_method(h_class, "fifo_part_get_info",
+  cls_register_cxx_method(h_class, op::GET_PART_INFO,
                           CLS_METHOD_RD,
-                          fifo_part_get_info_op, &h_fifo_part_get_info_op);
+                          get_part_info, &h_get_part_info);
 
   /* calculate entry overhead */
-  struct cls_fifo_entry_header entry_header;
-  bufferlist entry_header_bl;
+  struct entry_header entry_header;
+  ceph::buffer::list entry_header_bl;
   encode(entry_header, entry_header_bl);
 
-  part_entry_overhead = sizeof(cls_fifo_entry_header_pre) + entry_header_bl.length();
+  part_entry_overhead = sizeof(entry_header_pre) + entry_header_bl.length();
 
   return;
 }
