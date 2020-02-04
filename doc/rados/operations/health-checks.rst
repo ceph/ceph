@@ -530,6 +530,28 @@ are correctly installed and that the OSD daemon(s) have been
 restarted.  If the problem persists, check the OSD log for any clues
 as to the source of the problem.
 
+BLUESTORE_SPURIOUS_READ_ERRORS
+______________________________
+
+One or more OSDs using BlueStore detects spurious read errors at main device.
+BlueStore has recovered from these errors by retrying disk reads.
+Though this might show some issues with underlying hardware, I/O subsystem,
+etc.
+Which theoretically might cause permanent data corruption.
+Some observations on the root cause can be found at 
+https://tracker.ceph.com/issues/22464
+
+This alert doesn't require immediate response but corresponding host might need
+additional attention, e.g. upgrading to the latest OS/kernel versions and
+H/W resource utilization monitoring.
+
+This warning can be disabled on all OSDs with::
+
+  ceph config set osd bluestore_warn_on_spurious_read_errors false
+
+Alternatively, it can be disabled on a specific OSD with::
+
+  ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
 
 
 Device health
