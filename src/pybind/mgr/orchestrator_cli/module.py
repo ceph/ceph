@@ -606,6 +606,24 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
+        'orchestrator mgr add',
+        "name=num,type=CephInt,req=false "
+        "name=hosts,type=CephString,n=N,req=false "
+        "name=label,type=CephString,req=false",
+        'Add manager instance(s)')
+    def _add_mgrs(self, num=1, hosts=[], label=None):
+
+        placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
+        placement.validate()
+
+        spec = orchestrator.StatefulServiceSpec(placement=placement)
+
+        completion = self.add_mgrs(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
         'orchestrator mgr update',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false "
@@ -619,6 +637,16 @@ Usage:
         spec = orchestrator.StatefulServiceSpec(placement=placement)
 
         completion = self.update_mgrs(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
+        'orchestrator mgr rm',
+        "name=svc_id,type=CephString",
+        'Remove a manager')
+    def _mgr_rm(self, svc_id):
+        completion = self.remove_mgr(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
