@@ -1753,6 +1753,45 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return self._create_daemon('mgr', name, host, keyring=keyring)
 
+    def add_mgrs(self, spec):
+        if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:
+            raise RuntimeError("must specify at least %d hosts" % spec.placement.count)
+        return self._get_services('mgr').then(lambda ds: self._add_mgr(ds, spec))
+
+    def _add_mgr(self, daemons, spec):
+        args = []
+        num_added = 0
+        for host, _, name in spec.placement.hosts:
+            if num_added >= spec.count:
+                break
+            mgr_id = self.get_unique_name(host, daemons)
+            self.log.debug('placing mgr.%s on host %s' % (mgr_id, host))
+            args.append((host, mgr_id))
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.ServiceDescription()
+            sd.service_instance = mgr_id
+            sd.service_type = 'mgr'
+            sd.nodename = host
+            daemons.append(sd)
+            num_added += 1
+        return self._create_mgr(args)
+
+    def remove_mgr(self, name):
+        self.log.debug("Attempting to remove mgr: {}".format(name))
+
+        def _remove_mgr(daemons):
+            args = []
+            for d in daemons:
+                if d.service_instance == name:
+                    args.append(
+                        ('%s.%s' % (d.service_type, d.service_instance),
+                         d.nodename)
+                    )
+            if not args:
+                raise OrchestratorError('Unable to find mgr.%s daemon(s)' % name)
+            return self._remove_daemon(args)
+        return self._get_services('mgr').then(_remove_mgr)
+
     @with_services('mgr')
     def update_mgrs(self, spec, services):
         # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
