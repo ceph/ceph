@@ -302,7 +302,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
 
-  SnapInfo snap_info = {"snap", cls::rbd::MirrorPrimarySnapshotNamespace{}, 0,
+  SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
   expect_rollback(mock_image_ctx, 123, &snap_info, 0);
   MockCreatePrimaryRequest mock_create_primary_request;

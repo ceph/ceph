@@ -127,7 +127,7 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
 
     for (auto &[snap_id, snap_info] : m_image_ctx->snap_info) {
       auto type = cls::rbd::get_snap_namespace_type(snap_info.snap_namespace);
-      if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY ||
+      if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR ||
           type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY) {
         continue;
       }

@@ -258,7 +258,7 @@ Context *SnapshotCreateRequest<I>::send_create_image_state() {
   I &image_ctx = this->m_image_ctx;
   auto type = cls::rbd::get_snap_namespace_type(m_snap_namespace);
 
-  if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY) {
+  if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
     update_snap_context();
     image_ctx.io_work_queue->unblock_writes();
     return this->create_context_finisher(0);

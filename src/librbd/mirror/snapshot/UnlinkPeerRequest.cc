@@ -69,7 +69,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
     return;
   }
 
-  auto info = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+  auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
     &snap_info->snap_namespace);
   if (info == nullptr) {
     lderr(cct) << "not mirror primary snapshot (snap_id=" << m_snap_id << ")"
@@ -169,7 +169,7 @@ void UnlinkPeerRequest<I>::remove_snapshot() {
     return;
   }
 
-  auto info = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+  auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
     &snap_namespace);
   ceph_assert(info);
 

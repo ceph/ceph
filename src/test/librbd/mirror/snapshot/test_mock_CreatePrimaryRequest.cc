@@ -175,7 +175,7 @@ public:
                            auto it = mock_image_ctx.snap_info.find(snap_id);
                            ASSERT_NE(it, mock_image_ctx.snap_info.end());
                            auto info =
-                             boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+                             boost::get<cls::rbd::MirrorSnapshotNamespace>(
                                &it->second.snap_namespace);
                            ASSERT_NE(nullptr, info);
                            ASSERT_NE(0, info->mirror_peer_uuids.erase(
@@ -294,7 +294,8 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPeer) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
   for (int i = 0; i < 3; i++) {
-    cls::rbd::MirrorPrimarySnapshotNamespace ns{false, {"uuid"}};
+    cls::rbd::MirrorSnapshotNamespace ns{
+      cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"uuid"}, "", CEPH_NOSNAP};
     snap_create(mock_image_ctx, ns, "mirror_snap");
   }
 
