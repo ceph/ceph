@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,698 +7,682 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
+#include <cerrno>
 #include <iostream>
-#include <errno.h>
+#include <string_view>
 
+#include <boost/asio.hpp>
+#include <boost/system/error_code.hpp>
+
+#include <spawn/spawn.hpp>
+
+#include "include/scope_guard.h"
 #include "include/types.h"
-#include "include/rados/librados.hpp"
+#include "include/neorados/RADOS.hpp"
 
-#include "test/librados/test_cxx.h"
-#include "global/global_context.h"
+#include "cls/fifo/cls_fifo_ops.h"
+
+#include "neorados/cls/fifo.h"
+
+#include "test/neorados/common_tests.h"
 
 #include "gtest/gtest.h"
 
-using namespace librados;
+namespace R = neorados;
+namespace ba = boost::asio;
+namespace bs = boost::system;
+namespace cb = ceph::buffer;
+namespace fifo = rados::cls::fifo;
+namespace RCf = neorados::cls::fifo;
+namespace s = spawn;
 
-#include "cls/fifo/cls_fifo_client.h"
-
-
-using namespace rados::cls::fifo;
-
-static CephContext *cct(librados::IoCtx& ioctx)
+namespace {
+void fifo_create(R::RADOS& r,
+		 const R::IOContext& ioc,
+		 const R::Object& oid,
+		 std::string_view id,
+		 s::yield_context y,
+		 std::optional<fifo::objv> objv = std::nullopt,
+		 std::optional<std::string_view> oid_prefix = std::nullopt,
+		 bool exclusive = false,
+		 std::uint64_t max_part_size = RCf::default_max_part_size,
+		 std::uint64_t max_entry_size = RCf::default_max_entry_size)
 {
-  return reinterpret_cast<CephContext *>(ioctx.cct());
+  R::WriteOp op;
+  RCf::create_meta(op, id, objv, oid_prefix, exclusive, max_part_size,
+		   max_entry_size);
+  r.execute(oid, ioc, std::move(op), y);
 }
-
-static int fifo_create(IoCtx& ioctx,
-                       const string& oid,
-                       const string& id,
-                       const ClsFIFO::MetaCreateParams& params)
-{
-  ObjectWriteOperation op;
-
-  int r = ClsFIFO::meta_create(&op, id, params);
-  if (r < 0) {
-    return r;
-  }
-
-  return ioctx.operate(oid, &op);
 }
 
 TEST(ClsFIFO, TestCreate) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+  R::Object oid(fifo_id);
 
-  string fifo_id = "fifo";
-  string oid = fifo_id;
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+		bs::error_code ec;
+		fifo_create(r, ioc, oid, ""s, y[ec]);
+		EXPECT_EQ(bs::errc::invalid_argument, ec);
+		fifo_create(r, ioc, oid, fifo_id, y[ec], std::nullopt,
+			    std::nullopt, false, 0);
+		EXPECT_EQ(bs::errc::invalid_argument, ec);
+		fifo_create(r, ioc, oid, {}, y[ec],
+			    std::nullopt, std::nullopt,
+			    false, RCf::default_max_part_size, 0);
+		EXPECT_EQ(bs::errc::invalid_argument, ec);
+		fifo_create(r, ioc, oid, fifo_id, y);
+		{
+		  std::uint64_t size;
+		  std::uint64_t size2;
+		  {
+		    R::ReadOp op;
+		    op.stat(&size, nullptr);
+		    r.execute(oid, ioc, std::move(op),
+			      nullptr, y);
+		    EXPECT_GT(size, 0);
+		  }
 
-  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid, string(),
-                                  ClsFIFO::MetaCreateParams()));
-
-  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid, fifo_id,
-                     ClsFIFO::MetaCreateParams()
-                     .max_part_size(0)));
-
-  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid, fifo_id,
-                     ClsFIFO::MetaCreateParams()
-                     .max_entry_size(0)));
-  
-  /* first successful create */
-  ASSERT_EQ(0, fifo_create(ioctx, oid, fifo_id,
-               ClsFIFO::MetaCreateParams()));
-
-  uint64_t size;
-  struct timespec ts;
-  ASSERT_EQ(0, ioctx.stat2(oid, &size, &ts));
-  ASSERT_GT(size, 0);
-
-  /* test idempotency */
-  ASSERT_EQ(0, fifo_create(ioctx, oid, fifo_id,
-               ClsFIFO::MetaCreateParams()));
-
-  uint64_t size2;
-  struct timespec ts2;
-  ASSERT_EQ(0, ioctx.stat2(oid, &size2, &ts2));
-  ASSERT_EQ(size2, size);
-
-  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid, fifo_id,
-               ClsFIFO::MetaCreateParams()
-               .exclusive(true)));
-
-  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid, fifo_id,
-               ClsFIFO::MetaCreateParams()
-               .oid_prefix("myprefix")
-               .exclusive(false)));
-
-  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid, "foo",
-               ClsFIFO::MetaCreateParams()
-               .exclusive(false)));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		  {
+		    R::ReadOp op;
+		    op.stat(&size2, nullptr);
+		    r.execute(oid, ioc, std::move(op), nullptr, y);
+		  }
+		  EXPECT_EQ(size2, size);
+		}
+		/* test idempotency */
+		fifo_create(r, ioc, oid, fifo_id, y);
+		fifo_create(r, ioc, oid, {}, y[ec], std::nullopt,
+			    std::nullopt, false);
+		EXPECT_EQ(bs::errc::invalid_argument, ec);
+		fifo_create(r, ioc, oid, {}, y[ec], std::nullopt,
+			    "myprefix"sv, false);
+		EXPECT_EQ(bs::errc::invalid_argument, ec);
+		fifo_create(r, ioc, oid, "foo"sv, y[ec],
+			    std::nullopt, std::nullopt, false);
+		EXPECT_EQ(bs::errc::file_exists, ec);
+	      });
+  c.run();
 }
 
 TEST(ClsFIFO, TestGetInfo) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+  R::Object oid(fifo_id);
 
-  string fifo_id = "fifo";
-  string oid = fifo_id;
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+		/* first successful create */
+		fifo_create(r, ioc, oid, fifo_id, y);
 
-  fifo_info_t info;
-
-  /* first successful create */
-  ASSERT_EQ(0, fifo_create(ioctx, oid, fifo_id,
-               ClsFIFO::MetaCreateParams()));
-
-  uint32_t part_header_size;
-  uint32_t part_entry_overhead;
-
-  ASSERT_EQ(0, ClsFIFO::meta_get(ioctx, oid,
-               ClsFIFO::MetaGetParams(), &info,
-               &part_header_size, &part_entry_overhead));
-
-  ASSERT_GT(part_header_size, 0);
-  ASSERT_GT(part_entry_overhead, 0);
-
-  ASSERT_TRUE(!info.objv.instance.empty());
-
-  ASSERT_EQ(0, ClsFIFO::meta_get(ioctx, oid,
-               ClsFIFO::MetaGetParams()
-               .objv(info.objv),
-               &info,
-               &part_header_size, &part_entry_overhead));
-
-  fifo_objv_t objv;
-  objv.instance="foo";
-  objv.ver = 12;
-  ASSERT_EQ(-ECANCELED, ClsFIFO::meta_get(ioctx, oid,
-               ClsFIFO::MetaGetParams()
-               .objv(objv),
-               &info,
-               &part_header_size, &part_entry_overhead));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		fifo::info info;
+		std::uint32_t part_header_size;
+		std::uint32_t part_entry_overhead;
+		{
+		  R::ReadOp op;
+		  RCf::get_meta(op, std::nullopt,
+				nullptr, &info, &part_header_size,
+				&part_entry_overhead);
+		  r.execute(oid, ioc, std::move(op), nullptr, y);
+		  EXPECT_GT(part_header_size, 0);
+		  EXPECT_GT(part_entry_overhead, 0);
+		  EXPECT_FALSE(info.version.instance.empty());
+		}
+		{
+		  R::ReadOp op;
+		  RCf::get_meta(op, info.version,
+				nullptr, &info, &part_header_size,
+				&part_entry_overhead);
+		  r.execute(oid, ioc, std::move(op), nullptr, y);
+		}
+		{
+		  R::ReadOp op;
+		  fifo::objv objv;
+		  objv.instance = "foo";
+		  objv.ver = 12;
+		  RCf::get_meta(op, objv,
+				nullptr, &info, &part_header_size,
+				&part_entry_overhead);
+		  ASSERT_ANY_THROW(r.execute(oid, ioc, std::move(op),
+					     nullptr, y));
+		}
+	      });
+  c.run();
 }
 
 TEST(FIFO, TestOpenDefault) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"s;
 
-  string fifo_id = "fifo";
-
-  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
-
-  /* pre-open ops that should fail */
-  ASSERT_EQ(-EINVAL, fifo.read_meta());
-
-  bufferlist bl;
-  ASSERT_EQ(-EINVAL, fifo.push(bl));
-
-  ASSERT_EQ(-EINVAL, fifo.list(100, nullopt, nullptr, nullptr));
-  ASSERT_EQ(-EINVAL, fifo.trim(string()));
-
-  ASSERT_EQ(-ENOENT, fifo.open(false));
-
-  /* first successful create */
-  ASSERT_EQ(0, fifo.open(true));
-
-  ASSERT_EQ(0, fifo.read_meta()); /* force reading from backend */
-
-  auto info = fifo.get_meta();
-
-  ASSERT_EQ(info.id, fifo_id);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+		auto fifo = RCf::FIFO::create(r, ioc, fifo_id, y);
+		// force reading from backend
+		fifo->read_meta(y);
+		auto info = fifo->meta();
+		EXPECT_EQ(info.id, fifo_id);
+	      });
+  c.run();
 }
 
 TEST(FIFO, TestOpenParams) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
 
-  string fifo_id = "fifo";
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
 
-  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+		const std::uint64_t max_part_size = 10 * 1024;
+		const std::uint64_t max_entry_size = 128;
+		auto oid_prefix = "foo.123."sv;
+		fifo::objv objv;
+		objv.instance = "fooz"s;
+		objv.ver = 10;
 
-  uint64_t max_part_size = 10 * 1024;
-  uint64_t max_entry_size = 128;
-  string oid_prefix = "foo.123.";
-
-  fifo_objv_t objv;
-  objv.instance = "fooz";
-  objv.ver = 10;
+		/* first successful create */
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y, objv, oid_prefix,
+					   false, max_part_size,
+					   max_entry_size);
 
 
-  /* first successful create */
-  ASSERT_EQ(0, fifo.open(true,
-                         ClsFIFO::MetaCreateParams()
-                         .max_part_size(max_part_size)
-                         .max_entry_size(max_entry_size)
-                         .oid_prefix(oid_prefix)
-                         .objv(objv)));
-
-  ASSERT_EQ(0, fifo.read_meta()); /* force reading from backend */
-
-  auto info = fifo.get_meta();
-
-  ASSERT_EQ(info.id, fifo_id);
-  ASSERT_EQ(info.data_params.max_part_size, max_part_size);
-  ASSERT_EQ(info.data_params.max_entry_size, max_entry_size);
-  ASSERT_EQ(info.objv, objv);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		/* force reading from backend */
+		f->read_meta(y);
+		auto info = f->meta();
+		ASSERT_EQ(info.id, fifo_id);
+		ASSERT_EQ(info.params.max_part_size, max_part_size);
+		ASSERT_EQ(info.params.max_entry_size, max_entry_size);
+		ASSERT_EQ(info.version, objv);
+	      });
+  c.run();
 }
 
-template <class T>
-static int decode_entry(fifo_entry& entry,
-                        T *val,
-                        string *marker)
+namespace {
+template<class T>
+std::pair<T, std::string> decode_entry(const RCf::list_entry& entry)
 {
-  *marker = entry.marker;
+  T val;
   auto iter = entry.data.cbegin();
-
-  try {
-    decode(*val, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  return 0;
+  decode(val, iter);
+  return std::make_pair(std::move(val), entry.marker);
 }
+}
+
+
 
 TEST(FIFO, TestPushListTrim) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
 
-  string fifo_id = "fifo";
+  s::spawn(c, [&](s::yield_context y) mutable {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y);
+		static constexpr auto max_entries = 10u;
+		for (uint32_t i = 0; i < max_entries; ++i) {
+		  cb::list bl;
+		  encode(i, bl);
+		  f->push(bl, y);
+		}
 
-  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+		std::optional<std::string> marker;
+		/* get entries one by one */
 
-  /* first successful create */
-  ASSERT_EQ(0, fifo.open(true));
+		for (auto i = 0u; i < max_entries; ++i) {
+		  auto [result, more] = f->list(1, marker, y);
 
-  uint32_t max_entries = 10;
+		  bool expected_more = (i != (max_entries - 1));
+		  ASSERT_EQ(expected_more, more);
+		  ASSERT_EQ(1, result.size());
 
-  for (uint32_t i = 0; i < max_entries; ++i) {
-    bufferlist bl;
-    encode(i, bl);
-    ASSERT_EQ(0, fifo.push(bl));
-  }
+		  std::uint32_t val;
+		  std::tie(val, marker) =
+		    decode_entry<std::uint32_t>(result.front());
 
-  string marker;
+		  ASSERT_EQ(i, val);
+		}
 
-  /* get entries one by one */
+		/* get all entries at once */
+		std::string markers[max_entries];
+		std::uint32_t min_entry = 0;
+		{
+		  auto [result, more] = f->list(max_entries * 10, std::nullopt,
+						y);
 
-  for (uint32_t i = 0; i < max_entries; ++i) {
-    vector<fifo_entry> result;
-    bool more;
-    ASSERT_EQ(0, fifo.list(1, marker, &result, &more));
-
-    bool expected_more = (i != (max_entries - 1));
-    ASSERT_EQ(expected_more, more);
-    ASSERT_EQ(1, result.size());
-
-    uint32_t val;
-    ASSERT_EQ(0, decode_entry(result.front(), &val, &marker));
-
-    ASSERT_EQ(i, val);
-  }
-
-  /* get all entries at once */
-  vector<fifo_entry> result;
-  bool more;
-  ASSERT_EQ(0, fifo.list(max_entries * 10, string(), &result, &more));
-
-  ASSERT_FALSE(more);
-  ASSERT_EQ(max_entries, result.size());
-
-  string markers[max_entries];
+		  ASSERT_FALSE(more);
+		  ASSERT_EQ(max_entries, result.size());
 
 
-  for (uint32_t i = 0; i < max_entries; ++i) {
-    uint32_t val;
+		  for (auto i = 0u; i < max_entries; ++i) {
+		    std::uint32_t val;
 
-    ASSERT_EQ(0, decode_entry(result[i], &val, &markers[i]));
-    ASSERT_EQ(i, val);
-  }
-
-  uint32_t min_entry = 0;
-
-  /* trim one entry */
-  fifo.trim(markers[min_entry]);
-  ++min_entry;
-
-  ASSERT_EQ(0, fifo.list(max_entries * 10, string(), &result, &more));
-
-  ASSERT_FALSE(more);
-  ASSERT_EQ(max_entries - min_entry, result.size());
-
-  for (uint32_t i = min_entry; i < max_entries; ++i) {
-    uint32_t val;
-
-    ASSERT_EQ(0, decode_entry(result[i - min_entry], &val, &markers[i]));
-    ASSERT_EQ(i, val);
-  }
+		    std::tie(val, markers[i]) =
+		      decode_entry<std::uint32_t>(result[i]);
+		    ASSERT_EQ(i, val);
+		  }
 
 
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		  /* trim one entry */
+		  f->trim(markers[min_entry], y);
+		  ++min_entry;
+		}
+
+		auto [result, more] = f->list(max_entries * 10,
+					      std::nullopt, y);
+
+		ASSERT_FALSE(more);
+		ASSERT_EQ(max_entries - min_entry, result.size());
+
+		for (auto i = min_entry; i < max_entries; ++i) {
+		  std::uint32_t val;
+
+		  std::tie(val, markers[i - min_entry]) =
+		    decode_entry<std::uint32_t>(result[i - min_entry]);
+		  ASSERT_EQ(i, val);
+		}
+
+	      });
+  c.run();
 }
+
 
 TEST(FIFO, TestPushTooBig) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+  static constexpr auto max_part_size = 2048ull;
+  static constexpr auto max_entry_size = 128ull;
 
-  string fifo_id = "fifo";
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
 
-  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y, std::nullopt,
+					   std::nullopt, false, max_part_size,
+					   max_entry_size);
 
-  uint64_t max_part_size = 2048;
-  uint64_t max_entry_size = 128;
+		char buf[max_entry_size + 1];
+		memset(buf, 0, sizeof(buf));
 
-  char buf[max_entry_size + 1];
-  memset(buf, 0, sizeof(buf));
+		cb::list bl;
+		bl.append(buf, sizeof(buf));
 
-  /* first successful create */
-  ASSERT_EQ(0, fifo.open(true,
-                         ClsFIFO::MetaCreateParams()
-                         .max_part_size(max_part_size)
-                         .max_entry_size(max_entry_size)));
-
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
-
-  ASSERT_EQ(-EINVAL, fifo.push(bl));
-
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		bs::error_code ec;
+		f->push(bl, y[ec]);
+		EXPECT_EQ(RCf::errc::entry_too_large, ec);
+	      });
+  c.run();
 }
+
 
 TEST(FIFO, TestMultipleParts) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+  static constexpr auto max_part_size = 2048ull;
+  static constexpr auto max_entry_size = 128ull;
 
-  string fifo_id = "fifo";
+  s::spawn(c, [&](s::yield_context y) mutable {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
 
-  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
-
-  uint64_t max_part_size = 2048;
-  uint64_t max_entry_size = 128;
-
-  char buf[max_entry_size];
-  memset(buf, 0, sizeof(buf));
-
-  /* create */
-  ASSERT_EQ(0, fifo.open(true,
-                         ClsFIFO::MetaCreateParams()
-                         .max_part_size(max_part_size)
-                         .max_entry_size(max_entry_size)));
-
-  uint32_t part_header_size;
-  uint32_t part_entry_overhead;
-
-  fifo.get_part_layout_info(&part_header_size, &part_entry_overhead);
-
-  int entries_per_part = (max_part_size - part_header_size) / (max_entry_size + part_entry_overhead);
-
-  int max_entries = entries_per_part * 4 + 1;
-
-  /* push enough entries */
-  for (int i = 0; i < max_entries; ++i) {
-    bufferlist bl;
-
-    *(int *)buf = i;
-    bl.append(buf, sizeof(buf));
-
-    ASSERT_EQ(0, fifo.push(bl));
-  }
-
-  auto info = fifo.get_meta();
-
-  ASSERT_EQ(info.id, fifo_id);
-  ASSERT_GT(info.head_part_num, 0); /* head should have advanced */
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y, std::nullopt,
+					   std::nullopt, false, max_part_size,
+					   max_entry_size);
 
 
-  /* list all at once */
-  vector<fifo_entry> result;
-  bool more;
-  ASSERT_EQ(0, fifo.list(max_entries, string(), &result, &more));
-  ASSERT_EQ(false, more);
+		char buf[max_entry_size];
+		memset(buf, 0, sizeof(buf));
 
-  ASSERT_EQ(max_entries, result.size());
+		const auto [part_header_size, part_entry_overhead] =
+		  f->get_part_layout_info();
 
-  for (int i = 0; i < max_entries; ++i) {
-    auto& bl = result[i].data;
-    ASSERT_EQ(i, *(int *)bl.c_str());
-  }
+		const auto entries_per_part =
+		  (max_part_size - part_header_size) /
+		  (max_entry_size + part_entry_overhead);
+
+		const auto max_entries = entries_per_part * 4 + 1;
+
+		/* push enough entries */
+		for (auto i = 0u; i < max_entries; ++i) {
+		  cb::list bl;
+
+		  *(int *)buf = i;
+		  bl.append(buf, sizeof(buf));
+
+		  f->push(bl, y);
+		}
+
+		auto info = f->meta();
+
+		ASSERT_EQ(info.id, fifo_id);
+		/* head should have advanced */
+		ASSERT_GT(info.head_part_num, 0);
 
 
-  /* list one at a time */
-  string marker;
-  for (int i = 0; i < max_entries; ++i) {
-    ASSERT_EQ(0, fifo.list(1, marker, &result, &more));
+		/* list all at once */
+		auto [result, more] = f->list(max_entries, std::nullopt, y);
+		EXPECT_EQ(false, more);
 
-    ASSERT_EQ(result.size(), 1);
-    bool expected_more = (i != (max_entries - 1));
-    ASSERT_EQ(expected_more, more);
+		ASSERT_EQ(max_entries, result.size());
 
-    auto& entry = result[0];
+		for (auto i = 0u; i < max_entries; ++i) {
+		  auto& bl = result[i].data;
+		  ASSERT_EQ(i, *(int *)bl.c_str());
+		}
 
-    auto& bl = entry.data;
-    marker = entry.marker;
+		std::optional<std::string> marker;
+		/* get entries one by one */
 
-    ASSERT_EQ(i, *(int *)bl.c_str());
-  }
+		for (auto i = 0u; i < max_entries; ++i) {
+		  auto [result, more] = f->list(1, marker, y);
+		  ASSERT_EQ(result.size(), 1);
+		  const bool expected_more = (i != (max_entries - 1));
+		  ASSERT_EQ(expected_more, more);
 
-  /* trim one at a time */
-  marker.clear();
-  for (int i = 0; i < max_entries; ++i) {
-    /* read single entry */
-    ASSERT_EQ(0, fifo.list(1, marker, &result, &more));
+		  std::uint32_t val;
+		  std::tie(val, marker) =
+		    decode_entry<std::uint32_t>(result.front());
 
-    ASSERT_EQ(result.size(), 1);
-    bool expected_more = (i != (max_entries - 1));
-    ASSERT_EQ(expected_more, more);
+		  auto& entry = result.front();
+		  auto& bl = entry.data;
+		  ASSERT_EQ(i, *(int *)bl.c_str());
+		  marker = entry.marker;
+		}
 
-    marker = result[0].marker;
+		/* trim one at a time */
+		marker.reset();
+		for (auto i = 0u; i < max_entries; ++i) {
+		  /* read single entry */
+		  {
+		    auto [result, more] = f->list(1, marker, y);
+		    ASSERT_EQ(result.size(), 1);
+		    const bool expected_more = (i != (max_entries - 1));
+		    ASSERT_EQ(expected_more, more);
 
-    /* trim */
-    ASSERT_EQ(0, fifo.trim(marker));
+		    marker = result.front().marker;
 
-    /* check tail */
-    info = fifo.get_meta();
-    ASSERT_EQ(info.tail_part_num, i / entries_per_part);
+		    f->trim(*marker, y);
+		  }
 
-    /* try to read all again, see how many entries left */
-    ASSERT_EQ(0, fifo.list(max_entries, marker, &result, &more));
-    ASSERT_EQ(max_entries - i - 1, result.size());
-    ASSERT_EQ(false, more);
-  }
+		  /* check tail */
+		  info = f->meta();
+		  ASSERT_EQ(info.tail_part_num, i / entries_per_part);
 
-  /* tail now should point at head */
-  info = fifo.get_meta();
-  ASSERT_EQ(info.head_part_num, info.tail_part_num);
+		  /* try to read all again, see how many entries left */
+		  auto [result, more] = f->list(max_entries, marker, y);
+		  ASSERT_EQ(max_entries - i - 1, result.size());
+		  ASSERT_EQ(false, more);
+		}
 
-  fifo_part_info part_info;
+		/* tail now should point at head */
+		info = f->meta();
+		ASSERT_EQ(info.head_part_num, info.tail_part_num);
 
-  /* check old tails are removed */
-  for (int i = 0; i < info.tail_part_num; ++i) {
-    ASSERT_EQ(-ENOENT, fifo.get_part_info(i, &part_info));
-  }
-
-  /* check curent tail exists */
-  ASSERT_EQ(0, fifo.get_part_info(info.tail_part_num, &part_info));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		/* check old tails are removed */
+		for (auto i = 0; i < info.tail_part_num; ++i) {
+		  bs::error_code ec;
+		  f->get_part_info(i, y[ec]);
+		  ASSERT_EQ(bs::errc::no_such_file_or_directory, ec);
+		}
+		/* check current tail exists */
+		f->get_part_info(info.tail_part_num, y);
+	      });
+  c.run();
 }
+
 
 TEST(FIFO, TestTwoPushers) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+  static constexpr auto max_part_size = 2048ull;
+  static constexpr auto max_entry_size = 128ull;
 
-  string fifo_id = "fifo";
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
 
-  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y, std::nullopt,
+					   std::nullopt, false, max_part_size,
+					   max_entry_size);
 
-  uint64_t max_part_size = 2048;
-  uint64_t max_entry_size = 128;
 
-  char buf[max_entry_size];
-  memset(buf, 0, sizeof(buf));
 
-  /* create */
-  ASSERT_EQ(0, fifo.open(true,
-                         ClsFIFO::MetaCreateParams()
-                         .max_part_size(max_part_size)
-                         .max_entry_size(max_entry_size)));
+		char buf[max_entry_size];
+		memset(buf, 0, sizeof(buf));
 
-  uint32_t part_header_size;
-  uint32_t part_entry_overhead;
 
-  fifo.get_part_layout_info(&part_header_size, &part_entry_overhead);
+		auto [part_header_size, part_entry_overhead] =
+		  f->get_part_layout_info();
 
-  int entries_per_part = (max_part_size - part_header_size) / (max_entry_size + part_entry_overhead);
+		const auto entries_per_part =
+		  (max_part_size - part_header_size) /
+		  (max_entry_size + part_entry_overhead);
 
-  int max_entries = entries_per_part * 4 + 1;
+		const auto max_entries = entries_per_part * 4 + 1;
 
-  FIFO fifo2(cct(ioctx), fifo_id, &ioctx);
+		auto f2 = RCf::FIFO::open(r, ioc, fifo_id, y);
 
-  /* open second one */
-  ASSERT_EQ(0, fifo2.open(true,
-                         ClsFIFO::MetaCreateParams()));
+		std::vector fifos{&f, &f2};
 
-  vector<FIFO *> fifos(2);
-  fifos[0] = &fifo;
-  fifos[1] = &fifo2;
+		for (auto i = 0u; i < max_entries; ++i) {
+		  cb::list bl;
+		  *(int *)buf = i;
+		  bl.append(buf, sizeof(buf));
 
-  for (int i = 0; i < max_entries; ++i) {
-    bufferlist bl;
+		  auto& f = fifos[i % fifos.size()];
 
-    *(int *)buf = i;
-    bl.append(buf, sizeof(buf));
+		  (*f)->push(bl, y);
+		}
 
-    auto& f = fifos[i % fifos.size()];
+		/* list all by both */
+		{
+		  auto [result, more] = f2->list(max_entries, std::nullopt, y);
 
-    ASSERT_EQ(0, f->push(bl));
-  }
+		  ASSERT_EQ(false, more);
+		  ASSERT_EQ(max_entries, result.size());
+		}
+		auto [result, more] = f2->list(max_entries, std::nullopt, y);
+		ASSERT_EQ(false, more);
+		ASSERT_EQ(max_entries, result.size());
 
-  /* list all by both */
-  vector<fifo_entry> result;
-  bool more;
-  ASSERT_EQ(0, fifo2.list(max_entries, string(), &result, &more));
-
-  ASSERT_EQ(false, more);
-
-  ASSERT_EQ(max_entries, result.size());
-
-  ASSERT_EQ(0, fifo.list(max_entries, string(), &result, &more));
-  ASSERT_EQ(false, more);
-
-  ASSERT_EQ(max_entries, result.size());
-
-  for (int i = 0; i < max_entries; ++i) {
-    auto& bl = result[i].data;
-    ASSERT_EQ(i, *(int *)bl.c_str());
-  }
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		for (auto i = 0u; i < max_entries; ++i) {
+		  auto& bl = result[i].data;
+		  ASSERT_EQ(i, *(int *)bl.c_str());
+		}
+	      });
+  c.run();
 }
 
+
 TEST(FIFO, TestTwoPushersTrim) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+  static constexpr auto max_part_size = 2048ull;
+  static constexpr auto max_entry_size = 128ull;
 
-  string fifo_id = "fifo";
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
 
-  FIFO fifo1(cct(ioctx), fifo_id, &ioctx);
+		auto f1 = RCf::FIFO::create(r, ioc, fifo_id, y, std::nullopt,
+					    std::nullopt, false, max_part_size,
+					    max_entry_size);
 
-  uint64_t max_part_size = 2048;
-  uint64_t max_entry_size = 128;
+		char buf[max_entry_size];
+		memset(buf, 0, sizeof(buf));
 
-  char buf[max_entry_size];
-  memset(buf, 0, sizeof(buf));
 
-  /* create */
-  ASSERT_EQ(0, fifo1.open(true,
-                          ClsFIFO::MetaCreateParams()
-                          .max_part_size(max_part_size)
-                          .max_entry_size(max_entry_size)));
+		auto [part_header_size, part_entry_overhead] =
+		  f1->get_part_layout_info();
 
-  uint32_t part_header_size;
-  uint32_t part_entry_overhead;
+		const auto entries_per_part =
+		  (max_part_size - part_header_size) /
+		  (max_entry_size + part_entry_overhead);
 
-  fifo1.get_part_layout_info(&part_header_size, &part_entry_overhead);
+		const auto max_entries = entries_per_part * 4 + 1;
 
-  int entries_per_part = (max_part_size - part_header_size) / (max_entry_size + part_entry_overhead);
+		auto f2 = RCf::FIFO::open(r, ioc, fifo_id, y);
 
-  int max_entries = entries_per_part * 4 + 1;
+		/* push one entry to f2 and the rest to f1 */
 
-  FIFO fifo2(cct(ioctx), fifo_id, &ioctx);
+		for (auto i = 0u; i < max_entries; ++i) {
+		  cb::list bl;
 
-  /* open second one */
-  ASSERT_EQ(0, fifo2.open(true,
-                         ClsFIFO::MetaCreateParams()));
+		  *(int *)buf = i;
+		  bl.append(buf, sizeof(buf));
 
-  /* push one entry to fifo2 and the rest to fifo1 */
+		  auto f = (i < 1 ? &f2 : &f1);
+		  (*f)->push(bl, y);
+		}
 
-  for (int i = 0; i < max_entries; ++i) {
-    bufferlist bl;
+		/* trim half by fifo1 */
+		auto num = max_entries / 2;
 
-    *(int *)buf = i;
-    bl.append(buf, sizeof(buf));
+		std::string marker;
+		{
+		  auto [result, more] = f1->list(num, std::nullopt, y);
 
-    FIFO *f = (i < 1 ? &fifo2 : &fifo1);
+		  ASSERT_EQ(true, more);
+		  ASSERT_EQ(num, result.size());
 
-    ASSERT_EQ(0, f->push(bl));
-  }
+		  for (auto i = 0u; i < num; ++i) {
+		    auto& bl = result[i].data;
+		    ASSERT_EQ(i, *(int *)bl.c_str());
+		  }
 
-  /* trim half by fifo1 */
-  int num = max_entries / 2;
+		  auto& entry = result[num - 1];
+		  marker = entry.marker;
 
-  vector<fifo_entry> result;
-  bool more;
-  ASSERT_EQ(0, fifo1.list(num, string(), &result, &more));
+		  f1->trim(marker, y);
 
-  ASSERT_EQ(true, more);
-  ASSERT_EQ(num, result.size());
+		  /* list what's left by fifo2 */
 
-  for (int i = 0; i < num; ++i) {
-    auto& bl = result[i].data;
-    ASSERT_EQ(i, *(int *)bl.c_str());
-  }
+		}
 
-  auto& entry = result[num - 1];
-  auto& marker = entry.marker;
+		const auto left = max_entries - num;
+		auto [result, more] = f2->list(left, marker, y);
+		ASSERT_EQ(left, result.size());
+		ASSERT_EQ(false, more);
 
-  ASSERT_EQ(0, fifo1.trim(marker));
-
-  /* list what's left by fifo2 */
-
-  int left = max_entries - num;
-
-  ASSERT_EQ(0, fifo2.list(left, marker, &result, &more));
-  ASSERT_EQ(left, result.size());
-  ASSERT_EQ(false, more);
-
-  for (int i = num; i < max_entries; ++i) {
-    auto& bl = result[i - num].data;
-    ASSERT_EQ(i, *(int *)bl.c_str());
-  }
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		for (auto i = num; i < max_entries; ++i) {
+		  auto& bl = result[i - num].data;
+		  ASSERT_EQ(i, *(int *)bl.c_str());
+		}
+	      });
+  c.run();
 }
 
 TEST(FIFO, TestPushBatch) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+  static constexpr auto max_part_size = 2048ull;
+  static constexpr auto max_entry_size = 128ull;
 
-  string fifo_id = "fifo";
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
 
-  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y, std::nullopt,
+					   std::nullopt, false, max_part_size,
+					   max_entry_size);
 
-  uint64_t max_part_size = 2048;
-  uint64_t max_entry_size = 128;
 
-  char buf[max_entry_size];
-  memset(buf, 0, sizeof(buf));
+		char buf[max_entry_size];
+		memset(buf, 0, sizeof(buf));
 
-  /* create */
-  ASSERT_EQ(0, fifo.open(true,
-                          ClsFIFO::MetaCreateParams()
-                          .max_part_size(max_part_size)
-                          .max_entry_size(max_entry_size)));
+		auto [part_header_size, part_entry_overhead]
+		  = f->get_part_layout_info();
 
-  uint32_t part_header_size;
-  uint32_t part_entry_overhead;
+		auto entries_per_part =
+		  (max_part_size - part_header_size) /
+		  (max_entry_size + part_entry_overhead);
 
-  fifo.get_part_layout_info(&part_header_size, &part_entry_overhead);
+		auto max_entries = entries_per_part * 4 + 1; /* enough entries to span multiple parts */
 
-  int entries_per_part = (max_part_size - part_header_size) / (max_entry_size + part_entry_overhead);
+		std::vector<cb::list> bufs;
 
-  int max_entries = entries_per_part * 4 + 1; /* enough entries to span multiple parts */
+		for (auto i = 0u; i < max_entries; ++i) {
+		  cb::list bl;
 
-  vector<bufferlist> bufs;
+		  *(int *)buf = i;
+		  bl.append(buf, sizeof(buf));
 
-  for (int i = 0; i < max_entries; ++i) {
-    bufferlist bl;
+		  bufs.push_back(bl);
+		}
 
-    *(int *)buf = i;
-    bl.append(buf, sizeof(buf));
+		f->push(bufs, y);
 
-    bufs.push_back(bl);
-  }
+		/* list all */
 
-  ASSERT_EQ(0, fifo.push(bufs));
+		auto [result, more] = f->list(max_entries, std::nullopt, y);
+		ASSERT_EQ(false, more);
+		ASSERT_EQ(max_entries, result.size());
 
-  /* list all */
+		for (auto i = 0u; i < max_entries; ++i) {
+		  auto& bl = result[i].data;
+		  ASSERT_EQ(i, *(int *)bl.c_str());
+		}
 
-  vector<fifo_entry> result;
-  bool more;
-  ASSERT_EQ(0, fifo.list(max_entries, string(), &result, &more));
-
-  ASSERT_EQ(false, more);
-  ASSERT_EQ(max_entries, result.size());
-
-  for (int i = 0; i < max_entries; ++i) {
-    auto& bl = result[i].data;
-    ASSERT_EQ(i, *(int *)bl.c_str());
-  }
-
-  auto& info = fifo.get_meta();
-  ASSERT_EQ(info.head_part_num, 4);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+		auto& info = f->meta();
+		ASSERT_EQ(info.head_part_num, 4);
+	      });
+  c.run();
 }
