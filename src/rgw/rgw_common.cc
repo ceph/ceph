@@ -848,7 +848,9 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("torrent") == 0) ||
       (name.compare("tagging") == 0) ||
       (name.compare("append") == 0) ||
-      (name.compare("position") == 0)) {
+      (name.compare("position") == 0) ||
+      (name.compare("policyStatus") == 0) ||
+      (name.compare("publicAccessBlock") == 0)) {
     sub_resources[name] = val;
   } else if (name[0] == 'r') { // root of all evil
     if ((name.compare("response-content-type") == 0) ||
@@ -1004,7 +1006,9 @@ struct perm_state_from_req_state : public perm_state_base {
                                                                     _s->auth.identity.get(),
                                                                     _s->bucket_info,
                                                                     _s->perm_mask,
-                                                                    _s->defer_to_bucket_acls), s(_s) {}
+                                                                    _s->defer_to_bucket_acls,
+                                                                    _s->bucket_access_conf),
+                                                                    s(_s) {}
   std::optional<bool> get_request_payer() const override {
     const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
     if (!request_payer) {
@@ -1197,7 +1201,9 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct pe
     return false;
 
   if (bucket_acl->verify_permission(dpp, *s->identity, perm, perm,
-                                    s->get_referer()))
+                                    s->get_referer(),
+                                    s->bucket_access_conf &&
+                                    s->bucket_access_conf->ignore_public_acls()))
     return true;
 
   if (!user_acl)
@@ -1330,7 +1336,10 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     return false;
   }
 
-  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm);
+  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm,
+					   nullptr, /* http_referrer */
+					   s->bucket_access_conf &&
+					   s->bucket_access_conf->ignore_public_acls());
   if (ret) {
     return true;
   }
@@ -1394,7 +1403,10 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
     return false;
   }
 
-  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm);
+  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm,
+					   nullptr, /* http referrer */
+					   s->bucket_access_conf &&
+					   s->bucket_access_conf->ignore_public_acls());
   if (ret) {
     return true;
   }

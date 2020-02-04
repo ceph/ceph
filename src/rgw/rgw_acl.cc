@@ -77,7 +77,7 @@ uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp,
 }
 
 uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
-                                              const uint32_t perm_mask)
+                                              const uint32_t perm_mask) const
 {
   ldout(cct, 5) << "Searching permissions for group=" << (int)group
                 << " mask=" << perm_mask << dendl;
@@ -116,7 +116,8 @@ uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
 uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
                                           const rgw::auth::Identity& auth_identity,
                                           const uint32_t perm_mask,
-                                          const char * const http_referer)
+                                          const char * const http_referer,
+                                          bool ignore_public_acls)
 {
   ldpp_dout(dpp, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
                  << dendl;
@@ -132,7 +133,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
   }
 
   /* should we continue looking up? */
-  if ((perm & perm_mask) != perm_mask) {
+  if (!ignore_public_acls && ((perm & perm_mask) != perm_mask)) {
     perm |= acl.get_group_perm(ACL_GROUP_ALL_USERS, perm_mask);
 
     if (false == auth_identity.is_owner_of(rgw_user(RGW_USER_ANON_ID))) {
@@ -157,11 +158,12 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
                                                const rgw::auth::Identity& auth_identity,
                                                const uint32_t user_perm_mask,
                                                const uint32_t perm,
-                                               const char * const http_referer)
+                                               const char * const http_referer,
+                                               bool ignore_public_acls)
 {
   uint32_t test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
-  uint32_t policy_perm = get_perm(dpp, auth_identity, test_perm, http_referer);
+  uint32_t policy_perm = get_perm(dpp, auth_identity, test_perm, http_referer, ignore_public_acls);
 
   /* the swift WRITE_OBJS perm is equivalent to the WRITE obj, just
      convert those bits. Note that these bits will only be set on
@@ -186,3 +188,16 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
 }
 
 
+bool RGWAccessControlPolicy::is_public() const
+{
+
+  static constexpr auto public_groups = {ACL_GROUP_ALL_USERS,
+					 ACL_GROUP_AUTHENTICATED_USERS};
+  return std::any_of(public_groups.begin(), public_groups.end(),
+                         [&](ACLGroupTypeEnum g) {
+                           auto p = acl.get_group_perm(g, RGW_PERM_FULL_CONTROL);
+                           return (p != RGW_PERM_NONE) && (p != RGW_PERM_INVALID);
+                         }
+                         );
+
+}

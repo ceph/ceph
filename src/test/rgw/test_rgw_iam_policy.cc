@@ -53,6 +53,8 @@ using rgw::IAM::s3GetBucketLocation;
 using rgw::IAM::s3GetBucketLogging;
 using rgw::IAM::s3GetBucketNotification;
 using rgw::IAM::s3GetBucketPolicy;
+using rgw::IAM::s3GetBucketPolicyStatus;
+using rgw::IAM::s3GetBucketPublicAccessBlock;
 using rgw::IAM::s3GetBucketRequestPayment;
 using rgw::IAM::s3GetBucketTagging;
 using rgw::IAM::s3GetBucketVersioning;
@@ -66,6 +68,7 @@ using rgw::IAM::s3GetObjectTagging;
 using rgw::IAM::s3GetObjectVersion;
 using rgw::IAM::s3GetObjectVersionTagging;
 using rgw::IAM::s3GetObjectVersionTorrent;
+using rgw::IAM::s3GetPublicAccessBlock;
 using rgw::IAM::s3GetReplicationConfiguration;
 using rgw::IAM::s3ListAllMyBuckets;
 using rgw::IAM::s3ListBucket;
@@ -374,6 +377,9 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetBucketObjectLockConfiguration] = 1;
   act2[s3GetObjectRetention] = 1;
   act2[s3GetObjectLegalHold] = 1;
+  act2[s3GetBucketPolicyStatus] = 1;
+  act2[s3GetBucketPublicAccessBlock] = 1;
+  act2[s3GetPublicAccessBlock] = 1;
 
   EXPECT_EQ(p->statements[2].action, act2);
   EXPECT_EQ(p->statements[2].notaction, None);
@@ -440,6 +446,9 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetBucketObjectLockConfiguration] = 1;
   s3allow[s3GetObjectRetention] = 1;
   s3allow[s3GetObjectLegalHold] = 1;
+  s3allow[s3GetBucketPolicyStatus] = 1;
+  s3allow[s3GetBucketPublicAccessBlock] = 1;
+  s3allow[s3GetPublicAccessBlock] = 1;
 
   EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,

@@ -37,6 +37,7 @@
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
+#include "rgw_public_access.h"
 
 namespace ceph {
   class Formatter;
@@ -124,6 +125,7 @@ using ceph::crypto::MD5;
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
 #define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"
+#define RGW_ATTR_PUBLIC_ACCESS  RGW_ATTR_PREFIX "public-access"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -134,6 +136,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
 #define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
+
 
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
@@ -534,6 +537,12 @@ enum RGWOpType {
   RGW_OP_GET_BUCKET_REPLICATION,
   RGW_OP_PUT_BUCKET_REPLICATION,
   RGW_OP_DELETE_BUCKET_REPLICATION,
+
+  /* public access */
+  RGW_OP_GET_BUCKET_POLICY_STATUS,
+  RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK,
+  RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK,
+  RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK,
 };
 
 class RGWAccessControlPolicy;
@@ -1686,6 +1695,7 @@ struct req_state : DoutPrefixProvider {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
+  boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
   vector<rgw::IAM::Policy> iam_user_policies;
 
   /* Is the request made by an user marked as a system one?
@@ -2112,18 +2122,24 @@ struct perm_state_base {
   const RGWBucketInfo& bucket_info;
   int perm_mask;
   bool defer_to_bucket_acls;
+  boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
 
   perm_state_base(CephContext *_cct,
                   const rgw::IAM::Environment& _env,
                   rgw::auth::Identity *_identity,
                   const RGWBucketInfo& _bucket_info,
                   int _perm_mask,
-                  bool _defer_to_bucket_acls) : cct(_cct),
+                  bool _defer_to_bucket_acls,
+                  boost::optional<PublicAccessBlockConfiguration> _bucket_acess_conf = boost::none) :
+                                                cct(_cct),
                                                 env(_env),
                                                 identity(_identity),
                                                 bucket_info(_bucket_info),
                                                 perm_mask(_perm_mask),
-                                                defer_to_bucket_acls(_defer_to_bucket_acls) {}
+                                                defer_to_bucket_acls(_defer_to_bucket_acls),
+                                                bucket_access_conf(_bucket_acess_conf)
+  {}
+
   virtual ~perm_state_base() {}
 
   virtual const char *get_referer() const = 0;
