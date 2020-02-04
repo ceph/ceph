@@ -183,7 +183,12 @@ int RGWSTSGetSessionToken::get_params()
   tokenCode = s->info.args.get("TokenCode");
 
   if (! duration.empty()) {
-    uint64_t duration_in_secs = stoull(duration);
+    string err;
+    uint64_t duration_in_secs = strict_strtoll(duration.c_str(), 10, &err);
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+
     if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
             duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
       return -EINVAL;
