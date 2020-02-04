@@ -405,8 +405,18 @@ int Monitor::do_admin_command(
       err << "needs a valid 'quorum' command" << std::endl;
     }
   } else if (command == "connection scores dump") {
+    if (!get_quorum_mon_features().contains_all(
+				   ceph::features::mon::FEATURE_PINGING)) {
+      err << "Not all monitors support changing election strategies; \
+              please upgrade them first!";
+    }
     elector.dump_connection_scores(f);
   } else if (command == "connection scores reset") {
+    if (!get_quorum_mon_features().contains_all(
+				   ceph::features::mon::FEATURE_PINGING)) {
+      err << "Not all monitors support changing election strategies; \
+              please upgrade them first!";
+    }
     elector.notify_clear_peer_state();
   } else if (command == "smart") {
     string want_devid;
