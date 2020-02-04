@@ -811,6 +811,12 @@ n     *
     }
     err = 0;
   } else if (prefix == "mon set election_strategy") {
+    if (!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support changing election strategies; please upgrade first!";
+      goto reply;
+    }
     string strat;
     MonMap::election_strategy strategy;
     if (!cmd_getval(g_ceph_context, cmdmap, "strategy", strat)) {
@@ -831,6 +837,12 @@ n     *
     pending_map.strategy = strategy;
     propose = true;
   } else if (prefix == "mon add disallowed_leader") {
+    if (!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support changing election strategies; please upgrade first!";
+      goto reply;
+    }
     string name;
     if (!cmd_getval(g_ceph_context, cmdmap, "name", name)) {
       err = -EINVAL;
@@ -861,6 +873,12 @@ n     *
     err = 0;
     propose = true;
   } else if (prefix == "mon rm disallowed_leader") {
+    if (!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support changing election strategies; please upgrade first!";
+      goto reply;
+    }
     string name;
     if (!cmd_getval(g_ceph_context, cmdmap, "name", name)) {
       err = -EINVAL;

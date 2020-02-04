@@ -375,8 +375,18 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "connection scores dump") {
+    if (!get_quorum_mon_features().contains_all(
+				   ceph::features::mon::FEATURE_PINGING)) {
+      ss << "Not all monitors support changing election strategies; \
+             please upgrade them first!";
+    }
     elector.dump_connection_scores(f.get());
   } else if (command == "connection scores reset") {
+    if (!get_quorum_mon_features().contains_all(
+				   ceph::features::mon::FEATURE_PINGING)) {
+      ss << "Not all monitors support changing election strategies; \
+              please upgrade them first!";
+    }
     elector.notify_clear_peer_state();
   } else {
     ceph_abort_msg("bad AdminSocket command binding");

@@ -495,6 +495,8 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_MIMIC(      (1ULL << 2));
       constexpr mon_feature_t FEATURE_OSDMAP_PRUNE (1ULL << 3);
       constexpr mon_feature_t FEATURE_NAUTILUS(    (1ULL << 4));
+      // elector pinging and CONNECTIVITY mode:
+      constexpr mon_feature_t FEATURE_PINGING(    (1ULL << 7));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -511,6 +513,7 @@ namespace ceph {
 	  FEATURE_MIMIC |
           FEATURE_OSDMAP_PRUNE |
 	  FEATURE_NAUTILUS |
+	  FEATURE_PINGING |
 	  FEATURE_NONE
 	  );
       }
@@ -531,6 +534,7 @@ namespace ceph {
 	  FEATURE_MIMIC |
 	  FEATURE_NAUTILUS |
 	  FEATURE_OSDMAP_PRUNE |
+	  FEATURE_PINGING |
 	  FEATURE_NONE
 	  );
       }
@@ -577,6 +581,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "osdmap-prune";
   } else if (f == FEATURE_NAUTILUS) {
     return "nautilus";
+  } else if (f == FEATURE_PINGING) {
+    return "elector-pinging";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -595,6 +601,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_OSDMAP_PRUNE;
   } else if (n == "nautilus") {
     return FEATURE_NAUTILUS;
+  } else if (n == "feature-pinging") {
+    return FEATURE_PINGING;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }
