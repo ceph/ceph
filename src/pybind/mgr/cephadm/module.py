@@ -1842,34 +1842,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return c
 
         else:
-            # we assume explicit placement by which there are the same number of
-            # hosts specified as the size of increase in number of daemons.
-            num_new_mgrs = spec.count - num_mgrs
-            if len(spec.placement.hosts) < num_new_mgrs:
-                raise RuntimeError(
-                    "Error: {} hosts provided, expected {}".format(
-                        len(spec.placement.hosts), num_new_mgrs))
-
-            for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
-                    raise RuntimeError('name %s alrady exists', host_spec.name)
-
-            for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
-                    raise RuntimeError('name %s alrady exists', host_spec.name)
-
-            self.log.info("creating {} managers on hosts: '{}'".format(
-                num_new_mgrs, ",".join([_spec.hostname for _spec in spec.placement.hosts])))
-
-            args = []
-            for host_spec in spec.placement.hosts:
-                host = host_spec.hostname
-                name = host_spec.name or self.get_unique_name(host, services)
-                args.append((host, name))
-            c = self._create_mgr(args)
-            c.add_progress('Creating MGRs', self)
-            c.update_progress = True
-            return c
+            spec.count -= num_mgrs
+            return self._add_mgr(services, spec)
 
     def add_mds(self, spec):
         if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:
