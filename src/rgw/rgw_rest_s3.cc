@@ -4172,6 +4172,47 @@ void RGWGetObjLegalHold_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetBucketPolicyStatus_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("PolicyStatus", XMLNS_AWS_S3);
+  // https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketGETPolicyStatus.html
+  // mentions TRUE and FALSE, but boto/aws official clients seem to want lower
+  // case which is returned by AWS as well; so let's be bug to bug compatible
+  // with the API
+  s->formatter->dump_bool("IsPublic", isPublic);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+
+}
+
+void RGWPutBucketPublicAccessBlock_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketPublicAccessBlock_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  access_conf.dump_xml(s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
 
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
@@ -4292,6 +4333,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return RGWHandler_REST_PSNotifs_S3::create_get_op();
   } else if (is_replication_op()) {
     return new RGWGetBucketReplication_ObjStore_S3;
+  } else if (is_policy_status_op()) {
+    return new RGWGetBucketPolicyStatus_ObjStore_S3;
+  } else if (is_block_public_access_op()) {
+    return new RGWGetBucketPublicAccessBlock_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -4318,7 +4363,6 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     }
     return new RGWSetBucketWebsite_ObjStore_S3;
   }
-
   if (is_tagging_op()) {
     return new RGWPutBucketTags_ObjStore_S3;
   } else if (is_acl_op()) {
@@ -4343,6 +4387,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     }
 
     return new RGWPutBucketReplication_ObjStore_S3;
+  } else if (is_block_public_access_op()) {
+    return new RGWPutBucketPublicAccessBlock_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -4361,6 +4407,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return RGWHandler_REST_PSNotifs_S3::create_delete_op();
   } else if (is_replication_op()) {
     return new RGWDeleteBucketReplication_ObjStore_S3;
+  } else if (is_block_public_access_op()) {
+    return new RGWDeleteBucketPublicAccessBlock;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -5230,6 +5278,9 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ_LEGAL_HOLD:
         case RGW_STS_GET_SESSION_TOKEN:
         case RGW_STS_ASSUME_ROLE:
+        case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
+        case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
+        case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
