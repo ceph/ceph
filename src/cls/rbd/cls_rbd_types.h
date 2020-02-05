@@ -541,6 +541,8 @@ struct MirrorPrimarySnapshotNamespace {
   }
 };
 
+typedef std::map<uint64_t, uint64_t> SnapSeqs;
+
 struct MirrorNonPrimarySnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
     SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY;
@@ -549,6 +551,7 @@ struct MirrorNonPrimarySnapshotNamespace {
   snapid_t primary_snap_id = CEPH_NOSNAP;
   bool copied = false;
   uint64_t last_copied_object_number = 0;
+  SnapSeqs snap_seqs;
 
   MirrorNonPrimarySnapshotNamespace() {
   }
