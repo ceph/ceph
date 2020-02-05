@@ -39,6 +39,19 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
   FIND_PACKAGE(Threads)
 endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
+if(WIN32)
+  # The Windows headers (e.g. coming from mingw or the Windows SDK) check
+  # the targeted Windows version. The availability of certain functions and
+  # structures will depend on it.
+  set(WIN32_WINNT "0x0A00" CACHE STRING "Targeted Windows version.")
+  add_definitions(-D_WIN32_WINNT=${WIN32_WINNT})
+endif()
+
+if(MINGW)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-allow-multiple-definition")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-allow-multiple-definition")
+endif()
+
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
   find_program(CCACHE_FOUND ccache)
