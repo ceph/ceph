@@ -35,7 +35,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class HostSpec(namedtuple('HostSpec', ['hostname', 'network', 'name'])):
+class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
         res = ''
         res += self.hostname
@@ -46,7 +46,8 @@ class HostSpec(namedtuple('HostSpec', ['hostname', 'network', 'name'])):
         return res
 
 
-def parse_host_specs(host, require_network=True):
+def parse_host_placement_specs(host, require_network=True):
+    # type: (str, Optional[bool]) -> HostPlacementSpec
     """
     Split host into host, network, and (optional) daemon name parts.  The network
     part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
@@ -68,7 +69,7 @@ def parse_host_specs(host, require_network=True):
     name_re = r'=(.*?)$'
 
     # assign defaults
-    host_spec = HostSpec('', '', '')
+    host_spec = HostPlacementSpec('', '', '')
 
     match_host = re.search(host_re, host)
     if match_host:
@@ -1045,10 +1046,10 @@ class PlacementSpec(object):
         # type: (Optional[str], Optional[List], Optional[int]) -> None
         self.label = label
         if hosts:
-            if all([isinstance(host, HostSpec) for host in hosts]):
-                self.hosts = hosts  # type: List[HostSpec]
+            if all([isinstance(host, HostPlacementSpec) for host in hosts]):
+                self.hosts = hosts  # type: List[HostPlacementSpec]
             else:
-                self.hosts = [parse_host_specs(x, require_network=False) for x in hosts if x]
+                self.hosts = [parse_host_placement_specs(x, require_network=False) for x in hosts if x]
         else:
             self.hosts = []
 
