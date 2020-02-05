@@ -14,10 +14,10 @@ void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
   while (n--) {
     __u32 l;
     decode(l, p);
-    p.advance(l);
+    p += l;
     len += 4 + l;
     decode(l, p);
-    p.advance(l);
+    p += l;
     len += 4 + l;
   }
   start.copy(len, *out);
@@ -33,7 +33,7 @@ void decode_str_set_to_bl(bufferlist::const_iterator& p,
   while (n--) {
     __u32 l;
     decode(l, p);
-    p.advance(l);
+    p += l;
     len += 4 + l;
   }
   start.copy(len, *out);

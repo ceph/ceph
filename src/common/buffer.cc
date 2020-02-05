@@ -675,7 +675,7 @@ static ceph::spinlock debug_lock;
   buffer::list::iterator_impl<is_const>::iterator_impl(bl_t *l, unsigned o)
     : bl(l), ls(&bl->_buffers), p(ls->begin()), off(0), p_off(0)
   {
-    advance(o);
+    *this += o;
   }
 
   template<bool is_const>
@@ -683,7 +683,8 @@ static ceph::spinlock debug_lock;
     : iterator_impl<is_const>(i.bl, i.off, i.p, i.p_off) {}
 
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::advance(unsigned o)
+  auto buffer::list::iterator_impl<is_const>::operator +=(unsigned o)
+    -> iterator_impl&
   {
     //cout << this << " advance " << o << " from " << off
     //     << " (p_off " << p_off << " in " << p->length() << ")"
@@ -704,6 +705,7 @@ static ceph::spinlock debug_lock;
       throw end_of_buffer();
     }
     off += o;
+    return *this;
   }
 
   template<bool is_const>
@@ -711,7 +713,7 @@ static ceph::spinlock debug_lock;
   {
     p = ls->begin();
     off = p_off = 0;
-    advance(o);
+    *this += o;
   }
 
   template<bool is_const>
@@ -728,7 +730,7 @@ static ceph::spinlock debug_lock;
   {
     if (p == ls->end())
       throw end_of_buffer();
-    advance(1u);
+    *this += 1;
     return *this;
   }
 
@@ -765,7 +767,7 @@ static ceph::spinlock debug_lock;
       dest += howmuch;
 
       len -= howmuch;
-      advance(howmuch);
+      *this += howmuch;
     }
   }
 
@@ -801,7 +803,7 @@ static ceph::spinlock debug_lock;
       copy(len, dest.c_str());
     } else {
       dest = ptr(*p, p_off, len);
-      advance(len);
+      *this += len;
     }
   }
 
@@ -820,7 +822,7 @@ static ceph::spinlock debug_lock;
       dest.append(*p, p_off, howmuch);
 
       len -= howmuch;
-      advance(howmuch);
+      *this += howmuch;
     }
   }
 
@@ -840,7 +842,7 @@ static ceph::spinlock debug_lock;
       dest.append(c_str + p_off, howmuch);
 
       len -= howmuch;
-      advance(howmuch);
+      *this += howmuch;
     }
   }
 
@@ -857,7 +859,7 @@ static ceph::spinlock debug_lock;
       const char *c_str = p->c_str();
       dest.append(c_str + p_off, howmuch);
 
-      advance(howmuch);
+      *this += howmuch;
     }
   }
 
@@ -927,7 +929,7 @@ static ceph::spinlock debug_lock;
 	
       src += howmuch;
       len -= howmuch;
-      advance(howmuch);
+      *this += howmuch;
     }
   }
   

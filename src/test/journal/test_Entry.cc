@@ -70,7 +70,7 @@ TEST_F(TestEntry, IsReadableBadPreamble) {
   ASSERT_FALSE(journal::Entry::is_readable(it, &bytes_needed));
   ASSERT_EQ(0U, bytes_needed);
 
-  it.advance(sizeof(stray_bytes));
+  it += sizeof(stray_bytes);
   ASSERT_TRUE(journal::Entry::is_readable(it, &bytes_needed));
   ASSERT_EQ(0U, bytes_needed);
 }

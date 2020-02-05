@@ -3153,7 +3153,7 @@ void ENoOp::decode(bufferlist::const_iterator &bl)
     // journal debug tools catch it and recognise a malformed entry.
     throw buffer::end_of_buffer();
   } else {
-    bl.advance(pad_size);
+    bl += pad_size;
   }
   DECODE_FINISH(bl);
 }

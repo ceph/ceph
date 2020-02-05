@@ -184,7 +184,7 @@ public:
       decode(v, bl);
       if (v < 2) {  // normally 0, but conceivably 1
 	// decode old header_t struct (pre v0.40).
-	bl.advance(4u); // skip __u32 flags (it was unused by any old code)
+	bl += 4u; // skip __u32 flags (it was unused by any old code)
 	flags = 0;
 	uint64_t tfsid;
 	decode(tfsid, bl);

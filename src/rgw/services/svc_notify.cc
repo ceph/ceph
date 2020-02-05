@@ -396,7 +396,7 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	ldout(cct, 20) << "robust_notify: acked by " << id << dendl;
 	uint32_t blen;
 	decode(blen, p);
-	p.advance(blen);
+	p += blen;
       }
     } catch (const buffer::error& e) {
       ldout(cct, 0) << "robust_notify: notify response parse failed: "
@@ -435,7 +435,7 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	    }
 	    uint32_t blen;
 	    decode(blen, p);
-	    p.advance(blen);
+	    p += blen;
 	  }
 
 	  uint32_t num_timeouts;

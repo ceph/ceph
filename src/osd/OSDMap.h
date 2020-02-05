@@ -142,7 +142,7 @@ struct PGTempMap {
       offsets[i].second = p.get_off() - start_off;
       uint32_t vn;
       decode(vn, p);
-      p.advance(vn * sizeof(int32_t));
+      p += vn * sizeof(int32_t);
     }
     size_t len = p.get_off() - start_off;
     pstart.copy(len, data);
