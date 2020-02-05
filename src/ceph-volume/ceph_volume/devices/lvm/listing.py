@@ -169,7 +169,7 @@ class List(object):
                 lv = api.get_first_lv(filters={'vg_name': pv.vg_name})
             # or VG.
             else:
-                vg_name = os.path.basename(device)
+                vg_name = os.path.dirname(device)
                 lv = api.get_first_lv(filters={'vg_name': vg_name})
                 arg_is_vg = True
 
