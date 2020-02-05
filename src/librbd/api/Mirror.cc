@@ -1860,7 +1860,7 @@ int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
   if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
       mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
     lderr(cct) << "snapshot based mirroring is not enabled" << dendl;
-    return r;
+    return -EINVAL;
   }
 
   C_SaferCond on_finish;
