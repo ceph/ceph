@@ -321,7 +321,7 @@ class Device(object):
     def has_bluestore_label(self):
         out, err, ret = process.call([
             'ceph-bluestore-tool', 'show-label',
-            '--dev', self.abspath])
+            '--dev', self.abspath], verbose_on_failure=False)
         if ret:
             return False
         return True
