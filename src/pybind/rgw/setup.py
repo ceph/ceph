@@ -19,7 +19,10 @@ def filter_unsupported_flags(flags):
     if clang:
         return [f for f in flags if not (f == '-mcet' or
                                          f.startswith('-fcf-protection') or
-                                         f == '-fstack-clash-protection')]
+                                         f == '-fstack-clash-protection' or
+                                         f == '-fno-var-tracking-assignments' or
+                                         f == '-Wno-deprecated-register' or
+                                         f == '-Wno-gnu-designator')]
     return flags
 
 def monkey_with_compiler(compiler):
@@ -58,7 +61,7 @@ def get_python_flags(libs):
         include_dirs=[distutils.sysconfig.get_python_inc()],
         library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
         libraries=libs + [lib.replace('-l', '') for lib in py_libs],
-        extra_compile_args=distutils.sysconfig.get_config_var('CFLAGS').split(),
+        extra_compile_args=filter_unsupported_flags(distutils.sysconfig.get_config_var('CFLAGS').split()),
         extra_link_args=(distutils.sysconfig.get_config_var('LDFLAGS').split() +
                          distutils.sysconfig.get_config_var('LINKFORSHARED').split()))
 
