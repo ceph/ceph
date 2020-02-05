@@ -666,23 +666,14 @@ class Module(MgrModule):
             self.log.info('Send using HTTP(S) proxy: %s', self.proxy)
             proxies['http'] = self.proxy
             proxies['https'] = self.proxy
-        fail_reason = None
         try:
             resp = requests.put(url=url, json=report)
-            if not resp.ok:
-                fail_reason = 'Failed to send %s to %s: %d %s %s' % (
-                    what,
-                    url,
-                    resp.status_code,
-                    resp.reason,
-                    resp.text
-                )
+            resp.raise_for_status()
         except Exception as e:
-            fail_reason = 'Failed to send %s to %s: %s' % (
-                what, url, str(e)))
-        if fail_reason:
+            fail_reason = 'Failed to send %s to %s: %s' % (what, url, str(e))
             self.log.error(fail_reason)
-        return fail_reason
+            return fail_reason
+        return None
 
     def send(self, report, endpoint=None):
         if not endpoint:
