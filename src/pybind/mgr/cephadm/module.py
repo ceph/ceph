@@ -379,6 +379,7 @@ def trivial_completion(f):
 
 
 def trivial_result(val):
+    # type: (Any) -> AsyncCompletion
     return AsyncCompletion(value=val, name='trivial_result')
 
 
@@ -1301,6 +1302,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     @async_completion
     def remove_host(self, host):
+        # type: (str) -> str
         """
         Remove a host from orchestrator management.
 
@@ -1721,6 +1723,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if daemon_type == 'prometheus':
             j = self._generate_prometheus_config()
             extra_args.extend(['--config-json', '-'])
+        elif daemon_type == 'node-exporter':
+            j = None
         else:
             # keyring
             if not keyring:
@@ -2194,6 +2198,21 @@ scrape_configs:
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
         return self._update_service('prometheus', self.add_prometheus, spec)
 
+    def add_node_exporter(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # FIXME if no hosts are set (likewise no spec.count?) add node-exporter to all hosts!
+        if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
+            raise RuntimeError("must specify at least %d hosts" % spec.count)
+        return self._add_new_daemon('node-exporter', spec, self._create_node_exporter)
+
+    def apply_node_exporter(self, spec):
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='node-exporter').load()
+        return self._update_service('node-exporter', self.add_node_exporter, spec)
+
+    @async_map_completion
+    def _create_node_exporter(self, daemon_id, host):
+        return self._create_daemon('node-exporter', daemon_id, host)
+
     def _get_container_image_id(self, image_name):
         # pick a random host...
         host = None
@@ -2398,7 +2417,7 @@ class NodeAssignment(object):
         # Leaving this open for the next iteration
         # NOTE: This currently queries for all hosts without label restriction
         if self.spec.placement.label:
-            logger.info("Found labels. Assinging nodes that match the label")
+            logger.info("Found labels. Assigning nodes that match the label")
             candidates = [HostPlacementSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
             logger.info('Assigning nodes to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)

@@ -1054,6 +1054,16 @@ class Orchestrator(object):
         """Update prometheus cluster"""
         raise NotImplementedError()
 
+    def add_node_exporter(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Create a new Node-Exporter service"""
+        raise NotImplementedError()
+
+    def apply_node_exporter(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update existing a Node-Exporter daemon(s)"""
+        raise NotImplementedError()
+
     def upgrade_check(self, image, version):
         # type: (Optional[str], Optional[str]) -> Completion
         raise NotImplementedError()
