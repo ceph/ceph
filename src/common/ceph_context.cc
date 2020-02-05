@@ -484,7 +484,11 @@ int CephContext::_do_command(
       return -EPERM;
     }
   }
-  if (command == "perfcounters_dump" || command == "1" ||
+  if (command == "leak_some_memory") {
+    char *foo = new char[1234];
+    (void)foo;
+  }
+  else if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
     std::string logger;
     std::string counter;
@@ -685,6 +689,7 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_hook = new CephContextHook(this);
   _admin_socket->register_command("assert", _admin_hook, "");
   _admin_socket->register_command("abort", _admin_hook, "");
+  _admin_socket->register_command("leak_some_memory", _admin_hook, "");
   _admin_socket->register_command("perfcounters_dump", _admin_hook, "");
   _admin_socket->register_command("1", _admin_hook, "");
   _admin_socket->register_command("perf dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perfcounters value");

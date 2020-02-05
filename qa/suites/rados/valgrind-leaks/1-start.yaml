@@ -15,7 +15,6 @@ overrides:
     conf:
       global:
         osd heartbeat grace: 40
-        debug deliberately leak memory: true
         osd max object name len: 460
         osd max object namespace len: 64
       mon:
@@ -26,8 +25,7 @@ overrides:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
 roles:
-- [mon.a, mgr.x, osd.0, osd.1, client.0]
+- [mon.a, mon.b, mon.c, mgr.x, mgr.y, osd.0, osd.1, osd.2, client.0]
 tasks:
 - install:
 - ceph:
-    expect_valgrind_errors: true
