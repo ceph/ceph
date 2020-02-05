@@ -13490,7 +13490,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
         if (size > 0)
           bl.append_zero(size);
         if (offset + size < len) {
-          inline_iter.advance(size);
+          inline_iter += size;
           inline_iter.copy(len - offset - size, bl);
         }
         in->inline_data = bl;
