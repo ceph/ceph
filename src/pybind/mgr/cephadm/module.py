@@ -994,11 +994,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     @orchestrator._cli_read_command(
         'cephadm check-host',
-        'name=host,type=CephString',
+        'name=host,type=CephString '
+        'name=addr,type=CephString,req=false',
         'Check whether we can access and manage a remote host')
-    def _check_host(self, host):
+    def _check_host(self, host, addr=None):
         out, err, code = self._run_cephadm(host, 'client', 'check-host',
                                            ['--expect-hostname', host],
+                                           addr=addr,
                                            error_ok=True, no_fsid=True)
         if code:
             return 1, '', ('check-host failed:\n' + '\n'.join(err))
@@ -1009,7 +1011,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if item.startswith('host %s ' % host):
                     self.log.debug('kicking serve thread')
                     self.event.set()
-        return 0, '%s ok' % host, err
+        return 0, '%s (%s) ok' % (host, addr), err
 
     def _get_connection(self, host):
         """
