@@ -60,7 +60,6 @@ class PG : public boost::intrusive_ref_counter<
 
   spg_t pgid;
   pg_shard_t pg_whoami;
-  coll_t coll;
   crimson::os::CollectionRef coll_ref;
   ghobject_t pgmeta_oid;
 public:
