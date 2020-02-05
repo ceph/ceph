@@ -295,7 +295,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
     @_cli_read_command(
         'orch ps',
         "name=host,type=CephString,req=false "
-        "name=daemon_type,type=CephChoices,strings=mon|mgr|osd|mds|iscsi|nfs|rgw|rbd-mirror,req=false "
+        "name=daemon_type,type=CephString,req=false "
         "name=daemon_id,type=CephString,req=false "
         "name=format,type=CephChoices,strings=json|plain,req=false "
         "name=refresh,type=CephBool,req=false",
@@ -521,6 +521,21 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
+        'orch daemon add node-exporter',
+        'name=num,type=CephInt,req=false '
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
+        'Add node-exporter daemon(s)')
+    def _daemon_add_node_exporter(self, num=None, label=None, hosts=[]):
+        # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
+        spec = ServiceSpec(
+            placement=PlacementSpec(label=label, hosts=hosts, count=num),
+        )
+        completion = self.add_node_exporter(spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
         'orch',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
         "name=service_name,type=CephString",
@@ -690,6 +705,21 @@ Usage:
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.apply_prometheus(spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch apply node-exporter',
+        'name=num,type=CephInt,req=false '
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
+        'Update node_exporter service')
+    def _apply_node_exporter(self, num=None, label=None, hosts=[]):
+        # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
+        spec = ServiceSpec(
+            placement=PlacementSpec(label=label, hosts=hosts, count=num),
+        )
+        completion = self.apply_node_exporter(spec)
         self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 
