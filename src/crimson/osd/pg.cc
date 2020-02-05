@@ -107,7 +107,7 @@ PG::PG(
 	osdmap,
 	pgid.pool(),
 	pool,
-	osdmap->get_pool_name(pgid.pool())),
+	name),
       osdmap,
       this,
       this),
