@@ -3900,7 +3900,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         if (e.op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP) {
           ldout(sync_env->cct, 20) << "syncstop on " << e.timestamp << dendl;
           syncstopped = true;
-          entries_end = entries_iter; // dont sync past here
+          entries_end = std::next(entries_iter); // stop after this entry
           break;
         }
         if (e.op == RGWModifyOp::CLS_RGW_OP_RESYNC) {
