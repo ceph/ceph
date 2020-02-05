@@ -110,7 +110,7 @@ public:
       decode(delta_ub, p);
     }
 
-    p.advance(size);
+    p += size;
     min_message_size = size + payload_mid_length;
   }
   void encode_payload(uint64_t features) override {
