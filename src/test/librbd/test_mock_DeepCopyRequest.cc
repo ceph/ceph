@@ -41,10 +41,12 @@ public:
 
   static ImageCopyRequest* create(
       librbd::MockTestImageCtx *src_image_ctx,
-      librbd::MockTestImageCtx *dst_image_ctx, librados::snap_t snap_id_start,
-      librados::snap_t snap_id_end, bool flatten,
-      const ObjectNumber &object_number, const SnapSeqs &snap_seqs,
-      ProgressContext *prog_ctx,
+      librbd::MockTestImageCtx *dst_image_ctx,
+      librados::snap_t src_snap_id_start,
+      librados::snap_t src_snap_id_end,
+      librados::snap_t dst_snap_id_start,
+      bool flatten, const ObjectNumber &object_number,
+      const SnapSeqs &snap_seqs, ProgressContext *prog_ctx,
       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
