@@ -1537,7 +1537,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         found = list(zip(*args))[0] if args else []
         not_found = {osd_id for osd_id in osd_ids if 'osd.%s' % osd_id not in found}
         if not_found:
-            raise OrchestratorError('Unable to find ODS: %s' % not_found)
+            raise OrchestratorError('Unable to find OSD: %s' % not_found)
         return self._remove_daemon(args)
 
     def _create_daemon(self, daemon_type, daemon_id, host,
