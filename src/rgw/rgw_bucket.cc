@@ -2398,7 +2398,7 @@ RGWDataChangesLog::~RGWDataChangesLog() {
 }
 
 void *RGWDataChangesLog::ChangesRenewThread::entry() {
-  do {
+  for (;;) {
     dout(2) << "RGWDataChangesLog::ChangesRenewThread: start" << dendl;
     int r = log->renew_entries();
     if (r < 0) {
@@ -2411,7 +2411,7 @@ void *RGWDataChangesLog::ChangesRenewThread::entry() {
     int interval = cct->_conf->rgw_data_log_window * 3 / 4;
     std::unique_lock locker{lock};
     cond.wait_for(locker, std::chrono::seconds(interval));
-  } while (!log->going_down());
+  }
 
   return NULL;
 }
