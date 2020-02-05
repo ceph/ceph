@@ -1455,7 +1455,7 @@ public:
   set<pg_shard_t> might_have_unfound;
 
   bool deleting = false;  /// true while in removing or OSD is shutting down
-  atomic<bool> deleted = {false}; /// true once deletion complete
+  std::atomic<bool> deleted = {false}; /// true once deletion complete
 
   MissingLoc missing_loc; ///< information about missing objects
 
