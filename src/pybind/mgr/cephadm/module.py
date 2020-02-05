@@ -30,7 +30,7 @@ from ceph.deployment.drive_selection import selector
 from mgr_module import MgrModule
 import mgr_util
 import orchestrator
-from orchestrator import OrchestratorError, HostSpec, OrchestratorValidationError
+from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError
 
 from . import remotes
 
@@ -2168,7 +2168,7 @@ class BaseScheduler(object):
 
     * requires a placement_spec
 
-    `place(host_pool)` needs to return a List[HostSpec, ..]
+    `place(host_pool)` needs to return a List[HostPlacementSpec, ..]
     """
 
     def __init__(self, placement_spec):
@@ -2176,7 +2176,7 @@ class BaseScheduler(object):
         self.placement_spec = placement_spec
 
     def place(self, host_pool, count=None):
-        # type: (List, Optional[int]) -> List[HostSpec]
+        # type: (List, Optional[int]) -> List[HostPlacementSpec]
         raise NotImplementedError
 
 
@@ -2190,10 +2190,10 @@ class SimpleScheduler(BaseScheduler):
         super(SimpleScheduler, self).__init__(placement_spec)
 
     def place(self, host_pool, count=None):
-        # type: (List, Optional[int]) -> List[HostSpec]
+        # type: (List, Optional[int]) -> List[HostPlacementSpec]
         if not host_pool:
             raise Exception('List of host candidates is empty')
-        host_pool = [HostSpec(x, '', '') for x in host_pool]
+        host_pool = [HostPlacementSpec(x, '', '') for x in host_pool]
         # shuffle for pseudo random selection
         random.shuffle(host_pool)
         return host_pool[:count]
@@ -2241,7 +2241,7 @@ class NodeAssignment(object):
         # NOTE: This currently queries for all hosts without label restriction
         if self.spec.placement.label:
             logger.info("Found labels. Assinging nodes that match the label")
-            candidates = [HostSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
+            candidates = [HostPlacementSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
             logger.info('Assigning nodes to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
 

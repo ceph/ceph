@@ -9,7 +9,7 @@ from ceph.deployment import inventory
 from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference
 from orchestrator import InventoryNode, ServiceDescription
 from orchestrator import OrchestratorValidationError
-from orchestrator import parse_host_specs
+from orchestrator import parse_host_placement_specs
 
 
 @pytest.mark.parametrize("test_input,expected, require_network",
@@ -24,8 +24,8 @@ from orchestrator import parse_host_specs
                           ("myhost:[v1:10.1.1.10:6789,v2:10.1.1.11:3000]", ('myhost', '[v1:10.1.1.10:6789,v2:10.1.1.11:3000]', ''), True),
                           ("myhost:[v1:10.1.1.10:6789,v2:10.1.1.11:3000]=sname", ('myhost', '[v1:10.1.1.10:6789,v2:10.1.1.11:3000]', 'sname'), True),
                           ])
-def test_parse_host_specs(test_input, expected, require_network):
-    ret = parse_host_specs(test_input, require_network=require_network)
+def test_parse_host_placement_specs(test_input, expected, require_network):
+    ret = parse_host_placement_specs(test_input, require_network=require_network)
     assert ret == expected
     assert str(ret) == test_input
 
@@ -37,9 +37,9 @@ def test_parse_host_specs(test_input, expected, require_network):
                           # empty string
                           ("myhost=1"),
                           ])
-def test_parse_host_specs_raises(test_input):
+def test_parse_host_placement_specs_raises(test_input):
     with pytest.raises(ValueError):
-        ret = parse_host_specs(test_input)
+        ret = parse_host_placement_specs(test_input)
 
 
 def _test_resource(data, resource_class, extra=None):
