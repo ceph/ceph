@@ -1049,6 +1049,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return executable_path
 
     def _run_cephadm(self, host, entity, command, args,
+                     addr=None,
                      stdin=None,
                      no_fsid=False,
                      error_ok=False,
@@ -1056,7 +1057,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         Run cephadm on the remote host with the given command + args
         """
-        conn, connr = self._get_connection(host)
+        if not addr and host in self.inventory:
+            addr = self.inventory[host].get('addr', host)
+        conn, connr = self._get_connection(addr)
 
         try:
             if not image:
@@ -1135,8 +1138,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         :param host: host name
         """
         assert_valid_host(spec.hostname)
-        out, err, code = self._run_cephadm(spec.addr, 'client', 'check-host',
+        out, err, code = self._run_cephadm(spec.hostname, 'client', 'check-host',
                                            ['--expect-hostname', spec.hostname],
+                                           addr=spec.addr,
                                            error_ok=True, no_fsid=True)
         if code:
             raise OrchestratorError('New host %s (%s) failed check: %s' % (
