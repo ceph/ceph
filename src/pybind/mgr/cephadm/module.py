@@ -19,6 +19,7 @@ import os
 import random
 import tempfile
 import multiprocessing.pool
+import re
 import shutil
 import subprocess
 
@@ -88,6 +89,17 @@ def _name_to_entity_name(name):
     else:
         return name
 
+def assert_valid_host(name):
+    p = re.compile('^[a-zA-Z0-9-]+$')
+    try:
+        assert len(name) <= 250, 'name is too long (max 250 chars)'
+        parts = name.split('.')
+        for part in name.split('.'):
+            assert len(part) > 0, '.-delimited name component must not be empty'
+            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
+            assert p.match(part), 'name component must include only a-z, 0-9, and -'
+    except AssertionError as e:
+        raise OrchestratorError(e)
 
 class AsyncCompletion(orchestrator.Completion):
     def __init__(self,
@@ -1121,6 +1133,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         :param host: host name
         """
+        assert_valid_host(host)
         out, err, code = self._run_cephadm(host, 'client', 'check-host',
                                            ['--expect-hostname', host],
                                            error_ok=True, no_fsid=True)
