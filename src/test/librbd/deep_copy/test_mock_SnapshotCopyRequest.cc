@@ -154,8 +154,12 @@ public:
   void expect_get_snap_namespace(librbd::MockTestImageCtx &mock_image_ctx,
                                  uint64_t snap_id) {
     EXPECT_CALL(mock_image_ctx, get_snap_namespace(snap_id, _))
-      .WillOnce(DoAll(SetArgPointee<1>(cls::rbd::UserSnapshotNamespace()),
-                      Return(0)));
+      .WillOnce(Invoke([&mock_image_ctx](uint64_t snap_id,
+                                         cls::rbd::SnapshotNamespace* snap_ns) {
+                  auto it = mock_image_ctx.snap_info.find(snap_id);
+                  *snap_ns = it->second.snap_namespace;
+                  return 0;
+                }));
   }
 
   void expect_snap_create(librbd::MockTestImageCtx &mock_image_ctx,
@@ -223,24 +227,29 @@ public:
 
   MockSnapshotCopyRequest *create_request(
       librbd::MockTestImageCtx &mock_src_image_ctx,
-      librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish,
-      librados::snap_t snap_id_end = CEPH_NOSNAP) {
+      librbd::MockTestImageCtx &mock_dst_image_ctx,
+      librados::snap_t src_snap_id_start,
+      librados::snap_t src_snap_id_end,
+      librados::snap_t dst_snap_id_start,
+      Context *on_finish) {
     return new MockSnapshotCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
-                                       snap_id_end, false, m_work_queue,
+                                       src_snap_id_start, src_snap_id_end,
+                                       dst_snap_id_start, false, m_work_queue,
                                        &m_snap_seqs, on_finish);
   }
 
-  int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,
-                  bool protect = false) {
-    int r = image_ctx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					       snap_name.c_str());
+  int create_snap(librbd::ImageCtx *image_ctx,
+                  const cls::rbd::SnapshotNamespace& snap_ns,
+                  const std::string &snap_name, bool protect) {
+    int r = image_ctx->operations->snap_create(snap_ns, snap_name.c_str());
     if (r < 0) {
       return r;
     }
 
     if (protect) {
-      r = image_ctx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
-					      snap_name.c_str());
+      EXPECT_TRUE(boost::get<cls::rbd::UserSnapshotNamespace>(&snap_ns) !=
+                    nullptr);
+      r = image_ctx->operations->snap_protect(snap_ns, snap_name.c_str());
       if (r < 0) {
         return r;
       }
@@ -251,6 +260,12 @@ public:
       return r;
     }
     return 0;
+  }
+
+  int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,
+                  bool protect = false) {
+    return create_snap(image_ctx, cls::rbd::UserSnapshotNamespace{}, snap_name,
+                       protect);
   }
 
   void validate_snap_seqs(const librbd::SnapSeqs &snap_seqs) {
@@ -273,7 +288,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, Empty) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -312,7 +328,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreate) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -342,7 +359,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreateError) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -363,7 +381,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreateCancel) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   expect_test_features(mock_dst_image_ctx);
 
   InSequence seq;
@@ -415,7 +434,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapRemoveAndCreate) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -447,7 +467,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapRemoveError) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -485,7 +506,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotect) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -520,7 +542,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotectError) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }
@@ -545,7 +568,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotectCancel) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   expect_test_features(mock_dst_image_ctx);
 
   InSequence seq;
@@ -605,7 +629,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotectRemove) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -643,7 +668,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreateProtect) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -683,7 +709,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapProtect) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -721,7 +748,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapProtectError) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -746,7 +774,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapProtectCancel) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   expect_test_features(mock_dst_image_ctx);
 
   InSequence seq;
@@ -784,7 +813,8 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SetHeadError) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx);
+                                                    mock_dst_image_ctx, 0,
+                                                    CEPH_NOSNAP, 0, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -815,12 +845,72 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, NoSetHead) {
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
-                                                    mock_dst_image_ctx, &ctx,
-                                                    src_snap_id1);
+                                                    mock_dst_image_ctx,0,
+                                                    src_snap_id1, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
   validate_snap_seqs({{src_snap_id1, 12}});
+}
+
+TEST_F(TestMockDeepCopySnapshotCopyRequest, StartEndLimit) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  ASSERT_EQ(0, create_snap(m_src_image_ctx, "snap1", false));
+  ASSERT_EQ(0, create_snap(m_src_image_ctx, "snap2", false));
+  ASSERT_EQ(0, create_snap(m_src_image_ctx,
+                           {cls::rbd::MirrorPrimarySnapshotNamespace{
+                              false, {{"peer uuid1"}}}},
+                           "snap3", false));
+  auto src_snap_id1 = m_src_image_ctx->snaps[2];
+  auto src_snap_id2 = m_src_image_ctx->snaps[1];
+  auto src_snap_id3 = m_src_image_ctx->snaps[0];
+
+  ASSERT_EQ(0, create_snap(m_dst_image_ctx, "snap0", true));
+  ASSERT_EQ(0, create_snap(m_dst_image_ctx, "snap1", false));
+  ASSERT_EQ(0, create_snap(m_dst_image_ctx, "snap3", false));
+  auto dst_snap_id1 = m_dst_image_ctx->snaps[1];
+  auto dst_snap_id3 = m_dst_image_ctx->snaps[0];
+
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockSnapshotCreateRequest mock_snapshot_create_request;
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  expect_test_features(mock_dst_image_ctx);
+
+  InSequence seq;
+  expect_snap_is_unprotected(mock_dst_image_ctx, dst_snap_id3,
+                             true, 0);
+
+  expect_get_snap_namespace(mock_dst_image_ctx, dst_snap_id3);
+  expect_start_op(mock_exclusive_lock);
+  expect_snap_remove(mock_dst_image_ctx, "snap3", 0);
+
+  expect_get_snap_namespace(mock_src_image_ctx, src_snap_id2);
+  expect_start_op(mock_exclusive_lock);
+  expect_snap_create(mock_dst_image_ctx, mock_snapshot_create_request, "snap2",
+                     12, 0);
+  expect_get_snap_namespace(mock_src_image_ctx, src_snap_id3);
+
+  expect_snap_is_protected(mock_src_image_ctx, src_snap_id2, false, 0);
+  expect_snap_is_protected(mock_src_image_ctx, src_snap_id3, false, 0);
+
+  MockSetHeadRequest mock_set_head_request;
+  expect_set_head(mock_set_head_request, 0);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
+                                                    mock_dst_image_ctx,
+                                                    src_snap_id1,
+                                                    src_snap_id3,
+                                                    dst_snap_id1, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  validate_snap_seqs({{src_snap_id2, 12}, {src_snap_id3, CEPH_NOSNAP}});
 }
 
 } // namespace deep_copy

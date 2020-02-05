@@ -1287,7 +1287,7 @@ int Migration<I>::create_dst_image() {
 
   C_SaferCond on_snapshot_copy;
   auto snapshot_copy_req = librbd::deep_copy::SnapshotCopyRequest<I>::create(
-      m_src_image_ctx, dst_image_ctx, CEPH_NOSNAP, m_flatten,
+      m_src_image_ctx, dst_image_ctx, 0, CEPH_NOSNAP, 0, m_flatten,
       m_src_image_ctx->op_work_queue, &snap_seqs, &on_snapshot_copy);
   snapshot_copy_req->send();
   r = on_snapshot_copy.wait();

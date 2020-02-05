@@ -94,9 +94,11 @@ public:
 
   static SnapshotCopyRequest* create(librbd::MockTestImageCtx *src_image_ctx,
                                      librbd::MockTestImageCtx *dst_image_ctx,
-                                     librados::snap_t snap_id_end, bool flatten,
-                                     ContextWQ *work_queue, SnapSeqs *snap_seqs,
-                                     Context *on_finish) {
+                                     librados::snap_t src_snap_id_start,
+                                     librados::snap_t src_snap_id_end,
+                                     librados::snap_t dst_snap_id_start,
+                                     bool flatten, ContextWQ *work_queue,
+                                     SnapSeqs *snap_seqs, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
