@@ -146,17 +146,15 @@ static seastar::future<> test_echo(unsigned rounds,
 
       seastar::future<> dispatch_pingpong(const entity_addr_t& peer_addr) {
         mono_time start_time = mono_clock::now();
-        return msgr->connect(peer_addr, entity_name_t::TYPE_OSD
-        ).then([this, start_time](auto conn) {
-          return seastar::futurize_apply([this, conn] {
-            return do_dispatch_pingpong(conn.get());
-          }).finally([this, conn, start_time] {
-            auto session = find_session(conn.get());
-            std::chrono::duration<double> dur_handshake = session->connected_time - start_time;
-            std::chrono::duration<double> dur_pingpong = session->finish_time - session->connected_time;
-            logger().info("{}: handshake {}, pingpong {}",
-                          *conn, dur_handshake.count(), dur_pingpong.count());
-          });
+        auto conn = msgr->connect(peer_addr, entity_name_t::TYPE_OSD);
+        return seastar::futurize_apply([this, conn] {
+          return do_dispatch_pingpong(conn.get());
+        }).finally([this, conn, start_time] {
+          auto session = find_session(conn.get());
+          std::chrono::duration<double> dur_handshake = session->connected_time - start_time;
+          std::chrono::duration<double> dur_pingpong = session->finish_time - session->connected_time;
+          logger().info("{}: handshake {}, pingpong {}",
+                        *conn, dur_handshake.count(), dur_pingpong.count());
         });
       }
 
@@ -326,9 +324,8 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
       server->init(entity_name_t::OSD(4), "server3", 5, addr),
       client->init(entity_name_t::OSD(5), "client3", 6)
   ).then([server, client] {
-    return client->msgr->connect(server->msgr->get_myaddr(),
-                                 entity_name_t::TYPE_OSD);
-  }).then([](crimson::net::ConnectionRef conn) {
+    auto conn = client->msgr->connect(server->msgr->get_myaddr(),
+                                      entity_name_t::TYPE_OSD);
     // send two messages
     return conn->send(make_message<MPing>()).then([conn] {
       return conn->send(make_message<MPing>());
@@ -402,20 +399,18 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
         msgr->set_auth_server(&dummy_auth);
         return msgr->start(this);
       }
-      seastar::future<> send_pings(const entity_addr_t& addr) {
-        return msgr->connect(addr, entity_name_t::TYPE_OSD
-        ).then([this](crimson::net::ConnectionRef conn) {
-          // forwarded to stopped_send_promise
-          (void) seastar::do_until(
-            [this] { return stop_send; },
-            [this, conn] {
-              return conn->send(make_message<MPing>()).then([] {
-                return seastar::sleep(0ms);
-              });
-            }
-          ).then_wrapped([this, conn] (auto fut) {
-            fut.forward_to(std::move(stopped_send_promise));
-          });
+      void send_pings(const entity_addr_t& addr) {
+        auto conn = msgr->connect(addr, entity_name_t::TYPE_OSD);
+        // forwarded to stopped_send_promise
+        (void) seastar::do_until(
+          [this] { return stop_send; },
+          [this, conn] {
+            return conn->send(make_message<MPing>()).then([] {
+              return seastar::sleep(0ms);
+            });
+          }
+        ).then_wrapped([this, conn] (auto fut) {
+          fut.forward_to(std::move(stopped_send_promise));
         });
       }
       seastar::future<> shutdown() {
@@ -442,8 +437,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
     server->init(entity_name_t::OSD(6), "server4", 7, addr),
     client->init(entity_name_t::OSD(7), "client4", 8)
   ).then([server, client] {
-    return client->send_pings(server->get_addr());
-  }).then([] {
+    client->send_pings(server->get_addr());
     return seastar::sleep(100ms);
   }).then([client] {
     logger().info("client shutdown...");
@@ -1079,28 +1073,26 @@ class FailoverSuite : public Dispatcher {
  public:
   seastar::future<> connect_peer() {
     logger().info("[Test] connect_peer({})", test_peer_addr);
-    return test_msgr->connect(test_peer_addr, entity_name_t::TYPE_OSD
-    ).then([this] (auto conn) {
-      auto result = interceptor.find_result(conn);
-      ceph_assert(result != nullptr);
+    auto conn = test_msgr->connect(test_peer_addr, entity_name_t::TYPE_OSD);
+    auto result = interceptor.find_result(conn);
+    ceph_assert(result != nullptr);
 
-      if (tracked_conn) {
-        if (tracked_conn->is_closed()) {
-          ceph_assert(tracked_conn != conn);
-          logger().info("[Test] this is a new session replacing an closed one");
-        } else {
-          ceph_assert(tracked_index == result->index);
-          ceph_assert(tracked_conn == conn);
-          logger().info("[Test] this is not a new session");
-        }
+    if (tracked_conn) {
+      if (tracked_conn->is_closed()) {
+        ceph_assert(tracked_conn != conn);
+        logger().info("[Test] this is a new session replacing an closed one");
       } else {
-        logger().info("[Test] this is a new session");
+        ceph_assert(tracked_index == result->index);
+        ceph_assert(tracked_conn == conn);
+        logger().info("[Test] this is not a new session");
       }
-      tracked_index = result->index;
-      tracked_conn = conn;
+    } else {
+      logger().info("[Test] this is a new session");
+    }
+    tracked_index = result->index;
+    tracked_conn = conn;
 
-      return flush_pending_send();
-    });
+    return flush_pending_send();
   }
 
   seastar::future<> send_peer() {
@@ -1247,9 +1239,7 @@ class FailoverTest : public Dispatcher {
     cmd_msgr->set_auth_server(&dummy_auth);
     return cmd_msgr->start(this).then([this, cmd_peer_addr] {
       logger().info("CmdCli connect to CmdSrv({}) ...", cmd_peer_addr);
-      return cmd_msgr->connect(cmd_peer_addr, entity_name_t::TYPE_OSD);
-    }).then([this] (auto conn) {
-      cmd_conn = conn;
+      cmd_conn = cmd_msgr->connect(cmd_peer_addr, entity_name_t::TYPE_OSD);
       return pingpong();
     });
   }
@@ -1441,24 +1431,21 @@ class FailoverSuitePeer : public Dispatcher {
 
   seastar::future<> connect_peer(entity_addr_t addr) {
     logger().info("[TestPeer] connect_peer({})", addr);
-    return peer_msgr->connect(addr, entity_name_t::TYPE_OSD
-    ).then([this] (auto conn) {
-      auto new_tracked_conn = conn;
-      if (tracked_conn) {
-        if (tracked_conn->is_closed()) {
-          ceph_assert(tracked_conn != new_tracked_conn);
-          logger().info("[TestPeer] this is a new session"
-                        " replacing an closed one");
-        } else {
-          ceph_assert(tracked_conn == new_tracked_conn);
-          logger().info("[TestPeer] this is not a new session");
-        }
+    auto new_tracked_conn = peer_msgr->connect(addr, entity_name_t::TYPE_OSD);
+    if (tracked_conn) {
+      if (tracked_conn->is_closed()) {
+        ceph_assert(tracked_conn != new_tracked_conn);
+        logger().info("[TestPeer] this is a new session"
+                      " replacing an closed one");
       } else {
-        logger().info("[TestPeer] this is a new session");
+        ceph_assert(tracked_conn == new_tracked_conn);
+        logger().info("[TestPeer] this is not a new session");
       }
-      tracked_conn = new_tracked_conn;
-      return flush_pending_send();
-    });
+    } else {
+      logger().info("[TestPeer] this is a new session");
+    }
+    tracked_conn = new_tracked_conn;
+    return flush_pending_send();
   }
 
   seastar::future<> send_peer() {

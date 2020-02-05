@@ -34,7 +34,7 @@ public:
 			  entity_addrvec_t back);
   seastar::future<> stop();
 
-  seastar::future<> add_peer(osd_id_t peer, epoch_t epoch);
+  void add_peer(osd_id_t peer, epoch_t epoch);
   seastar::future<> update_peers(int whoami);
   seastar::future<> remove_peer(osd_id_t peer);
 
@@ -67,7 +67,7 @@ private:
   /// @return peers not needed in this epoch
   seastar::future<osds_t> remove_down_peers();
   /// add enough reporters for fast failure detection
-  seastar::future<> add_reporter_peers(int whoami);
+  void add_reporter_peers(int whoami);
 
   seastar::future<> start_messenger(crimson::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);

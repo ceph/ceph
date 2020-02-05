@@ -76,7 +76,7 @@ public:
 
   /// either return an existing connection to the peer,
   /// or a new pending connection
-  virtual seastar::future<ConnectionRef>
+  virtual ConnectionRef
   connect(const entity_addr_t& peer_addr,
           const entity_type_t& peer_type) = 0;
 

@@ -57,11 +57,9 @@ seastar::future<> ShardServices::send_to_osd(
 		    osdmap->get_info(peer).up_from, from_epoch);
     return seastar::now();
   } else {
-    return cluster_msgr.connect(osdmap->get_cluster_addrs(peer).front(),
-      CEPH_ENTITY_TYPE_OSD)
-      .then([m, this] (auto conn) {
-	      return conn->send(m);
-	    });
+    auto conn = cluster_msgr.connect(
+        osdmap->get_cluster_addrs(peer).front(), CEPH_ENTITY_TYPE_OSD);
+    return conn->send(m);
   }
 }
 

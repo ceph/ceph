@@ -131,7 +131,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
   return seastar::now();
 }
 
-seastar::future<crimson::net::ConnectionRef>
+crimson::net::ConnectionRef
 SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
 {
   assert(seastar::engine().cpu_id() == master_sid);
@@ -141,12 +141,12 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
   ceph_assert(peer_addr.get_port() > 0);
 
   if (auto found = lookup_conn(peer_addr); found) {
-    return seastar::make_ready_future<ConnectionRef>(found->shared_from_this());
+    return found->shared_from_this();
   }
   SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
       *this, *dispatcher, peer_addr.is_msgr2());
   conn->start_connect(peer_addr, peer_type);
-  return seastar::make_ready_future<ConnectionRef>(conn->shared_from_this());
+  return conn->shared_from_this();
 }
 
 seastar::future<> SocketMessenger::shutdown()
