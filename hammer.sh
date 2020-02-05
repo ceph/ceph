@@ -14,8 +14,6 @@ fi
 
 test -e $1
 
-teuthology-nuke -t $job
-
 title() {
 	echo '\[\033]0;hammer '$job' '$N' passes\007\]'
 }
