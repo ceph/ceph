@@ -76,26 +76,17 @@ class TestSessionMap(CephFSTestCase):
         split into multiple versions to obey mds_sessionmap_keys_per_op
         """
 
-        # Start umounted
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
         # Configure MDS to write one OMAP key at once
         self.set_conf('mds', 'mds_sessionmap_keys_per_op', 1)
         self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
-
-        # I would like two MDSs, so that I can do an export dir later
-        self.fs.set_max_mds(2)
-        self.fs.wait_for_daemons()
-
-        status = self.fs.status()
+        status = self.fs.wait_for_daemons()
 
         # Bring the clients back
         self.mount_a.mount()
         self.mount_b.mount()
-        self.mount_a.create_files()  # Kick the client into opening sessions
-        self.mount_b.create_files()
 
         # See that they've got sessions
         self.assert_session_count(2, mds_id=self.fs.get_rank(status=status)['name'])
@@ -109,8 +100,11 @@ class TestSessionMap(CephFSTestCase):
 
         # Now, induce a "force_open_sessions" event by exporting a dir
         self.mount_a.run_shell(["mkdir", "bravo"])
-        self.mount_a.run_shell(["touch", "bravo/file"])
-        self.mount_b.run_shell(["ls", "-l", "bravo/file"])
+        self.mount_a.run_shell(["touch", "bravo/file_a"])
+        self.mount_b.run_shell(["touch", "bravo/file_b"]) # avoid cap contention w/ seperate file
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
 
         def get_omap_wrs():
             return self.fs.rank_asok(['perf', 'dump', 'objecter'], rank=1, status=status)['objecter']['omap_wr']
