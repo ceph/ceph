@@ -285,13 +285,13 @@ void PG::prepare_write(pg_info_t &info,
     ceph_assert(ret == 0);
   }
   pglog.write_log_and_missing(
-    t, &km, coll, pgmeta_oid,
+    t, &km, coll_ref->get_cid(), pgmeta_oid,
     peering_state.get_pool().info.require_rollback());
   if (!km.empty()) {
-    t.omap_setkeys(coll, pgmeta_oid, km);
+    t.omap_setkeys(coll_ref->get_cid(), pgmeta_oid, km);
   }
   if (!key_to_remove.empty()) {
-    t.omap_rmkey(coll, pgmeta_oid, key_to_remove);
+    t.omap_rmkey(coll_ref->get_cid(), pgmeta_oid, key_to_remove);
   }
 }
 
