@@ -508,29 +508,24 @@ class Module(MgrModule):
             self.log.info('Using HTTP(S) proxy: %s', self.config['proxy'])
             proxies['http'] = self.config['proxy']
             proxies['https'] = self.config['proxy']
-        fail_reason = None
         try:
-            resp = requests.put(url=url, json=report)
-            if not resp.ok:
-                fail_reason = 'Failed to send %s to %s: %d %s %s' % (
-                    what,
-                    url,
-                    resp.status_code,
-                    resp.reason,
-                    resp.text
-                )
+            resp = requests.put(url=url, json=report, proxies=proxies)
+            resp.raise_for_status()
         except Exception as e:
-            fail_reason = 'Failed to send %s to %s: %s' % (
-                what, url, str(e))
-        if fail_reason:
+            fail_reason = 'Failed to send %s to %s: %s' % (what, url, str(e))
             self.log.error(fail_reason)
-        return fail_reason
+            return fail_reason
+        return None
 
     def send(self, report):
         fail_reason = self._try_post('ceph report', self.config['url'], report)
         if fail_reason:
             return 1, '', fail_reason
-        return 0, 'Report sent to {0}'.format(self.config['url']), ''
+        else:
+            now = int(time.time())
+            self.last_upload = now
+            self.set_config('last_upload', str(now))
+            return 0, 'Report sent to {0}'.format(self.config['url']), ''
 
     def handle_command(self, command):
         if command['prefix'] == 'telemetry config-show':
@@ -626,10 +621,7 @@ class Module(MgrModule):
                 except:
                     self.log.exception('Exception while compiling report:')
 
-                res = self.send(self.last_report)
-                if res[0] == 0:
-                    self.last_upload = now
-                    self.set_config('last_upload', str(now))
+                self.send(self.last_report)
             else:
                 self.log.debug('Interval for sending new report has not expired')
 
