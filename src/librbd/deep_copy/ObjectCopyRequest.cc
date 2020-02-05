@@ -43,13 +43,17 @@ using librbd::util::create_rados_callback;
 template <typename I>
 ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
                                         I *dst_image_ctx,
+                                        librados::snap_t src_snap_id_start,
+                                        librados::snap_t dst_snap_id_start,
                                         const SnapMap &snap_map,
                                         uint64_t dst_object_number,
                                         bool flatten, Context *on_finish)
   : m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
-    m_snap_map(snap_map), m_dst_object_number(dst_object_number),
-    m_flatten(flatten), m_on_finish(on_finish) {
+    m_src_snap_id_start(src_snap_id_start),
+    m_dst_snap_id_start(dst_snap_id_start), m_snap_map(snap_map),
+    m_dst_object_number(dst_object_number), m_flatten(flatten),
+    m_on_finish(on_finish) {
   ceph_assert(src_image_ctx->data_ctx.is_valid());
   ceph_assert(dst_image_ctx->data_ctx.is_valid());
   ceph_assert(!m_snap_map.empty());
@@ -318,12 +322,15 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
 
     // write snapshot context should be before actual snapshot
-    if (snap_map_it != m_snap_map.begin()) {
-      --snap_map_it;
-      ceph_assert(!snap_map_it->second.empty());
-      dst_snap_seq = snap_map_it->second.front();
-      dst_snap_ids = snap_map_it->second;
+    ceph_assert(!snap_map_it->second.empty());
+    auto dst_snap_ids_it = snap_map_it->second.begin();
+    ++dst_snap_ids_it;
+
+    dst_snap_ids = SnapIds{dst_snap_ids_it, snap_map_it->second.end()};
+    if (!dst_snap_ids.empty()) {
+      dst_snap_seq = dst_snap_ids.front();
     }
+    ceph_assert(dst_snap_seq != CEPH_NOSNAP);
   }
 
   ldout(m_cct, 20) << "dst_snap_seq=" << dst_snap_seq << ", "
@@ -581,10 +588,10 @@ void ObjectCopyRequest<I>::compute_read_ops() {
   m_src_image_ctx->image_lock.unlock_shared();
 
   librados::snap_t src_copy_point_snap_id = m_snap_map.rbegin()->first;
-  bool prev_exists = hide_parent;
+  bool prev_exists = (hide_parent || m_src_snap_id_start > 0);
   uint64_t prev_end_size = prev_exists ?
       m_src_image_ctx->layout.object_size : 0;
-  librados::snap_t start_src_snap_id = 0;
+  librados::snap_t start_src_snap_id = m_src_snap_id_start;
 
   for (auto &pair : m_snap_map) {
     ceph_assert(!pair.second.empty());

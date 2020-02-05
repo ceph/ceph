@@ -158,7 +158,8 @@ void DeepCopyRequest<I>::send_copy_image() {
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_image>(this);
   m_image_copy_request = ImageCopyRequest<I>::create(
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_src_snap_id_end,
-    m_flatten, m_object_number, *m_snap_seqs, m_prog_ctx, ctx);
+    m_dst_snap_id_start, m_flatten, m_object_number, *m_snap_seqs, m_prog_ctx,
+    ctx);
   m_image_copy_request->get();
   m_lock.unlock();
 
