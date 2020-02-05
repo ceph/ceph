@@ -766,8 +766,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def add_host(self, host):
-        # type: (str) -> Completion
+    def add_host(self, HostSpec):
+        # type: (HostSpec) -> Completion
         """
         Add a host to the orchestrator inventory.
 
@@ -1028,6 +1028,12 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+class HostSpec(object):
+    def __init__(self, hostname, addr=None, labels=None):
+        # type: (str, Optional[str], Optional[List[str]]) -> None
+        self.hostname = hostname       # the hostname on the host
+        self.addr = addr or hostname   # DNS name or IP address to reach it
+        self.labels = labels or []     # initial label(s), if any
 
 class UpgradeStatusSpec(object):
     # Orchestrator's report on what's going on with any ongoing upgrade

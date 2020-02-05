@@ -157,10 +157,13 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @orchestrator._cli_write_command(
         'orchestrator host add',
-        "name=host,type=CephString,req=true",
+        'name=host,type=CephString,req=true '
+        'name=addr,type=CephString,req=false '
+        'name=labels,type=CephString,n=N,req=false',
         'Add a host')
-    def _add_host(self, host):
-        completion = self.add_host(host)
+    def _add_host(self, host, addr=None, labels=None):
+        s = orchestrator.HostSpec(hostname=host, addr=addr, labels=labels)
+        completion = self.add_host(s)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

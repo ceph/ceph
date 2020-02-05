@@ -30,7 +30,7 @@ from ceph.deployment.drive_selection import selector
 from mgr_module import MgrModule
 import mgr_util
 import orchestrator
-from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError
+from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError, HostSpec
 
 from . import remotes
 
@@ -1127,25 +1127,30 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self.inventory_cache.items_filtered(wanted)
 
     @async_completion
-    def add_host(self, host):
+    def add_host(self, spec):
+        # type: (HostSpec) -> str
         """
         Add a host to be managed by the orchestrator.
 
         :param host: host name
         """
-        assert_valid_host(host)
-        out, err, code = self._run_cephadm(host, 'client', 'check-host',
-                                           ['--expect-hostname', host],
+        assert_valid_host(spec.hostname)
+        out, err, code = self._run_cephadm(spec.addr, 'client', 'check-host',
+                                           ['--expect-hostname', spec.hostname],
                                            error_ok=True, no_fsid=True)
         if code:
-            raise OrchestratorError('New host %s failed check: %s' % (host, err))
+            raise OrchestratorError('New host %s (%s) failed check: %s' % (
+                spec.hostname, spec.addr, err))
 
-        self.inventory[host] = {}
+        self.inventory[spec.hostname] = {
+            'addr': spec.addr,
+            'labels': spec.labels,
+        }
         self._save_inventory()
-        self.inventory_cache[host] = orchestrator.OutdatableData()
-        self.service_cache[host] = orchestrator.OutdatableData()
+        self.inventory_cache[spec.hostname] = orchestrator.OutdatableData()
+        self.service_cache[spec.hostname] = orchestrator.OutdatableData()
         self.event.set()  # refresh stray health check
-        return "Added host '{}'".format(host)
+        return "Added host '{}'".format(spec.hostname)
 
     @async_completion
     def remove_host(self, host):
