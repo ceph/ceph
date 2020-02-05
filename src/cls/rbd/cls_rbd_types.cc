@@ -745,6 +745,7 @@ void MirrorNonPrimarySnapshotNamespace::encode(bufferlist& bl) const {
   encode(primary_snap_id, bl);
   encode(copied, bl);
   encode(last_copied_object_number, bl);
+  encode(snap_seqs, bl);
 }
 
 void MirrorNonPrimarySnapshotNamespace::decode(bufferlist::const_iterator& it) {
@@ -753,6 +754,7 @@ void MirrorNonPrimarySnapshotNamespace::decode(bufferlist::const_iterator& it) {
   decode(primary_snap_id, it);
   decode(copied, it);
   decode(last_copied_object_number, it);
+  decode(snap_seqs, it);
 }
 
 void MirrorNonPrimarySnapshotNamespace::dump(Formatter *f) const {
@@ -760,6 +762,7 @@ void MirrorNonPrimarySnapshotNamespace::dump(Formatter *f) const {
   f->dump_unsigned("primary_snap_id", primary_snap_id);
   f->dump_bool("copied", copied);
   f->dump_unsigned("last_copied_object_number", last_copied_object_number);
+  f->dump_stream("snap_seqs") << snap_seqs;
 }
 
 class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
@@ -985,7 +988,8 @@ std::ostream& operator<<(std::ostream& os,
      << "primary_mirror_uuid=" << ns.primary_mirror_uuid << ", "
      << "primary_snap_id=" << ns.primary_snap_id << ", "
      << "copied=" << ns.copied << ", "
-     << "last_copied_object_number=" << ns.last_copied_object_number
+     << "last_copied_object_number=" << ns.last_copied_object_number << ", "
+     << "snap_seqs=" << ns.snap_seqs
      << "]";
   return os;
 }
