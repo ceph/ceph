@@ -1935,8 +1935,11 @@ int Client::make_request(MetaRequest *request,
       session = &mds_sessions.at(mds);
     }
 
-    if (request->async_dirop_cb)
+    if (request->async_dirop_cb) {
       (this->*request->async_dirop_cb)(request, session, 0);
+      if (request->async)
+	request->perms.unshare_gids();
+    }
 
     // send request.
     send_request(request, session);
