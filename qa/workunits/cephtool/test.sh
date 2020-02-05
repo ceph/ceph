@@ -1945,6 +1945,16 @@ function test_mon_osd_pool()
   ceph osd crush rule rm foo
   ceph osd erasure-code-profile rm foo
 
+  # autoscale mode
+  ceph osd pool create modeon --autoscale-mode=on
+  ceph osd dump | grep modeon | grep 'autoscale_mode on'
+  ceph osd pool create modewarn --autoscale-mode=warn
+  ceph osd dump | grep modewarn | grep 'autoscale_mode warn'
+  ceph osd pool create modeoff --autoscale-mode=off
+  ceph osd dump | grep modeoff | grep 'autoscale_mode off'
+  ceph osd pool delete modeon modeon --yes-i-really-really-mean-it
+  ceph osd pool delete modewarn modewarn --yes-i-really-really-mean-it
+  ceph osd pool delete modeoff modeoff --yes-i-really-really-mean-it
 }
 
 function test_mon_osd_pool_quota()
