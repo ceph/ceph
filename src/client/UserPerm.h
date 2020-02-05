@@ -88,6 +88,15 @@ public:
     gids = o.gids;
     alloced_gids = false;
   }
+  void unshare_gids() {
+    if (alloced_gids || gid_count <= 0)
+      return;
+    gid_t *_gids = new gid_t[gid_count];
+    for (int i = 0; i < gid_count; ++i)
+      _gids[i] = gids[i];
+    gids = _gids;
+    alloced_gids = true;
+  }
 };
 
 #endif
