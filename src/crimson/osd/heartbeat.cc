@@ -93,7 +93,7 @@ void Heartbeat::set_require_authorizer(bool require_authorizer)
   }
 }
 
-seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
+void Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
 {
   auto [peer_info, added] = peers.try_emplace(peer);
   auto& info = peer_info->second;
@@ -102,17 +102,10 @@ seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
     logger().info("add_peer({})", peer);
     auto osdmap = service.get_osdmap_service().get_map();
     // TODO: use addrs
-    return seastar::when_all_succeed(
-        front_msgr->connect(osdmap->get_hb_front_addrs(peer).front(),
-                            CEPH_ENTITY_TYPE_OSD),
-        back_msgr->connect(osdmap->get_hb_back_addrs(peer).front(),
-                           CEPH_ENTITY_TYPE_OSD))
-      .then([&info=peer_info->second] (auto con_front, auto con_back) {
-        info.con_front = con_front;
-        info.con_back = con_back;
-      });
-  } else {
-    return seastar::now();
+    peer_info->second.con_front = front_msgr->connect(
+        osdmap->get_hb_front_addrs(peer).front(), CEPH_ENTITY_TYPE_OSD);
+    peer_info->second.con_back = back_msgr->connect(
+        osdmap->get_hb_back_addrs(peer).front(), CEPH_ENTITY_TYPE_OSD);
   }
 }
 
@@ -143,7 +136,7 @@ seastar::future<Heartbeat::osds_t> Heartbeat::remove_down_peers()
     });
 }
 
-seastar::future<> Heartbeat::add_reporter_peers(int whoami)
+void Heartbeat::add_reporter_peers(int whoami)
 {
   auto osdmap = service.get_osdmap_service().get_map();
   // include next and previous up osds to ensure we have a fully-connected set
@@ -160,20 +153,18 @@ seastar::future<> Heartbeat::add_reporter_peers(int whoami)
   auto subtree = local_conf().get_val<string>("mon_osd_reporter_subtree_level");
   osdmap->get_random_up_osds_by_subtree(
     whoami, subtree, min_down, want, &want);
-  return seastar::parallel_for_each(
-    std::move(want),
-    [epoch=osdmap->get_epoch(), this](int osd) {
-      return add_peer(osd, epoch);
-  });
+  auto epoch = osdmap->get_epoch();
+  for (int osd : want) {
+    add_peer(osd, epoch);
+  };
 }
 
 seastar::future<> Heartbeat::update_peers(int whoami)
 {
   const auto min_peers = static_cast<size_t>(
     local_conf().get_val<int64_t>("osd_heartbeat_min_peers"));
-  return add_reporter_peers(whoami).then([this] {
-    return remove_down_peers();
-  }).then([=](osds_t&& extra) {
+  add_reporter_peers(whoami);
+  return remove_down_peers().then([=](osds_t&& extra) {
     // too many?
     struct iteration_state {
       osds_t::const_iterator where;
@@ -197,11 +188,10 @@ seastar::future<> Heartbeat::update_peers(int whoami)
       next = osdmap->get_next_up_osd_after(next)) {
       want.push_back(next);
     }
-    return seastar::parallel_for_each(
-      std::move(want),
-      [epoch=osdmap->get_epoch(), this](int osd) {
-        return add_peer(osd, epoch);
-    });
+    auto epoch = osdmap->get_epoch();
+    for (int osd : want) {
+      add_peer(osd, epoch);
+    }
   });
 }
 
@@ -242,7 +232,7 @@ seastar::future<> Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn)
   const auto peer = found->first;
   const auto epoch = found->second.epoch;
   return remove_peer(peer).then([peer, epoch, this] {
-    return add_peer(peer, epoch);
+    add_peer(peer, epoch);
   });
 }
 

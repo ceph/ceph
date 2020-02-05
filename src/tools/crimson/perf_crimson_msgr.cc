@@ -366,12 +366,9 @@ static seastar::future<> run(
           // start clients in active cores (#1 ~ #jobs)
           if (client.is_active()) {
             mono_time start_time = mono_clock::now();
-            return client.msgr->connect(peer_addr, entity_name_t::TYPE_OSD
-            ).then([&client] (auto conn) {
-              client.active_conn = conn;
-              // make sure handshake won't hurt the performance
-              return seastar::sleep(1s);
-            }).then([&client, start_time] {
+            client.active_conn = client.msgr->connect(peer_addr, entity_name_t::TYPE_OSD);
+            // make sure handshake won't hurt the performance
+            return seastar::sleep(1s).then([&client, start_time] {
               if (client.conn_stats.connected_time == mono_clock::zero()) {
                 logger().error("\n{} not connected after 1s!\n", client.lname);
                 ceph_assert(false);

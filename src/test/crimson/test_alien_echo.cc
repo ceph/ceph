@@ -187,9 +187,9 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       client.msgr->set_require_authorizer(false);
       client.msgr->set_auth_client(&client.dummy_auth);
       client.msgr->set_auth_server(&client.dummy_auth);
-      return client.msgr->start(&client.dispatcher).then([addr, &client] {
-        return client.msgr->connect(addr, entity_name_t::TYPE_OSD);
-      }).then([&disp=client.dispatcher, count](crimson::net::ConnectionRef conn) {
+      return client.msgr->start(&client.dispatcher).then(
+          [addr, &client, &disp=client.dispatcher, count] {
+        auto conn = client.msgr->connect(addr, entity_name_t::TYPE_OSD);
         return seastar::do_until(
           [&disp,count] { return disp.count >= count; },
           [&disp,conn] {
