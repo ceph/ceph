@@ -2528,7 +2528,6 @@ def _get_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '--image',
-        default=os.environ.get('CEPHADM_IMAGE', DEFAULT_IMAGE),
         help='container image. Can also be set via the "CEPHADM_IMAGE" '
         'env var')
     parser.add_argument(
@@ -2835,6 +2834,19 @@ def _get_parser():
 
     return parser
 
+def _parse_args(av):
+    parser = _get_parser()
+    args = parser.parse_args(av)
+
+    if not args.image:
+        if 'name' in args:
+            type_ = args.name.split('.', 1)[0]
+            if type_ in Monitoring.components:
+                args.image = Monitoring.components[type_]['image']
+        if not args.image:
+            args.image = os.environ.get('CEPHADM_IMAGE', DEFAULT_IMAGE)
+
+    return args
 
 if __name__ == "__main__":
     # allow argv to be injected
@@ -2842,8 +2854,7 @@ if __name__ == "__main__":
         av = injected_argv # type: ignore
     except NameError:
         av = sys.argv[1:]
-    parser = _get_parser()
-    args = parser.parse_args(av)
+    args = _parse_args(av)
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
