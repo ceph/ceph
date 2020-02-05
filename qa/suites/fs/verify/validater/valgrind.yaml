@@ -1,5 +1,5 @@
-# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-os_type: centos
+# Only works on os_type: centos
+# See http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
 
 overrides:
   install:
