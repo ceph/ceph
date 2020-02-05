@@ -29,7 +29,7 @@ class Module(MgrModule):
     MODULE_OPTIONS = [
         {
             'name': 'enable_monitoring',
-            'default': False,
+            'default': True,
             'type': 'bool',
             'desc': 'monitor device health metrics',
             'runtime': True,
