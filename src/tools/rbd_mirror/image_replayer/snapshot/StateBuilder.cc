@@ -100,9 +100,10 @@ template <typename I>
 image_replayer::Replayer* StateBuilder<I>::create_replayer(
    Threads<I>* threads,
     const std::string& local_mirror_uuid,
+    PoolMetaCache* pool_meta_cache,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(
-    threads, local_mirror_uuid, this, replayer_listener);
+    threads, local_mirror_uuid, pool_meta_cache, this, replayer_listener);
 }
 
 } // namespace snapshot

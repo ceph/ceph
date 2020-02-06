@@ -8,6 +8,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
@@ -35,10 +36,12 @@ template <typename I>
 Replayer<I>::Replayer(
     Threads<I>* threads,
     const std::string& local_mirror_uuid,
+    PoolMetaCache* pool_meta_cache,
     StateBuilder<I>* state_builder,
     ReplayerListener* replayer_listener)
   : m_threads(threads),
     m_local_mirror_uuid(local_mirror_uuid),
+    m_pool_meta_cache(pool_meta_cache),
     m_state_builder(state_builder),
     m_replayer_listener(replayer_listener),
     m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
