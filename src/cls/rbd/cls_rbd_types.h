@@ -555,6 +555,19 @@ struct MirrorSnapshotNamespace {
       primary_mirror_uuid(primary_mirror_uuid),
       primary_snap_id(primary_snap_id) {
   }
+  MirrorSnapshotNamespace(MirrorSnapshotState state,
+                          const std::set<std::string> &mirror_peer_uuids,
+                          const std::string& primary_mirror_uuid,
+                          snapid_t primary_snap_id,
+                          bool complete,
+                          uint64_t last_copied_object_number,
+                          const SnapSeqs& snap_seqs)
+    : state(state), complete(complete), mirror_peer_uuids(mirror_peer_uuids),
+      primary_mirror_uuid(primary_mirror_uuid),
+      primary_snap_id(primary_snap_id),
+      last_copied_object_number(last_copied_object_number),
+      snap_seqs(snap_seqs) {
+  }
 
   inline bool is_primary() const {
     return (state == MIRROR_SNAPSHOT_STATE_PRIMARY ||
