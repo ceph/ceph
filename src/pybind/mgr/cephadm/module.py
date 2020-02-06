@@ -1616,7 +1616,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             ] + extra_args,
             stdin=j)
         self.log.debug('create_daemon code %s out %s' % (code, out))
-        if not code:
+        if not code and host in self.service_cache:
             # prime cached service state with what we (should have)
             # just created
             sd = {
@@ -1647,6 +1647,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             host, name, 'rm-daemon',
             ['--name', name])
         self.log.debug('_remove_daemon code %s out %s' % (code, out))
+        if not code and host in self.service_cache:
+            # remove item from cache
+            data = self.service_cache[host].data
+            if data:
+                data = [d for d in data if d['name'] != name]
+                self.service_cache[host] = orchestrator.OutdatableData(data)
         self.service_cache.invalidate(host)
         return "Removed {} from host '{}'".format(name, host)
 
