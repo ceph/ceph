@@ -178,6 +178,17 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @orchestrator._cli_write_command(
+        'orchestrator host set-addr',
+        'name=host,type=CephString '
+        'name=addr,type=CephString',
+        'Update a host address')
+    def _update_set_addr(self, host, addr):
+        completion = self.update_host_addr(host, addr)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @orchestrator._cli_read_command(
         'orchestrator host ls',
         'name=format,type=CephChoices,strings=json|plain,req=false',

@@ -784,6 +784,16 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def update_host_addr(self, host, addr):
+        # type: (str, str) -> Completion
+        """
+        Update a host's address
+
+        :param host: hostname
+        :param addr: address (dns name or IP)
+        """
+        raise NotImplementedError()
+
     def get_hosts(self):
         # type: () -> Completion
         """
