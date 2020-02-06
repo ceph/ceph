@@ -409,6 +409,7 @@ void ImageReplayer<I>::start_replay() {
   std::unique_lock locker{m_lock};
   ceph_assert(m_replayer == nullptr);
   m_replayer = m_state_builder->create_replayer(m_threads, m_local_mirror_uuid,
+                                                m_pool_meta_cache,
                                                 m_replayer_listener);
 
   auto ctx = create_context_callback<

@@ -59,6 +59,7 @@ public:
   image_replayer::Replayer* create_replayer(
       Threads<ImageCtxT>* threads,
       const std::string& local_mirror_uuid,
+      PoolMetaCache* pool_meta_cache,
       ReplayerListener* replayer_listener) override;
 
   SyncPointHandler<ImageCtxT>* sync_point_handler = nullptr;

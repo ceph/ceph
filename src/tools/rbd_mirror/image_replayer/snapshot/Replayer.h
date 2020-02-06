@@ -19,6 +19,7 @@ namespace snapshot { template <typename I> class Replay; }
 namespace rbd {
 namespace mirror {
 
+class PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -37,15 +38,17 @@ public:
   static Replayer* create(
       Threads<ImageCtxT>* threads,
       const std::string& local_mirror_uuid,
+      PoolMetaCache* pool_meta_cache,
       StateBuilder<ImageCtxT>* state_builder,
       ReplayerListener* replayer_listener) {
-    return new Replayer(threads, local_mirror_uuid, state_builder,
-                        replayer_listener);
+    return new Replayer(threads, local_mirror_uuid, pool_meta_cache,
+                        state_builder, replayer_listener);
   }
 
   Replayer(
       Threads<ImageCtxT>* threads,
       const std::string& local_mirror_uuid,
+      PoolMetaCache* pool_meta_cache,
       StateBuilder<ImageCtxT>* state_builder,
       ReplayerListener* replayer_listener);
   ~Replayer();
@@ -105,6 +108,7 @@ private:
 
   Threads<ImageCtxT>* m_threads;
   std::string m_local_mirror_uuid;
+  PoolMetaCache* m_pool_meta_cache;
   StateBuilder<ImageCtxT>* m_state_builder;
   ReplayerListener* m_replayer_listener;
 

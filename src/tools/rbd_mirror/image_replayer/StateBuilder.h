@@ -74,6 +74,7 @@ public:
   virtual Replayer* create_replayer(
       Threads<ImageCtxT>* threads,
       const std::string& local_mirror_uuid,
+      PoolMetaCache* pool_meta_cache,
       ReplayerListener* replayer_listener) = 0;
 
   std::string global_image_id;
