@@ -153,41 +153,19 @@ class TestFullReport(object):
         assert result['0'][0]['name'] == 'volume1'
         assert result['0'][1]['name'] == 'wal'
 
-    def test_physical_journal_gets_reported(self, pvolumes, volumes, monkeypatch):
-        tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=journal'
-        pv = api.PVolume(vg_name="VolGroup", pv_name='/dev/sda1', pv_tags={},
-                         pv_uuid="0000", lv_uuid="aaaa")
+    @pytest.mark.parametrize('type_', ['journal', 'db', 'wal'])
+    def test_physical_2nd_device_gets_reported(self, type_, monkeypatch):
+        tags = ('ceph.osd_id=0,ceph.{t}_uuid=x,ceph.type=data,'
+                'ceph.{t}_device=/dev/sda1').format(t=type_)
         osd = api.Volume(lv_name='volume1', lv_uuid='y', lv_tags=tags,
                          vg_name='VolGroup', lv_path='/dev/VolGroup/lv')
-        pvolumes.append(pv)
-        volumes.append(osd)
-        monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
-                            pvolumes)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
-                            volumes)
+                            [osd])
 
         result = lvm.listing.List([]).full_report()
         assert result['0'][1]['path'] == '/dev/sda1'
         assert result['0'][1]['tags'] == {'PARTUUID': 'x'}
-        assert result['0'][1]['type'] == 'journal'
-
-    def test_physical_wal_gets_reported(self, pvolumes, volumes, monkeypatch):
-        tags = 'ceph.osd_id=0,ceph.wal_uuid=x,ceph.type=wal'
-        pv = api.PVolume(pv_name='/dev/sda1', pv_tags={}, pv_uuid="0000",
-                         vg_name="VolGroup", lv_uuid="aaaa")
-        osd = api.Volume(lv_name='volume1', lv_uuid='y', lv_tags=tags,
-                         lv_path='/dev/VolGroup/lv', vg_name="VolGroup")
-        pvolumes.append(pv)
-        volumes.append(osd)
-        monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
-                            pvolumes)
-        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
-                            volumes)
-
-        result = lvm.listing.List([]).full_report()
-        assert result['0'][1]['path'] == '/dev/sda1'
-        assert result['0'][1]['tags'] == {'PARTUUID': 'x'}
-        assert result['0'][1]['type'] == 'wal'
+        assert result['0'][1]['type'] == type_
 
 
 class TestSingleReport(object):
@@ -196,9 +174,8 @@ class TestSingleReport(object):
         # ceph lvs are detected by looking into its tags
         lv = api.Volume(lv_name='lv', lv_tags={}, lv_path='/dev/VolGroup/lv',
                         vg_name='VolGroup')
-        volumes.append(lv)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
-                            volumes)
+                            [lv])
 
         result = lvm.listing.List([]).single_report('VolGroup/lv')
         assert result == {}
@@ -220,20 +197,14 @@ class TestSingleReport(object):
         assert result['0'][0]['path'] == '/dev/VolGroup/lv'
         assert result['0'][0]['devices'] == []
 
-    def test_report_a_ceph_journal_device(self, volumes, pvolumes, monkeypatch):
+    def test_report_a_ceph_journal_device(self, monkeypatch):
         # ceph lvs are detected by looking into its tags
-        tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=journal,' + \
+        tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,' + \
                'ceph.journal_device=/dev/sda1'
-        pv = api.PVolume(pv_name='/dev/sda1', pv_uuid="0000", pv_tags={},
-                         vg_name="VolGroup", lv_uuid="aaaa")
         lv = api.Volume(lv_name='lv', lv_uuid='aaa', lv_tags=tags,
                         lv_path='/dev/VolGroup/lv', vg_name='VolGroup')
-        pvolumes.append(pv)
-        volumes.append(lv)
-        monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
-                            pvolumes)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
-                            volumes)
+                            [lv] if 'tags' in kwargs else [])
 
         result = lvm.listing.List([]).single_report('/dev/sda1')
         assert result['0'][0]['tags'] == {'PARTUUID': 'x'}
@@ -267,33 +238,6 @@ class TestSingleReport(object):
         assert result['0'][0]['lv_tags'] == tags
         assert result['0'][0]['path'] == '/dev/VolGroup/lv'
         assert result['0'][0]['devices'] == ['/dev/sda1', '/dev/sdb1']
-
-    def test_report_a_ceph_lv_with_multiple_pvs_of_same_name(self, pvolumes,
-                                                             volumes,
-                                                             monkeypatch):
-        tags = 'ceph.osd_id=0,ceph.type=data'
-        lv = api.Volume(lv_name='lv', vg_name='VolGroup', lv_uuid='aaaa',
-                        lv_path='/dev/VolGroup/lv', lv_tags=tags)
-        volumes.append(lv)
-        monkeypatch.setattr(api, 'get_lv_from_argument', lambda device: None)
-        monkeypatch.setattr(api, 'get_lv', lambda vg_name: lv)
-        FooPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda',
-                                 pv_uuid="0000", pv_tags={}, lv_uuid="aaaa")
-        BarPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda',
-                                 pv_uuid="0000", pv_tags={})
-        pvolumes.append(FooPVolume)
-        pvolumes.append(BarPVolume)
-        listing = lvm.listing.List([])
-        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
-                            volumes)
-        monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
-                            pvolumes)
-
-        result = listing.single_report('/dev/sda')
-        assert result['0'][0]['name'] == 'lv'
-        assert result['0'][0]['lv_tags'] == tags
-        assert result['0'][0]['path'] == '/dev/VolGroup/lv'
-        assert len(result) == 1
 
     def test_report_a_ceph_lv_with_no_matching_devices(self, volumes,
                                                        monkeypatch):
