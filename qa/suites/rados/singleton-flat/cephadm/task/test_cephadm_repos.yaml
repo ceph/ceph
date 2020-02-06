@@ -1,0 +1,7 @@
+roles:
+- [mon.a, mgr.x, osd.0, client.0]
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - cephadm/test_repos.sh
