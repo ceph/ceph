@@ -503,6 +503,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for d in daemons:
                 if d.service_type != daemon_type:
                     continue
+                if not d.container_image_id:
+                    self.log.debug('daemon %s.%s image_id is not known' % (
+                        daemon_type, d.service_instance))
+                    return None
                 if d.container_image_id == target_id:
                     self.log.debug('daemon %s.%s version correct' % (
                         daemon_type, d.service_instance))
