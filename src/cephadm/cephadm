@@ -1581,13 +1581,16 @@ def command_pull():
 def command_inspect_image():
     # type: () -> int
     out, err, ret = call_throws([
-        container_path, 'images', '--format', 'json', args.image])
-    j = json.loads(out)
-    if not j:
-        return -errno.ENOENT
+        container_path, 'inspect',
+        '--format', '{{.Id}}',
+        args.image])
+    if ret:
+        return errno.ENOENT
+    image_id = normalize_container_id(out.strip())
+    ver = CephContainer(args.image, 'ceph', ['--version']).run()
     r = {
-        'image_id': normalize_container_id(j[0].get('id')),
-        'ceph_version': CephContainer(args.image, 'ceph', ['--version']).run(),
+        'image_id': image_id,
+        'ceph_version': ver,
     }
     print(json.dumps(r, indent=4, sort_keys=True))
     return 0
