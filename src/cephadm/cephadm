@@ -2145,6 +2145,27 @@ def command_unit():
 
 ##################################
 
+@infer_fsid
+def command_logs():
+    # type: () -> None
+    if not args.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
+    (daemon_type, daemon_id) = args.name.split('.', 1)
+    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+
+    cmd = [find_program('journalctl')]
+    cmd.extend(['-u', unit_name])
+    if args.command:
+        cmd.extend(args.command)
+
+    # call this directly, without our wrapper, so that we get an unmolested
+    # stdout with logger prefixing.
+    logger.debug("Running command: %s" % ' '.join(cmd))
+    subprocess.call(cmd) # type: ignore
+
+##################################
+
 def command_ls():
     # type: () -> None
     ls = list_daemons(detail=not args.no_detail,
@@ -2721,6 +2742,20 @@ def _get_parser():
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
+
+    parser_logs = subparsers.add_parser(
+        'logs', help='print journald logs for a daemon container')
+    parser_logs.set_defaults(func=command_logs)
+    parser_logs.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_logs.add_argument(
+        '--name', '-n',
+        required=True,
+        help='daemon name (type.id)')
+    parser_logs.add_argument(
+        'command', nargs='*',
+        help='additional journalctl args')
 
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
