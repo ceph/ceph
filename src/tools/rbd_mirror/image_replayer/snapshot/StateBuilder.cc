@@ -36,6 +36,12 @@ template <typename I>
 void StateBuilder<I>::close(Context* on_finish) {
   dout(10) << dendl;
 
+  // close the remote image after closing the local
+  // image in case the remote cluster is unreachable and
+  // we cannot close it.
+  on_finish = new LambdaContext([this, on_finish](int) {
+      this->close_remote_image(on_finish);
+    });
   this->close_local_image(on_finish);
 }
 
