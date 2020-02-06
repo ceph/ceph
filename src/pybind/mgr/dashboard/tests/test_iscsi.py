@@ -3,9 +3,14 @@
 import copy
 import errno
 import json
-import mock
+import unittest
 
-from . import CmdException, ControllerTestCase, CLICommandTestMixin
+try:
+    import mock
+except ImportError:
+    import unittest.mock as mock
+
+from . import CmdException, ControllerTestCase, CLICommandTestMixin, KVStoreMockMixin
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient
@@ -13,16 +18,7 @@ from ..services.orchestrator import OrchClient
 from ..rest_client import RequestException
 
 
-class IscsiTest(ControllerTestCase, CLICommandTestMixin):
-
-    @classmethod
-    def setup_server(cls):
-        OrchClient().available = lambda: False
-        mgr.rados.side_effect = None
-        # pylint: disable=protected-access
-        Iscsi._cp_config['tools.authenticate.on'] = False
-        IscsiTarget._cp_config['tools.authenticate.on'] = False
-        cls.setup_controllers([Iscsi, IscsiTarget])
+class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
 
     def setUp(self):
         self.mock_kv_store()
@@ -64,6 +60,36 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                 'service_url': 'https://admin:admin@10.17.5.2:5001'
             }
         })
+
+
+class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
+
+    @classmethod
+    def setup_server(cls):
+        OrchClient().available = lambda: False
+        mgr.rados.side_effect = None
+        # pylint: disable=protected-access
+        Iscsi._cp_config['tools.authenticate.on'] = False
+        IscsiTarget._cp_config['tools.authenticate.on'] = False
+        cls.setup_controllers([Iscsi, IscsiTarget])
+
+    def setUp(self):
+        self.mock_kv_store()
+        self.CONFIG_KEY_DICT['_iscsi_config'] = '''
+            {
+                "gateways": {
+                    "node1": {
+                        "service_url": "https://admin:admin@10.17.5.1:5001"
+                    },
+                    "node2": {
+                        "service_url": "https://admin:admin@10.17.5.2:5001"
+                    }
+                }
+            }
+        '''
+        # pylint: disable=protected-access
+        IscsiClientMock._instance = IscsiClientMock()
+        IscsiClient.instance = IscsiClientMock.instance
 
     def test_enable_discoveryauth(self):
         discoveryauth = {

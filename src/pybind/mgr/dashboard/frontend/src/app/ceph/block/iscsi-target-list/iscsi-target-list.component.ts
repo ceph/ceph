@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
@@ -15,6 +16,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { NotAvailablePipe } from '../../../shared/pipes/not-available.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
@@ -58,6 +60,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     private iscsiService: IscsiService,
     private taskListService: TaskListService,
     private cephReleaseNamePipe: CephReleaseNamePipe,
+    private notAvailablePipe: NotAvailablePipe,
     private summaryservice: SummaryService,
     private modalService: BsModalService,
     private taskWrapper: TaskWrapperService,
@@ -76,13 +79,17 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
         permission: 'update',
         icon: 'fa-pencil',
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
-        name: this.actionLabels.EDIT
+        name: this.actionLabels.EDIT,
+        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
+        disableDesc: () => this.getEditDisableDesc()
       },
       {
         permission: 'delete',
         icon: 'fa-times',
         click: () => this.deleteIscsiTargetModal(),
-        name: this.actionLabels.DELETE
+        name: this.actionLabels.DELETE,
+        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
+        disableDesc: () => this.getDeleteDisableDesc()
       }
     ];
   }
@@ -108,6 +115,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
       {
         name: this.i18n('# Sessions'),
         prop: 'info.num_sessions',
+        pipe: this.notAvailablePipe,
         flexGrow: 1
       }
     ];
@@ -144,6 +152,29 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.summaryDataSubscription) {
       this.summaryDataSubscription.unsubscribe();
+    }
+  }
+
+  getEditDisableDesc(): string | undefined {
+    const first = this.selection.first();
+    if (first && first.cdExecuting) {
+      return first.cdExecuting;
+    }
+    if (first && _.isUndefined(first['info'])) {
+      return this.i18n('Unavailable gateway(s)');
+    }
+  }
+
+  getDeleteDisableDesc(): string | undefined {
+    const first = this.selection.first();
+    if (first && first.cdExecuting) {
+      return first.cdExecuting;
+    }
+    if (first && _.isUndefined(first['info'])) {
+      return this.i18n('Unavailable gateway(s)');
+    }
+    if (first && first['info'] && first['info']['num_sessions']) {
+      return this.i18n('Target has active sessions');
     }
   }
 

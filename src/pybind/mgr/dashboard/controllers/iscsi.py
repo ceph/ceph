@@ -16,6 +16,7 @@ from ..rest_client import RequestException
 from ..security import Scope
 from ..services.iscsi_client import IscsiClient
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.iscsi_config import IscsiGatewayDoesNotExist
 from ..services.rbd import format_bitmask
 from ..services.tcmu_service import TcmuService
 from ..exceptions import DashboardException
@@ -32,18 +33,13 @@ class IscsiUi(BaseController):
     @ReadPermission
     def status(self):
         status = {'available': False}
-        gateways = IscsiGatewaysConfig.get_gateways_config()['gateways']
-        if not gateways:
-            status['message'] = 'There are no gateways defined'
+        try:
+            gateway = get_available_gateway()
+        except DashboardException as e:
+            status['message'] = str(e)
             return status
         try:
-            for gateway in gateways:
-                try:
-                    IscsiClient.instance(gateway_name=gateway).ping()
-                except RequestException:
-                    status['message'] = 'Gateway {} is inaccessible'.format(gateway)
-                    return status
-            config = IscsiClient.instance().get_config()
+            config = IscsiClient.instance(gateway_name=gateway).get_config()
             if config['version'] < IscsiUi.REQUIRED_CEPH_ISCSI_CONFIG_MIN_VERSION or \
                     config['version'] > IscsiUi.REQUIRED_CEPH_ISCSI_CONFIG_MAX_VERSION:
                 status['message'] = 'Unsupported `ceph-iscsi` config version. ' \
@@ -68,14 +64,17 @@ class IscsiUi(BaseController):
     @Endpoint()
     @ReadPermission
     def version(self):
+        gateway = get_available_gateway()
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
         return {
-            'ceph_iscsi_config_version': IscsiClient.instance().get_config()['version']
+            'ceph_iscsi_config_version': config['version']
         }
 
     @Endpoint()
     @ReadPermission
     def settings(self):
-        settings = IscsiClient.instance().get_settings()
+        gateway = get_available_gateway()
+        settings = IscsiClient.instance(gateway_name=gateway).get_settings()
         if 'target_controls_limits' in settings:
             target_default_controls = settings['target_default_controls']
             for ctrl_k, ctrl_v in target_default_controls.items():
@@ -105,8 +104,11 @@ class IscsiUi(BaseController):
         portals = []
         gateways_config = IscsiGatewaysConfig.get_gateways_config()
         for name in gateways_config['gateways']:
-            ip_addresses = IscsiClient.instance(gateway_name=name).get_ip_addresses()
-            portals.append({'name': name, 'ip_addresses': ip_addresses['data']})
+            try:
+                ip_addresses = IscsiClient.instance(gateway_name=name).get_ip_addresses()
+                portals.append({'name': name, 'ip_addresses': ip_addresses['data']})
+            except RequestException:
+                pass
         return sorted(portals, key=lambda p: '{}.{}'.format(p['name'], p['ip_addresses']))
 
     @Endpoint()
@@ -183,16 +185,24 @@ class Iscsi(BaseController):
     @Endpoint('GET', 'discoveryauth')
     @ReadPermission
     def get_discoveryauth(self):
-        return self._get_discoveryauth()
+        gateway = get_available_gateway()
+        return self._get_discoveryauth(gateway)
 
     @Endpoint('PUT', 'discoveryauth')
     @UpdatePermission
     def set_discoveryauth(self, user, password, mutual_user, mutual_password):
-        IscsiClient.instance().update_discoveryauth(user, password, mutual_user, mutual_password)
-        return self._get_discoveryauth()
+        gateway = get_available_gateway()
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
+        gateway_names = list(config['gateways'].keys())
+        validate_rest_api(gateway_names)
+        IscsiClient.instance(gateway_name=gateway).update_discoveryauth(user,
+                                                                        password,
+                                                                        mutual_user,
+                                                                        mutual_password)
+        return self._get_discoveryauth(gateway)
 
-    def _get_discoveryauth(self):
-        config = IscsiClient.instance().get_config()
+    def _get_discoveryauth(self, gateway):
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
         user = config['discovery_auth']['username']
         password = config['discovery_auth']['password']
         mutual_user = config['discovery_auth']['mutual_username']
@@ -213,7 +223,8 @@ def iscsi_target_task(name, metadata, wait_for=2.0):
 class IscsiTarget(RESTController):
 
     def list(self):
-        config = IscsiClient.instance().get_config()
+        gateway = get_available_gateway()
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
         targets = []
         for target_iqn in config['targets'].keys():
             target = IscsiTarget._config_to_target(target_iqn, config)
@@ -222,7 +233,8 @@ class IscsiTarget(RESTController):
         return targets
 
     def get(self, target_iqn):
-        config = IscsiClient.instance().get_config()
+        gateway = get_available_gateway()
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
         if target_iqn not in config['targets']:
             raise cherrypy.HTTPError(404)
         target = IscsiTarget._config_to_target(target_iqn, config)
@@ -231,7 +243,8 @@ class IscsiTarget(RESTController):
 
     @iscsi_target_task('delete', {'target_iqn': '{target_iqn}'})
     def delete(self, target_iqn):
-        config = IscsiClient.instance().get_config()
+        gateway = get_available_gateway()
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
         if target_iqn not in config['targets']:
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
@@ -240,6 +253,15 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
                                      component='iscsi')
+        portal_names = list(config['targets'][target_iqn]['portals'].keys())
+        validate_rest_api(portal_names)
+        if portal_names:
+            portal_name = portal_names[0]
+            target_info = IscsiClient.instance(gateway_name=portal_name).get_targetinfo(target_iqn)
+            if target_info['num_sessions'] > 0:
+                raise DashboardException(msg='Target has active sessions',
+                                         code='target_has_active_sessions',
+                                         component='iscsi')
         IscsiTarget._delete(target_iqn, config, 0, 100)
 
     @iscsi_target_task('create', {'target_iqn': '{target_iqn}'})
@@ -251,12 +273,13 @@ class IscsiTarget(RESTController):
         clients = clients or []
         groups = groups or []
 
-        config = IscsiClient.instance().get_config()
+        gateway = get_available_gateway()
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
         if target_iqn in config['targets']:
             raise DashboardException(msg='Target already exists',
                                      code='target_already_exists',
                                      component='iscsi')
-        settings = IscsiClient.instance().get_settings()
+        settings = IscsiClient.instance(gateway_name=gateway).get_settings()
         IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
 
         IscsiTarget._create(target_iqn, target_controls, acl_enabled, auth, portals, disks,
@@ -271,7 +294,8 @@ class IscsiTarget(RESTController):
         clients = IscsiTarget._sorted_clients(clients)
         groups = IscsiTarget._sorted_groups(groups)
 
-        config = IscsiClient.instance().get_config()
+        gateway = get_available_gateway()
+        config = IscsiClient.instance(gateway_name=gateway).get_config()
         if target_iqn not in config['targets']:
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
@@ -280,7 +304,11 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target IQN already in use',
                                      code='target_iqn_already_in_use',
                                      component='iscsi')
-        settings = IscsiClient.instance().get_settings()
+        settings = IscsiClient.instance(gateway_name=gateway).get_settings()
+        new_portal_names = {p['host'] for p in portals}
+        old_portal_names = set(config['targets'][target_iqn]['portals'].keys())
+        deleted_portal_names = list(old_portal_names - new_portal_names)
+        validate_rest_api(deleted_portal_names)
         IscsiTarget._validate(new_target_iqn, target_controls, portals, disks, groups, settings)
         config = IscsiTarget._delete(target_iqn, config, 0, 50, new_target_iqn, target_controls,
                                      portals, disks, clients, groups)
@@ -499,15 +527,8 @@ class IscsiTarget(RESTController):
                                                  code='target_control_invalid_max',
                                                  component='iscsi')
 
-        for portal in portals:
-            gateway_name = portal['host']
-            try:
-                IscsiClient.instance(gateway_name=gateway_name).ping()
-            except RequestException:
-                raise DashboardException(msg='iSCSI REST Api not available for gateway '
-                                             '{}'.format(gateway_name),
-                                         code='ceph_iscsi_rest_api_not_available_for_gateway',
-                                         component='iscsi')
+        portal_names = [p['host'] for p in portals]
+        validate_rest_api(portal_names)
 
         for disk in disks:
             pool = disk['pool']
@@ -824,6 +845,12 @@ class IscsiTarget(RESTController):
         # During task execution, additional info is not available
         if IscsiTarget._is_executing(target_iqn):
             return
+        # If any portal is down, additional info is not available
+        for portal in target['portals']:
+            try:
+                IscsiClient.instance(gateway_name=portal['host']).ping()
+            except (IscsiGatewayDoesNotExist, RequestException):
+                return
         gateway_name = target['portals'][0]['host']
         try:
             target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(
@@ -876,3 +903,31 @@ class IscsiTarget(RESTController):
                 portals_by_host[host] = []
             portals_by_host[host].append(ip)
         return portals_by_host
+
+
+def get_available_gateway():
+    gateways = IscsiGatewaysConfig.get_gateways_config()['gateways']
+    if not gateways:
+        raise DashboardException(msg='There are no gateways defined',
+                                 code='no_gateways_defined',
+                                 component='iscsi')
+    for gateway in gateways:
+        try:
+            IscsiClient.instance(gateway_name=gateway).ping()
+            return gateway
+        except RequestException:
+            pass
+    raise DashboardException(msg='There are no gateways available',
+                             code='no_gateways_available',
+                             component='iscsi')
+
+
+def validate_rest_api(gateways):
+    for gateway in gateways:
+        try:
+            IscsiClient.instance(gateway_name=gateway).ping()
+        except RequestException:
+            raise DashboardException(msg='iSCSI REST Api not available for gateway '
+                                         '{}'.format(gateway),
+                                     code='ceph_iscsi_rest_api_not_available_for_gateway',
+                                     component='iscsi')
