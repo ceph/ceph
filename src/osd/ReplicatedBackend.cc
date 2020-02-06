@@ -1469,11 +1469,11 @@ int ReplicatedBackend::prep_push_to_replica(
     hobject_t head = soid;
     head.snap = CEPH_NOSNAP;
 
-    // try to base push off of clones that succeed/preceed poid
-    // we need the head (and current SnapSet) locally to do that.
+    // if we are missing head, the snaps of clone will not present.
+    // push raw clone will cause peer's SnapMapper cheat.
     if (get_parent()->get_local_missing().is_missing(head)) {
-      dout(15) << "push_to_replica missing head " << head << ", pushing raw clone" << dendl;
-      return prep_push(obc, soid, peer, pop, cache_dont_need);
+      dout(15) << "push_to_replica missing head " << head << ", drop" << dendl;
+      return -EINVAL;
     }
 
     SnapSetContext *ssc = obc->ssc;
