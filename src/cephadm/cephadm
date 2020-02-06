@@ -2887,7 +2887,7 @@ def _parse_args(av):
     args = parser.parse_args(av)
 
     if not args.image:
-        if 'name' in args:
+        if 'name' in args and args.name:
             type_ = args.name.split('.', 1)[0]
             if type_ in Monitoring.components:
                 args.image = Monitoring.components[type_]['image']
