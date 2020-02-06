@@ -534,7 +534,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     daemon_type, d.service_instance,
                     d.container_image_id, d.version))
 
-                if d.service_instance == self.get_mgr_id():
+                if daemon_type == 'mgr' and \
+                   d.service_instance == self.get_mgr_id():
                     self.log.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                   self.get_mgr_id())
                     need_upgrade_self = True
