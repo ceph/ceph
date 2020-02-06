@@ -6,7 +6,6 @@ from __future__ import absolute_import
 
 import collections
 import errno
-from distutils.version import StrictVersion
 import os
 import socket
 import tempfile
@@ -26,39 +25,9 @@ except ImportError:
 
 from .services.sso import load_sso_db
 
-# The SSL code in CherryPy 3.5.0 is buggy.  It was fixed long ago,
-# but 3.5.0 is still shipping in major linux distributions
-# (Fedora 27, Ubuntu Xenial), so we must monkey patch it to get SSL working.
 if cherrypy is not None:
-    v = StrictVersion(cherrypy.__version__)
-    # It was fixed in 3.7.0.  Exact lower bound version is probably earlier,
-    # but 3.5.0 is what this monkey patch is tested on.
-    if StrictVersion("3.5.0") <= v < StrictVersion("3.7.0"):
-        from cherrypy.wsgiserver.wsgiserver2 import HTTPConnection,\
-                                                    CP_fileobject
-
-        def fixed_init(hc_self, server, sock, makefile=CP_fileobject):
-            hc_self.server = server
-            hc_self.socket = sock
-            hc_self.rfile = makefile(sock, "rb", hc_self.rbufsize)
-            hc_self.wfile = makefile(sock, "wb", hc_self.wbufsize)
-            hc_self.requests_seen = 0
-
-        HTTPConnection.__init__ = fixed_init
-
-# When the CherryPy server in 3.2.2 (and later) starts it attempts to verify
-# that the ports its listening on are in fact bound. When using the any address
-# "::" it tries both ipv4 and ipv6, and in some environments (e.g. kubernetes)
-# ipv6 isn't yet configured / supported and CherryPy throws an uncaught
-# exception.
-if cherrypy is not None:
-    v = StrictVersion(cherrypy.__version__)
-    # the issue was fixed in 3.2.3. it's present in 3.2.2 (current version on
-    # centos:7) and back to at least 3.0.0.
-    if StrictVersion("3.1.2") <= v < StrictVersion("3.2.3"):
-        # https://github.com/cherrypy/cherrypy/issues/1100
-        from cherrypy.process import servers
-        servers.wait_for_occupied_port = lambda host, port: None
+    from .cherrypy_backports import patch_cherrypy
+    patch_cherrypy(cherrypy.__version__)
 
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage
@@ -83,7 +52,10 @@ from .settings import options_command_list, options_schema_list, \
                       handle_option_command
 
 from .plugins import PLUGIN_MANAGER
-from .plugins import feature_toggles  # noqa # pylint: disable=unused-import
+from .plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+
+
+PLUGIN_MANAGER.hook.init()
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -116,6 +88,11 @@ class CherryPyConfig(object):
     def url_prefix(self):
         return self._url_prefix
 
+    @staticmethod
+    def update_cherrypy_config(config):
+        PLUGIN_MANAGER.hook.configure_cherrypy(config=config)
+        cherrypy.config.update(config)
+
     # pylint: disable=too-many-branches
     def _configure(self):
         """
@@ -141,10 +118,10 @@ class CherryPyConfig(object):
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
-        cherrypy.tools.plugin_hooks = cherrypy.Tool(
+        cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
             lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
-            priority=10)
+            priority=1)
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -166,7 +143,7 @@ class CherryPyConfig(object):
             ],
             'tools.json_in.on': True,
             'tools.json_in.force': False,
-            'tools.plugin_hooks.on': True,
+            'tools.plugin_hooks_filter_request.on': True,
         }
 
         if ssl:
@@ -195,7 +172,7 @@ class CherryPyConfig(object):
             config['server.ssl_certificate'] = cert_fname
             config['server.ssl_private_key'] = pkey_fname
 
-        cherrypy.config.update(config)
+        self.update_cherrypy_config(config)
 
         self._url_prefix = prepare_url_prefix(self.get_module_option('url_prefix',
                                                                      default=''))
@@ -332,6 +309,7 @@ class Module(MgrModule, CherryPyConfig):
             config[purl] = {
                 'request.dispatch': mapper
             }
+
         cherrypy.tree.mount(None, config=config)
 
         PLUGIN_MANAGER.hook.setup()

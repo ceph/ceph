@@ -115,7 +115,6 @@ class RESTControllerTest(ControllerTestCase):
         self.assertIsInstance(body, dict)
         assert body['detail'] == "The path '/foo' was not found."
         assert '404' in body['status']
-        assert 'traceback' in body
 
     def test_args_from_json(self):
         self._put("/api/fooargs/hello", {'name': 'world'})
