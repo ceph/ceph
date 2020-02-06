@@ -125,4 +125,26 @@ describe('SettingsService', () => {
     service.disableSetting(exampleUrl);
     expect(service['settings']).toEqual({ [exampleUrl]: '' });
   });
+
+  it('should return the specified settings (1)', () => {
+    let result;
+    service.getValues('foo,bar').subscribe((resp) => {
+      result = resp;
+    });
+    const req = httpTesting.expectOne('api/settings?names=foo,bar');
+    expect(req.request.method).toBe('GET');
+    req.flush([
+      { name: 'foo', default: '', type: 'str', value: 'test' },
+      { name: 'bar', default: 0, type: 'int', value: 2 }
+    ]);
+    expect(result).toEqual({
+      foo: 'test',
+      bar: 2
+    });
+  });
+
+  it('should return the specified settings (2)', () => {
+    service.getValues(['abc', 'xyz']).subscribe();
+    httpTesting.expectOne('api/settings?names=abc,xyz');
+  });
 });

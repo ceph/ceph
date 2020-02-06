@@ -1,27 +1,72 @@
 import { Injectable } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+import { SettingsService } from '../api/settings.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class PasswordPolicyService {
-  constructor(private i18n: I18n) {}
+  constructor(private i18n: I18n, private settingsService: SettingsService) {}
 
-  getHelpText() {
-    return this.i18n(
-      'Required rules for password complexity:\n\
-    - must contain at least 8 characters\n\
-    - cannot contain username\n\
-    - cannot contain any keyword used in Ceph\n\
-    - cannot contain any repetitive characters e.g. "aaa"\n\
-    - cannot contain any sequential characters e.g. "abc"\n\
-    - must consist of characters from the following groups:\n\
-      * alphabetic a-z, A-Z\n\
-      * numbers 0-9\n\
-      * special chars: !"#$%& \'()*+,-./:;<=>?@[\\]^_`{{|}}~\n\
-      * any other characters (signs)'
-    );
+  getHelpText(): Observable<string> {
+    return this.settingsService
+      .getValues([
+        'PWD_POLICY_ENABLED',
+        'PWD_POLICY_MIN_LENGTH',
+        'PWD_POLICY_CHECK_LENGTH_ENABLED',
+        'PWD_POLICY_CHECK_OLDPWD_ENABLED',
+        'PWD_POLICY_CHECK_USERNAME_ENABLED',
+        'PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED',
+        'PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED',
+        'PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED',
+        'PWD_POLICY_CHECK_COMPLEXITY_ENABLED'
+      ])
+      .pipe(
+        map((resp: Object[]) => {
+          let helpText: string[] = [];
+          if (resp['PWD_POLICY_ENABLED']) {
+            helpText.push(this.i18n('Required rules for passwords:'));
+            const i18nHelp: { [key: string]: string } = {
+              PWD_POLICY_CHECK_LENGTH_ENABLED: this.i18n(
+                'Must contain at least {{length}} characters',
+                {
+                  length: resp['PWD_POLICY_MIN_LENGTH']
+                }
+              ),
+              PWD_POLICY_CHECK_OLDPWD_ENABLED: this.i18n(
+                'Must not be the same as the previous one'
+              ),
+              PWD_POLICY_CHECK_USERNAME_ENABLED: this.i18n('Cannot contain the username'),
+              PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED: this.i18n(
+                'Cannot contain any configured keyword'
+              ),
+              PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED: this.i18n(
+                'Cannot contain any repetitive characters e.g. "aaa"'
+              ),
+              PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED: this.i18n(
+                'Cannot contain any sequential characters e.g. "abc"'
+              ),
+              PWD_POLICY_CHECK_COMPLEXITY_ENABLED: this.i18n(
+                'Must consist of characters from the following groups:\n' +
+                  '  * Alphabetic a-z, A-Z\n' +
+                  '  * Numbers 0-9\n' +
+                  '  * Special chars: !"#$%& \'()*+,-./:;<=>?@[\\]^_`{{|}}~\n' +
+                  '  * Any other characters (signs)'
+              )
+            };
+            helpText = helpText.concat(
+              Object.keys(i18nHelp)
+                .filter((key) => resp[key])
+                .map((key) => '- ' + i18nHelp[key])
+            );
+          }
+          return helpText.join('\n');
+        })
+      );
   }
 
   /**

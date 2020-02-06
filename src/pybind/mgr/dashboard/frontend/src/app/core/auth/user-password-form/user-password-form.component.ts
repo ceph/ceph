@@ -25,7 +25,7 @@ export class UserPasswordFormComponent {
   userForm: CdFormGroup;
   action: string;
   resource: string;
-  passwordPolicyHelpText: string;
+  passwordPolicyHelpText = '';
   passwordStrengthLevelClass: string;
   passwordValuation: string;
   icons = Icons;
@@ -46,7 +46,9 @@ export class UserPasswordFormComponent {
   }
 
   createForm() {
-    this.passwordPolicyHelpText = this.passwordPolicyService.getHelpText();
+    this.passwordPolicyService.getHelpText().subscribe((helpText: string) => {
+      this.passwordPolicyHelpText = helpText;
+    });
     this.userForm = this.formBuilder.group(
       {
         oldpassword: [

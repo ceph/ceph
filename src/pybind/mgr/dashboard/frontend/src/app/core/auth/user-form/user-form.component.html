@@ -37,7 +37,8 @@
           <label class="cd-col-form-label"
                  for="password">
             <ng-container i18n>Password</ng-container>
-            <cd-helper class="text-pre"
+            <cd-helper *ngIf="passwordPolicyHelpText.length > 0"
+                       class="text-pre"
                        html="{{ passwordPolicyHelpText }}">
             </cd-helper>
           </label>

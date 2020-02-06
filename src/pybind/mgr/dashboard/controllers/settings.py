@@ -35,11 +35,23 @@ class Settings(RESTController):
     def _to_native(setting):
         return setting.upper().replace('-', '_')
 
-    def list(self):
-        return [
-            self._get(name) for name in Options.__dict__
+    def list(self, names=None):
+        """
+        Get the list of available options.
+        :param names: A comma separated list of option names that should
+          be processed. Defaults to ``None``.
+        :type names: None|str
+        :return: A list of available options.
+        :rtype: list[dict]
+        """
+        option_names = [
+            name for name in Options.__dict__
             if name.isupper() and not name.startswith('_')
         ]
+        if names:
+            names = names.split(',')
+            option_names = list(set(option_names) & set(names))
+        return [self._get(name) for name in option_names]
 
     def _get(self, name):
         with self._attribute_handler(name) as sname:
@@ -52,6 +64,13 @@ class Settings(RESTController):
         }
 
     def get(self, name):
+        """
+        Get the given option.
+        :param name: The name of the option.
+        :return: Returns a dict containing the name, type,
+          default value and current value of the given option.
+        :rtype: dict
+        """
         return self._get(name)
 
     def set(self, name, value):

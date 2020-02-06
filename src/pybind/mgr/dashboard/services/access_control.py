@@ -57,9 +57,7 @@ class PasswordPolicy(object):
         self.password = password
         self.username = username
         self.old_password = old_password
-        self.forbidden_words = ['osd', 'host', 'dashboard', 'pool',
-                                'block', 'nfs', 'ceph', 'monitors',
-                                'gateway', 'logs', 'crush', 'maps']
+        self.forbidden_words = Settings.PWD_POLICY_EXCLUSION_LIST.split(',')
         self.complexity_credits = 0
 
     @staticmethod
@@ -67,7 +65,9 @@ class PasswordPolicy(object):
         return re.compile('(?:{0})'.format(word),
                           flags=re.IGNORECASE).search(password)
 
-    def check_password_characters(self):
+    def check_password_complexity(self):
+        if not Settings.PWD_POLICY_CHECK_COMPLEXITY_ENABLED:
+            return Settings.PWD_POLICY_MIN_COMPLEXITY
         digit_credit = 1
         small_letter_credit = 1
         big_letter_credit = 2
@@ -88,47 +88,65 @@ class PasswordPolicy(object):
         return self.complexity_credits
 
     def check_is_old_password(self):
+        if not Settings.PWD_POLICY_CHECK_OLDPWD_ENABLED:
+            return False
         return self.old_password and self.password == self.old_password
 
     def check_if_contains_username(self):
+        if not Settings.PWD_POLICY_CHECK_USERNAME_ENABLED:
+            return False
         if not self.username:
             return False
         return self._check_if_contains_word(self.password, self.username)
 
     def check_if_contains_forbidden_words(self):
+        if not Settings.PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED:
+            return False
         return self._check_if_contains_word(self.password,
                                             '|'.join(self.forbidden_words))
 
     def check_if_sequential_characters(self):
+        if not Settings.PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED:
+            return False
         for i in range(1, len(self.password) - 1):
             if ord(self.password[i - 1]) + 1 == ord(self.password[i])\
                == ord(self.password[i + 1]) - 1:
                 return True
         return False
 
-    def check_if_repetetive_characters(self):
+    def check_if_repetitive_characters(self):
+        if not Settings.PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED:
+            return False
         for i in range(1, len(self.password) - 1):
             if self.password[i - 1] == self.password[i] == self.password[i + 1]:
                 return True
         return False
 
-    def check_password_length(self, min_length=8):
-        return len(self.password) >= min_length
+    def check_password_length(self):
+        if not Settings.PWD_POLICY_CHECK_LENGTH_ENABLED:
+            return True
+        return len(self.password) >= Settings.PWD_POLICY_MIN_LENGTH
 
     def check_all(self):
         """
         Perform all password policy checks.
         :raise PasswordPolicyException: If a password policy check fails.
         """
-        if self.check_password_characters() < 10 or not self.check_password_length():
+        if not Settings.PWD_POLICY_ENABLED:
+            return
+        if self.check_password_complexity() < Settings.PWD_POLICY_MIN_COMPLEXITY:
+            raise PasswordPolicyException('Password is too weak.')
+        if not self.check_password_length():
             raise PasswordPolicyException('Password is too weak.')
         if self.check_is_old_password():
             raise PasswordPolicyException('Password must not be the same as the previous one.')
         if self.check_if_contains_username():
             raise PasswordPolicyException('Password must not contain username.')
-        if self.check_if_contains_forbidden_words():
-            raise PasswordPolicyException('Password must not contain keywords.')
-        if self.check_if_repetetive_characters():
+        result = self.check_if_contains_forbidden_words()
+        if result:
+            raise PasswordPolicyException('Password must not contain the keyword "{}".'.format(
+                result.group(0)))
+        if self.check_if_repetitive_characters():
             raise PasswordPolicyException('Password must not contain repetitive characters.')
         if self.check_if_sequential_characters():
             raise PasswordPolicyException('Password must not contain sequential characters.')
