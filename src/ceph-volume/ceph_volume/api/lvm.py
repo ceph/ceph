@@ -866,7 +866,6 @@ def get_device_vgs(device, name_prefix=''):
     return [VolumeGroup(**vg) for vg in vgs]
 
 
-
 #################################
 #
 # Code for LVM Logical Volumes
@@ -874,6 +873,7 @@ def get_device_vgs(device, name_prefix=''):
 ###############################
 
 LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
+LV_CMD_OPTIONS =  ['--noheadings', '--readonly', '--separator=";"', '-a']
 
 def get_api_lvs():
     """
@@ -888,8 +888,7 @@ def get_api_lvs():
 
     """
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o',
-         LV_FIELDS],
+        ['lvs'] + LV_CMD_OPTIONS +  ['-o', LV_FIELDS],
         verbose_on_failure=False
     )
     return _output_parser(stdout, LV_FIELDS)
@@ -1348,6 +1347,15 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
     return lvs
 
 
+def get_device_lvs(device, name_prefix=''):
+    stdout, stderr, returncode = process.call(
+        ['pvs'] + LV_CMD_OPTIONS + ['-o', LV_FIELDS, device],
+        verbose_on_failure=False
+    )
+    lvs = _output_parser(stdout, LV_FIELDS)
+    return [Volume(**lv) for lv in lvs]
+
+
 #############################################################
 #
 # New methods to get PVs, LVs, and VGs.
@@ -1407,7 +1415,7 @@ def make_filters_lvmcmd_ready(filters, tags):
     else:
         return ''
 
-def get_pvs(fields=PV_FIELDS, sep='";"', filters='', tags=None):
+def get_pvs(fields=PV_FIELDS, filters='', tags=None):
     """
     Return a list of PVs that are available on the system and match the
     filters and tags passed. Argument filters takes a dictionary containing
@@ -1424,24 +1432,24 @@ def get_pvs(fields=PV_FIELDS, sep='";"', filters='', tags=None):
     :returns: list of class PVolume object representing pvs on the system
     """
     filters = make_filters_lvmcmd_ready(filters, tags)
-    args = ['pvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
+    args = ['pvs', '--no-heading', '--readonly', '--separator=";"', '-S',
             filters, '-o', fields]
 
     stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
     pvs_report = _output_parser(stdout, fields)
     return [PVolume(**pv_report) for pv_report in pvs_report]
 
-def get_first_pv(fields=PV_FIELDS, sep='";"', filters=None, tags=None):
+def get_first_pv(fields=PV_FIELDS, filters=None, tags=None):
     """
     Wrapper of get_pv meant to be a convenience method to avoid the phrase::
         pvs = get_pvs()
         if len(pvs) >= 1:
             pv = pvs[0]
     """
-    pvs = get_pvs(fields=fields, sep=sep, filters=filters, tags=tags)
+    pvs = get_pvs(fields=fields, filters=filters, tags=tags)
     return pvs[0] if len(pvs) > 0 else []
 
-def get_vgs(fields=VG_FIELDS, sep='";"', filters='', tags=None):
+def get_vgs(fields=VG_FIELDS, filters='', tags=None):
     """
     Return a list of VGs that are available on the system and match the
     filters and tags passed. Argument filters takes a dictionary containing
@@ -1458,24 +1466,23 @@ def get_vgs(fields=VG_FIELDS, sep='";"', filters='', tags=None):
     :returns: list of class VolumeGroup object representing vgs on the system
     """
     filters = make_filters_lvmcmd_ready(filters, tags)
-    args = ['vgs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
-            filters, '-o', fields]
+    args = ['vgs'] + VG_CMD_OPTIONS + ['-S', filters, '-o', fields]
 
     stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
     vgs_report =_output_parser(stdout, fields)
     return [VolumeGroup(**vg_report) for vg_report in vgs_report]
 
-def get_first_vg(fields=VG_FIELDS, sep='";"', filters=None, tags=None):
+def get_first_vg(fields=VG_FIELDS, filters=None, tags=None):
     """
     Wrapper of get_vg meant to be a convenience method to avoid the phrase::
         vgs = get_vgs()
         if len(vgs) >= 1:
             vg = vgs[0]
     """
-    vgs = get_vgs(fields=fields, sep=sep, filters=filters, tags=tags)
+    vgs = get_vgs(fields=fields, filters=filters, tags=tags)
     return vgs[0] if len(vgs) > 0 else []
 
-def get_lvs(fields=LV_FIELDS, sep='";"', filters='', tags=None):
+def get_lvs(fields=LV_FIELDS, filters='', tags=None):
     """
     Return a list of LVs that are available on the system and match the
     filters and tags passed. Argument filters takes a dictionary containing
@@ -1492,19 +1499,18 @@ def get_lvs(fields=LV_FIELDS, sep='";"', filters='', tags=None):
     :returns: list of class Volume object representing LVs on the system
     """
     filters = make_filters_lvmcmd_ready(filters, tags)
-    args = ['lvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
-            filters, '-o', fields]
+    args = ['lvs'] + LV_CMD_OPTIONS + ['-S', filters, '-o', fields]
 
     stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
     lvs_report = _output_parser(stdout, fields)
     return [Volume(**lv_report) for lv_report in lvs_report]
 
-def get_first_lv(fields=LV_FIELDS, sep='";"', filters=None, tags=None):
+def get_first_lv(fields=LV_FIELDS, filters=None, tags=None):
     """
     Wrapper of get_lv meant to be a convenience method to avoid the phrase::
         lvs = get_lvs()
         if len(lvs) >= 1:
             lv = lvs[0]
     """
-    lvs = get_lvs(fields=fields, sep=sep, filters=filters, tags=tags)
+    lvs = get_lvs(fields=fields, filters=filters, tags=tags)
     return lvs[0] if len(lvs) > 0 else []
