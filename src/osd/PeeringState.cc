@@ -6802,9 +6802,11 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
       continue;
     }
 
-    // We pull the log from the peer's last_epoch_started to ensure we
-    // get enough log to detect divergent updates.
-    since.epoch = pi.last_epoch_started;
+    // We pull the log from the minimum of peer's last_epoch_started and last_update.epoch 
+    // to ensure we get enough log to detect divergent updates.
+    // That's because we can't ensure there is no divergent entries before last_epoch_started
+    since.epoch = std::min(pi.last_epoch_started, pi.last_update.epoch);
+
     ceph_assert(pi.last_update >= ps->info.log_tail);  // or else choose_acting() did a bad thing
     if (pi.log_tail <= since) {
       psdout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
