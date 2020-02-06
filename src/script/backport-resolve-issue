@@ -97,6 +97,7 @@ import os
 import re
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
+from redminelib.exceptions import ResourceAttrError
 from git import Repo
 from git.exc import GitCommandError
 
@@ -408,8 +409,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
         for bt in self.backport_trackers:
             # does the Backport Tracker description link back to the GitHub PR?
             p = re.compile('http.?://github.com/ceph/ceph/pull/\\d+')
-            bt.tracker_description = bt.redmine_issue.description
-            bt.github_url_from_tracker = None
+            bt.get_tracker_description()
             try:
                 bt.github_url_from_tracker = p.search(bt.tracker_description).group()
             except AttributeError:
@@ -541,6 +541,14 @@ class BackportTracker(Backport):
         self.redmine_issue = redmine_issue
         self.issue_id = issue_id
         self.parent = backport_obj
+        self.tracker_description = None
+        self.github_url_from_tracker = None
+
+    def get_tracker_description(self):
+        try:
+            self.tracker_description = self.redmine_issue.description
+        except ResourceAttrError:
+            self.tracker_description = ""
 
     def get_tracker_target_version(self):
         if self.redmine_issue.fixed_version:
