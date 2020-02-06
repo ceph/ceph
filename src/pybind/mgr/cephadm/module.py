@@ -467,6 +467,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 del self.health_checks[k]
         self.set_health_checks(self.health_checks)
 
+    def _fail_upgrade(self, alert_id, alert):
+        self.log.error('Upgrade: Paused due to %s: %s' % (alert_id,
+                                                          alert['summary']))
+        self.upgrade_state['error'] = alert_id + ': ' + alert['summary']
+        self.upgrade_state['paused'] = True
+        self._save_upgrade_state()
+        self.health_checks[alert_id] = alert
+        self.set_health_checks(self.health_checks)
+
     def _do_upgrade(self, daemons):
         # type: (List[orchestrator.ServiceDescription]) -> Optional[AsyncCompletion]
         if not self.upgrade_state:
@@ -565,14 +574,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 mgr_map = self.get('mgr_map')
                 num = len(mgr_map.get('standbys'))
                 if not num:
-                    self.log.warning(
-                        'Upgrade: No standby mgrs and I need to update the mgr, '
-                        'suspending upgrade')
-                    self.upgrade_state['error'] = 'No standby mgrs and mgr.%s ' \
-                        'needs to be upgraded' % self.get_mgr_id()
-                    self.upgrade_state['paused'] = True
-                    self._save_upgrade_state()
-                    self.health_checks['UPGRADE_NO_STANDBY_MGR'] = {
+                    self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
                         'severity': 'warning',
                         'summary': 'Upgrade: Need standby mgr daemon',
                         'count': 1,
@@ -580,8 +582,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             'The upgrade process needs to upgrade the mgr, '
                             'but it needs at least one standby to proceed.',
                         ],
-                    }
-                    self.set_health_checks(self.health_checks)
+                    })
                     return None
 
                 self.log.info('Upgrade: there are %d other already-upgraded '
