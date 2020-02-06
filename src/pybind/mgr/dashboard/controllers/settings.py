@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 import cherrypy
 
-from . import ApiController, RESTController, UiApiController
+from . import ApiController, RESTController
 from ..settings import Settings as SettingsModule, Options
 from ..security import Scope
 
@@ -85,13 +85,3 @@ class Settings(RESTController):
         with self._attribute_handler(kwargs) as data:
             for name, value in data.items():
                 setattr(SettingsModule, self._to_native(name), value)
-
-
-@UiApiController('/standard_settings')
-class StandardSettings(RESTController):
-    def list(self):
-        return {
-            'user_pwd_expiration_span': SettingsModule.USER_PWD_EXPIRATION_SPAN,
-            'user_pwd_expiration_warning_1': SettingsModule.USER_PWD_EXPIRATION_WARNING_1,
-            'user_pwd_expiration_warning_2': SettingsModule.USER_PWD_EXPIRATION_WARNING_2
-        }

@@ -21,7 +21,7 @@ export class PwdExpirationNotificationComponent implements OnInit {
 
   ngOnInit() {
     this.settingsService.pwdExpirationSettings().subscribe((pwdExpirationSettings) => {
-      this.pwdExpirationSettings = new CdPwdExpirationSettings(pwdExpirationSettings);
+      this.pwdExpirationSettings = pwdExpirationSettings;
       const pwdExpirationDate = this.authStorageService.getPwdExpirationDate();
       if (pwdExpirationDate) {
         this.expirationDays = this.getExpirationDays(pwdExpirationDate);

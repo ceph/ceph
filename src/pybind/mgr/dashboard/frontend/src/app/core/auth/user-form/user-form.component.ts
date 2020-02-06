@@ -130,7 +130,7 @@ export class UserFormComponent implements OnInit {
           role.enabled = true;
           return role;
         });
-        this.pwdExpirationSettings = new CdPwdExpirationSettings(result[1]);
+        this.pwdExpirationSettings = result[1];
 
         if (this.mode === this.userFormMode.editing) {
           this.initEdit();

@@ -75,6 +75,19 @@ export class SettingsService {
   }
 
   pwdExpirationSettings(): Observable<CdPwdExpirationSettings> {
-    return this.http.get<CdPwdExpirationSettings>('ui-api/standard_settings');
+    return this.getValues([
+      'USER_PWD_EXPIRATION_SPAN',
+      'USER_PWD_EXPIRATION_WARNING_1',
+      'USER_PWD_EXPIRATION_WARNING_2'
+    ]).pipe(
+      map((resp: { [key: string]: any }) => {
+        const result = new CdPwdExpirationSettings(
+          resp['USER_PWD_EXPIRATION_SPAN'],
+          resp['USER_PWD_EXPIRATION_WARNING_1'],
+          resp['USER_PWD_EXPIRATION_WARNING_2']
+        );
+        return result;
+      })
+    );
   }
 }

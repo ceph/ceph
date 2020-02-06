@@ -175,9 +175,9 @@ describe('UserFormComponent', () => {
       }
     ];
     const pwdExpirationSettings = {
-      user_pwd_expiration_warning_1: 10,
-      user_pwd_expiration_warning_2: 5,
-      user_pwd_expiration_span: 90
+      pwdExpirationSpan: 10,
+      pwdExpirationWarning1: 5,
+      pwdExpirationWarning2: 90
     };
 
     beforeEach(() => {
@@ -191,7 +191,9 @@ describe('UserFormComponent', () => {
       const req = httpTesting.expectOne('api/role');
       expect(req.request.method).toBe('GET');
       req.flush(roles);
-      httpTesting.expectOne('ui-api/standard_settings');
+      httpTesting.expectOne(
+        'api/settings?names=USER_PWD_EXPIRATION_SPAN,USER_PWD_EXPIRATION_WARNING_1,USER_PWD_EXPIRATION_WARNING_2'
+      );
     });
 
     afterEach(() => {
