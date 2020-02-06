@@ -742,7 +742,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
             self._check_for_strays(services)
 
-            while self.upgrade_state and not self.upgrade_state.get('paused'):
+            if self.upgrade_state and not self.upgrade_state.get('paused'):
                 completion = self._do_upgrade(services)
                 if completion:
                     while not completion.has_result:
@@ -753,11 +753,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             break
                     orchestrator.raise_if_exception(completion)
                 self.log.debug('did _do_upgrade')
-
-            sleep_interval = 600
-            self.log.debug('Sleeping for %d seconds', sleep_interval)
-            ret = self.event.wait(sleep_interval)
-            self.event.clear()
+            else:
+                sleep_interval = 600
+                self.log.debug('Sleeping for %d seconds', sleep_interval)
+                ret = self.event.wait(sleep_interval)
+                self.event.clear()
         self.log.info("serve exit")
 
     def config_notify(self):
