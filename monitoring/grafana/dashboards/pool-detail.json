@@ -257,7 +257,7 @@
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "$pool_name Object In-/Egress",
+      "title": "$pool_name Object Ingress/Egress",
       "tooltip": {
         "shared": true,
         "sort": 0,
