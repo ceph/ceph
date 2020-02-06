@@ -86,6 +86,7 @@ print("branch %s" % branch)
 
 # assemble
 print('--- creating branch %s' % branch)
+r = call(['git', 'branch', '-D', branch])
 r = call(['git', 'checkout', '-b', branch])
 assert not r
 for pr in prs:
