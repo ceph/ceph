@@ -148,6 +148,7 @@
   },
   "resolutions": {
     "lodash": "4.17.15",
-    "mem": "4.3.0"
+    "mem": "4.3.0",
+    "fsevents": "2.1.2"
   }
 }
