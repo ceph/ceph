@@ -239,7 +239,7 @@ public:
   }
 
   // output
-  std::ostream& gmtime(std::ostream& out) const {
+  std::ostream& gmtime(std::ostream& out, bool legacy_form=false) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
     out.fill('0');
@@ -254,9 +254,13 @@ public:
       gmtime_r(&tt, &bdt);
       out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
 	  << '-' << std::setw(2) << (bdt.tm_mon+1)
-	  << '-' << std::setw(2) << bdt.tm_mday
-	  << 'T'
-	  << std::setw(2) << bdt.tm_hour
+	  << '-' << std::setw(2) << bdt.tm_mday;
+      if (legacy_form) {
+	out << ' ';
+      } else {
+	out << 'T';
+      }
+      out << std::setw(2) << bdt.tm_hour
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
       out << "." << std::setw(6) << usec();
@@ -322,7 +326,7 @@ public:
     return out;
   }
 
-  std::ostream& localtime(std::ostream& out) const {
+  std::ostream& localtime(std::ostream& out, bool legacy_form=false) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
     out.fill('0');
@@ -337,15 +341,21 @@ public:
       localtime_r(&tt, &bdt);
       out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
 	  << '-' << std::setw(2) << (bdt.tm_mon+1)
-	  << '-' << std::setw(2) << bdt.tm_mday
-	  << 'T'
-	  << std::setw(2) << bdt.tm_hour
+	  << '-' << std::setw(2) << bdt.tm_mday;
+      if (legacy_form) {
+	out << ' ';
+      } else {
+	out << 'T';
+      }
+      out << std::setw(2) << bdt.tm_hour
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
       out << "." << std::setw(6) << usec();
-      char buf[32] = { 0 };
-      strftime(buf, sizeof(buf), "%z", &bdt);
-      out << buf;
+      if (!legacy_form) {
+	char buf[32] = { 0 };
+	strftime(buf, sizeof(buf), "%z", &bdt);
+	out << buf;
+      }
     }
     out.fill(oldfill);
     out.unsetf(std::ios::right);
