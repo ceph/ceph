@@ -462,7 +462,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return True
 
     def _clear_upgrade_health_checks(self):
-        for k in ['UPGRADE_NO_STANDBY_MGR']:
+        for k in ['UPGRADE_NO_STANDBY_MGR',
+                  'UPGRADE_FAILED_PULL']:
             if k in self.health_checks:
                 del self.health_checks[k]
         self.set_health_checks(self.health_checks)
@@ -487,7 +488,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if not target_id:
             # need to learn the container hash
             self.log.info('Upgrade: First pull of %s' % target_name)
-            target_id, target_version = self._get_container_image_id(target_name)
+            try:
+                target_id, target_version = self._get_container_image_id(target_name)
+            except OrchestratorError as e:
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pull target image',
+                    'count': 1,
+                    'detail': [str(e)],
+                })
+                return None
             self.upgrade_state['target_id'] = target_id
             self.upgrade_state['target_version'] = target_version
             self._save_upgrade_state()
@@ -533,19 +543,24 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 # make sure host has latest container image
                 out, err, code = self._run_cephadm(
                     d.nodename, None, 'inspect-image', [],
-                    image=target_name, no_fsid=True)
+                    image=target_name, no_fsid=True, error_ok=True)
                 self.log.debug('out %s code %s' % (out, code))
                 if code or json.loads(''.join(out)).get('image_id') != target_id:
                     self.log.info('Upgrade: Pulling %s on %s' % (target_name,
                                                                  d.nodename))
                     out, err, code = self._run_cephadm(
                         d.nodename, None, 'pull', [],
-                        image=target_name, no_fsid=True)
+                        image=target_name, no_fsid=True, error_ok=True)
                     if code:
-                        self.log.warning('Upgrade: failed to pull %s on %s' % (
-                            target_name, d.nodename))
-                        # FIXME
-                        continue
+                        self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                            'severity': 'warning',
+                            'summary': 'Upgrade: failed to pull target image',
+                            'count': 1,
+                            'detail': [
+                                'failed to pull %s on host %s' % (target_name,
+                                                                  d.nodename)],
+                        })
+                        return None
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
                         self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.nodename, r['image_id'], target_id))
@@ -2053,7 +2068,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         out, err, code = self._run_cephadm(
             host, None, 'pull', [],
             image=image_name,
-            no_fsid=True)
+            no_fsid=True,
+            error_ok=True)
+        if code:
+            raise OrchestratorError('Failed to pull %s on %s: %s' % (
+                image_name, host, '\n'.join(out)))
         j = json.loads('\n'.join(out))
         image_id = j.get('image_id')
         ceph_version = j.get('ceph_version')
