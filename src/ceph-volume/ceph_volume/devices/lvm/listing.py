@@ -150,9 +150,6 @@ class List(object):
         volume in the form of vg/lv or a device with an absolute path like
         /dev/sda1 or /dev/sda. Returns '{}' to denote failure.
         """
-        lv = api.get_first_lv(filters={'lv_path': device})
-        # whether the dev to reported is lv...
-        arg_is_vg = False
 
         # The `device` argument can be a logical volume name or a device path.
         # If it's a path that exists, use the canonical path (in particular,
@@ -161,22 +158,17 @@ class List(object):
         if os.path.exists(device):
             device = os.path.realpath(device)
 
-        lv = api.get_first_lv(filters={'lv_path': device})
+        lv = api.get_lvs(filters={'lv_full_name': device})
         if not lv:
             # if device at given path is not LV, it might be PV...
             pv = api.get_first_pv(filters={'pv_name': device})
             if pv:
-                lv = api.get_first_lv(filters={'vg_name': pv.vg_name})
-            # or VG.
-            else:
-                vg_name = os.path.dirname(device)
-                lv = api.get_first_lv(filters={'vg_name': vg_name})
-                arg_is_vg = True
+                lv = api.get_lvs(filters={'vg_name': pv.vg_name})
 
         if not lv:
             return {}
 
-        return self.create_report(lv, full_report=False, arg_is_vg=arg_is_vg)
+        return self.create_report(lv, full_report=False)
 
     def main(self):
         sub_command_help = dedent("""
