@@ -57,6 +57,7 @@ def _test_resource(data, resource_class, extra=None):
 def test_inventory():
     json_data = {
         'name': 'host0',
+        'addr': '1.2.3.4',
         'devices': [
             {
                 'sys_api': {
@@ -74,7 +75,7 @@ def test_inventory():
     for devices in json_data['devices']:
         _test_resource(devices, inventory.Device)
 
-    json_data = [{}, {'name': 'host0'}, {'devices': []}]
+    json_data = [{}, {'name': 'host0', 'addr': '1.2.3.4'}, {'devices': []}]
     for data in json_data:
         with pytest.raises(OrchestratorValidationError):
             InventoryNode.from_json(data)

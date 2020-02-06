@@ -71,6 +71,7 @@ class OrchestratorControllerTest(ControllerTestCase):
         inventory = [
             {
                 'name': 'host-0',
+                'addr': '1.2.3.4',
                 'devices': [
                     {'path': 'nvme0n1'},
                     {'path': '/dev/sdb'},
@@ -79,6 +80,7 @@ class OrchestratorControllerTest(ControllerTestCase):
             },
             {
                 'name': 'host-1',
+                'addr': '1.2.3.5',
                 'devices': [
                     {'path': '/dev/sda'},
                     {'path': 'sdb'},
@@ -97,11 +99,13 @@ class OrchestratorControllerTest(ControllerTestCase):
         self.assertEqual(len(resp), 2)
         host0 = resp[0]
         self.assertEqual(host0['name'], 'host-0')
+        self.assertEqual(host0['addr'], '1.2.3.4')
         self.assertEqual(host0['devices'][0]['osd_ids'], [1, 2])
         self.assertEqual(host0['devices'][1]['osd_ids'], [1])
         self.assertEqual(host0['devices'][2]['osd_ids'], [2])
         host1 = resp[1]
         self.assertEqual(host1['name'], 'host-1')
+        self.assertEqual(host1['addr'], '1.2.3.5')
         self.assertEqual(host1['devices'][0]['osd_ids'], [])
         self.assertEqual(host1['devices'][1]['osd_ids'], [3])
 

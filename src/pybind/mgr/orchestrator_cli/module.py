@@ -192,13 +192,13 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             output = json.dumps(hosts, sort_keys=True)
         else:
             table = PrettyTable(
-                ['HOST', 'LABELS'],
+                ['HOST', 'ADDR', 'LABELS'],
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
             for node in completion.result:
-                table.add_row((node.name, ' '.join(node.labels)))
+                table.add_row((node.name, node.addr, ' '.join(node.labels)))
             output = table.get_string()
         return HandleCommandResult(stdout=output)
 

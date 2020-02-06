@@ -1184,7 +1184,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         TODO:
           - InventoryNode probably needs to be able to report labels
         """
-        return [orchestrator.InventoryNode(host_name) for host_name in self.inventory_cache]
+        r = []
+        for hostname, info in self.inventory.items():
+            self.log.debug('host %s info %s' % (hostname, info))
+            r.append(orchestrator.InventoryNode(
+                hostname,
+                addr=info.get('addr', hostname),
+                labels=info.get('labels', []),
+            ))
+        return r
 
     @async_completion
     def add_host_label(self, host, label):
