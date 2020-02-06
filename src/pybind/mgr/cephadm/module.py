@@ -1173,6 +1173,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.event.set()  # refresh stray health check
         return "Removed host '{}'".format(host)
 
+    @async_completion
+    def update_host_addr(self, host, addr):
+        if host not in self.inventory:
+            raise OrchestratorError('host %s not registered' % host)
+        self.inventory[host]['addr'] = addr
+        self._save_inventory()
+        self._reset_con(host)
+        self.event.set()  # refresh stray health check
+        return "Updated host '{}' addr to '{}'".format(host, addr)
+
     @trivial_completion
     def get_hosts(self):
         """
