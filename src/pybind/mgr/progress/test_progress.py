@@ -2,7 +2,8 @@
 import unittest
 import os
 import sys
-from mock import Mock
+from tests import mock
+
 import pytest
 import json
 os.environ['UNITTEST'] = "1"
@@ -15,7 +16,7 @@ class TestPgRecoveryEvent(object):
     def setup(self):
         # Creating the class and Mocking 
         # a bunch of attributes for testing
-        module._module = Mock() # just so Event._refresh() works
+        module._module = mock.Mock() # just so Event._refresh() works
         self.test_event = module.PgRecoveryEvent(None, None, [module.PgId(1,i) for i in range(3)], [0], 30)
 
     def test_pg_update(self):
@@ -76,7 +77,7 @@ class TestPgRecoveryEvent(object):
         ]
         }
 
-        self.test_event.pg_update(pg_dump, Mock())
+        self.test_event.pg_update(pg_dump, mock.Mock())
         assert self.test_event._progress == 1.0
        
 class OSDMap: 
@@ -124,13 +125,13 @@ class TestModule(object):
         # Creating the class and Mocking a
         # bunch of attributes for testing
 
-        module.PgRecoveryEvent.pg_update = Mock()
+        module.PgRecoveryEvent.pg_update = mock.Mock()
         self.test_module = module.Module() # so we can see if an event gets created
-        self.test_module.log = Mock() # we don't need to log anything
-        self.test_module.get = Mock() # so we can call pg_update
-        self.test_module._complete = Mock() # we want just to see if this event gets called
-        self.test_module.get_osdmap = Mock() # so that self.get_osdmap().get_epoch() works
-        module._module = Mock() # so that Event.refresh() works
+        self.test_module.log = mock.Mock() # we don't need to log anything
+        self.test_module.get = mock.Mock() # so we can call pg_update
+        self.test_module._complete = mock.Mock() # we want just to see if this event gets called
+        self.test_module.get_osdmap = mock.Mock() # so that self.get_osdmap().get_epoch() works
+        module._module = mock.Mock() # so that Event.refresh() works
 
     def test_osd_in_out(self):
         # test for the correct event being
