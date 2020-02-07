@@ -29,7 +29,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             'type': 'str',
             'default': None,
             'desc': 'Orchestrator backend',
-            'enum_allowed': ['cephadm', 'rook', 'deepsea',
+            'enum_allowed': ['cephadm', 'rook',
                              'test_orchestrator'],
             'runtime': True,
         },

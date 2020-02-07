@@ -3,7 +3,6 @@ usr/bin/ceph-mgr
 usr/share/ceph/mgr/alerts
 usr/share/ceph/mgr/balancer
 usr/share/ceph/mgr/crash
-usr/share/ceph/mgr/deepsea
 usr/share/ceph/mgr/devicehealth
 usr/share/ceph/mgr/influx
 usr/share/ceph/mgr/insights
