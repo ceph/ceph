@@ -26,11 +26,6 @@ describe('Manager modules page', () => {
       await mgrmodules.navigateTo();
     });
 
-    it('should test editing on ansible module', async () => {
-      const ansibleArr = [['rq', 'ca_bundle'], ['colts', 'server_location']];
-      await mgrmodules.editMgrModule('ansible', ansibleArr);
-    });
-
     it('should test editing on deepsea module', async () => {
       const deepseaArr = [
         ['rq', 'salt_api_eauth'],

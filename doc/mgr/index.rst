@@ -46,4 +46,3 @@ sensible.
     Cephadm orchestrator <cephadm>
     Rook module <rook>
     DeepSea module <deepsea>
-    Ansible module <ansible>

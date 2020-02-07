@@ -14,7 +14,7 @@ ceph-mgr orchestrator modules
 
 In this context, *orchestrator* refers to some external service that
 provides the ability to discover devices and create Ceph services.  This
-includes external projects such as ceph-ansible, DeepSea, and Rook.
+includes external projects such as DeepSea and Rook.
 
 An *orchestrator module* is a ceph-mgr module (:ref:`mgr-module-dev`)
 which implements common management operations using a particular
@@ -36,8 +36,7 @@ the dashboard, to work with various different backends.
             dashboard [label="mgr/dashboard"]
             orchestrator_cli [label="mgr/orchestrator_cli"]
             orchestrator [label="Orchestrator Interface"]
-            ansible [label="mgr/ansible"]
-            ssh [label="mgr/ssh"]
+            cephadm [label="mgr/cephadm"]
             deepsea [label="mgr/deepsea"]
 
             label = "ceph-mgr";
@@ -47,13 +46,11 @@ the dashboard, to work with various different backends.
         dashboard -> orchestrator
         orchestrator_cli -> orchestrator
         orchestrator -> rook -> rook_io
-        orchestrator -> ansible -> ceph_ansible
         orchestrator -> deepsea -> suse_deepsea
-        orchestrator -> ssh
+        orchestrator -> cephadm
 
 
         rook_io [label="Rook"]
-        ceph_ansible [label="ceph-ansible"]
         suse_deepsea [label="DeepSea"]
 
         rankdir="TB";
