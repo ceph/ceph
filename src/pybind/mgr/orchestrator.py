@@ -125,7 +125,7 @@ class NoOrchestrator(OrchestratorError):
     """
     No orchestrator in configured.
     """
-    def __init__(self, msg="No orchestrator configured (try `ceph orchestrator set backend`)"):
+    def __init__(self, msg="No orchestrator configured (try `ceph orch set backend`)"):
         super(NoOrchestrator, self).__init__(msg)
 
 

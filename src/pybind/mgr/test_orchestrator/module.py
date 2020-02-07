@@ -195,7 +195,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         a single DriveGroup for now.
         You can work around it by invoking:
 
-        $: ceph orchestrator osd create -i <dg.file>
+        $: ceph orch osd create -i <dg.file>
 
         multiple times. The drivegroup file must only contain one spec at a time.
         """

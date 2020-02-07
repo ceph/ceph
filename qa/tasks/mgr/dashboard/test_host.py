@@ -17,7 +17,7 @@ class HostControllerTest(DashboardTestCase):
         super(HostControllerTest, cls).setUpClass()
         cls._load_module("test_orchestrator")
 
-        cmd = ['orchestrator', 'set', 'backend', 'test_orchestrator']
+        cmd = ['orch', 'set', 'backend', 'test_orchestrator']
         cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
 
         cmd = ['test_orchestrator', 'load_data', '-i', '-']
