@@ -1,4 +1,3 @@
-
 - hosts: osds
   become: yes
   tasks:
@@ -13,7 +12,6 @@
         name: ceph-osd@0
         state: stopped
 
-
 - hosts: mons
   become: yes
   tasks:
@@ -24,26 +22,20 @@
     - name: destroy osd.0
       command: "ceph --cluster {{ cluster }} osd destroy osd.0 --yes-i-really-mean-it"
 
-
 - hosts: osds
   become: yes
   tasks:
 
     # osd.2 device
-    - name: zap /dev/sdd1
-      command: "ceph-volume --cluster {{ cluster }} lvm zap /dev/sdd1 --destroy"
-      environment:
-        CEPH_VOLUME_DEBUG: 1
-
-    - name: zap /dev/sdd2
-      command: "ceph-volume --cluster {{ cluster }} lvm zap /dev/sdd2 --destroy"
+    - name: zap /dev/vdd1
+      command: "ceph-volume --cluster {{ cluster }} lvm zap /dev/vdd1 --destroy"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     # partitions have been completely removed, so re-create them again
-    - name: re-create partition /dev/sdd for lvm data usage
+    - name: re-create partition /dev/vdd for lvm data usage
       parted:
-        device: /dev/sdd
+        device: /dev/vdd
         number: 1
         part_start: 0%
         part_end: 50%
@@ -51,18 +43,8 @@
         label: gpt
         state: present
 
-    - name: re-create partition /dev/sdd lvm journals
-      parted:
-        device: /dev/sdd
-        number: 2
-        part_start: 50%
-        part_end: 100%
-        unit: '%'
-        state: present
-        label: gpt
-
-    - name: redeploy osd.2 using /dev/sdd1
-      command: "ceph-volume --cluster {{ cluster }} lvm create --filestore --data /dev/sdd1 --journal /dev/sdd2 --osd-id 2"
+    - name: redeploy osd.2 using /dev/vdd1
+      command: "ceph-volume --cluster {{ cluster }} lvm create --bluestore --data /dev/vdd1 --osd-id 2"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
@@ -72,28 +54,42 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
-    - name: zap /dev/sdc1
-      command: "ceph-volume --cluster {{ cluster }} lvm zap /dev/sdc1 --destroy"
+    - name: redeploy osd.0 using test_group/data-lv1
+      command: "ceph-volume --cluster {{ cluster }} lvm create --bluestore --data test_group/data-lv1 --osd-id 0"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
-    - name: re-create partition /dev/sdc1
-      parted:
-        device: /dev/sdc
-        number: 1
-        part_start: 0%
-        part_end: 50%
-        unit: '%'
-        state: present
-        label: gpt
+    - name: stop ceph-osd@0 daemon
+      service:
+        name: ceph-osd@0
+        state: stopped
 
-    - name: prepare osd.0 again using test_group/data-lv1
-      command: "ceph-volume --cluster {{ cluster }} lvm prepare --filestore --data test_group/data-lv1 --journal /dev/sdc1 --osd-id 0"
+
+- hosts: mons
+  become: yes
+  tasks:
+
+    - name: destroy osd.0
+      command: "ceph --cluster {{ cluster }} osd destroy osd.0 --yes-i-really-mean-it"
+
+
+- hosts: osds
+  become: yes
+  tasks:
+
+
+    - name: zap test_group/data-lv1
+      command: "ceph-volume --cluster {{ cluster }} lvm zap test_group/data-lv1"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: prepare osd.0 using test_group/data-lv1
+      command: "ceph-volume --cluster {{ cluster }} lvm prepare --bluestore --data test_group/data-lv1 --osd-id 0"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: activate all to start the previously prepared osd.0
-      command: "ceph-volume lvm activate --filestore --all"
+      command: "ceph-volume lvm activate --all"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
