@@ -230,7 +230,7 @@ struct MockImageCtx {
   ::SnapContext snapc;
   std::vector<librados::snap_t> snaps;
   std::map<librados::snap_t, SnapInfo> snap_info;
-  std::map<std::pair<cls::rbd::SnapshotNamespace, std::string>, librados::snap_t> snap_ids;
+  std::map<ImageCtx::SnapKey, librados::snap_t, ImageCtx::SnapKeyComparator> snap_ids;
 
   bool old_format;
   bool read_only;
