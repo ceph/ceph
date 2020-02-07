@@ -293,6 +293,8 @@ def device_info(monkeypatch, patch_bluestore_label):
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
         else:
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_device_lvs",
+                                lambda path: [lv])
         monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: lv)
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
