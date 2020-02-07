@@ -1885,7 +1885,7 @@ def command_bootstrap():
         logger.info('Enabling cephadm module...')
         cli(['mgr', 'module', 'enable', 'cephadm'])
         logger.info('Setting orchestrator backend to cephadm...')
-        cli(['orchestrator', 'set', 'backend', 'cephadm'])
+        cli(['orch', 'set', 'backend', 'cephadm'])
 
         logger.info('Generating ssh key...')
         cli(['cephadm', 'generate-key'])
@@ -1915,7 +1915,7 @@ def command_bootstrap():
 
         host = get_hostname()
         logger.info('Adding host %s...' % host)
-        cli(['orchestrator', 'host', 'add', host])
+        cli(['orch', 'host', 'add', host])
 
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')

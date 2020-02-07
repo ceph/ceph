@@ -47,11 +47,11 @@ CEPHADM_STRAY_HOST
 One or more hosts have running Ceph daemons but are not registered as
 hosts managed by *cephadm*.  This means that those services cannot
 currently be managed by cephadm (e.g., restarted, upgraded, included
-in `ceph orchestrator service ls`).
+in `ceph orch service ls`).
 
 You can manage the host(s) with::
 
-  ceph orchestrator host add *<hostname>*
+  ceph orch host add *<hostname>*
 
 Note that you may need to configure SSH access to the remote host
 before this will work.
@@ -71,7 +71,7 @@ One or more Ceph daemons are running but not are not managed by
 *cephadm*, perhaps because they were deploy using a different tool, or
 were started manually.  This means that those services cannot
 currently be managed by cephadm (e.g., restarted, upgraded, included
-in `ceph orchestrator service ls`).
+in `ceph orch service ls`).
 
 **FIXME:** We need to implement and document an adopt procedure here.
 
@@ -94,7 +94,7 @@ You can manually run this check with::
 
 You can remove a broken host from management with::
 
-  ceph orchestrator host rm *<hostname>*
+  ceph orch host rm *<hostname>*
 
 You can disable this health warning with::
 

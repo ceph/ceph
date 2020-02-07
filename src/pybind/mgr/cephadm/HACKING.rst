@@ -77,14 +77,14 @@ Add the newly created host(s) to the inventory.
 ::
 
 
-   # ceph orchestrator host add <host>
+   # ceph orch host add <host>
 
 
 4) Verify the inventory
 
 ::
 
-   # ceph orchestrator host ls
+   # ceph orch host ls
 
 
 You should see the hostname in the list.
