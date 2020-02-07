@@ -45,4 +45,3 @@ sensible.
     Orchestrator CLI module <orchestrator_cli>
     Cephadm orchestrator <cephadm>
     Rook module <rook>
-    DeepSea module <deepsea>

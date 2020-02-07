@@ -1549,7 +1549,6 @@ fi
 %{_datadir}/ceph/mgr/alerts
 %{_datadir}/ceph/mgr/balancer
 %{_datadir}/ceph/mgr/crash
-%{_datadir}/ceph/mgr/deepsea
 %{_datadir}/ceph/mgr/devicehealth
 %{_datadir}/ceph/mgr/influx
 %{_datadir}/ceph/mgr/insights

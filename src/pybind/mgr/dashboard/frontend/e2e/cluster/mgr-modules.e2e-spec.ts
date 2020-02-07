@@ -26,16 +26,6 @@ describe('Manager modules page', () => {
       await mgrmodules.navigateTo();
     });
 
-    it('should test editing on deepsea module', async () => {
-      const deepseaArr = [
-        ['rq', 'salt_api_eauth'],
-        ['alm', 'salt_api_password'],
-        ['bu', 'salt_api_url'],
-        ['sox', 'salt_api_username']
-      ];
-      await mgrmodules.editMgrModule('deepsea', deepseaArr);
-    });
-
     it('should test editing on diskprediction_local module', async () => {
       const diskpredLocalArr = [['11', 'predict_interval'], ['0122', 'sleep_interval']];
       await mgrmodules.editMgrModule('diskprediction_local', diskpredLocalArr);
