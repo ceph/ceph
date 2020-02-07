@@ -528,7 +528,7 @@ class RookCluster(object):
                    "config": { "storeType": drive_group.objectstore }}
 
             if block_devices:
-                pd["devices"] = [{'name': d} for d in block_devices]
+                pd["devices"] = [{'name': d.path} for d in block_devices]
             if directories:
                 pd["directories"] = [{'path': p} for p in directories]
 
@@ -551,16 +551,16 @@ class RookCluster(object):
                 patch.append({
                     "op": "add",
                     "path": "/spec/storage/nodes/{0}/devices/-".format(node_idx),
-                    "value": {'name': n}  # type: ignore
+                    "value": {'name': n.path}  # type: ignore
                 })
-
-            new_dirs = list(set(directories) - set(current_node['directories']))
-            for p in new_dirs:
-                patch.append({
-                    "op": "add",
-                    "path": "/spec/storage/nodes/{0}/directories/-".format(node_idx),
-                    "value": {'path': p}  # type: ignore
-                })
+            if directories:
+                new_dirs = list(set(directories) - set(current_node['directories']))
+                for p in new_dirs:
+                    patch.append({
+                        "op": "add",
+                        "path": "/spec/storage/nodes/{0}/directories/-".format(node_idx),
+                        "value": {'path': p}  # type: ignore
+                    })
 
         if len(patch) == 0:
             return "No change"
