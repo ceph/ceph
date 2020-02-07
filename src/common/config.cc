@@ -575,6 +575,11 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
     else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
       no_mon_config = true;
     }
+    else if (ceph_argparse_flag(args, i, "--log-early", (char*)NULL)) {
+      // parse but ignore this option
+      cerr << "WARNING: ignoring --log-early option (not implemented)"
+	   << std::endl;
+    }
     else if (ceph_argparse_flag(args, i, "--mon-config", (char*)NULL)) {
       no_mon_config = false;
     }
