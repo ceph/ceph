@@ -126,3 +126,26 @@ class TestFilterDevices(object):
         result, filtered_devices = batch.filter_devices(args)
         assert result
         assert len(filtered_devices) == 1
+
+    def test_no_auto_fails_on_unavailable_device(self, factory):
+        hdd1 = factory(
+            used_by_ceph=False,
+            abspath="/dev/sda",
+            rotational=True,
+            is_lvm_member=False,
+            available=True
+        )
+        ssd1 = factory(
+            used_by_ceph=True,
+            abspath="/dev/nvme0n1",
+            rotational=False,
+            is_lvm_member=True,
+            available=False
+        )
+        args = factory(devices=[hdd1], db_devices=[ssd1], filtered_devices={},
+                      yes=True)
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(RuntimeError) as ex:
+            b._filter_devices()
+            assert '1 devices were filtered in non-interactive mode, bailing out' in str(ex.value)

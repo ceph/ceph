@@ -325,7 +325,6 @@ class Batch(object):
             self.execute()
 
     def _get_explicit_strategy(self):
-        # TODO assert that none of the device lists overlap?
         self._filter_devices()
         self._ensure_disjoint_device_lists()
         if self.args.bluestore:
@@ -355,18 +354,22 @@ class Batch(object):
         # filter devices by their available property.
         # TODO: Some devices are rejected in the argparser already. maybe it
         # makes sense to unifiy this
-        used_reason = {"reasons": ["Used by ceph as a data device already"]}
+        used_reason = {"reasons": ["Used by ceph already"]}
         self.filtered_devices = {}
         for dev_list in ['', 'db_', 'wal_', 'journal_']:
             dev_list_prop = '{}devices'.format(dev_list)
             if hasattr(self.args, dev_list_prop):
                 usable_dev_list_prop = '{}usable'.format(dev_list)
-                usable = [d for d in getattr(self.args, dev_list_prop) if
-                          d.available]
+                devs = getattr(self.args, dev_list_prop)
+                usable = [d for d in devs if d.available]
                 setattr(self, usable_dev_list_prop, usable)
                 self.filtered_devices.update({d: used_reason for d in
                                               getattr(self.args, dev_list_prop)
                                               if d.used_by_ceph})
+                if self.args.yes and dev_list and devs != usable:
+                    err = '{} devices were filtered in non-interactive mode, bailing out'
+                    raise RuntimeError(err.format(len(devs) - len(usable)))
+
 
     def _ensure_disjoint_device_lists(self):
         # check that all device lists are disjoint with each other
