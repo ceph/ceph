@@ -11,6 +11,8 @@ overrides:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
 - exec:
     client.0:
       - ceph_test_lazy_omap_stats

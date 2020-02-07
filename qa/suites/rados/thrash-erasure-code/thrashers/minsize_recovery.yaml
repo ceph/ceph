@@ -4,6 +4,8 @@ overrides:
     - but it is still running
     - objects unfound and apparently lost
     create_rbd_pool: False
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     conf:
       osd:
         osd debug reject backfill probability: .3
