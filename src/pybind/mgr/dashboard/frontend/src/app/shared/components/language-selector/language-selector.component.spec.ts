@@ -44,47 +44,47 @@ describe('LanguageSelectorComponent', () => {
     expectLanguageChange('cs');
   });
 
-  it('should change to de-DE', () => {
-    expectLanguageChange('de-DE');
+  it('should change to de', () => {
+    expectLanguageChange('de');
   });
 
-  it('should change to es-ES', () => {
-    expectLanguageChange('es-ES');
+  it('should change to es', () => {
+    expectLanguageChange('es');
   });
 
-  it('should change to fr-FR', () => {
-    expectLanguageChange('fr-FR');
+  it('should change to fr', () => {
+    expectLanguageChange('fr');
   });
 
-  it('should change to id-ID', () => {
-    expectLanguageChange('id-ID');
+  it('should change to id', () => {
+    expectLanguageChange('id');
   });
 
-  it('should change to it-IT', () => {
-    expectLanguageChange('it-IT');
+  it('should change to it', () => {
+    expectLanguageChange('it');
   });
 
-  it('should change to ja-JP', () => {
-    expectLanguageChange('ja-JP');
+  it('should change to ja', () => {
+    expectLanguageChange('ja');
   });
 
-  it('should change to ko-KR', () => {
-    expectLanguageChange('ko-KR');
+  it('should change to ko', () => {
+    expectLanguageChange('ko');
   });
 
-  it('should change to pl-PL', () => {
-    expectLanguageChange('pl-PL');
+  it('should change to pl', () => {
+    expectLanguageChange('pl');
   });
 
-  it('should change to pt-BR', () => {
-    expectLanguageChange('pt-BR');
+  it('should change to pt', () => {
+    expectLanguageChange('pt');
   });
 
-  it('should change to zh-CN', () => {
-    expectLanguageChange('zh-CN');
+  it('should change to zh-Hans', () => {
+    expectLanguageChange('zh-Hans');
   });
 
-  it('should change to zh-TW', () => {
-    expectLanguageChange('zh-TW');
+  it('should change to zh-Hant', () => {
+    expectLanguageChange('zh-Hant');
   });
 });
