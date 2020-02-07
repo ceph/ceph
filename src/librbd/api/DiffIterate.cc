@@ -378,7 +378,25 @@ int DiffIterate<I>::execute() {
 
       if (fast_diff_enabled) {
         const uint64_t object_no = p->second.front().objectno;
-        if (object_diff_state[object_no] != OBJECT_DIFF_STATE_NONE) {
+        if (object_diff_state[object_no] == OBJECT_DIFF_STATE_NONE &&
+            from_snap_id == 0 && !diff_context.parent_diff.empty()) {
+          // no data in child object -- report parent diff instead
+          for (auto& oe : p->second) {
+            for (auto& be : oe.buffer_extents) {
+              interval_set<uint64_t> o;
+              o.insert(off + be.first, be.second);
+              o.intersection_of(diff_context.parent_diff);
+              ldout(cct, 20) << " reporting parent overlap " << o << dendl;
+              for (auto e = o.begin(); e != o.end(); ++e) {
+                r = m_callback(e.get_start(), e.get_len(), true,
+                               m_callback_arg);
+                if (r < 0) {
+                  return r;
+                }
+              }
+            }
+          }
+        } else if (object_diff_state[object_no] != OBJECT_DIFF_STATE_NONE) {
           bool updated = (object_diff_state[object_no] ==
                             OBJECT_DIFF_STATE_UPDATED);
           for (std::vector<ObjectExtent>::iterator q = p->second.begin();

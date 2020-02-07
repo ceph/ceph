@@ -1646,19 +1646,40 @@ In order to create a new plugin, the following steps are required:
 
 #. Add a new file under ``src/pybind/mgr/dashboard/plugins``.
 #. Import the ``PLUGIN_MANAGER`` instance and the ``Interfaces``.
-#. Create a class extending the desired interfaces. The plug-in library will check if all the methods of the interfaces have been properly overridden.
+#. Create a class extending the desired interfaces. The plug-in library will
+   check if all the methods of the interfaces have been properly overridden.
 #. Register the plugin in the ``PLUGIN_MANAGER`` instance.
-#. Import the plug-in from within the Ceph Dashboard ``module.py`` (currently no dynamic loading is implemented).
+#. Import the plug-in from within the Ceph Dashboard ``module.py`` (currently no
+   dynamic loading is implemented).
 
-The available interfaces are the following:
+The available Mixins (helpers) are:
 
 - ``CanMgr``: provides the plug-in with access to the ``mgr`` instance under ``self.mgr``.
 - ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
-- ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
-- ``HasOptions``: requires overriding ``get_options()`` hook by returning a list of ``Options()``. The options returned here are added to the ``MODULE_OPTIONS``.
-- ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand`. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
-- ``HasControllers``: requires overriding ``get_controllers()`` hook by defining and returning the controllers as usual.
-- ``FilterRequest.BeforeHandler``: requires overriding ``filter_request_before_handler()`` hook. This method receives a ``cherrypy.request`` object for processing. A usual implementation of this method will allow some requests to pass or will raise a ``cherrypy.HTTPError` based on the ``request`` metadata and other conditions.
+
+The available Interfaces are:
+
+- ``Initializable``: requires overriding ``init()`` hook. This method is run at
+  the very beginning of the dashboard module, right after all imports have been
+  performed.
+- ``Setupable``: requires overriding ``setup()`` hook. This method is run in the
+  Ceph Dashboard ``serve()`` method, right after CherryPy has been configured,
+  but before it is started. It's a placeholder for the plug-in initialization
+  logic.
+- ``HasOptions``: requires overriding ``get_options()`` hook by returning a list
+  of ``Options()``. The options returned here are added to the
+  ``MODULE_OPTIONS``.
+- ``HasCommands``: requires overriding ``register_commands()`` hook by defining
+  the commands the plug-in can handle and decorating them with ``@CLICommand``.
+  The commands can be optionally returned, so that they can be invoked
+  externally (which makes unit testing easier).
+- ``HasControllers``: requires overriding ``get_controllers()`` hook by defining
+  and returning the controllers as usual.
+- ``FilterRequest.BeforeHandler``: requires overriding
+  ``filter_request_before_handler()`` hook. This method receives a
+  ``cherrypy.request`` object for processing. A usual implementation of this
+  method will allow some requests to pass or will raise a ``cherrypy.HTTPError`
+  based on the ``request`` metadata and other conditions.
 
 New interfaces and hooks should be added as soon as they are required to
 implement new functionality. The above list only comprises the hooks needed for
@@ -1686,14 +1707,14 @@ A sample plugin implementation would look like this:
 
     @PM.add_hook
     def setup(self):
-      self.mute = self.mgr.get_module_options('mute')
+      self.mute = self.mgr.get_module_option('mute')
 
     @PM.add_hook
     def register_commands(self):
       @CLICommand("dashboard mute")
       def _(mgr):
         self.mute = True
-        self.mgr.set_module_options('mute', True)
+        self.mgr.set_module_option('mute', True)
         return 0
 
     @PM.add_hook
@@ -1710,4 +1731,54 @@ A sample plugin implementation would look like this:
         def get(_):
           return self.mute
 
-      return [FeatureTogglesEndpoint]
+      return [MuteController]
+
+
+Additionally, a helper for creating plugins ``SimplePlugin`` is provided. It
+facilitates the basic tasks (Options, Commands, and common Mixins). The previous
+plugin could be rewritten like this:
+
+.. code-block:: python
+  
+  from . import PLUGIN_MANAGER as PM
+  from . import interfaces as I
+  from .plugin import SimplePlugin as SP
+
+  import cherrypy
+
+  @PM.add_plugin
+  class Mute(SP, I.Setupable, I.FilterRequest.BeforeHandler, I.HasControllers):
+    OPTIONS = [
+        SP.Option('mute', default=False, type='bool')
+    ]
+
+    def shut_up(self):
+      self.set_option('mute', True)
+      self.mute = True
+      return 0
+
+    COMMANDS = [
+        SP.Command("dashboard mute", handler=shut_up)
+    ]
+
+    @PM.add_hook
+    def setup(self):
+      self.mute = self.get_option('mute')
+
+    @PM.add_hook
+    def filter_request_before_handler(self, request):
+      if self.mute:
+        raise cherrypy.HTTPError(500, "I'm muted :-x")
+
+    @PM.add_hook
+    def get_controllers(self):
+      from ..controllers import ApiController, RESTController
+
+      @ApiController('/mute')
+      class MuteController(RESTController):
+        def get(_):
+          return self.mute
+
+      return [MuteController]
+
+

@@ -60,7 +60,7 @@ void RGWRestRole::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 int RGWRoleRead::check_caps(RGWUserCaps& caps)
@@ -138,8 +138,15 @@ void RGWCreateRole::execute()
   }
 
   if (op_ret == 0) {
-    s->formatter->open_object_section("role");
+    s->formatter->open_object_section("CreateRoleResponse");
+    s->formatter->open_object_section("CreateRoleResult");
+    s->formatter->open_object_section("Role");
     role.dump(s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
     s->formatter->close_section();
   }
 }
@@ -168,6 +175,12 @@ void RGWDeleteRole::execute()
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
   }
+
+  s->formatter->open_object_section("DeleteRoleResponse");
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->close_section();
 }
 
 int RGWGetRole::verify_permission()
@@ -226,8 +239,15 @@ void RGWGetRole::execute()
   op_ret = _verify_permission(role);
 
   if (op_ret == 0) {
-    s->formatter->open_object_section("role");
+    s->formatter->open_object_section("GetRoleResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->open_object_section("GetRoleResult");
+    s->formatter->open_object_section("Role");
     role.dump(s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
     s->formatter->close_section();
   }
 }
@@ -260,6 +280,11 @@ void RGWModifyRole::execute()
   _role.update_trust_policy(trust_policy);
   op_ret = _role.update();
 
+  s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->close_section();
 }
 
 int RGWListRoles::verify_permission()
@@ -299,12 +324,19 @@ void RGWListRoles::execute()
   op_ret = RGWRole::get_roles_by_path_prefix(store, s->cct, path_prefix, s->user->user_id.tenant, result);
 
   if (op_ret == 0) {
-    s->formatter->open_array_section("Roles");
+    s->formatter->open_array_section("ListRolesResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->open_array_section("ListRolesResult");
+    s->formatter->open_object_section("Roles");
     for (const auto& it : result) {
-      s->formatter->open_object_section("role");
+      s->formatter->open_object_section("member");
       it.dump(s->formatter);
       s->formatter->close_section();
     }
+    s->formatter->close_section();
+    s->formatter->close_section();
     s->formatter->close_section();
   }
 }
@@ -339,6 +371,14 @@ void RGWPutRolePolicy::execute()
 
   _role.set_perm_policy(policy_name, perm_policy);
   op_ret = _role.update();
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section("PutRolePolicyResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
 }
 
 int RGWGetRolePolicy::get_params()
@@ -362,11 +402,20 @@ void RGWGetRolePolicy::execute()
 
   string perm_policy;
   op_ret = _role.get_role_policy(policy_name, perm_policy);
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_SUCH_ENTITY;
+  }
+
   if (op_ret == 0) {
+    s->formatter->open_object_section("GetRolePolicyResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
     s->formatter->open_object_section("GetRolePolicyResult");
     s->formatter->dump_string("PolicyName", policy_name);
     s->formatter->dump_string("RoleName", role_name);
     s->formatter->dump_string("Permission policy", perm_policy);
+    s->formatter->close_section();
     s->formatter->close_section();
   }
 }
@@ -390,10 +439,17 @@ void RGWListRolePolicies::execute()
   }
 
   std::vector<string> policy_names = _role.get_role_policy_names();
+  s->formatter->open_object_section("ListRolePoliciesResponse");
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->open_object_section("ListRolePoliciesResult");
   s->formatter->open_array_section("PolicyNames");
   for (const auto& it : policy_names) {
     s->formatter->dump_string("member", it);
   }
+  s->formatter->close_section();
+  s->formatter->close_section();
   s->formatter->close_section();
 }
 
@@ -424,4 +480,10 @@ void RGWDeleteRolePolicy::execute()
   if (op_ret == 0) {
     op_ret = _role.update();
   }
+
+  s->formatter->open_object_section("DeleteRolePoliciesResponse");
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->close_section();
 }

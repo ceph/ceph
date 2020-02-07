@@ -802,6 +802,14 @@ public:
       discard_granularity_bytes = 0;
     }
 
+    alloc_hint_flags = 0;
+    auto compression_hint = config.get_val<std::string>("rbd_compression_hint");
+    if (compression_hint == "compressible") {
+      alloc_hint_flags |= librados::ALLOC_HINT_FLAG_COMPRESSIBLE;
+    } else if (compression_hint == "incompressible") {
+      alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+    }
+
     io_work_queue->apply_qos_schedule_tick_min(
       config.get_val<uint64_t>("rbd_qos_schedule_tick_min"));
 

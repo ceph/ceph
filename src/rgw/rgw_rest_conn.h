@@ -438,7 +438,7 @@ public:
   int wait(T *dest, E *err_result = nullptr);
 };
 
-template <class T, class E=int>
+template <class T, class E>
 int RGWRESTSendResource::wait(T *dest, E *err_result)
 {
   int ret = req.wait();

@@ -52,13 +52,21 @@ int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
         f->close_section();
       }
     } else if (all_flag || !trash) {
-      std::cout << child.pool_name << "/";
+      if (child.pool_name.empty()) {
+        std::cout << "(child missing " << child.pool_id << "/";
+      } else {
+        std::cout << child.pool_name << "/";
+      }
       if (!child.pool_namespace.empty()) {
         std::cout << child.pool_namespace << "/";
       }
-      std::cout << child.image_name;
-      if (trash) {
-        std::cout << " (trash " << child.image_id << ")";
+      if (child.image_name.empty()) {
+        std::cout << child.image_id << ")";
+      } else {
+        std::cout << child.image_name;
+        if (trash) {
+          std::cout << " (trash " << child.image_id << ")";
+	}
       }
       std::cout << std::endl;
     }

@@ -20,6 +20,10 @@ class HomeTest(ControllerTestCase):
         logger.info(self.body)
         self.assertIn('<html lang="en">', self.body.decode('utf-8'))
 
+    def test_home_uplevel_check(self):
+        self._get('/../../../../../../etc/shadow')
+        self.assertStatus(403)
+
     def test_home_en_us(self):
         self._get('/', headers=[('Accept-Language', 'en-US')])
         self.assertStatus(200)
