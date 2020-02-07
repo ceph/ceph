@@ -1,5 +1,6 @@
 import pytest
 from ceph_volume.devices import lvm
+from mock.mock import patch, Mock
 
 
 class TestLVM(object):
@@ -102,6 +103,17 @@ class TestPrepare(object):
         expected = '--journal is required when using --filestore'
         assert expected in str(error.value)
 
+    @patch('ceph_volume.devices.lvm.prepare.api.is_ceph_device')
+    def test_safe_prepare_osd_already_created(self, m_is_ceph_device):
+        m_is_ceph_device.return_value = True
+        with pytest.raises(RuntimeError) as error:
+            prepare = lvm.prepare.Prepare(argv=[])
+            prepare.args = Mock()
+            prepare.args.data = '/dev/sdfoo'
+            prepare.get_lv = Mock()
+            prepare.safe_prepare()
+            expected = 'skipping {}, it is already prepared'.format('/dev/sdfoo')
+            assert expected in str(error.value)
 
 class TestGetJournalLV(object):
 
