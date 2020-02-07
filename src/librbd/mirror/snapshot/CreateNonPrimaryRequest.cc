@@ -119,8 +119,11 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
   ldout(cct, 20) << dendl;
 
   cls::rbd::MirrorSnapshotNamespace ns{
-    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
+    (m_demoted ? cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED :
+                 cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY), {},
     m_primary_mirror_uuid, m_primary_snap_id};
+  ns.snap_seqs = m_snap_seqs;
+
   auto ctx = create_context_callback<
     CreateNonPrimaryRequest<I>,
     &CreateNonPrimaryRequest<I>::handle_create_snapshot>(this);
