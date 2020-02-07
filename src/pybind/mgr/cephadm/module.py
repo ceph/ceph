@@ -449,22 +449,32 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if not self.upgrade_state or self.upgrade_state.get('paused'):
                 return False
             if ret:
-                self.log.info('Upgrade: not safe to stop %s.%s' %
+                self.log.info('Upgrade: It is NOT safe to stop %s.%s' %
                               (s.service_type, s.service_instance))
                 time.sleep(15)
                 tries -= 1
             else:
-                self.log.info('Upgrade: safe to stop %s.%s' %
+                self.log.info('Upgrade: It is safe to stop %s.%s' %
                               (s.service_type, s.service_instance))
                 return True
-        self.log.info('Upgrade: safe to stop %s.%s' %
+        self.log.info('Upgrade: It is safe to stop %s.%s' %
                       (s.service_type, s.service_instance))
         return True
 
     def _clear_upgrade_health_checks(self):
-        for k in ['UPGRADE_NO_STANDBY_MGR']:
+        for k in ['UPGRADE_NO_STANDBY_MGR',
+                  'UPGRADE_FAILED_PULL']:
             if k in self.health_checks:
                 del self.health_checks[k]
+        self.set_health_checks(self.health_checks)
+
+    def _fail_upgrade(self, alert_id, alert):
+        self.log.error('Upgrade: Paused due to %s: %s' % (alert_id,
+                                                          alert['summary']))
+        self.upgrade_state['error'] = alert_id + ': ' + alert['summary']
+        self.upgrade_state['paused'] = True
+        self._save_upgrade_state()
+        self.health_checks[alert_id] = alert
         self.set_health_checks(self.health_checks)
 
     def _do_upgrade(self, daemons):
@@ -478,7 +488,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if not target_id:
             # need to learn the container hash
             self.log.info('Upgrade: First pull of %s' % target_name)
-            target_id, target_version = self._get_container_image_id(target_name)
+            try:
+                target_id, target_version = self._get_container_image_id(target_name)
+            except OrchestratorError as e:
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pull target image',
+                    'count': 1,
+                    'detail': [str(e)],
+                })
+                return None
             self.upgrade_state['target_id'] = target_id
             self.upgrade_state['target_version'] = target_version
             self._save_upgrade_state()
@@ -503,6 +522,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for d in daemons:
                 if d.service_type != daemon_type:
                     continue
+                if not d.container_image_id:
+                    self.log.debug('daemon %s.%s image_id is not known' % (
+                        daemon_type, d.service_instance))
+                    return None
                 if d.container_image_id == target_id:
                     self.log.debug('daemon %s.%s version correct' % (
                         daemon_type, d.service_instance))
@@ -511,7 +534,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     daemon_type, d.service_instance,
                     d.container_image_id, d.version))
 
-                if d.service_instance == self.get_mgr_id():
+                if daemon_type == 'mgr' and \
+                   d.service_instance == self.get_mgr_id():
                     self.log.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                   self.get_mgr_id())
                     need_upgrade_self = True
@@ -520,19 +544,24 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 # make sure host has latest container image
                 out, err, code = self._run_cephadm(
                     d.nodename, None, 'inspect-image', [],
-                    image=target_name, no_fsid=True)
+                    image=target_name, no_fsid=True, error_ok=True)
                 self.log.debug('out %s code %s' % (out, code))
                 if code or json.loads(''.join(out)).get('image_id') != target_id:
                     self.log.info('Upgrade: Pulling %s on %s' % (target_name,
                                                                  d.nodename))
                     out, err, code = self._run_cephadm(
                         d.nodename, None, 'pull', [],
-                        image=target_name, no_fsid=True)
+                        image=target_name, no_fsid=True, error_ok=True)
                     if code:
-                        self.log.warning('Upgrade: failed to pull %s on %s' % (
-                            target_name, d.nodename))
-                        # FIXME
-                        continue
+                        self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                            'severity': 'warning',
+                            'summary': 'Upgrade: failed to pull target image',
+                            'count': 1,
+                            'detail': [
+                                'failed to pull %s on host %s' % (target_name,
+                                                                  d.nodename)],
+                        })
+                        return None
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
                         self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.nodename, r['image_id'], target_id))
@@ -561,14 +590,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 mgr_map = self.get('mgr_map')
                 num = len(mgr_map.get('standbys'))
                 if not num:
-                    self.log.warning(
-                        'Upgrade: No standby mgrs and I need to update the mgr, '
-                        'suspending upgrade')
-                    self.upgrade_state['error'] = 'No standby mgrs and mgr.%s ' \
-                        'needs to be upgraded' % self.get_mgr_id()
-                    self.upgrade_state['paused'] = True
-                    self._save_upgrade_state()
-                    self.health_checks['UPGRADE_NO_STANDBY_MGR'] = {
+                    self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
                         'severity': 'warning',
                         'summary': 'Upgrade: Need standby mgr daemon',
                         'count': 1,
@@ -576,8 +598,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             'The upgrade process needs to upgrade the mgr, '
                             'but it needs at least one standby to proceed.',
                         ],
-                    }
-                    self.set_health_checks(self.health_checks)
+                    })
                     return None
 
                 self.log.info('Upgrade: there are %d other already-upgraded '
@@ -742,7 +763,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
             self._check_for_strays(services)
 
-            while self.upgrade_state and not self.upgrade_state.get('paused'):
+            if self.upgrade_state and not self.upgrade_state.get('paused'):
                 completion = self._do_upgrade(services)
                 if completion:
                     while not completion.has_result:
@@ -753,11 +774,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             break
                     orchestrator.raise_if_exception(completion)
                 self.log.debug('did _do_upgrade')
-
-            sleep_interval = 600
-            self.log.debug('Sleeping for %d seconds', sleep_interval)
-            ret = self.event.wait(sleep_interval)
-            self.event.clear()
+            else:
+                sleep_interval = 600
+                self.log.debug('Sleeping for %d seconds', sleep_interval)
+                ret = self.event.wait(sleep_interval)
+                self.event.clear()
         self.log.info("serve exit")
 
     def config_notify(self):
@@ -2048,7 +2069,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         out, err, code = self._run_cephadm(
             host, None, 'pull', [],
             image=image_name,
-            no_fsid=True)
+            no_fsid=True,
+            error_ok=True)
+        if code:
+            raise OrchestratorError('Failed to pull %s on %s: %s' % (
+                image_name, host, '\n'.join(out)))
         j = json.loads('\n'.join(out))
         image_id = j.get('image_id')
         ceph_version = j.get('ceph_version')
