@@ -35,7 +35,8 @@ From within the `src/pybind/mgr/cephadm` directory.
 
 ::
 
-   # vagrant up
+   # vagrant up osd0 mon0
+   # vagrant up mgr0
 
 This will spawn three machines.
 mon0, mgr0, osd0
