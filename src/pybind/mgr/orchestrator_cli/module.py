@@ -503,8 +503,8 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator rgw update',
-        'name=zone_name,type=CephString '
         'name=realm_name,type=CephString '
+        'name=zone_name,type=CephString '
         'name=num,type=CephInt,req=false '
         'name=hosts,type=CephString,n=N,req=false '
         'name=label,type=CephString,req=false',
