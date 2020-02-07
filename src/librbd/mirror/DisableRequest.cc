@@ -121,8 +121,7 @@ Context *DisableRequest<I>::handle_image_state_update(int *result) {
         auto &snap_info = it.second;
         auto type = cls::rbd::get_snap_namespace_type(
           snap_info.snap_namespace);
-        if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR ||
-            type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY) {
+        if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
           send_remove_snap("", snap_info.snap_namespace, snap_info.name);
           removing_snapshots = true;
         }

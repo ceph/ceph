@@ -37,7 +37,6 @@ bool ignore_snapshot(const SnapInfo& snap_info) {
     snap_info.snap_namespace);
   switch (snap_namespace_type) {
   case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR:
-  case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY:
     return true;
   default:
     return false;

@@ -5711,7 +5711,7 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
 }
 
 int image_snapshot_set_copy_progress(cls_method_context_t hctx,
-                                     uint64_t snap_id, bool copied,
+                                     uint64_t snap_id, bool complete,
                                      uint64_t last_copied_object_number) {
   cls_rbd_snap snap;
   std::string snap_key;
@@ -5725,16 +5725,19 @@ int image_snapshot_set_copy_progress(cls_method_context_t hctx,
     return r;
   }
 
-  auto non_primary = boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
+  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
     &snap.snapshot_namespace);
-  if (non_primary == nullptr) {
+  if (mirror_ns == nullptr) {
     CLS_LOG(5, "mirror_image_snapshot_set_copy_progress " \
             "not mirroring snapshot snap_id=%" PRIu64, snap_id);
     return -EINVAL;
   }
 
-  non_primary->copied = copied;
-  non_primary->last_copied_object_number = last_copied_object_number;
+  mirror_ns->complete = complete;
+  if (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY ||
+      mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED) {
+    mirror_ns->last_copied_object_number = last_copied_object_number;
+  }
 
   r = image::snapshot::write(hctx, snap_key, std::move(snap));
   if (r < 0) {
@@ -6760,7 +6763,7 @@ int mirror_image_snapshot_unlink_peer(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param snap_id: snapshot id
- * @param copied: true if shapshot fully copied
+ * @param complete: true if shapshot fully copied/complete
  * @param last_copied_object_number: last copied object number
  *
  * Output:
@@ -6770,22 +6773,22 @@ int mirror_image_snapshot_set_copy_progress(cls_method_context_t hctx,
                                             bufferlist *in,
                                             bufferlist *out) {
   uint64_t snap_id;
-  bool copied;
+  bool complete;
   uint64_t last_copied_object_number;
   try {
     auto iter = in->cbegin();
     decode(snap_id, iter);
-    decode(copied, iter);
+    decode(complete, iter);
     decode(last_copied_object_number, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
   CLS_LOG(20, "mirror_image_snapshot_set_copy_progress snap_id=%" PRIu64 \
-          " copied=%d last_copied_object_number=%" PRIu64, snap_id, copied,
+          " complete=%d last_copied_object_number=%" PRIu64, snap_id, complete,
           last_copied_object_number);
 
-  int r = mirror::image_snapshot_set_copy_progress(hctx, snap_id, copied,
+  int r = mirror::image_snapshot_set_copy_progress(hctx, snap_id, complete,
                                                    last_copied_object_number);
   if (r < 0) {
     return r;

@@ -417,11 +417,10 @@ struct GroupSpec {
 WRITE_CLASS_ENCODER(GroupSpec);
 
 enum SnapshotNamespaceType {
-  SNAPSHOT_NAMESPACE_TYPE_USER               = 0,
-  SNAPSHOT_NAMESPACE_TYPE_GROUP              = 1,
-  SNAPSHOT_NAMESPACE_TYPE_TRASH              = 2,
-  SNAPSHOT_NAMESPACE_TYPE_MIRROR             = 3,
-  SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY = 4,
+  SNAPSHOT_NAMESPACE_TYPE_USER   = 0,
+  SNAPSHOT_NAMESPACE_TYPE_GROUP  = 1,
+  SNAPSHOT_NAMESPACE_TYPE_TRASH  = 2,
+  SNAPSHOT_NAMESPACE_TYPE_MIRROR = 3,
 };
 
 struct UserSnapshotNamespace {
@@ -606,49 +605,6 @@ struct MirrorSnapshotNamespace {
   }
 };
 
-struct MirrorNonPrimarySnapshotNamespace {
-  static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
-    SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY;
-
-  std::string primary_mirror_uuid;
-  snapid_t primary_snap_id = CEPH_NOSNAP;
-  bool copied = false;
-  uint64_t last_copied_object_number = 0;
-  SnapSeqs snap_seqs;
-
-  MirrorNonPrimarySnapshotNamespace() {
-  }
-  MirrorNonPrimarySnapshotNamespace(const std::string &primary_mirror_uuid,
-                                    snapid_t primary_snap_id)
-    : primary_mirror_uuid(primary_mirror_uuid),
-      primary_snap_id(primary_snap_id) {
-  }
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& it);
-
-  void dump(Formatter *f) const;
-
-  inline bool operator==(const MirrorNonPrimarySnapshotNamespace& mnsn) const {
-    return primary_mirror_uuid == mnsn.primary_mirror_uuid &&
-           primary_snap_id == mnsn.primary_snap_id && copied == mnsn.copied &&
-           last_copied_object_number == mnsn.last_copied_object_number;
-  }
-
-  inline bool operator<(const MirrorNonPrimarySnapshotNamespace& mnsn) const {
-    if (primary_mirror_uuid != mnsn.primary_mirror_uuid) {
-      return primary_mirror_uuid < mnsn.primary_mirror_uuid;
-    }
-    if (primary_snap_id != mnsn.primary_snap_id) {
-      return primary_snap_id < mnsn.primary_snap_id;
-    }
-    if (copied != mnsn.copied) {
-      return copied < mnsn.copied;
-    }
-    return last_copied_object_number < mnsn.last_copied_object_number;
-  }
-};
-
 struct UnknownSnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
     static_cast<SnapshotNamespaceType>(-1);
@@ -673,15 +629,12 @@ std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns);
-std::ostream& operator<<(std::ostream& os,
-                         const MirrorNonPrimarySnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 
 typedef boost::variant<UserSnapshotNamespace,
                        GroupSnapshotNamespace,
                        TrashSnapshotNamespace,
                        MirrorSnapshotNamespace,
-                       MirrorNonPrimarySnapshotNamespace,
                        UnknownSnapshotNamespace> SnapshotNamespaceVariant;
 
 struct SnapshotNamespace : public SnapshotNamespaceVariant {
