@@ -147,10 +147,8 @@ void CreateNonPrimaryRequest<I>::write_image_state() {
   uint64_t snap_id;
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
-    cls::rbd::MirrorSnapshotNamespace ns{
-      cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
-      m_primary_mirror_uuid, m_primary_snap_id};
-    snap_id = m_image_ctx->get_snap_id(ns, m_snap_name);
+    snap_id = m_image_ctx->get_snap_id(
+      cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
   }
 
   if (m_snap_id != nullptr) {
