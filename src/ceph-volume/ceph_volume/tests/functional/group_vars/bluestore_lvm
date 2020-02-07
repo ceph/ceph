@@ -19,7 +19,7 @@ lvm_volumes:
     data_vg: test_group
     db: journal1
     db_vg: journals
-  - data: /dev/sdd1
+  - data: /dev/vdd1
 os_tuning_params:
   - { name: kernel.pid_max, value: 4194303 }
   - { name: fs.file-max, value: 26234859 }
