@@ -239,6 +239,9 @@ class Prepare(object):
         """
         if args is not None:
             self.args = args
+        if api.is_ceph_device(self.get_lv(self.args.data)):
+            logger.info("device {} is already used".format(self.args.data))
+            raise RuntimeError("skipping {}, it is already prepared".format(self.args.data))
         try:
             self.prepare()
         except Exception:
