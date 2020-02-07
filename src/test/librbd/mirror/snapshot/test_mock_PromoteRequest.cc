@@ -89,8 +89,10 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
   Context* on_finish = nullptr;
   static CreateNonPrimaryRequest* s_instance;
   static CreateNonPrimaryRequest *create(MockTestImageCtx *image_ctx,
+                                         bool demoted,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
+                                         SnapSeqs snap_seqs,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
