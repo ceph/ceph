@@ -747,6 +747,7 @@ class Module(MgrModule):
             r = {}
             for opt in self.MODULE_OPTIONS:
                 r[opt['name']] = getattr(self, opt['name'])
+            r['last_upload'] = time.ctime(self.last_upload) if self.last_upload else self.last_upload
             return 0, json.dumps(r, indent=4), ''
         elif command['prefix'] == 'telemetry on':
             if command.get('license') != LICENSE:
