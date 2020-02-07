@@ -139,16 +139,8 @@ void CreatePrimaryRequest<I>::handle_create_snapshot(int r) {
 
   if (m_snap_id != nullptr) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
-    cls::rbd::MirrorSnapshotNamespace ns{
-      ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0 ?
-        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
-        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
-      m_mirror_peer_uuids, "", CEPH_NOSNAP};
-
-    // TODO delay until after image state written
-    ns.complete = true;
-
-    *m_snap_id = m_image_ctx->get_snap_id(ns, m_snap_name);
+    *m_snap_id = m_image_ctx->get_snap_id(
+      cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
   }
 
   unlink_peer();
