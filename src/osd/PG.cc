@@ -3276,6 +3276,16 @@ void PG::_update_calc_stats()
   info.stats.avail_no_missing.clear();
   info.stats.object_location_counts.clear();
 
+  // We should never hit this condition, but if end up hitting it,
+  // make sure to update num_objects and set PG_STATE_INCONSISTENT.
+  if (info.stats.stats.sum.num_objects < 0) {
+    dout(0) << __func__ << " negative num_objects = "
+            << info.stats.stats.sum.num_objects << " setting it to 0 "
+            << dendl;
+    info.stats.stats.sum.num_objects = 0;
+    state_set(PG_STATE_INCONSISTENT);
+  }
+
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
     dout(20) << __func__ << " actingset " << actingset << " upset "
              << upset << " acting_recovery_backfill " << acting_recovery_backfill << dendl;
