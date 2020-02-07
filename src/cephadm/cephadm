@@ -38,6 +38,7 @@ import fcntl
 import json
 import logging
 import os
+import platform
 import random
 import re
 import select
@@ -69,6 +70,12 @@ if sys.version_info >= (3, 2):
     from configparser import ConfigParser
 else:
     from ConfigParser import SafeConfigParser
+
+if sys.version_info >= (3, 0):
+    from urllib.request import urlopen
+    from urllib.error import HTTPError
+else:
+    from urllib2 import urlopen, HTTPError
 
 container_path = ''
 
@@ -617,6 +624,10 @@ def get_hostname():
 def get_fqdn():
     # type: () -> str
     return socket.getfqdn() or socket.gethostname()
+
+def get_arch():
+    # type: () -> str
+    return platform.uname().machine
 
 def generate_service_id():
     # type: () -> str
@@ -2554,6 +2565,269 @@ class CustomValidation(argparse.Action):
 
 ##################################
 
+def get_distro():
+    id_ = None
+    version = None
+    codename = None
+    with open('/etc/os-release', 'r') as f:
+        for line in f.readlines():
+            line = line.strip()
+            if '=' not in line or line.startswith('#'):
+                continue
+            (var, val) = line.split('=', 1)
+            if val[0] == '"' and val[-1] == '"':
+                val = val[1:-1]
+            if var == 'ID':
+                id_ = val.lower()
+            elif var == 'VERSION_ID':
+                version = val.lower()
+            elif var == 'VERSION_CODENAME':
+                codename = val.lower()
+    return id_, version, codename
+
+class Packager(object):
+    def __init__(self, stable=None, branch=None, commit=None):
+        assert \
+            (stable and not branch and not commit) or \
+            (not stable and branch) or \
+            (not stable and not branch and not commit)
+        self.stable = stable
+        self.branch = branch
+        self.commit = commit
+
+    def add_repo(self):
+        raise NotImplementedError
+
+    def rm_repo(self):
+        raise NotImplementedError
+
+    def query_shaman(self, distro, version, branch, commit):
+        # query shaman
+        logging.info('Fetching repo metadata from shaman and chacra...')
+        shaman_url = 'https://shaman.ceph.com/api/repos/ceph/{version}/{sha1}/{distro}/{distro_version}/repo/?arch={arch}'.format(
+            distro=distro,
+            distro_version=version,
+            version=branch,
+            sha1=commit or 'latest',
+            arch=get_arch()
+        )
+        try:
+            shaman_response = urlopen(shaman_url)
+        except HTTPError as err:
+            logging.error('repository not found in shaman (might not be available yet)')
+            raise Error('%s, failed to fetch %s' % (err, shaman_url))
+        try:
+            chacra_url = shaman_response.geturl()
+            chacra_response = urlopen(chacra_url)
+        except HTTPError as err:
+            logging.error('repository not found in chacra (might not be available yet)')
+            raise Error('%s, failed to fetch %s' % (err, chacra_url))
+        return chacra_response.read().decode('utf-8')
+
+    def repo_gpgkey(self):
+        if args.gpg_url:
+            return args.gpg_url
+        if self.stable:
+            return 'https://download.ceph.com/keys/release.asc', 'release'
+        else:
+            return 'https://download.ceph.com/keys/autobuild.asc', 'autobuild'
+
+class Apt(Packager):
+    DISTRO_NAMES = {
+        'ubuntu': 'ubuntu',
+        'debian': 'debian',
+    }
+
+    def __init__(self, stable, branch, commit,
+                 distro, version, codename):
+        super(Apt, self).__init__(stable=stable, branch=branch, commit=commit)
+        self.distro = self.DISTRO_NAMES[distro]
+        self.codename = codename
+
+    def repo_path(self):
+        return '/etc/apt/sources.list.d/ceph.list'
+
+    def add_repo(self):
+        url, name = self.repo_gpgkey()
+        logging.info('Installing repo GPG key from %s...' % url)
+        try:
+            response = urlopen(url)
+        except HTTPError as err:
+            logging.error('failed to fetch GPG repo key from %s: %s' % (
+                url, err))
+            raise Error('failed to fetch GPG key')
+        key = response.read().decode('utf-8')
+        with open('/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name, 'w') as f:
+            f.write(key)
+
+        if self.stable:
+            content = 'deb %s/debian-%s/ %s main\n' % (
+                args.repo_url, self.stable, self.codename)
+        else:
+            content = self.query_shaman(self.distro, self.codename, self.branch,
+                                        self.commit)
+
+        logging.info('Installing repo file at %s...' % self.repo_path())
+        with open(self.repo_path(), 'w') as f:
+            f.write(content)
+
+    def rm_repo(self):
+        for name in ['autobuild', 'release']:
+            p = '/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name
+            if os.path.exists(p):
+                logging.info('Removing repo GPG key %s...' % p)
+                os.unlink(p)
+        if os.path.exists(self.repo_path()):
+            logging.info('Removing repo at %s...' % self.repo_path())
+            os.unlink(self.repo_path())
+
+class YumDnf(Packager):
+    DISTRO_NAMES = {
+        'centos': ('centos', 'el'),
+        'rhel': ('centos', 'el'),
+        'scientific': ('centos', 'el'),
+        'fedora': ('fedora', 'fc'),
+    }
+
+    def __init__(self, stable, branch, commit,
+                 distro, version):
+        super(YumDnf, self).__init__(stable=stable, branch=branch, commit=commit)
+        self.major = int(version.split('.')[0])
+        self.distro_normalized = self.DISTRO_NAMES[distro][0]
+        self.distro_code = self.DISTRO_NAMES[distro][1] + str(self.major)
+        if (self.distro_code == 'fc' and self.major >= 30) or \
+           (self.distro_code == 'el' and self.major >= 8):
+            self.tool = 'dnf'
+        else:
+            self.tool = 'yum'
+
+    def custom_repo(self, **kw):
+        """
+        Repo files need special care in that a whole line should not be present
+        if there is no value for it. Because we were using `format()` we could
+        not conditionally add a line for a repo file. So the end result would
+        contain a key with a missing value (say if we were passing `None`).
+
+        For example, it could look like::
+
+        [ceph repo]
+        name= ceph repo
+        proxy=
+        gpgcheck=
+
+        Which breaks. This function allows us to conditionally add lines,
+        preserving an order and be more careful.
+
+        Previously, and for historical purposes, this is how the template used
+        to look::
+
+        custom_repo =
+        [{repo_name}]
+        name={name}
+        baseurl={baseurl}
+        enabled={enabled}
+        gpgcheck={gpgcheck}
+        type={_type}
+        gpgkey={gpgkey}
+        proxy={proxy}
+
+        """
+        lines = []
+
+        # by using tuples (vs a dict) we preserve the order of what we want to
+        # return, like starting with a [repo name]
+        tmpl = (
+            ('reponame', '[%s]'),
+            ('name', 'name=%s'),
+            ('baseurl', 'baseurl=%s'),
+            ('enabled', 'enabled=%s'),
+            ('gpgcheck', 'gpgcheck=%s'),
+            ('_type', 'type=%s'),
+            ('gpgkey', 'gpgkey=%s'),
+            ('proxy', 'proxy=%s'),
+            ('priority', 'priority=%s'),
+        )
+
+        for line in tmpl:
+            tmpl_key, tmpl_value = line  # key values from tmpl
+
+            # ensure that there is an actual value (not None nor empty string)
+            if tmpl_key in kw and kw.get(tmpl_key) not in (None, ''):
+                lines.append(tmpl_value % kw.get(tmpl_key))
+
+        return '\n'.join(lines)
+
+    def repo_path(self):
+        return '/etc/yum.repos.d/ceph.repo'
+
+    def repo_baseurl(self):
+        assert self.stable
+        return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro_code)
+
+    def add_repo(self):
+        if self.stable:
+            content = ''
+            for n, t in {
+                    'Ceph': '$basearch',
+                    'Ceph-noarch': 'noarch',
+                    'Ceph-source': 'SRPMS'}.items():
+                content += '[%s]\n' % (n)
+                content += self.custom_repo(
+                    name='Ceph %s' % t,
+                    baseurl=self.repo_baseurl() + '/' + t,
+                    enabled=1,
+                    gpgcheck=1,
+                    gpgkey=self.repo_gpgkey()[0],
+                )
+                content += '\n\n'
+        else:
+            content = self.query_shaman(self.distro_normalized, self.major,
+                                        self.branch,
+                                        self.commit)
+
+        logging.info('Writing repo to %s...' % self.repo_path())
+        with open(self.repo_path(), 'w') as f:
+            f.write(content)
+
+        if self.distro_code.startswith('el'):
+            logger.info('Enabling EPEL...')
+            call_throws([self.tool, 'install', '-y', 'epel-release'])
+        if self.distro_code == 'el8':
+            # we also need Ken's copr repo, at least for now
+            logger.info('Enabling supplementary copr repo ktdreyer/ceph-el8...')
+            call_throws(['dnf', 'copr', 'enable', '-y', 'ktdreyer/ceph-el8'])
+
+    def rm_repo(self):
+        if os.path.exists(self.repo_path()):
+            os.unlink(self.repo_path())
+        if self.distro_code == 'el8':
+            logger.info('Disabling supplementary copr repo ktdreyer/ceph-el8...')
+            call_throws(['dnf', 'copr', 'disable', '-y', 'ktdreyer/ceph-el8'])
+
+def create_packager(stable=None, branch=None, commit=None):
+    distro, version, codename = get_distro()
+    if distro in YumDnf.DISTRO_NAMES:
+        return YumDnf(stable=stable, branch=branch, commit=commit,
+                   distro=distro, version=version)
+    elif distro in Apt.DISTRO_NAMES:
+        return Apt(stable=stable, branch=branch, commit=commit,
+                   distro=distro, version=version, codename=codename)
+    raise Error('Distro %s version %s not supported' % (distro, version))
+
+def command_add_repo():
+    pkg = create_packager(stable=args.release, branch=args.dev,
+                          commit=args.dev_commit)
+    pkg.add_repo()
+
+def command_rm_repo():
+    pkg = create_packager()
+    pkg.rm_repo()
+
+def command_install():
+    pass
+
+##################################
+
 def _get_parser():
     # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser(
@@ -2885,6 +3159,35 @@ def _get_parser():
     parser_check_host.add_argument(
         '--expect-hostname',
         help='Check that hostname matches an expected value')
+
+    parser_add_repo = subparsers.add_parser(
+        'add-repo', help='configure package repository')
+    parser_add_repo.set_defaults(func=command_add_repo)
+    parser_add_repo.add_argument(
+        '--release',
+        help='use specified upstream release')
+    parser_add_repo.add_argument(
+        '--dev',
+        help='use specified bleeding edge build from git branch or tag')
+    parser_add_repo.add_argument(
+        '--dev-commit',
+        help='use specified bleeding edge build from git commit')
+    parser_add_repo.add_argument(
+        '--gpg-url',
+        help='specify alternative GPG key location')
+    parser_add_repo.add_argument(
+        '--repo-url',
+        default='https://download.ceph.com/',
+        help='specify alternative repo location')
+    # TODO: proxy?
+
+    parser_rm_repo = subparsers.add_parser(
+        'rm-repo', help='remove package repository configuration')
+    parser_rm_repo.set_defaults(func=command_rm_repo)
+
+    parser_install = subparsers.add_parser(
+        'install', help='install ceph package(s)')
+    parser_install.set_defaults(func=command_install)
 
     return parser
 
