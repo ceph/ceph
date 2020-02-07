@@ -8,7 +8,7 @@
   "scripts": {
     "ng": "ng",
     "start": "npm run env_build && ng serve --host 0.0.0.0",
-    "build": "export _locale=${LOCALE:-$npm_package_config_locale}; if [ ${_locale} = $npm_package_config_locale ]; then export _file=; else export _file=src/locale/messages.${_locale}.xlf; fi; ng build --outputPath=dist/${_locale} --i18nFile=${_file} --i18nLocale=${_locale}",
+    "build": "export _locale=${LOCALE:-$npm_package_config_locale}; ng build --configuration=${_locale}",
     "prebuild": "npm run env_build",
     "build:cs": "LOCALE=cs npm run build",
     "build:de-DE": "LOCALE=de-DE npm run build",
@@ -25,7 +25,7 @@
     "build:zh-TW": "LOCALE=zh-TW npm run build",
     "env_build": "cp src/environments/environment.tpl.ts src/environments/environment.prod.ts && cp src/environments/environment.tpl.ts src/environments/environment.ts  && node ./environment.build.js",
     "i18n": "npm run i18n:extract && npm run i18n:push && npm run i18n:pull && npm run i18n:merge",
-    "i18n:extract": "ng xi18n --i18n-format xlf --i18n-locale en-US --output-path locale --progress=false && ngx-extractor -i 'src/**/*.ts' -f xlf -o src/locale/messages.xlf -l en-US",
+    "i18n:extract": "ng xi18n --output-path locale --progress=false && ngx-extractor -i 'src/**/*.ts' -f xlf -o src/locale/messages.xlf -l en-US",
     "i18n:push": "npx i18ntool push -c i18n.config.json",
     "i18n:pull": "npx i18ntool pull -c i18n.config.json",
     "i18n:merge": "npx i18ntool merge -c i18n.config.json",
