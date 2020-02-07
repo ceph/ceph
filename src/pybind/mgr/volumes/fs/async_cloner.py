@@ -72,6 +72,15 @@ def handle_clone_pending(volume_client, volname, index, groupname, subvolname, s
         raise VolumeException(oe.error, oe.error_str)
     return (next_state, False)
 
+def sync_attrs(fs_handle, target_path, source_statx):
+    try:
+        fs_handle.lchown(target_path, source_statx["uid"], source_statx["gid"])
+        fs_handle.lutimes(target_path, (time.mktime(source_statx["atime"].timetuple()),
+                                        time.mktime(source_statx["mtime"].timetuple())))
+    except cephfs.Error as e:
+        log.warn("error synchronizing attrs for {0} ({1})".format(target_path, e))
+        raise e
+
 def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     """
     bulk copy data from source to destination -- only directories, symlinks
@@ -90,31 +99,45 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                         log.debug("d={0}".format(d))
                         d_full_src = os.path.join(src_root_path, d.d_name)
                         d_full_dst = os.path.join(dst_root_path, d.d_name)
-                        st = fs_handle.lstat(d_full_src)
-                        mo = st.st_mode & ~stat.S_IFMT(st.st_mode)
-                        if stat.S_ISDIR(st.st_mode):
+                        stx = fs_handle.statx(d_full_src, cephfs.CEPH_STATX_MODE  |
+                                                          cephfs.CEPH_STATX_UID   |
+                                                          cephfs.CEPH_STATX_GID   |
+                                                          cephfs.CEPH_STATX_ATIME |
+                                                          cephfs.CEPH_STATX_MTIME |
+                                                          cephfs.CEPH_STATX_SIZE,
+                                                          cephfs.AT_SYMLINK_NOFOLLOW)
+                        handled = True
+                        mo = stx["mode"] & ~stat.S_IFMT(stx["mode"])
+                        if stat.S_ISDIR(stx["mode"]):
                             log.debug("cptree: (DIR) {0}".format(d_full_src))
                             try:
                                 fs_handle.mkdir(d_full_dst, mo)
-                                fs_handle.chown(d_full_dst, st.st_uid, st.st_gid)
                             except cephfs.Error as e:
                                 if not e.args[0] == errno.EEXIST:
                                     raise
                             cptree(d_full_src, d_full_dst)
-                        elif stat.S_ISLNK(st.st_mode):
+                        elif stat.S_ISLNK(stx["mode"]):
                             log.debug("cptree: (SYMLINK) {0}".format(d_full_src))
                             target = fs_handle.readlink(d_full_src, 4096)
                             try:
-                                fs_handle.symlink(target[:st.st_size], d_full_dst)
+                                fs_handle.symlink(target[:stx["size"]], d_full_dst)
                             except cephfs.Error as e:
                                 if not e.args[0] == errno.EEXIST:
                                     raise
-                        elif stat.S_ISREG(st.st_mode):
+                        elif stat.S_ISREG(stx["mode"]):
                             log.debug("cptree: (REG) {0}".format(d_full_src))
-                            copy_file(fs_handle, d_full_src, d_full_dst, mo, st.st_uid, st.st_gid)
+                            copy_file(fs_handle, d_full_src, d_full_dst, mo)
                         else:
+                            handled = False
                             log.warn("cptree: (IGNORE) {0}".format(d_full_src))
+                        if handled:
+                            sync_attrs(fs_handle, d_full_dst, stx)
                     d = fs_handle.readdir(dir_handle)
+                stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME |
+                                                          cephfs.CEPH_STATX_MTIME,
+                                                          cephfs.AT_SYMLINK_NOFOLLOW)
+                fs_handle.lutimes(dst_root_path, (time.mktime(stx_root["atime"].timetuple()),
+                                                  time.mktime(stx_root["mtime"].timetuple())))
         except cephfs.Error as e:
             if not e.args[0] == errno.ENOENT:
                 raise VolumeException(-e.args[0], e.args[1])
