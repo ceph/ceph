@@ -654,10 +654,12 @@ void RocksDBStore::close()
   // stop compaction thread
   compact_queue_lock.Lock();
   if (compact_thread.is_started()) {
+    dout(1) << __func__ << " waiting for compaction thread to stop" << dendl;
     compact_queue_stop = true;
     compact_queue_cond.Signal();
     compact_queue_lock.Unlock();
     compact_thread.join();
+    dout(1) << __func__ << " compaction thread to stopped" << dendl;    
   } else {
     compact_queue_lock.Unlock();
   }
@@ -1291,8 +1293,9 @@ void RocksDBStore::compact()
 void RocksDBStore::compact_thread_entry()
 {
   compact_queue_lock.Lock();
+  dout(10) << __func__ << " enter" << dendl;
   while (!compact_queue_stop) {
-    while (!compact_queue.empty()) {
+    if (!compact_queue.empty()) {
       pair<string,string> range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
@@ -1306,6 +1309,7 @@ void RocksDBStore::compact_thread_entry()
       compact_queue_lock.Lock();
       continue;
     }
+    dout(10) << __func__ << " waiting" << dendl;
     compact_queue_cond.Wait(compact_queue_lock);
   }
   compact_queue_lock.Unlock();
