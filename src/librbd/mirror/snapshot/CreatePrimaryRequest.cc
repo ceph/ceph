@@ -168,13 +168,6 @@ void CreatePrimaryRequest<I>::unlink_peer() {
     size_t count = 0;
     uint64_t prev_snap_id = 0;
     for (auto &snap_it : m_image_ctx->snap_info) {
-      if (boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
-            &snap_it.second.snap_namespace)) {
-        // reset counters -- we count primary snapshots after the last promotion
-        count = 0;
-        prev_snap_id = 0;
-        continue;
-      }
       auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
         &snap_it.second.snap_namespace);
       if (info == nullptr) {

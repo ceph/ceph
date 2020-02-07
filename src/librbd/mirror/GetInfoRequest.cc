@@ -267,19 +267,6 @@ void GetInfoRequest<I>::calc_promotion_state(
       }
       break;
     }
-
-    auto non_primary =
-      boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
-        &it->second.snap_namespace);
-    if (non_primary != nullptr) {
-      if (non_primary->primary_mirror_uuid.empty()) {
-        *m_promotion_state = PROMOTION_STATE_ORPHAN;
-      } else {
-        *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
-        *m_primary_mirror_uuid = non_primary->primary_mirror_uuid;
-      }
-      break;
-    }
   }
 
   ldout(m_cct, 10) << "promotion_state=" << *m_promotion_state << ", "

@@ -123,17 +123,6 @@ public:
       snap_namespace.last_copied_object_number;
     return 0;
   }
-
-  inline int operator()(
-      const cls::rbd::MirrorNonPrimarySnapshotNamespace& snap_namespace) {
-    mirror_snap->state = RBD_SNAP_MIRROR_STATE_NON_PRIMARY;
-    mirror_snap->primary_mirror_uuid = snap_namespace.primary_mirror_uuid;
-    mirror_snap->primary_snap_id = snap_namespace.primary_snap_id;
-    mirror_snap->complete = snap_namespace.copied;
-    mirror_snap->last_copied_object_number =
-      snap_namespace.last_copied_object_number;
-    return 0;
-  }
 };
 
 } // anonymous namespace
