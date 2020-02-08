@@ -1,4 +1,4 @@
-14.2.7
+14.2.8
 ------
 
 * The following OSD memory config options related to bluestore cache autotuning can now
@@ -33,3 +33,13 @@
   named 'Records'. Note that this does not affect pulling bucket notification
   from a subscription in a 'pubsub' zone, as these are already wrapped inside
   that array.
+
+* Ceph will now issue a health warning if a RADOS pool as a ``pg_num``
+  value that is not a power of two.  This can be fixed by adjusting
+  the pool to a nearby power of two::
+
+    ceph osd pool set <pool-name> pg_num <new-pg-num>
+
+  Alternatively, the warning can be silenced with::
+
+    ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false

@@ -26,7 +26,6 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
-#include "global/global_context.h"
 #include "include/ceph_features.h"
 #include "include/str_map.h"
 
@@ -5417,7 +5416,8 @@ void print_osd_utilization(const OSDMap& osdmap,
   }
 }
 
-void OSDMap::check_health(health_check_map_t *checks) const
+void OSDMap::check_health(CephContext *cct,
+			  health_check_map_t *checks) const
 {
   int num_osds = get_num_osds();
 
@@ -5462,7 +5462,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
 	    break;
 	  type = crush->get_bucket_type(parent_id);
 	  if (!subtree_type_is_down(
-		g_ceph_context, parent_id, type,
+		cct, parent_id, type,
 		&down_in_osds, &up_in_osds, &subtree_up, &subtree_type_down))
 	    break;
 	  current = parent_id;
@@ -5591,7 +5591,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   {
     // An osd could configure failsafe ratio, to something different
     // but for now assume it is the same here.
-    float fsr = g_conf()->osd_failsafe_full_ratio;
+    float fsr = cct->_conf->osd_failsafe_full_ratio;
     if (fsr > 1.0) fsr /= 100;
     float fr = get_full_ratio();
     float br = get_backfillfull_ratio();
@@ -5742,19 +5742,19 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // OLD_CRUSH_TUNABLES
-  if (g_conf()->mon_warn_on_legacy_crush_tunables) {
+  if (cct->_conf->mon_warn_on_legacy_crush_tunables) {
     string min = crush->get_min_required_version();
-    if (min < g_conf()->mon_crush_min_required_version) {
+    if (min < cct->_conf->mon_crush_min_required_version) {
       ostringstream ss;
       ss << "crush map has legacy tunables (require " << min
-	 << ", min is " << g_conf()->mon_crush_min_required_version << ")";
+	 << ", min is " << cct->_conf->mon_crush_min_required_version << ")";
       auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str());
       d.detail.push_back("see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
     }
   }
 
   // OLD_CRUSH_STRAW_CALC_VERSION
-  if (g_conf()->mon_warn_on_crush_straw_calc_version_zero) {
+  if (cct->_conf->mon_warn_on_crush_straw_calc_version_zero) {
     if (crush->get_straw_calc_version() == 0) {
       ostringstream ss;
       ss << "crush map has straw_calc_version=0";
@@ -5765,7 +5765,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // CACHE_POOL_NO_HIT_SET
-  if (g_conf()->mon_warn_on_cache_pools_without_hit_sets) {
+  if (cct->_conf->mon_warn_on_cache_pools_without_hit_sets) {
     list<string> detail;
     for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
 	 p != pools.end();
@@ -5841,6 +5841,27 @@ void OSDMap::check_health(health_check_map_t *checks) const
       ss << nearfull_detail.size() << " pool(s) nearfull";
       auto& d = checks->add("POOL_NEARFULL", HEALTH_WARN, ss.str());
       d.detail.swap(nearfull_detail);
+    }
+  }
+
+  // POOL_PG_NUM_NOT_POWER_OF_TWO
+  if (cct->_conf.get_val<bool>("mon_warn_on_pool_pg_num_not_power_of_two")) {
+    list<string> detail;
+    for (auto it : get_pools()) {
+      if (!isp2(it.second.get_pg_num_target())) {
+	ostringstream ss;
+	ss << "pool '" << get_pool_name(it.first)
+	   << "' pg_num " << it.second.get_pg_num_target()
+	   << " is not a power of two";
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have non-power-of-two pg_num";
+      auto& d = checks->add("POOL_PG_NUM_NOT_POWER_OF_TWO", HEALTH_WARN,
+			    ss.str());
+      d.detail.swap(detail);
     }
   }
 }
