@@ -1,3 +1,6 @@
+#ifndef __S3SELECT_OPER__
+#define __S3SELECT_OPER__
+
 #include <string>
 #include <iostream>
 #include <list>
@@ -6,24 +9,31 @@
 #include <math.h>
 
 using namespace std;
-class base_s3select_exception {
-    
-    public:
-            typedef enum {NONE,ERROR,FATAL} s3select_exp_en_t;
+class base_s3select_exception
+{
 
-    private:
-            s3select_exp_en_t m_severity;
+public:
+    typedef enum
+    {
+        NONE,
+        ERROR,
+        FATAL
+    } s3select_exp_en_t;
 
-    public:
+private:
+    s3select_exp_en_t m_severity;
 
-        const char * _msg;
-        base_s3select_exception(const char * n):m_severity(NONE){_msg = n;}
-        base_s3select_exception(const char * n, s3select_exp_en_t severity):m_severity(severity){ _msg = n;}
-        base_s3select_exception(std::string n, s3select_exp_en_t severity):m_severity(severity){ _msg = strdup(n.c_str());}//TODO allocator(?)
+public:
+    const char *_msg;
+    base_s3select_exception(const char *n) : m_severity(NONE) { _msg = n; }
+    base_s3select_exception(const char *n, s3select_exp_en_t severity) : m_severity(severity) { _msg = n; }
+    base_s3select_exception(std::string n, s3select_exp_en_t severity) : m_severity(severity) { _msg = strdup(n.c_str()); } //TODO allocator(?)
 
-        virtual const char* what(){return _msg; }
+    virtual const char *what() { return _msg; }
 
-    virtual ~base_s3select_exception(){}
+    s3select_exp_en_t severity() { return m_severity; }
+
+    virtual ~base_s3select_exception() {}
 };
 
 class scratch_area
@@ -73,7 +83,7 @@ public:
     {
     
         if ((column_pos >= m_upper_bound) || column_pos < 0) 
-            throw base_s3select_exception("column_position_is_wrong"); 
+            throw base_s3select_exception("column_position_is_wrong",base_s3select_exception::ERROR); 
 
         return m_columns[column_pos];
     }
@@ -693,23 +703,33 @@ struct _fn_add : public base_function{
     }
 };
 
-struct _fn_sum : public base_function{
+struct _fn_sum : public base_function
+{
 
     value sum;
 
-    _fn_sum():sum(0){aggregate=true;}
+    _fn_sum() : sum(0) { aggregate = true; }
 
-    bool operator()(list<base_statement*> * args,variable * result)
+    bool operator()(list<base_statement *> *args, variable *result)
     {
-        list<base_statement*>::iterator iter = args->begin();
-        base_statement* x =  *iter;
+        list<base_statement *>::iterator iter = args->begin();
+        base_statement *x = *iter;
 
-        sum = sum + x->eval();
-        
+        try
+        {
+            sum = sum + x->eval();
+        }
+        catch (base_s3select_exception &e)
+        {
+            std::cout << "illegal value for aggregation(sum). skipping." << std::endl;
+            if (e.severity() == base_s3select_exception::FATAL)
+                throw;
+        }
+
         return true;
     }
 
-    virtual void get_aggregate_result(variable*result){result->_set( sum );}
+    virtual void get_aggregate_result(variable *result) { result->_set(sum); }
 };
 
 struct _fn_count : public base_function{
@@ -1170,3 +1190,5 @@ bool base_statement::is_binop_aggregate_and_column(base_statement *skip_expressi
 
     return false;
 }
+
+#endif

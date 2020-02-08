@@ -873,10 +873,17 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
   return 0;
 }
 
+class s3select;
 class RGWS3Select : public RGWGetObj_ObjStore_S3
 {
 
+private:
+  s3select *s3select_syntax;
+
 public:
+  unsigned int chunk_number;
+  u_int64_t m_processed_bytes;
+
   typedef enum
   {
     EVENT_TYPE,
@@ -893,10 +900,8 @@ public:
   } header_value_en_t;
   static const char *header_value_str[3];
 
-  RGWS3Select()
-  {
-    set_get_data(true);
-  }
+  RGWS3Select();
+  virtual ~RGWS3Select();
 
 //encoding into big-endian
 #define ENCODE_NUMBER(dst, src, idx) \

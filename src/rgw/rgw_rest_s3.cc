@@ -5875,13 +5875,23 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
 }
 
-#include "s3select.h"
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 const char *RGWS3Select::header_name_str[3] = {":event-type", ":content-type", ":message-type"};
 const char *RGWS3Select::header_value_str[3] = {"Records", "application/octet-stream", "event"};
+#include "s3select.h"
+
+RGWS3Select::RGWS3Select()
+{
+  set_get_data(true);
+  chunk_number = 0;
+  s3select_syntax = new s3select();
+  m_processed_bytes = 0;
+}
+
+RGWS3Select::~RGWS3Select()
+{
+  delete s3select_syntax;
+}
 
 int RGWS3Select::creare_header_records(char *buff)
 {
@@ -5953,13 +5963,17 @@ int RGWS3Select::send_response_data(bufferlist& bl, off_t ofs, off_t len)
   if (len == 0)
     return 0;
 
+if(chunk_number == 0)
+{
   if (op_ret < 0)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-
+}
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  if(chunk_number == 0) 
+    end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+
   char *buff=0;//TODO should by dynamic (up to 4m at this stage)
 
   #define GT "&gt;"
@@ -5973,23 +5987,32 @@ int RGWS3Select::send_response_data(bufferlist& bl, off_t ofs, off_t len)
   std::string query = m_s3select_query.substr(_qs, _qe - _qs);
 
   std::string res;
-  s3select s3select_syntax;
-  csv_object xxx(&s3select_syntax,query,(char*)bl.c_str());
+  m_processed_bytes += len;
+
+  csv_object xxx(s3select_syntax,query,(char*)bl.c_str(), (m_processed_bytes >= s->obj_size) );
+  if (s3select_syntax->get_error_description().empty() == false)
+  {
+    //TODO create error messege 
+  } 
+
+  #define PAYLOAD_LINE "\n<Payload>\n<Records>\n<Payload>\n"
+  res.append(PAYLOAD_LINE);
   xxx.run_s3select_on_object(res);
 
-  std::string return_payload;//TODO not efficient 
-  return_payload.append("\n<Payload>\n<Records>\n<Payload>\n");
-  return_payload.append(res);
-  return_payload.append("\n</Payload></Records></Payload>");
-  
-  buff = (char*)malloc(return_payload.size() + 1000);
-  int buff_len = create_message(return_payload.c_str(),buff);
+  if (res.size() > strlen(PAYLOAD_LINE))
+  {
+    res.append("\n</Payload></Records></Payload>");
 
-  s->formatter->write_bin_data(buff,buff_len);
-  if (op_ret < 0)
-    return op_ret;
+    buff = (char *)malloc(res.size() + 1000);
+    int buff_len = create_message(res.c_str(), buff);
 
+    s->formatter->write_bin_data(buff, buff_len);
+    if (op_ret < 0)
+      return op_ret;
+  }
   rgw_flush_formatter_and_reset(s, s->formatter);
+
+  chunk_number ++;
 
   if(buff) free(buff);
   

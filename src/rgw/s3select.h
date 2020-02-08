@@ -1,3 +1,6 @@
+#ifndef __S3SELECT__
+#define __S3SELECT__
+
 #include <boost/spirit/include/classic_core.hpp>
 #include <iostream>
 #include <string>
@@ -73,7 +76,8 @@ struct push_from_clause : public base_action
         m_action->from_clause = token;
     }
 
-} g_push_from_clause;
+};
+static push_from_clause g_push_from_clause;
 
 struct push_number : public base_action //TODO use define for defintion of actions
 {
@@ -85,7 +89,8 @@ struct push_number : public base_action //TODO use define for defintion of actio
         m_action->exprQ.push_back(v);
     }
 
-} g_push_number;
+};
+static push_number g_push_number;
 
 struct push_float_number : public base_action //TODO use define for defintion of actions
 {
@@ -113,7 +118,8 @@ struct push_float_number : public base_action //TODO use define for defintion of
         }
     }
 
-} g_push_float_number;
+};
+static push_float_number g_push_float_number;
 
 struct push_string : public base_action //TODO use define for defintion of actions
 {
@@ -129,7 +135,8 @@ struct push_string : public base_action //TODO use define for defintion of actio
         m_action->exprQ.push_back(v);
     }
 
-} g_push_string;
+};
+static push_string g_push_string;
 
 struct push_variable : public base_action
 {
@@ -141,7 +148,8 @@ struct push_variable : public base_action
 
         m_action->exprQ.push_back(v);
     }
-} g_push_variable;
+};
+static push_variable g_push_variable;
 
 /////////////////////////arithmetic unit  /////////////////
 struct push_addsub : public base_action
@@ -155,7 +163,8 @@ struct push_addsub : public base_action
         else
             m_action->addsubQ.push_back(addsub_operation::addsub_op_t::SUB);
     }
-} g_push_addsub;
+};
+static push_addsub g_push_addsub;
 
 struct push_mulop : public base_action
 {
@@ -170,7 +179,8 @@ struct push_mulop : public base_action
         else
             m_action->muldivQ.push_back(mulldiv_operation::muldiv_t::POW);
     }
-} g_push_mulop;
+};
+static push_mulop g_push_mulop;
 
 struct push_addsub_binop : public base_action
 {
@@ -187,7 +197,8 @@ struct push_addsub_binop : public base_action
         addsub_operation *as = new addsub_operation(l, o, r);
         m_action->exprQ.push_back(as);
     }
-} g_push_addsub_binop;
+};
+static push_addsub_binop g_push_addsub_binop;
 
 struct push_mulldiv_binop : public base_action
 {
@@ -204,7 +215,8 @@ struct push_mulldiv_binop : public base_action
         mulldiv_operation *f = new mulldiv_operation(vl, o, vr);
         m_action->exprQ.push_back(f);
     }
-} g_push_mulldiv_binop;
+};
+static push_mulldiv_binop g_push_mulldiv_binop;
 
 struct push_function_arg : public base_action
 {
@@ -219,7 +231,8 @@ struct push_function_arg : public base_action
         if (dynamic_cast<__function *>(f))
             dynamic_cast<__function *>(f)->push_argument(be);
     }
-} g_push_function_arg;
+};
+static push_function_arg g_push_function_arg;
 
 struct push_function_name : public base_action
 {
@@ -233,7 +246,8 @@ struct push_function_name : public base_action
 
         m_action->funcQ.push_back(func);
     }
-} g_push_function_name;
+};
+static push_function_name g_push_function_name;
 
 struct push_function_expr : public base_action
 {
@@ -246,7 +260,8 @@ struct push_function_expr : public base_action
 
         m_action->exprQ.push_back(func);
     }
-} g_push_function_expr;
+};
+static push_function_expr g_push_function_expr;
 
 ////////////////////// logical unit ////////////////////////
 
@@ -274,7 +289,8 @@ struct push_compare_operator : public base_action
 
         m_action->arithmetic_compareQ.push_back(c);
     }
-} g_push_compare_operator;
+};
+static push_compare_operator g_push_compare_operator;
 
 struct push_logical_operator : public base_action
 {
@@ -293,7 +309,8 @@ struct push_logical_operator : public base_action
         m_action->logical_compareQ.push_back(l);
 
     }
-} g_push_logical_operator;
+};
+static push_logical_operator g_push_logical_operator;
 
 struct push_arithmetic_predicate : public base_action
 {
@@ -313,7 +330,8 @@ struct push_arithmetic_predicate : public base_action
 
         m_action->condQ.push_back(t);
     }
-} g_push_arithmetic_predicate;
+};
+static push_arithmetic_predicate g_push_arithmetic_predicate;
 
 struct push_logical_predicate : public base_action
 {
@@ -341,7 +359,8 @@ struct push_logical_predicate : public base_action
 
         m_action->condQ.push_back(f);
     }
-} g_push_logical_predicate;
+};
+static push_logical_predicate g_push_logical_predicate;
 
 struct push_column_pos : public base_action
 {
@@ -358,7 +377,8 @@ struct push_column_pos : public base_action
         m_action->exprQ.push_back(v);
     }
 
-} g_push_column_pos;
+};
+static  push_column_pos g_push_column_pos;
 
 struct push_projection : public base_action
 {
@@ -370,7 +390,8 @@ struct push_projection : public base_action
         m_action->exprQ.pop_back();
     }
 
-} g_push_projection;
+};
+static push_projection g_push_projection;
 
 
 /// for the schema description "mini-parser"
@@ -384,7 +405,8 @@ struct push_column : public base_action
         m_action->schema_columns.push_back(token); 
     }
 
-} g_push_column;
+};
+static push_column g_push_column;
 
 struct push_debug_1 : public base_action
 {
@@ -394,7 +416,8 @@ struct push_debug_1 : public base_action
         std::string token(a,b);
     }
 
-} g_push_debug_1;
+};
+static push_debug_1 g_push_debug_1;
 
 struct s3select : public grammar<s3select>
 {
@@ -404,13 +427,36 @@ struct s3select : public grammar<s3select>
 
     scratch_area m_sca;//TODO on heap
 
+    std::string error_description;
+
+
     #define BOOST_BIND_ACTION( push_name ) boost::bind( &push_name::operator(), g_ ## push_name , _1 ,_2)
     #define ATTACH_ACTION_Q( push_name ) {(g_ ## push_name).set_action_q(&m_actionQ);}
 
     public:
 
+        int parse_query(const char *input_query)
+        {
+            if(get_projections_list().empty() == false) return 0;//already parsed
+
+            parse_info<> info = boost::spirit::classic::parse(input_query, *this, space_p);
+            auto  query_parse_position = info.stop;
+
+            if (!info.full)
+            {
+                std::cout << "failure -->" << query_parse_position << "<---" << std::endl;
+                error_description = std::string("failure -->") + query_parse_position + std::string("<---");
+                return -1;
+            }
+
+            return 0;
+        }
+        
+        std::string get_error_description(){return error_description;}
+        
     s3select()
-    {   //TODO check option for defining action and push into list 
+    {   //TODO check option for defining action and push into list
+
         ATTACH_ACTION_Q(push_from_clause);
         ATTACH_ACTION_Q(push_number);
         ATTACH_ACTION_Q(push_logical_operator);
@@ -430,6 +476,8 @@ struct s3select : public grammar<s3select>
         ATTACH_ACTION_Q(push_column_pos);
         ATTACH_ACTION_Q(push_projection);
         ATTACH_ACTION_Q(push_debug_1);
+
+        error_description.clear();
 
     }
 
@@ -598,6 +646,7 @@ private:
   list<base_statement *> m_projections;
   bool m_aggr_flow = false; //TODO once per query
   int line_index;
+  bool m_is_to_aggregate;
 
   int getNextRow(char **tokens) //TODO add delimiter
   {                             //purpose: simple csv parser, not handling escape rules
@@ -624,22 +673,17 @@ private:
   }
 
 public:
-  csv_object(s3select *s3_query,std::string query,char *csv_stream) : base_s3object(s3_query->get_scratch_area())
+  csv_object(s3select *s3_query,std::string query,char *csv_stream,bool do_aggregate = false) : base_s3object(s3_query->get_scratch_area())
   {
 
-  parse_info<> info = parse(query.c_str(), *s3_query, space_p);
-  auto x = info.stop;
-
-  if (!info.full)
-  {
-    std::cout << "failure -->" << x << "<---" << std::endl; //TODO exception??
-  }
+    if (s3_query->parse_query(query.c_str()) <0) return;//TODO set error state/description 
 
     std::string __stream(csv_stream);
     boost::split(m_csv_lines, __stream, [](char c) { return c == '\n'; }); //splitting the stream (should be 4->128 mb)
     line_index = 0;
     m_projections = s3_query->get_projections_list();
     m_where_clause = s3_query->get_filter();
+    m_is_to_aggregate = do_aggregate;
 
     if (m_where_clause)
       m_where_clause->traverse_and_apply(m_sa);
@@ -689,11 +733,13 @@ public:
         number_of_tokens = getNextRow(row_tokens);
         if (number_of_tokens < 0) //end of stream
         {
-          for (auto i : m_projections)
-          {
-            i->set_last_call();
-            result.push_back((i->eval().to_string()));
-          }
+            if (m_is_to_aggregate)
+                for (auto i : m_projections)
+                {
+                    i->set_last_call();
+                    result.push_back((i->eval().to_string()));
+                }
+
           return number_of_tokens;
         }
 
@@ -727,37 +773,45 @@ public:
     return number_of_tokens; //TODO wrong
   }
 
-
-int run_s3select_on_object(std::string & o_result)//,s3select &s3select_syntax)
-{
-  try
+  int run_s3select_on_object(std::string &o_result) //,s3select &s3select_syntax)
   {
-    //csv_object my_input(&s3select_syntax, input_stream);
 
-    do
-    {
-      std::list<string> result;
-      int num = getMatchRow(result);
-
-      for (std::list<string>::iterator it = result.begin(); it != result.end(); it++)
+      do
       {
-        if (std::next(it) != result.end())
-          {o_result.append(*it);o_result.append(",");}
-        else
-          {o_result.append(*it);o_result.append("\n");}
-      }
+          std::list<string> result;
+          int num = 0;
+          try
+          {
+              num = getMatchRow(result);
+          }
+          catch (base_s3select_exception &e)
+          {
+              std::cout << e.what() << std::endl;
+              if (e.severity() == base_s3select_exception::s3select_exp_en_t::NONE)
+                  return -1;
+          }
 
-      if (num < 0)
-        break;
+          for (std::list<string>::iterator it = result.begin(); it != result.end(); it++)
+          {
+              if (std::next(it) != result.end())
+              {
+                  o_result.append(*it);
+                  o_result.append(",");
+              }
+              else
+              {
+                  o_result.append(*it);
+                  o_result.append("\n");
+              }
+          }
 
-    } while (1);
+          if (num < 0)
+              break;
+
+      } while (1);
+
+      return 0;
   }
-  catch (base_s3select_exception & e)
-  {
-    std::cout << e.what() << std::endl;
-    return -1;
-  }
-
-  return 0;
-}
 };
+
+#endif 
