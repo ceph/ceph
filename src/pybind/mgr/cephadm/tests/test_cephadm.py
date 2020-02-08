@@ -10,7 +10,7 @@ except ImportError:
     pass
 
 from orchestrator import ServiceDescription, InventoryNode, \
-    StatelessServiceSpec, PlacementSpec, RGWSpec, StatefulServiceSpec
+    StatelessServiceSpec, PlacementSpec, RGWSpec, StatefulServiceSpec, HostSpec
 from tests import mock
 from .fixtures import cephadm_module, wait
 
@@ -37,7 +37,7 @@ class TestCephadm(object):
 
     @contextmanager
     def _with_host(self, m, name):
-        wait(m, m.add_host(name))
+        wait(m, m.add_host(HostSpec(hostname=name)))
         yield
         wait(m, m.remove_host(name))
 

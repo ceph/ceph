@@ -30,7 +30,7 @@ from ceph.deployment.drive_selection import selector
 from mgr_module import MgrModule
 import mgr_util
 import orchestrator
-from orchestrator import OrchestratorError, HostSpec, OrchestratorValidationError
+from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError, HostSpec
 
 from . import remotes
 
@@ -1015,11 +1015,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     @orchestrator._cli_read_command(
         'cephadm check-host',
-        'name=host,type=CephString',
+        'name=host,type=CephString '
+        'name=addr,type=CephString,req=false',
         'Check whether we can access and manage a remote host')
-    def _check_host(self, host):
+    def _check_host(self, host, addr=None):
         out, err, code = self._run_cephadm(host, 'client', 'check-host',
                                            ['--expect-hostname', host],
+                                           addr=addr,
                                            error_ok=True, no_fsid=True)
         if code:
             return 1, '', ('check-host failed:\n' + '\n'.join(err))
@@ -1030,7 +1032,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if item.startswith('host %s ' % host):
                     self.log.debug('kicking serve thread')
                     self.event.set()
-        return 0, '%s ok' % host, err
+        return 0, '%s (%s) ok' % (host, addr), err
 
     def _get_connection(self, host):
         """
@@ -1070,6 +1072,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return executable_path
 
     def _run_cephadm(self, host, entity, command, args,
+                     addr=None,
                      stdin=None,
                      no_fsid=False,
                      error_ok=False,
@@ -1077,7 +1080,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         Run cephadm on the remote host with the given command + args
         """
-        conn, connr = self._get_connection(host)
+        if not addr and host in self.inventory:
+            addr = self.inventory[host].get('addr', host)
+        conn, connr = self._get_connection(addr)
 
         try:
             if not image:
@@ -1148,25 +1153,31 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self.inventory_cache.items_filtered(wanted)
 
     @async_completion
-    def add_host(self, host):
+    def add_host(self, spec):
+        # type: (HostSpec) -> str
         """
         Add a host to be managed by the orchestrator.
 
         :param host: host name
         """
-        assert_valid_host(host)
-        out, err, code = self._run_cephadm(host, 'client', 'check-host',
-                                           ['--expect-hostname', host],
+        assert_valid_host(spec.hostname)
+        out, err, code = self._run_cephadm(spec.hostname, 'client', 'check-host',
+                                           ['--expect-hostname', spec.hostname],
+                                           addr=spec.addr,
                                            error_ok=True, no_fsid=True)
         if code:
-            raise OrchestratorError('New host %s failed check: %s' % (host, err))
+            raise OrchestratorError('New host %s (%s) failed check: %s' % (
+                spec.hostname, spec.addr, err))
 
-        self.inventory[host] = {}
+        self.inventory[spec.hostname] = {
+            'addr': spec.addr,
+            'labels': spec.labels,
+        }
         self._save_inventory()
-        self.inventory_cache[host] = orchestrator.OutdatableData()
-        self.service_cache[host] = orchestrator.OutdatableData()
+        self.inventory_cache[spec.hostname] = orchestrator.OutdatableData()
+        self.service_cache[spec.hostname] = orchestrator.OutdatableData()
         self.event.set()  # refresh stray health check
-        return "Added host '{}'".format(host)
+        return "Added host '{}'".format(spec.hostname)
 
     @async_completion
     def remove_host(self, host):
@@ -1183,6 +1194,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.event.set()  # refresh stray health check
         return "Removed host '{}'".format(host)
 
+    @async_completion
+    def update_host_addr(self, host, addr):
+        if host not in self.inventory:
+            raise OrchestratorError('host %s not registered' % host)
+        self.inventory[host]['addr'] = addr
+        self._save_inventory()
+        self._reset_con(host)
+        self.event.set()  # refresh stray health check
+        return "Updated host '{}' addr to '{}'".format(host, addr)
+
     @trivial_completion
     def get_hosts(self):
         """
@@ -1194,7 +1215,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         TODO:
           - InventoryNode probably needs to be able to report labels
         """
-        return [orchestrator.InventoryNode(host_name) for host_name in self.inventory_cache]
+        r = []
+        for hostname, info in self.inventory.items():
+            self.log.debug('host %s info %s' % (hostname, info))
+            r.append(orchestrator.InventoryNode(
+                hostname,
+                addr=info.get('addr', hostname),
+                labels=info.get('labels', []),
+            ))
+        return r
 
     @async_completion
     def add_host_label(self, host, label):
@@ -2193,7 +2222,7 @@ class BaseScheduler(object):
 
     * requires a placement_spec
 
-    `place(host_pool)` needs to return a List[HostSpec, ..]
+    `place(host_pool)` needs to return a List[HostPlacementSpec, ..]
     """
 
     def __init__(self, placement_spec):
@@ -2201,7 +2230,7 @@ class BaseScheduler(object):
         self.placement_spec = placement_spec
 
     def place(self, host_pool, count=None):
-        # type: (List, Optional[int]) -> List[HostSpec]
+        # type: (List, Optional[int]) -> List[HostPlacementSpec]
         raise NotImplementedError
 
 
@@ -2215,10 +2244,10 @@ class SimpleScheduler(BaseScheduler):
         super(SimpleScheduler, self).__init__(placement_spec)
 
     def place(self, host_pool, count=None):
-        # type: (List, Optional[int]) -> List[HostSpec]
+        # type: (List, Optional[int]) -> List[HostPlacementSpec]
         if not host_pool:
             raise Exception('List of host candidates is empty')
-        host_pool = [HostSpec(x, '', '') for x in host_pool]
+        host_pool = [HostPlacementSpec(x, '', '') for x in host_pool]
         # shuffle for pseudo random selection
         random.shuffle(host_pool)
         return host_pool[:count]
@@ -2266,7 +2295,7 @@ class NodeAssignment(object):
         # NOTE: This currently queries for all hosts without label restriction
         if self.spec.placement.label:
             logger.info("Found labels. Assinging nodes that match the label")
-            candidates = [HostSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
+            candidates = [HostPlacementSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
             logger.info('Assigning nodes to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
 

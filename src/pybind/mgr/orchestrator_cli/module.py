@@ -157,10 +157,13 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @orchestrator._cli_write_command(
         'orchestrator host add',
-        "name=host,type=CephString,req=true",
+        'name=host,type=CephString,req=true '
+        'name=addr,type=CephString,req=false '
+        'name=labels,type=CephString,n=N,req=false',
         'Add a host')
-    def _add_host(self, host):
-        completion = self.add_host(host)
+    def _add_host(self, host, addr=None, labels=None):
+        s = orchestrator.HostSpec(hostname=host, addr=addr, labels=labels)
+        completion = self.add_host(s)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -171,6 +174,17 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         'Remove a host')
     def _remove_host(self, host):
         completion = self.remove_host(host)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
+        'orchestrator host set-addr',
+        'name=host,type=CephString '
+        'name=addr,type=CephString',
+        'Update a host address')
+    def _update_set_addr(self, host, addr):
+        completion = self.update_host_addr(host, addr)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -189,13 +203,13 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             output = json.dumps(hosts, sort_keys=True)
         else:
             table = PrettyTable(
-                ['HOST', 'LABELS'],
+                ['HOST', 'ADDR', 'LABELS'],
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
             for node in completion.result:
-                table.add_row((node.name, ' '.join(node.labels)))
+                table.add_row((node.name, node.addr, ' '.join(node.labels)))
             output = table.get_string()
         return HandleCommandResult(stdout=output)
 
