@@ -747,6 +747,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 }
         self.set_health_checks(self.health_checks)
 
+    def _serve_sleep(self):
+        sleep_interval = 600
+        self.log.debug('Sleeping for %d seconds', sleep_interval)
+        ret = self.event.wait(sleep_interval)
+        self.event.clear()
+
     def serve(self):
         # type: () -> None
         self.log.info("serve starting")
@@ -757,7 +763,23 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.log.debug('refreshing services')
             completion = self._get_services(maybe_refresh=True)
             self._orchestrator_wait([completion])
-            orchestrator.raise_if_exception(completion)
+            # FIXME: this is a band-aid to avoid crashing the mgr, but what
+            # we really need to do here is raise health alerts for individual
+            # hosts that fail and continue with the ones that do not fail.
+            if completion.exception is not None:
+                self.log.error('failed to refresh services: %s' % completion.exception)
+                self.health_checks['CEPHADM_REFRESH_FAILED'] = {
+                    'severity': 'warning',
+                    'summary': 'failed to probe one or more hosts',
+                    'count': 1,
+                    'detail': [str(completion.exception)],
+                }
+                self.set_health_checks(self.health_checks)
+                self._serve_sleep()
+                continue
+            if 'CEPHADM_REFRESH_FAILED' in self.health_checks:
+                del self.health_checks['CEPHADM_REFRESH_FAILED']
+                self.set_health_checks(self.health_checks)
             services = completion.result
             self.log.debug('services %s' % services)
 
@@ -772,13 +794,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             time.sleep(1)
                         else:
                             break
-                    orchestrator.raise_if_exception(completion)
+                    if completion.exception is not None:
+                        self.log.error(str(completion.exception))
                 self.log.debug('did _do_upgrade')
             else:
-                sleep_interval = 600
-                self.log.debug('Sleeping for %d seconds', sleep_interval)
-                ret = self.event.wait(sleep_interval)
-                self.event.clear()
+                self._serve_sleep()
         self.log.info("serve exit")
 
     def config_notify(self):
