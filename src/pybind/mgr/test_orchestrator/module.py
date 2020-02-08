@@ -263,7 +263,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [orchestrator.InventoryNode('localhost', inventory.Devices([]))]
 
     @deferred_write("add_host")
-    def add_host(self, host):
+    def add_host(self, spec):
+        # type: (orchestrator.HostSpec) -> None
+        host = spec.hostname
         if host == 'raise_no_support':
             raise orchestrator.OrchestratorValidationError("MON count must be either 1, 3 or 5")
         if host == 'raise_bug':

@@ -35,7 +35,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class HostSpec(namedtuple('HostSpec', ['hostname', 'network', 'name'])):
+class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
         res = ''
         res += self.hostname
@@ -46,7 +46,8 @@ class HostSpec(namedtuple('HostSpec', ['hostname', 'network', 'name'])):
         return res
 
 
-def parse_host_specs(host, require_network=True):
+def parse_host_placement_specs(host, require_network=True):
+    # type: (str, Optional[bool]) -> HostPlacementSpec
     """
     Split host into host, network, and (optional) daemon name parts.  The network
     part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
@@ -68,7 +69,7 @@ def parse_host_specs(host, require_network=True):
     name_re = r'=(.*?)$'
 
     # assign defaults
-    host_spec = HostSpec('', '', '')
+    host_spec = HostPlacementSpec('', '', '')
 
     match_host = re.search(host_re, host)
     if match_host:
@@ -765,8 +766,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def add_host(self, host):
-        # type: (str) -> Completion
+    def add_host(self, HostSpec):
+        # type: (HostSpec) -> Completion
         """
         Add a host to the orchestrator inventory.
 
@@ -780,6 +781,16 @@ class Orchestrator(object):
         Remove a host from the orchestrator inventory.
 
         :param host: hostname
+        """
+        raise NotImplementedError()
+
+    def update_host_addr(self, host, addr):
+        # type: (str, str) -> Completion
+        """
+        Update a host's address
+
+        :param host: hostname
+        :param addr: address (dns name or IP)
         """
         raise NotImplementedError()
 
@@ -1027,6 +1038,12 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+class HostSpec(object):
+    def __init__(self, hostname, addr=None, labels=None):
+        # type: (str, Optional[str], Optional[List[str]]) -> None
+        self.hostname = hostname       # the hostname on the host
+        self.addr = addr or hostname   # DNS name or IP address to reach it
+        self.labels = labels or []     # initial label(s), if any
 
 class UpgradeStatusSpec(object):
     # Orchestrator's report on what's going on with any ongoing upgrade
@@ -1045,10 +1062,10 @@ class PlacementSpec(object):
         # type: (Optional[str], Optional[List], Optional[int]) -> None
         self.label = label
         if hosts:
-            if all([isinstance(host, HostSpec) for host in hosts]):
-                self.hosts = hosts  # type: List[HostSpec]
+            if all([isinstance(host, HostPlacementSpec) for host in hosts]):
+                self.hosts = hosts  # type: List[HostPlacementSpec]
             else:
-                self.hosts = [parse_host_specs(x, require_network=False) for x in hosts if x]
+                self.hosts = [parse_host_placement_specs(x, require_network=False) for x in hosts if x]
         else:
             self.hosts = []
 
@@ -1353,8 +1370,8 @@ class InventoryNode(object):
     When fetching inventory, all Devices are groups inside of an
     InventoryNode.
     """
-    def __init__(self, name, devices=None, labels=None):
-        # type: (str, Optional[inventory.Devices], Optional[List[str]]) -> None
+    def __init__(self, name, devices=None, labels=None, addr=None):
+        # type: (str, Optional[inventory.Devices], Optional[List[str]], Optional[str]) -> None
         if devices is None:
             devices = inventory.Devices([])
         if labels is None:
@@ -1362,12 +1379,14 @@ class InventoryNode(object):
         assert isinstance(devices, inventory.Devices)
 
         self.name = name  # unique within cluster.  For example a hostname.
+        self.addr = addr or name
         self.devices = devices
         self.labels = labels
 
     def to_json(self):
         return {
             'name': self.name,
+            'addr': self.addr,
             'devices': self.devices.to_json(),
             'labels': self.labels,
         }
@@ -1377,12 +1396,13 @@ class InventoryNode(object):
         try:
             _data = copy.deepcopy(data)
             name = _data.pop('name')
+            addr = _data.pop('addr') or name
             devices = inventory.Devices.from_json(_data.pop('devices'))
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
             labels = _data.get('labels', list())
-            return cls(name, devices, labels)
+            return cls(name, devices, labels, addr)
         except KeyError as e:
             error_msg = '{} is required for {}'.format(e, cls.__name__)
             raise OrchestratorValidationError(error_msg)
