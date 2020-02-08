@@ -9,34 +9,40 @@ import tempfile
 import textwrap
 from distutils.ccompiler import new_compiler
 from distutils.errors import CompileError, LinkError
+from itertools import filterfalse
 import distutils.sysconfig
 
-unwrapped_customize = distutils.sysconfig.customize_compiler
 
-clang = False
-
-def filter_unsupported_flags(flags):
-    if clang:
-        return [f for f in flags if not (f == '-mcet' or
-                                         f.startswith('-fcf-protection') or
-                                         f == '-fstack-clash-protection' or
-                                         f == '-fno-var-tracking-assignments' or
-                                         f == '-Wno-deprecated-register' or
-                                         f == '-Wno-gnu-designator')]
+def filter_unsupported_flags(compiler, flags):
+    if 'clang' in compiler:
+        return filterfalse(lambda f:
+                           f in ('-mcet',
+                                 '-fstack-clash-protection',
+                                 '-fno-var-tracking-assignments',
+                                 '-Wno-deprecated-register',
+                                 '-Wno-gnu-designator') or
+                           f.startswith('-fcf-protection'),
+                           flags)
     else:
         return flags
 
-def monkey_with_compiler(compiler):
-    unwrapped_customize(compiler)
-    if compiler.compiler_type == 'unix':
-        if compiler.compiler[0].find('clang') != -1:
-            global clang
-            clang = True
-            compiler.compiler = filter_unsupported_flags(compiler.compiler)
-            compiler.compiler_so = filter_unsupported_flags(
-                compiler.compiler_so)
 
-distutils.sysconfig.customize_compiler = monkey_with_compiler
+def monkey_with_compiler(customize):
+    def patched(compiler):
+        customize(compiler)
+        if compiler.compiler_type != 'unix':
+            return
+        compiler.compiler[1:] = \
+            filter_unsupported_flags(compiler.compiler[0],
+                                     compiler.compiler[1:])
+        compiler.compiler_so[1:] = \
+            filter_unsupported_flags(compiler.compiler_so[0],
+                                     compiler.compiler_so[1:])
+    return patched
+
+
+distutils.sysconfig.customize_compiler = \
+    monkey_with_compiler(distutils.sysconfig.customize_compiler)
 
 if not pkgutil.find_loader('setuptools'):
     from distutils.core import setup
@@ -54,11 +60,14 @@ __version__ = '2.0.0'
 def get_python_flags(libs):
     py_libs = sum((libs.split() for libs in
                    distutils.sysconfig.get_config_vars('LIBS', 'SYSLIBS')), [])
+    compiler = new_compiler()
     return dict(
         include_dirs=[distutils.sysconfig.get_python_inc()],
         library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
         libraries=libs + [lib.replace('-l', '') for lib in py_libs],
-        extra_compile_args=filter_unsupported_flags(distutils.sysconfig.get_config_var('CFLAGS').split()),
+        extra_compile_args=filter_unsupported_flags(
+            compiler.compiler[0],
+            distutils.sysconfig.get_config_var('CFLAGS').split()),
         extra_link_args=(distutils.sysconfig.get_config_var('LDFLAGS').split() +
                          distutils.sysconfig.get_config_var('LINKFORSHARED').split()))
 
