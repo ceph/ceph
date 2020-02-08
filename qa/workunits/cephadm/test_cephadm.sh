@@ -209,28 +209,59 @@ done
 
 # add node-exporter
 $CEPHADM --image 'prom/node-exporter:latest' \
-    deploy --name node-exporter.a --fsid $FSID
-sleep 90
-out=$(curl 'http://localhost:9100')
-echo $out | grep -q 'Node Exporter'
+	 deploy --name node-exporter.a --fsid $FSID
+TRIES=0
+while true; do
+    if curl 'http://localhost:9100' | grep -q 'Node Exporter'; then
+	break
+    fi
+    TRIES=$(($TRIES + 1))
+    if [ "$TRIES" -eq 5 ]; then
+	echo "node exporter did not come up"
+	exit 1
+    fi
+    sleep 5
+done
+echo "node exporter ok"
 
 # add prometheus
 cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
         $CEPHADM --image 'prom/prometheus:latest' \
             deploy --name prometheus.a --fsid $FSID \
                    --config-json -
-sleep 90
-out=$(curl 'localhost:9095/api/v1/query?query=up')
-echo $out | jq -e '.["status"] == "success"'
+TRIES=0
+while true; do
+    if curl 'localhost:9095/api/v1/query?query=up' | \
+	    jq -e '.["status"] == "success"'; then
+	break
+    fi
+    TRIES=$(($TRIES + 1))
+    if [ "$TRIES" -eq 5 ]; then
+	echo "prom did not come up"
+	exit 1
+    fi
+    sleep 5
+done
+echo "prom ok"
 
 # add grafana
 cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
         $CEPHADM --image 'pcuzner/ceph-grafana-el8:latest' \
             deploy --name grafana.a --fsid $FSID \
                    --config-json -
-sleep 90
-out=$(curl --insecure option 'https://localhost:3000')
-echo $out | grep -q 'grafana'
+TRIES=0
+while true; do
+    if curl --insecure option 'https://localhost:3000' | grep -q 'grafana'; then
+	break
+    fi
+    TRIES=$(($TRIES + 1))
+    if [ "$TRIES" -eq 5 ]; then
+	echo "grafana did not come up"
+	exit 1
+    fi
+    sleep 5
+done
+echo "grafana ok"
 
 ## run
 # WRITE ME
