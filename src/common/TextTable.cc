@@ -70,7 +70,7 @@ std::ostream &operator<<(std::ostream &out, const TextTable &t)
     TextTable::TextTableColumn col = t.col[i];
     out << string(t.indent, ' ')
         << pad(col.heading, col.width, col.hd_align)
-	<< ' ';
+	<< t.column_separation;
   }
   out << endl;
 
@@ -79,7 +79,7 @@ std::ostream &operator<<(std::ostream &out, const TextTable &t)
       TextTable::TextTableColumn col = t.col[j];
       out << string(t.indent, ' ')
 	  << pad(t.row[i][j], col.width, col.col_align)
-	  << ' ';
+	  << t.column_separation;
     }
     out << endl;
   }

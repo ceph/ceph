@@ -82,7 +82,7 @@ while ! ceph config show osd.0 | grep debug_asok | grep 99
 do
     sleep 1
 done
-ceph config show osd.0 | grep debug_asok | grep 'override mon'
+ceph config show osd.0 | grep debug_asok | grep 'override  mon'
 ceph tell osd.0 config unset debug_asok
 ceph tell osd.0 config unset debug_asok
 
