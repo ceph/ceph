@@ -61,7 +61,7 @@ To create a pool, execute::
 	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
              [crush-rule-name] [expected-num-objects]
 	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]]   erasure \
-             [erasure-code-profile] [crush-rule-name] [expected_num_objects]
+             [erasure-code-profile] [crush-rule-name] [expected_num_objects] [--autoscale-mode=<on,off,warn>]
 
 Where:
 
@@ -131,15 +131,15 @@ Where:
 :Type: String
 :Required: No.
 
-When you create a pool, set the number of placement groups to a reasonable value
-(e.g., ``100``). Consider the total number of placement groups per OSD too.
-Placement groups are computationally expensive, so performance will degrade when
-you have many pools with many placement groups (e.g., 50 pools with 100
-placement groups each). The point of diminishing returns depends upon the power
-of the OSD host.
+``--autoscale-mode=<on,off,warn>``
 
-See `Placement Groups`_ for details on calculating an appropriate number of
-placement groups for your pool.
+:Description: Autoscale mode
+
+:Type: String
+:Required: No.
+:Default:  The default behavior is controlled by the ``osd pool default pg autoscale mode`` option.
+
+If you set the autoscale mode to ``on`` or ``warn``, you can let the system autotune or recommend changes to the number of placement groups in your pool based on actual usage.  If you leave it off, then you should refer to `Placement Groups`_ for more information.
 
 .. _Placement Groups: ../placement-groups
 

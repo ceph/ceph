@@ -999,6 +999,7 @@ COMMAND("osd pool create "
         "name=expected_num_objects,type=CephInt,range=0,req=false "
         "name=size,type=CephInt,range=0,req=false "
 	"name=pg_num_min,type=CephInt,range=0,req=false "
+	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0|1,req=false",\
 	"create pool", "osd", "rw")
