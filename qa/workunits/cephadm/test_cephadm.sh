@@ -209,10 +209,21 @@ done
 
 # add node-exporter
 $CEPHADM --image 'prom/node-exporter:latest' \
-    deploy --name node-exporter.a --fsid $FSID
-sleep 90
-out=$(curl 'http://localhost:9100')
-echo $out | grep -q 'Node Exporter'
+	 deploy --name node-exporter.a --fsid $FSID
+TRIES=0
+while true; do
+    out=$(curl 'http://localhost:9100')
+    if echo $out | grep -q 'Node Exporter'; then
+	break
+    fi
+    TRIES=$(($TRIES + 1))
+    if [ "$TRIES" -eq 5 ]; then
+	echo "node exporter did not come up"
+	exit 1
+    fi
+    sleep 5
+done
+echo "node exporter ok"
 
 # add prometheus
 cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
