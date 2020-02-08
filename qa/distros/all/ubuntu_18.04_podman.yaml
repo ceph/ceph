@@ -8,3 +8,4 @@ tasks:
     - sudo apt -y install software-properties-common
     - sudo add-apt-repository -y ppa:projectatomic/ppa
     - sudo apt -y install podman
+    - echo -e "[registries.search]\nregistries = ['docker.io']" | sudo tee /etc/containers/registries.conf
