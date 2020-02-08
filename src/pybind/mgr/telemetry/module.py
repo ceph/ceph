@@ -343,7 +343,8 @@ class Module(MgrModule):
                 continue
             c = json.loads(crashinfo)
             del c['utsname_hostname']
-            (etype, eid) = c.get('entity_name', '').split('.')
+            # entity_name might have more than one '.', beware
+            (etype, eid) = c.get('entity_name', '').split('.', 1)
             m = hashlib.sha1()
             m.update(self.salt.encode('utf-8'))
             m.update(eid.encode('utf-8'))
