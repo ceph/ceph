@@ -678,14 +678,19 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         bad_hosts = []
         for host, v in self.inventory.items():
             self.log.debug(' checking %s' % host)
-            out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
-                                               error_ok=True, no_fsid=True)
-            if code:
+            try:
+                out, err, code = self._run_cephadm(
+                    host, 'client', 'check-host', [],
+                    error_ok=True, no_fsid=True)
+                if code:
+                    self.log.debug(' host %s failed check' % host)
+                    if self.warn_on_failed_host_check:
+                        bad_hosts.append('host %s failed check: %s' % (host, err))
+                else:
+                    self.log.debug(' host %s ok' % host)
+            except Exception as e:
                 self.log.debug(' host %s failed check' % host)
-                if self.warn_on_failed_host_check:
-                    bad_hosts.append('host %s failed check: %s' % (host, err))
-            else:
-                self.log.debug(' host %s ok' % host)
+                bad_hosts.append('host %s failed check: %s' % (host, e))
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
             del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
         if bad_hosts:
