@@ -155,6 +155,9 @@ $CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").fsid' \
 $CEPHADM ls | jq '.[]' | jq 'select(.name == "mgr.x").fsid' \
     | grep $FSID
 
+# make sure the version is returned correctly
+$CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").version' | grep -q \\.
+
 ## deploy
 # add mon.b
 cp $CONFIG $MONCONFIG

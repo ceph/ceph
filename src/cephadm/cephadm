@@ -2197,6 +2197,9 @@ def list_daemons(detail=True, legacy_dir=None):
     if legacy_dir is not None:
         data_dir = os.path.abspath(legacy_dir + data_dir)
 
+    # keep track of ceph versions we see
+    seen_versions = {}  # type: Dict[str, Optional[str]]
+
     # /var/lib/ceph
     if os.path.exists(data_dir):
         for i in os.listdir(data_dir):
@@ -2268,12 +2271,21 @@ def list_daemons(detail=True, legacy_dir=None):
                         if not code:
                             (container_id, image_name, image_id, version) = out.strip().split(',')
                             image_id = normalize_container_id(image_id)
-                            if not version:
-                                out, err, code = call(
-                                    [container_path, 'exec', container_id,
-                                     'ceph', '-v'])
-                                if not code and out.startswith('ceph version '):
-                                    version = out.split(' ')[2]
+                            daemon_type = name.split('.', 1)[0]
+                            if daemon_type in Ceph.daemons:
+                                if not version or '.' not in version:
+                                    version = seen_versions.get(image_id, None)
+                                if not version:
+                                    out, err, code = call(
+                                        [container_path, 'exec', container_id,
+                                         'ceph', '-v'])
+                                    if not code and \
+                                       out.startswith('ceph version '):
+                                        version = out.split(' ')[2]
+                                        seen_versions[image_id] = version
+                            else:
+                                # FIXME: monitoring component version?
+                                pass
                         i['container_id'] = container_id
                         i['container_image_name'] = image_name
                         i['container_image_id'] = image_id
