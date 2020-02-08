@@ -862,7 +862,7 @@ int Monitor::preinit()
       // not registerd by me
       continue;
     }
-    r = admin_socket->register_command(prefix, admin_hook,
+    r = admin_socket->register_command(command.cmdstring, admin_hook,
 				       command.helpstring);
     ceph_assert(r == 0);
   }
