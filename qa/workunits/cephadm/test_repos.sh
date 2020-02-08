@@ -1,7 +1,7 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR=$(dirname ${BASH_SOURCE[0]})
 CEPHADM_SRC_DIR=${SCRIPT_DIR}/../../../src/cephadm
 CEPHADM=${CEPHADM_SRC_DIR}/cephadm
 
