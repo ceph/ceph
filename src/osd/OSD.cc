@@ -5144,8 +5144,9 @@ void OSD::maybe_update_heartbeat_peers()
   // subtree level (e.g., hosts) for fast failure detection.
   auto min_down = cct->_conf.get_val<uint64_t>("mon_osd_min_down_reporters");
   auto subtree = cct->_conf.get_val<string>("mon_osd_reporter_subtree_level");
+  auto limit = std::max(min_down, (uint64_t)cct->_conf->osd_heartbeat_min_peers);
   osdmap->get_random_up_osds_by_subtree(
-    whoami, subtree, min_down, want, &want);
+    whoami, subtree, limit, want, &want);
 
   for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
     dout(10) << " adding neighbor peer osd." << *p << dendl;
