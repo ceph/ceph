@@ -64,9 +64,11 @@ class Module(MgrModule):
                 continue
 
             rank_table = PrettyTable(
-                ("Rank", "State", "MDS", "Activity", "dns", "inos"),
-                hrules=prettytable.FRAME
+                ("RANK", "STATE", "MDS", "ACTIVITY", "DNS", "INOS"),
+                border=False,
             )
+            rank_table.left_padding_width = 0
+            rank_table.right_padding_width = 2
 
             mdsmap = filesystem['mdsmap']
 
@@ -177,7 +179,10 @@ class Module(MgrModule):
             metadata_pool_id = mdsmap['metadata_pool']
             data_pool_ids = mdsmap['data_pools']
 
-            pools_table = PrettyTable(["Pool", "type", "used", "avail"])
+            pools_table = PrettyTable(["POOL", "TYPE", "USED", "AVAIL"],
+                                      border=False)
+            pools_table.left_padding_width = 0
+            pools_table.right_padding_width = 2
             for pool_id in [metadata_pool_id] + data_pool_ids:
                 pool_type = "metadata" if pool_id == metadata_pool_id else "data"
                 stats = pool_stats[pool_id]
@@ -212,7 +217,9 @@ class Module(MgrModule):
         if not output and not json_output and fs_filter is not None:
             return errno.EINVAL, "", "Invalid filesystem: " + fs_filter
 
-        standby_table = PrettyTable(["Standby MDS"])
+        standby_table = PrettyTable(["STANDBY MDS"], border=False)
+        standby_table.left_padding_width = 0
+        standby_table.right_padding_width = 2
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
             mds_versions[metadata.get('ceph_version', "unknown")].append(standby['name'])
@@ -234,7 +241,10 @@ class Module(MgrModule):
             else:
                 output += "MDS version: {0}".format(list(mds_versions)[0])
         else:
-            version_table = PrettyTable(["version", "daemons"])
+            version_table = PrettyTable(["VERSION", "DAEMONS"],
+                                        border=False)
+            version_table.left_padding_width = 0
+            version_table.right_padding_width = 2
             for version, daemons in six.iteritems(mds_versions):
                 if output_format in ('json', 'json-pretty'):
                     json_output['mds_version'].append({
@@ -257,7 +267,20 @@ class Module(MgrModule):
             return 0, output, ""
 
     def handle_osd_status(self, cmd):
-        osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data', 'state'])
+        osd_table = PrettyTable(['ID', 'HOST', 'USED', 'AVAIL', 'WR OPS',
+                                 'WR DATA', 'RD OPS', 'RD DATA', 'STATE'],
+                                border=False)
+        osd_table.align['ID'] = 'r'
+        osd_table.align['HOST'] = 'l'
+        osd_table.align['USED'] = 'r'
+        osd_table.align['AVAIL'] = 'r'
+        osd_table.align['WR OPS'] = 'r'
+        osd_table.align['WR DATA'] = 'r'
+        osd_table.align['RD OPS'] = 'r'
+        osd_table.align['RD DATA'] = 'r'
+        osd_table.align['STATE'] = 'l'
+        osd_table.left_padding_width = 0
+        osd_table.right_padding_width = 2
         osdmap = self.get("osd_map")
 
         filter_osds = set()
