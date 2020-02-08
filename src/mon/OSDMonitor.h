@@ -531,6 +531,7 @@ private:
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
+		       const string& pg_autoscale_mode,
 		       ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
