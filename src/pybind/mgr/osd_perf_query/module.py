@@ -115,9 +115,9 @@ class OSDPerfQuery(MgrModule):
             descriptors = query['performance_counter_descriptors']
 
             if query == self.RBD_IMAGE_ID_QUERY:
-                column_names = ["pool_id", "rbd image_id"]
+                column_names = ["POOL_ID", "RBD IMAGE ID"]
             else:
-                column_names = [sk['type'] for sk in query['key_descriptor']]
+                column_names = [sk['type'].upper() for sk in query['key_descriptor']]
             for d in descriptors:
                 desc = d
                 if d in ['bytes']:
@@ -126,10 +126,12 @@ class OSDPerfQuery(MgrModule):
                     desc += '/sec'
                 elif d in ['write_latency', 'read_latency']:
                     desc += '(msec)'
-                column_names.append(desc)
+                column_names.append(desc.upper())
 
             table = prettytable.PrettyTable(tuple(column_names),
                                             hrules=prettytable.FRAME)
+            table.left_padding_width = 0
+            table.right_padding_width = 2
 
             if query == self.RBD_IMAGE_ID_QUERY:
                 # typical output:
