@@ -212,7 +212,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
-            table.right_padding_width = 1
+            table.right_padding_width = 2
             for host in sorted(completion.result, key=lambda h: h.hostname):
                 table.add_row((host.hostname, host.addr, ' '.join(host.labels), host.status))
             output = table.get_string()
@@ -275,7 +275,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align = 'l'
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
-            table.right_padding_width = 1
+            table.right_padding_width = 2
             for host_ in completion.result: # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
                     table.add_row(
@@ -393,7 +393,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
-            table.right_padding_width = 1
+            table.right_padding_width = 2
             for s in sorted(daemons, key=lambda s: s.name()):
                 status = {
                     -1: 'error',

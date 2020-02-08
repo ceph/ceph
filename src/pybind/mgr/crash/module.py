@@ -210,7 +210,7 @@ class Module(MgrModule):
             table = PrettyTable(['ID', 'ENTITY', 'NEW'],
                                 border=False)
             table.left_padding_width = 0
-            table.right_padding_width = 1
+            table.right_padding_width = 2
             table.align['ID'] = 'l'
             table.align['ENTITY'] = 'l'
             for c in r:

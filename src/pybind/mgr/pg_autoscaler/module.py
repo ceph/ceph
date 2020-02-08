@@ -152,7 +152,7 @@ class PgAutoscaler(MgrModule):
                                  'NEW PG_NUM', 'AUTOSCALE'],
                                 border=False)
             table.left_padding_width = 0
-            table.right_padding_width = 1
+            table.right_padding_width = 2
             table.align['POOL'] = 'l'
             table.align['SIZE'] = 'r'
             table.align['TARGET SIZE'] = 'r'
