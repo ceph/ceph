@@ -964,6 +964,10 @@ bool DaemonServer::_handle_command(
     // only include state from services that are in the persisted service map
     f->open_object_section("service_status");
     for (auto& [type, service] : pending_service_map.services) {
+      if (ServiceMap::is_normal_ceph_entity(type)) {
+        continue;
+      }
+
       f->open_object_section(type.c_str());
       for (auto& q : service.daemons) {
 	f->open_object_section(q.first.c_str());
@@ -2741,6 +2745,10 @@ void DaemonServer::got_service_map()
   // cull missing daemons, populate new ones
   std::set<std::string> types;
   for (auto& [type, service] : pending_service_map.services) {
+    if (ServiceMap::is_normal_ceph_entity(type)) {
+      continue;
+    }
+
     types.insert(type);
 
     std::set<std::string> names;
