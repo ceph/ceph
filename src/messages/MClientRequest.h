@@ -132,6 +132,9 @@ public:
   bool is_replay() const {
     return get_flags() & CEPH_MDS_FLAG_REPLAY;
   }
+  bool is_async() const {
+    return get_flags() & CEPH_MDS_FLAG_ASYNC;
+  }
 
   // normal fields
   void set_stamp(utime_t t) { stamp = t; }
@@ -154,6 +157,9 @@ public:
   }
   void set_replayed_op() {
     head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
+  }
+  void set_async_op() {
+    head.flags = head.flags | CEPH_MDS_FLAG_ASYNC;
   }
 
   utime_t get_stamp() const { return stamp; }
@@ -267,7 +273,9 @@ public:
       out << " " << stamp;
     if (head.num_retry)
       out << " RETRY=" << (int)head.num_retry;
-    if (get_flags() & CEPH_MDS_FLAG_REPLAY)
+    if (is_async())
+      out << " ASYNC";
+    if (is_replay())
       out << " REPLAY";
     if (queued_for_replay)
       out << " QUEUED_FOR_REPLAY";
