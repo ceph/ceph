@@ -2062,7 +2062,8 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   ldout(cct, 10) << __func__ << " accept setting up session_security." << dendl;
 
   if (connection->policy.server &&
-      connection->policy.lossy) {
+      connection->policy.lossy &&
+      !connection->policy.register_lossy_clients) {
     // incoming lossy client, no need to register this connection
     // new session
     ldout(cct, 10) << __func__ << " accept new session" << dendl;
