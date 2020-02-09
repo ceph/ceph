@@ -954,14 +954,16 @@ def _validate_non_positional_args(args, sig, d, partial=False):
                 parser.add_argument("--{}".format(desc.name),
                                     dest="{}".format(desc.name),
                                     action="store_true")
-                parser.add_argument("--{}".format(desc.name.replace('_', '-')),
-                                    dest="{}".format(desc.name),
-                                    action="store_true")
+                if '_' in desc.name:
+                    parser.add_argument("--{}".format(desc.name.replace('_', '-')),
+                                        dest="{}".format(desc.name),
+                                        action="store_true")
             else:
                 parser.add_argument("--{}".format(desc.name),
                                     dest="{}".format(desc.name))
-                parser.add_argument("--{}".format(desc.name.replace('_', '-')),
-                                    dest="{}".format(desc.name))
+                if '_' in desc.name:
+                    parser.add_argument("--{}".format(desc.name.replace('_', '-')),
+                                        dest="{}".format(desc.name))
             descs.append(desc)
             sig.remove(desc)
 
