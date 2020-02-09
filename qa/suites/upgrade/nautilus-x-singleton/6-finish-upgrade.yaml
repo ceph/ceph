@@ -28,3 +28,10 @@ tasks:
       - ceph mon enable-msgr2
 - install.upgrade:
     client.0:
+
+# reduce canary pool hit set count from 32 -> 4 and do some io so that
+# we are sure they will be trimmed post-upgrade.
+- exec:
+    mon.a:
+      - sudo ceph osd pool set test-hit-set-cache hit_set_count 4
+      - rados -p test-hit-set-cache bench 5 write -b 1

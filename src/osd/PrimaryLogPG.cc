@@ -13538,11 +13538,11 @@ hobject_t PrimaryLogPG::get_hit_set_archive_object(utime_t start,
   ostringstream ss;
   ss << "hit_set_" << info.pgid.pgid << "_archive_";
   if (using_gmt) {
-    start.gmtime(ss) << "_";
-    end.gmtime(ss);
+    start.gmtime(ss, true /* legacy pre-octopus form */) << "_";
+    end.gmtime(ss, true /* legacy pre-octopus form */);
   } else {
-    start.localtime(ss) << "_";
-    end.localtime(ss);
+    start.localtime(ss, true /* legacy pre-octopus form */) << "_";
+    end.localtime(ss, true /* legacy pre-octopus form */);
   }
   hobject_t hoid(sobject_t(ss.str(), CEPH_NOSNAP), "",
 		 info.pgid.ps(), info.pgid.pool(),
