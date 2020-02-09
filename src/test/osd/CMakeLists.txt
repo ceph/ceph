@@ -34,13 +34,14 @@ install(TARGETS
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # scripts
-add_ceph_test(safe-to-destroy.sh ${CMAKE_CURRENT_SOURCE_DIR}/safe-to-destroy.sh)
+add_ceph_test(safe-to-destroy.sh ${CMAKE_CURRENT_SOURCE_DIR}/safe-to-destroy.sh 
+	      LABELS "long" COST 441.0)
 
 # unittest_osdmap
 add_executable(unittest_osdmap
   TestOSDMap.cc
   )
-add_ceph_unittest(unittest_osdmap)
+add_ceph_unittest(unittest_osdmap LABELS "long" COST 91.0)
 target_link_libraries(unittest_osdmap global ${BLKID_LIBRARIES})
 
 # unittest_osd_types
@@ -71,7 +72,7 @@ add_executable(unittest_pglog
   $<TARGET_OBJECTS:unit-main>
   $<TARGET_OBJECTS:store_test_fixture>
   )
-add_ceph_unittest(unittest_pglog)
+add_ceph_unittest(unittest_pglog COST 214.0)
 target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 
 # unittest_hitset

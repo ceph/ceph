@@ -49,7 +49,7 @@ add_executable(unittest_rbd_mirror
   image_sync/test_mock_SyncPointPruneRequest.cc
   pool_watcher/test_mock_RefreshImagesRequest.cc
   )
-add_ceph_unittest(unittest_rbd_mirror)
+add_ceph_unittest(unittest_rbd_mirror LABELS "long" COST 196.0)
 
 add_dependencies(unittest_rbd_mirror
   cls_journal

@@ -515,17 +515,17 @@ endif()
 if(WITH_RBD)
   # Run rbd-unit-tests separate so they an run in parallel
   # For values see: src/include/rbd/features.h
-  add_ceph_test(run-rbd-unit-tests-N.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh N)
-  add_ceph_test(run-rbd-unit-tests-0.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 0)
-  add_ceph_test(run-rbd-unit-tests-1.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 1)
-  add_ceph_test(run-rbd-unit-tests-61.sh  ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 61)
-  add_ceph_test(run-rbd-unit-tests-109.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 109)
-  add_ceph_test(run-rbd-unit-tests-127.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 127)
+  add_ceph_test(run-rbd-unit-tests-N.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh N COST 500.0)
+  add_ceph_test(run-rbd-unit-tests-0.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 0 COST 181.0)
+  add_ceph_test(run-rbd-unit-tests-1.sh   ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 1 COST 255.0)
+  add_ceph_test(run-rbd-unit-tests-61.sh  ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 61 COST 267.0)
+  add_ceph_test(run-rbd-unit-tests-109.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 109 COST 346.0)
+  add_ceph_test(run-rbd-unit-tests-127.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh 127 COST 350.0)
   if(FREEBSD)
-    add_ceph_test(rbd-ggate.sh ${CMAKE_CURRENT_SOURCE_DIR}/rbd-ggate.sh)
+    add_ceph_test(rbd-ggate.sh ${CMAKE_CURRENT_SOURCE_DIR}/rbd-ggate.sh COST 160.0)
   endif(FREEBSD)
 endif(WITH_RBD)
-add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
+add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests COST 264.0)
 
 # flaky, see https://tracker.ceph.com/issues/44243
 #add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_objectstore_memstore.sh)
@@ -533,7 +533,7 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 # flaky
 #add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 
-add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
+add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh COST 230.0)
 
 set_property(
   TEST ${tox_tests}
@@ -657,7 +657,7 @@ add_executable(unittest_bufferlist
   bufferlist.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_bufferlist)
+add_ceph_unittest(unittest_bufferlist LABELS "long" COST 400.0)
 target_link_libraries(unittest_bufferlist global)
 
 # compiletest_cxx11_client

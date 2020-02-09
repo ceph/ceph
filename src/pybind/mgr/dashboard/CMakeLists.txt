@@ -106,6 +106,6 @@ add_custom_target(mgr-dashboard-frontend-build
 add_dependencies(tests mgr-dashboard-frontend-build)
 
 if(WITH_TESTS)
-  include(AddCephTest)
-  add_tox_test(mgr-dashboard TOX_ENVS lint check)
+ include(AddCephTest)
+ add_tox_test(mgr-dashboard TOX_ENVS lint check LABELS "long" COST 300.0)
 endif()
