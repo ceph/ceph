@@ -63,7 +63,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
     uint32_t n = num_pg_by_state.size();
     encode(n, bl);
     for (auto p : num_pg_by_state) {
-      encode((uint32_t)p.first, bl);
+      encode((int32_t)p.first, bl);
       encode(p.second, bl);
     }
   }
