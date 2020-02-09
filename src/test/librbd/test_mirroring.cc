@@ -1242,6 +1242,8 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   uint64_t snap_id;
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
+  uint64_t snap_id2;
+  ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id2));
   librbd::snap_mirror_namespace_t mirror_snap;
   ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
                                                sizeof(mirror_snap)));
