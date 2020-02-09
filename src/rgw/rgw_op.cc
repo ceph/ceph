@@ -71,8 +71,6 @@ using rgw::IAM::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
-using rgw::IAM::Policy;
-
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
