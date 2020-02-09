@@ -657,7 +657,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if outs:
                         print(outs, file=sys.stderr)
                     if outbuf:
-                        print(outbuf)
+                        print(outbuf.decode('utf-8'))
 
     return ret, outbuf, outs
 
