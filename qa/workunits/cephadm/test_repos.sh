@@ -25,8 +25,4 @@ sudo $CEPHADM -v add-repo --dev master
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
-sudo $CEPHADM -v add-repo --dev $CEPH_REF
-test_install_uninstall
-sudo $CEPHADM -v rm-repo
-
 echo OK.
