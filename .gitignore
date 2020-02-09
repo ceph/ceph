@@ -68,6 +68,8 @@ GTAGS
 
 .idea
 
+.vscode
+
 # dashboard
 /src/pybind/mgr/dashboard/frontend/.protractor-report
 /src/pybind/mgr/dashboard/frontend/src/environments/environment.ts
