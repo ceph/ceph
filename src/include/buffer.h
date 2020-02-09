@@ -166,7 +166,6 @@ inline namespace v14_2_0 {
   ceph::unique_leakable_ptr<raw> create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
   ceph::unique_leakable_ptr<raw> create_page_aligned(unsigned len);
   ceph::unique_leakable_ptr<raw> create_small_page_aligned(unsigned len);
-  ceph::unique_leakable_ptr<raw> create_unshareable(unsigned len);
   ceph::unique_leakable_ptr<raw> claim_buffer(unsigned len, char *buf, deleter del);
 
 #ifdef HAVE_SEASTAR
@@ -443,7 +442,6 @@ inline namespace v14_2_0 {
       // _root.next can be thought as _head
       ptr_hook _root;
       ptr_hook* _tail;
-      std::size_t _size;
 
     public:
       template <class T>
@@ -512,17 +510,14 @@ inline namespace v14_2_0 {
 
       buffers_t()
         : _root(&_root),
-	  _tail(&_root),
-	  _size(0) {
+	  _tail(&_root) {
       }
       buffers_t(const buffers_t&) = delete;
       buffers_t(buffers_t&& other)
 	: _root(other._root.next == &other._root ? &_root : other._root.next),
-	  _tail(other._tail == &other._root ? &_root : other._tail),
-	  _size(other._size) {
+	  _tail(other._tail == &other._root ? &_root : other._tail) {
 	other._root.next = &other._root;
 	other._tail = &other._root;
-	other._size = 0;
 
 	_tail->next = &_root;
       }
@@ -539,14 +534,12 @@ inline namespace v14_2_0 {
 	// this updates _root.next when called on empty
 	_tail->next = &item;
 	_tail = &item;
-	_size++;
       }
 
       void push_front(reference item) {
 	item.next = _root.next;
 	_root.next = &item;
 	_tail = _tail == &_root ? &item : _tail;
-	_size++;
       }
 
       // *_after
@@ -556,7 +549,6 @@ inline namespace v14_2_0 {
 	it->next = to_erase->next;
 	_root.next = _root.next == to_erase ? to_erase->next : _root.next;
 	_tail = _tail == to_erase ? (ptr_hook*)&*it : _tail;
-	_size--;
 	return it->next;
       }
 
@@ -565,11 +557,10 @@ inline namespace v14_2_0 {
 	it->next = &item;
 	_root.next = it == end() ? &item : _root.next;
 	_tail = const_iterator(_tail) == it ? &item : _tail;
-	_size++;
       }
 
       void splice_back(buffers_t& other) {
-	if (other._size == 0) {
+	if (other.empty()) {
 	  return;
 	}
 
@@ -577,14 +568,11 @@ inline namespace v14_2_0 {
 	// will update root.next if empty() == true
 	_tail->next = other._root.next;
 	_tail = other._tail;
-	_size += other._size;
 
 	other._root.next = &other._root;
 	other._tail = &other._root;
-	other._size = 0;
       }
 
-      std::size_t size() const { return _size; }
       bool empty() const { return _tail == &_root; }
 
       const_iterator begin() const {
@@ -634,7 +622,6 @@ inline namespace v14_2_0 {
 	}
 	_root.next = &_root;
 	_tail = &_root;
-	_size = 0;
       }
       iterator erase_after_and_dispose(iterator it) {
 	auto* to_dispose = &*std::next(it);
@@ -656,7 +643,6 @@ inline namespace v14_2_0 {
 
 	_tail->next = &_root;
 	other._tail->next = &other._root;
-	std::swap(_size, other._size);
       }
     };
 
@@ -670,8 +656,7 @@ inline namespace v14_2_0 {
     // bufferlist holds have this trait -- if somebody ::push_back(const ptr&),
     // he expects it won't change.
     ptr* _carriage;
-    unsigned _len;
-    unsigned _memcopy_count; //the total of memcopy using rebuild().
+    unsigned _len, _num;
 
     template <bool is_const>
     class CEPH_BUFFER_API iterator_impl {
@@ -951,21 +936,21 @@ inline namespace v14_2_0 {
     list()
       : _carriage(&always_empty_bptr),
         _len(0),
-        _memcopy_count(0) {
+        _num(0) {
     }
     // cppcheck-suppress noExplicitConstructor
     // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc)
       : _carriage(&always_empty_bptr),
         _len(0),
-        _memcopy_count(0) {
+        _num(0) {
       reserve(prealloc);
     }
 
     list(const list& other)
       : _carriage(&always_empty_bptr),
         _len(other._len),
-        _memcopy_count(other._memcopy_count) {
+        _num(other._num) {
       _buffers.clone_from(other._buffers);
     }
     list(list&& other) noexcept;
@@ -979,6 +964,7 @@ inline namespace v14_2_0 {
         _carriage = &always_empty_bptr;
         _buffers.clone_from(other._buffers);
         _len = other._len;
+        _num = other._num;
       }
       return *this;
     }
@@ -986,13 +972,13 @@ inline namespace v14_2_0 {
       _buffers = std::move(other._buffers);
       _carriage = other._carriage;
       _len = other._len;
-      _memcopy_count = other._memcopy_count;
+      _num = other._num;
       other.clear();
       return *this;
     }
 
     uint64_t get_wasted_space() const;
-    unsigned get_num_buffers() const { return _buffers.size(); }
+    unsigned get_num_buffers() const { return _num; }
     const ptr_node& front() const { return _buffers.front(); }
     const ptr_node& back() const { return _buffers.back(); }
 
@@ -1004,7 +990,6 @@ inline namespace v14_2_0 {
       return _carriage->unused_tail_length();
     }
 
-    unsigned get_memcopy_count() const {return _memcopy_count; }
     const buffers_t& buffers() const { return _buffers; }
     void swap(list& other) noexcept;
     unsigned length() const {
@@ -1043,18 +1028,20 @@ inline namespace v14_2_0 {
       _carriage = &always_empty_bptr;
       _buffers.clear_and_dispose();
       _len = 0;
-      _memcopy_count = 0;
+      _num = 0;
     }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
       _buffers.push_back(*ptr_node::create(bp).release());
       _len += bp.length();
+      _num += 1;
     }
     void push_back(ptr&& bp) {
       if (bp.length() == 0)
 	return;
       _len += bp.length();
+      _num += 1;
       _buffers.push_back(*ptr_node::create(std::move(bp)).release());
       _carriage = &always_empty_bptr;
     }
@@ -1066,6 +1053,7 @@ inline namespace v14_2_0 {
 	return;
       _carriage = bp.get();
       _len += bp->length();
+      _num += 1;
       _buffers.push_back(*bp.release());
     }
     void push_back(raw* const r) = delete;
@@ -1073,6 +1061,7 @@ inline namespace v14_2_0 {
       _buffers.push_back(*ptr_node::create(std::move(r)).release());
       _carriage = &_buffers.back();
       _len += _buffers.back().length();
+      _num += 1;
     }
 
     void zero();
@@ -1091,12 +1080,8 @@ inline namespace v14_2_0 {
 
     void reserve(size_t prealloc);
 
-    // assignment-op with move semantics
-    const static unsigned int CLAIM_DEFAULT = 0;
-    const static unsigned int CLAIM_ALLOW_NONSHAREABLE = 1;
-
-    void claim(list& bl, unsigned int flags = CLAIM_DEFAULT);
-    void claim_append(list& bl, unsigned int flags = CLAIM_DEFAULT);
+    void claim(list& bl);
+    void claim_append(list& bl);
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);
 
@@ -1109,6 +1094,7 @@ inline namespace v14_2_0 {
           _buffers.push_back(*ptr_node::create(bp).release());
         }
         _len = bl._len;
+        _num = bl._num;
       }
     }
 
@@ -1191,11 +1177,11 @@ inline namespace v14_2_0 {
     template<typename VectorT>
     void prepare_iov(VectorT *piov) const {
 #ifdef __CEPH__
-      ceph_assert(_buffers.size() <= IOV_MAX);
+      ceph_assert(_num <= IOV_MAX);
 #else
-      assert(_buffers.size() <= IOV_MAX);
+      assert(_num <= IOV_MAX);
 #endif
-      piov->resize(_buffers.size());
+      piov->resize(_num);
       unsigned n = 0;
       for (auto& p : _buffers) {
 	(*piov)[n].iov_base = (void *)p.c_str();
