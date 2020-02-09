@@ -107,7 +107,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     // (on my local run of ceph-dev, this is subject to change i would assume). I'd imagine there is a
     // better way of doing this.
     await this.navigateTo();
-    await this.waitClickableAndClick(this.getFirstTableCellWithText('devicehealth')); // checks ansible
+    await this.waitClickableAndClick(this.getFirstTableCellWithText('devicehealth'));
     await element(by.cssContainingText('button', 'Edit')).click();
     await this.clearInput(element(by.id('mark_out_threshold')));
     await element(by.id('mark_out_threshold')).sendKeys('2419200');
@@ -127,7 +127,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     await this.clearInput(element(by.id('warn_threshold')));
     await element(by.id('warn_threshold')).sendKeys('7257600');
 
-    // Checks that clearing represents in details tab of ansible
+    // Checks that clearing represents in details tab
     await this.waitClickableAndClick(element(by.cssContainingText('button', 'Update')));
     await this.navigateTo();
     await this.waitVisibility(this.getFirstTableCellWithText('devicehealth'));

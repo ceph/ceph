@@ -291,37 +291,37 @@ Current Implementation Status
 
 This is an overview of the current implementation status of the orchestrators.
 
-=================================== ========= ====== ========= =====
- Command                             Ansible   Rook   DeepSea   SSH
-=================================== ========= ====== ========= =====
- host add                            ✔         ⚪       ⚪         ✔
- host ls                             ✔         ✔       ⚪         ✔
- host rm                             ✔         ⚪       ⚪         ✔
- mgr update                          ⚪         ⚪       ⚪         ✔
- mon update                          ⚪         ✔       ⚪         ✔
- osd create                          ✔         ✔       ⚪         ✔
- osd rm                              ✔         ⚪       ⚪         ✔
- device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ✔
- device ls                           ✔         ✔       ✔         ✔
- service ls                          ⚪         ✔       ✔         ✔
- service-instance status             ⚪         ⚪       ⚪         ✔
- service-instance {stop,start,...}   ⚪         ⚪       ⚪         ✔
- iscsi add                           ⚪         ⚪       ⚪         ⚪
- iscsi rm                            ⚪         ⚪       ⚪         ⚪
- iscsi update                        ⚪         ⚪       ⚪         ⚪
- mds add                             ⚪         ✔       ⚪         ✔
- mds rm                              ⚪         ✔       ⚪         ✔
- mds update                          ⚪         ✔       ⚪         ✔
- nfs add                             ⚪         ✔       ⚪         ⚪
- nfs rm                              ⚪         ✔       ⚪         ⚪
- nfs update                          ⚪         ✔       ⚪         ⚪
- rbd-mirror add                      ⚪         ⚪       ⚪         ✔
- rbd-mirror rm                       ⚪         ⚪       ⚪         ✔
- rbd-mirror update                   ⚪         ⚪       ⚪         ✔
- rgw add                             ✔         ✔       ⚪         ✔
- rgw rm                              ✔         ✔       ⚪         ✔
- rgw update                          ⚪         ⚪       ⚪         ✔
-=================================== ========= ====== ========= =====
+=================================== ====== =========
+ Command                             Rook   Cephadm
+=================================== ====== =========
+ host add                            ⚪      ✔
+ host ls                             ✔      ✔
+ host rm                             ⚪      ✔
+ mgr update                          ⚪      ✔
+ mon update                          ✔      ✔
+ osd create                          ✔      ✔
+ osd rm                              ⚪      ✔
+ device {ident,fault}-(on,off}       ⚪      ✔
+ device ls                           ✔      ✔
+ service ls                          ✔      ✔
+ service-instance status             ⚪      ✔
+ service-instance {stop,start,...}   ⚪      ✔
+ iscsi add                           ⚪      ⚪
+ iscsi rm                            ⚪      ⚪
+ iscsi update                        ⚪      ⚪
+ mds add                             ✔      ✔
+ mds rm                              ✔      ✔
+ mds update                          ✔      ✔
+ nfs add                             ✔      ⚪
+ nfs rm                              ✔      ⚪
+ nfs update                          ✔      ⚪
+ rbd-mirror add                      ⚪      ✔
+ rbd-mirror rm                       ⚪      ✔
+ rbd-mirror update                   ⚪      ✔
+ rgw add                             ✔      ✔
+ rgw rm                              ✔      ✔
+ rgw update                          ⚪      ✔
+=================================== ====== =========
 
 where
 

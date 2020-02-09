@@ -5524,7 +5524,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     for (auto& k : {
 	"pod_name", "pod_namespace", // set by rook
-	"container_name"             // set by ceph-ansible
+	"container_name"             // set by cephadm, ceph-ansible
 	}) {
       if (auto p = m.find(k); p != m.end()) {
 	f->dump_string(k, p->second);
