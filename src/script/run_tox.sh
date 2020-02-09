@@ -29,10 +29,6 @@ following command will run tox with envlist of "py27,py3" using the "tox.ini" in
 
   $prog_name --tox-envs py27,py3
 
-following command will run tox with envlist of "py27" using "src/pybind/mgr/ansible/tox.ini"
-
-  $prog_name --tox-envs py27 ansible
-
 following command will run tox with envlist of "py27" using "/ceph/src/python-common/tox.ini"
 
   $prog_name --tox-envs py27 --tox-path /ceph/src/python-common
