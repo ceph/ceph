@@ -165,6 +165,7 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, RemoveSnapshot) {
     cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer_uuid"},
     "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
+  snap_create(mock_image_ctx, ns, "mirror_snap2");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
 
@@ -334,6 +335,7 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, RemoveSnapshotError) {
     cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer_uuid"},
     "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
+  snap_create(mock_image_ctx, ns, "mirror_snap2");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
 
