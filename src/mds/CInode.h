@@ -796,7 +796,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   int get_num_caps_wanted() const { return num_caps_wanted; }
   void adjust_num_caps_wanted(int d);
 
-  Capability *add_client_cap(client_t client, Session *session, SnapRealm *conrealm=0);
+  Capability *add_client_cap(client_t client, Session *session,
+			     SnapRealm *conrealm=nullptr, bool new_inode=false);
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 
