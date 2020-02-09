@@ -345,7 +345,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   std::lock_guard l{lock};
   size_t bytes = pending_bl.length();
   ldout(cct, 20) << __func__ << " we need " << bytes << " bytes. iov size: "
-                 << pending_bl.buffers().size() << dendl;
+                 << pending_bl.get_num_buffers() << dendl;
   if (!bytes)
     return 0;
 
@@ -388,7 +388,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   }
 
   ldout(cct, 20) << __func__ << " left bytes: " << pending_bl.length() << " in buffers "
-                 << pending_bl.buffers().size() << " tx chunks " << tx_buffers.size() << dendl;
+                 << pending_bl.get_num_buffers() << " tx chunks " << tx_buffers.size() << dendl;
 
   int r = post_work_request(tx_buffers);
   if (r < 0)

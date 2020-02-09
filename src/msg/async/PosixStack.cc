@@ -109,7 +109,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   ssize_t send(bufferlist &bl, bool more) override {
     size_t sent_bytes = 0;
     auto pb = std::cbegin(bl.buffers());
-    uint64_t left_pbrs = std::size(bl.buffers());
+    uint64_t left_pbrs = bl.get_num_buffers();
     while (left_pbrs) {
       struct msghdr msg;
       struct iovec msgvec[IOV_MAX];
