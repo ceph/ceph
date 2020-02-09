@@ -48,6 +48,38 @@ functions, which are themselves defined in
 others are binaries that are compiled during the build process.  The
 ``add_ceph_test`` function is used to declare unit test scripts, while
 ``add_ceph_unittest`` is used for unit test binaries.
+``add_tox_test`` declare tests that require ``tox`` for testing and sets up 
+the full environment for this during testing.
+::
+
+        add_ceph_test(test_name test_path <args> <options>)
+        add_ceph_unittest(test_name <args> <options>)
+        add_tox_test(test_name <args> <options>)
+        args: any parameter, not being an options keyword
+        options:
+            [COST <float>]
+               Order of testing is set by COST. 
+               Highest COST are tested first.
+            [TIMEOUT sec]
+               Restrict the max runtime of this test to <sec>
+            [LABELS "labels"]
+               Append "labels" to a test.
+               Labels can be selected with ctest -L or -LE
+
+Since COST is used to determine the testing order, values can be chosen rather
+arbitrarily. Currently long running programs are given a value equal to the
+execution time in a OpenStack VM. The idea is to first run the long standing 
+tests, and then fill up free cores with programs with shorter execution time.
+Turning this into a bin-packing challenge, So the exact value is not important,
+it is about the relative COST value.
+
+Currently some LABELS are introduced::
+
+        unittest  as declared above (DEF COST = 5)
+        tox       the test used tox to do the testing (DEF COST = 25)
+        long      when the test executes for more than 60 secs (DEF COST = 50)
+	vstart    when the test uses vsstart.sh to setup a cluster
+
 
 Unit testing of CLI tools
 -------------------------
