@@ -1317,7 +1317,9 @@ def run_in_thread(func, *args, **kwargs):
     if timeout == 0 or timeout == None:
         # python threading module will just get blocked if timeout is `None`,
         # otherwise it will keep polling until timeout or thread stops.
-        timeout = 2 ** 32
+        # wait for INT32_MAX, as python 3.6.8 use int32_t to present the
+        # timeout in integer when converting it to nanoseconds
+        timeout = (1 << (32 - 1)) - 1
     t = RadosThread(func, *args, **kwargs)
 
     # allow the main thread to exit (presumably, avoid a join() on this
