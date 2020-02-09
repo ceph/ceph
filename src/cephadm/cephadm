@@ -2014,10 +2014,12 @@ def command_deploy():
         monitoring_args = [
             '--user',
             str(uid),
-            '--cpus',
-            metadata.get('cpus', '2'),
-            '--memory',
-            metadata.get('memory', '4GB')
+            # FIXME: disable cpu/memory limits for the time being (not supported
+            # by ubuntu 18.04 kernel!)
+            #'--cpus',
+            #metadata.get('cpus', '2'),
+            #'--memory',
+            #metadata.get('memory', '4GB')
         ]
 
         c = get_container(args.fsid, daemon_type, daemon_id, container_args=monitoring_args)
