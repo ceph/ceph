@@ -635,7 +635,7 @@ class CephPrefix(CephArgtype):
 class argdesc(object):
     """
     argdesc(typename, name='name', n=numallowed|N,
-            req=False, param=True, helptext=helptext, **kwargs (type-specific))
+            req=False, positional=False, helptext=helptext, **kwargs (type-specific))
 
     validation rules:
     typename: type(**kwargs) will be constructed
@@ -644,7 +644,7 @@ class argdesc(object):
     name is used for parse errors and for constructing JSON output
     n is a numeric literal or 'n|N', meaning "at least one, but maybe more"
     req=False means the argument need not be present in the list
-    param=True forces --name= in the helpstr
+    positional=False forces --name= in the helpstr
     helptext is the associated help for the command
     anything else are arguments to pass to the type constructor.
 
@@ -653,7 +653,7 @@ class argdesc(object):
     valid() will later be called with input to validate against it,
     and will store the validated value in self.instance.val for extraction.
     """
-    def __init__(self, t, name=None, n=1, req=True, param=False, **kwargs):
+    def __init__(self, t, name=None, n=1, req=True, positional=True, **kwargs):
         if isinstance(t, basestring):
             self.t = CephPrefix
             self.typeargs = {'prefix': t}
@@ -670,7 +670,7 @@ class argdesc(object):
         else:
             self.n = int(n)
 
-        self.param = param in (True, 'True', 'true')
+        self.positional = positional in (True, 'True', 'true')
 
         self.numseen = 0
 
@@ -729,7 +729,7 @@ class argdesc(object):
         s = chunk
         if self.N:
             s += '...'
-        if self.param and not s.startswith("--"):
+        if not self.positional and not s.startswith("--"):
             s = "--{0}={1}".format(self.name.replace("_", "-"), s)
         if not self.req:
             s = '[' + s + ']'
@@ -940,16 +940,16 @@ def store_arg(desc, d):
 
 def _validate_non_positional_args(args, sig, d, partial=False):
     # short circuit
-    if not any(map(lambda x: x.param, sig)):
+    if all(map(lambda x: x.positional, sig)):
         return args, sig, d, 0
 
-    # We know there is at least 1 param argdesc, so lets deal with them now
-    # so they're not parsed positionally
+    # We know there is at least 1 non-posiitonal argdesc, so lets deal
+    # with them now so they're not parsed positionally
     matchcnt = 0
     descs = []
     parser = argparse.ArgumentParser()
     for desc in sig.copy():
-        if desc.param:
+        if not desc.positional:
             if desc.t == CephBool:
                 parser.add_argument("--{}".format(desc.name),
                                     dest="{}".format(desc.name),
