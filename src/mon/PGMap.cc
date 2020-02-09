@@ -214,7 +214,7 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
     f->open_array_section("pgs_by_state");
 
   // list is descending numeric order (by count)
-  std::multimap<int,int> state_by_count;  // count -> state
+  std::multimap<int,uint64_t> state_by_count;  // count -> state
   for (auto p = num_pg_by_state.begin();
        p != num_pg_by_state.end();
        ++p) {
