@@ -1115,7 +1115,7 @@ protected:
   }
 
   bool completion_is_done(int slot) override {
-    return completions[slot]->is_complete();
+    return completions[slot] && completions[slot]->is_complete();
   }
 
   int completion_wait(int slot) override {
