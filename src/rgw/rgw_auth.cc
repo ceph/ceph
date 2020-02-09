@@ -542,9 +542,18 @@ bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
 	       id.get_tenant() == user_info.user_id.tenant) {
       return true;
     } else if (id.is_user() &&
-	       (id.get_tenant() == user_info.user_id.tenant) &&
-	       (id.get_id() == user_info.user_id.id)) {
-      return true;
+	       (id.get_tenant() == user_info.user_id.tenant)) {
+      if (id.get_id() == user_info.user_id.id) {
+        return true;
+      }
+      for (auto subuser : user_info.subusers) {
+        std::string user = user_info.user_id.id;
+        user.append(":");
+        user.append(subuser.second.name);
+        if (user == id.get_id()) {
+          return true;
+        }
+      }
     }
   }
   return false;
