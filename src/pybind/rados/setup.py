@@ -64,6 +64,7 @@ def get_python_flags(libs):
     py_libs = sum((libs.split() for libs in
                    distutils.sysconfig.get_config_vars('LIBS', 'SYSLIBS')), [])
     compiler = new_compiler()
+    distutils.sysconfig.customize_compiler(compiler)
     return dict(
         include_dirs=[distutils.sysconfig.get_python_inc()],
         library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
