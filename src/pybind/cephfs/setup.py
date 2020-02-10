@@ -15,14 +15,14 @@ import distutils.sysconfig
 
 def filter_unsupported_flags(compiler, flags):
     if 'clang' in compiler:
-        return filterfalse(lambda f:
-                           f in ('-mcet',
-                                 '-fstack-clash-protection',
-                                 '-fno-var-tracking-assignments',
-                                 '-Wno-deprecated-register',
-                                 '-Wno-gnu-designator') or
-                           f.startswith('-fcf-protection'),
-                           flags)
+        return list(filterfalse(lambda f:
+                                f in ('-mcet',
+                                      '-fstack-clash-protection',
+                                      '-fno-var-tracking-assignments',
+                                      '-Wno-deprecated-register',
+                                      '-Wno-gnu-designator') or
+                                f.startswith('-fcf-protection'),
+                                flags))
     else:
         return flags
 
