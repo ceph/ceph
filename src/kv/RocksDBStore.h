@@ -16,6 +16,7 @@
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
+#include "rocksdb/db.h"
 #include "kv/rocksdb_cache/BinnedLRUCache.h"
 #include <errno.h>
 #include "common/errno.h"
@@ -141,6 +142,15 @@ private:
 				      std::vector<std::string>& columns);
   int create_shards(const rocksdb::Options& opt,
 		    const vector<ColumnFamily>& sharding_def);
+  int apply_sharding(const rocksdb::Options& opt,
+		     const std::string& sharding_text);
+  int verify_sharding(const rocksdb::Options& opt,
+		      const std::string& sharding_text,
+		      std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
+		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
+		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
+		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
+
   // manage async compactions
   ceph::mutex compact_queue_lock =
     ceph::make_mutex("RocksDBStore::compact_thread_lock");
