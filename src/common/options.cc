@@ -4512,7 +4512,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_min_alloc_size"),
 
     Option("bluestore_min_alloc_size_ssd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(16_K)
+    .set_default(4_K)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for non-rotational (solid state)  media")
     .add_see_also("bluestore_min_alloc_size"),
