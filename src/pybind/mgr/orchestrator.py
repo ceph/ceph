@@ -7,6 +7,7 @@ Please see the ceph-mgr module developer's guide for more information.
 import copy
 import functools
 import logging
+import pickle
 import sys
 import time
 from collections import namedtuple
@@ -201,6 +202,23 @@ class _Promise(object):
         # _Promise is not a continuation monad, as `_result` is of type
         # T instead of (T -> r) -> r. Therefore we need to store the first promise here.
         self._first_promise = _first_promise or self  # type: '_Promise'
+
+    @property
+    def _exception(self):
+        # type: () -> Optional[Exception]
+        return getattr(self, '_exception_', None)
+
+    @_exception.setter
+    def _exception(self, e):
+        self._exception_ = e
+        self._serialized_exception_ = pickle.dumps(e) if e is not None else None
+
+    @property
+    def _serialized_exception(self):
+        # type: () -> Optional[bytes]
+        return getattr(self, '_serialized_exception_', None)
+
+
 
     @property
     def _on_complete(self):
@@ -569,6 +587,11 @@ class Completion(_Promise):
         return self._last_promise()._exception
 
     @property
+    def serialized_exception(self):
+        # type: () -> Optional[bytes]
+        return self._last_promise()._serialized_exception
+
+    @property
     def has_result(self):
         # type: () -> bool
         """
@@ -631,9 +654,9 @@ def raise_if_exception(c):
     :raises OrchestratorError: Some user error or a config error.
     :raises Exception: Some internal error
     """
-    if c.exception is not None:
+    if c.serialized_exception is not None:
         try:
-            e = copy.deepcopy(c.exception)
+            e = pickle.loads(c.serialized_exception)
         except (KeyError, AttributeError):
             raise Exception('{}: {}'.format(type(c.exception), c.exception))
         raise e
