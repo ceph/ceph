@@ -254,7 +254,7 @@ cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
                    --config-json -
 TRIES=0
 while true; do
-    if curl --insecure option 'https://localhost:3000' | grep -q 'grafana'; then
+    if curl --insecure 'https://localhost:3000' | grep -q 'grafana'; then
 	break
     fi
     TRIES=$(($TRIES + 1))
