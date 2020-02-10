@@ -810,6 +810,7 @@ public:
         bool modify_tail;
         bool completeMultipart;
         bool appendable;
+        string storage_class;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),

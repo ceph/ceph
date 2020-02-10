@@ -2999,6 +2999,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     bufferlist bl;
     encode(*meta.manifest, bl);
     op.setxattr(RGW_ATTR_MANIFEST, bl);
+  } else if (meta.flags == PUT_OBJ_CREATE_EXCL) {
+    storage_class = meta.storage_class;
   }
 
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {

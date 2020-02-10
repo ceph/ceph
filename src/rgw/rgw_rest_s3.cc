@@ -3837,7 +3837,8 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       s->formatter->dump_string("UploadId", mp.get_upload_id());
       dump_owner(s, s->user->get_id(), s->user->get_display_name(), "Initiator");
       dump_owner(s, s->user->get_id(), s->user->get_display_name());
-      s->formatter->dump_string("StorageClass", "STANDARD");
+      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->obj.meta.storage_class);
+      s->formatter->dump_string("StorageClass", storage_class.c_str());
       dump_time(s, "Initiated", &iter->obj.meta.mtime);
       s->formatter->close_section();
     }
