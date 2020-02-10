@@ -167,6 +167,11 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
       }
     }
 
+    // pre-pacific clients don't know about positional
+    if (!HAVE_FEATURE(features, SERVER_PACIFIC)) {
+      desckv.erase("positional");
+    }
+
     // dump all the keys including name into the array
     for (auto [key, value] : desckv) {
       f->dump_string(key, value);
