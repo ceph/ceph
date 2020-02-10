@@ -10,11 +10,13 @@ import tempfile
 import textwrap
 from distutils.ccompiler import new_compiler
 from distutils.errors import CompileError, LinkError
+from itertools import filterfalse, takewhile
 import distutils.sysconfig
 
 
 def filter_unsupported_flags(compiler, flags):
-    if 'clang' in compiler:
+    args = takewhile(lambda argv: not argv.startswith('-'), [compiler] + flags)
+    if any('clang' in arg for arg in args):
         return list(filterfalse(lambda f:
                                 f in ('-mcet',
                                       '-fstack-clash-protection',
