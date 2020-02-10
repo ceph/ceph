@@ -1239,6 +1239,10 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             f.write(' '.join(poststop.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o600)
 
+    with open(data_dir + '/unit.image', 'w') as f:
+        f.write(c.image + '\n')
+        os.fchmod(f.fileno(), 0o600)
+
     # systemd
     install_base_units(fsid)
     unit = get_unit_file(fsid, uid, gid)
