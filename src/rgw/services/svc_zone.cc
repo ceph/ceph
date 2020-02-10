@@ -194,8 +194,9 @@ int RGWSI_Zone::do_start()
     return ret;
   }
 
+  auto sync_modules = sync_modules_svc->get_manager();
   RGWSyncModuleRef sm;
-  if (!sync_modules_svc->get_manager()->get_module(zone_public_config->tier_type, &sm)) {
+  if (!sync_modules->get_module(zone_public_config->tier_type, &sm)) {
     lderr(cct) << "ERROR: tier type not found: " << zone_public_config->tier_type << dendl;
     return -EINVAL;
   }
@@ -232,7 +233,7 @@ int RGWSI_Zone::do_start()
     bool zone_is_target = target_zones.find(z.id) != target_zones.end();
 
     if (zone_is_source || zone_is_target) {
-      if (zone_is_source) {
+      if (zone_is_source && sync_modules->supports_data_export(z.tier_type)) {
         data_sync_source_zones.push_back(&z);
       }
       if (zone_is_target) {
