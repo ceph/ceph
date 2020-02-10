@@ -439,6 +439,12 @@ information stored in OSDs.::
     --cap mon 'allow *'
   ceph-authtool /path/to/admin.keyring -n client.admin \
     --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
+  # add one or more ceph-mgr's key to the keyring. in this case, an encoded key
+  # for mgr.x is added, you can find the encoded key in
+  # /etc/ceph/${cluster}.${mgr_name}.keyring on the machine where ceph-mgr is
+  # deployed
+  ceph-authtool /path/to/admin.keyring --add-key 'AQDN8kBe9PLWARAAZwxXMr+n85SBYbSlLcZnMA==' -n mgr.x \
+    --cap mon 'allow profile mgr' --cap osd 'allow *' --cap mds 'allow *'
   # if your monitors' ids are not single characters like 'a', 'b', 'c', please
   # specify them in the command line by passing them as arguments of the "--mon-ids"
   # option. if you are not sure, please check your ceph.conf to see if there is any
