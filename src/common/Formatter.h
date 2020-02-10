@@ -27,10 +27,10 @@ namespace ceph {
       Formatter& formatter;
 
     public:
-      ObjectSection(Formatter& f, const char *name) : formatter(f) {
+      ObjectSection(Formatter& f, std::string_view name) : formatter(f) {
         formatter.open_object_section(name);
       }
-      ObjectSection(Formatter& f, const char *name, const char *ns) : formatter(f) {
+      ObjectSection(Formatter& f, std::string_view name, const char *ns) : formatter(f) {
         formatter.open_object_section_in_ns(name, ns);
       }
       ~ObjectSection() {
@@ -41,10 +41,10 @@ namespace ceph {
       Formatter& formatter;
 
     public:
-      ArraySection(Formatter& f, const char *name) : formatter(f) {
+      ArraySection(Formatter& f, std::string_view name) : formatter(f) {
         formatter.open_array_section(name);
       }
-      ArraySection(Formatter& f, const char *name, const char *ns) : formatter(f) {
+      ArraySection(Formatter& f, std::string_view name, const char *ns) : formatter(f) {
         formatter.open_array_section_in_ns(name, ns);
       }
       ~ArraySection() {
@@ -75,42 +75,42 @@ namespace ceph {
     virtual void output_header() = 0;
     virtual void output_footer() = 0;
 
-    virtual void open_array_section(const char *name) = 0;
-    virtual void open_array_section_in_ns(const char *name, const char *ns) = 0;
-    virtual void open_object_section(const char *name) = 0;
-    virtual void open_object_section_in_ns(const char *name, const char *ns) = 0;
+    virtual void open_array_section(std::string_view name) = 0;
+    virtual void open_array_section_in_ns(std::string_view name, const char *ns) = 0;
+    virtual void open_object_section(std::string_view name) = 0;
+    virtual void open_object_section_in_ns(std::string_view name, const char *ns) = 0;
     virtual void close_section() = 0;
-    virtual void dump_unsigned(const char *name, uint64_t u) = 0;
-    virtual void dump_int(const char *name, int64_t s) = 0;
-    virtual void dump_float(const char *name, double d) = 0;
-    virtual void dump_string(const char *name, std::string_view s) = 0;
-    virtual void dump_bool(const char *name, bool b)
+    virtual void dump_unsigned(std::string_view name, uint64_t u) = 0;
+    virtual void dump_int(std::string_view name, int64_t s) = 0;
+    virtual void dump_float(std::string_view name, double d) = 0;
+    virtual void dump_string(std::string_view name, std::string_view s) = 0;
+    virtual void dump_bool(std::string_view name, bool b)
     {
       dump_format_unquoted(name, "%s", (b ? "true" : "false"));
     }
     template<typename T>
-    void dump_object(const char *name, const T& foo) {
+    void dump_object(std::string_view name, const T& foo) {
       open_object_section(name);
       foo.dump(this);
       close_section();
     }
-    virtual std::ostream& dump_stream(const char *name) = 0;
-    virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) = 0;
-    virtual void dump_format(const char *name, const char *fmt, ...);
-    virtual void dump_format_ns(const char *name, const char *ns, const char *fmt, ...);
-    virtual void dump_format_unquoted(const char *name, const char *fmt, ...);
+    virtual std::ostream& dump_stream(std::string_view name) = 0;
+    virtual void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) = 0;
+    virtual void dump_format(std::string_view name, const char *fmt, ...);
+    virtual void dump_format_ns(std::string_view name, const char *ns, const char *fmt, ...);
+    virtual void dump_format_unquoted(std::string_view name, const char *fmt, ...);
     virtual int get_len() const = 0;
     virtual void write_raw_data(const char *data) = 0;
     /* with attrs */
-    virtual void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+    virtual void open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs)
     {
       open_array_section(name);
     }
-    virtual void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+    virtual void open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs)
     {
       open_object_section(name);
     }
-    virtual void dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs)
+    virtual void dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs)
     {
       dump_string(name, s);
     }
@@ -143,26 +143,26 @@ namespace ceph {
     void flush(std::ostream& os) override;
     using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
-    void open_array_section(const char *name) override;
-    void open_array_section_in_ns(const char *name, const char *ns) override;
-    void open_object_section(const char *name) override;
-    void open_object_section_in_ns(const char *name, const char *ns) override;
+    void open_array_section(std::string_view name) override;
+    void open_array_section_in_ns(std::string_view name, const char *ns) override;
+    void open_object_section(std::string_view name) override;
+    void open_object_section_in_ns(std::string_view name, const char *ns) override;
     void close_section() override;
-    void dump_unsigned(const char *name, uint64_t u) override;
-    void dump_int(const char *name, int64_t s) override;
-    void dump_float(const char *name, double d) override;
-    void dump_string(const char *name, std::string_view s) override;
-    std::ostream& dump_stream(const char *name) override;
-    void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
+    void dump_unsigned(std::string_view name, uint64_t u) override;
+    void dump_int(std::string_view name, int64_t s) override;
+    void dump_float(std::string_view name, double d) override;
+    void dump_string(std::string_view name, std::string_view s) override;
+    std::ostream& dump_stream(std::string_view name) override;
+    void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
     int get_len() const override;
     void write_raw_data(const char *data) override;
 
   protected:
-    virtual bool handle_value(const char *name, std::string_view s, bool quoted) {
+    virtual bool handle_value(std::string_view name, std::string_view s, bool quoted) {
       return false; /* is handling done? */
     }
 
-    virtual bool handle_open_section(const char *name, const char *ns, bool is_array) {
+    virtual bool handle_open_section(std::string_view name, const char *ns, bool is_array) {
       return false; /* is handling done? */
     }
 
@@ -179,15 +179,15 @@ namespace ceph {
     };
 
     bool m_pretty;
-    void open_section(const char *name, const char *ns, bool is_array);
+    void open_section(std::string_view name, const char *ns, bool is_array);
     void print_quoted_string(std::string_view s);
-    void print_name(const char *name);
+    void print_name(std::string_view name);
     void print_comma(json_formatter_stack_entry_d& entry);
     void finish_pending_string();
 
     template <class T>
-    void add_value(const char *name, T val);
-    void add_value(const char *name, std::string_view val, bool quoted);
+    void add_value(std::string_view name, T val);
+    void add_value(std::string_view name, std::string_view val, bool quoted);
 
     copyable_sstream m_ss;
     copyable_sstream m_pending_string;
@@ -198,7 +198,7 @@ namespace ceph {
   };
 
   template <class T>
-  void add_value(const char *name, T val);
+  void add_value(std::string_view name, T val);
 
   class XMLFormatter : public Formatter {
   public:
@@ -213,27 +213,27 @@ namespace ceph {
     void flush(std::ostream& os) override;
     using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
-    void open_array_section(const char *name) override;
-    void open_array_section_in_ns(const char *name, const char *ns) override;
-    void open_object_section(const char *name) override;
-    void open_object_section_in_ns(const char *name, const char *ns) override;
+    void open_array_section(std::string_view name) override;
+    void open_array_section_in_ns(std::string_view name, const char *ns) override;
+    void open_object_section(std::string_view name) override;
+    void open_object_section_in_ns(std::string_view name, const char *ns) override;
     void close_section() override;
-    void dump_unsigned(const char *name, uint64_t u) override;
-    void dump_int(const char *name, int64_t s) override;
-    void dump_float(const char *name, double d) override;
-    void dump_string(const char *name, std::string_view s) override;
-    std::ostream& dump_stream(const char *name) override;
-    void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
+    void dump_unsigned(std::string_view name, uint64_t u) override;
+    void dump_int(std::string_view name, int64_t s) override;
+    void dump_float(std::string_view name, double d) override;
+    void dump_string(std::string_view name, std::string_view s) override;
+    std::ostream& dump_stream(std::string_view name) override;
+    void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
     int get_len() const override;
     void write_raw_data(const char *data) override;
 
     /* with attrs */
-    void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs) override;
-    void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs) override;
-    void dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs) override;
+    void open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override;
+    void open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override;
+    void dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs) override;
 
   protected:
-    void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
+    void open_section_in_ns(std::string_view name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
     void print_spaces();
     void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
@@ -249,7 +249,7 @@ namespace ceph {
     bool m_line_break_enabled = false;
   private:
     template <class T>
-    void add_value(const char *name, T val);
+    void add_value(std::string_view name, T val);
   };
 
   class TableFormatter : public Formatter {
@@ -263,22 +263,22 @@ namespace ceph {
     void flush(std::ostream& os) override;
     using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
-    void open_array_section(const char *name) override;
-    void open_array_section_in_ns(const char *name, const char *ns) override;
-    void open_object_section(const char *name) override;
-    void open_object_section_in_ns(const char *name, const char *ns) override;
+    void open_array_section(std::string_view name) override;
+    void open_array_section_in_ns(std::string_view name, const char *ns) override;
+    void open_object_section(std::string_view name) override;
+    void open_object_section_in_ns(std::string_view name, const char *ns) override;
 
-    void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs) override;
-    void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs) override;
+    void open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override;
+    void open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override;
 
     void close_section() override;
-    void dump_unsigned(const char *name, uint64_t u) override;
-    void dump_int(const char *name, int64_t s) override;
-    void dump_float(const char *name, double d) override;
-    void dump_string(const char *name, std::string_view s) override;
-    void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
-    void dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs) override;
-    std::ostream& dump_stream(const char *name) override;
+    void dump_unsigned(std::string_view name, uint64_t u) override;
+    void dump_int(std::string_view name, int64_t s) override;
+    void dump_float(std::string_view name, double d) override;
+    void dump_string(std::string_view name, std::string_view s) override;
+    void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
+    void dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs) override;
+    std::ostream& dump_stream(std::string_view name) override;
 
     int get_len() const override;
     void write_raw_data(const char *data) override;
@@ -286,12 +286,12 @@ namespace ceph {
 
   private:
     template <class T>
-    void add_value(const char *name, T val);
-    void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
+    void add_value(std::string_view name, T val);
+    void open_section_in_ns(std::string_view name, const char *ns, const FormatterAttrs *attrs);
     std::vector< std::vector<std::pair<std::string, std::string> > > m_vec;
     std::stringstream m_ss;
-    size_t m_vec_index(const char* name);
-    std::string get_section_name(const char* name);
+    size_t m_vec_index(std::string_view name);
+    std::string get_section_name(std::string_view name);
     void finish_pending_string();
     std::string m_pending_name;
     bool m_keyval;
