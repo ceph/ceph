@@ -2076,6 +2076,12 @@ class TestMirroring(object):
         mode = self.image.mirror_image_get_mode()
         eq(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode)
 
+        snaps = list(self.image.list_snaps())
+        eq(1, len(snaps))
+        snap = snaps[0]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        eq(False, snap['mirror_primary']['demoted'])
+
         info = self.image.mirror_image_get_info()
         eq(True, info['primary'])
         entries = dict(
@@ -2087,8 +2093,11 @@ class TestMirroring(object):
         snap_id = self.image.mirror_image_create_snapshot()
 
         snaps = list(self.image.list_snaps())
-        eq(1, len(snaps))
+        eq(2, len(snaps))
         snap = snaps[0]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        eq(False, snap['mirror_primary']['demoted'])
+        snap = snaps[1]
         eq(snap['id'], snap_id)
         eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
         eq(False, snap['mirror_primary']['demoted'])
@@ -2105,11 +2114,13 @@ class TestMirroring(object):
         assert_raises(InvalidArgument, self.image.mirror_image_create_snapshot)
 
         snaps = list(self.image.list_snaps())
-        eq(2, len(snaps))
+        eq(3, len(snaps))
         snap = snaps[0]
-        eq(snap['id'], snap_id)
         eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
         snap = snaps[1]
+        eq(snap['id'], snap_id)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        snap = snaps[2]
         eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
         eq(True, snap['mirror_primary']['demoted'])
         eq(sorted([peer1_uuid, peer2_uuid]),
