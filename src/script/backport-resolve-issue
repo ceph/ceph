@@ -510,12 +510,13 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
     def populate_github_url(self):
         global github_endpoint
         # GitHub PR ID from merge commit string
-        p = re.compile('\\d+')
+        p = re.compile('(pull request|PR) #(\\d+)')
         try:
-            self.github_pr_id = p.search(self.merge_commit_description).group()
+            self.github_pr_id = p.search(self.merge_commit_description).group(2)
         except AttributeError:
             assert False, \
                 "Failed to extract GitHub PR ID from merge commit string ->{}<-".format(self.merge_commit_string)
+        logging.debug("Merge commit string: {}".format(self.merge_commit_string))
         logging.debug("GitHub PR ID from merge commit string: {}".format(self.github_pr_id))
         self.github_url = "{}/pull/{}".format(github_endpoint, self.github_pr_id)
 
