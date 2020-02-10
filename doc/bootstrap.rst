@@ -102,7 +102,7 @@ For each new host you'd like to add to the cluster, you need to do two things:
 
 #. Tell Ceph that the new node is part of the cluster::
 
-     [monitor 1] # ceph orchestrator host add *newhost*
+     [monitor 1] # ceph orch host add *newhost*
 
 Deploying additional monitors
 =============================
@@ -114,12 +114,12 @@ either as a simple IP address or as a CIDR network name.
 
 To deploy additional monitors,::
 
-  [monitor 1] # ceph orchestrator mon update *<new-num-monitors>* *<host1:network1> [<host1:network2>...]*
+  [monitor 1] # ceph orch mon update *<new-num-monitors>* *<host1:network1> [<host1:network2>...]*
 
 For example, to deploy a second monitor on ``newhost`` using an IP
 address in network ``10.1.2.0/24``,::
 
-  [monitor 1] # ceph orchestrator mon update 2 newhost:10.1.2.0/24
+  [monitor 1] # ceph orch mon update 2 newhost:10.1.2.0/24
 
 Deploying OSDs
 ==============
@@ -127,11 +127,11 @@ Deploying OSDs
 To add an OSD to the cluster, you need to know the device name for the
 block device (hard disk or SSD) that will be used.  Then,::
 
-  [monitor 1] # ceph orchestrator osd create *<host>*:*<path-to-device>*
+  [monitor 1] # ceph orch osd create *<host>*:*<path-to-device>*
 
 For example, to deploy an OSD on host *newhost*'s SSD,::
 
-  [monitor 1] # ceph orchestrator osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
+  [monitor 1] # ceph orch osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
 
 Deploying manager daemons
 =========================
@@ -139,7 +139,7 @@ Deploying manager daemons
 It is a good idea to have at least one backup manager daemon.  To
 deploy one or more new manager daemons,::
 
-  [monitor 1] # ceph orchestrator mgr update *<new-num-mgrs>* [*<host1>* ...]
+  [monitor 1] # ceph orch mgr update *<new-num-mgrs>* [*<host1>* ...]
 
 Deploying MDSs
 ==============

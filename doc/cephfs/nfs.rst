@@ -194,14 +194,14 @@ Add Storage for NFS-Ganesha Servers to prevent recovery conflicts::
         [root@minikube /]# ceph osd pool create nfs-ganesha 64
         pool 'nfs-ganesha' created
         [root@minikube /]# ceph osd pool set nfs-ganesha size 1
-        [root@minikube /]# ceph orchestrator nfs add mynfs nfs-ganesha ganesha
+        [root@minikube /]# ceph orch nfs add mynfs nfs-ganesha ganesha
 
 Here we have created a NFS-Ganesha cluster called "mynfs" in "ganesha"
 namespace with "nfs-ganesha" OSD pool.
 
 Scale out NFS-Ganesha cluster::
 
-        [root@minikube /]# ceph orchestrator nfs update mynfs 2
+        [root@minikube /]# ceph orch nfs update mynfs 2
 
 Configure NFS-Ganesha Exports
 -----------------------------
