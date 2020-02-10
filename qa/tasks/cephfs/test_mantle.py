@@ -7,17 +7,15 @@ failure = "using old balancer; mantle failed for balancer="
 success = "mantle balancer version changed: "
 
 class TestMantle(CephFSTestCase):
-    def start_mantle(self):
-        self.wait_for_health_clear(timeout=30)
-        self.fs.set_max_mds(2)
-        self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
-                              reject_fn=lambda v: v > 2 or v < 1)
+    def setUp(self):
+        super(TestVolumes, self).setUp()
 
-        for m in self.fs.get_active_names():
-            self.fs.mds_asok(['config', 'set', 'debug_objecter', '20'], mds_id=m)
-            self.fs.mds_asok(['config', 'set', 'debug_ms', '0'], mds_id=m)
-            self.fs.mds_asok(['config', 'set', 'debug_mds', '0'], mds_id=m)
-            self.fs.mds_asok(['config', 'set', 'debug_mds_balancer', '5'], mds_id=m)
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+        self.config_set("mds", "debug_objecter", "20")
+        self.config_set("mds", "debug_ms", "0")
+        self.config_set("mds", "debug_mds", "0")
+        self.config_set("mds", "debug_mds_balancer", "5")
 
     def push_balancer(self, obj, lua_code, expect):
         self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', obj)
@@ -26,7 +24,6 @@ class TestMantle(CephFSTestCase):
             log.info("run a " + obj + " balancer that expects=" + expect)
 
     def test_version_empty(self):
-        self.start_mantle()
         expect = " : (2) No such file or directory"
 
         ret = self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer')
@@ -36,13 +33,11 @@ class TestMantle(CephFSTestCase):
         with self.assert_cluster_log(failure + " " + expect): pass
 
     def test_version_not_in_rados(self):
-        self.start_mantle()
         expect = failure + "ghost.lua : (2) No such file or directory"
         self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', "ghost.lua")
         with self.assert_cluster_log(expect): pass
 
     def test_balancer_invalid(self):
-        self.start_mantle()
         expect = ": (22) Invalid argument"
 
         lua_code = "this is invalid lua code!"
@@ -55,7 +50,6 @@ class TestMantle(CephFSTestCase):
         self.push_balancer("invalid_log_again.lua", lua_code, expect)
 
     def test_balancer_valid(self):
-        self.start_mantle()
         lua_code = "BAL_LOG(0, \"test\")\nreturn {3, 4}"
         self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', "valid.lua")
         self.fs.rados(["put", "valid.lua", "-"], stdin_data=lua_code)
@@ -63,7 +57,6 @@ class TestMantle(CephFSTestCase):
             log.info("run a valid.lua balancer")
 
     def test_return_invalid(self):
-        self.start_mantle()
         expect = ": (22) Invalid argument"
 
         lua_code = "return \"hello\""
@@ -88,7 +81,6 @@ class TestMantle(CephFSTestCase):
         self.push_balancer("too_many_numbers.lua", lua_code, expect)
 
     def test_dead_osd(self):
-        self.start_mantle()
         expect = " : (110) Connection timed out"
 
         # kill the OSDs so that the balancer pull from RADOS times out

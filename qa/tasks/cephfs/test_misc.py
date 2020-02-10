@@ -24,7 +24,7 @@ class TestMisc(CephFSTestCase):
         # Enable debug. Client will requests CEPH_CAP_XATTR_SHARED
         # on lookup/open
         self.mount_b.umount_wait()
-        self.set_conf('client', 'client debug getattr caps', 'true')
+        self.config_set('client', 'client debug getattr caps', 'true')
         self.mount_b.mount()
         self.mount_b.wait_until_mounted()
 
@@ -117,8 +117,7 @@ class TestMisc(CephFSTestCase):
         session_timeout = self.fs.get_var("session_timeout")
         eviction_timeout = session_timeout / 2.0
 
-        self.fs.mds_asok(['config', 'set', 'mds_cap_revoke_eviction_timeout',
-                          str(eviction_timeout)])
+        self.config_set('mds', 'mds_cap_revoke_eviction_timeout', str(eviction_timeout))
 
         cap_holder = self.mount_a.open_background()
 
@@ -211,8 +210,8 @@ class TestCacheDrop(CephFSTestCase):
         self.mount_a.create_n_files("dc-dir/dc-file", 1000, sync=True)
 
         # Reduce this so the MDS doesn't rkcall the maximum for simple tests
-        self.fs.rank_asok(['config', 'set', 'mds_recall_max_caps', str(max_caps)])
-        self.fs.rank_asok(['config', 'set', 'mds_recall_max_decay_threshold', str(threshold)])
+        self.config_set('mds', 'mds_recall_max_caps', str(max_caps))
+        self.config_set('mds', 'mds_recall_max_decay_threshold', str(threshold))
 
     def test_drop_cache_command(self):
         """
@@ -220,7 +219,7 @@ class TestCacheDrop(CephFSTestCase):
         Confirm it halts without a timeout.
         Note that the cache size post trimming is not checked here.
         """
-        mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        mds_min_caps_per_client = int(self.config_get('mds', 'mds_min_caps_per_client'))
         self._setup()
         result = self._run_drop_cache_cmd()
         self.assertEqual(result['client_recall']['return_code'], 0)

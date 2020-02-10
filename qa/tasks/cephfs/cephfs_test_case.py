@@ -162,28 +162,19 @@ class CephFSTestCase(CephTestCase):
 
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:
-            setattr(self, setting, float(self.fs.mds_asok(
-                ['config', 'get', setting], self.mds_cluster.mds_ids[0]
-            )[setting]))
-
-        self.configs_set = set()
+            v = self.config_get("mds", setting)
+            setattr(self, setting, float(v))
 
     def tearDown(self):
-        super(CephFSTestCase, self).tearDown()
-
         self.mds_cluster.clear_firewall()
+
         for m in self.mounts:
             m.teardown()
 
         for i, m in enumerate(self.mounts):
             m.client_id = self._original_client_ids[i]
 
-        for subsys, key in self.configs_set:
-            self.mds_cluster.clear_ceph_conf(subsys, key)
-
-    def set_conf(self, subsys, key, value):
-        self.configs_set.add((subsys, key))
-        self.mds_cluster.set_ceph_conf(subsys, key, value)
+        return super(CephFSTestCase, self).tearDown()
 
     def auth_list(self):
         """

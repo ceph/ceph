@@ -81,7 +81,7 @@ class TestSessionMap(CephFSTestCase):
         self.mount_b.umount_wait()
 
         # Configure MDS to write one OMAP key at once
-        self.set_conf('mds', 'mds_sessionmap_keys_per_op', 1)
+        self.config_set('mds', 'mds_sessionmap_keys_per_op', 1)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
@@ -168,7 +168,7 @@ class TestSessionMap(CephFSTestCase):
         )
         mount.client_id = id_name
         sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
-        self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
+        self.config_set("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def test_session_reject(self):
         if not isinstance(self.mount_a, FuseMount):
@@ -190,7 +190,7 @@ class TestSessionMap(CephFSTestCase):
         self.mount_b.umount_wait()
 
         # Configure the client to claim that its mount point metadata is /baz
-        self.set_conf("client.badguy", "client_metadata", "root=/baz")
+        self.config_set("client.badguy", "client_metadata", "root=/baz")
         # Try to mount the client, see that it fails
         with self.assert_cluster_log("client session with non-allowable root '/baz' denied"):
             with self.assertRaises(CommandFailedError):

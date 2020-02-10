@@ -19,7 +19,7 @@ class TestJournalMigration(CephFSTestCase):
         self.fs.mds_stop()
 
         # Create a filesystem using the older journal format.
-        self.fs.set_ceph_conf('mds', 'mds journal format', old_journal_version)
+        self.config_set('mds', 'mds journal format', old_journal_version)
         self.fs.mds_restart()
         self.fs.recreate()
 
@@ -47,7 +47,7 @@ class TestJournalMigration(CephFSTestCase):
             })
 
         # Modify the ceph.conf to ask the MDS to use the new journal format.
-        self.fs.set_ceph_conf('mds', 'mds journal format', new_journal_version)
+        self.config_set('mds', 'mds journal format', new_journal_version)
 
         # Restart the MDS.
         self.fs.mds_fail_restart()

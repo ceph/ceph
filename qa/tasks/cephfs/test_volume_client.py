@@ -60,7 +60,7 @@ vc.disconnect()
         )
         mount.client_id = id_name
         sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
-        self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
+        self.config_set("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def _configure_guest_auth(self, volumeclient_mount, guest_mount,
                               guest_entity, mount_path,
@@ -126,10 +126,10 @@ vc.disconnect()
                         guest_mount.get_keyring_path(), keyring_txt)
 
         # Add a guest client section to the ceph config file.
-        self.set_conf("client.{0}".format(guest_entity), "client quota", "True")
-        self.set_conf("client.{0}".format(guest_entity), "debug client", "20")
-        self.set_conf("client.{0}".format(guest_entity), "debug objecter", "20")
-        self.set_conf("client.{0}".format(guest_entity),
+        self.config_set("client.{0}".format(guest_entity), "client quota", "True")
+        self.config_set("client.{0}".format(guest_entity), "debug client", "20")
+        self.config_set("client.{0}".format(guest_entity), "debug objecter", "20")
+        self.config_set("client.{0}".format(guest_entity),
                       "keyring", guest_mount.get_keyring_path())
 
     def test_default_prefix(self):

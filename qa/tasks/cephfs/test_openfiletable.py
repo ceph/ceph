@@ -12,7 +12,7 @@ class OpenFileTable(CephFSTestCase):
         The maximum number of openfiles omap objects keys are now equal to
         osd_deep_scrub_large_omap_object_key_threshold option.
         """
-        self.set_conf("mds", "osd_deep_scrub_large_omap_object_key_threshold", "5")
+        self.config_set("mds", "osd_deep_scrub_large_omap_object_key_threshold", "5")
 
         self.fs.mds_restart()
         self.fs.wait_for_daemons()

@@ -109,15 +109,15 @@ class TestStrays(CephFSTestCase):
             Helper for updating ops/files limits, and calculating effective
             ops_per_pg setting to give the same ops limit.
             """
-            self.set_conf('mds', 'mds_max_purge_files', "%d" % files)
-            self.set_conf('mds', 'mds_max_purge_ops', "%d" % ops)
+            self.config_set('mds', 'mds_max_purge_files', "%d" % files)
+            self.config_set('mds', 'mds_max_purge_ops', "%d" % ops)
 
             pgs = self.fs.mon_manager.get_pool_int_property(
                 self.fs.get_data_pool_name(),
                 "pg_num"
             )
             ops_per_pg = float(ops) / pgs
-            self.set_conf('mds', 'mds_max_purge_ops_per_pg', "%s" % ops_per_pg)
+            self.config_set('mds', 'mds_max_purge_ops_per_pg', "%s" % ops_per_pg)
 
         # Test conditions depend on what we're going to be exercising.
         # * Lift the threshold on whatever throttle we are *not* testing, so
@@ -173,8 +173,8 @@ class TestStrays(CephFSTestCase):
         background_thread = gevent.spawn(background)
 
         total_inodes = file_multiplier * self.throttle_workload_size_range + 1
-        mds_max_purge_ops = int(self.fs.get_config("mds_max_purge_ops", 'mds'))
-        mds_max_purge_files = int(self.fs.get_config("mds_max_purge_files", 'mds'))
+        mds_max_purge_ops = int(self.config_get('mds', "mds_max_purge_ops"))
+        mds_max_purge_files = int(self.config_get('mds', "mds_max_purge_files"))
 
         # During this phase we look for the concurrent ops to exceed half
         # the limit (a heuristic) and not exceed the limit (a correctness
@@ -557,7 +557,7 @@ class TestStrays(CephFSTestCase):
         """
         rank_0_id, rank_1_id = self._setup_two_ranks()
 
-        self.set_conf("mds.{0}".format(rank_1_id), 'mds_max_purge_files', "0")
+        self.config_set("mds.{0}".format(rank_1_id), 'mds_max_purge_files', "0")
         self.mds_cluster.mds_fail_restart(rank_1_id)
         self.fs.wait_for_daemons()
 
@@ -830,8 +830,7 @@ class TestStrays(CephFSTestCase):
         """
 
         LOW_LIMIT = 50
-        for mds in self.fs.get_daemon_names():
-            self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
 
         try:
             self.mount_a.run_python(dedent("""
@@ -948,7 +947,7 @@ class TestStrays(CephFSTestCase):
         """
         rank_0_id, rank_1_id = self._setup_two_ranks()
 
-        self.set_conf("mds.{0}".format(rank_1_id), 'mds_max_purge_files', "0")
+        self.config_set("mds.{0}".format(rank_1_id), 'mds_max_purge_files', "0")
         self.mds_cluster.mds_fail_restart(rank_1_id)
         self.fs.wait_for_daemons()
 
@@ -965,8 +964,7 @@ class TestStrays(CephFSTestCase):
 
         # What we're really checking here is that we are completing client
         # operations immediately rather than delaying until the next tick.
-        tick_period = float(self.fs.get_config("mds_tick_interval",
-                                               service_type="mds"))
+        tick_period = float(self.config_get('mds', "mds_tick_interval"))
 
         duration = (end - begin).total_seconds()
         self.assertLess(duration, (file_count * tick_period) * 0.25)

@@ -55,7 +55,7 @@ class TestFailover(MgrTestCase):
         self.assertListEqual(self.mgr_cluster.get_standby_ids(), [])
         self.assertEqual(self.mgr_cluster.get_active_id(), original_active)
 
-        grace = int(self.mgr_cluster.get_config("mon_mgr_beacon_grace"))
+        grace = int(self.config_get("mon", "mon_mgr_beacon_grace"))
         log.info("Should time out in about {0} seconds".format(grace))
 
         self.mgr_cluster.mgr_stop(original_active)

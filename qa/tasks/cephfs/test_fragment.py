@@ -35,7 +35,7 @@ class TestFragmentation(CephFSTestCase):
         """
 
         for k, v in kwargs.items():
-            self.ceph_cluster.set_ceph_conf("mds", k, v.__str__())
+            self.config_set("mds", k, v.__str__())
 
         self.mds_cluster.mds_fail_restart()
         self.fs.wait_for_daemons()

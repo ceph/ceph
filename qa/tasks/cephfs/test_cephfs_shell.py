@@ -391,7 +391,7 @@ class TestSnapshots(TestCephFSShell):
         """
         Test that snapshot creation and deletion work
         """
-        sd = self.fs.get_config('client_snapdir')
+        sd = self.config_get('client', 'client_snapdir')
         sdn = "data_dir/{}/snap1".format(sd)
 
         # create a data dir and dump some files into it

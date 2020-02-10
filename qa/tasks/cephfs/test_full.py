@@ -123,7 +123,7 @@ class FullnessTestCase(CephFSTestCase):
                           the failed write.
         """
 
-        osd_mon_report_interval = int(self.fs.get_config("osd_mon_report_interval", service_type='osd'))
+        osd_mon_report_interval = int(self.config_get("osd", "osd_mon_report_interval"))
 
         log.info("Writing {0}MB should fill this cluster".format(self.fill_mb))
 
@@ -201,8 +201,8 @@ class FullnessTestCase(CephFSTestCase):
         file_path = os.path.join(self.mount_a.mountpoint, "full_test_file")
 
         # Enough to trip the full flag
-        osd_mon_report_interval = int(self.fs.get_config("osd_mon_report_interval", service_type='osd'))
-        mon_tick_interval = int(self.fs.get_config("mon_tick_interval", service_type="mon"))
+        osd_mon_report_interval = int(self.config_get("osd", "osd_mon_report_interval"))
+        mon_tick_interval = int(self.config_get("mon", "mon_tick_interval"))
 
         # Sufficient data to cause RADOS cluster to go 'full'
         log.info("pool capacity {0}, {1}MB should be enough to fill it".format(self.pool_capacity, self.fill_mb))
@@ -394,7 +394,7 @@ class TestClusterFull(FullnessTestCase):
 
         if self.pool_capacity is None:
             max_avail = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-            full_ratio = float(self.fs.get_config("mon_osd_full_ratio", service_type="mon"))
+            full_ratio = float(self.config_get("mon", "mon_osd_full_ratio"))
             TestClusterFull.pool_capacity = int(max_avail * full_ratio)
             TestClusterFull.fill_mb = (self.pool_capacity / (1024 * 1024))
 

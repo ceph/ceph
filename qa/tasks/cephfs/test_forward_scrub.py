@@ -146,8 +146,8 @@ class TestForwardScrub(CephFSTestCase):
         self.mount_a.umount_wait()
         self.fs.mds_stop()
         self.fs.mds_fail()
-        self.fs.set_ceph_conf('mds', 'mds verify scatter', False)
-        self.fs.set_ceph_conf('mds', 'mds debug scatterstat', False)
+        self.config_set('mds', 'mds verify scatter', False)
+        self.config_set('mds', 'mds debug scatterstat', False)
         frag_obj_id = "{0:x}.00000000".format(inos["./parent/flushed"])
         self.fs.rados(["rmomapkey", frag_obj_id, "bravo_head"])
 
@@ -185,8 +185,8 @@ class TestForwardScrub(CephFSTestCase):
         ])
 
         # After in-place injection stats should be kosher again
-        self.fs.set_ceph_conf('mds', 'mds verify scatter', True)
-        self.fs.set_ceph_conf('mds', 'mds debug scatterstat', True)
+        self.config_set('mds', 'mds verify scatter', True)
+        self.config_set('mds', 'mds debug scatterstat', True)
 
         # And we should have all the same linkage we started with,
         # and no lost+found, and no extra inodes!

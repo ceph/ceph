@@ -12,9 +12,10 @@ ValidationError = namedtuple("ValidationError", ["exception", "backtrace"])
 
 
 class Workload(CephFSTestCase):
-    def __init__(self, filesystem, mount):
+    def __init__(self, test, mount):
+        self._test = test
         self._mount = mount
-        self._filesystem = filesystem
+        self._filesystem = test.fs
         self._initial_state = None
 
         # Accumulate backtraces for every failed validation, and return them.  Backtraces
@@ -95,7 +96,7 @@ class DupInodeWorkload(Workload):
                                 "parentfile_head", temp_bin_path])
         self._filesystem.rados(["setomapval", "10000000000.00000000",
                                 "shadow_head"], stdin_file=temp_bin_path)
-        self._filesystem.set_ceph_conf('mds', 'mds hack allow loading invalid metadata', True)
+        self._test.config_set('mds', 'mds hack allow loading invalid metadata', True)
         self._filesystem.mds_restart()
         self._filesystem.wait_for_daemons()
 
@@ -120,8 +121,8 @@ class TestScrub(CephFSTestCase):
         workload.write()
 
         # are off by default, but in QA we need to explicitly disable them)
-        self.fs.set_ceph_conf('mds', 'mds verify scatter', False)
-        self.fs.set_ceph_conf('mds', 'mds debug scatterstat', False)
+        self._test.config_set('mds', 'mds verify scatter', False)
+        self._test.config_set('mds', 'mds debug scatterstat', False)
 
         # Apply any data damage the workload wants
         workload.damage()
@@ -141,7 +142,7 @@ class TestScrub(CephFSTestCase):
             ))
 
     def test_scrub_backtrace(self):
-        self._scrub(BacktraceWorkload(self.fs, self.mount_a))
+        self._scrub(BacktraceWorkload(self, self.mount_a))
 
     def test_scrub_dup_inode(self):
-        self._scrub(DupInodeWorkload(self.fs, self.mount_a))
+        self._scrub(DupInodeWorkload(self, self.mount_a))
