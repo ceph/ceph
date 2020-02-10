@@ -89,7 +89,8 @@ class TimeoutExpired(Error):
 
 
 class Ceph(object):
-    daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror')
+    daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror',
+               'crash')
 
 
 class Monitoring(object):
