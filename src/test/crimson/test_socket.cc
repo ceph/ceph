@@ -43,7 +43,7 @@ future<> test_refused() {
   return socket_connect().discard_result().then([] {
     ceph_abort_msg("connection is not refused");
   }).handle_exception_type([] (const std::system_error& e) {
-    if (e.code() != error::connection_refused) {
+    if (e.code() != std::errc::connection_refused) {
       logger.error("test_refused() got unexpeted error {}", e);
       ceph_abort();
     } else {
@@ -69,7 +69,7 @@ future<> test_bind_same() {
         }).finally([pss2] {
           return pss2->destroy();
         }).handle_exception_type([] (const std::system_error& e) {
-          if (e.code() != error::address_in_use) {
+          if (e.code() != std::errc::address_in_use) {
             logger.error("test_bind_same() got unexpeted error {}", e);
             ceph_abort();
           } else {
@@ -246,8 +246,8 @@ class Connection {
     ).then([] {
       ceph_abort();
     }).handle_exception_type([this] (const std::system_error& e) {
-      if (e.code() != error::broken_pipe &&
-          e.code() != error::connection_reset) {
+      if (e.code() != std::errc::broken_pipe &&
+          e.code() != std::errc::connection_reset) {
         logger.error("dispatch_write_unbounded(): "
                      "unexpected error {}", e);
         throw;
@@ -305,7 +305,7 @@ class Connection {
       ceph_abort();
     }).handle_exception_type([this] (const std::system_error& e) {
       if (e.code() != error::read_eof
-       && e.code() != error::connection_reset) {
+       && e.code() != std::errc::connection_reset) {
         logger.error("dispatch_read_unbounded(): "
                      "unexpected error {}", e);
         throw;
