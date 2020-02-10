@@ -303,7 +303,13 @@ def set_context(path, recursive=False):
         )
         return
 
-    stdout, stderr, code = process.call(['selinuxenabled'], verbose_on_failure=False)
+    try:
+        stdout, stderr, code = process.call(['selinuxenabled'],
+                                            verbose_on_failure=False)
+    except FileNotFoundError:
+        logger.info('No SELinux found, skipping call to restorecon')
+        return
+
     if code != 0:
         logger.info('SELinux is not enabled, will not call restorecon')
         return
