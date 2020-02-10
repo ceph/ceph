@@ -1,4 +1,3 @@
-
 import unittest
 from unittest import case
 import time
@@ -32,6 +31,8 @@ class CephTestCase(unittest.TestCase):
     REQUIRE_MEMSTORE = False
 
     def setUp(self):
+        self._mon_configs_set = set()
+
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
             "Starting test {0}".format(self.id()))
 
@@ -43,11 +44,41 @@ class CephTestCase(unittest.TestCase):
                 raise case.SkipTest("Require `memstore` OSD backend (test " \
                         "would take too long on full sized OSDs")
 
-
-
     def tearDown(self):
+        self.config_clear()
+
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
             "Ended test {0}".format(self.id()))
+
+    def config_clear(self):
+        for section, key in self._mon_configs_set:
+            self.config_rm(section, key)
+        self._mon_configs_set.clear()
+
+    def _fix_key(self, key):
+        return str(key).replace(' ', '_')
+
+    def config_get(self, section, key):
+       key = self._fix_key(key)
+       return self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "get", section, key).strip()
+
+    def config_show(self, entity, key):
+       key = self._fix_key(key)
+       return self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "show", entity, key).strip()
+
+    def config_minimal(self):
+       return self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "generate-minimal-conf").strip()
+
+    def config_rm(self, section, key):
+       key = self._fix_key(key)
+       self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "rm", section, key)
+       # simplification: skip removing from _mon_configs_set;
+       # let tearDown clear everything again
+
+    def config_set(self, section, key, value):
+       key = self._fix_key(key)
+       self._mon_configs_set.add((section, key))
+       self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "set", section, key, str(value))
 
     def assert_cluster_log(self, expected_pattern, invert_match=False,
                            timeout=10, watch_channel=None):
