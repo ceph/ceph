@@ -1756,7 +1756,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                    extra_config=extra_config)
 
     def update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
+        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
@@ -1768,7 +1768,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._update_mons(spec)
 
     def _update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
+        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster monitors.
         """
@@ -1826,7 +1826,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     @with_services('mgr')
     def update_mgrs(self, spec, services):
-        # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
+        # type: (orchestrator.ServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
@@ -2265,19 +2265,19 @@ class NodeAssignment(object):
     """
 
     def __init__(self,
-                 spec=None,  # type: Optional[orchestrator.StatefulServiceSpec]
+                 spec=None,  # type: Optional[orchestrator.ServiceSpec]
                  scheduler=None,  # type: Optional[BaseScheduler]
                  get_hosts_func=None,  # type: Optional[Callable]
                  service_type=None,  # type: Optional[str]
                  ):
         assert spec and get_hosts_func and service_type
-        self.spec = spec  # type: orchestrator.StatefulServiceSpec
+        self.spec = spec  # type: orchestrator.ServiceSpec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
         self.service_type = service_type
 
     def load(self):
-        # type: () -> orchestrator.StatefulServiceSpec
+        # type: () -> orchestrator.ServiceSpec
         """
         Load nodes into the spec.placement.nodes container.
         """

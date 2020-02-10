@@ -304,7 +304,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def add_mds(self, spec):
-        # type: (orchestrator.StatelessServiceSpec) -> RookCompletion
+        # type: (orchestrator.ServiceSpec) -> RookCompletion
         return self._service_add_decorate('MDS', spec,
                                        self.rook_cluster.add_filesystem)
 
@@ -341,7 +341,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> RookCompletion
+        # type: (orchestrator.ServiceSpec) -> RookCompletion
         if spec.placement.hosts or spec.placement.label:
             raise RuntimeError("Host list or label is not supported by rook.")
 
@@ -352,7 +352,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def update_mds(self, spec):
-        # type: (orchestrator.StatelessServiceSpec) -> RookCompletion
+        # type: (orchestrator.ServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
             lambda: self.rook_cluster.update_mds_count(spec.name, num),

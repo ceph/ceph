@@ -242,6 +242,8 @@ Service Actions
 
 .. automethod:: Orchestrator.service_action
 
+.. autoclass:: ServiceSpec
+
 OSD management
 --------------
 
@@ -286,8 +288,6 @@ Phase two is a call to  :meth:`Orchestrator.create_osds` with a Drive Group with
 
 Stateless Services
 ------------------
-
-.. autoclass:: StatelessServiceSpec
 
 .. automethod:: Orchestrator.add_mds
 .. automethod:: Orchestrator.remove_mds

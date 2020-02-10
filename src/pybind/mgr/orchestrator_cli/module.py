@@ -408,7 +408,7 @@ Usage:
         "name=hosts,type=CephString,n=N,req=false",
         'Create an rbd-mirror service')
     def _rbd_mirror_add(self, num=None, hosts=None):
-        spec = orchestrator.StatelessServiceSpec(
+        spec = orchestrator.ServiceSpec(
             None,
             placement=orchestrator.PlacementSpec(hosts=hosts, count=num))
         completion = self.add_rbd_mirror(spec)
@@ -423,7 +423,7 @@ Usage:
         "name=label,type=CephString,req=false",
         'Update the number of rbd-mirror instances')
     def _rbd_mirror_update(self, num, label=None, hosts=[]):
-        spec = orchestrator.StatelessServiceSpec(
+        spec = orchestrator.ServiceSpec(
             None,
             placement=orchestrator.PlacementSpec(hosts=hosts, count=num, label=label))
         completion = self.update_rbd_mirror(spec)
@@ -448,7 +448,7 @@ Usage:
         "name=hosts,type=CephString,n=N,req=false",
         'Create an MDS service')
     def _mds_add(self, fs_name, num=None, hosts=None):
-        spec = orchestrator.StatelessServiceSpec(
+        spec = orchestrator.ServiceSpec(
             fs_name,
             placement=orchestrator.PlacementSpec(hosts=hosts, count=num))
         completion = self.add_mds(spec)
@@ -467,7 +467,7 @@ Usage:
         placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = orchestrator.StatelessServiceSpec(
+        spec = orchestrator.ServiceSpec(
             fs_name,
             placement=placement)
 
@@ -630,7 +630,7 @@ Usage:
         placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = orchestrator.StatefulServiceSpec(placement=placement)
+        spec = orchestrator.ServiceSpec(placement=placement)
 
         completion = self.update_mgrs(spec)
         self._orchestrator_wait([completion])
@@ -650,7 +650,7 @@ Usage:
         placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = orchestrator.StatefulServiceSpec(placement=placement)
+        spec = orchestrator.ServiceSpec(placement=placement)
 
         completion = self.update_mons(spec)
         self._orchestrator_wait([completion])
