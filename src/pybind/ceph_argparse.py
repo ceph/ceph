@@ -155,7 +155,7 @@ class CephInt(CephArgtype):
     range-limited integers, [+|-][0-9]+ or 0x[0-9a-f]+
     range: list of 1 or 2 ints, [min] or [min,max]
     """
-    def __init__(self, range=''):
+    def __init__(self, range='', **kwargs):
         if range == '':
             self.range = list()
         else:
@@ -190,7 +190,7 @@ class CephFloat(CephArgtype):
     range-limited float type
     range: list of 1 or 2 floats, [min] or [min, max]
     """
-    def __init__(self, range=''):
+    def __init__(self, range='', **kwargs):
         if range == '':
             self.range = list()
         else:
@@ -223,7 +223,7 @@ class CephString(CephArgtype):
     """
     String; pretty generic.  goodchars is a RE char class of valid chars
     """
-    def __init__(self, goodchars=''):
+    def __init__(self, goodchars='', **kwargs):
         from string import printable
         try:
             re.compile(goodchars)
@@ -400,7 +400,7 @@ class CephName(CephArgtype):
 
     Also accept '*'
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.nametype = None
         self.nameid = None
 
@@ -442,7 +442,7 @@ class CephOsdName(CephArgtype):
 
     osd.<id>, or <id>, or *, where id is a base10 int
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.nametype = None
         self.nameid = None
 
