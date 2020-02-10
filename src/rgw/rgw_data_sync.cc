@@ -732,8 +732,8 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
   sync_env_local.http_manager = &http_manager;
   auto instance_id = ceph::util::generate_random_number<uint64_t>();
   RGWDataSyncCtx sc_local = sc;
-  sc.env = &sync_env_local;
-  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sc, num_shards, instance_id, tn, &sync_status));
+  sc_local.env = &sync_env_local;
+  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sc_local, num_shards, instance_id, tn, &sync_status));
   http_manager.stop();
   return ret;
 }
