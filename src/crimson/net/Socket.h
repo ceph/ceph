@@ -178,7 +178,7 @@ public:
       lo.set_fixed_cpu(ss.cpu);
       ss.listener = seastar::listen(s_addr, lo);
     }).handle_exception_type([addr] (const std::system_error& e) {
-      if (e.code() == error::address_in_use) {
+      if (e.code() == std::errc::address_in_use) {
         logger().trace("FixedCPUServerSocket::listen({}): address in use", addr);
         throw;
       } else {
@@ -230,8 +230,8 @@ public:
             });
           });
         }).handle_exception_type([&ss] (const std::system_error& e) {
-          if (e.code() == error::connection_aborted ||
-              e.code() == error::invalid_argument) {
+          if (e.code() == std::errc::connection_aborted ||
+              e.code() == std::errc::invalid_argument) {
             logger().trace("FixedCPUServerSocket({})::accept(): stopped ({})",
                            ss.addr, e);
           } else {
