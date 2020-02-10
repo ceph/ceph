@@ -2292,6 +2292,13 @@ def list_daemons(detail=True, legacy_dir=None):
                             else:
                                 # FIXME: monitoring component version?
                                 pass
+                        else:
+                            vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
+                            try:
+                                with open(vfile, 'r') as f:
+                                    image_name = f.read().strip() or None
+                            except IOError:
+                                pass
                         i['container_id'] = container_id
                         i['container_image_name'] = image_name
                         i['container_image_id'] = image_id
