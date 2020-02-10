@@ -14,6 +14,7 @@
 #include <boost/tokenizer.hpp>
 
 #include "messages/MMgrBeacon.h"
+#include "messages/MMgrBeaconReply.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
 
@@ -470,8 +471,7 @@ public:
 bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 {
   auto m = op->get_req<MMgrBeacon>();
-  mon->no_reply(op); // we never reply to beacons
-  dout(4) << "beacon from " << m->get_gid() << dendl;
+  dout(4) << "beacon from " << m->get_gid() << ", seq #" << m->get_seq() << dendl;
 
   if (!check_caps(op, m->get_fsid())) {
     // drop it on the floor
@@ -485,7 +485,7 @@ bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 {
   auto m = op->get_req<MMgrBeacon>();
-  dout(4) << "beacon from " << m->get_gid() << dendl;
+  dout(4) << "beacon from " << m->get_gid() << ", seq #" << m->get_seq() << dendl;
 
   // See if we are seeing same name, new GID for the active daemon
   if (m->get_name() == pending_map.active_name
@@ -624,6 +624,11 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   } else {
     dout(10) << "no change" << dendl;
   }
+
+  // ack the beacon reply to manager
+  dout(10) << "ack beacon to " << m->get_gid() << " with seq #" << m->get_seq() << dendl;
+  auto mreply = make_message<MMgrBeaconReply>(m->get_seq());
+  mon->send_reply(op, mreply.detach());
 
   return updated;
 }

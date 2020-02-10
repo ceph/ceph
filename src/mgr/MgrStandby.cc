@@ -25,6 +25,7 @@
 #include "mgr/mgr_commands.h"
 
 #include "messages/MMgrBeacon.h"
+#include "messages/MMgrBeaconReply.h"
 #include "messages/MMgrMap.h"
 #include "Mgr.h"
 
@@ -215,8 +216,12 @@ void MgrStandby::send_beacon()
   // as available in the map)
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
 
+  auto send_seq = last_seq++;
+  seq_stamp.emplace(send_seq, clock::now());
+
   auto addrs = available ? active_mgr->get_server_addrs() : entity_addrvec_t();
-  dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
+  dout(10) << "sending beacon as gid " << monc.get_global_id() << " with seq #"
+           << send_seq << dendl;
 
   map<string,string> metadata;
   metadata["addr"] = client_messenger->get_myaddr_legacy().ip_only_to_str();
@@ -231,6 +236,7 @@ void MgrStandby::send_beacon()
 				 std::move(module_info),
 				 std::move(metadata),
                                  std::move(clients),
+                                 send_seq,
 				 CEPH_FEATURES_ALL);
 
   if (available) {
@@ -427,6 +433,21 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
   }
 }
 
+bool MgrStandby::handle_beacon_reply(const ref_t<MMgrBeaconReply>& m) {
+  auto seq_ack = m->get_seq_ack();
+  dout(10) << state_str() << " received beacon reply with seq #" << seq_ack
+           << dendl;
+
+  auto it = seq_stamp.find(seq_ack);
+  if (it == seq_stamp.end()) {
+    derr << "discarding beacon ack with seq #" << seq_ack << dendl;
+    return false;
+  }
+
+  seq_stamp.erase(seq_stamp.begin(), ++it);
+  return true;
+}
+
 bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
@@ -434,6 +455,8 @@ bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 
   if (m->get_type() == MSG_MGR_MAP) {
     handle_mgr_map(ref_cast<MMgrMap>(m));
+  } else if (m->get_type() == MSG_MGR_BEACON_REPLY) {
+    return handle_beacon_reply(ref_cast<MMgrBeaconReply>(m));
   }
   bool handled = false;
   if (active_mgr) {

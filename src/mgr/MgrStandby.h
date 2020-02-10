@@ -19,6 +19,7 @@
 #include "common/Finisher.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
+#include "include/types.h"
 
 #include "client/Client.h"
 #include "mon/MonClient.h"
@@ -29,6 +30,7 @@
 class MMgrMap;
 class Mgr;
 class PyModuleConfig;
+class MMgrBeaconReply;
 
 class MgrStandby : public Dispatcher,
 		   public md_config_obs_t {
@@ -81,6 +83,21 @@ public:
   void respawn();
   int main(vector<const char *> args);
   void tick();
+
+private:
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
+  // sequence number of beacon sent to monitor
+  version_t last_seq = 0;
+
+  // this could just have been a list of outstanding (unacknowleged)
+  // sequence numbers since there is no consideration of a laggy mgr
+  // which is derieved from ack from the monitor. however, maintaining
+  // sequence timestamps *might* just help later in this respect.
+  std::map<version_t, time> seq_stamp;
+
+  bool handle_beacon_reply(const ref_t<MMgrBeaconReply>& m);
 };
 
 #endif

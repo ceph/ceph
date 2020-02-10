@@ -228,6 +228,9 @@
 #define MSG_MGR_COMMAND           0x709
 #define MSG_MGR_COMMAND_REPLY     0x70a
 
+// *** ceph_mon(MgrMonitor) -> ceph-mgr ***
+#define MSG_MGR_BEACON_REPLY      0x70b
+
 // ======================================================
 
 // abstract Message class

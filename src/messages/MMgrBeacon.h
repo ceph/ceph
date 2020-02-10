@@ -24,8 +24,11 @@
 
 class MMgrBeacon : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 10;
+  static constexpr int HEAD_VERSION = 11;
   static constexpr int COMPAT_VERSION = 8;
+
+  // sequence # of this beacon
+  version_t seq = 0;
 
 protected:
   uint64_t gid;
@@ -60,11 +63,11 @@ public:
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
 	     std::map<std::string,std::string>&& metadata_,
              std::vector<entity_addrvec_t> clients,
-	     uint64_t feat)
+             version_t seq, uint64_t feat)
     : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(gid_), server_addrs(server_addrs_), available(available_), name(name_),
       fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_)),
-      clients(std::move(clients)),
+      clients(std::move(clients)), seq(seq),
       mgr_features(feat)
   {
   }
@@ -107,6 +110,10 @@ public:
     return clients;
   }
 
+  version_t get_seq() const {
+    return seq;
+  }
+
 private:
   ~MMgrBeacon() override {}
 
@@ -117,7 +124,7 @@ public:
   void print(std::ostream& out) const override {
     out << get_type_name() << " mgr." << name << "(" << fsid << ","
 	<< gid << ", " << server_addrs << ", " << available
-	<< ")";
+	<< ", seq #" << seq << ")";
   }
 
   void encode_payload(uint64_t features) override {
@@ -153,6 +160,7 @@ public:
     encode(modules, payload);
     encode(mgr_features, payload);
     encode(clients, payload, features);
+    encode(seq, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -195,6 +203,9 @@ public:
     }
     if (header.version >= 10) {
       decode(clients, p);
+    }
+    if (header.version >= 11) {
+      decode(seq, p);
     }
   }
 private:
