@@ -320,6 +320,29 @@ function clear_line {
     log overwrite "                                                                             \r"
 }
 
+function clip_pr_body {
+    local pr_body="$*"
+    local clipped=""
+    local last_line_was_blank=""
+    local line=""
+    local pr_json_tempfile=$(mktemp)
+    echo "$pr_body" | sed -n '/<!--.*/q;p' > "$pr_json_tempfile"
+    while IFS= read -r line; do
+        if [ "$(trim_whitespace "$line")" ] ; then
+            last_line_was_blank=""
+            clipped="${clipped}${line}\n"
+        else
+            if [ "$last_line_was_blank" ] ; then
+                true
+            else
+                clipped="${clipped}\n"
+            fi
+        fi
+    done < "$pr_json_tempfile"
+    rm "$pr_json_tempfile"
+    echo "$clipped"
+}
+
 function debug {
     log debug "$@"
 }
@@ -388,12 +411,8 @@ function existing_pr_routine {
         info "Cowardly refusing to work on a backport to $base_branch"
         false
     fi
-    pr_json_tempfile=$(mktemp)
-    echo "$pr_body" | sed -n '/<!--.*/q;p' > "$pr_json_tempfile"
-    # clipped_pr_body=$(cat "$pr_json_tempfile" | xargs)
-    clipped_pr_body="$(xargs < "$pr_json_tempfile")"
-    rm "$pr_json_tempfile"
-    verbose_en "Clipped body of existing PR ${backport_pr_number}:\n${clipped_pr_body}\n"
+    clipped_pr_body="$(clip_pr_body "$pr_body")"
+    verbose_en "Clipped body of existing PR ${backport_pr_number}:\n${clipped_pr_body}"
     if [[ "$backport_pr_title" =~ ^${milestone}: ]] ; then
         verbose "Existing backport PR ${backport_pr_number} title has ${milestone} prepended"
     else
@@ -1011,6 +1030,15 @@ function tracker_component_was_updated {
         was_updated="yes"
     fi
     echo "$was_updated"
+}
+
+function trim_whitespace {
+    local var="$*"
+    # remove leading whitespace characters
+    var="${var#"${var%%[![:space:]]*}"}"
+    # remove trailing whitespace characters
+    var="${var%"${var##*[![:space:]]}"}"
+    echo -n "$var"
 }
 
 function troubleshooting_advice {
