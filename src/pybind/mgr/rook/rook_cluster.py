@@ -336,7 +336,7 @@ class RookCluster(object):
                 raise
 
     def add_filesystem(self, spec):
-        # type: (orchestrator.StatelessServiceSpec) -> None
+        # type: (orchestrator.ServiceSpec) -> None
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
