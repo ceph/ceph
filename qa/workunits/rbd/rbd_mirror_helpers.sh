@@ -254,7 +254,7 @@ setup_pools()
     CEPH_ARGS='' rbd --cluster ${cluster} pool init ${POOL}
     CEPH_ARGS='' rbd --cluster ${cluster} pool init ${PARENT_POOL}
 
-    rbd --cluster ${cluster} mirror pool enable ${POOL} pool
+    CEPH_ARGS='' rbd --cluster ${cluster} mirror pool enable ${POOL} pool
     rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL} image
 
     if [ -z ${RBD_MIRROR_MANUAL_PEERS} ]; then
