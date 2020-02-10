@@ -622,7 +622,7 @@ static int update_mgrmap(MonitorDBStore& st)
     }
     bufferlist bl;
     encode(mgr_command_descs, bl);
-    t->put("mgr_command_desc", "", bl);
+    t->put("mgr_command_descs", "", bl);
   }
   return st.apply_transaction(t);
 }
