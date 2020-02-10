@@ -36,6 +36,7 @@
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/ops_executer.h"
+#include "crimson/osd/osd_operations/osdop_params.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 
 namespace {
@@ -487,21 +488,33 @@ blocking_future<> PG::WaitForActiveBlocker::wait()
 
 seastar::future<> PG::submit_transaction(ObjectContextRef&& obc,
 					 ceph::os::Transaction&& txn,
-					 const MOSDOp& req)
+					 const osd_op_params_t& osd_op_p)
 {
   epoch_t map_epoch = get_osdmap_epoch();
-  eversion_t at_version{map_epoch, projected_last_update.version + 1};
+
+  std::vector<pg_log_entry_t> log_entries;
+  log_entries.emplace_back(obc->obs.exists ?
+		      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
+		    obc->obs.oi.soid, osd_op_p.at_version, obc->obs.oi.version,
+		    osd_op_p.user_modify ? osd_op_p.at_version.version : 0,
+		    osd_op_p.req->get_reqid(), osd_op_p.req->get_mtime(), 0);
+  peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
+						txn, true, false);
+
   return backend->mutate_object(peering_state.get_acting_recovery_backfill(),
 				std::move(obc),
 				std::move(txn),
-				req,
+				std::move(osd_op_p),
 				peering_state.get_last_peering_reset(),
 				map_epoch,
-				at_version).then([this](auto acked) {
+				std::move(log_entries)).then(
+    [this, last_complete=peering_state.get_info().last_complete,
+      at_version=osd_op_p.at_version](auto acked) {
     for (const auto& peer : acked) {
       peering_state.update_peer_last_complete_ondisk(
         peer.shard, peer.last_complete_ondisk);
     }
+    peering_state.complete_write(at_version, last_complete);
     return seastar::now();
   });
 }
@@ -515,6 +528,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
                                                    : m->get_hobj();
   auto ox =
     std::make_unique<OpsExecuter>(obc, *this/* as const& */, m);
+
   return crimson::do_for_each(
     m->ops, [obc, m, ox = ox.get()](OSDOp& osd_op) {
     logger().debug(
@@ -528,10 +542,10 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       "do_osd_ops: {} - object {} all operations successful",
       *m,
       obc->obs.oi.soid);
-    return std::move(*ox).submit_changes(
-      [this, m] (auto&& txn, auto&& obc) -> osd_op_errorator::future<> {
-        // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
-        if (txn.empty()) {
+    return std::move(*ox).submit_changes([this, m]
+      (auto&& txn, auto&& obc, auto&& osd_op_p) -> osd_op_errorator::future<> {
+	// XXX: the entire lambda could be scheduled conditionally. ::if_then()?
+	if (txn.empty()) {
 	  logger().debug(
 	    "do_osd_ops: {} - object {} txn is empty, bypassing mutate",
 	    *m,
@@ -542,8 +556,9 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
 	    "do_osd_ops: {} - object {} submitting txn",
 	    *m,
 	    obc->obs.oi.soid);
-          return submit_transaction(std::move(obc), std::move(txn), *m);
-        }
+	   return submit_transaction(std::move(obc), std::move(txn),
+				    std::move(osd_op_p));
+	 }
       });
   }).safe_then([m, obc, this, ox_deleter = std::move(ox)] {
     auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
@@ -787,6 +802,11 @@ seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   ceph::os::Transaction txn;
   auto encoded_txn = req->get_data().cbegin();
   decode(txn, encoded_txn);
+  auto p = req->logbl.cbegin();
+  std::vector<pg_log_entry_t> log_entries;
+  decode(log_entries, p);
+  peering_state.append_log(std::move(log_entries), req->pg_trim_to,
+      req->version, req->min_last_complete_ondisk, txn, !txn.empty(), false);
   return shard_services.get_store().do_transaction(coll_ref, std::move(txn))
     .then([req, lcod=peering_state.get_info().last_complete, this] {
       peering_state.update_last_complete_ondisk(lcod);
