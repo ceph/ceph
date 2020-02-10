@@ -18,7 +18,7 @@ class TestOrchestratorCli(MgrTestCase):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd(module, *args)
 
     def _orch_cmd(self, *args):
-        return self._cmd("orchestrator", *args)
+        return self._cmd("orch", *args)
 
     def _progress_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", *args)
@@ -27,7 +27,7 @@ class TestOrchestratorCli(MgrTestCase):
         """
         raw_cluster_cmd doesn't support kwargs.
         """
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("orchestrator", *args, **kwargs)
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("orch", *args, **kwargs)
 
     def _test_orchestrator_cmd_result(self, *args, **kwargs):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("test_orchestrator", *args, **kwargs)

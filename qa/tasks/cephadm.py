@@ -414,11 +414,11 @@ def ceph_bootstrap(ctx, config):
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orchestrator', 'host', 'add',
+                'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
             r = _shell(ctx, cluster_name, remote,
-                       ['ceph', 'orchestrator', 'host', 'ls', '--format=json'],
+                       ['ceph', 'orch', 'host', 'ls', '--format=json'],
                        stdout=StringIO())
             hosts = [node['host'] for node in json.loads(r.stdout.getvalue())]
             assert remote.shortname in hosts
@@ -464,7 +464,7 @@ def ceph_mons(ctx, config):
                 log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orchestrator', 'mon', 'update',
+                    'ceph', 'orch', 'mon', 'update',
                     str(num_mons),
                     remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
                 ])
@@ -499,11 +499,11 @@ def ceph_mons(ctx, config):
                         if teuthology.is_type('mon', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mon)
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orchestrator', 'service-instance', 'reconfig',
+                    'ceph', 'orch', 'service-instance', 'reconfig',
                     'mon', id_,
                 ])
         _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
-            'ceph', 'orchestrator', 'service-instance', 'reconfig',
+            'ceph', 'orch', 'service-instance', 'reconfig',
             'mgr', ctx.ceph[cluster_name].first_mgr,
         ])
 
@@ -534,7 +534,7 @@ def ceph_mgrs(ctx, config):
                 daemons[mgr] = (remote, id_)
         if nodes:
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orchestrator', 'mgr', 'update',
+                'ceph', 'orch', 'mgr', 'update',
                 str(len(nodes) + 1)] + nodes
             )
         for mgr, i in daemons.items():
@@ -587,7 +587,7 @@ def ceph_osds(ctx, config):
             _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orchestrator', 'osd', 'create',
+                'ceph', 'orch', 'osd', 'create',
                 remote.shortname + ':' + short_dev
             ])
             ctx.daemons.register_daemon(
@@ -623,7 +623,7 @@ def ceph_mdss(ctx, config):
             daemons[role] = (remote, id_)
     if nodes:
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'orchestrator', 'mds', 'update',
+            'ceph', 'orch', 'mds', 'update',
             'all',
             str(len(nodes))] + nodes
         )
