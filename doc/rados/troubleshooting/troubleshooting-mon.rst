@@ -439,7 +439,12 @@ information stored in OSDs.::
     --cap mon 'allow *'
   ceph-authtool /path/to/admin.keyring -n client.admin \
     --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
-  ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring
+  # if your monitors' ids are not single characters like 'a', 'b', 'c', please
+  # specify them in the command line by passing them as arguments of the "--mon-ids"
+  # option. if you are not sure, please check your ceph.conf to see if there is any
+  # sections named like '[mon.foo]'. don't pass the "--mon-ids" option, if you are
+  # using DNS SRV for looking up monitors.
+  ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring --mon-ids alpha beta gamma
   
   # make a backup of the corrupted store.db just in case!  repeat for
   # all monitors.
