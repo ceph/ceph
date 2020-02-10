@@ -2,7 +2,7 @@ from __future__ import print_function
 import distutils.sysconfig
 from distutils.errors import CompileError, LinkError
 from distutils.ccompiler import new_compiler
-from itertools import filterfalse
+from itertools import filterfalse, takewhile
 
 import os
 import pkgutil
@@ -14,7 +14,8 @@ import textwrap
 
 
 def filter_unsupported_flags(compiler, flags):
-    if 'clang' in compiler:
+    args = takewhile(lambda argv: not argv.startswith('-'), [compiler] + flags)
+    if any('clang' in arg for arg in args):
         return list(filterfalse(lambda f:
                                 f in ('-mcet',
                                       '-fstack-clash-protection',
