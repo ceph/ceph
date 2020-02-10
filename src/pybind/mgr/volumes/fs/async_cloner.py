@@ -96,7 +96,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                             log.debug("cptree: (DIR) {0}".format(d_full_src))
                             try:
                                 fs_handle.mkdir(d_full_dst, mo)
-                                fs_handle.chown(d_full_dst, st.st_uid, st.st_gid)
+                                fs_handle.chown(d_full_dst, int(st.st_uid), int(st.st_gid))
                             except cephfs.Error as e:
                                 if not e.args[0] == errno.EEXIST:
                                     raise
@@ -111,7 +111,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                                     raise
                         elif stat.S_ISREG(st.st_mode):
                             log.debug("cptree: (REG) {0}".format(d_full_src))
-                            copy_file(fs_handle, d_full_src, d_full_dst, mo, st.st_uid, st.st_gid)
+                            copy_file(fs_handle, d_full_src, d_full_dst, mo, int(st.st_uid), int(st.st_gid))
                         else:
                             log.warn("cptree: (IGNORE) {0}".format(d_full_src))
                     d = fs_handle.readdir(dir_handle)
