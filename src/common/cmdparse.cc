@@ -47,8 +47,7 @@ std::string cmddesc_get_prefix(const std::string_view &cmddesc)
 using arg_desc_t = std::map<std::string_view, std::string_view>;
 
 // Snarf up all the key=val,key=val pairs, put 'em in a dict.
-template<class String>
-arg_desc_t cmddesc_get_args(const String& cmddesc)
+arg_desc_t cmddesc_get_args(const string_view cmddesc)
 {
   arg_desc_t arg_desc;
   for_each_substr(cmddesc, ",", [&](auto kv) {

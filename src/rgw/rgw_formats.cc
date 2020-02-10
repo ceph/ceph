@@ -63,7 +63,7 @@ void RGWFormatter_Plain::reset()
   min_stack_level = 0;
 }
 
-void RGWFormatter_Plain::open_array_section(const char *name)
+void RGWFormatter_Plain::open_array_section(std::string_view name)
 {
   struct plain_stack_entry new_entry;
   new_entry.is_array = true;
@@ -79,14 +79,14 @@ void RGWFormatter_Plain::open_array_section(const char *name)
   stack.push_back(new_entry);
 }
 
-void RGWFormatter_Plain::open_array_section_in_ns(const char *name, const char *ns)
+void RGWFormatter_Plain::open_array_section_in_ns(std::string_view name, const char *ns)
 {
   ostringstream oss;
   oss << name << " " << ns;
   open_array_section(oss.str().c_str());
 }
 
-void RGWFormatter_Plain::open_object_section(const char *name)
+void RGWFormatter_Plain::open_object_section(std::string_view name)
 {
   struct plain_stack_entry new_entry;
   new_entry.is_array = false;
@@ -98,7 +98,7 @@ void RGWFormatter_Plain::open_object_section(const char *name)
   stack.push_back(new_entry);
 }
 
-void RGWFormatter_Plain::open_object_section_in_ns(const char *name,
+void RGWFormatter_Plain::open_object_section_in_ns(std::string_view name,
 						   const char *ns)
 {
   ostringstream oss;
@@ -111,33 +111,33 @@ void RGWFormatter_Plain::close_section()
   stack.pop_back();
 }
 
-void RGWFormatter_Plain::dump_unsigned(const char *name, uint64_t u)
+void RGWFormatter_Plain::dump_unsigned(std::string_view name, uint64_t u)
 {
   dump_value_int(name, "%" PRIu64, u);
 }
 
-void RGWFormatter_Plain::dump_int(const char *name, int64_t u)
+void RGWFormatter_Plain::dump_int(std::string_view name, int64_t u)
 {
   dump_value_int(name, "%" PRId64, u);
 }
 
-void RGWFormatter_Plain::dump_float(const char *name, double d)
+void RGWFormatter_Plain::dump_float(std::string_view name, double d)
 {
   dump_value_int(name, "%f", d);
 }
 
-void RGWFormatter_Plain::dump_string(const char *name, std::string_view s)
+void RGWFormatter_Plain::dump_string(std::string_view name, std::string_view s)
 {
   dump_format(name, "%s", s.data());
 }
 
-std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
+std::ostream& RGWFormatter_Plain::dump_stream(std::string_view name)
 {
   // TODO: implement this!
   ceph_abort();
 }
 
-void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
+void RGWFormatter_Plain::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
 
@@ -248,7 +248,7 @@ done_free:
     free(p);
 }
 
-void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
+void RGWFormatter_Plain::dump_value_int(std::string_view name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
   va_list ap;
