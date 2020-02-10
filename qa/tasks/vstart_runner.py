@@ -1016,12 +1016,6 @@ class LocalCephCluster(CephCluster):
     def admin_remote(self):
         return LocalRemote()
 
-    def set_config_opt(self, section, opt, val):
-        self.mon_manager.raw_cluster_cmd('config', 'set', section, opt, val)
-
-    def rm_config_opt(self, section, opt):
-        self.mon_manager.raw_cluster_cmd('config', 'rm', section, opt)
-
     def get_config(self, key, service_type=None):
         if service_type is None:
             service_type = 'mon'
