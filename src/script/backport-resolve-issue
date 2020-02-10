@@ -95,6 +95,7 @@ import logging
 import json
 import os
 import re
+import sys
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
 from git import Repo
@@ -116,6 +117,7 @@ redmine = None
 bri_tag = None
 github_token_file = "~/.github_token"
 github_token = None
+github_user = None
 redmine_key_file = "~/.redmine_key"
 redmine_key = None
 
@@ -154,6 +156,21 @@ def connect_to_redmine(a):
         return Redmine(redmine_endpoint, key=redmine_key)
     else:
         usage()
+
+def derive_github_user_from_token(gh_token):
+    retval = None
+    if gh_token:
+        curl_opt = "-u :{} --silent".format(gh_token)
+        cmd = "curl {} https://api.github.com/user".format(curl_opt)
+        logging.debug("Running curl command ->{}<-".format(cmd))
+        json_str = os.popen(cmd).read()
+        github_api_result = json.loads(json_str)
+        if "login" in github_api_result:
+            retval = github_api_result['login']
+            if "message" in github_api_result:
+                assert False, \
+                    "GitHub API unexpectedly returned ->{}<-".format(github_api_result['message'])
+    return retval    
 
 def ensure_bri_tag_exists(repo, release):
     global bri_tag
@@ -303,15 +320,12 @@ def releases():
 def report_params(a):
     global dry_run
     global no_browser
-    global github_token
     if a.dry_run:
          dry_run = True
          logging.warning("Dry run: nothing will be written to Redmine")
     if a.no_browser:
          no_browser = True
          logging.warning("Web browser will not be used even if it is running")
-    if github_token:
-         logging.info("GitHub token was read from '%s'; using it" % github_token_file)
 
 def set_logging_level(a):
     if a.debug:
@@ -350,6 +364,7 @@ class Backport:
         global browser_cmd
         global ceph_release
         global github_token
+        global github_user
         self.repo = repo
         self.merge_commit_string = merge_commit_string
         #
@@ -370,10 +385,15 @@ class Backport:
         self.populate_github_url()
         #
         # GitHub PR description and merged status from GitHub
-        cmd = "curl --silent https://api.github.com/repos/ceph/ceph/pulls/{}".format(self.github_pr_id)
+        curl_opt = "--silent"
         # if GitHub token was provided, use it to avoid throttling - 
-        if github_token:
-            cmd = "{}?access_token={}".format(cmd, github_token)
+        if github_token and github_user:
+            curl_opt = "-u {}:{} {}".format(github_user, github_token, curl_opt)
+        cmd = (
+               "curl {} https://api.github.com/repos/ceph/ceph/pulls/{}"
+               .format(curl_opt, self.github_pr_id)
+              )
+        logging.debug("Running curl command ->{}<-".format(cmd))
         json_str = os.popen(cmd).read()
         github_api_result = json.loads(json_str)
         if "title" not in github_api_result:
@@ -596,6 +616,13 @@ if __name__ == '__main__':
     set_logging_level(args)
     logging.debug(args)
     github_token = read_from_file(github_token_file)
+    if github_token:
+        logging.info("GitHub token was read from ->{}<-; using it".format(github_token_file))
+        github_user = derive_github_user_from_token(github_token)
+        if github_user:
+            logging.info(
+                "GitHub user ->{}<- was derived from the GitHub token".format(github_user)
+                )
     report_params(args)
     #
     # set up Redmine variables
