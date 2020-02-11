@@ -1100,13 +1100,13 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
-    def __init__(self, ctx, fscid=None, name='cephfs', create=False):
+    def __init__(self, ctx, fscid=None, name='cephfs', create=False, ec_profile=None):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
 
         self.id = None
-        self.name = None
-        self.ec_profile = None
+        self.name = name
+        self.ec_profile = ec_profile
         self.metadata_pool_name = None
         self.metadata_overlay = False
         self.data_pool_name = None
