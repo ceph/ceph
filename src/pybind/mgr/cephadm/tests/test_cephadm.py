@@ -2,6 +2,8 @@ import json
 from contextlib import contextmanager
 import fnmatch
 
+import pytest
+
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 
 try:
@@ -10,7 +12,7 @@ except ImportError:
     pass
 
 from orchestrator import ServiceDescription, InventoryNode, \
-    ServiceSpec, PlacementSpec, RGWSpec, HostSpec
+    ServiceSpec, PlacementSpec, RGWSpec, HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait
 
@@ -186,15 +188,37 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'host1'):
             with self._with_host(cephadm_module, 'host2'):
                 ps = PlacementSpec(hosts=['host1'], count=1)
-                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
                 [out] = wait(cephadm_module, c)
-                match_glob(out, "Deployed rgw.realm.zone.host1.* on host 'host1'")
-
+                match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
 
                 ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
-                c = cephadm_module.update_rgw(RGWSpec('realm', 'zone', placement=ps))
+                c = cephadm_module.update_rgw(RGWSpec('realm', 'zone1', placement=ps))
                 [out] = wait(cephadm_module, c)
-                match_glob(out, "Deployed rgw.realm.zone.host2.* on host 'host2'")
+                match_glob(out, "Deployed rgw.realm.zone1.host2.* on host 'host2'")
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    def test_rgw_update_fail(self, _send_command, _get_connection, cephadm_module):
+
+        with self._with_host(cephadm_module, 'host1'):
+            with self._with_host(cephadm_module, 'host2'):
+                ps = PlacementSpec(hosts=['host1'], count=1)
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
+
+                ps = PlacementSpec(hosts=['host2'], count=1)
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone2', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone2.host2.* on host 'host2'")
+
+                with pytest.raises(OrchestratorError):
+                    ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
+                    c = cephadm_module.update_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                    [out] = wait(cephadm_module, c)
 
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
