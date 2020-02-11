@@ -202,6 +202,7 @@ int RGWSI_Zone::do_start()
   }
 
   writeable_zone = sm->supports_writes();
+  exports_data = sm->supports_data_export();
 
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
@@ -881,11 +882,6 @@ bool RGWSI_Zone::has_zonegroup_api(const std::string& api) const
 bool RGWSI_Zone::zone_is_writeable()
 {
   return writeable_zone && !get_zone().is_read_only();
-}
-
-bool RGWSI_Zone::sync_module_supports_writes() const
-{
-  return writeable_zone;
 }
 
 uint32_t RGWSI_Zone::get_zone_short_id() const
