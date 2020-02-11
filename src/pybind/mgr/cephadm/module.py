@@ -1320,7 +1320,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     if '.' in d['name']:
                         sd.service_instance = '.'.join(d['name'].split('.')[1:])
                     elif d['name'] != '*':
-                        sd.service_instance = host  # e.g., crash
+                        sd.service_instance = host
                     if service_id and service_id != sd.service_instance:
                         continue
                     if service_name and not sd.service_instance.startswith(service_name + '.'):
@@ -1632,13 +1632,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if extra_config:
             config += extra_config
 
-        # crash_keyring
-        ret, crash_keyring, err = self.mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'client.crash.%s' % host,
-            'caps': ['mon', 'profile crash',
-                     'mgr', 'profile crash'],
-        })
+        if daemon_type != 'crash':
+            # crash_keyring
+            ret, crash_keyring, err = self.mon_command({
+                'prefix': 'auth get-or-create',
+                'entity': 'client.crash.%s' % host,
+                'caps': ['mon', 'profile crash',
+                         'mgr', 'profile crash'],
+            })
+        else:
+            crash_keyring = None
 
         j = json.dumps({
             'config': config,
