@@ -73,6 +73,8 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   bool is_leader() const override { return mon->is_leader(); }
 
  protected:
+  using mds_info_t = MDSMap::mds_info_t;
+
   // my helpers
   template<int dblV = 7>
   void print_map(const FSMap &m);
@@ -88,7 +90,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
 
   int fail_mds(FSMap &fsmap, std::ostream &ss,
       const std::string &arg,
-      MDSMap::mds_info_t *failed_info);
+      mds_info_t *failed_info);
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
@@ -113,8 +115,8 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
 
   bool maybe_promote_standby(FSMap& fsmap, Filesystem& fs);
   bool maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid);
-  void maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
-      const MDSMap::mds_info_t& info, bool *mds_propose, bool *osd_propose);
+  bool drop_mds(FSMap &fsmap, mds_gid_t gid, const mds_info_t* rep_info, bool* osd_propose);
+  bool check_health(FSMap &fsmap, bool* osd_propose);
   void tick() override;     // check state, take actions
 
   int dump_metadata(const FSMap &fsmap, const std::string &who, Formatter *f,
