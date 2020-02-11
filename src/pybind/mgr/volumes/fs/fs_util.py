@@ -36,7 +36,7 @@ def remove_filesystem(mgr, fs_name):
 def create_mds(mgr, fs_name):
     spec = orchestrator.ServiceSpec(fs_name)
     try:
-        completion = mgr.add_mds(spec)
+        completion = mgr.apply_mds(spec)
         mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
     except (ImportError, orchestrator.OrchestratorError):
