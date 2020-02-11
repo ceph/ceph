@@ -34,6 +34,7 @@ namespace mirror {
 template <typename> class RemotePoolPoller;
 namespace remote_pool_poller { struct Listener; }
 
+struct PoolMetaCache;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
@@ -47,6 +48,7 @@ public:
   PoolReplayer(Threads<ImageCtxT> *threads,
                ServiceDaemon<ImageCtxT> *service_daemon,
                journal::CacheManagerHandler *cache_manager_handler,
+               PoolMetaCache* pool_meta_cache,
 	       int64_t local_pool_id, const PeerSpec &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
@@ -193,6 +195,7 @@ private:
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
   int64_t m_local_pool_id = -1;
   PeerSpec m_peer;
   std::vector<const char*> m_args;

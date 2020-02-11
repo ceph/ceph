@@ -27,6 +27,7 @@ class ProgressContext;
 
 template <typename> class ImageSync;
 template <typename> class InstanceWatcher;
+struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -47,14 +48,15 @@ public:
       const std::string& local_mirror_uuid,
       const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
-      local_mirror_uuid, remote_pool_meta, cache_manager_handler, progress_ctx,
-      state_builder, do_resync, on_finish);
+      local_mirror_uuid, remote_pool_meta, cache_manager_handler,
+      pool_meta_cache, progress_ctx, state_builder, do_resync, on_finish);
   }
 
   BootstrapRequest(
@@ -66,11 +68,11 @@ public:
       const std::string& local_mirror_uuid,
       const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish);
-  ~BootstrapRequest() override;
 
   bool is_syncing() const;
 
@@ -94,10 +96,7 @@ private:
    *    v                                           (error) *
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * *
    *    |                                                   *
-   *    v                                                   *
-   * GET_REMOTE_MIRROR_INFO * * * * * * * * * * * * * * *   *
-   *    |                                               *   *
-   *    |                                               *   *
+   *    |                                                   *
    *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *
    *    |         |       ^                             *   *
    *    |         |       .                             *   *
@@ -131,6 +130,7 @@ private:
   std::string m_local_mirror_uuid;
   RemotePoolMeta m_remote_pool_meta;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
   ProgressContext *m_progress_ctx;
   StateBuilder<ImageCtxT>** m_state_builder;
   bool *m_do_resync;
@@ -138,10 +138,6 @@ private:
   mutable ceph::mutex m_lock;
   bool m_canceled = false;
 
-  ImageCtxT *m_remote_image_ctx = nullptr;
-  cls::rbd::MirrorImage m_mirror_image;
-  librbd::mirror::PromotionState m_promotion_state =
-    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   int m_ret_val = 0;
 
   std::string m_local_image_name;
@@ -158,9 +154,6 @@ private:
 
   void open_remote_image();
   void handle_open_remote_image(int r);
-
-  void get_remote_mirror_info();
-  void handle_get_remote_mirror_info(int r);
 
   void open_local_image();
   void handle_open_local_image(int r);

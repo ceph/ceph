@@ -217,12 +217,14 @@ ImageReplayer<I>::ImageReplayer(
     const std::string &global_image_id, Threads<I> *threads,
     InstanceWatcher<I> *instance_watcher,
     MirrorStatusUpdater<I>* local_status_updater,
-    journal::CacheManagerHandler *cache_manager_handler) :
+    journal::CacheManagerHandler *cache_manager_handler,
+    PoolMetaCache* pool_meta_cache) :
   m_local_io_ctx(local_io_ctx), m_local_mirror_uuid(local_mirror_uuid),
   m_global_image_id(global_image_id), m_threads(threads),
   m_instance_watcher(instance_watcher),
   m_local_status_updater(local_status_updater),
   m_cache_manager_handler(cache_manager_handler),
+  m_pool_meta_cache(pool_meta_cache),
   m_local_image_name(global_image_id),
   m_lock(ceph::make_mutex("rbd::mirror::ImageReplayer " +
       stringify(local_io_ctx.get_id()) + " " + global_image_id)),
@@ -352,7 +354,8 @@ void ImageReplayer<I>::bootstrap() {
       m_threads, m_local_io_ctx, m_remote_image_peer.io_ctx, m_instance_watcher,
       m_global_image_id, m_local_mirror_uuid,
       m_remote_image_peer.remote_pool_meta, m_cache_manager_handler,
-      &m_progress_cxt, &m_state_builder, &m_resync_requested, ctx);
+      m_pool_meta_cache, &m_progress_cxt, &m_state_builder, &m_resync_requested,
+      ctx);
 
   request->get();
   m_bootstrap_request = request;

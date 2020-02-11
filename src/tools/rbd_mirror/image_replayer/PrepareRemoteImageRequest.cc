@@ -8,13 +8,15 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "journal/Journaler.h"
+#include "journal/Settings.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/journal/Types.h"
+#include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -33,51 +35,8 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void PrepareRemoteImageRequest<I>::send() {
-  get_remote_mirror_uuid();
-}
-
-template <typename I>
-void PrepareRemoteImageRequest<I>::get_remote_mirror_uuid() {
-  dout(10) << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_uuid_get_start(&op);
-
-  librados::AioCompletion *aio_comp = create_rados_callback<
-    PrepareRemoteImageRequest<I>,
-    &PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid>(this);
-  int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid(int r) {
-  if (r >= 0) {
-    auto it = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_uuid_get_finish(&it, &m_remote_mirror_uuid);
-    if (r >= 0 && m_remote_mirror_uuid.empty()) {
-      r = -ENOENT;
-    }
-  }
-
-  dout(10) << "r=" << r << dendl;
-  if (r < 0) {
-    if (r == -ENOENT) {
-      dout(5) << "remote mirror uuid missing" << dendl;
-    } else {
-      derr << "failed to retrieve remote mirror uuid: " << cpp_strerror(r)
-           << dendl;
-    }
-    finish(r);
-    return;
-  }
-
-  auto state_builder = *m_state_builder;
-  if (state_builder != nullptr) {
-    // if the local image exists but the remote image doesn't, we still
-    // want to populate the remote mirror uuid that we've looked up
-    state_builder->remote_mirror_uuid = m_remote_mirror_uuid;
+  if (*m_state_builder != nullptr) {
+    (*m_state_builder)->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
   }
 
   get_remote_image_id();
@@ -106,33 +65,26 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_image_id(int r) {
     return;
   }
 
-  get_mirror_image();
+  get_mirror_info();
 }
 
 template <typename I>
-void PrepareRemoteImageRequest<I>::get_mirror_image() {
+void PrepareRemoteImageRequest<I>::get_mirror_info() {
   dout(10) << dendl;
 
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_image_get_start(&op, m_remote_image_id);
-
-  auto aio_comp = create_rados_callback<
+  auto ctx = create_context_callback<
     PrepareRemoteImageRequest<I>,
-    &PrepareRemoteImageRequest<I>::handle_get_mirror_image>(this);
-  m_out_bl.clear();
-  int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  aio_comp->release();
+    &PrepareRemoteImageRequest<I>::handle_get_mirror_info>(this);
+  auto req = librbd::mirror::GetInfoRequest<I>::create(
+    m_remote_io_ctx, m_threads->work_queue, m_remote_image_id,
+    &m_mirror_image, &m_promotion_state, &m_primary_mirror_uuid,
+    ctx);
+  req->send();
 }
 
 template <typename I>
-void PrepareRemoteImageRequest<I>::handle_get_mirror_image(int r) {
+void PrepareRemoteImageRequest<I>::handle_get_mirror_info(int r) {
   dout(10) << "r=" << r << dendl;
-  cls::rbd::MirrorImage mirror_image;
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
-  }
 
   if (r == -ENOENT) {
     dout(10) << "image " << m_global_image_id << " not mirrored" << dendl;
@@ -145,22 +97,36 @@ void PrepareRemoteImageRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  if (*m_state_builder != nullptr &&
-      (*m_state_builder)->get_mirror_image_mode() != mirror_image.mode) {
+  auto state_builder = *m_state_builder;
+  if (state_builder != nullptr &&
+      state_builder->get_mirror_image_mode() != m_mirror_image.mode) {
     derr << "local and remote mirror image using different mirroring modes "
          << "for image " << m_global_image_id << ": split-brain" << dendl;
     finish(-EEXIST);
     return;
+  } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+    dout(5) << "remote image mirroring is being disabled" << dendl;
+    finish(-EREMOTEIO);
+    return;
+  } else if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
+             (state_builder == nullptr ||
+              state_builder->local_image_id.empty())) {
+    // no local image and remote isn't primary -- don't sync it
+    dout(5) << "remote image is not primary -- not syncing" << dendl;
+    finish(-EREMOTEIO);
+    return;
   }
 
-  switch (mirror_image.mode) {
+  switch (m_mirror_image.mode) {
   case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
     get_client();
     break;
   case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
-    // TODO
+    finalize_snapshot_state_builder();
+    finish(0);
+    break;
   default:
-    derr << "unsupported mirror image mode " << mirror_image.mode << " "
+    derr << "unsupported mirror image mode " << m_mirror_image.mode << " "
          << "for image " << m_global_image_id << dendl;
     finish(-EOPNOTSUPP);
     break;
@@ -257,7 +223,7 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
   journal::StateBuilder<I>* state_builder = nullptr;
   if (*m_state_builder != nullptr) {
     // already verified that it's a matching builder in
-    // 'handle_get_mirror_image'
+    // 'handle_get_mirror_info'
     state_builder = dynamic_cast<journal::StateBuilder<I>*>(*m_state_builder);
     ceph_assert(state_builder != nullptr);
   } else {
@@ -265,11 +231,31 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
     *m_state_builder = state_builder;
   }
 
-  state_builder->remote_mirror_uuid = m_remote_mirror_uuid;
+  state_builder->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
   state_builder->remote_image_id = m_remote_image_id;
+  state_builder->remote_promotion_state = m_promotion_state;
   state_builder->remote_journaler = m_remote_journaler;
   state_builder->remote_client_state = client_state;
   state_builder->remote_client_meta = client_meta;
+}
+
+template <typename I>
+void PrepareRemoteImageRequest<I>::finalize_snapshot_state_builder() {
+  snapshot::StateBuilder<I>* state_builder = nullptr;
+  if (*m_state_builder != nullptr) {
+    // already verified that it's a matching builder in
+    // 'handle_get_mirror_info'
+    state_builder = dynamic_cast<snapshot::StateBuilder<I>*>(*m_state_builder);
+    ceph_assert(state_builder != nullptr);
+  } else {
+    state_builder = snapshot::StateBuilder<I>::create(m_global_image_id);
+    *m_state_builder = state_builder;
+  }
+
+  state_builder->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
+  state_builder->remote_mirror_peer_uuid = m_remote_pool_meta.mirror_peer_uuid;
+  state_builder->remote_image_id = m_remote_image_id;
+  state_builder->remote_promotion_state = m_promotion_state;
 }
 
 template <typename I>

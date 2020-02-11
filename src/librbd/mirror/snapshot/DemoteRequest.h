@@ -21,12 +21,16 @@ namespace snapshot {
 template <typename ImageCtxT = librbd::ImageCtx>
 class DemoteRequest {
 public:
-  static DemoteRequest *create(ImageCtxT *image_ctx, Context *on_finish) {
-    return new DemoteRequest(image_ctx, on_finish);
+  static DemoteRequest *create(ImageCtxT *image_ctx,
+                               const std::string& global_image_id,
+                               Context *on_finish) {
+    return new DemoteRequest(image_ctx, global_image_id, on_finish);
   }
 
-  DemoteRequest(ImageCtxT *image_ctx, Context *on_finish)
-    : m_image_ctx(image_ctx), m_on_finish(on_finish) {
+  DemoteRequest(ImageCtxT *image_ctx, const std::string& global_image_id,
+                Context *on_finish)
+    : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
+      m_on_finish(on_finish) {
   }
 
   void send();
@@ -38,9 +42,6 @@ private:
    * <start>
    *    |
    *    v
-   * REFRESH_IMAGE
-   *    |
-   *    v
    * CREATE_SNAPSHOT
    *    |
    *    v
@@ -50,10 +51,8 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
+  std::string m_global_image_id;
   Context *m_on_finish;
-
-  void refresh_image();
-  void handle_refresh_image(int r);
 
   void create_snapshot();
   void handle_create_snapshot(int r);

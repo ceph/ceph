@@ -26,6 +26,16 @@ bool auto_delete_snapshot(const SnapInfo& snap_info) {
     snap_info.snap_namespace);
   switch (snap_namespace_type) {
   case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool ignore_snapshot(const SnapInfo& snap_info) {
+  auto snap_namespace_type = cls::rbd::get_snap_namespace_type(
+    snap_info.snap_namespace);
+  switch (snap_namespace_type) {
   case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY:
   case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY:
     return true;
@@ -160,7 +170,7 @@ void PreRemoveRequest<I>::check_image_snaps() {
   for (auto& snap_info : m_image_ctx->snap_info) {
     if (auto_delete_snapshot(snap_info.second)) {
       m_snap_infos.insert(snap_info);
-    } else {
+    } else if (!ignore_snapshot(snap_info.second)) {
       m_image_ctx->image_lock.unlock_shared();
 
       ldout(cct, 5) << "image has snapshots - not removing" << dendl;

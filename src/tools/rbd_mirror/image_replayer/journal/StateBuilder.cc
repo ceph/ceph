@@ -43,26 +43,18 @@ void StateBuilder<I>::close(Context* on_finish) {
   // close the remote journaler after closing the local image
   // in case we have lost contact w/ the remote cluster and
   // will block
-  auto ctx = new LambdaContext([this, on_finish](int) {
+  on_finish = new LambdaContext([this, on_finish](int) {
       shut_down_remote_journaler(on_finish);
     });
-  this->close_local_image(ctx);
+  on_finish = new LambdaContext([this, on_finish](int) {
+      this->close_local_image(on_finish);
+    });
+  this->close_remote_image(on_finish);
 }
 
 template <typename I>
 bool StateBuilder<I>::is_disconnected() const {
   return (remote_client_state == cls::journal::CLIENT_STATE_DISCONNECTED);
-}
-
-template <typename I>
-bool StateBuilder<I>::is_local_primary() const  {
-  return (!this->local_image_id.empty() &&
-          local_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID);
-}
-
-template <typename I>
-bool StateBuilder<I>::is_linked() const {
-  return (local_tag_owner == this->remote_mirror_uuid);
 }
 
 template <typename I>
@@ -82,25 +74,24 @@ template <typename I>
 BaseRequest* StateBuilder<I>::create_local_image_request(
     Threads<I>* threads,
     librados::IoCtx& local_io_ctx,
-    I* remote_image_ctx,
     const std::string& global_image_id,
+    PoolMetaCache* pool_meta_cache,
     ProgressContext* progress_ctx,
     Context* on_finish) {
   return CreateLocalImageRequest<I>::create(
-    threads, local_io_ctx, remote_image_ctx, this->global_image_id,
-    progress_ctx, this, on_finish);
+    threads, local_io_ctx, this->remote_image_ctx, this->global_image_id,
+    pool_meta_cache, progress_ctx, this, on_finish);
 }
 
 template <typename I>
 BaseRequest* StateBuilder<I>::create_prepare_replay_request(
     const std::string& local_mirror_uuid,
-    librbd::mirror::PromotionState remote_promotion_state,
     ProgressContext* progress_ctx,
     bool* resync_requested,
     bool* syncing,
     Context* on_finish) {
   return PrepareReplayRequest<I>::create(
-    local_mirror_uuid, remote_promotion_state, progress_ctx, this,
+    local_mirror_uuid, this->remote_promotion_state, progress_ctx, this,
     resync_requested, syncing, on_finish);
 }
 

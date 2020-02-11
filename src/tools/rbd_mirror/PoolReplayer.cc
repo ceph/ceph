@@ -15,6 +15,7 @@
 #include "global/global_context.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Namespace.h"
+#include "PoolMetaCache.h"
 #include "RemotePoolPoller.h"
 #include "ServiceDaemon.h"
 #include "Threads.h"
@@ -224,11 +225,13 @@ struct PoolReplayer<I>::RemotePoolPollerListener
 template <typename I>
 PoolReplayer<I>::PoolReplayer(
     Threads<I> *threads, ServiceDaemon<I> *service_daemon,
-    journal::CacheManagerHandler *cache_manager_handler, int64_t local_pool_id,
+    journal::CacheManagerHandler *cache_manager_handler,
+    PoolMetaCache* pool_meta_cache, int64_t local_pool_id,
     const PeerSpec &peer, const std::vector<const char*> &args) :
   m_threads(threads),
   m_service_daemon(service_daemon),
   m_cache_manager_handler(cache_manager_handler),
+  m_pool_meta_cache(pool_meta_cache),
   m_local_pool_id(local_pool_id),
   m_peer(peer),
   m_args(args),
@@ -360,12 +363,16 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     return;
   }
   ceph_assert(!m_remote_pool_meta.mirror_uuid.empty());
+  m_pool_meta_cache->set_remote_pool_meta(
+    m_remote_io_ctx.get_id(), m_remote_pool_meta);
+  m_pool_meta_cache->set_local_pool_meta(
+    m_local_io_ctx.get_id(), {m_local_mirror_uuid});
 
   m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
       "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
       m_remote_pool_meta, m_threads, m_image_sync_throttler.get(),
       m_image_deletion_throttler.get(), m_service_daemon,
-      m_cache_manager_handler));
+      m_cache_manager_handler, m_pool_meta_cache));
 
   C_SaferCond on_init;
   m_default_namespace_replayer->init(&on_init);
@@ -431,6 +438,9 @@ void PoolReplayer<I>::shut_down() {
     C_SaferCond ctx;
     m_remote_pool_poller->shut_down(&ctx);
     ctx.wait();
+
+    m_pool_meta_cache->remove_remote_pool_meta(m_remote_io_ctx.get_id());
+    m_pool_meta_cache->remove_local_pool_meta(m_local_io_ctx.get_id());
   }
   m_remote_pool_poller.reset();
   m_remote_pool_poller_listener.reset();
@@ -657,7 +667,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
         name, m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
         m_remote_pool_meta, m_threads, m_image_sync_throttler.get(),
         m_image_deletion_throttler.get(), m_service_daemon,
-        m_cache_manager_handler);
+        m_cache_manager_handler, m_pool_meta_cache);
     auto on_init = new LambdaContext(
         [this, namespace_replayer, name, &mirroring_namespaces,
          ctx=gather_ctx->new_sub()](int r) {

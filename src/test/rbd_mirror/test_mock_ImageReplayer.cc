@@ -107,6 +107,7 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
       const std::string &local_mirror_uuid,
       const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache,
       rbd::mirror::ProgressContext *progress_ctx,
       StateBuilder<librbd::MockTestImageCtx>** state_builder,
       bool *do_resync, Context *on_finish) {
@@ -354,7 +355,8 @@ public:
   void create_image_replayer(MockThreads &mock_threads) {
     m_image_replayer = new MockImageReplayer(
         m_local_io_ctx, "local_mirror_uuid", "global image id",
-        &mock_threads, &m_instance_watcher, &m_local_status_updater, nullptr);
+        &mock_threads, &m_instance_watcher, &m_local_status_updater, nullptr,
+        nullptr);
     m_image_replayer->add_peer({"peer_uuid", m_remote_io_ctx,
                                 {"remote mirror uuid",
                                  "remote mirror peer uuid"},

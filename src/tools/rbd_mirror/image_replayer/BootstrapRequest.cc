@@ -3,7 +3,6 @@
 
 #include "include/compat.h"
 #include "BootstrapRequest.h"
-#include "CloseImageRequest.h"
 #include "CreateImageRequest.h"
 #include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
@@ -20,7 +19,6 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
-#include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/BaseRequest.h"
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/ProgressContext.h"
@@ -54,6 +52,7 @@ BootstrapRequest<I>::BootstrapRequest(
     const std::string& local_mirror_uuid,
     const RemotePoolMeta& remote_pool_meta,
     ::journal::CacheManagerHandler* cache_manager_handler,
+    PoolMetaCache* pool_meta_cache,
     ProgressContext* progress_ctx,
     StateBuilder<I>** state_builder,
     bool* do_resync,
@@ -69,17 +68,13 @@ BootstrapRequest<I>::BootstrapRequest(
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_pool_meta(remote_pool_meta),
     m_cache_manager_handler(cache_manager_handler),
+    m_pool_meta_cache(pool_meta_cache),
     m_progress_ctx(progress_ctx),
     m_state_builder(state_builder),
     m_do_resync(do_resync),
     m_lock(ceph::make_mutex(unique_lock_name("BootstrapRequest::m_lock",
                                              this))) {
   dout(10) << dendl;
-}
-
-template <typename I>
-BootstrapRequest<I>::~BootstrapRequest() {
-  ceph_assert(m_remote_image_ctx == nullptr);
 }
 
 template <typename I>
@@ -161,7 +156,8 @@ void BootstrapRequest<I>::prepare_remote_image() {
     BootstrapRequest, &BootstrapRequest<I>::handle_prepare_remote_image>(this);
   auto req = image_replayer::PrepareRemoteImageRequest<I>::create(
     m_threads, m_local_io_ctx, m_remote_io_ctx, m_global_image_id,
-    m_local_mirror_uuid, m_cache_manager_handler, m_state_builder, ctx);
+    m_local_mirror_uuid, m_remote_pool_meta, m_cache_manager_handler,
+    m_state_builder, ctx);
   req->send();
 }
 
@@ -170,9 +166,16 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
   dout(10) << "r=" << r << dendl;
 
   auto state_builder = *m_state_builder;
+  ceph_assert(state_builder == nullptr ||
+              !state_builder->remote_mirror_uuid.empty());
+
   if (state_builder != nullptr && state_builder->is_local_primary()) {
     dout(5) << "local image is primary" << dendl;
     finish(-ENOMSG);
+    return;
+  } else if (r == -EREMOTEIO) {
+    dout(10) << "remote-image is non-primary" << cpp_strerror(r) << dendl;
+    finish(r);
     return;
   } else if (r == -ENOENT || state_builder == nullptr) {
     dout(10) << "remote image does not exist" << dendl;
@@ -206,12 +209,13 @@ void BootstrapRequest<I>::open_remote_image() {
 
   update_progress("OPEN_REMOTE_IMAGE");
 
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_remote_image>(
-      this);
+  auto ctx = create_context_callback<
+    BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_open_remote_image>(this);
+  ceph_assert(*m_state_builder != nullptr);
   OpenImageRequest<I> *request = OpenImageRequest<I>::create(
-    m_remote_io_ctx, &m_remote_image_ctx, remote_image_id, false,
-    ctx);
+    m_remote_io_ctx, &(*m_state_builder)->remote_image_ctx, remote_image_id,
+    false, ctx);
   request->send();
 }
 
@@ -219,72 +223,13 @@ template <typename I>
 void BootstrapRequest<I>::handle_open_remote_image(int r) {
   dout(15) << "r=" << r << dendl;
 
+  ceph_assert(*m_state_builder != nullptr);
   if (r < 0) {
     derr << "failed to open remote image: " << cpp_strerror(r) << dendl;
-    ceph_assert(m_remote_image_ctx == nullptr);
+    ceph_assert((*m_state_builder)->remote_image_ctx == nullptr);
     finish(r);
     return;
   }
-
-  get_remote_mirror_info();
-}
-
-template <typename I>
-void BootstrapRequest<I>::get_remote_mirror_info() {
-  dout(15) << dendl;
-
-  update_progress("GET_REMOTE_MIRROR_INFO");
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_mirror_info>(
-      this);
-  auto request = librbd::mirror::GetInfoRequest<I>::create(
-    *m_remote_image_ctx, &m_mirror_image, &m_promotion_state, ctx);
-  request->send();
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
-  dout(15) << "r=" << r << dendl;
-
-  if (r == -ENOENT) {
-    dout(5) << "remote image is not mirrored" << dendl;
-    m_ret_val = -EREMOTEIO;
-    close_remote_image();
-    return;
-  } else if (r < 0) {
-    derr << "error querying remote image primary status: " << cpp_strerror(r)
-         << dendl;
-    m_ret_val = r;
-    close_remote_image();
-    return;
-  }
-
-  if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
-    dout(5) << "remote image mirroring is being disabled" << dendl;
-    m_ret_val = -EREMOTEIO;
-    close_remote_image();
-    return;
-  }
-
-  if (m_mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
-    dout(5) << ": remote image is in unsupported mode: " << m_mirror_image.mode
-            << dendl;
-    m_ret_val = -EOPNOTSUPP;
-    close_remote_image();
-    return;
-  }
-
-  ceph_assert(*m_state_builder != nullptr);
-  if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
-      (*m_state_builder)->local_image_id.empty()) {
-    // no local image and remote isn't primary -- don't sync it
-    dout(5) << "remote image is not primary -- not syncing" << dendl;
-    m_ret_val = -EREMOTEIO;
-    close_remote_image();
-    return;
-  }
-
 
   if ((*m_state_builder)->local_image_id.empty()) {
     create_local_image();
@@ -349,8 +294,7 @@ void BootstrapRequest<I>::prepare_replay() {
   auto ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_prepare_replay>(this);
   auto request = (*m_state_builder)->create_prepare_replay_request(
-    m_local_mirror_uuid, m_promotion_state, m_progress_ctx, m_do_resync,
-    &m_syncing, ctx);
+    m_local_mirror_uuid, m_progress_ctx, m_do_resync, &m_syncing, ctx);
   request->send();
 }
 
@@ -394,7 +338,7 @@ void BootstrapRequest<I>::create_local_image() {
     BootstrapRequest<I>,
     &BootstrapRequest<I>::handle_create_local_image>(this);
   auto request = (*m_state_builder)->create_local_image_request(
-    m_threads, m_local_io_ctx, m_remote_image_ctx, m_global_image_id,
+    m_threads, m_local_io_ctx, m_global_image_id, m_pool_meta_cache,
     m_progress_ctx, ctx);
   request->send();
 }
@@ -438,7 +382,7 @@ void BootstrapRequest<I>::image_sync() {
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
   m_image_sync = ImageSync<I>::create(
-    m_threads, state_builder->local_image_ctx, m_remote_image_ctx,
+    m_threads, state_builder->local_image_ctx, state_builder->remote_image_ctx,
     m_local_mirror_uuid, sync_point_handler, m_instance_watcher,
     m_progress_ctx, ctx);
   m_image_sync->get();
@@ -478,12 +422,11 @@ void BootstrapRequest<I>::close_remote_image() {
 
   update_progress("CLOSE_REMOTE_IMAGE");
 
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_remote_image>(
-      this);
-  CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_remote_image_ctx, ctx);
-  request->send();
+  auto ctx = create_context_callback<
+    BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_close_remote_image>(this);
+  ceph_assert(*m_state_builder != nullptr);
+  (*m_state_builder)->close_remote_image(ctx);
 }
 
 template <typename I>

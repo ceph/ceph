@@ -687,8 +687,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       C_SaferCond cond;
       image::CreateRequest<> *req = image::CreateRequest<>::create(
-        config, io_ctx, image_name, id, size, opts, non_primary_global_image_id,
-        primary_mirror_uuid, skip_mirror_enable, op_work_queue, &cond);
+        config, io_ctx, image_name, id, size, opts, skip_mirror_enable,
+        cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, non_primary_global_image_id,
+        primary_mirror_uuid, op_work_queue, &cond);
       req->send();
 
       r = cond.wait();
@@ -780,9 +781,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
-      config, p_ioctx, parent_id, p_snap_name, CEPH_NOSNAP, c_ioctx, c_name,
-      clone_id, c_opts, non_primary_global_image_id, primary_mirror_uuid,
-      op_work_queue, &cond);
+      config, p_ioctx, parent_id, p_snap_name,
+      {cls::rbd::UserSnapshotNamespace{}}, CEPH_NOSNAP, c_ioctx, c_name,
+      clone_id, c_opts, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+      non_primary_global_image_id, primary_mirror_uuid, op_work_queue, &cond);
     req->send();
 
     r = cond.wait();

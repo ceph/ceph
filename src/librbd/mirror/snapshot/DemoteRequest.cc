@@ -24,35 +24,6 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 void DemoteRequest<I>::send() {
-  refresh_image();
-}
-
-template <typename I>
-void DemoteRequest<I>::refresh_image() {
-  if (!m_image_ctx->state->is_refresh_required()) {
-    create_snapshot();
-    return;
-  }
-
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
-  auto ctx = create_context_callback<
-    DemoteRequest<I>, &DemoteRequest<I>::handle_refresh_image>(this);
-  m_image_ctx->state->refresh(ctx);
-}
-
-template <typename I>
-void DemoteRequest<I>::handle_refresh_image(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
   create_snapshot();
 }
 
@@ -64,8 +35,10 @@ void DemoteRequest<I>::create_snapshot() {
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_create_snapshot>(this);
 
-  auto req = CreatePrimaryRequest<I>::create(m_image_ctx, true, false, nullptr,
-                                             ctx);
+  auto req = CreatePrimaryRequest<I>::create(
+    m_image_ctx, m_global_image_id,
+    (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
+     snapshot::CREATE_PRIMARY_FLAG_DEMOTED), nullptr, ctx);
   req->send();
 }
 

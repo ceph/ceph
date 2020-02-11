@@ -70,7 +70,8 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
       Threads<librbd::MockTestImageCtx> *threads,
       InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
       MirrorStatusUpdater<librbd::MockTestImageCtx>* local_status_updater,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     ceph_assert(s_instance != nullptr);
     s_instance->global_image_id = global_image_id;
     return s_instance;
@@ -179,7 +180,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
       m_local_io_ctx, "local_mirror_uuid",
-      &mock_threads, &mock_service_daemon, &mock_status_updater, nullptr);
+      &mock_threads, &mock_service_daemon, &mock_status_updater, nullptr,
+      nullptr);
   std::string global_image_id("global_image_id");
 
   EXPECT_CALL(mock_image_replayer, get_global_image_id())
@@ -248,7 +250,8 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
       m_local_io_ctx, "local_mirror_uuid",
-      &mock_threads, &mock_service_daemon, &mock_status_updater, nullptr);
+      &mock_threads, &mock_service_daemon, &mock_status_updater, nullptr,
+      nullptr);
   std::string global_image_id("global_image_id");
 
   EXPECT_CALL(mock_image_replayer, get_global_image_id())
@@ -321,7 +324,8 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
       m_local_io_ctx, "local_mirror_uuid",
-      &mock_threads, &mock_service_daemon, &mock_status_updater, nullptr);
+      &mock_threads, &mock_service_daemon, &mock_status_updater, nullptr,
+      nullptr);
   std::string global_image_id("global_image_id");
 
   EXPECT_CALL(mock_image_replayer, get_global_image_id())

@@ -1137,8 +1137,8 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   vector<librbd::snap_info_t> snaps;
   ASSERT_EQ(0, image.snap_list(snaps));
-  ASSERT_EQ(1U, snaps.size());
-  ASSERT_EQ(snaps[0].id, snap_id);
+  ASSERT_EQ(2U, snaps.size());
+  ASSERT_EQ(snaps[1].id, snap_id);
 
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
@@ -1198,8 +1198,8 @@ TEST_F(TestMirroring, SnapshotRemoveOnDisable)
 
   vector<librbd::snap_info_t> snaps;
   ASSERT_EQ(0, image.snap_list(snaps));
-  ASSERT_EQ(1U, snaps.size());
-  ASSERT_EQ(snaps[0].id, snap_id);
+  ASSERT_EQ(2U, snaps.size());
+  ASSERT_EQ(snaps[1].id, snap_id);
 
   ASSERT_EQ(0, image.mirror_image_disable(false));
 
