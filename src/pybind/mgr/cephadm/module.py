@@ -1776,6 +1776,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             )
             daemons.append(sd)
             num_added += 1
+
+        if (len(our_daemons) + num_added) < spec.count:
+            missing = spec.count - len(our_daemons) - num_added
+            available = [p.hostname for p in hosts_without_daemons]
+            m = f'Cannot find placement for {missing} daemons. available hosts = {available}'
+            raise orchestrator.OrchestratorError(m)
         return create_func(args)
 
 
