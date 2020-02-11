@@ -284,14 +284,14 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("update_mgrs")
     def update_mgrs(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> None
+        # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h, str) for h in spec.placement.hosts])
 
     @deferred_write("update_mons")
     def update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> None
+        # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h[0], str) for h in spec.placement.hosts])
