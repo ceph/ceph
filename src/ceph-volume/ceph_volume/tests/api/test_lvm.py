@@ -1,5 +1,6 @@
 import os
 import pytest
+from mock.mock import patch
 from ceph_volume import process, exceptions
 from ceph_volume.api import lvm as api
 
