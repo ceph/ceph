@@ -443,11 +443,18 @@ bool rgw::auth::RemoteApplier::is_identity(const idset_t& ids) const {
 		info.acct_user.tenant) == id.get_tenant()) {
       return true;
     } else if (id.is_user() &&
-	       info.acct_user.id == id.get_id() &&
 	       (info.acct_user.tenant.empty() ?
 		info.acct_user.id :
 		info.acct_user.tenant) == id.get_tenant()) {
-      return true;
+      if (info.acct_user.id == id.get_id()) {
+        return true;
+      }
+      std::string user = info.acct_user.id;
+      user.append(":");
+      user.append(info.subuser);
+      if (user == id.get_id()) {
+        return true;
+      }
     }
   }
   return false;
@@ -520,6 +527,9 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
 
   user_info.user_id = new_acct_user;
   user_info.display_name = info.acct_name;
+  if (info.subuser != AuthInfo::NO_SUBUSER) {
+    user_info.subusers.insert({info.subuser, RGWSubUser(info.subuser)});
+  }
 
   user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
   rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
@@ -568,16 +578,30 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
 
     if (ctl->user->get_info_by_uid(tenanted_uid, &user_info, null_yield) >= 0) {
-      /* Succeeded. */
-      return;
+      if (info.subuser != AuthInfo::NO_SUBUSER) {
+        if (user_info.subusers.find(info.subuser) != user_info.subusers.end()) {
+          /* Succeeded. */
+          return;
+        }
+      } else {
+        /* Succeeded. */
+        return;
+      }
     }
   }
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
   else if (ctl->user->get_info_by_uid(acct_user, &user_info, null_yield) >= 0) {
+    if (info.subuser != AuthInfo::NO_SUBUSER) {
+      if (user_info.subusers.find(info.subuser) != user_info.subusers.end()) {
+        /* Succeeded. */
+        return;
+      }
+    } else {
       /* Succeeded. */
       return;
+    }
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;

@@ -5559,6 +5559,10 @@ rgw::auth::s3::LDAPEngine::get_acl_strategy() const
   return nullptr;
 }
 
+/* rgw::auth::RemoteApplier::AuthInfo */
+/* static declaration */
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
+
 rgw::auth::RemoteApplier::AuthInfo
 rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
 {
@@ -5570,6 +5574,7 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
   return rgw::auth::RemoteApplier::AuthInfo {
     rgw_user(token.id),
     token.id,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
     RGW_PERM_FULL_CONTROL,
     acct_privilege_t::IS_PLAIN_ACCT,
     TYPE_LDAP
@@ -5692,6 +5697,7 @@ rgw::auth::s3::STSEngine::get_creds_info(const STS::SessionToken& token) const n
   return rgw::auth::RemoteApplier::AuthInfo {
     token.user,
     token.acct_name,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
     token.perm_mask,
     (token.is_admin) ? acct_privilege_t::IS_ADMIN_ACCT: acct_privilege_t::IS_PLAIN_ACCT,
     token.acct_type

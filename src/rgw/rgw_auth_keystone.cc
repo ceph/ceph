@@ -129,6 +129,7 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
     rgw_user(token.get_project_id()),
     /* User's display name (aka real name). */
     token.get_project_name(),
+    token.get_user_name(),
     /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
@@ -517,6 +518,7 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     rgw_user(token.get_project_id()),
     /* User's display name (aka real name). */
     token.get_project_name(),
+    token.get_user_name(),
     /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
