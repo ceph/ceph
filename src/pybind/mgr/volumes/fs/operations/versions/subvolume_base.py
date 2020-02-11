@@ -70,7 +70,7 @@ class SubvolumeBase(object):
     def legacy_config_path(self):
         m = md5()
         m.update(self.base_path)
-        meta_config = "{0}.meta".format(m.digest().hex())
+        meta_config = "{0}.meta".format(m.hexdigest())
         return os.path.join(self.legacy_dir, meta_config.encode('utf-8'))
 
     @property
