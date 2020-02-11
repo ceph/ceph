@@ -90,16 +90,16 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    def test_service_action(self, _send_command, _get_connection, cephadm_module):
+    def test_daemon_action(self, _send_command, _get_connection, cephadm_module):
         cephadm_module.service_cache_timeout = 10
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.describe_service(refresh=True)
             wait(cephadm_module, c)
-            c = cephadm_module.service_action('redeploy', 'rgw', service_id='myrgw.foobar')
+            c = cephadm_module.daemon_action('redeploy', 'rgw', 'myrgw.foobar')
             assert wait(cephadm_module, c) == ["Deployed rgw.myrgw.foobar on host 'test'"]
 
             for what in ('start', 'stop', 'restart'):
-                c = cephadm_module.service_action(what, 'rgw', service_id='myrgw.foobar')
+                c = cephadm_module.daemon_action(what, 'rgw', 'myrgw.foobar')
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
 
 

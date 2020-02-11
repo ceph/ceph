@@ -868,27 +868,30 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_action(self, action, service_type, service_name=None, service_id=None):
-        # type: (str, str, Optional[str], Optional[str]) -> Completion
+    def service_action(self, action, service_type, service_name):
+        # type: (str, str, str) -> Completion
         """
-        Perform an action (start/stop/reload) on a service.
-
-        Either service_name or service_id must be specified:
-
-        * If using service_name, perform the action on that entire logical
-          service (i.e. all daemons providing that named service).
-        * If using service_id, perform the action on a single specific daemon
-          instance.
+        Perform an action (start/stop/reload) on a service (i.e., all daemons
+        providing the logical service).
 
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
         :param service_type: e.g. "mds", "rgw", ...
         :param service_name: name of logical service ("cephfs", "us-east", ...)
-        :param service_id: service daemon instance (usually a short hostname)
         :rtype: Completion
         """
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
-        #assert service_name or service_id
-        #assert not (service_name and service_id)
+        raise NotImplementedError()
+
+    def daemon_action(self, action, daemon_type, daemon_id):
+        # type: (str, str, str) -> Completion
+        """
+        Perform an action (start/stop/reload) on a daemon.
+
+        :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
+        :param name: name of daemon
+        :rtype: Completion
+        """
+        #assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
     def create_osds(self, drive_groups):

@@ -252,7 +252,7 @@ Discover the status of a particular service::
 Query the status of a particular service instance (mon, osd, mds, rgw).  For OSDs
 the id is the numeric OSD ID, for MDS services it is the file system name::
 
-    ceph orch service-instance status <type> <instance-name> [--refresh]
+    ceph orch daemon status <type> <instance-name> [--refresh]
 
 
 
@@ -283,7 +283,7 @@ Start/stop/reload::
 
     ceph orch service {stop,start,reload} <type> <name>
 
-    ceph orch service-instance {start,stop,reload} <type> <instance-name>
+    ceph orch daemon {start,stop,reload} <type> <daemon-id>
 
 
 Current Implementation Status
@@ -301,11 +301,11 @@ This is an overview of the current implementation status of the orchestrators.
  mon update                          ✔      ✔
  osd create                          ✔      ✔
  osd rm                              ⚪      ✔
+ daemon status                       ⚪      ✔
+ daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
  service ls                          ✔      ✔
- service-instance status             ⚪      ✔
- service-instance {stop,start,...}   ⚪      ✔
  iscsi add                           ⚪      ⚪
  iscsi rm                            ⚪      ⚪
  iscsi update                        ⚪      ⚪

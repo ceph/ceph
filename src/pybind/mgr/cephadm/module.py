@@ -579,7 +579,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     'value': target_name,
                     'who': daemon_type + '.' + d.service_instance,
                 })
-                return self._service_action([(
+                return self._daemon_action([(
                     d.service_type,
                     d.service_instance,
                     d.nodename,
@@ -1387,41 +1387,32 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                     refresh=refresh)
         return result
 
-    def service_action(self, action, service_type,
-                       service_name=None,
-                       service_id=None):
-        self.log.debug('service_action action %s type %s name %s id %s' % (
-            action, service_type, service_name, service_id))
+    def service_action(self, action, service_type, service_name):
+        self.log.debug('service_action action %s type %s name %s' % (
+            action, service_type, service_name))
 
         def _proc_daemons(daemons):
-            if service_name is None and service_id is None:
-                raise ValueError('service_name or service_id required')
             args = []
             for d in daemons:
                 args.append((d.service_type, d.service_instance,
                              d.nodename, action))
             if not args:
-                if service_name:
-                    n = service_name + '-*'
-                else:
-                    n = service_id
                 raise orchestrator.OrchestratorError(
-                    'Unable to find %s.%s daemon(s)' % (
-                        service_type, n))
-            return self._service_action(args)
+                    'Unable to find %s.%s.* daemon(s)' % (
+                        service_type, service_name))
+            return self._daemon_action(args)
 
         return self._get_services(
             service_type,
-            service_name=service_name,
-            service_id=service_id).then(_proc_daemons)
+            service_name=service_name).then(_proc_daemons)
 
     @async_map_completion
-    def _service_action(self, service_type, service_id, host, action):
+    def _daemon_action(self, daemon_type, daemon_id, host, action):
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
-            return self._create_daemon(service_type, service_id, host)
+            return self._create_daemon(daemon_type, daemon_id, host)
         elif action == 'reconfig':
-            return self._create_daemon(service_type, service_id, host,
+            return self._create_daemon(daemon_type, daemon_id, host,
                                        reconfig=True)
 
         actions = {
@@ -1429,15 +1420,34 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'stop': ['stop'],
             'restart': ['reset-failed', 'restart'],
         }
-        name = '%s.%s' % (service_type, service_id)
+        name = '%s.%s' % (daemon_type, daemon_id)
         for a in actions[action]:
             out, err, code = self._run_cephadm(
                 host, name, 'unit',
                 ['--name', name, a],
                 error_ok=True)
             self.service_cache.invalidate(host)
-            self.log.debug('_service_action code %s out %s' % (code, out))
+            self.log.debug('_daemon_action code %s out %s' % (code, out))
         return "{} {} from host '{}'".format(action, name, host)
+
+    def daemon_action(self, action, daemon_type, daemon_id):
+        self.log.debug('daemon_action action %s type %s id %s' % (
+            action, daemon_type, daemon_id))
+
+        def _proc_daemons(daemons):
+            args = []
+            for d in daemons:
+                args.append((d.service_type, d.service_instance,
+                             d.nodename, action))
+            if not args:
+                raise orchestrator.OrchestratorError(
+                    'Unable to find %s.%s daemon(s)' % (
+                        daemon_type, daemon_id))
+            return self._daemon_action(args)
+
+        return self._get_services(
+            service_type=daemon_type,
+            service_id=daemon_id).then(_proc_daemons)
 
     def get_inventory(self, node_filter=None, refresh=False):
         """
