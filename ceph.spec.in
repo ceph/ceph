@@ -395,9 +395,11 @@ Base is the package that includes all the files shared amongst ceph servers
 
 %package -n cephadm
 Summary:        Utility to bootstrap Ceph clusters
-Requires:       podman
 Requires:       lvm2
 Requires:       python%{python3_pkgversion}
+%if 0%{?weak_deps}
+Recommends:     podman
+%endif
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed 
 with systemd and podman.
