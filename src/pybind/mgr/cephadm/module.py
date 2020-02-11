@@ -1933,7 +1933,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def add_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        if not spec.placement.hosts or spec.placement.count is None or len(spec.placement.hosts) < spec.placement.count:
+        spec.placement.count = spec.count 
+
+        if not spec.placement.hosts:
+            spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
+
+        if len(spec.placement.hosts) < spec.placement.count:
             raise RuntimeError("must specify at least %s hosts" % spec.placement.count)
         # ensure mds_join_fs is set for these daemons
         assert spec.name
