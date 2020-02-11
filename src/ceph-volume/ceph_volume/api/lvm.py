@@ -274,7 +274,10 @@ def is_ceph_device(lv):
         logger.warning('device is not part of ceph: %s', lv)
         return False
 
-    return True
+    if lv.tags['ceph.osd_id'] == 'null':
+        return False
+    else:
+        return True
 
 
 ####################################
