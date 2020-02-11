@@ -520,24 +520,31 @@ class Filesystem(MDSCluster):
     def fail(self):
         self.mon_manager.raw_cluster_cmd("fs", "fail", str(self.name))
 
+    def set_flag(self, var, *args):
+        a = map(lambda x: str(x).lower(), args)
+        self.mon_manager.raw_cluster_cmd("fs", "flag", "set", var, *a)
+
+    def set_allow_multifs(self, yes=True):
+        self.set_flag("enable_multiple", yes)
+
     def set_var(self, var, *args):
-        a = map(str, args)
+        a = map(lambda x: str(x).lower(), args)
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
 
     def set_down(self, down=True):
         self.set_var("down", str(down).lower())
 
     def set_joinable(self, joinable=True):
-        self.set_var("joinable", str(joinable).lower())
+        self.set_var("joinable", joinable)
 
     def set_max_mds(self, max_mds):
         self.set_var("max_mds", "%d" % max_mds)
 
     def set_allow_standby_replay(self, yes):
-        self.set_var("allow_standby_replay", str(yes).lower())
+        self.set_var("allow_standby_replay", yes)
 
     def set_allow_new_snaps(self, yes):
-        self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
+        self.set_var("allow_new_snaps", yes, '--yes-i-really-mean-it')
 
     # In Octopus+, the PG count can be omitted to use the default. We keep the
     # hard-coded value for deployments of Mimic/Nautilus.
