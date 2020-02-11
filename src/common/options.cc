@@ -7566,9 +7566,10 @@ std::vector<Option> get_mds_options() {
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description("path to MDS data and keyring"),
 
-    Option("mds_join_fs", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("mds_join_fs", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("")
-    .set_description("force mds daemon to join a specific fs")
+    .set_description("file system MDS prefers to join")
+    .set_long_description("This setting indicates which file system name the MDS should prefer to join (affinity). The monitors will try to have the MDS cluster safely reach a state where all MDS have strong affinity, even via failovers to a standby.")
     .set_flag(Option::FLAG_RUNTIME),
 
     Option("mds_max_xattr_pairs_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)

@@ -86,6 +86,7 @@ class FSMap {
 public:
   friend class MDSMonitor;
   friend class PaxosFSMap;
+  using mds_info_t = MDSMap::mds_info_t;
 
   FSMap() : compat(MDSMap::get_compat_set_default()) {}
 
@@ -99,8 +100,7 @@ public:
       ever_enabled_multiple(rhs.ever_enabled_multiple),
       mds_roles(rhs.mds_roles),
       standby_daemons(rhs.standby_daemons),
-      standby_epochs(rhs.standby_epochs),
-      standby_daemon_fscid(rhs.standby_daemon_fscid)
+      standby_epochs(rhs.standby_epochs)
   {
     filesystems.clear();
     for (const auto &i : rhs.filesystems) {
@@ -146,9 +146,9 @@ public:
   /**
    * Get state of all daemons (for all filesystems, including all standbys)
    */
-  std::map<mds_gid_t, MDSMap::mds_info_t> get_mds_info() const;
+  std::map<mds_gid_t, mds_info_t> get_mds_info() const;
 
-  mds_gid_t get_available_standby(fs_cluster_id_t fscid) const;
+  const mds_info_t* get_available_standby(fs_cluster_id_t fscid) const;
 
   /**
    * Resolve daemon name to GID
@@ -158,7 +158,7 @@ public:
   /**
    * Resolve daemon name to status
    */
-  const MDSMap::mds_info_t* find_by_name(std::string_view name) const;
+  const mds_info_t* find_by_name(std::string_view name) const;
 
   /**
    * Does a daemon exist with this GID?
@@ -176,17 +176,15 @@ public:
     return gid_exists(gid) && mds_roles.at(gid) != FS_CLUSTER_ID_NONE;
   }
 
+  fs_cluster_id_t gid_fscid(mds_gid_t gid) const
+  {
+    return mds_roles.at(gid);
+  }
+
   /**
    * Insert a new MDS daemon, as a standby
    */
-  void insert(const MDSMap::mds_info_t &new_info);
-
-  /**
-   * Adjust an MDS daemon's fscid
-   */
-  void adjust_standby_fscid(mds_gid_t standby_gid,
-			    fs_cluster_id_t fscid);
-  std::size_t clear_standby_fscid(mds_gid_t standby_gid);
+  void insert(const mds_info_t& new_info);
 
   /**
    * Assign an MDS cluster standby replay rank to a standby daemon
@@ -245,15 +243,7 @@ public:
    * Remove the filesystem (it must exist).  Caller should already
    * have failed out any MDSs that were assigned to the filesystem.
    */
-  void erase_filesystem(fs_cluster_id_t fscid)
-  {
-    filesystems.erase(fscid);
-    for (auto& p : standby_daemon_fscid) {
-      if (p.second == fscid) {
-	p.second = FS_CLUSTER_ID_NONE;
-      }
-    }
-  }
+  void erase_filesystem(fs_cluster_id_t fscid);
 
   /**
    * Reset all the state information (not configuration information)
@@ -299,7 +289,7 @@ public:
    * Given that gid exists in a filesystem or as a standby, return
    * a reference to its info.
    */
-  const MDSMap::mds_info_t& get_info_gid(mds_gid_t gid) const
+  const mds_info_t& get_info_gid(mds_gid_t gid) const
   {
     auto fscid = mds_roles.at(gid);
     if (fscid == FS_CLUSTER_ID_NONE) {
@@ -373,7 +363,7 @@ public:
    */
   bool pool_in_use(int64_t poolid) const;
 
-  mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name) const;
+  const mds_info_t* find_replacement_for(mds_role_t role) const;
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
@@ -417,11 +407,8 @@ protected:
   std::map<mds_gid_t, fs_cluster_id_t> mds_roles;
 
   // For MDS daemons not yet assigned to a Filesystem
-  std::map<mds_gid_t, MDSMap::mds_info_t> standby_daemons;
+  std::map<mds_gid_t, mds_info_t> standby_daemons;
   std::map<mds_gid_t, epoch_t> standby_epochs;
-
-  // Missing entry implies no preference for a fs; NONE means assign to no fs
-  std::map<mds_gid_t, fs_cluster_id_t> standby_daemon_fscid;
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 
