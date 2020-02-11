@@ -137,10 +137,9 @@ private:
 
     std::vector<fragment> frags;
     auto pb = bl.buffers().begin();
-    uint64_t left_pbrs = bl.buffers().size();
     uint64_t len = 0;
     uint64_t seglen = 0;
-    while (len < available && left_pbrs--) {
+    while (len < available && pb != bl.buffers().end()) {
       seglen = pb->length();
       // Buffer length is zero, no need to send, so skip it
       if (seglen == 0) {
