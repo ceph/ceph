@@ -91,7 +91,11 @@ void global_pre_init(
   std::string cluster = "";
 
   // ensure environment arguments are included in early processing
+  // but CLI arguments take precedent
+  std::vector<const char*> cli_args;
+  std::swap(cli_args, args);
   env_to_vec(args);
+  args.insert(args.end(), cli_args.begin(), cli_args.end());
 
   CephInitParameters iparams = ceph_argparse_early_args(
     args, module_type,
