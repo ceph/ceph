@@ -1747,11 +1747,37 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     )
                 return self._remove_daemon(args)
             elif len(daemons) < spec.count:
-                # add some
-                spec.count -= len(daemons)
                 return add_func(spec)
             return []
         return self._get_services(daemon_type, service_name=spec.name).then(___update_service)
+
+    def _add_new_daemon(self, svc_type: str, daemons: List[orchestrator.ServiceDescription],
+                        spec: orchestrator.ServiceSpec,
+                        create_func: Callable):
+        args = []
+        num_added = 0
+        assert spec.count is not None
+        prefix = f'{svc_type}.{spec.name}'
+        our_daemons = [d for d in daemons if d.name().startswith(prefix)]
+        hosts_with_daemons = {d.nodename for d in daemons}
+        hosts_without_daemons = {p for p in spec.placement.hosts if p.hostname not in hosts_with_daemons}
+
+        for host, _, name in hosts_without_daemons:
+            if (len(our_daemons) + num_added) >= spec.count:
+                break
+            svc_id = self.get_unique_name(host, daemons, spec.name, name)
+            self.log.debug('placing %s.%s on host %s' % (svc_type, svc_id, host))
+            args.append((svc_id, host))
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.ServiceDescription(
+                nodename=host,
+                service_type=svc_type,
+                service_instance=svc_id,
+            )
+            daemons.append(sd)
+            num_added += 1
+        return create_func(args)
+
 
     @async_map_completion
     def _create_mon(self, host, network, name):
@@ -1943,26 +1969,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'name': 'mds_join_fs',
             'value': spec.name,
         })
-        return self._get_services('mds').then(lambda ds: self._add_mds(ds, spec))
 
-    def _add_mds(self, daemons, spec):
-        # type: (List[orchestrator.ServiceDescription], orchestrator.ServiceSpec) -> AsyncCompletion
-        args = []
-        num_added = 0
-        for host, _, name in spec.placement.hosts:
-            if num_added >= spec.count:
-                break
-            mds_id = self.get_unique_name(host, daemons, spec.name, name)
-            self.log.debug('placing mds.%s on host %s' % (mds_id, host))
-            args.append((mds_id, host))
-            # add to daemon list so next name(s) will also be unique
-            sd = orchestrator.ServiceDescription()
-            sd.service_instance = mds_id
-            sd.service_type = 'mds'
-            sd.nodename = host
-            daemons.append(sd)
-            num_added += 1
-        return self._create_mds(args)
+        def _add_mds(daemons):
+            # type: (List[orchestrator.ServiceDescription]) -> AsyncCompletion
+            return self._add_new_daemon('mds', daemons, spec, self._create_mds)
+
+        return self._get_services('mds').then(_add_mds)
 
     def update_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2015,22 +2027,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         })
 
         def _add_rgw(daemons):
-            args = []
-            num_added = 0
-            for host, _, name in spec.placement.hosts:
-                if num_added >= spec.count:
-                    break
-                rgw_id = self.get_unique_name(host, daemons, spec.name, name)
-                self.log.debug('placing rgw.%s on host %s' % (rgw_id, host))
-                args.append((rgw_id, host))
-                # add to daemon list so next name(s) will also be unique
-                sd = orchestrator.ServiceDescription()
-                sd.service_instance = rgw_id
-                sd.service_type = 'rgw'
-                sd.nodename = host
-                daemons.append(sd)
-                num_added += 1
-            return self._create_rgw(args)
+            return self._add_new_daemon('rgw', daemons, spec, self._create_rgw)
 
         return self._get_services('rgw').then(_add_rgw)
 
@@ -2069,24 +2066,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.log.debug('nodes %s' % spec.placement.hosts)
 
         def _add_rbd_mirror(daemons):
-            args = []
-            num_added = 0
-            for host, _, name in spec.placement.hosts:
-                if num_added >= spec.count:
-                    break
-                daemon_id = self.get_unique_name(host, daemons, None, name)
-                self.log.debug('placing rbd-mirror.%s on host %s' % (daemon_id,
-                                                                     host))
-                args.append((daemon_id, host))
-
-                # add to daemon list so next name(s) will also be unique
-                sd = orchestrator.ServiceDescription()
-                sd.service_instance = daemon_id
-                sd.service_type = 'rbd-mirror'
-                sd.nodename = host
-                daemons.append(sd)
-                num_added += 1
-            return self._create_rbd_mirror(args)
+            return self._add_new_daemon('rbd-mirror', daemons, spec, self._create_rbd_mirror)
 
         return self._get_services('rbd-mirror').then(_add_rbd_mirror)
 

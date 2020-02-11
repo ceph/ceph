@@ -174,8 +174,28 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
             [out] = wait(cephadm_module, c)
-            assert "Deployed rgw.realm.zone." in out
-            assert " on host 'test'" in out
+            match_glob(out, "Deployed rgw.realm.zone.* on host 'test'")
+
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    def test_rgw_update(self, _send_command, _get_connection, cephadm_module):
+
+        with self._with_host(cephadm_module, 'host1'):
+            with self._with_host(cephadm_module, 'host2'):
+                ps = PlacementSpec(hosts=['host1'], count=1)
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone.host1.* on host 'host1'")
+
+
+                ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
+                c = cephadm_module.update_rgw(RGWSpec('realm', 'zone', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone.host2.* on host 'host2'")
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
@@ -217,4 +237,3 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
-
