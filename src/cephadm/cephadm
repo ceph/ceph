@@ -1239,6 +1239,10 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             f.write(' '.join(poststop.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o600)
 
+    with open(data_dir + '/unit.image', 'w') as f:
+        f.write(c.image + '\n')
+        os.fchmod(f.fileno(), 0o600)
+
     # systemd
     install_base_units(fsid)
     unit = get_unit_file(fsid, uid, gid)
@@ -2292,6 +2296,13 @@ def list_daemons(detail=True, legacy_dir=None):
                                         seen_versions[image_id] = version
                             else:
                                 # FIXME: monitoring component version?
+                                pass
+                        else:
+                            vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
+                            try:
+                                with open(vfile, 'r') as f:
+                                    image_name = f.read().strip() or None
+                            except IOError:
                                 pass
                         i['container_id'] = container_id
                         i['container_image_name'] = image_name
