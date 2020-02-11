@@ -110,13 +110,13 @@ public:
   }
 
 
-  int supports_data_export(const string& name) {
+  bool supports_data_export(const string& name) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
-      return -ENOENT;
+      return false;
     }
 
-    return module.get()->supports_data_export();
+    return module->supports_data_export();
   }
 
   int create_instance(CephContext *cct, const string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
