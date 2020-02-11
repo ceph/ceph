@@ -602,19 +602,21 @@ Usage:
         "name=svc_name,type=CephString",
         'Start, stop, restart, redeploy, or reconfig an entire service (i.e. all daemons)')
     def _service_action(self, action, svc_type, svc_name):
-        completion = self.service_action(action, svc_type, service_name=svc_name)
+        completion = self.service_action(action, svc_type, svc_name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch service-instance',
+        'orch daemon',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
-        "name=svc_type,type=CephString "
-        "name=svc_id,type=CephString",
-        'Start, stop, restart, redeploy, or reconfig a specific service instance')
-    def _service_instance_action(self, action, svc_type, svc_id):
-        completion = self.service_action(action, svc_type, service_id=svc_id)
+        "name=name,type=CephString ",
+        'Start, stop, restart, redeploy, or reconfig a specific daemon')
+    def _service_instance_action(self, action, name):
+        if '.' not in name:
+            raise orchestrator.OrchestratorError('%s is not a valid daemon name' % name)
+        (daemon_type, daemon_id) = name.split('.', 1)
+        completion = self.daemon_action(action, daemon_type, daemon_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

@@ -499,12 +499,12 @@ def ceph_mons(ctx, config):
                         if teuthology.is_type('mon', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mon)
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'service-instance', 'reconfig',
-                    'mon', id_,
+                    'ceph', 'orch', 'daemon', 'reconfig',
+                    'mon.' + id_,
                 ])
         _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
-            'ceph', 'orch', 'service-instance', 'reconfig',
-            'mgr', ctx.ceph[cluster_name].first_mgr,
+            'ceph', 'orch', 'daemon', 'reconfig',
+            'mgr.' + ctx.ceph[cluster_name].first_mgr,
         ])
 
         yield
