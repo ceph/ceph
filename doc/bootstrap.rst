@@ -4,6 +4,8 @@
  Installation (cephadm)
 ========================
 
+.. note:: The *cephadm* bootstrap feature is first introduced in Octopus, and is not yet recommended for production deployments.
+
 A new Ceph cluster is deployed by bootstrapping a cluster on a single
 node, and then adding additional nodes and daemons via the CLI or GUI
 dashboard.
