@@ -109,6 +109,7 @@ systemctl status docker && ( $CEPHADM --docker version | grep 'ceph version' )
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
+$CEPHADM shell --fsid $FSID -e FOO=BAR -- printenv | grep FOO=BAR
 
 ## bootstrap
 ORIG_CONFIG=`mktemp -p $TMPDIR`
