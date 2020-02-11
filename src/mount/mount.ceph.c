@@ -218,7 +218,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 		if(*data == 0)
 			break;
 		next_keyword = strchr(data,',');
-	
+
 		/* temporarily null terminate end of keyword=value pair */
 		if(next_keyword)
 			*next_keyword++ = 0;
@@ -229,46 +229,46 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			value++;
 		}
 
-		if (strncmp(data, "ro", 2) == 0) {
+		if (strcmp(data, "ro") == 0) {
 			cmi->cmi_flags |= MS_RDONLY;
-		} else if (strncmp(data, "rw", 2) == 0) {
+		} else if (strcmp(data, "rw") == 0) {
 			cmi->cmi_flags &= ~MS_RDONLY;
-		} else if (strncmp(data, "nosuid", 6) == 0) {
+		} else if (strcmp(data, "nosuid") == 0) {
 			cmi->cmi_flags |= MS_NOSUID;
-		} else if (strncmp(data, "suid", 4) == 0) {
+		} else if (strcmp(data, "suid") == 0) {
 			cmi->cmi_flags &= ~MS_NOSUID;
-		} else if (strncmp(data, "dev", 3) == 0) {
+		} else if (strcmp(data, "dev") == 0) {
 			cmi->cmi_flags &= ~MS_NODEV;
-		} else if (strncmp(data, "nodev", 5) == 0) {
+		} else if (strcmp(data, "nodev") == 0) {
 			cmi->cmi_flags |= MS_NODEV;
-		} else if (strncmp(data, "noexec", 6) == 0) {
+		} else if (strcmp(data, "noexec") == 0) {
 			cmi->cmi_flags |= MS_NOEXEC;
-		} else if (strncmp(data, "exec", 4) == 0) {
+		} else if (strcmp(data, "exec") == 0) {
 			cmi->cmi_flags &= ~MS_NOEXEC;
-                } else if (strncmp(data, "sync", 4) == 0) {
+                } else if (strcmp(data, "sync") == 0) {
                         cmi->cmi_flags |= MS_SYNCHRONOUS;
-                } else if (strncmp(data, "remount", 7) == 0) {
+                } else if (strcmp(data, "remount") == 0) {
                         cmi->cmi_flags |= MS_REMOUNT;
-                } else if (strncmp(data, "mandlock", 8) == 0) {
+                } else if (strcmp(data, "mandlock") == 0) {
                         cmi->cmi_flags |= MS_MANDLOCK;
-		} else if ((strncmp(data, "nobrl", 5) == 0) || 
-			   (strncmp(data, "nolock", 6) == 0)) {
+		} else if ((strcmp(data, "nobrl") == 0) ||
+			   (strcmp(data, "nolock") == 0)) {
 			cmi->cmi_flags &= ~MS_MANDLOCK;
-		} else if (strncmp(data, "noatime", 7) == 0) {
+		} else if (strcmp(data, "noatime") == 0) {
 			cmi->cmi_flags |= MS_NOATIME;
-		} else if (strncmp(data, "nodiratime", 10) == 0) {
+		} else if (strcmp(data, "nodiratime") == 0) {
 			cmi->cmi_flags |= MS_NODIRATIME;
-		} else if (strncmp(data, "relatime", 8) == 0) {
+		} else if (strcmp(data, "relatime") == 0) {
 			cmi->cmi_flags |= MS_RELATIME;
-		} else if (strncmp(data, "strictatime", 11) == 0) {
+		} else if (strcmp(data, "strictatime") == 0) {
 			cmi->cmi_flags |= MS_STRICTATIME;
-		} else if (strncmp(data, "noauto", 6) == 0) {
+		} else if (strcmp(data, "noauto") == 0) {
 			/* ignore */
-		} else if (strncmp(data, "_netdev", 7) == 0) {
+		} else if (strcmp(data, "_netdev") == 0) {
 			/* ignore */
-		} else if (strncmp(data, "nofail", 6) == 0) {
+		} else if (strcmp(data, "nofail") == 0) {
 			/* ignore */
-		} else if (strncmp(data, "secretfile", 10) == 0) {
+		} else if (strcmp(data, "secretfile") == 0) {
 			int ret;
 
 			if (!value || !*value) {
@@ -280,7 +280,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 				fprintf(stderr, "error reading secret file: %d\n", ret);
 				return ret;
 			}
-		} else if (strncmp(data, "secret", 6) == 0) {
+		} else if (strcmp(data, "secret") == 0) {
 			size_t len;
 
 			if (!value || !*value) {
@@ -291,7 +291,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			len = strnlen(value, sizeof(cmi->cmi_secret)) + 1;
 			if (len <= sizeof(cmi->cmi_secret))
 				memcpy(cmi->cmi_secret, value, len);
-		} else if (strncmp(data, "conf", 4) == 0) {
+		} else if (strcmp(data, "conf") == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option conf requires a value.\n");
 				return -EINVAL;
@@ -300,7 +300,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			cmi->cmi_conf = strdup(value);
 			if (!cmi->cmi_conf)
 				return -ENOMEM;
-		} else if (strncmp(data, "name", 4) == 0) {
+		} else if (strcmp(data, "name") == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option name requires a value.\n");
 				return -EINVAL;
@@ -326,7 +326,6 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			} else {
 				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, data);
 			}
-			
 		}
 		data = next_keyword;
 	} while (data);
