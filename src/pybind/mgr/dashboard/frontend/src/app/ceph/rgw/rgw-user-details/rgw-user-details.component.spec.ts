@@ -29,4 +29,24 @@ describe('RgwUserDetailsComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should show correct "System" info', () => {
+    component.selection.selected = [
+      { uid: '', email: '', system: 'true', keys: [], swift_keys: [] }
+    ];
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
+      '.table.table-striped.table-bordered tr td'
+    );
+    expect(detailsTab[6].textContent).toEqual('System');
+    expect(detailsTab[7].textContent).toEqual('Yes');
+
+    component.selection.selected[0].system = 'false';
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    expect(detailsTab[7].textContent).toEqual('No');
+  });
 });
