@@ -242,9 +242,10 @@ services of a particular type via optional --type parameter
 
 ::
 
+    ceph orch ps
     ceph orch service ls [--host host] [--svc_type type] [--refresh]
 
-Discover the status of a particular service::
+Discover the status of a particular service or daemons::
 
     ceph orch service ls --svc_type type --svc_id <name> [--refresh]
 
@@ -305,7 +306,6 @@ This is an overview of the current implementation status of the orchestrators.
  daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
- service ls                          ✔      ✔
  iscsi add                           ⚪      ⚪
  iscsi rm                            ⚪      ⚪
  iscsi update                        ⚪      ⚪
@@ -315,12 +315,14 @@ This is an overview of the current implementation status of the orchestrators.
  nfs add                             ✔      ⚪
  nfs rm                              ✔      ⚪
  nfs update                          ✔      ⚪
+ ps                                  ⚪      ✔
  rbd-mirror add                      ⚪      ✔
  rbd-mirror rm                       ⚪      ✔
  rbd-mirror update                   ⚪      ✔
  rgw add                             ✔      ✔
  rgw rm                              ✔      ✔
  rgw update                          ⚪      ✔
+ service ls                          ✔      ⚪
 =================================== ====== =========
 
 where

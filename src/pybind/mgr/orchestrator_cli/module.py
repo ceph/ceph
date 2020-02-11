@@ -288,31 +288,31 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout='\n'.join(out))
 
     @orchestrator._cli_read_command(
-        'orch service ls',
+        'orch ps',
         "name=host,type=CephString,req=false "
-        "name=svc_type,type=CephChoices,strings=mon|mgr|osd|mds|iscsi|nfs|rgw|rbd-mirror,req=false "
-        "name=svc_id,type=CephString,req=false "
+        "name=daemon_type,type=CephChoices,strings=mon|mgr|osd|mds|iscsi|nfs|rgw|rbd-mirror,req=false "
+        "name=daemon_id,type=CephString,req=false "
         "name=format,type=CephChoices,strings=json|plain,req=false "
         "name=refresh,type=CephBool,req=false",
-        'List services known to orchestrator')
-    def _list_services(self, host=None, svc_type=None, svc_id=None, format='plain', refresh=False):
-        # XXX this is kind of confusing for people because in the orchestrator
-        # context the service ID for MDS is the filesystem ID, not the daemon ID
-
-        completion = self.describe_service(svc_type, svc_id, host, refresh=refresh)
+        'List daemons known to orchestrator')
+    def _list_daemons(self, host=None, daemon_type=None, daemon_id=None, format='plain', refresh=False):
+        completion = self.list_daemons(daemon_type,
+                                       daemon_id=daemon_id,
+                                       host=host,
+                                       refresh=refresh)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        services = completion.result
+        daemons = completion.result
 
         def ukn(s):
             return '<unknown>' if s is None else s
         # Sort the list for display
-        services.sort(key=lambda s: (ukn(s.service_type), ukn(s.nodename), ukn(s.service_instance)))
+        daemons.sort(key=lambda s: (ukn(s.daemon_type), ukn(s.nodename), ukn(s.daemon_id)))
 
-        if len(services) == 0:
-            return HandleCommandResult(stdout="No services reported")
+        if len(daemons) == 0:
+            return HandleCommandResult(stdout="No daemons reported")
         elif format == 'json':
-            data = [s.to_json() for s in services]
+            data = [s.to_json() for s in daemons]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
             now = datetime.datetime.utcnow()
@@ -323,7 +323,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
-            for s in sorted(services, key=lambda s: s.name()):
+            for s in sorted(daemons, key=lambda s: s.name()):
                 status = {
                     -1: 'error',
                     0: 'stopped',
@@ -610,9 +610,9 @@ Usage:
     @orchestrator._cli_write_command(
         'orch daemon',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
-        "name=name,type=CephString ",
+        "name=name,type=CephString",
         'Start, stop, restart, redeploy, or reconfig a specific daemon')
-    def _service_instance_action(self, action, name):
+    def _daemon_action(self, action, name):
         if '.' not in name:
             raise orchestrator.OrchestratorError('%s is not a valid daemon name' % name)
         (daemon_type, daemon_id) = name.split('.', 1)

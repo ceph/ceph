@@ -61,12 +61,12 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertIn("localhost", ret)
         self.assertIsInstance(json.loads(ret), list)
 
-    def test_service_ls(self):
-        ret = self._orch_cmd("service", "ls")
+    def test_ps(self):
+        ret = self._orch_cmd("ps")
         self.assertIn("ceph-mgr", ret)
 
-    def test_service_ls_json(self):
-        ret = self._orch_cmd("service", "ls", "--format", "json")
+    def test_ps_json(self):
+        ret = self._orch_cmd("ps", "--format", "json")
         self.assertIsInstance(json.loads(ret), list)
         self.assertIn("ceph-mgr", ret)
 
