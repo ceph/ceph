@@ -755,6 +755,7 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
 
+  bool fuse_default_permissions;
 
 protected:
   /* Flags for check_caps() */

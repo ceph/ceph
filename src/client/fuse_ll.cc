@@ -956,9 +956,7 @@ static void do_init(void *data, fuse_conn_info *conn)
   Client *client = cfuse->client;
 
 #if !defined(__APPLE__)
-  auto fuse_default_permissions = client->cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
-  if (!fuse_default_permissions && client->ll_handle_umask()) {
+  if (!client->fuse_default_permissions && client->ll_handle_umask()) {
     // apply umask in userspace if posix acl is enabled
     if(conn->capable & FUSE_CAP_DONT_MASK)
       conn->want |= FUSE_CAP_DONT_MASK;
