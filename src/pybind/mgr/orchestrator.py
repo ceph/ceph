@@ -878,6 +878,15 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def remove_daemons(self, names):
+        # type: (List[str]) -> Completion
+        """
+        Remove specific daemon(s).
+
+        :return: None
+        """
+        raise NotImplementedError()
+
     def service_action(self, action, service_type, service_name):
         # type: (str, str, str) -> Completion
         """
