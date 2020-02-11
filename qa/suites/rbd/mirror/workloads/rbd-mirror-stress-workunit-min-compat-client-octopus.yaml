@@ -1,5 +1,5 @@
 meta:
-- desc: run the rbd_mirror.sh workunit to test the rbd-mirror daemon
+- desc: run the rbd_mirror_stress.sh workunit to test the rbd-mirror daemon
 tasks:
 - workunit:
     clients:

@@ -30,22 +30,26 @@ using util::create_context_callback;
 using util::create_async_context_callback;
 
 template <typename I>
-CloneRequest<I>::CloneRequest(ConfigProxy& config,
-                              IoCtx& parent_io_ctx,
-                              const std::string& parent_image_id,
-                              const std::string& parent_snap_name,
-                              uint64_t parent_snap_id,
-                              IoCtx &c_ioctx,
-			      const std::string &c_name,
-			      const std::string &c_id,
-			      ImageOptions c_options,
-			      const std::string &non_primary_global_image_id,
-			      const std::string &primary_mirror_uuid,
-			      ContextWQ *op_work_queue, Context *on_finish)
+CloneRequest<I>::CloneRequest(
+    ConfigProxy& config,
+    IoCtx& parent_io_ctx,
+    const std::string& parent_image_id,
+    const std::string& parent_snap_name,
+    const cls::rbd::SnapshotNamespace& parent_snap_namespace,
+    uint64_t parent_snap_id,
+    IoCtx &c_ioctx,
+    const std::string &c_name,
+    const std::string &c_id,
+    ImageOptions c_options,
+    cls::rbd::MirrorImageMode mirror_image_mode,
+    const std::string &non_primary_global_image_id,
+    const std::string &primary_mirror_uuid,
+    ContextWQ *op_work_queue, Context *on_finish)
   : m_config(config), m_parent_io_ctx(parent_io_ctx),
     m_parent_image_id(parent_image_id), m_parent_snap_name(parent_snap_name),
+    m_parent_snap_namespace(parent_snap_namespace),
     m_parent_snap_id(parent_snap_id), m_ioctx(c_ioctx), m_name(c_name),
-    m_id(c_id), m_opts(c_options),
+    m_id(c_id), m_opts(c_options), m_mirror_image_mode(mirror_image_mode),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish),
@@ -137,8 +141,10 @@ void CloneRequest<I>::open_parent() {
                                    m_parent_io_ctx, true);
   } else {
     m_parent_image_ctx = I::create("", m_parent_image_id,
-                                   m_parent_snap_name.c_str(), m_parent_io_ctx,
+                                   m_parent_snap_name.c_str(),
+                                   m_parent_io_ctx,
                                    true);
+    m_parent_image_ctx->snap_namespace = m_parent_snap_namespace;
   }
 
   Context *ctx = create_context_callback<
@@ -278,11 +284,10 @@ void CloneRequest<I>::create_child() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_child>(this);
 
-  std::shared_lock image_locker{m_parent_image_ctx->image_lock};
   CreateRequest<I> *req = CreateRequest<I>::create(
-    m_config, m_ioctx, m_name, m_id, m_size, m_opts,
-    m_non_primary_global_image_id, m_primary_mirror_uuid, true,
-    m_op_work_queue, ctx);
+    m_config, m_ioctx, m_name, m_id, m_size, m_opts, true,
+    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, m_non_primary_global_image_id,
+    m_primary_mirror_uuid, m_op_work_queue, ctx);
   req->send();
 }
 
@@ -525,12 +530,9 @@ void CloneRequest<I>::enable_mirror() {
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_enable_mirror>(this);
-
-  // TODO: in future rbd-mirror will want to enable mirroring
-  // not only in journal mode.
-  mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
-    m_imctx->md_ctx, m_id, RBD_MIRROR_IMAGE_MODE_JOURNAL,
-    m_non_primary_global_image_id, m_imctx->op_work_queue, ctx);
+  auto req = mirror::EnableRequest<I>::create(
+    m_imctx->md_ctx, m_id, m_mirror_image_mode, m_non_primary_global_image_id,
+    m_imctx->op_work_queue, ctx);
   req->send();
 }
 

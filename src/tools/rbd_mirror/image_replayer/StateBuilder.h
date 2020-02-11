@@ -15,6 +15,7 @@ namespace rbd {
 namespace mirror {
 
 struct BaseRequest;
+struct PoolMetaCache;
 struct ProgressContext;
 template <typename> class Threads;
 
@@ -41,25 +42,26 @@ public:
 
   virtual bool is_disconnected() const = 0;
 
-  virtual bool is_local_primary() const = 0;
-  virtual bool is_linked() const = 0;
+  bool is_local_primary() const;
+  virtual bool is_linked() const;
 
   virtual cls::rbd::MirrorImageMode get_mirror_image_mode() const = 0;
 
   virtual image_sync::SyncPointHandler* create_sync_point_handler() = 0;
   void destroy_sync_point_handler();
 
+  void close_remote_image(Context* on_finish);
+
   virtual BaseRequest* create_local_image_request(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
-      ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       Context* on_finish) = 0;
 
   virtual BaseRequest* create_prepare_replay_request(
       const std::string& local_mirror_uuid,
-      librbd::mirror::PromotionState remote_promotion_state,
       ProgressContext* progress_ctx,
       bool* resync_requested,
       bool* syncing,
@@ -73,10 +75,16 @@ public:
   std::string global_image_id;
 
   std::string local_image_id;
+  librbd::mirror::PromotionState local_promotion_state =
+    librbd::mirror::PROMOTION_STATE_PRIMARY;
+  std::string local_primary_mirror_uuid;
   ImageCtxT* local_image_ctx = nullptr;
 
   std::string remote_mirror_uuid;
   std::string remote_image_id;
+  librbd::mirror::PromotionState remote_promotion_state =
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
+  ImageCtxT* remote_image_ctx = nullptr;
 
 protected:
   image_sync::SyncPointHandler* m_sync_point_handler = nullptr;
@@ -87,6 +95,7 @@ protected:
 
 private:
   void handle_close_local_image(int r, Context* on_finish);
+  void handle_close_remote_image(int r, Context* on_finish);
 };
 
 } // namespace image_replayer

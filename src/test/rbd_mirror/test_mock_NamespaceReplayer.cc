@@ -99,7 +99,8 @@ struct InstanceReplayer<librbd::MockTestImageCtx> {
       Threads<librbd::MockTestImageCtx> *threads,
       ServiceDaemon<librbd::MockTestImageCtx> *service_daemon,
       MirrorStatusUpdater<librbd::MockTestImageCtx>* local_status_updater,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }
@@ -400,7 +401,7 @@ TEST_F(TestMockNamespaceReplayer, Init_LocalMirrorStatusUpdaterError) {
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
-      nullptr, nullptr, nullptr, nullptr);
+      nullptr, nullptr, nullptr, nullptr, nullptr);
 
   C_SaferCond on_init;
   namespace_replayer.init(&on_init);
@@ -422,7 +423,7 @@ TEST_F(TestMockNamespaceReplayer, Init_RemoteMirrorStatusUpdaterError) {
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
-      nullptr, nullptr, nullptr, nullptr);
+      nullptr, nullptr, nullptr, nullptr, nullptr);
 
   C_SaferCond on_init;
   namespace_replayer.init(&on_init);
@@ -447,7 +448,7 @@ TEST_F(TestMockNamespaceReplayer, Init_InstanceReplayerError) {
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
-      nullptr, nullptr, nullptr, nullptr);
+      nullptr, nullptr, nullptr, nullptr, nullptr);
 
   C_SaferCond on_init;
   namespace_replayer.init(&on_init);
@@ -477,7 +478,7 @@ TEST_F(TestMockNamespaceReplayer, Init_InstanceWatcherError) {
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
-      nullptr, nullptr, nullptr, nullptr);
+      nullptr, nullptr, nullptr, nullptr, nullptr);
 
   C_SaferCond on_init;
   namespace_replayer.init(&on_init);
@@ -504,7 +505,7 @@ TEST_F(TestMockNamespaceReplayer, Init) {
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
-      nullptr, nullptr, &mock_service_daemon, nullptr);
+      nullptr, nullptr, &mock_service_daemon, nullptr, nullptr);
 
   C_SaferCond on_init;
   namespace_replayer.init(&on_init);
@@ -543,7 +544,7 @@ TEST_F(TestMockNamespaceReplayer, AcuqireLeader) {
   MockNamespaceReplayer namespace_replayer(
       {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
-      nullptr, nullptr, &mock_service_daemon, nullptr);
+      nullptr, nullptr, &mock_service_daemon, nullptr, nullptr);
 
   C_SaferCond on_init;
   namespace_replayer.init(&on_init);

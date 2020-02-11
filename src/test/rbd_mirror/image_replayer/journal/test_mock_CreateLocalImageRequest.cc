@@ -69,6 +69,8 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
                                     const std::string &local_image_name,
 				    const std::string &local_image_id,
                                     librbd::MockTestImageCtx *remote_image_ctx,
+                                    PoolMetaCache* pool_meta_cache,
+                                    cls::rbd::MirrorImageMode mirror_image_mode,
                                     Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -172,6 +174,7 @@ public:
                                     m_threads->work_queue->queue(on_finish, r);
                                   })));
   }
+
   void expect_create_image(MockCreateImageRequest& mock_create_image_request,
                            const std::string& image_id, int r) {
     EXPECT_CALL(mock_create_image_request, construct(image_id));
@@ -188,7 +191,8 @@ public:
       Context* on_finish) {
     return new MockCreateLocalImageRequest(
       &mock_threads, m_local_io_ctx, m_mock_remote_image_ctx,
-      global_image_id, nullptr, &mock_state_builder, on_finish);
+      global_image_id, nullptr, nullptr, &mock_state_builder,
+      on_finish);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
@@ -315,8 +319,9 @@ TEST_F(TestMockImageReplayerJournalCreateLocalImageRequest, CreateImageDuplicate
   MockCreateImageRequest mock_create_image_request;
   expect_create_image(mock_create_image_request, "local image id", -EBADF);
 
-  // update image id
-  expect_journaler_update_client(mock_journaler, client_data, 0);
+  // re-register the client
+  expect_journaler_unregister_client(mock_journaler, 0);
+  expect_journaler_register_client(mock_journaler, client_data, 0);
 
   // re-create the local image
   expect_create_image(mock_create_image_request, "local image id", 0);
@@ -328,37 +333,6 @@ TEST_F(TestMockImageReplayerJournalCreateLocalImageRequest, CreateImageDuplicate
     mock_threads, mock_state_builder, "global image id", &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
-}
-
-TEST_F(TestMockImageReplayerJournalCreateLocalImageRequest, UpdateClientImageError) {
-  InSequence seq;
-
-  // re-register the client
-  ::journal::MockJournaler mock_journaler;
-  expect_journaler_unregister_client(mock_journaler, 0);
-
-  librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta;
-  librbd::util::s_image_id = "local image id";
-  mirror_peer_client_meta.image_id = "local image id";
-  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
-  librbd::journal::ClientData client_data;
-  client_data.client_meta = mirror_peer_client_meta;
-  expect_journaler_register_client(mock_journaler, client_data, 0);
-
-  // create the missing local image
-  MockCreateImageRequest mock_create_image_request;
-  expect_create_image(mock_create_image_request, "local image id", -EBADF);
-
-  // update image id
-  expect_journaler_update_client(mock_journaler, client_data, -EINVAL);
-
-  C_SaferCond ctx;
-  MockThreads mock_threads;
-  MockStateBuilder mock_state_builder;
-  auto request = create_request(
-    mock_threads, mock_state_builder, "global image id", &ctx);
-  request->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 } // namespace journal

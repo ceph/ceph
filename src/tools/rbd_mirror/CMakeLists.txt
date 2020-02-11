@@ -17,6 +17,7 @@ set(rbd_mirror_internal
   MirrorStatusUpdater.cc
   MirrorStatusWatcher.cc
   NamespaceReplayer.cc
+  PoolMetaCache.cc
   PoolReplayer.cc
   PoolWatcher.cc
   RemotePoolPoller.cc
@@ -50,8 +51,13 @@ set(rbd_mirror_internal
   image_replayer/journal/ReplayStatusFormatter.cc
   image_replayer/journal/StateBuilder.cc
   image_replayer/journal/SyncPointHandler.cc
+  image_replayer/snapshot/CreateLocalImageRequest.cc
+  image_replayer/snapshot/PrepareReplayRequest.cc
+  image_replayer/snapshot/Replayer.cc
+  image_replayer/snapshot/StateBuilder.cc
   image_sync/SyncPointCreateRequest.cc
   image_sync/SyncPointPruneRequest.cc
+  image_sync/Utils.cc
   pool_watcher/RefreshImagesRequest.cc
   service_daemon/Types.cc)
 

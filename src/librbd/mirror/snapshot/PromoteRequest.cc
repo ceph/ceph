@@ -30,35 +30,7 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 void PromoteRequest<I>::send() {
-  refresh_image();
-}
-
-template <typename I>
-void PromoteRequest<I>::refresh_image() {
-  if (!m_image_ctx->state->is_refresh_required()) {
-    handle_refresh_image(0);
-    return;
-  }
-
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
-  auto ctx = create_context_callback<
-    PromoteRequest<I>, &PromoteRequest<I>::handle_refresh_image>(this);
-  m_image_ctx->state->refresh(ctx);
-}
-
-template <typename I>
-void PromoteRequest<I>::handle_refresh_image(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
   if (!util::can_create_primary_snapshot(m_image_ctx, false, true,
                                          &m_rollback_snap_id)) {
     lderr(cct) << "cannot promote" << dendl;
@@ -322,8 +294,10 @@ void PromoteRequest<I>::create_promote_snapshot() {
     PromoteRequest<I>,
     &PromoteRequest<I>::handle_create_promote_snapshot>(this);
 
-  auto req = CreatePrimaryRequest<I>::create(m_image_ctx, false, true, nullptr,
-                                             ctx);
+  auto req = CreatePrimaryRequest<I>::create(
+    m_image_ctx, m_global_image_id,
+    (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
+     snapshot::CREATE_PRIMARY_FLAG_FORCE), nullptr, ctx);
   req->send();
 }
 

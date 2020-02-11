@@ -282,6 +282,7 @@ struct C_ImageGetInfo : public Context {
 
   cls::rbd::MirrorImage mirror_image;
   mirror::PromotionState promotion_state = mirror::PROMOTION_STATE_PRIMARY;
+  std::string primary_mirror_uuid;
 
   C_ImageGetInfo(mirror_image_info_t *mirror_image_info,
                  mirror_image_mode_t *mirror_image_mode,  Context *on_finish)
@@ -410,7 +411,8 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
   }
 
   C_SaferCond ctx;
-  auto req = mirror::EnableRequest<ImageCtx>::create(ictx, mode, &ctx);
+  auto req = mirror::EnableRequest<ImageCtx>::create(
+    ictx, static_cast<cls::rbd::MirrorImageMode>(mode), &ctx);
   req->send();
 
   r = ctx.wait();
@@ -580,8 +582,21 @@ void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
   ldout(cct, 20) << "ictx=" << ictx << ", "
                  << "force=" << force << dendl;
 
-  auto req = mirror::PromoteRequest<>::create(*ictx, force, on_finish);
-  req->send();
+  auto on_refresh = new LambdaContext([ictx, force, on_finish](int r) {
+      if (r < 0) {
+        lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
+        on_finish->complete(r);
+        return;
+      }
+
+      auto req = mirror::PromoteRequest<>::create(*ictx, force, on_finish);
+      req->send();
+    });
+  if (ictx->state->is_refresh_required()) {
+    ictx->state->refresh(on_refresh);
+  } else {
+    on_refresh->complete(0);
+  }
 }
 
 template <typename I>
@@ -604,8 +619,21 @@ void Mirror<I>::image_demote(I *ictx, Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  auto req = mirror::DemoteRequest<>::create(*ictx, on_finish);
-  req->send();
+  auto on_refresh = new LambdaContext([ictx, on_finish](int r) {
+      if (r < 0) {
+        lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
+        on_finish->complete(r);
+        return;
+      }
+
+      auto req = mirror::DemoteRequest<>::create(*ictx, on_finish);
+      req->send();
+    });
+  if (ictx->state->is_refresh_required()) {
+    ictx->state->refresh(on_refresh);
+  } else {
+    on_refresh->complete(0);
+  }
 }
 
 template <typename I>
@@ -658,6 +686,7 @@ void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
       auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
       auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
                                                    &ctx->promotion_state,
+                                                   &ctx->primary_mirror_uuid,
                                                    ctx);
       req->send();
     });
@@ -694,7 +723,8 @@ void Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
   auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(io_ctx, op_work_queue, image_id,
                                                &ctx->mirror_image,
-                                               &ctx->promotion_state, ctx);
+                                               &ctx->promotion_state,
+                                               &ctx->primary_mirror_uuid, ctx);
   req->send();
 }
 
@@ -722,7 +752,7 @@ void Mirror<I>::image_get_mode(I *ictx, mirror_image_mode_t *mode,
   auto ctx = new C_ImageGetInfo(nullptr, mode, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
                                                &ctx->promotion_state,
-                                               ctx);
+                                               &ctx->primary_mirror_uuid, ctx);
   req->send();
 }
 
@@ -1812,9 +1842,30 @@ int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
+  int r = ictx->state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  cls::rbd::MirrorImage mirror_image;
+  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                   &mirror_image);
+  if (r == -ENOENT) {
+    return -EINVAL;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve mirror image" << dendl;
+    return r;
+  }
+
+  if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
+      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    lderr(cct) << "snapshot based mirroring is not enabled" << dendl;
+    return -EINVAL;
+  }
+
   C_SaferCond on_finish;
   auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
-    ictx, false, false, snap_id, &on_finish);
+    ictx, mirror_image.global_image_id, 0U, snap_id, &on_finish);
   req->send();
   return on_finish.wait();
 }

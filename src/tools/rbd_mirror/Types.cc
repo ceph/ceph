@@ -12,6 +12,11 @@ std::ostream &operator<<(std::ostream &os, const ImageId &image_id) {
 }
 
 std::ostream& operator<<(std::ostream& lhs,
+                         const LocalPoolMeta& rhs) {
+  return lhs << "mirror_uuid=" << rhs.mirror_uuid;
+}
+
+std::ostream& operator<<(std::ostream& lhs,
                          const RemotePoolMeta& rhs) {
   return lhs << "mirror_uuid=" << rhs.mirror_uuid << ", "
                 "mirror_pool_uuid=" << rhs.mirror_peer_uuid;
