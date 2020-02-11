@@ -21,7 +21,7 @@ def _output_parser(output, fields):
     Newer versions of LVM allow ``--reportformat=json``, but older versions,
     like the one included in Xenial do not. LVM has the ability to filter and
     format its output so we assume the output will be in a format this parser
-    can handle (using ',' as a delimiter)
+    can handle (using ';' as a delimiter)
 
     :param fields: A string, possibly using ',' to group many items, as it
                    would be used on the CLI
@@ -43,7 +43,7 @@ def _output_parser(output, fields):
         # splitting on ';' because that is what the lvm call uses as
         # '--separator'
         output_items = [i.strip() for i in line.split(';')]
-        # map the output to the fiels
+        # map the output to the fields
         report.append(
             dict(zip(field_items, output_items))
         )
@@ -273,6 +273,7 @@ def dmsetup_splitname(dev):
 #
 ################################
 
+PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
 def get_api_pvs():
     """
@@ -288,14 +289,13 @@ def get_api_pvs():
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
-    fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
-
     stdout, stderr, returncode = process.call(
-        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields],
+        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o',
+         PV_FIELDS],
         verbose_on_failure=False
     )
 
-    return _output_parser(stdout, fields)
+    return _output_parser(stdout, PV_FIELDS)
 
 
 class PVolume(object):
@@ -516,6 +516,9 @@ def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
 #
 #############################
 
+#TODO add vg_extent_size here to have that available in VolumeGroup class
+VG_FIELDS = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
+
 
 def get_api_vgs():
     """
@@ -532,12 +535,12 @@ def get_api_vgs():
     To normalize sizing, the units are forced in 'g' which is equivalent to
     gigabytes, which uses multiples of 1024 (as opposed to 1000)
     """
-    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields],
+        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"',
+         '-o', VG_FIELDS],
         verbose_on_failure=False
     )
-    return _output_parser(stdout, fields)
+    return _output_parser(stdout, VG_FIELDS)
 
 
 class VolumeGroup(object):
@@ -859,12 +862,24 @@ def get_vg(vg_name=None, vg_tags=None, vgs=None):
     return vgs.get(vg_name=vg_name, vg_tags=vg_tags)
 
 
+def get_device_vgs(device, name_prefix=''):
+    stdout, stderr, returncode = process.call(
+        ['pvs', '--noheadings', '--readonly', '--units=g', '--separator=";"',
+         '-o', VG_FIELDS, device],
+        verbose_on_failure=False
+    )
+    vgs = _output_parser(stdout, VG_FIELDS)
+    return [VolumeGroup(**vg) for vg in vgs]
+
+
+
 #################################
 #
 # Code for LVM Logical Volumes
 #
 ###############################
 
+LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
 
 def get_api_lvs():
     """
@@ -878,12 +893,12 @@ def get_api_lvs():
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
-    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o', fields],
+        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o',
+         LV_FIELDS],
         verbose_on_failure=False
     )
-    return _output_parser(stdout, fields)
+    return _output_parser(stdout, LV_FIELDS)
 
 
 class Volume(object):
@@ -1091,54 +1106,56 @@ class Volumes(list):
         return lvs[0]
 
 
-def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False, pv=None):
+def create_lv(name_prefix, uuid, vg=None, device=None, extents=None, size=None, tags=None):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
         lvcreate -L 50G -n gfslv vg0
 
-    ``name``, ``group``, are required. If ``size`` is provided it must follow
+    ``name_prefix`` is required. If ``size`` is provided it must follow
     lvm's size notation (like 1G, or 20M). Tags are an optional dictionary and is expected to
     conform to the convention of prefixing them with "ceph." like::
 
         {"ceph.block_device": "/dev/ceph/osd-1"}
 
-    :param uuid_name: Optionally combine the ``name`` with UUID to ensure uniqueness
+    :param name_prefix: name prefix for the LV, typically somehting like ceph-osd-block
+    :param uuid: UUID to ensure uniqueness; is combined with name_prefix to
+                 form the LV name
+    :param vg: optional, pass an existing VG to create LV
+    :param device: optional, device to use. Either device of vg must be passed
+    :param extends: optional, how many lvm extends to use
+    :param size: optional, LV size, must follow lvm's size notation, supersedes
+    extends
+    :param tags: optional, a dict of lvm tags to set on the LV
     """
-    if uuid_name:
-        name = '%s-%s' % (name, uuid.uuid4())
-    if tags is None:
-        tags = {
-            "ceph.osd_id": "null",
-            "ceph.type": "null",
-            "ceph.cluster_fsid": "null",
-            "ceph.osd_fsid": "null",
-        }
+    name = '{}-{}'.format(name_prefix, uuid)
+    if not vg:
+        if not device:
+            raise RuntimeError("Must either specify vg or device, none given")
+        # check if a vgs starting with ceph already exists
+        vgs = get_device_vgs(device, 'ceph')
+        if vgs:
+            vg = vgs[0].vg_name
+        else:
+            # create on if not
+            vg = create_vg(device, name_prefix='ceph').vg_name
+    assert(vg)
 
-    # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
-    type_path_tag = {
-        'journal': 'ceph.journal_device',
-        'data': 'ceph.data_device',
-        'block': 'ceph.block_device',
-        'wal': 'ceph.wal_device',
-        'db': 'ceph.db_device',
-        'lockbox': 'ceph.lockbox_device',  # XXX might not ever need this lockbox sorcery
-    }
     if size:
         command = [
             'lvcreate',
             '--yes',
             '-L',
-            '%s' % size,
-            '-n', name, group
+            '{}'.format(size),
+            '-n', name, vg
         ]
     elif extents:
         command = [
             'lvcreate',
             '--yes',
             '-l',
-            '%s' % extents,
-            '-n', name, group
+            '{}'.format(extents),
+            '-n', name, vg
         ]
     # create the lv with all the space available, this is needed because the
     # system call is different for LVM
@@ -1148,22 +1165,36 @@ def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False, 
             '--yes',
             '-l',
             '100%FREE',
-            '-n', name, group
+            '-n', name, vg
         ]
-    if pv:
-        command.append(pv)
     process.run(command)
 
-    lv = get_lv(lv_name=name, vg_name=group)
-    lv.set_tags(tags)
+    lv = get_lv(lv_name=name, vg_name=vg)
 
+    if tags is None:
+        tags = {
+            "ceph.osd_id": "null",
+            "ceph.type": "null",
+            "ceph.cluster_fsid": "null",
+            "ceph.osd_fsid": "null",
+        }
     # when creating a distinct type, the caller doesn't know what the path will
     # be so this function will set it after creation using the mapping
+    # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
+    type_path_tag = {
+        'journal': 'ceph.journal_device',
+        'data': 'ceph.data_device',
+        'block': 'ceph.block_device',
+        'wal': 'ceph.wal_device',
+        'db': 'ceph.db_device',
+        'lockbox': 'ceph.lockbox_device',  # XXX might not ever need this lockbox sorcery
+    }
     path_tag = type_path_tag.get(tags.get('ceph.type'))
     if path_tag:
-        lv.set_tags(
-            {path_tag: lv.lv_path}
-        )
+        tags.update({path_tag: lv.lv_path})
+
+    lv.set_tags(tags)
+
     return lv
 
 
@@ -1211,6 +1242,14 @@ def is_lv(dev, lvs=None):
         return len(lvs) > 0
     return False
 
+def get_lv_by_name(name):
+    stdout, stderr, returncode = process.call(
+        ['lvs', '--noheadings', '-o', LV_FIELDS, '-S',
+         'lv_name={}'.format(name)],
+        verbose_on_failure=False
+    )
+    lvs = _output_parser(stdout, LV_FIELDS)
+    return [Volume(**lv) for lv in lvs]
 
 def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None, lvs=None):
     """
@@ -1285,8 +1324,7 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
     for part in range(0, sizing['parts']):
         size = sizing['sizes']
         extents = sizing['extents']
-        lv_name = '%s-%s' % (name_prefix, uuid.uuid4())
         lvs.append(
-            create_lv(lv_name, volume_group.name, extents=extents, tags=tags)
+            create_lv(name_prefix, uuid.uuid4(), vg=volume_group.name, extents=extents, tags=tags)
         )
     return lvs

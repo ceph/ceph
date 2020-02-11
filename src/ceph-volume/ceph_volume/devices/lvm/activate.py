@@ -103,7 +103,7 @@ def get_osd_device_path(osd_lv, lvs, device_type, dmcrypt_secret=None):
     if not device_uuid:
         return None
 
-    device_lv = lvs.get(lv_uuid=device_uuid)
+    device_lv = lvs.get(lv_tags={'ceph.type': device_type})
     if device_lv:
         if is_encrypted:
             encryption_utils.luks_open(dmcrypt_secret, device_lv.lv_path, device_uuid)
