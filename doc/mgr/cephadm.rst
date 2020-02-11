@@ -49,7 +49,7 @@ CEPHADM_STRAY_HOST
 One or more hosts have running Ceph daemons but are not registered as
 hosts managed by *cephadm*.  This means that those services cannot
 currently be managed by cephadm (e.g., restarted, upgraded, included
-in `ceph orch service ls`).
+in `ceph orch ps`).
 
 You can manage the host(s) with::
 
@@ -66,20 +66,20 @@ You can also disable this warning entirely with::
 
   ceph config set mgr mgr/cephadm/warn_on_stray_hosts false
 
-CEPHADM_STRAY_SERVICE
-^^^^^^^^^^^^^^^^^^^^^
+CEPHADM_STRAY_DAEMON
+^^^^^^^^^^^^^^^^^^^^
 
 One or more Ceph daemons are running but not are not managed by
 *cephadm*, perhaps because they were deploy using a different tool, or
 were started manually.  This means that those services cannot
 currently be managed by cephadm (e.g., restarted, upgraded, included
-in `ceph orch service ls`).
+in `ceph orch ps`).
 
 **FIXME:** We need to implement and document an adopt procedure here.
 
 You can also disable this warning entirely with::
 
-  ceph config set mgr mgr/cephadm/warn_on_stray_services false
+  ceph config set mgr mgr/cephadm/warn_on_stray_daemons false
 
 CEPHADM_HOST_CHECK_FAILED
 ^^^^^^^^^^^^^^^^^^^^^^^^^

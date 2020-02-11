@@ -868,6 +868,16 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion
+        """
+        Describe a daemon (of any kind) that is already configured in
+        the orchestrator.
+
+        :return: list of DaemonDescription objects.
+        """
+        raise NotImplementedError()
+
     def service_action(self, action, service_type, service_name):
         # type: (str, str, str) -> Completion
         """
@@ -1128,6 +1138,86 @@ def handle_type_error(method):
         raise OrchestratorValidationError(error_msg)
     return inner
 
+
+class DaemonDescription(object):
+    """
+    For responding to queries about the status of a particular daemon,
+    stateful or stateless.
+
+    This is not about health or performance monitoring of daemons: it's
+    about letting the orchestrator tell Ceph whether and where a
+    daemon is scheduled in the cluster.  When an orchestrator tells
+    Ceph "it's running on node123", that's not a promise that the process
+    is literally up this second, it's a description of where the orchestrator
+    has decided the daemon should run.
+    """
+
+    def __init__(self,
+                 daemon_type=None,
+                 daemon_id=None,
+                 nodename=None,
+                 container_id=None,
+                 container_image_id=None,
+                 container_image_name=None,
+                 version=None,
+                 status=None,
+                 status_desc=None):
+        # Node is at the same granularity as InventoryNode
+        self.nodename = nodename
+
+        # Not everyone runs in containers, but enough people do to
+        # justify having the container_id (runtime id) and container_image
+        # (image name)
+        self.container_id = container_id                  # runtime id
+        self.container_image_id = container_image_id      # image hash
+        self.container_image_name = container_image_name  # image friendly name
+
+        # The type of service (osd, mon, mgr, etc.)
+        self.daemon_type = daemon_type
+
+        # The orchestrator will have picked some names for daemons,
+        # typically either based on hostnames or on pod names.
+        # This is the <foo> in mds.<foo>, the ID that will appear
+        # in the FSMap/ServiceMap.
+        self.daemon_id = daemon_id
+
+        # Service version that was deployed
+        self.version = version
+
+        # Service status: -1 error, 0 stopped, 1 running
+        self.status = status
+
+        # Service status description when status == -1.
+        self.status_desc = status_desc
+
+        # datetime when this info was last refreshed
+        self.last_refresh = None   # type: Optional[datetime.datetime]
+
+    def name(self):
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def __repr__(self):
+        return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
+                                                         id=self.daemon_id)
+
+    def to_json(self):
+        out = {
+            'nodename': self.nodename,
+            'container_id': self.container_id,
+            'container_image_id': self.container_image_id,
+            'container_image_name': self.container_image_name,
+            'daemon_id': self.daemon_id,
+            'daemon_type': self.daemon_type,
+            'version': self.version,
+            'status': self.status,
+            'status_desc': self.status_desc,
+        }
+        return {k: v for (k, v) in out.items() if v is not None}
+
+    @classmethod
+    @handle_type_error
+    def from_json(cls, data):
+        return cls(**data)
 
 class ServiceDescription(object):
     """
