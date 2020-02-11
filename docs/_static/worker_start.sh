@@ -2,7 +2,7 @@
  
 # A simple script used by Red Hat to start teuthology-worker processes.
  
-ARCHIVE=$HOME/archive
+ARCHIVE=${ARCHIVE:-"$HOME/archive"}
 WORKER_LOGS=$ARCHIVE/worker_logs
  
 function start_workers_for_tube {
