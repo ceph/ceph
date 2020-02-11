@@ -182,6 +182,54 @@ private:
                                   const C_WriteRequest<U> &req);
 };
 
+/**
+ * This is the custodian of the BlockGuard cell for this
+ * aio_flush. Block guard is released as soon as the new
+ * sync point (if required) is created. Subsequent IOs can
+ * proceed while this flush waits for prior IOs to complete
+ * and any required sync points to be persisted.
+ */
+template <typename T>
+class C_FlushRequest : public C_BlockIORequest<T> {
+public:
+  using C_BlockIORequest<T>::rwl;
+  std::shared_ptr<SyncPoint> to_append;
+
+  C_FlushRequest(T &rwl, const utime_t arrived,
+                 io::Extents &&image_extents,
+                 bufferlist&& bl, const int fadvise_flags,
+                 ceph::mutex &lock, PerfCounters *perfcounter,
+                 Context *user_req);
+
+  ~C_FlushRequest() override {}
+
+  bool alloc_resources() override;
+
+  void dispatch() override;
+
+  const char *get_name() const override {
+    return "C_FlushRequest";
+  }
+
+  void setup_buffer_resources(
+      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
+      uint64_t &number_lanes, uint64_t &number_log_entries,
+      uint64_t &number_unpublished_reserves) override;
+private:
+  std::shared_ptr<SyncPointLogOperation> op;
+  ceph::mutex &m_lock;
+  PerfCounters *m_perfcounter = nullptr;
+
+  void finish_req(int r) override;
+  void deferred_handler() override {
+    m_perfcounter->inc(l_librbd_rwl_aio_flush_def, 1);
+  }
+
+  template <typename U>
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const C_FlushRequest<U> &req);
+};
+
 struct BlockGuardReqState {
   bool barrier = false; /* This is a barrier request */
   bool current_barrier = false; /* This is the currently active barrier */
