@@ -1166,7 +1166,6 @@ void MDCache::get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir
       frag_vec_t leaves;
       diri->dirfragtree.get_leaves_under(fg, leaves);
       if (leaves.empty()) {
-	bool all = true;
 	frag_t approx_fg = diri->dirfragtree[fg.value()];
         frag_vec_t approx_leaves;
 	tmpdft.get_leaves_under(approx_fg, approx_leaves);
@@ -1174,20 +1173,13 @@ void MDCache::get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir
 	  if (p->second.get().count(leaf) == 0) {
 	    // not bound, so the resolve message is from auth MDS of the dirfrag
 	    force_dir_fragment(diri, leaf);
-	    all = false;
 	  }
 	}
-	if (all)
-	  leaves.push_back(approx_fg);
-	else
-	  diri->dirfragtree.get_leaves_under(fg, leaves);
       }
-      dout(10) << "  frag " << fg << " contains " << leaves << dendl;
-      for (const auto& leaf : leaves) {
-	CDir *dir = diri->get_dirfrag(leaf);
-	if (dir)
-	  bounds.insert(dir);
-      }
+
+      auto&& [complete, sibs] = diri->get_dirfrags_under(fg);
+      for (const auto& sib : sibs)
+	bounds.insert(sib);
     }
   }
 }
