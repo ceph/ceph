@@ -336,24 +336,44 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
           << " want 0x" << std::hex << want << std::dec << dendl;
   ceph_assert(id < alloc.size());
   ceph_assert(alloc[id]);
+  int64_t got = 0;
 
-  int64_t got = alloc[id]->allocate(want, alloc_size[id], 0, extents);
-  ceph_assert(got != 0);
-  if (got < 0) {
-    derr << __func__ << " failed to allocate space to return to bluestore"
-      << dendl;
-    alloc[id]->dump();
-    return got;
+  interval_set<uint64_t> granular;
+  while (want > 0 && !block_unused_too_granular[id].empty()) {
+    auto p = block_unused_too_granular[id].begin();
+    dout(20) << __func__ << " unused " << (int)id << ":"
+	     << std::hex << p.get_start() << "~" << p.get_len() << dendl;
+    extents->push_back({p.get_start(), p.get_len()});
+    granular.insert(p.get_start(), p.get_len());
+    if (want >= p.get_len()) {
+      want -= p.get_len();
+    } else {
+      want = 0;
+    }
+    got += p.get_len();
+    block_unused_too_granular[id].erase(p);
   }
 
-  for (auto& p : *extents) {
-    block_all[id].erase(p.offset, p.length);
-    log_t.op_alloc_rm(id, p.offset, p.length);
-  }
+  if (want > 0) {
+    got += alloc[id]->allocate(want, alloc_size[id], 0, extents);
+    ceph_assert(got != 0);
+    if (got < 0) {
+      derr << __func__ << " failed to allocate space to return to bluestore"
+	   << dendl;
+      alloc[id]->dump();
+      block_unused_too_granular[id].insert(granular);
+      return got;
+    }
 
-  flush_bdev();
-  int r = _flush_and_sync_log(l);
-  ceph_assert(r == 0);
+    for (auto& p : *extents) {
+      block_all[id].erase(p.offset, p.length);
+      log_t.op_alloc_rm(id, p.offset, p.length);
+    }
+
+    flush_bdev();
+    int r = _flush_and_sync_log(l);
+    ceph_assert(r == 0);
+  }
 
   logger->inc(l_bluefs_reclaim_bytes, got);
   dout(1) << __func__ << " bdev " << id << " want 0x" << std::hex << want
@@ -528,6 +548,7 @@ void BlueFS::_init_alloc()
   alloc.resize(MAX_BDEV);
   alloc_size.resize(MAX_BDEV, 0);
   pending_release.resize(MAX_BDEV);
+  block_unused_too_granular.resize(MAX_BDEV);
 
   if (bdev[BDEV_WAL]) {
     alloc_size[BDEV_WAL] = cct->_conf->bluefs_alloc_size;
@@ -586,6 +607,7 @@ void BlueFS::_stop_alloc()
     }
   }
   alloc.clear();
+  block_unused_too_granular.clear();
 }
 
 int BlueFS::mount()
@@ -832,6 +854,82 @@ int BlueFS::_check_new_allocations(const bluefs_fnode_t& fnode,
   return 0;
 }
 
+int BlueFS::_adjust_granularity(
+  __u8 id, uint64_t *offset, uint64_t *length, bool alloc)
+{
+  const char *op = alloc ? "op_alloc_add" : "op_alloc_rm";
+  auto oldo = *offset;
+  auto oldl = *length;
+  if (*offset & (alloc_size[id] - 1)) {
+    *offset &= ~(alloc_size[id] - 1);
+    *offset += alloc_size[id];
+    if (*length > *offset - oldo) {
+      if (alloc) {
+	block_unused_too_granular[id].insert(oldo, *offset - oldo);
+      } else {
+	block_unused_too_granular[id].erase(oldo, *offset - oldo);
+      }
+      *length -= (*offset - oldo);
+    } else {
+      if (alloc) {
+	block_unused_too_granular[id].insert(oldo, *length);
+      } else {
+	block_unused_too_granular[id].erase(oldo, *length);
+      }
+      *length = 0;
+    }
+  }
+  if (*length & (alloc_size[id] - 1)) {
+    *length &= ~(alloc_size[id] - 1);
+    if (alloc) {
+      block_unused_too_granular[id].insert(
+	*offset + *length,
+	oldo + oldl - *offset - *length);
+    } else {
+      block_unused_too_granular[id].erase(
+	*offset + *length,
+	oldo + oldl - *offset - *length);
+    }
+  }
+  if (oldo != *offset || oldl != *length) {
+    derr << __func__ << " " << op << " "
+	 << (int)id << ":" << std::hex << oldo << "~" << oldl
+	 << " -> " << (int)id << ":" << *offset << "~" << *length << dendl;
+  }
+  return 0;
+}
+
+int BlueFS::_verify_alloc_granularity(
+  __u8 id, uint64_t offset, uint64_t length, const char *op)
+{
+  if ((offset & (alloc_size[id] - 1)) ||
+      (length & (alloc_size[id] - 1))) {
+    derr << __func__ << " " << op << " of " << (int)id
+	 << ":0x" << std::hex << offset << "~" << length << std::dec
+	 << " does not align to alloc_size 0x"
+	 << std::hex << alloc_size[id] << std::dec << dendl;
+    // be helpful
+    auto need = alloc_size[id];
+    while (need && ((offset & (need - 1)) ||
+		    (length & (need - 1)))) {
+      need >>= 1;
+    }
+    if (need) {
+      const char *which;
+      if (id == BDEV_SLOW ||
+	  (id == BDEV_DB && !bdev[BDEV_SLOW])) {
+	which = "bluefs_shared_alloc_size";
+      } else {
+	which = "bluefs_alloc_size";
+      }
+      derr << "work-around by setting " << which << " = " << need
+	   << " for this OSD" << dendl;
+    }
+    return -EFAULT;
+  }
+  return 0;
+}
+
 int BlueFS::_replay(bool noop, bool to_stdout)
 {
   dout(10) << __func__ << (noop ? " NO-OP" : "") << dendl;
@@ -840,6 +938,11 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
   FileRef log_file;
   log_file = _get_file(1);
+
+  // sanity check
+  for (auto& a : block_unused_too_granular) {
+    ceph_assert(a.empty());
+  }
 
   if (!noop) {
     log_file->fnode = super.log_fnode;
@@ -1051,10 +1154,12 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << ":0x" << std::hex << offset << "~" << length << std::dec
                       << std::endl;
           }
-
 	  if (!noop) {
 	    block_all[id].insert(offset, length);
-	    alloc[id]->init_add_free(offset, length);
+	    _adjust_granularity(id, &offset, &length, true);
+	    if (length) {
+	      alloc[id]->init_add_free(offset, length);
+	    }
 
             if (cct->_conf->bluefs_log_replay_check_allocations) {
               bool fail = false;
@@ -1108,10 +1213,12 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << ":0x" << std::hex << offset << "~" << length << std::dec
                       << std::endl;
           }
-
 	  if (!noop) {
 	    block_all[id].erase(offset, length);
-	    alloc[id]->init_rm_free(offset, length);
+	    _adjust_granularity(id, &offset, &length, false);
+	    if (length) {
+	      alloc[id]->init_rm_free(offset, length);
+	    }
             if (cct->_conf->bluefs_log_replay_check_allocations) {
               bool fail = false;
               apply_for_bitset_range(offset, length, alloc_size[id], owned_blocks[id],
@@ -1260,7 +1367,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
             std::cout << " 0x" << std::hex << pos << std::dec
                       << ":  op_file_update " << " " << fnode << std::endl;
           }
-
           if (!noop) {
 	    FileRef f = _get_file(fnode.ino);
             if (cct->_conf->bluefs_log_replay_check_allocations) {
@@ -1277,7 +1383,12 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               auto& fnode_extents = f->fnode.extents;
               for (auto e : fnode_extents) {
                 auto id = e.bdev;
-                apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
+		if (int r = _verify_alloc_granularity(id, e.offset, e.length,
+						      "OP_FILE_UPDATE"); r < 0) {
+		  return r;
+		}
+                apply_for_bitset_range(e.offset, e.length, alloc_size[id],
+				       used_blocks[id],
                   [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
                     ceph_assert(bs.test(pos));
                     bs.reset(pos);
@@ -1412,6 +1523,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     }
   }
 
+  for (unsigned id = 0; id < MAX_BDEV; ++id) {
+    dout(10) << __func__ << " block_unused_too_granular " << id << ": "
+	     << block_unused_too_granular[id] << dendl;
+  }
   dout(10) << __func__ << " done" << dendl;
   return 0;
 }
