@@ -325,20 +325,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def remove_mds(self, name):
-        return self._service_rm_decorate(
-            'MDS', name, lambda: self.rook_cluster.rm_service('cephfilesystems', name)
-        )
-
-    def remove_rgw(self, zone):
-        return self._service_rm_decorate(
-            'RGW', zone, lambda: self.rook_cluster.rm_service('cephobjectstores', zone)
-        )
-
-    def remove_nfs(self, name):
-        return self._service_rm_decorate(
-            'NFS', name, lambda: self.rook_cluster.rm_service('cephnfses', name)
-        )
+    def remove_service(self, service_type, service_name):
+        if service_type == 'mds':
+            return self._service_rm_decorate(
+                'MDS', service_name, lambda: self.rook_cluster.rm_service(
+                    'cephfilesystems', service_name)
+            )
+        elif service_type == 'rgw':
+            return self._service_rm_decorate(
+                'RGW', service_name, lambda: self.rook_cluster.rm_service('cephobjectstores', service_name)
+            )
+        elif service_type == 'nfs':
+            return self._service_rm_decorate(
+                'NFS', service_name, lambda: self.rook_cluster.rm_service('cephnfses', service_name)
+            )
 
     def update_mons(self, spec):
         # type: (orchestrator.ServiceSpec) -> RookCompletion
