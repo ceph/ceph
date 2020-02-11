@@ -1488,6 +1488,19 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return self._remove_daemon(args)
         return self._get_daemons(daemon_type=service_type).then(_filter)
 
+    def service_apply(self, spec):
+        if spec.service_type == 'mgr':
+            return self.update_mgrs(spec)
+        if spec.service_type == 'mon':
+            return self.update_mons(spec)
+        if spec.service_type == 'mds':
+            return self.update_mds(spec)
+        if spec.service_type == 'rgw':
+            return self.update_rgw(spec)
+        if spec.service_type == 'rbd-mirror':
+            return self.update_rbd_mirror(spec)
+        raise NotImplementedError()
+
     def get_inventory(self, node_filter=None, refresh=False):
         """
         Return the storage inventory of nodes matching the given filter.
