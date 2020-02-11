@@ -614,6 +614,8 @@ private:
     // let seastar::do_with to up-cast us to seastar::future.
     template<typename T, typename F>
     friend inline auto ::seastar::do_with(T&&, F&&);
+    template<typename T1, typename T2, typename T3_or_F, typename... More>
+    friend inline auto ::seastar::do_with(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
   };
 
 public:
