@@ -1803,6 +1803,9 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
   case StateIncrementalSync:
     s = "incremental-sync";
     break;
+  case StateStopped:
+    s = "stopped";
+    break;
   default:
     s = "unknown";
     break;
