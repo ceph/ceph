@@ -259,7 +259,7 @@ while true; do
 	break
     fi
     TRIES=$(($TRIES + 1))
-    if [ "$TRIES" -eq 5 ]; then
+    if [ "$TRIES" -eq 30 ]; then
 	echo "grafana did not come up"
 	exit 1
     fi
