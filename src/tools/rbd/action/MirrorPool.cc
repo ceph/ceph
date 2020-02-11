@@ -1458,10 +1458,7 @@ int execute_status(const po::variables_map &vm,
   }
 
   MirrorDaemonServiceInfo daemon_service_info(io_ctx);
-  r = daemon_service_info.init();
-  if (r < 0) {
-    return r;
-  }
+  daemon_service_info.init();
 
   MirrorHealth mirror_daemon_health = daemon_service_info.get_daemon_health();
   auto mirror_services = daemon_service_info.get_mirror_services();
