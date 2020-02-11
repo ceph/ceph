@@ -635,6 +635,21 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
+        'orch service rm',
+        "name=name,type=CephString",
+        'Remove a service')
+    def _service_rm(self, name):
+        if '.' in name:
+            (service_type, service_name) = name.split('.')
+        else:
+            service_type = name;
+            service_name = None
+        completion = self.remove_service(service_type, service_name)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
         'orch mgr update',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false "
