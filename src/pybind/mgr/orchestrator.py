@@ -930,7 +930,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mgrs(self, spec):
-        # type: (StatefulServiceSpec) -> Completion
+        # type: (ServiceSpec) -> Completion
         """
         Update the number of cluster managers.
 
@@ -940,7 +940,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mons(self, spec):
-        # type: (StatefulServiceSpec) -> Completion
+        # type: (ServiceSpec) -> Completion
         """
         Update the number of cluster monitors.
 
@@ -950,7 +950,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_mds(self, spec):
-        # type: (StatelessServiceSpec) -> Completion
+        # type: (ServiceSpec) -> Completion
         """Create a new MDS cluster"""
         raise NotImplementedError()
 
@@ -960,7 +960,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mds(self, spec):
-        # type: (StatelessServiceSpec) -> Completion
+        # type: (ServiceSpec) -> Completion
         """
         Update / redeploy existing MDS cluster
         Like for example changing the number of service instances.
@@ -968,7 +968,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_rbd_mirror(self, spec):
-        # type: (StatelessServiceSpec) -> Completion
+        # type: (ServiceSpec) -> Completion
         """Create rbd-mirror cluster"""
         raise NotImplementedError()
 
@@ -978,7 +978,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_rbd_mirror(self, spec):
-        # type: (StatelessServiceSpec) -> Completion
+        # type: (ServiceSpec) -> Completion
         """
         Update / redeploy rbd-mirror cluster
         Like for example changing the number of service instances.
@@ -1223,51 +1223,39 @@ class ServiceDescription(object):
         return cls(**data)
 
 
-class StatefulServiceSpec(object):
-    """ Such as mgrs/mons
+class ServiceSpec(object):
     """
-    # TODO: create base class for Stateless/Stateful service specs and propertly inherit
+    Details of service creation.
+
+    Request to the orchestrator for a cluster of daemons
+    such as MDS, RGW, iscsi gateway, MONs, MGRs, Prometheus
+
+    This structure is supposed to be enough information to
+    start the services.
+
+    """
+
     def __init__(self, name=None, placement=None):
         # type: (Optional[str], Optional[PlacementSpec]) -> None
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
-        self.name = name
 
-        # for backwards-compatibility
+        #: Give this set of stateless services a name: typically it would
+        #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
+        #: within one ceph cluster. Note: Not all clusters have a name
+        self.name = name  # type: Optional[str]
+
         if self.placement is not None and self.placement.count is not None:
-            self.count = self.placement.count
+            #: Count of service instances. Deprecated.
+            self.count = self.placement.count  # type: int
         else:
             self.count = 1
-
-
-class StatelessServiceSpec(object):
-    # Request to orchestrator for a group of stateless services
-    # such as MDS, RGW, nfs gateway, iscsi gateway
-    """
-    Details of stateless service creation.
-
-    Request to orchestrator for a group of stateless services
-    such as MDS, RGW or iscsi gateway
-    """
-    # This structure is supposed to be enough information to
-    # start the services.
-
-    def __init__(self, name, placement=None):
-        self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
-
-        #: Give this set of statelss services a name: typically it would
-        #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
-        #: within one ceph cluster.
-        self.name = name  # type: str
-
-        #: Count of service instances
-        self.count = self.placement.count if self.placement is not None else 1  # for backwards-compatibility
 
     def validate_add(self):
         if not self.name:
             raise OrchestratorValidationError('Cannot add Service: Name required')
 
 
-class NFSServiceSpec(StatelessServiceSpec):
+class NFSServiceSpec(ServiceSpec):
     def __init__(self, name, pool=None, namespace=None, placement=None):
         super(NFSServiceSpec, self).__init__(name, placement)
 
@@ -1284,7 +1272,7 @@ class NFSServiceSpec(StatelessServiceSpec):
             raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
 
 
-class RGWSpec(StatelessServiceSpec):
+class RGWSpec(ServiceSpec):
     """
     Settings to configure a (multisite) Ceph RGW
 
