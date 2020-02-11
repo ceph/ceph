@@ -264,6 +264,10 @@ def device_info_not_ceph_disk_member(monkeypatch, request):
     monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
                         lambda path: {'PARTLABEL': request.param[1]})
 
+@pytest.fixture
+def patched_get_block_devs_lsblk():
+    with patch('ceph_volume.util.disk.get_block_devs_lsblk') as p:
+        yield p
 
 @pytest.fixture
 def patch_bluestore_label():
