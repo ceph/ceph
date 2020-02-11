@@ -224,6 +224,26 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
+                name='rgw.myrgw.myhost.myid',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                version='version',
+                state='running',
+            )
+        ])
+    ))
+    def test_remove_daemon(self, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            c = cephadm_module.list_daemons(refresh=True)
+            wait(cephadm_module, c)
+            c = cephadm_module.remove_daemons(['rgw.myrgw.myhost.myid'])
+            out = wait(cephadm_module, c)
+            assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
+        json.dumps([
+            dict(
                 name='rgw.myrgw.foobar',
                 style='cephadm',
                 fsid='fsid',
