@@ -264,21 +264,21 @@ setup_pools()
         rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
       else
         mon_map_file=${TEMPDIR}/${remote_cluster}.monmap
-        ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
+        CEPH_ARGS='' ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
         mon_addr=$(monmaptool --print ${mon_map_file} | grep -E 'mon\.' |
           head -n 1 | sed -E 's/^[0-9]+: ([^ ]+).+$/\1/' | sed -E 's/\/[0-9]+//g')
 
         admin_key_file=${TEMPDIR}/${remote_cluster}.client.${CEPH_ID}.key
         CEPH_ARGS='' ceph --cluster ${remote_cluster} auth get-key client.${CEPH_ID} > ${admin_key_file}
 
-        rbd --cluster ${cluster} mirror pool peer add ${POOL} \
+        CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer add ${POOL} \
             client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX} \
             --remote-mon-host "${mon_addr}" --remote-key-file ${admin_key_file}
 
         uuid=$(rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} \
             client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX})
-        rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
-        rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
+        CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
+        CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
       fi
     fi
 }
@@ -469,9 +469,9 @@ status()
     for cluster in ${CLUSTER1} ${CLUSTER2}
     do
 	echo "${cluster} status"
-	ceph --cluster ${cluster} -s
-	ceph --cluster ${cluster} service dump
-	ceph --cluster ${cluster} service status
+	CEPH_ARGS='' ceph --cluster ${cluster} -s
+	CEPH_ARGS='' ceph --cluster ${cluster} service dump
+	CEPH_ARGS='' ceph --cluster ${cluster} service status
 	echo
 
 	for image_pool in ${POOL} ${PARENT_POOL}
@@ -487,7 +487,7 @@ status()
 	        echo
 
 	        echo "${cluster} ${image_pool}${image_ns} mirror pool status"
-	        rbd --cluster ${cluster} -p ${image_pool}${image_ns} mirror pool status --verbose
+	        CEPH_ARGS='' rbd --cluster ${cluster} -p ${image_pool}${image_ns} mirror pool status --verbose
 	        echo
 
 	        for image in `rbd --cluster ${cluster} -p ${image_pool}${image_ns} ls 2>/dev/null`
@@ -699,7 +699,7 @@ test_status_in_pool_dir()
     local service_pattern="$6"
 
     local status_log=${TEMPDIR}/$(mkfname ${cluster}-${pool}-${image}.mirror_status)
-    rbd --cluster ${cluster} mirror image status ${pool}/${image} |
+    CEPH_ARGS='' rbd --cluster ${cluster} mirror image status ${pool}/${image} |
 	tee ${status_log} >&2
     grep "^  state: .*${state_pattern}" ${status_log} || return 1
     grep "^  description: .*${description_pattern}" ${status_log} || return 1
