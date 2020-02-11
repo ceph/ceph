@@ -993,15 +993,6 @@ def main():
     if injectargs and '--' in injectargs:
         injectargs.remove('--')
 
-    # special deprecation warning for 'ceph <type> tell'
-    # someday 'mds' will be here too
-    if (len(childargs) >= 2 and
-            childargs[0] in ['mon', 'osd'] and
-            childargs[1] == 'tell'):
-        print('"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0]),
-              file=sys.stderr)
-        return 1
-
     block = False
     waitdata = dict()
     if parsed_args.block:
@@ -1041,21 +1032,33 @@ def main():
         return 1
 
     if parsed_args.help:
-        hdr('Monitor commands:')
+        target = None
+        if len(childargs) >= 2 and childargs[0] == 'tell':
+            target = childargs[1].split('.')
+            if not validate_target(target):
+                print('target {0} doesn\'t exist; please pass correct target to tell command (e.g., mon.a, osd.1, mds.a, mgr)'.format(childargs[1]), file=sys.stderr)
+                return 1
+            childargs = childargs[2:]
+            hdr('Tell %s commands:' % target[0])
+        else:
+            hdr('Monitor commands:')
+            target = ('mon', '')
         if verbose:
             print('[Contacting monitor, timeout after %d seconds]' % timeout)
 
-        return do_extended_help(parser, childargs, ('mon', ''), ' '.join(childargs))
+        return do_extended_help(parser, childargs, target, ' '.join(childargs))
 
     # implement "tell service.id help"
     if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
         target = childargs[1].split('.')
         if validate_target(target):
+            hdr('Tell %s commands' % target[0])
             return do_extended_help(parser, childargs, target, None)
         else:
             print('target {0} doesn\'t exists, please pass correct target to tell command, such as mon.a/'
                   'osd.1/mds.a/mgr'.format(childargs[1]), file=sys.stderr)
             return 1
+
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
     level = ''
