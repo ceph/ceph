@@ -213,13 +213,13 @@ error if it doesn't know how to do this transition.
 
 Update the number of monitor nodes::
 
-    ceph orch mon update <num> [host, host:network...]
+    ceph orch apply mon <num> [host, host:network...]
 
 Each host can optionally specify a network for the monitor to listen on.
 
 Update the number of manager nodes::
 
-    ceph orch mgr update <num> [host...]
+    ceph orch apply mgr <num> [host...]
 
 ..
     .. note::
@@ -295,27 +295,27 @@ This is an overview of the current implementation status of the orchestrators.
 =================================== ====== =========
  Command                             Rook   Cephadm
 =================================== ====== =========
+ apply iscsi                         ⚪      ⚪
+ apply mds                           ✔      ✔
+ apply mgr                           ⚪      ✔
+ apply mon                           ✔      ✔
+ apply nfs                           ✔      ⚪
+ apply osd                           ✔      ✔
+ apply rbd-mirror                    ✔      ✔
+ apply rgw                           ⚪      ✔
  host add                            ⚪      ✔
  host ls                             ✔      ✔
  host rm                             ⚪      ✔
- mgr update                          ⚪      ✔
- mon update                          ✔      ✔
- osd create                          ✔      ✔
  daemon status                       ⚪      ✔
  daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
  iscsi add                           ⚪      ⚪
- iscsi update                        ⚪      ⚪
  mds add                             ✔      ✔
- mds update                          ✔      ✔
  nfs add                             ✔      ⚪
- nfs update                          ✔      ⚪
  ps                                  ⚪      ✔
  rbd-mirror add                      ⚪      ✔
- rbd-mirror update                   ⚪      ✔
  rgw add                             ✔      ✔
- rgw update                          ⚪      ✔
  service ls                          ✔      ⚪
 =================================== ====== =========
 
