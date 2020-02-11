@@ -388,21 +388,6 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch osd rm',
-        "name=svc_id,type=CephString,n=N",
-        'Remove OSD services')
-    def _osd_rm(self, svc_id):
-        # type: (List[str]) -> HandleCommandResult
-        """
-        Remove OSD's
-        :cmd : Arguments for remove the osd
-        """
-        completion = self.remove_osds(svc_id)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @orchestrator._cli_write_command(
         'orch rbd-mirror add',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false",
@@ -427,16 +412,6 @@ Usage:
             None,
             placement=orchestrator.PlacementSpec(hosts=hosts, count=num, label=label))
         completion = self.update_rbd_mirror(spec)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @orchestrator._cli_write_command(
-        'orch rbd-mirror rm',
-        "name=name,type=CephString,req=false",
-        'Remove rbd-mirror service or rbd-mirror service instance')
-    def _rbd_mirror_rm(self, name=None):
-        completion = self.remove_rbd_mirror(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -472,16 +447,6 @@ Usage:
             placement=placement)
 
         completion = self.update_mds(spec)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @orchestrator._cli_write_command(
-        'orch mds rm',
-        "name=name,type=CephString",
-        'Remove an MDS service (mds id or fs_name)')
-    def _mds_rm(self, name):
-        completion = self.remove_mds(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -535,18 +500,6 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch rgw rm',
-        'name=realm_name,type=CephString '
-        'name=zone_name,type=CephString',
-        'Remove an RGW service')
-    def _rgw_rm(self, realm_name, zone_name):
-        name = realm_name + '.' + zone_name
-        completion = self.remove_rgw(name)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @orchestrator._cli_write_command(
         'orch nfs add',
         "name=svc_arg,type=CephString "
         "name=pool,type=CephString "
@@ -583,16 +536,6 @@ Usage:
         )
         completion = self.update_nfs(spec)
         self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @orchestrator._cli_write_command(
-        'orch nfs rm',
-        "name=svc_id,type=CephString",
-        'Remove an NFS service')
-    def _nfs_rm(self, svc_id):
-        completion = self.remove_nfs(svc_id)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(

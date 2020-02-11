@@ -301,26 +301,20 @@ This is an overview of the current implementation status of the orchestrators.
  mgr update                          ⚪      ✔
  mon update                          ✔      ✔
  osd create                          ✔      ✔
- osd rm                              ⚪      ✔
  daemon status                       ⚪      ✔
  daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
  iscsi add                           ⚪      ⚪
- iscsi rm                            ⚪      ⚪
  iscsi update                        ⚪      ⚪
  mds add                             ✔      ✔
- mds rm                              ✔      ✔
  mds update                          ✔      ✔
  nfs add                             ✔      ⚪
- nfs rm                              ✔      ⚪
  nfs update                          ✔      ⚪
  ps                                  ⚪      ✔
  rbd-mirror add                      ⚪      ✔
- rbd-mirror rm                       ⚪      ✔
  rbd-mirror update                   ⚪      ✔
  rgw add                             ✔      ✔
- rgw rm                              ✔      ✔
  rgw update                          ⚪      ✔
  service ls                          ✔      ⚪
 =================================== ====== =========
