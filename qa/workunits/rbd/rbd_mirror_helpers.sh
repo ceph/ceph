@@ -248,7 +248,8 @@ setup_pools()
       PEER_CLUSTER_SUFFIX=-DNE
     fi
 
-    rbd --cluster ${cluster} mirror pool enable --site-name ${cluster}${PEER_CLUSTER_SUFFIX} ${POOL} pool
+    CEPH_ARGS='' rbd --cluster ${cluster} mirror pool enable \
+        --site-name ${cluster}${PEER_CLUSTER_SUFFIX} ${POOL} pool
     rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL} image
 
     rbd --cluster ${cluster} namespace create ${POOL}/${NS1}
