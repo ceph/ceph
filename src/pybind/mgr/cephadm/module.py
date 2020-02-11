@@ -1469,6 +1469,25 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return self._remove_daemon(args)
         return self._get_daemons().then(_filter)
 
+    def remove_service(self, service_type, service_name):
+        if service_name:
+            prefix = service_name + '.'
+        else:
+            prefix = ''
+        def _filter(daemons):
+            args = []
+            for d in daemons:
+                if d.daemon_type == service_type and \
+                   d.daemon_id.startswith(prefix):
+                    args.append(
+                        ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
+                    )
+            if not args:
+                raise OrchestratorError('Unable to find daemons in %s.%s* service' % (
+                    service_type, prefix))
+            return self._remove_daemon(args)
+        return self._get_daemons(daemon_type=service_type).then(_filter)
+
     def get_inventory(self, node_filter=None, refresh=False):
         """
         Return the storage inventory of nodes matching the given filter.
