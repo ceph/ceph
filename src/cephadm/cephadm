@@ -1450,8 +1450,9 @@ class CephContainer:
                  volume_mounts={},
                  cname='',
                  container_args=[],
+                 envs=None,
                  privileged=False):
-        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[bool]) -> None
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], Optional[bool]) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
@@ -1459,6 +1460,7 @@ class CephContainer:
         self.cname = cname
         self.container_args = container_args
         self.privileged = privileged
+        self.envs = envs
 
     def run_cmd(self):
         # type: () -> List[str]
@@ -1481,6 +1483,9 @@ class CephContainer:
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
         ]
+        if self.envs:
+            for e in self.envs:
+                envs.extend(['-e', e])
         cname = ['--name', self.cname] if self.cname else []
         return [
             str(container_path),
@@ -1509,6 +1514,9 @@ class CephContainer:
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
         ]
+        if self.envs:
+            for e in self.envs:
+                envs.extend(['-e', e])
         cmd_args = [] # type: List[str]
         if cmd:
             cmd_args = ['-c'] + cmd
@@ -2047,6 +2055,7 @@ def command_shell():
         args=[],
         container_args=container_args,
         volume_mounts=mounts,
+        envs=args.env,
         privileged=True)
     command = c.shell_cmd(command)
 
@@ -2959,6 +2968,11 @@ def _get_parser():
     parser_shell.add_argument(
         '--keyring', '-k',
         help='ceph.keyring to pass through to the container')
+    parser_shell.add_argument(
+        '--env', '-e',
+        action='append',
+        default=[],
+        help='set environment variable')
     parser_shell.add_argument(
         'command', nargs='*',
         help='command (optional)')
