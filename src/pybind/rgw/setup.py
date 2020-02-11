@@ -10,19 +10,21 @@ import tempfile
 import textwrap
 from distutils.ccompiler import new_compiler
 from distutils.errors import CompileError, LinkError
+from itertools import filterfalse, takewhile
 import distutils.sysconfig
 
 
 def filter_unsupported_flags(compiler, flags):
-    if 'clang' in compiler:
-        return filterfalse(lambda f:
-                           f in ('-mcet',
-                                 '-fstack-clash-protection',
-                                 '-fno-var-tracking-assignments',
-                                 '-Wno-deprecated-register',
-                                 '-Wno-gnu-designator') or
-                           f.startswith('-fcf-protection'),
-                           flags)
+    args = takewhile(lambda argv: not argv.startswith('-'), [compiler] + flags)
+    if any('clang' in arg for arg in args):
+        return list(filterfalse(lambda f:
+                                f in ('-mcet',
+                                      '-fstack-clash-protection',
+                                      '-fno-var-tracking-assignments',
+                                      '-Wno-deprecated-register',
+                                      '-Wno-gnu-designator') or
+                                f.startswith('-fcf-protection'),
+                                flags))
     else:
         return flags
 
@@ -61,6 +63,7 @@ def get_python_flags(libs):
     py_libs = sum((libs.split() for libs in
                    distutils.sysconfig.get_config_vars('LIBS', 'SYSLIBS')), [])
     compiler = new_compiler()
+    distutils.sysconfig.customize_compiler(compiler)
     return dict(
         include_dirs=[distutils.sysconfig.get_python_inc()],
         library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
