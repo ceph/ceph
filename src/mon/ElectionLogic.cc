@@ -317,6 +317,12 @@ double ElectionLogic::connectivity_election_score(int rank)
   } else {
     peer_tracker->get_total_connection_score(rank, &score, &liveness);
   }
+  if (0 == score && !peer_tracker->has_peer_records()) {
+    // we can't start pinging until there's been a quorum,
+    // so just regard everybody as alive until that happens
+    ldout(cct, 5) << "returning score=1 as we have no score records" << dendl;
+    return 1.0;
+  }
   return score;
 }
 

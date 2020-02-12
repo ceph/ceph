@@ -60,6 +60,7 @@ void ConnectionTracker::receive_peer_report(const ConnectionTracker& o)
     }
   }
   encoding.clear();
+  seen_any_report = true;
 }
 
 bool ConnectionTracker::increase_epoch(epoch_t e)
@@ -98,6 +99,7 @@ void ConnectionTracker::report_live_connection(int peer_rank, double units_alive
   my_reports->current[peer_rank] = true;
 
   increase_version();
+  seen_any_report = true;
 }
 
 void ConnectionTracker::report_dead_connection(int peer_rank, double units_dead)
@@ -115,6 +117,7 @@ void ConnectionTracker::report_dead_connection(int peer_rank, double units_dead)
   my_reports->current[peer_rank] = false;
   
   increase_version();
+  seen_any_report = true;
 }
 
 void ConnectionTracker::get_total_connection_score(int peer_rank, double *rating,
@@ -151,6 +154,7 @@ void ConnectionTracker::encode(bufferlist &bl) const
   encode(version, bl);
   encode(half_life, bl);
   encode(peer_reports, bl);
+  encode(seen_any_report, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -164,6 +168,7 @@ void ConnectionTracker::decode(bufferlist::const_iterator& bl) {
   decode(version, bl);
   decode(half_life, bl);
   decode(peer_reports, bl);
+  decode(seen_any_report, bl);
   DECODE_FINISH(bl);
 
   my_reports = &peer_reports[rank];

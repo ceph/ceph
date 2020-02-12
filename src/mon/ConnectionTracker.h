@@ -121,6 +121,14 @@ class ConnectionTracker {
   void get_total_connection_score(int peer_rank, double *rating,
 				  int *live_count) const;
   /**
+   * Lets the caller know if we have gotten any reports -- a single connection,
+   * data we read off disk, whatever.
+   * This way when first booting up they can ignore nonexistent scores.
+   */
+  bool has_peer_records() {
+    return seen_any_report;
+  }
+  /**
    * Encode this ConnectionTracker. Useful both for storing on disk
    * and for sending off to peers for decoding and import
    * with receive_peer_report() above.
@@ -142,6 +150,7 @@ class ConnectionTracker {
   RankProvider *owner;
   int rank;
   int persist_interval;
+  bool seen_any_report = false;
   bufferlist encoding;
   int get_my_rank() const { return rank; }
   ConnectionReport *reports(int p);
@@ -175,7 +184,8 @@ class ConnectionTracker {
   ConnectionTracker(const ConnectionTracker& o) :
     epoch(o.epoch), version(o.version),
     half_life(o.half_life), owner(o.owner), rank(o.rank),
-    persist_interval(o.persist_interval)
+    persist_interval(o.persist_interval),
+    seen_any_report(o.seen_any_report)
   {
     peer_reports = o.peer_reports;
     my_reports = &peer_reports[rank];
