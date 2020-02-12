@@ -1086,13 +1086,13 @@ class PlacementSpec(object):
     def __init__(self, label=None, hosts=None, count=None):
         # type: (Optional[str], Optional[List], Optional[int]) -> None
         self.label = label
+        self.hosts = []  # type: List[HostPlacementSpec]
         if hosts:
             if all([isinstance(host, HostPlacementSpec) for host in hosts]):
-                self.hosts = hosts  # type: List[HostPlacementSpec]
+                self.hosts = hosts
             else:
                 self.hosts = [parse_host_placement_specs(x, require_network=False) for x in hosts if x]
-        else:
-            self.hosts = []
+
 
         self.count = count  # type: Optional[int]
 
@@ -1146,7 +1146,7 @@ class ServiceDescription(object):
                  service_type=None, version=None, rados_config_location=None,
                  service_url=None, status=None, status_desc=None):
         # Node is at the same granularity as InventoryNode
-        self.nodename = nodename
+        self.nodename = nodename  # type: Optional[str]
 
         # Not everyone runs in containers, but enough people do to
         # justify having the container_id (runtime id) and container_image
