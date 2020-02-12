@@ -1798,8 +1798,12 @@ def command_bootstrap():
         },
     )
 
+    # wait for the service to become available
     def is_mon_available():
-        out, err, ret = call(c.run_cmd(), desc=c.entrypoint, timeout=30)
+        timeout=args.timeout if args.timeout else 30 # seconds
+        out, err, ret = call(c.run_cmd(),
+                             desc=c.entrypoint,
+                             timeout=timeout)
         return ret == 0
     is_available('mon', is_mon_available)()
 
@@ -1851,9 +1855,11 @@ def command_bootstrap():
         f.write(config)
     logger.info('Wrote config to %s' % args.output_config)
 
+    # wait for the service to become available
     logger.info('Waiting for mgr to start...')
     def is_mgr_available():
-        out = cli(['status', '-f', 'json-pretty'], timeout=30)
+        timeout=args.timeout if args.timeout else 30 # seconds
+        out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
         j = json.loads(out)
         return j.get('mgrmap', {}).get('available', False)
     is_available('mgr', is_mgr_available)()
@@ -1899,9 +1905,11 @@ def command_bootstrap():
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
 
+        # wait for the service to become available
         logger.info('Waiting for the dashboard to start...')
         def is_dashboard_available():
-            out = cli(['-h'], timeout=30)
+            timeout=args.timeout if args.timeout else 30 # seconds
+            out = cli(['-h'], timeout=timeout)
             return 'dashboard' in out
         is_available('Dashboard', is_dashboard_available)()
 
