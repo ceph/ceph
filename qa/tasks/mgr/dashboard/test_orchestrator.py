@@ -9,6 +9,7 @@ test_data = {
     'inventory': [
         {
             'name': 'test-host0',
+            'addr': '1.2.3.4',
             'devices': [
                 {
                     'path': '/dev/sda',
@@ -17,6 +18,7 @@ test_data = {
         },
         {
             'name': 'test-host1',
+            'addr': '1.2.3.5',
             'devices': [
                 {
                     'path': '/dev/sdb',
