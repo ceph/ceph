@@ -388,6 +388,26 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
+        'orch daemon add mon',
+        "name=num,type=CephInt,req=false "
+        "name=hosts,type=CephString,n=N,req=false "
+        "name=label,type=CephString,req=false",
+        'Start monitor daemon(s)')
+    def _daemon_add_mon(self, num=None, hosts=[], label=None):
+        if not num and not hosts and not label:
+            # Improve Error message. Point to parse_host_spec examples
+            raise orchestrator.OrchestratorValidationError("Mons need a placement spec. (num, host, network, name(opt))")
+        placement = orchestrator.PlacementSpec(label=label, count=num, hosts=hosts)
+        placement.validate()
+
+        spec = orchestrator.ServiceSpec(placement=placement)
+
+        completion = self.add_mon(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
         'orch daemon add mgr',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false",

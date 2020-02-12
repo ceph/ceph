@@ -960,6 +960,11 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def add_mon(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Create a new mon daemon"""
+        raise NotImplementedError()
+
     def add_mgr(self, spec):
         # type: (ServiceSpec) -> Completion
         """Create a new mgr daemon"""
