@@ -11,6 +11,7 @@ DATA_DIR_MODE=0o700
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1=r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT=None # in seconds
+DEFAULT_RETRY=10
 
 """
 You can invoke cephadm in two ways:
@@ -540,30 +541,31 @@ def call_timeout(command, timeout):
 
 ##################################
 
-def is_available(what, func, retry_max=10):
+def is_available(what, func):
     # type (str, func, Optional[int]) -> func
     """
     Wait for a service to become available
 
     :param what: the name of the service
     :param func: the callable object that determines availability
-    :param retry_max: max number of retry invocations of func
+    :param retry: max number of retry invocations of func
     """
+    retry = args.retry
     @wraps(func)
     def func_wrapper(*args, **kwargs):
         logger.info('Waiting for %s...' % (what))
-        retry_num = 1
+        num = 1
         while True:
             if func(*args, **kwargs):
                 break
-            elif retry_num > retry_max:
+            elif num > retry:
                 raise Error('%s not available after %s tries'
-                        % (what, retry_max))
+                        % (what, retry))
 
             logger.info('%s not available, waiting (%s/%s)...'
-                    % (what, retry_num, retry_max))
+                    % (what, num, retry))
 
-            retry_num += 1
+            num += 1
             time.sleep(1)
     return func_wrapper
 
@@ -1795,6 +1797,7 @@ def command_bootstrap():
             tmp_config.name: '/etc/ceph/ceph.conf:z',
         },
     )
+
     def is_mon_available():
         out, err, ret = call(c.run_cmd(), desc=c.entrypoint, timeout=30)
         return ret == 0
@@ -2857,6 +2860,11 @@ def _get_parser():
         type=int,
         default=DEFAULT_TIMEOUT,
         help='timeout in seconds')
+    parser.add_argument(
+        '--retry',
+        type=int,
+        default=DEFAULT_RETRY,
+        help='max number of retries')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
