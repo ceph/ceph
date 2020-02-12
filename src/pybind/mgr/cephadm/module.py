@@ -1287,6 +1287,45 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.daemon_cache[host] = orchestrator.OutdatableData(data)
         return host, data
 
+    def _proc_ls(self, host, ls):
+        # type: (str, List[Dict[str,str]]) -> List[orchestrator.DaemonDescription]
+        result = []
+        for d in ls:
+            if not d['style'].startswith('cephadm'):
+                self.log.debug('ignoring non-cephadm on %s: %s' % (host, d))
+                continue
+            if d['fsid'] != self._cluster_fsid:
+                self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
+                continue
+            self.log.debug('including %s %s' % (host, d))
+            sd = orchestrator.DaemonDescription()
+            if 'last_refresh' in d:
+                sd.last_refresh = datetime.datetime.strptime(
+                    d['last_refresh'], DATEFMT)
+            if '.' not in d['name']:
+                self.log.debug('ignoring dot-less daemon on %s: %s' % (host, d))
+                continue
+            sd.daemon_type = d['name'].split('.')[0]
+            sd.daemon_id = '.'.join(d['name'].split('.')[1:])
+            sd.nodename = host
+            sd.container_id = d.get('container_id')
+            sd.container_image_name = d.get('container_image_name')
+            sd.container_image_id = d.get('container_image_id')
+            sd.version = d.get('version')
+            if 'state' in d:
+                sd.status_desc = d['state']
+                sd.status = {
+                    'running': 1,
+                    'stopped': 0,
+                    'error': -1,
+                    'unknown': -1,
+                }[d['state']]
+            else:
+                sd.status_desc = 'unknown'
+                sd.status = None
+            result.append(sd)
+        return result
+
     def _get_daemons(self,
                      daemon_type=None,
                      daemon_id=None,
@@ -1327,46 +1366,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
             result = []
             for host, ls in daemons.items():
-                for d in ls:
-                    if not d['style'].startswith('cephadm'):
-                        self.log.debug('ignoring non-cephadm on %s: %s' % (host, d))
+                for d in self._proc_ls(host, ls):
+                    if daemon_type and daemon_type != d.daemon_type:
                         continue
-                    if d['fsid'] != self._cluster_fsid:
-                        self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
+                    if daemon_id and daemon_id != d.daemon_id:
                         continue
-                    self.log.debug('including %s %s' % (host, d))
-                    sd = orchestrator.DaemonDescription()
-                    if 'last_refresh' in d:
-                        sd.last_refresh = datetime.datetime.strptime(
-                            d['last_refresh'], DATEFMT)
-                    if '.' not in d['name']:
-                        self.log.debug('ignoring dot-less daemon on %s: %s' % (host, d))
+                    if service_name and not d.daemon_id.startswith(service_name + '.'):
                         continue
-                    sd.daemon_type = d['name'].split('.')[0]
-                    if daemon_type and daemon_type != sd.daemon_type:
-                        continue
-                    sd.daemon_id = '.'.join(d['name'].split('.')[1:])
-                    if daemon_id and daemon_id != sd.daemon_id:
-                        continue
-                    if service_name and not sd.daemon_id.startswith(service_name + '.'):
-                        continue
-                    sd.nodename = host
-                    sd.container_id = d.get('container_id')
-                    sd.container_image_name = d.get('container_image_name')
-                    sd.container_image_id = d.get('container_image_id')
-                    sd.version = d.get('version')
-                    if 'state' in d:
-                        sd.status_desc = d['state']
-                        sd.status = {
-                            'running': 1,
-                            'stopped': 0,
-                            'error': -1,
-                            'unknown': -1,
-                        }[d['state']]
-                    else:
-                        sd.status_desc = 'unknown'
-                        sd.status = None
-                    result.append(sd)
+                    result.append(d)
             return result
 
         if wait_for_args:
