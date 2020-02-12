@@ -86,6 +86,9 @@ public:
                                            "Dump internal statistics for bluefs."
                                            "");
         ceph_assert(r == 0);
+	r = admin_socket->register_command("bluefs files list", hook,
+					   "print files in bluefs");
+	ceph_assert(r == 0);
       }
     }
     return hook;
@@ -132,6 +135,33 @@ private:
       bluefs->dump_block_extents(ss);
       bluefs->dump_volume_selector(ss);
       out.append(ss);
+    } else if (command == "bluefs files list") {
+      const char* devnames[3] = {"wal","db","slow"};
+      std::lock_guard l(bluefs->lock);
+      f->open_array_section("files");
+      for (auto &d : bluefs->dir_map) {
+        std::string dir = d.first;
+        for (auto &r : d.second->file_map) {
+          f->open_object_section("file");
+          f->dump_string("name", (dir + "/" + r.first).c_str());
+          std::vector<size_t> sizes;
+          sizes.resize(bluefs->bdev.size());
+          for(auto& i : r.second->fnode.extents) {
+            sizes[i.bdev] += i.length;
+          }
+          for (size_t i = 0; i < sizes.size(); i++) {
+            if (sizes[i]>0) {
+	      if (i < sizeof(devnames) / sizeof(*devnames))
+		f->dump_int(devnames[i], sizes[i]);
+	      else
+		f->dump_int(("dev-"+to_string(i)).c_str(), sizes[i]);
+	    }
+          }
+          f->close_section();
+        }
+      }
+      f->close_section();
+      f->flush(out);
     } else {
       errss << "Invalid command" << std::endl;
       return -ENOSYS;
