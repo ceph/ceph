@@ -1869,6 +1869,31 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                    keyring=keyring,
                                    extra_config=extra_config)
 
+    def add_mon(self, spec):
+        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
+
+        # current support requires a network to be specified
+        for host, network, _ in spec.placement.hosts:
+            if not network:
+                raise RuntimeError("Host '{}' is missing a network spec".format(host))
+
+        def add_mons(daemons):
+            for _, _, name in spec.placement.hosts:
+                if name and len([d for d in daemons if d.daemon_id == name]):
+                    raise RuntimeError('name %s already exists', name)
+
+            # explicit placement: enough hosts provided?
+            if len(spec.placement.hosts) < spec.count:
+                raise RuntimeError("Error: {} hosts provided, expected {}".format(
+                    len(spec.placement.hosts), spec.count))
+            self.log.info("creating {} monitors on hosts: '{}'".format(
+                spec.count, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
+            # TODO: we may want to chain the creation of the monitors so they join
+            # the quorum one at a time.
+            return self._create_mon(spec.placement.hosts)
+
+        return self._get_daemons('mon').then(add_mons)
+
     def update_mons(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         """
