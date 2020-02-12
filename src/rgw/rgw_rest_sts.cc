@@ -354,13 +354,8 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
       for (const auto& t : tokens) {
         auto pos = t.find("=");
         if (pos != string::npos) {
-          const auto key = t.substr(0, pos);
-          if (key == "Action") {
-            s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
-          } else if (key == "RoleArn" || key == "Policy") {
-            const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
-            s->info.args.append(key, value);
-          }
+          s->info.args.append(t.substr(0,pos),
+                              url_decode(t.substr(pos+1, t.size() -1)));
         }
       }
     } 
