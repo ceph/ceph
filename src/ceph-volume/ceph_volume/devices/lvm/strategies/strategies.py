@@ -1,5 +1,6 @@
 import json
 from ceph_volume.util.prepare import osd_id_available
+from ceph_volume.api.lvm import get_device_vgs
 
 class Strategy(object):
 
@@ -64,10 +65,6 @@ class MixedStrategy(Strategy):
     def get_common_vg(self, devs):
         # find all the vgs associated with the current device
         for dev in devs:
-            for pv in dev.pvs_api:
-                vg = self.system_vgs.get(vg_name=pv.vg_name)
-                if not vg:
-                    continue
-                # this should give us just one VG, it would've been caught by
-                # the validator otherwise
-                return vg
+            vgs = get_device_vgs(dev.abspath)
+            if vgs:
+                return vgs[0]
