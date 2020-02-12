@@ -125,8 +125,8 @@ function TEST_recovery_priority() {
       fi
     done
 
-    ceph osd pool set $pool2 size 1
-    ceph osd pool set $pool3 size 1
+    ceph osd pool set $pool2 size 1 --yes-i-really-mean-it
+    ceph osd pool set $pool3 size 1 --yes-i-really-mean-it
     wait_for_clean || return 1
 
     dd if=/dev/urandom of=$dir/data bs=1M count=10
@@ -401,9 +401,9 @@ function TEST_recovery_pool_priority() {
     pool1_prio=$(expr $NORMAL_PRIO + $pool1_extra_prio)
     pool2_prio=$(expr $NORMAL_PRIO + $pool2_extra_prio)
 
-    ceph osd pool set $pool1 size 1
+    ceph osd pool set $pool1 size 1 --yes-i-really-mean-it
     ceph osd pool set $pool1 recovery_priority $pool1_extra_prio
-    ceph osd pool set $pool2 size 1
+    ceph osd pool set $pool2 size 1 --yes-i-really-mean-it
     ceph osd pool set $pool2 recovery_priority $pool2_extra_prio
     wait_for_clean || return 1
 

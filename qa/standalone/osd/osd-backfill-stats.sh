@@ -143,7 +143,7 @@ function TEST_backfill_sizeup() {
     run_osd $dir 5 || return 1
 
     create_pool $poolname 1 1
-    ceph osd pool set $poolname size 1
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
 
     wait_for_clean || return 1
 
@@ -189,7 +189,7 @@ function TEST_backfill_sizeup_out() {
     run_osd $dir 5 || return 1
 
     create_pool $poolname 1 1
-    ceph osd pool set $poolname size 1
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
 
     wait_for_clean || return 1
 
