@@ -1080,45 +1080,10 @@ start_ganesha() {
 
         prun rm -rf $ganesha_dir
         prun mkdir -p $ganesha_dir
+        prun ceph_adm fs nfs cluster create tester
+	prun ceph_adm osd pool application enable nfs-ganesha nfs
 
-        echo "NFS_CORE_PARAM {
-        Enable_NLM = false;
-        Enable_RQUOTA = false;
-        Protocols = 4;
-        NFS_Port = $port;
-}
-
-CACHEINODE {
-        Dir_Chunk = 0;
-        NParts = 1;
-        Cache_Size = 1;
-}
-
-NFSv4 {
-        RecoveryBackend = 'rados_cluster';
-        Minor_Versions = 1, 2;
-}
-
-CEPH {
-       Ceph_Conf = $conf_fn;
-}
-
-RADOS_URLS {
-	   ceph_conf = $conf_fn;
-	   userid = "admin";
-}
-
-%url rados://nfs-ganesha/ganesha/export-1
-
-RADOS_KV {
-	Ceph_Conf = $conf_fn;
-	pool = 'nfs-ganesha';
-	namespace = 'ganesha';
-	UserId = 'admin';
-	nodeid = $name;
-}" > "$ganesha_dir/ganesha.conf"
-
-
+        echo "%url rados://nfs-ganesha/tester/$name" > "$ganesha_dir/ganesha.conf"
 	wconf <<EOF
 [ganesha.$name]
         host = $HOSTNAME
@@ -1128,20 +1093,16 @@ RADOS_KV {
         pid file = $ganesha_dir/ganesha.pid
 EOF
 
-        if !($CEPH_BIN/rados lspools | grep "nfs-ganesha"); then
-            prun ceph_adm osd pool create nfs-ganesha
-            prun ceph_adm osd pool application enable nfs-ganesha nfs
-        fi
-
-        prun ceph_adm fs nfs create
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha add $name
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
+        #prun ceph_adm fs nfs create
+        prun ganesha-rados-grace -p nfs-ganesha -n tester add $name
+        prun ganesha-rados-grace -p nfs-ganesha -n tester
 
         prun /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
+
+        prun ganesha-rados-grace -p nfs-ganesha -n tester
 
         if $with_mgr_dashboard; then
             $CEPH_BIN/rados -p nfs-ganesha put "conf-$name" "$ganesha_dir/ganesha.conf"
