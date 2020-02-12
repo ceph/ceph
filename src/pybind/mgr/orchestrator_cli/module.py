@@ -549,6 +549,8 @@ Usage:
         else:
             service_type = name;
             service_name = None
+        if name in ['mon', 'mgr']:
+            raise orchestrator.OrchestratorError('The mon and mgr services cannot be removed')
         completion = self.remove_service(service_type, service_name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
