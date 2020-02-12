@@ -78,7 +78,7 @@
 %if 0%{without python2}
 %global _defined_if_python2_absent 1
 %endif
-%if 0%{?fedora} || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
 %if %{with selinux}
