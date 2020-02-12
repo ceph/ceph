@@ -5,9 +5,9 @@
   become: yes
   tasks:
 
-    - name: partition /dev/sdd for lvm data usage
+    - name: partition /dev/vdd for lvm data usage
       parted:
-        device: /dev/sdd
+        device: /dev/vdd
         number: 1
         part_start: 0%
         part_end: 50%
@@ -15,9 +15,9 @@
         label: gpt
         state: present
 
-    - name: partition /dev/sdd lvm journals
+    - name: partition /dev/vdd lvm journals
       parted:
-        device: /dev/sdd
+        device: /dev/vdd
         number: 2
         part_start: 50%
         part_end: 100%
