@@ -8604,7 +8604,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     return r;
 
   list_state.pending_map.clear(); // we don't need this and it inflates size
-  if (!astate->exists) {
+  if (!list_state.is_delete_marker() && !astate->exists) {
       /* object doesn't exist right now -- hopefully because it's
        * marked as !exists and got deleted */
     if (list_state.exists) {
