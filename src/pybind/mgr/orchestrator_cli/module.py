@@ -388,6 +388,19 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
+        'orch daemon add mgr',
+        "name=num,type=CephInt,req=false "
+        "name=hosts,type=CephString,n=N,req=false",
+        'Start rbd-mirror daemon(s)')
+    def _daemon_add_mgr(self, num=None, hosts=None):
+        spec = orchestrator.ServiceSpec(
+            placement=orchestrator.PlacementSpec(hosts=hosts, count=num))
+        completion = self.add_mgr(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
         'orch daemon add rbd-mirror',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false",
