@@ -425,24 +425,39 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 	free(cmi->cmi_conf);
 }
 
-static int finalize_options(struct ceph_mount_info *cmi)
+static int append_key_or_secret_option(struct ceph_mount_info *cmi)
 {
-	int pos;
+	int pos = strlen(cmi->cmi_opts);
 
-	if (cmi->cmi_secret[0] || is_kernel_secret(cmi->cmi_name)) {
-		int ret;
-		char secret_option[SECRET_OPTION_BUFSIZE];
+	if (!cmi->cmi_secret[0] && !is_kernel_secret(cmi->cmi_name))
+		return 0;
 
-		ret = get_secret_option(cmi->cmi_secret, cmi->cmi_name,
-					secret_option, sizeof(secret_option));
-		if (ret < 0)
+	if (pos)
+		pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
+
+	/* when parsing kernel options (-o remount) we get '<hidden>' as the secret */
+	if (cmi->cmi_secret[0] && (strcmp(cmi->cmi_secret, "<hidden>") != 0)) {
+		int ret = set_kernel_secret(cmi->cmi_secret, cmi->cmi_name);
+		if (ret < 0) {
+			if (ret == -ENODEV || ret == -ENOSYS) {
+				/* old kernel; fall back to secret= in options */
+				pos = safe_cat(&cmi->cmi_opts,
+					       &cmi->cmi_opts_len, pos,
+					       "secret=");
+				pos = safe_cat(&cmi->cmi_opts,
+					       &cmi->cmi_opts_len, pos,
+					       cmi->cmi_secret);
+				return 0;
+			}
+			fprintf(stderr, "adding ceph secret key to kernel failed: %s\n",
+				strerror(-ret));
 			return ret;
-
-		pos = strlen(cmi->cmi_opts);
-		if (pos)
-			pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
-		pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, secret_option);
+		}
 	}
+
+	pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, "key=");
+	pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, cmi->cmi_name);
+
 	return 0;
 }
 
@@ -493,9 +508,9 @@ int main(int argc, char *argv[])
 	/* Ensure the ceph key_type is available */
 	modprobe();
 
-	retval = finalize_options(&cmi);
+	retval = append_key_or_secret_option(&cmi);
 	if (retval) {
-		fprintf(stderr, "couldn't finalize options: %d\n", retval);
+		fprintf(stderr, "couldn't append secret option: %d\n", retval);
 		retval = EX_USAGE;
 		goto out;
 	}
