@@ -11,7 +11,7 @@ import pickle
 import sys
 import time
 from collections import namedtuple
-from functools import wraps
+from functools import wraps, partial
 import uuid
 import string
 import random
@@ -29,7 +29,7 @@ from mgr_util import format_bytes
 try:
     from ceph.deployment.drive_group import DriveGroupSpec
     from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
-        Type, Sequence
+        Type, Sequence, Dict
 except ImportError:
     pass
 
@@ -148,7 +148,13 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
             msg = 'This Orchestrator does not support `{}`'.format(prefix)
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
-    return CLICommand(prefix, cmd_args, desc, perm)(wrapper)
+    # misuse partial to copy `wrapper`
+    wrapper_copy = partial(wrapper)
+    wrapper_copy._prefix = prefix  # type: ignore
+    wrapper_copy._cli_command = CLICommand(prefix, cmd_args, desc, perm)  # type: ignore
+    wrapper_copy._cli_command.func = wrapper_copy  # type: ignore
+
+    return wrapper_copy
 
 
 def _cli_command(perm):
@@ -159,6 +165,32 @@ def _cli_command(perm):
 
 _cli_read_command = _cli_command('r')
 _cli_write_command = _cli_command('rw')
+
+
+class CLICommandMeta(type):
+    """
+    This is a workaround for the use of a global variable CLICommand.COMMANDS which
+    prevents modules from importing any other module.
+
+    We make use of CLICommand, except for the use of the global variable.
+    """
+    def __init__(cls, name, bases, dct):
+        super(CLICommandMeta, cls).__init__(name, bases, dct)
+        dispatch = {}  # type: Dict[str, CLICommand]
+        for v in dct.values():
+            try:
+                dispatch[v._prefix] = v._cli_command
+            except AttributeError:
+                pass
+
+        def handle_command(self, inbuf, cmd):
+            if cmd['prefix'] not in dispatch:
+                return self.handle_command(inbuf, cmd)
+
+            return dispatch[cmd['prefix']].call(self, cmd, inbuf)
+
+        cls.COMMANDS = [cmd.dump_cmd() for cmd in dispatch.values()]
+        cls.handle_command = handle_command
 
 
 def _no_result():

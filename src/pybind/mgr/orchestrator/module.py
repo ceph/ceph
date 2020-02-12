@@ -3,13 +3,15 @@ import errno
 import json
 import yaml
 
+import six
+
 from ceph.deployment.inventory import Device
 from prettytable import PrettyTable
 
 from mgr_util import format_bytes, to_pretty_timedelta
 
 try:
-    from typing import List, Set, Optional
+    from typing import List, Set, Optional, Dict
 except ImportError:
     pass  # just for type checking.
 
@@ -21,9 +23,10 @@ from mgr_module import MgrModule, HandleCommandResult
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, ServiceSpec, PlacementSpec, OrchestratorValidationError, NFSServiceSpec, \
-    RGWSpec, InventoryFilter, InventoryNode, HostPlacementSpec, HostSpec
+    RGWSpec, InventoryFilter, InventoryNode, HostPlacementSpec, HostSpec, CLICommandMeta
 
 
+@six.add_metaclass(CLICommandMeta)
 class OrchestratorCli(OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = [
         {

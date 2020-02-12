@@ -308,13 +308,16 @@ class CLICommand(object):
         assert self.func
         return self.func(mgr, **kwargs)
 
+    def dump_cmd(self):
+        return {
+            'cmd': '{} {}'.format(self.prefix, self.args),
+            'desc': self.desc,
+            'perm': self.perm
+        }
+
     @classmethod
     def dump_cmd_list(cls):
-        return [{
-            'cmd': '{} {}'.format(cmd.prefix, cmd.args),
-            'desc': cmd.desc,
-            'perm': cmd.perm
-        } for _, cmd in cls.COMMANDS.items()]
+        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
 
 
 def CLIReadCommand(prefix, args="", desc=""):
