@@ -291,7 +291,7 @@ objclass.register(bl_concat_immut)
 -- RunError
 --
 function runerr_a()
-  error('WTF')
+  error('error_a')
 end
 
 function runerr_b()
