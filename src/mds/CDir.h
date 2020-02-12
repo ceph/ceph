@@ -60,6 +60,7 @@ public:
 
   class scrub_info_t {
   public:
+    MEMPOOL_CLASS_HELPERS();
     struct scrub_stamps {
       version_t version;
       utime_t time;
@@ -672,7 +673,7 @@ protected:
   version_t projected_version = 0;
   mempool::mds_co::list<fnode_t> projected_fnode;
 
-  std::unique_ptr<scrub_info_t> scrub_infop; // FIXME not in mempool
+  std::unique_ptr<scrub_info_t> scrub_infop;
 
   // contents of this directory
   dentry_key_map items;       // non-null AND null
