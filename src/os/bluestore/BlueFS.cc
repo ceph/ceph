@@ -82,13 +82,13 @@ private:
     bluefs(bluefs) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
 	   Formatter *f,
-	   std::ostream& ss,
+	   std::ostream& errss,
 	   bufferlist& out) override {
     if (command == "bluestore bluefs available") {
       int64_t alloc_size = 0;
       cmd_getval(cmdmap, "alloc_size", alloc_size);
       if ((alloc_size & (alloc_size - 1)) != 0) {
-	ss << "Invalid allocation size:'" << alloc_size << std::endl;
+	errss << "Invalid allocation size:'" << alloc_size << std::endl;
 	return -EINVAL;
       }
       if (alloc_size == 0)
@@ -109,11 +109,13 @@ private:
       }
       f->dump_int("available_from_bluestore", extra_space);
       f->close_section();
-    } else if (command == "bluestore bluefs stats") {
+    } else if (command == "bluefs stats") {
+      std::stringstream ss;
       bluefs->dump_block_extents(ss);
       bluefs->dump_volume_selector(ss);
+      out.append(ss);
     } else {
-      ss << "Invalid command" << std::endl;
+      errss << "Invalid command" << std::endl;
       return -ENOSYS;
     }
     return 0;
