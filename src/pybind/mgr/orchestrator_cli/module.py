@@ -540,7 +540,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch service rm',
+        'orch rm',
         "name=name,type=CephString",
         'Remove a service')
     def _service_rm(self, name):
