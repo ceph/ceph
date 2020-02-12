@@ -746,11 +746,12 @@ void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 
 }
 
-void cls_rgw_bucket_instance_entry::generate_test_instances(list<cls_rgw_bucket_instance_entry*>& ls)
+void cls_rgw_bucket_instance_entry::generate_test_instances(
+  list<cls_rgw_bucket_instance_entry*>& ls)
 {
   ls.push_back(new cls_rgw_bucket_instance_entry);
   ls.push_back(new cls_rgw_bucket_instance_entry);
-  ls.back()->reshard_status = CLS_RGW_RESHARD_IN_PROGRESS;
+  ls.back()->reshard_status = RESHARD_STATUS::IN_PROGRESS;
   ls.back()->new_bucket_instance_id = "new_instance_id";
 }
   

@@ -1125,8 +1125,8 @@ struct RGWBucketInfo {
   RGWQuotaInfo quota;
 
   // Represents the number of bucket index object shards:
-  //   - value of 0 indicates there is no sharding (this is by default before this
-  //     feature is implemented).
+  //   - value of 0 indicates there is no sharding (this is by default
+  //     before this feature is implemented).
   //   - value of UINT32_T::MAX indicates this is a blind bucket.
   uint32_t num_shards{0};
 
@@ -1148,10 +1148,8 @@ struct RGWBucketInfo {
 
   map<string, uint32_t> mdsearch_config;
 
-
-
-  /* resharding */
-  uint8_t reshard_status{0};
+  // resharding
+  cls_rgw_reshard_status reshard_status{cls_rgw_reshard_status::NOT_RESHARDING};
   string new_bucket_instance_id;
 
   RGWObjectLock obj_lock;
