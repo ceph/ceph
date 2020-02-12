@@ -143,6 +143,7 @@ namespace rwl {
 
 /* Limit work between sync points */
 const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
+const uint64_t MAX_BYTES_PER_SYNC_POINT = (1024 * 1024 * 8);
 
 const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
 const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
@@ -254,6 +255,8 @@ public:
     return image_extent(block_extent());
   }
 };
+
+io::Extent whole_volume_extent();
 
 } // namespace rwl
 } // namespace cache

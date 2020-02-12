@@ -153,7 +153,7 @@ public:
 
   void dispatch() override;
 
-  virtual void setup_log_operations();
+  virtual void setup_log_operations(DeferredContexts &on_exit);
 
   bool append_write_request(std::shared_ptr<SyncPoint> sync_point);
 
@@ -193,6 +193,7 @@ template <typename T>
 class C_FlushRequest : public C_BlockIORequest<T> {
 public:
   using C_BlockIORequest<T>::rwl;
+  bool internal = false;
   std::shared_ptr<SyncPoint> to_append;
 
   C_FlushRequest(T &rwl, const utime_t arrived,
