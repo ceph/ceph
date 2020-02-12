@@ -8,7 +8,7 @@ Multisite bucket-granularity sync policy provides fine grained control of data m
 
 The sync policy supersedes the old zonegroup coarse configuration (sync_from*). The sync policy can be configured at the zonegroup level (and if it is configured it replaces the old style config), but it can also be configured at the bucket level.
 
-In the sync policy multiple groups that can contain lists of data-flow configurations can be defined, as well as lists of pipe configurations.  The data-flow define the flow of data between the different zones. It can define symmetrical data flow, in which multiple zones sync data from each other, and it can define directional data flow, in which the data moves in one way from one zone to another.
+In the sync policy multiple groups that can contain lists of data-flow configurations can be defined, as well as lists of pipe configurations. The data-flow defines the flow of data between the different zones. It can define symmetrical data flow, in which multiple zones sync data from each other, and it can define directional data flow, in which the data moves in one way from one zone to another.
 
 A pipe defines the actual buckets that can use these data flows, and the properties that are associated with it (for example: source object prefix).
 
@@ -27,7 +27,7 @@ A sync policy group can be in 3 states:
 
 A policy can be defined at the bucket level. A bucket level sync policy inherits the data flow of the zonegroup policy, and can only define a subset of what the zonegroup allows.
 
-A wildcard zone, and a wildcard bucket parameter in the policy defines all relevant zones, or all relevant buckets. In the context of a bucket policy it means the current bucket instance.  A disaster recovery configuration where entire zones are mirrored doesn't require configuring anything on the buckets. However, for a fine grained bucket sync it would be better to configure the pipes to be synced by allowing (status=allowed) them at the zonegroup level (e.g., using wildcards), but only enable the specific sync at the bucket leve (status=enabled). If needed, the policy at the bucket level can limit the data movement to specific relevant zones.
+A wildcard zone, and a wildcard bucket parameter in the policy defines all relevant zones, or all relevant buckets. In the context of a bucket policy it means the current bucket instance.  A disaster recovery configuration where entire zones are mirrored doesn't require configuring anything on the buckets. However, for a fine grained bucket sync it would be better to configure the pipes to be synced by allowing (status=allowed) them at the zonegroup level (e.g., using wildcards), but only enable the specific sync at the bucket level (status=enabled). If needed, the policy at the bucket level can limit the data movement to specific relevant zones.
 
 .. important:: Any changes to the zonegroup policy needs to be applied on the
                zonegroup master zone, and require period update and commit. Changes
@@ -667,6 +667,7 @@ Prefixes and tags can be combined, in which object will need to have both in ord
 
 
 Example 8: Destination Params: Storage Class
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Storage class of the destination objects can be configured:
 
