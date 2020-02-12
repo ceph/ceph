@@ -55,15 +55,6 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
    return _block_picker(t, cursor, size, align);
 }
 
-namespace {
-  struct dispose_rs {
-    void operator()(range_seg_t* p)
-    {
-      delete p;
-    }
-  };
-}
-
 void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
 {
   assert(size != 0);
@@ -83,25 +74,22 @@ void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
   bool merge_after = (rs_after != range_tree.end() && rs_after->start == end);
 
   if (merge_before && merge_after) {
-    range_size_tree.erase(*rs_before);
-    range_size_tree.erase(*rs_after);
+    _range_size_tree_rm(*rs_before);
+    _range_size_tree_rm(*rs_after);
     rs_after->start = rs_before->start;
     range_tree.erase_and_dispose(rs_before, dispose_rs{});
-    range_size_tree.insert(*rs_after);
+    _range_size_tree_try_insert(*rs_after);
   } else if (merge_before) {
-    range_size_tree.erase(*rs_before);
+    _range_size_tree_rm(*rs_before);
     rs_before->end = end;
-    range_size_tree.insert(*rs_before);
+    _range_size_tree_try_insert(*rs_before);
   } else if (merge_after) {
-    range_size_tree.erase(*rs_after);
+    _range_size_tree_rm(*rs_after);
     rs_after->start = start;
-    range_size_tree.insert(*rs_after);
+    _range_size_tree_try_insert(*rs_after);
   } else {
-    auto new_rs = new range_seg_t{start, end};
-    range_tree.insert_before(rs_after, *new_rs);
-    range_size_tree.insert(*new_rs);
+    _try_insert_range(start, end, &rs_after);
   }
-  num_free += size;
 }
 
 void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
@@ -120,25 +108,31 @@ void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
   bool left_over = (rs->start != start);
   bool right_over = (rs->end != end);
 
-  range_size_tree.erase(*rs);
+  _range_size_tree_rm(*rs);
 
   if (left_over && right_over) {
-    auto new_seg = new range_seg_t{end, rs->end};
+    auto old_right_end = rs->end;
+    auto insert_pos = rs;
+    ceph_assert(insert_pos != range_tree.end());
+    ++insert_pos;
     rs->end = start;
-    range_tree.insert(rs, *new_seg);
-    range_size_tree.insert(*new_seg);
-    range_size_tree.insert(*rs);
+
+    // Insert tail first to be sure insert_pos hasn't been disposed.
+    // This woulnd't dispose rs though since it's out of range_size_tree.
+    // Don't care about a small chance of 'not-the-best-choice-for-removal' case
+    // which might happen if rs has the lowest size.
+    _try_insert_range(end, old_right_end, &insert_pos);
+    _range_size_tree_try_insert(*rs);
+
   } else if (left_over) {
     rs->end = start;
-    range_size_tree.insert(*rs);
+    _range_size_tree_try_insert(*rs);
   } else if (right_over) {
     rs->start = end;
-    range_size_tree.insert(*rs);
+    _range_size_tree_try_insert(*rs);
   } else {
     range_tree.erase_and_dispose(rs, dispose_rs{});
   }
-  assert(num_free >= size);
-  num_free -= size;
 }
 
 int AvlAllocator::_allocate(
@@ -197,6 +191,22 @@ int AvlAllocator::_allocate(
   *length = size;
   return 0;
 }
+
+AvlAllocator::AvlAllocator(CephContext* cct,
+                           int64_t device_size,
+                           int64_t block_size,
+                           uint64_t max_entries,
+                           const std::string& name) :
+  Allocator(name),
+  num_total(device_size),
+  block_size(block_size),
+  range_size_alloc_threshold(
+    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
+  range_size_alloc_free_pct(
+    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
+  range_count_cap(max_entries),
+  cct(cct)
+{}
 
 AvlAllocator::AvlAllocator(CephContext* cct,
 			   int64_t device_size,
