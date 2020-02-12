@@ -388,10 +388,10 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch rbd-mirror add',
+        'orch daemon add rbd-mirror',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false",
-        'Create an rbd-mirror service')
+        'Start rbd-mirror daemon(s)')
     def _rbd_mirror_add(self, num=None, hosts=None):
         spec = orchestrator.ServiceSpec(
             None,
@@ -402,11 +402,11 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch mds add',
+        'orch daemon add mds',
         "name=fs_name,type=CephString "
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false",
-        'Create an MDS service')
+        'Start MDS daemon(s)')
     def _mds_add(self, fs_name, num=None, hosts=None):
         spec = orchestrator.ServiceSpec(
             fs_name,
@@ -417,13 +417,12 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch rgw add',
+        'orch daemon add rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
         'name=num,type=CephInt,req=false '
         "name=hosts,type=CephString,n=N,req=false",
-        'Create an RGW service. A complete <rgw_spec> can be provided'\
-        ' using <-i> to customize completelly the RGW service')
+        'Start RGW daemon(s)')
     def _rgw_add(self, realm_name, zone_name, num=1, hosts=None, inbuf=None):
         usage = """
 Usage:
@@ -447,14 +446,14 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch nfs add',
+        'orch daemon add nfs',
         "name=svc_arg,type=CephString "
         "name=pool,type=CephString "
         "name=namespace,type=CephString,req=false "
         'name=num,type=CephInt,req=false '
         'name=hosts,type=CephString,n=N,req=false '
         'name=label,type=CephString,req=false',
-        'Create an NFS service')
+        'Start NFS daemon(s)')
     def _nfs_add(self, svc_arg, pool, namespace=None, num=None, label=None, hosts=[]):
         spec = orchestrator.NFSServiceSpec(
             svc_arg,
