@@ -7064,6 +7064,38 @@ std::vector<Option> get_rgw_options() {
       "rgw_crypt_vault_auth",
       "rgw_crypt_vault_addr"}),
 
+    Option("rgw_crypt_kmip_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("kmip server address"),
+
+    Option("rgw_crypt_kmip_ca_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("ca for kmip servers"),
+
+    Option("rgw_crypt_kmip_username", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("when authenticating via username"),
+
+    Option("rgw_crypt_kmip_password", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("optional w/ username"),
+
+    Option("rgw_crypt_kmip_client_cert", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("connect using client certificate"),
+
+    Option("rgw_crypt_kmip_client_key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("connect using client certificate"),
+
+    Option("rgw_crypt_kmip_kms_key_template", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("sse-kms; kmip key names"),
+
+    Option("rgw_crypt_kmip_s3_key_template", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("sse-s3; kmip key names"),
+
     Option("rgw_crypt_suppress_logs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Suppress logs that might print client key"),
