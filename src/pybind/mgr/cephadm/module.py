@@ -1921,22 +1921,28 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._get_daemons('mon').then(update_mons_with_daemons)
 
     @async_map_completion
-    def _create_mgr(self, host, name):
+    def _create_mgr(self, mgr_id, host):
         """
         Create a new manager instance on a host.
         """
-        self.log.info("create_mgr({}, mgr.{}): starting".format(host, name))
+        self.log.info("create_mgr({}, mgr.{}): starting".format(host, mgr_id))
 
         # get mgr. key
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % name,
+            'entity': 'mgr.%s' % mgr_id,
             'caps': ['mon', 'profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
 
-        return self._create_daemon('mgr', name, host, keyring=keyring)
+        return self._create_daemon('mgr', mgr_id, host, keyring=keyring)
+
+    @with_daemons('mgr')
+    def add_mgr(self, spec, daemons):
+        # type: (orchestrator.ServiceSpec, List[orchestrator.DaemonDescription]) -> orchestrator.Completion
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
+        return self._add_new_daemon('mgr', daemons, spec, self._create_mgr)
 
     @with_daemons('mgr')
     def update_mgrs(self, spec, daemons):
@@ -2010,7 +2016,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for host_spec in spec.placement.hosts:
                 host = host_spec.hostname
                 name = host_spec.name or self.get_unique_name(host, daemons)
-                args.append((host, name))
+                args.append((name, host))
             c = self._create_mgr(args)
             c.add_progress('Creating MGRs', self)
             c.update_progress = True
