@@ -67,10 +67,9 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
 
             ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
             proxy.obs_mgr.for_each_change(proxy.values->changed, proxy,
-                                          [&rev_obs](md_config_obs_t *obs,
-                                                     const std::string &key) {
-                                            rev_obs[obs].insert(key);
-                                          }, nullptr);
+              [&rev_obs](ConfigObserver *obs, const std::string& key) {
+                rev_obs[obs].insert(key);
+              }, nullptr);
             for (auto& obs_keys : rev_obs) {
               obs_keys.first->handle_conf_change(proxy, obs_keys.second);
             }
