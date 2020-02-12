@@ -1333,7 +1333,7 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
         size = sizing['sizes']
         extents = sizing['extents']
         lvs.append(
-            create_lv(name_prefix, uuid.uuid4(), vg=volume_group.name, extents=extents, tags=tags)
+            create_lv(name_prefix, uuid.uuid4(), vg=volume_group, extents=extents, tags=tags)
         )
     return lvs
 
