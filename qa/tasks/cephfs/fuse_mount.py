@@ -19,6 +19,7 @@ class FuseMount(CephFSMount):
 
         self.client_config = client_config if client_config else {}
         self.fuse_daemon = None
+        self.ceph_config = None
         self._fuse_conn = None
         self.id = None
         self.inst = None
@@ -69,6 +70,9 @@ class FuseMount(CephFSMount):
 
         if mount_fs_name is not None:
             fuse_cmd += ["--client_mds_namespace={0}".format(mount_fs_name)]
+
+        if self.ceph_config is not None:
+            fuse_cmd += ["--conf={0}".format(self.ceph_config)]
 
         fuse_cmd += [
             '--name', 'client.{id}'.format(id=self.client_id),
