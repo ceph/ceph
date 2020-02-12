@@ -235,7 +235,6 @@ int DPDKDevice::init_port_start()
     } else if (_dev_info.hash_key_size == 52) {
       _rss_key = default_rsskey_52bytes;
     } else if (_dev_info.hash_key_size != 0) {
-      // WTF?!!
       rte_exit(EXIT_FAILURE,
                "Port %d: We support only 40 or 52 bytes RSS hash keys, %d bytes key requested",
                _port_idx, _dev_info.hash_key_size);
