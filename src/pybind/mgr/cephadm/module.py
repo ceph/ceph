@@ -1359,21 +1359,21 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def service_action(self, action, service_type, service_name):
         self.log.debug('service_action action %s type %s name %s' % (
             action, service_type, service_name))
-
-        def _proc_daemons(daemons):
-            args = []
-            for d in daemons:
-                args.append((d.daemon_type, d.daemon_id,
-                             d.nodename, action))
-            if not args:
-                raise orchestrator.OrchestratorError(
-                    'Unable to find %s.%s.* daemon(s)' % (
-                        service_type, service_name))
-            return self._daemon_action(args)
-
-        return self._get_daemons(
-            service_type,
-            service_name=service_name).then(_proc_daemons)
+        if service_name:
+            prefix = service_name + '.'
+        else:
+            prefix = ''
+        args = []
+        for host, di in self.daemon_cache.items():
+            for name, d in di['daemons'].items():
+                if d.daemon_type == service_type and d.daemon_id.startswith(prefix):
+                    args.append((d.daemon_type, d.daemon_id,
+                                 d.nodename, action))
+        if not args:
+            raise orchestrator.OrchestratorError(
+                'Unable to find %s.%s.* daemon(s)' % (
+                    service_type, service_name))
+        return self._daemon_action(args)
 
     @async_map_completion
     def _daemon_action(self, daemon_type, daemon_id, host, action):
@@ -1403,20 +1403,17 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.log.debug('daemon_action action %s type %s id %s' % (
             action, daemon_type, daemon_id))
 
-        def _proc_daemons(daemons):
-            args = []
-            for d in daemons:
-                args.append((d.daemon_type, d.daemon_id,
-                             d.nodename, action))
-            if not args:
-                raise orchestrator.OrchestratorError(
-                    'Unable to find %s.%s daemon(s)' % (
-                        daemon_type, daemon_id))
-            return self._daemon_action(args)
-
-        return self._get_daemons(
-            daemon_type=daemon_type,
-            daemon_id=daemon_id).then(_proc_daemons)
+        args = []
+        for host, di in self.daemon_cache.items():
+            for name, d in di['daemons'].items():
+                if d.daemon_type == daemon_type and d.daemon_id == daemon_id:
+                    args.append((d.daemon_type, d.daemon_id,
+                                 d.nodename, action))
+        if not args:
+            raise orchestrator.OrchestratorError(
+                'Unable to find %s.%s daemon(s)' % (
+                    daemon_type, daemon_id))
+        return self._daemon_action(args)
 
     def remove_daemons(self, names, force):
         # type: (List[str], bool) -> orchestrator.Completion
