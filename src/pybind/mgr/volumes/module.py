@@ -460,19 +460,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
     def _cmd_fs_nfs_create(self, inbuf, cmd):
-        if NFSConfig.check_fsal_valid(self.vc.mgr.get('fs_map')):
+        if NFSConfig.check_fsal_valid(self, self.vc.mgr.get('fs_map')):
             pool_name = "nfs-ganesha"
-            NFSConfig.create_rados_pool(self.vc.mgr, pool_name)
-            instance = NFSConfig.create_instance(self, pool_name)
-            return NFSConfig.create_export(instance)
-
-            NFSConfig.create_rados_pool(self.vc.mgr, pool_name)
-            instance = NFSConfig.create_instance(self, pool_name)
+            #NFSConfig.create_rados_pool(self.vc.mgr, pool_name)
+            #instance = NFSConfig.create_instance(self, pool_name)
             return NFSConfig.create_export(instance)
 
     def _cmd_fs_nfs_delete(self, inbuf, cmd):
             instance = NFSConfig.create_instance(self, "nfs-ganesha")
             return NFSConfig.delete_export(instance, cmd['export_id'])
+
     def _cmd_fs_nfs_cluster_create(self, inbuf, cmd):
             nfs_obj = NFSConfig(self, cmd['cluster_id'])
-            return nfs_obj.create_nfs_cluster(size=cmd.get('size', 1))
+            nfs_obj.create_nfs_cluster(size=cmd.get('size', 1))
+            return nfs_obj.create_export()

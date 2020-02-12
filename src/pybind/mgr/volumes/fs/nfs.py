@@ -119,7 +119,7 @@ class GaneshaConf(object):
             if not entity_type or entity.startswith('{}.'.format(entity_type)):
                 entity_id = entity[entity.find('.')+1:]
                 result[entity_id] = auth_entry
-        self.cephx_key = result["admin"]["key"]
+        self.cephx_key = result["ganesha-tester"]["key"]
         export.fsal.cephx_key = self.cephx_key
 
     def _persist_daemon_configuration(self):
@@ -186,19 +186,38 @@ class NFSConfig(object):
     exp_num = 0
 
     def __init__(self, mgr, cluster_id):
-        self.cluster_id = cluster_id
+        self.cluster_id = "ganesha-%s" % cluster_id
         self.pool_name = 'nfs-ganesha'
-        self.pool_ns = 'nfsgw'
+        self.pool_ns = cluster_id
         self.mgr = mgr
+        self.ganeshaconf = ''
+
+    def create_common_config(self, nodeid):
+        result = "NFS_CORE_PARAM {\n Enable_NLM = false;\n Enable_RQUOTA = false;\n Protocols = 4;\n}\n\n"
+        result += "CACHEINODE {\n Dir_Chunk = 0;\n NParts = 1;\n Cache_Size = 1;\n}\n\n"
+        result += "NFSv4 {\n RecoveryBackend = rados_cluster;\n Minor_Versions = 1, 2;\n}\n\n"
+        result += "RADOS_URLS {{\n userid = {};\n}}\n\n".format(self.cluster_id)
+        #result += "%url rados://{}/{}/{}\n\n".format(self.pool_name, self.pool_ns, nodeid)
+        result += "%url rados://{}/{}/export-1\n\n".format(self.pool_name, self.pool_ns)
+        result += "RADOS_KV {{\n pool = {};\n namespace = {};\n UserId = {};\n nodeid = {};\n}}\n\n".format(self.pool_name, self.pool_ns, self.cluster_id, nodeid)
+        #self.ganeshaconf._write_raw_config(result, nodeid)
+
+        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
+            if self.pool_ns:
+                ioctx.set_namespace(self.pool_ns)
+            ioctx.write_full(nodeid, result.encode('utf-8'))
+            log.debug(
+                    "write configuration into rados object %s/%s/%s:\n%s",
+                    self.pool_name, self.pool_ns, nodeid, result)
 
     def create_instance(self, orch, pool_name):
         return GaneshaConf("a", pool_name, "ganesha", orch)
 
-    def create_export(self, ganesha_conf):
-        ex_id = ganesha_conf.create_export({
+    def create_export(self):
+        ex_id = self.ganeshaconf.create_export({
             'path': "/",
             'pseudo': "/cephfs",
-            'cluster_id': "cluster1",
+            'cluster_id': self.cluster_id,
             'daemons': ["ganesha.a"],
             'tag': "",
             'access_type': "RW",
@@ -206,7 +225,7 @@ class NFSConfig(object):
             'security_label': True,
             'protocols': [4],
             'transports': ["TCP"],
-            'fsal': {"name": "CEPH", "user_id":"admin", "fs_name": "a", "sec_label_xattr": ""},
+            'fsal': {"name": "CEPH", "user_id":self.cluster_id, "fs_name": "a", "sec_label_xattr": ""},
             'clients': []
             })
 
@@ -247,13 +266,14 @@ class NFSConfig(object):
 
     def create_nfs_cluster(self, size):
         pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
-        client = 'client.ganesha-%s' % self.cluster_id
+        client = 'client.%s' % self.cluster_id
 
         if self.pool_name not in pool_list:
             r, out, err = create_pool(self.mgr, self.pool_name)
             if r != 0:
                 return r, out, err
             log.info("{}".format(out))
+            self.ganeshaconf = GaneshaConf(self.cluster_id, self.pool_name, self.pool_ns, self.mgr)
 
         ret, out, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
@@ -263,5 +283,8 @@ class NFSConfig(object):
 
         if ret!= 0:
             return ret, out, err
+
+        log.info("Calling up common config")
+        self.create_common_config("a")
 
         return 0, "", "NFS Cluster Created Successfully"
