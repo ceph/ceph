@@ -117,14 +117,14 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   auto [env_options, env_arguments] = split_dashdash(env);
 
   args.clear();
-  args.insert(args.end(), options.begin(), options.end());
   args.insert(args.end(), env_options.begin(), env_options.end());
+  args.insert(args.end(), options.begin(), options.end());
   if (arguments.empty() && env_arguments.empty()) {
     return;
   }
   args.push_back("--");
-  args.insert(args.end(), arguments.begin(), arguments.end());
   args.insert(args.end(), env_arguments.begin(), env_arguments.end());
+  args.insert(args.end(), arguments.begin(), arguments.end());
 }
 
 void argv_to_vec(int argc, const char **argv,
