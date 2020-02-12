@@ -113,7 +113,7 @@ class DriveGroupSpecs(object):
     def __init__(self, drive_group_json):
         # type: (dict) -> None
         self.drive_group_json = drive_group_json
-        self.drive_groups = list()  # type: list
+        self.drive_groups = list()  # type: List[DriveGroupSpec]
         self.build_drive_groups()
 
     def build_drive_groups(self):

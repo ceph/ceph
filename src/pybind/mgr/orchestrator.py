@@ -890,7 +890,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def create_osds(self, drive_groups):
-        # type: (DriveGroupSpec) -> Completion
+        # type: (List[DriveGroupSpec]) -> Completion
         """
         Create one or more OSDs within a single Drive Group.
 

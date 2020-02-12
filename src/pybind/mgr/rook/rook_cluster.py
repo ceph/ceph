@@ -494,7 +494,7 @@ class RookCluster(object):
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
         """
-        block_devices = drive_group.data_devices.paths if drive_group.data_devices else None
+        block_devices = drive_group.data_devices.paths if drive_group.data_devices else []
         directories = drive_group.data_directories
 
         assert drive_group.objectstore in ("bluestore", "filestore")
@@ -525,7 +525,7 @@ class RookCluster(object):
 
         if drive_group.hosts(all_hosts)[0] not in [n['name'] for n in current_nodes]:
             pd = { "name": drive_group.hosts(all_hosts)[0],
-                   "config": { "storeType": drive_group.objectstore }}
+                   "config": { "storeType": drive_group.objectstore }}  # type: dict
 
             if block_devices:
                 pd["devices"] = [{'name': d.path} for d in block_devices]
