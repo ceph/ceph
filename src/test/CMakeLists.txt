@@ -90,22 +90,13 @@ target_link_libraries(ceph_test_signal_handlers global ${BLKID_LIBRARIES} ${CMAK
 add_executable(ceph_test_rewrite_latency
   test_rewrite_latency.cc
   )
-target_link_libraries(ceph_test_rewrite_latency ceph-common
-  ${CMAKE_DL_LIBS}
-  ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS} m ${EXTRALIBS})
+target_link_libraries(ceph_test_rewrite_latency ceph-common)
 
 # test_crypt
 add_executable(test_crypto
-  testcrypto.cc
-  )
+  testcrypto.cc)
 target_link_libraries(test_crypto
-  global
-  ${CRYPTO_LIBS}
-  m
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
+  ceph-common)
 
 add_executable(test_build_libcommon buildtest_skeleton.cc)
 target_link_libraries(test_build_libcommon ceph-common pthread ${CRYPTO_LIBS} ${EXTRALIBS})
@@ -163,11 +154,8 @@ add_executable(ceph_omapbench
   )
 target_link_libraries(ceph_omapbench
   librados
-  Boost::program_options
-  global
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
+  ceph-common
+  Boost::program_options)
 
 if(WITH_KVS)
   # ceph_kvstorebench
@@ -340,8 +328,7 @@ add_executable(ceph_test_rgw_token
   )
 target_link_libraries(ceph_test_rgw_token
   rgw
-  os
-  global
+  ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
@@ -375,8 +362,7 @@ endif(${WITH_RADOSGW})
 add_executable(ceph_multi_stress_watch
   multi_stress_watch.cc
   )
-target_link_libraries(ceph_multi_stress_watch librados global radostest-cxx
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(ceph_multi_stress_watch librados global radostest-cxx)
 
 #ceph_perf_local
 add_executable(ceph_perf_local
@@ -392,7 +378,7 @@ if(PERF_LOCAL_FLAGS)
   set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
     ${PERF_LOCAL_FLAGS})
 endif()
-target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
+target_link_libraries(ceph_perf_local global ${UNITTEST_LIBS})
 
 install(TARGETS
   ceph_bench_log
@@ -765,45 +751,39 @@ target_link_libraries(unittest_perf_counters global)
 
 # unittest_ceph_crypto
 add_executable(unittest_ceph_crypto
-  ceph_crypto.cc
-  )
+  ceph_crypto.cc)
 add_ceph_unittest(unittest_ceph_crypto)
 target_link_libraries(unittest_ceph_crypto global)
 
 # unittest_utf8
 add_executable(unittest_utf8
-  utf8.cc
-  )
+  utf8.cc)
 add_ceph_unittest(unittest_utf8)
 target_link_libraries(unittest_utf8 global)
 
 # unittest_mime
 add_executable(unittest_mime
-  mime.cc
-  )
+  mime.cc)
 add_ceph_unittest(unittest_mime)
-target_link_libraries(unittest_mime global)
+target_link_libraries(unittest_mime ceph-common)
 
 # unittest_escape
 add_executable(unittest_escape
-  escape.cc
-  )
+  escape.cc)
 add_ceph_unittest(unittest_escape)
-target_link_libraries(unittest_escape global)
+target_link_libraries(unittest_escape ceph-common)
 
 # unittest_strtol
 add_executable(unittest_strtol
-  strtol.cc
-  )
+  strtol.cc)
 add_ceph_unittest(unittest_strtol)
-target_link_libraries(unittest_strtol global)
+target_link_libraries(unittest_strtol ceph-common)
 
 # unittest_confutils
 add_executable(unittest_confutils
-  confutils.cc
-  )
+  confutils.cc)
 add_ceph_unittest(unittest_confutils)
-target_link_libraries(unittest_confutils global)
+target_link_libraries(unittest_confutils ceph-common)
 
 # unittest_heartbeatmap
 add_executable(unittest_heartbeatmap
@@ -864,40 +844,37 @@ endif(WITH_RBD)
 add_executable(unittest_ipaddr
   test_ipaddr.cc)
 add_ceph_unittest(unittest_ipaddr)
-target_link_libraries(unittest_ipaddr mon global)
+target_link_libraries(unittest_ipaddr global)
 
 # unittest_utime
 add_executable(unittest_utime
   test_utime.cc)
 add_ceph_unittest(unittest_utime)
-target_link_libraries(unittest_utime mon global)
+target_link_libraries(unittest_utime ceph-common)
 
 # unittest_texttable
 add_executable(unittest_texttable
   test_texttable.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 add_ceph_unittest(unittest_texttable)
-target_link_libraries(unittest_texttable mon global)
+target_link_libraries(unittest_texttable ceph-common)
 
 # unittest_on_exit
 add_executable(unittest_on_exit
-  on_exit.cc
-  )
+  on_exit.cc)
 add_ceph_unittest(unittest_on_exit)
-target_link_libraries(unittest_on_exit global)
+target_link_libraries(unittest_on_exit ceph-common)
 
 # unittest_subprocess
 add_executable(unittest_subprocess
-  test_subprocess.cc
-  )
+  test_subprocess.cc)
 add_ceph_unittest(unittest_subprocess)
-target_link_libraries(unittest_subprocess global)
+target_link_libraries(unittest_subprocess ceph-common)
 
 # unittest_pageset
 add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset)
-target_link_libraries(unittest_pageset global)
+target_link_libraries(unittest_pageset ceph-common)
 
 add_executable(unittest_random_string test_random_string.cc $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_random_string)
@@ -906,7 +883,6 @@ target_link_libraries(unittest_random_string global)
 # unittest_any_
 add_executable(unittest_any test_any.cc)
 add_ceph_unittest(unittest_any)
-target_link_libraries(unittest_any)
 
 # unittest_weighted_shuffle
 add_executable(unittest_weighted_shuffle test_weighted_shuffle.cc)
