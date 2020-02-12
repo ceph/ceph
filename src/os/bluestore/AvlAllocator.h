@@ -43,10 +43,30 @@ struct range_seg_t {
       }
     }
   };
+  inline uint64_t length() const {
+    return end - start;
+  }
   boost::intrusive::avl_set_member_hook<> size_hook;
 };
 
 class AvlAllocator final : public Allocator {
+  struct dispose_rs {
+    void operator()(range_seg_t* p)
+    {
+      delete p;
+    }
+  };
+
+protected:
+  /*
+  * ctor intended for the usage from descendant class(es) which
+  * provides handlig for spilled over entries
+  * (when entry count >= max_entries)
+  */
+  AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
+    uint64_t max_entries,
+    const std::string& name);
+
 public:
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
 	       const std::string& name);
@@ -101,7 +121,8 @@ private:
       boost::intrusive::member_hook<
 	range_seg_t,
 	boost::intrusive::avl_set_member_hook<>,
-	&range_seg_t::size_hook>>;
+	&range_seg_t::size_hook>,
+      boost::intrusive::constant_time_size<true>>;
   range_size_tree_t range_size_tree;
 
   const int64_t num_total;   ///< device size
@@ -132,6 +153,66 @@ private:
    */
   int range_size_alloc_free_pct = 0;
 
+  /*
+  * Max amount of range entries allowed. 0 - unlimited
+  */
+  uint64_t range_count_cap = 0;
+
   CephContext* cct;
   std::mutex lock;
+
+  uint64_t _lowest_size_available() {
+    auto rs = range_size_tree.begin();
+    return rs != range_size_tree.end() ? rs->length() : 0;
+  }
+  void _range_size_tree_rm(range_seg_t& r) {
+    ceph_assert(num_free >= r.length());
+    num_free -= r.length();
+    range_size_tree.erase(r);
+
+  }
+  void _range_size_tree_try_insert(range_seg_t& r) {
+    if (_try_insert_range(r.start, r.end)) {
+      range_size_tree.insert(r);
+      num_free += r.length();
+    } else {
+      range_tree.erase_and_dispose(r, dispose_rs{});
+    }
+  }
+  bool _try_insert_range(uint64_t start,
+                         uint64_t end,
+                        range_tree_t::iterator* insert_pos = nullptr) {
+    bool res = !range_count_cap || range_size_tree.size() < range_count_cap;
+    bool remove_lowest = false;
+    if (!res) {
+      if (end - start > _lowest_size_available()) {
+        remove_lowest = true;
+        res = true;
+      }
+    }
+    if (!res) {
+      _spillover_range(start, end);
+    } else {
+      // NB:  we should do insertion before the following removal
+      // to avoid potential iterator disposal insertion might depend on.
+      if (insert_pos) {
+        auto new_rs = new range_seg_t{ start, end };
+        range_tree.insert_before(*insert_pos, *new_rs);
+        range_size_tree.insert(*new_rs);
+        num_free += new_rs->length();
+      }
+      if (remove_lowest) {
+        auto r = range_size_tree.begin();
+        _range_size_tree_rm(*r);
+        _spillover_range(r->start, r->end);
+        range_tree.erase_and_dispose(*r, dispose_rs{});
+      }
+    }
+    return res;
+  }
+  virtual void _spillover_range(uint64_t start, uint64_t end) {
+    // this should be overriden when range count cap is present,
+    // i.e. (range_count_cap > 0)
+    ceph_assert(false);
+  }
 };
