@@ -190,11 +190,27 @@ void C_WriteRequest<T>::setup_buffer_resources(
 }
 
 template <typename T>
-void C_WriteRequest<T>::setup_log_operations() {
+void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   {
     std::lock_guard locker(m_lock);
-    // TODO: Add sync point if necessary
     std::shared_ptr<SyncPoint> current_sync_point = rwl.get_current_sync_point();
+    if ((!rwl.get_persist_on_flush() && current_sync_point->log_entry->writes_completed) ||
+        (current_sync_point->log_entry->writes > MAX_WRITES_PER_SYNC_POINT) ||
+        (current_sync_point->log_entry->bytes > MAX_BYTES_PER_SYNC_POINT)) {
+      /* Create new sync point and persist the previous one. This sequenced
+       * write will bear a sync gen number shared with no already completed
+       * writes. A group of sequenced writes may be safely flushed concurrently
+       * if they all arrived before any of them completed. We'll insert one on
+       * an aio_flush() from the application. Here we're inserting one to cap
+       * the number of bytes and writes per sync point. When the application is
+       * not issuing flushes, we insert sync points to record some observed
+       * write concurrency information that enables us to safely issue >1 flush
+       * write (for writes observed here to have been in flight simultaneously)
+       * at a time in persist-on-write mode.
+       */
+      rwl.flush_new_sync_point(nullptr, on_exit);
+      current_sync_point = rwl.get_current_sync_point();
+    }
     uint64_t current_sync_gen = rwl.get_current_sync_gen();
     op_set =
       make_unique<WriteLogOperationSet>(this->m_dispatched_time,
@@ -287,11 +303,12 @@ template <typename T>
 void C_WriteRequest<T>::dispatch()
 {
   CephContext *cct = rwl.get_context();
+  DeferredContexts on_exit;
   utime_t now = ceph_clock_now();
   this->m_dispatched_time = now;
 
   ldout(cct, 15) << "write_req=" << this << " cell=" << this->get_cell() << dendl;
-  setup_log_operations();
+  setup_log_operations(on_exit);
 
   bool append_deferred = false;
   if (!op_set->persist_on_flush &&

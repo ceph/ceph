@@ -413,11 +413,11 @@ void ReplicatedWriteLog<I>::rwl_init(Context *on_finish, DeferredContexts &later
     m_cache_state->empty = true;
   }
 
-  // TODO: Will init sync point, this will be covered in later PR.
-  //  init_flush_new_sync_point(later);
-  ++m_current_sync_gen;
-  m_current_sync_point = std::make_shared<SyncPoint>(m_current_sync_gen,
-                                                     this->m_image_ctx.cct);
+  /* Start the sync point following the last one seen in the
+   * log. Flush the last sync point created during the loading of the
+   * existing log entries. */
+  init_flush_new_sync_point(later);
+  ldout(cct,20) << "new sync point = [" << m_current_sync_point << "]" << dendl;
 
   m_initialized = true;
   // Start the thread
@@ -783,6 +783,14 @@ template <typename I>
 void ReplicatedWriteLog<I>::schedule_append(GenericLogOperationsVector &ops)
 {
   GenericLogOperations to_append(ops.begin(), ops.end());
+
+  schedule_append(to_append);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::schedule_append(GenericLogOperationSharedPtr op)
+{
+  GenericLogOperations to_append { op };
 
   schedule_append(to_append);
 }
@@ -1331,6 +1339,190 @@ bool ReplicatedWriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   req->set_allocated(alloc_succeeds);
 
   return alloc_succeeds;
+}
+
+template <typename I>
+C_FlushRequest<ReplicatedWriteLog<I>>* ReplicatedWriteLog<I>::make_flush_req(Context *on_finish) {
+  utime_t flush_begins = ceph_clock_now();
+  bufferlist bl;
+  auto *flush_req =
+    new C_FlushRequestT(*this, flush_begins, Extents({whole_volume_extent()}),
+                        std::move(bl), 0, m_lock, m_perfcounter, on_finish);
+
+  return flush_req;
+}
+
+/* Update/persist the last flushed sync point in the log */
+template <typename I>
+void ReplicatedWriteLog<I>::persist_last_flushed_sync_gen()
+{
+  TOID(struct WriteLogPoolRoot) pool_root;
+  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+  uint64_t flushed_sync_gen;
+
+  std::lock_guard append_locker(m_log_append_lock);
+  {
+    std::lock_guard locker(m_lock);
+    flushed_sync_gen = m_flushed_sync_gen;
+  }
+
+  if (D_RO(pool_root)->flushed_sync_gen < flushed_sync_gen) {
+    ldout(m_image_ctx.cct, 15) << "flushed_sync_gen in log updated from "
+                               << D_RO(pool_root)->flushed_sync_gen << " to "
+                               << flushed_sync_gen << dendl;
+    TX_BEGIN(m_log_pool) {
+      D_RW(pool_root)->flushed_sync_gen = flushed_sync_gen;
+    } TX_ONCOMMIT {
+    } TX_ONABORT {
+      lderr(m_image_ctx.cct) << "failed to commit update of flushed sync point" << dendl;
+      ceph_assert(false);
+    } TX_FINALLY {
+    } TX_END;
+  }
+}
+
+/* Returns true if the specified SyncPointLogEntry is considered flushed, and
+ * the log will be updated to reflect this. */
+template <typename I>
+bool ReplicatedWriteLog<I>::handle_flushed_sync_point(std::shared_ptr<SyncPointLogEntry> log_entry)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(log_entry);
+
+  if ((log_entry->writes_flushed == log_entry->writes) &&
+      log_entry->completed && log_entry->prior_sync_point_flushed &&
+      log_entry->next_sync_point_entry) {
+    ldout(m_image_ctx.cct, 20) << "All writes flushed up to sync point="
+                               << *log_entry << dendl;
+    log_entry->next_sync_point_entry->prior_sync_point_flushed = true;
+    /* Don't move the flushed sync gen num backwards. */
+    if (m_flushed_sync_gen < log_entry->ram_entry.sync_gen_number) {
+      m_flushed_sync_gen = log_entry->ram_entry.sync_gen_number;
+    }
+    m_async_op_tracker.start_op();
+    m_work_queue.queue(new LambdaContext(
+      [this, log_entry](int r) {
+        bool handled_by_next;
+        {
+          std::lock_guard locker(m_lock);
+          handled_by_next = handle_flushed_sync_point(log_entry->next_sync_point_entry);
+        }
+        if (!handled_by_next) {
+          persist_last_flushed_sync_gen();
+        }
+        m_async_op_tracker.finish_op();
+      }));
+    return true;
+  }
+  return false;
+}
+
+/* Make a new sync point and flush the previous during initialization, when there may or may
+* not be a previous sync point */
+template <typename I>
+void ReplicatedWriteLog<I>::init_flush_new_sync_point(DeferredContexts &later) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(!m_initialized); /* Don't use this after init */
+
+  if (!m_current_sync_point) {
+    /* First sync point since start */
+    new_sync_point(later);
+  } else {
+    flush_new_sync_point(nullptr, later);
+  }
+}
+
+/**
+* Begin a new sync point
+*/
+template <typename I>
+void ReplicatedWriteLog<I>::new_sync_point(DeferredContexts &later) {
+  CephContext *cct = m_image_ctx.cct;
+  std::shared_ptr<SyncPoint> old_sync_point = m_current_sync_point;
+  std::shared_ptr<SyncPoint> new_sync_point;
+  ldout(cct, 20) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  /* The first time this is called, if this is a newly created log,
+   * this makes the first sync gen number we'll use 1. On the first
+   * call for a re-opened log m_current_sync_gen will be the highest
+   * gen number from all the sync point entries found in the re-opened
+   * log, and this advances to the next sync gen number. */
+  ++m_current_sync_gen;
+
+  new_sync_point = std::make_shared<SyncPoint>(m_current_sync_gen, cct);
+  m_current_sync_point = new_sync_point;
+
+  /* If this log has been re-opened, old_sync_point will initially be
+   * nullptr, but m_current_sync_gen may not be zero. */
+  if (old_sync_point) {
+    new_sync_point->setup_earlier_sync_point(old_sync_point, m_last_op_sequence_num);
+    /* This sync point will acquire no more sub-ops. Activation needs
+     * to acquire m_lock, so defer to later*/
+    later.add(new LambdaContext(
+      [this, old_sync_point](int r) {
+        old_sync_point->prior_persisted_gather_activate();
+      }));
+  }
+
+  new_sync_point->prior_persisted_gather_set_finisher();
+
+  if (old_sync_point) {
+    ldout(cct,6) << "new sync point = [" << *m_current_sync_point
+                 << "], prior = [" << *old_sync_point << "]" << dendl;
+  } else {
+    ldout(cct,6) << "first sync point = [" << *m_current_sync_point
+                 << "]" << dendl;
+  }
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::flush_new_sync_point(C_FlushRequestT *flush_req, DeferredContexts &later) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  if (!flush_req) {
+    m_async_null_flush_finish++;
+    m_async_op_tracker.start_op();
+    Context *flush_ctx = new LambdaContext([this](int r) {
+      m_async_null_flush_finish--;
+      m_async_op_tracker.finish_op();
+    });
+    flush_req = make_flush_req(flush_ctx);
+    flush_req->internal = true;
+  }
+
+  /* Add a new sync point. */
+  new_sync_point(later);
+  std::shared_ptr<SyncPoint> to_append = m_current_sync_point->earlier_sync_point;
+  ceph_assert(to_append);
+
+  /* This flush request will append/persist the (now) previous sync point */
+  flush_req->to_append = to_append;
+
+  /* When the m_sync_point_persist Gather completes this sync point can be
+   * appended.  The only sub for this Gather is the finisher Context for
+   * m_prior_log_entries_persisted, which records the result of the Gather in
+   * the sync point, and completes. TODO: Do we still need both of these
+   * Gathers?*/
+  Context * ctx = new LambdaContext([this, flush_req](int r) {
+    ldout(m_image_ctx.cct, 20) << "Flush req=" << flush_req
+                               << " sync point =" << flush_req->to_append
+                               << ". Ready to persist." << dendl;
+    alloc_and_dispatch_io_req(flush_req);
+  });
+  to_append->persist_gather_set_finisher(ctx);
+
+  /* The m_sync_point_persist Gather has all the subs it will ever have, and
+   * now has its finisher. If the sub is already complete, activation will
+   * complete the Gather. The finisher will acquire m_lock, so we'll activate
+   * this when we release m_lock.*/
+  later.add(new LambdaContext([this, to_append](int r) {
+    to_append->persist_gather_activate();
+  }));
+
+  /* The flush request completes when the sync point persists */
+  to_append->add_in_on_persisted_ctxs(flush_req);
 }
 
 } // namespace cache

@@ -91,6 +91,7 @@ public:
   using This = ReplicatedWriteLog<ImageCtxT>;
   using C_WriteRequestT = rwl::C_WriteRequest<This>;
   using C_BlockIORequestT = rwl::C_BlockIORequest<This>;
+  using C_FlushRequestT = rwl::C_FlushRequest<This>;
   CephContext * get_context();
   void release_guarded_request(BlockGuardCell *cell);
   void release_write_lanes(C_BlockIORequestT *req);
@@ -98,7 +99,9 @@ public:
   template <typename V>
   void flush_pmem_buffer(V& ops);
   void schedule_append(rwl::GenericLogOperationsVector &ops);
+  void schedule_append(rwl::GenericLogOperationSharedPtr op);
   void schedule_flush_and_append(rwl::GenericLogOperationsVector &ops);
+  void flush_new_sync_point(C_FlushRequestT *flush_req, rwl::DeferredContexts &later);
   std::shared_ptr<rwl::SyncPoint> get_current_sync_point() {
     return m_current_sync_point;
   }
@@ -179,6 +182,7 @@ private:
   std::atomic<int> m_async_flush_ops = {0};
   std::atomic<int> m_async_append_ops = {0};
   std::atomic<int> m_async_complete_ops = {0};
+  std::atomic<int> m_async_null_flush_finish = {0};
 
   /* Acquire locks in order declared here */
 
@@ -236,6 +240,13 @@ private:
   void rwl_init(Context *on_finish, rwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
   void wake_up();
+
+  void persist_last_flushed_sync_gen();
+  bool handle_flushed_sync_point(std::shared_ptr<rwl::SyncPointLogEntry> log_entry);
+
+  void init_flush_new_sync_point(rwl::DeferredContexts &later);
+  void new_sync_point(rwl::DeferredContexts &later);
+  rwl::C_FlushRequest<ReplicatedWriteLog<ImageCtxT>>* make_flush_req(Context *on_finish);
 
   void dispatch_deferred_writes(void);
   void alloc_and_dispatch_io_req(C_BlockIORequestT *write_req);

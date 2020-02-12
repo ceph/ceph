@@ -103,6 +103,10 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 };
 
+io::Extent whole_volume_extent() {
+  return io::Extent({0, std::numeric_limits<uint64_t>::max()});
+}
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
