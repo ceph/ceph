@@ -100,6 +100,26 @@ void MgrStandby::handle_conf_change(
   }
 }
 
+void MgrStandby::handle_signal(int signum) {
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
+  shutdown();
+}
+
+// reference for use by the signal handler
+static MgrStandby *signal_mgr = nullptr;
+static void handle_mgr_signal(int signum)
+{
+  derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
+
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  if (signal_mgr) {
+    signal_mgr->handle_signal(signum);
+  }
+
+  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
+}
+
 int MgrStandby::init()
 {
   init_async_signal_handler();
@@ -258,6 +278,32 @@ void MgrStandby::send_beacon()
   monc.send_mon_message(std::move(m));
 }
 
+void MgrStandby::wait_for_beacon_ack(version_t seq_ack, std::unique_lock<ceph::mutex> &locker) {
+  dout(10) << "waiting for seq ack#" << seq_ack << dendl;
+
+  if (seq_stamp.count(seq_ack) == 0) {
+    derr << "invalid seq ack#" << seq_ack << " to wait on" << dendl;
+    return;
+  }
+
+  double timo = g_conf().get_val<std::chrono::seconds>("mgr_shutdown_or_respawn_timeout").count();
+  while (!seq_stamp.empty() && seq_stamp.begin()->first <= seq_ack) {
+    if (cond.wait_for(locker, ceph::make_timespan(timo)) == std::cv_status::timeout) {
+      derr << "timed out waiting for beacon seq ack #" << seq_ack << dendl;
+      return;
+    }
+  }
+
+  dout(20) << "done waiting for beacon seq ack#" << seq_ack << dendl;
+}
+
+void MgrStandby::send_beacon_and_wait(std::unique_lock<ceph::mutex> &locker) {
+  dout(10) << __func__ << dendl;
+
+  send_beacon();
+  wait_for_beacon_ack(last_seq - 1, locker);
+}
+
 void MgrStandby::tick()
 {
   dout(10) << __func__ << dendl;
@@ -271,35 +317,14 @@ void MgrStandby::tick()
   )); 
 }
 
-void MgrStandby::shutdown()
-{
+void MgrStandby::shutdown() {
   finisher.queue(new LambdaContext([&](int) {
-    std::lock_guard l(lock);
+        std::unique_lock locker(lock);
+        timer.shutdown();
+        py_module_registry.stop();
+        send_beacon_and_wait(locker);
+      }));
 
-    dout(4) << "Shutting down" << dendl;
-
-    // stop sending beacon first, i use monc to talk with monitors
-    timer.shutdown();
-    // client uses monc and objecter
-    client.shutdown();
-    mgrc.shutdown();
-    // stop monc, so mon won't be able to instruct me to shutdown/activate after
-    // the active_mgr is stopped
-    monc.shutdown();
-    if (active_mgr) {
-      active_mgr->shutdown();
-    }
-
-    py_module_registry.shutdown();
-
-    // objecter is used by monc and active_mgr
-    objecter.shutdown();
-    // client_messenger is used by all of them, so stop it in the end
-    client_messenger->shutdown();
-  }));
-
-  // Then stop the finisher to ensure its enqueued contexts aren't going
-  // to touch references to the things we're about to tear down
   finisher.wait_for_empty();
   finisher.stop();
 }
@@ -313,6 +338,8 @@ void MgrStandby::respawn()
   //
   // to main() so that /proc/$pid/stat field 2 contains "(ceph-mgr)"
   // instead of "(exe)", so that killall (and log rotation) will work.
+
+  shutdown();
 
   char *new_argv[orig_argc+1];
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
@@ -445,6 +472,7 @@ bool MgrStandby::handle_beacon_reply(const ref_t<MMgrBeaconReply>& m) {
   }
 
   seq_stamp.erase(seq_stamp.begin(), ++it);
+  cond.notify_all();
   return true;
 }
 
@@ -481,11 +509,20 @@ bool MgrStandby::ms_handle_refused(Connection *con)
 
 int MgrStandby::main(vector<const char *> args)
 {
+  // Enable signal handlers
+  signal_mgr = this;
+  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
+
   client_messenger->wait();
 
   // Disable signal handlers
   unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_mgr_signal);
+  unregister_async_signal_handler(SIGTERM, handle_mgr_signal);
+
   shutdown_async_signal_handler();
+  signal_mgr = nullptr;
 
   return 0;
 }

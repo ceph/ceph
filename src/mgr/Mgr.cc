@@ -221,32 +221,11 @@ std::map<std::string, std::string> Mgr::load_store()
   return loaded;
 }
 
-void Mgr::handle_signal(int signum)
-{
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
-  shutdown();
-}
-
-static void handle_mgr_signal(int signum)
-{
-  derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
-
-  // The python modules don't reliably shut down, so don't even
-  // try. The mon will blacklist us (and all of our rados/cephfs
-  // clients) anyway. Just exit!
-
-  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
-}
-
 void Mgr::init()
 {
   std::unique_lock l(lock);
   ceph_assert(initializing);
   ceph_assert(!initialized);
-
-  // Enable signal handlers
-  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
   // subscribe to all the maps
   monc->sub_want("log-info", 0, 0);

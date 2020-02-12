@@ -52,6 +52,7 @@ protected:
   LogChannelRef clog, audit_clog;
 
   ceph::mutex lock = ceph::make_mutex("MgrStandby::lock");
+  ceph::condition_variable cond;
   Finisher finisher;
   SafeTimer timer;
 
@@ -82,6 +83,7 @@ public:
   void shutdown();
   void respawn();
   int main(vector<const char *> args);
+  void handle_signal(int signum);
   void tick();
 
 private:
@@ -98,6 +100,8 @@ private:
   std::map<version_t, time> seq_stamp;
 
   bool handle_beacon_reply(const ref_t<MMgrBeaconReply>& m);
+  void send_beacon_and_wait(std::unique_lock<ceph::mutex> &locker);
+  void wait_for_beacon_ack(version_t seq_ack, std::unique_lock<ceph::mutex> &locker);
 };
 
 #endif
