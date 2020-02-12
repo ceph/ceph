@@ -2174,9 +2174,9 @@ function test_mon_osd_pool_set()
 
   old_size=$(ceph osd pool get $TEST_POOL_GETSET size | sed -e 's/size: //')
   (( new_size = old_size + 1 ))
-  ceph osd pool set $TEST_POOL_GETSET size $new_size
+  ceph osd pool set $TEST_POOL_GETSET size $new_size --yes-i-really-mean-it
   ceph osd pool get $TEST_POOL_GETSET size | grep "size: $new_size"
-  ceph osd pool set $TEST_POOL_GETSET size $old_size
+  ceph osd pool set $TEST_POOL_GETSET size $old_size --yes-i-really-mean-it
 
   ceph osd pool create pool_erasure 1 1 erasure
   ceph osd pool application enable pool_erasure rados

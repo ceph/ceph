@@ -1736,6 +1736,11 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_pool_default_size")
     .add_see_also("osd_pool_default_min_size"),
 
+    Option("mon_allow_pool_size_one", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .add_service("mon")
+    .set_description("allow configuring pool with no replicas"),
+
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mgr")
