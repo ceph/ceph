@@ -308,7 +308,7 @@ void ElectionLogic::propose_classic_handler(int from, epoch_t mepoch)
 double ElectionLogic::connectivity_election_score(int rank)
 {
   if (elector->get_disallowed_leaders().count(rank)) {
-    return 0;
+    return -1;
   }
   double score;
   int liveness;
@@ -367,7 +367,7 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
   int my_rank = elector->get_my_rank();
   double my_score = connectivity_election_score(my_rank);
   double from_score = connectivity_election_score(from);
-  double leader_score = 0;
+  double leader_score = -1;
   if (leader_acked >= 0) {
     leader_score = connectivity_election_score(leader_acked);
   }
@@ -380,11 +380,11 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
 		 << "; currently acked " << leader_acked
 		 << ",score=" << leader_score << dendl;
 
-  bool my_win = (my_score > 0) && // My score is non-zero; I am allowed to lead
+  bool my_win = (my_score >= 0) && // My score is non-zero; I am allowed to lead
     ((my_rank < from && my_score >= from_score) || // We have same scores and I have lower rank, or
      (my_score > from_score)); // my score is higher
   
-  bool their_win = (from_score > 0) && // Their score is non-zero; they're allowed to lead, AND
+  bool their_win = (from_score >= 0) && // Their score is non-zero; they're allowed to lead, AND
     ((from < my_rank && from_score >= my_score) || // Either they have lower rank and same score, or
      (from_score > my_score)) && // their score is higher, AND
     ((from <= leader_acked && from_score >= leader_score) || // same conditions compared to leader, or IS leader
@@ -501,11 +501,19 @@ bool ElectionLogic::victory_makes_sense(int from)
 
 bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
 {
-  ceph_assert(victory_makes_sense(from));
+  bool election_okay = victory_makes_sense(from);
 
   last_election_winner = from;
   last_voted_for = leader_acked;
   clear_live_election_state();
+
+  if (!election_okay) {
+    ceph_assert(strategy == CONNECTIVITY);
+    ldout(cct, 1) << "I should have been elected over this leader; bumping and restarting!" << dendl;
+    bump_epoch(from_epoch);
+    start();
+    return false;
+  }
 
   // i should have seen this election if i'm getting the victory.
   if (from_epoch != epoch + 1) { 
