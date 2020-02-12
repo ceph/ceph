@@ -213,6 +213,24 @@ class TestGetVG(object):
         assert api.get_vg(vg_name='foo') == FooVG
 
 
+class TestVolume(object):
+
+    def test_is_ceph_device(self):
+        lv_tags = "ceph.type=data,ceph.osd_id=0"
+        osd = api.Volume(lv_name='osd/volume', lv_tags=lv_tags)
+        assert api.is_ceph_device(osd)
+
+    @pytest.mark.parametrize('dev',[
+        '/dev/sdb',
+        api.VolumeGroup(vg_name='foo'),
+        api.Volume(lv_name='vg/no_osd', lv_tags=''),
+        api.Volume(lv_name='vg/no_osd', lv_tags='ceph.osd_id=null'),
+        None,
+    ])
+    def test_is_not_ceph_device(self, dev):
+        assert not api.is_ceph_device(dev)
+
+
 class TestVolumes(object):
 
     def test_volume_get_has_no_volumes(self, volumes):
