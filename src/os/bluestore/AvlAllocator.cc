@@ -135,13 +135,34 @@ void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
   }
 }
 
+int64_t AvlAllocator::_allocate(
+  uint64_t want,
+  uint64_t unit,
+  uint64_t max_alloc_size,
+  int64_t  hint, // unused, for now!
+  PExtentVector* extents)
+{
+  uint64_t allocated = 0;
+  while (allocated < want) {
+    uint64_t offset, length;
+    int r = _allocate(std::min(max_alloc_size, want - allocated),
+      unit, &offset, &length);
+    if (r < 0) {
+      // Allocation failed.
+      break;
+    }
+    extents->emplace_back(offset, length);
+    allocated += length;
+  }
+  return allocated ? allocated : -ENOSPC;
+}
+
 int AvlAllocator::_allocate(
   uint64_t size,
   uint64_t unit,
   uint64_t *offset,
   uint64_t *length)
 {
-  std::lock_guard l(lock);
   uint64_t max_size = 0;
   if (auto p = range_size_tree.rbegin(); p != range_size_tree.rend()) {
     max_size = p->end - p->start;
@@ -190,6 +211,25 @@ int AvlAllocator::_allocate(
   *offset = start;
   *length = size;
   return 0;
+}
+
+void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
+{
+  for (auto p = release_set.begin(); p != release_set.end(); ++p) {
+    const auto offset = p.get_start();
+    const auto length = p.get_len();
+    ldout(cct, 10) << __func__ << std::hex
+      << " offset 0x" << offset
+      << " length 0x" << length
+      << std::dec << dendl;
+    _add_to_tree(offset, length);
+  }
+}
+
+void AvlAllocator::_shutdown()
+{
+  range_size_tree.clear();
+  range_tree.clear_and_dispose(dispose_rs{});
 }
 
 AvlAllocator::AvlAllocator(CephContext* cct,
@@ -250,34 +290,13 @@ int64_t AvlAllocator::allocate(
       max_alloc_size >= cap) {
     max_alloc_size = cap;
   }
-
-  uint64_t allocated = 0;
-  while (allocated < want) {
-    uint64_t offset, length;
-    int r = _allocate(std::min(max_alloc_size, want - allocated),
-                      unit, &offset, &length);
-    if (r < 0) {
-      // Allocation failed.
-      break;
-    }
-    extents->emplace_back(offset, length);
-    allocated += length;
-  }
-  return allocated ? allocated : -ENOSPC;
+  std::lock_guard l(lock);
+  return _allocate(want, unit, max_alloc_size, hint, extents);
 }
 
-void AvlAllocator::release(const interval_set<uint64_t>& release_set)
-{
+void AvlAllocator::release(const interval_set<uint64_t>& release_set) {
   std::lock_guard l(lock);
-  for (auto p = release_set.begin(); p != release_set.end(); ++p) {
-    const auto offset = p.get_start();
-    const auto length = p.get_len();
-    ldout(cct, 10) << __func__ << std::hex
-                   << " offset 0x" << offset
-                   << " length 0x" << length
-                   << std::dec << dendl;
-    _add_to_tree(offset, length);
-  }
+  _release(release_set);
 }
 
 uint64_t AvlAllocator::get_free()
@@ -289,30 +308,31 @@ uint64_t AvlAllocator::get_free()
 double AvlAllocator::get_fragmentation()
 {
   std::lock_guard l(lock);
-  auto free_blocks = p2align(num_free, block_size) / block_size;
-  if (free_blocks <= 1) {
-    return .0;
-  }  
-  return (static_cast<double>(range_tree.size() - 1) / (free_blocks - 1));
+  return _get_fragmentation();
 }
 
 void AvlAllocator::dump()
 {
   std::lock_guard l(lock);
+  _dump();
+}
+
+void AvlAllocator::_dump() const
+{
   ldout(cct, 0) << __func__ << " range_tree: " << dendl;
   for (auto& rs : range_tree) {
     ldout(cct, 0) << std::hex
-                  << "0x" << rs.start << "~" << rs.end
-                  << std::dec
-                  << dendl;
+      << "0x" << rs.start << "~" << rs.end
+      << std::dec
+      << dendl;
   }
 
   ldout(cct, 0) << __func__ << " range_size_tree: " << dendl;
   for (auto& rs : range_size_tree) {
     ldout(cct, 0) << std::hex
-                  << "0x" << rs.start << "~" << rs.end
-                  << std::dec
-                  << dendl;
+      << "0x" << rs.start << "~" << rs.end
+      << std::dec
+      << dendl;
   }
 }
 
@@ -346,6 +366,5 @@ void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 void AvlAllocator::shutdown()
 {
   std::lock_guard l(lock);
-  range_size_tree.clear();
-  range_tree.clear_and_dispose(dispose_rs{});
+  _shutdown();
 }

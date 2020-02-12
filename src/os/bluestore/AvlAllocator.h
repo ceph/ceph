@@ -49,7 +49,7 @@ struct range_seg_t {
   boost::intrusive::avl_set_member_hook<> size_hook;
 };
 
-class AvlAllocator final : public Allocator {
+class AvlAllocator : public Allocator {
   struct dispose_rs {
     void operator()(range_seg_t* p)
     {
@@ -60,7 +60,7 @@ class AvlAllocator final : public Allocator {
 protected:
   /*
   * ctor intended for the usage from descendant class(es) which
-  * provides handlig for spilled over entries
+  * provides handling for spilled over entries
   * (when entry count >= max_entries)
   */
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
@@ -76,23 +76,21 @@ public:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
-    PExtentVector *extents) final;
-  void release(const interval_set<uint64_t>& release_set) final;
-  uint64_t get_free() final;
-  double get_fragmentation() final;
+    PExtentVector *extents) override;
+  void release(const interval_set<uint64_t>& release_set) override;
+  uint64_t get_free() override;
+  double get_fragmentation() override;
 
-  void dump() final;
-  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) final;
-  void init_add_free(uint64_t offset, uint64_t length) final;
-  void init_rm_free(uint64_t offset, uint64_t length) final;
-  void shutdown() final;
+  void dump() override;
+  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
+  void init_add_free(uint64_t offset, uint64_t length) override;
+  void init_rm_free(uint64_t offset, uint64_t length) override;
+  void shutdown() override;
 
 private:
   template<class Tree>
   uint64_t _block_picker(const Tree& t, uint64_t *cursor, uint64_t size,
     uint64_t align);
-  void _add_to_tree(uint64_t start, uint64_t size);
-  void _remove_from_tree(uint64_t start, uint64_t size);
   int _allocate(
     uint64_t size,
     uint64_t unit,
@@ -158,13 +156,6 @@ private:
   */
   uint64_t range_count_cap = 0;
 
-  CephContext* cct;
-  std::mutex lock;
-
-  uint64_t _lowest_size_available() {
-    auto rs = range_size_tree.begin();
-    return rs != range_size_tree.end() ? rs->length() : 0;
-  }
   void _range_size_tree_rm(range_seg_t& r) {
     ceph_assert(num_free >= r.length());
     num_free -= r.length();
@@ -215,4 +206,34 @@ private:
     // i.e. (range_count_cap > 0)
     ceph_assert(false);
   }
+protected:
+  CephContext* cct;
+  std::mutex lock;
+
+  double _get_fragmentation() const {
+    auto free_blocks = p2align(num_free, block_size) / block_size;
+    if (free_blocks <= 1) {
+      return .0;
+    }
+    return (static_cast<double>(range_tree.size() - 1) / (free_blocks - 1));
+  }
+  void _dump() const;
+
+  uint64_t _lowest_size_available() {
+    auto rs = range_size_tree.begin();
+    return rs != range_size_tree.end() ? rs->length() : 0;
+  }
+
+  int64_t _allocate(
+    uint64_t want,
+    uint64_t unit,
+    uint64_t max_alloc_size,
+    int64_t  hint,
+    PExtentVector *extents);
+
+  void _release(const interval_set<uint64_t>& release_set);
+  void _shutdown();
+
+  void _add_to_tree(uint64_t start, uint64_t size);
+  void _remove_from_tree(uint64_t start, uint64_t size);
 };
