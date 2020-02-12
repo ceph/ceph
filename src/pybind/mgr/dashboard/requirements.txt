@@ -10,3 +10,4 @@ Routes
 six
 -e ../../../python-common
 prettytable
+pyyaml
