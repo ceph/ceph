@@ -573,6 +573,11 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	bool account = entry.get_info(&cls_key, &category, &stats);
 	rgw_obj_key key(cls_key);
 	rgw_obj obj(new_bucket_info.bucket, key);
+	RGWMPObj mp;
+	if (key.ns == RGW_OBJ_NS_MULTIPART && mp.from_meta(key.name)) {
+	  // place the multipart .meta object on the same shard as its head object
+	  obj.index_hash_source = mp.get_key();
+	}
 	int ret = store->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
 	if (ret < 0) {
 	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
