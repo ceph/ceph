@@ -1417,39 +1417,32 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def remove_daemons(self, names, force):
         # type: (List[str], bool) -> orchestrator.Completion
-        def _filter(daemons):
-            args = []
-            for d in daemons:
-                for name in names:
-                    if d.name() == name:
-                        args.append(
-                            ('%s.%s' % (d.daemon_type, d.daemon_id),
-                             d.nodename,
-                             force)
-                        )
-            if not args:
-                raise OrchestratorError('Unable to find daemon(s) %s' % (names))
-            return self._remove_daemon(args)
-        return self._get_daemons().then(_filter)
+        args = []
+        for host, di in self.daemon_cache.items():
+            for name in names:
+                if name in di['daemons']:
+                    args.append((name, host, force))
+        if not args:
+            raise OrchestratorError('Unable to find daemon(s) %s' % (names))
+        return self._remove_daemon(args)
 
     def remove_service(self, service_type, service_name):
         if service_name:
             prefix = service_name + '.'
         else:
             prefix = ''
-        def _filter(daemons):
-            args = []
-            for d in daemons:
+        args = []
+        for host, di in self.daemon_cache.items():
+            for name, d in di['daemons'].items():
                 if d.daemon_type == service_type and \
                    d.daemon_id.startswith(prefix):
                     args.append(
                         ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
                     )
-            if not args:
-                raise OrchestratorError('Unable to find daemons in %s.%s* service' % (
-                    service_type, prefix))
-            return self._remove_daemon(args)
-        return self._get_daemons(daemon_type=service_type).then(_filter)
+        if not args:
+            raise OrchestratorError('Unable to find daemons in %s.%s* service' % (
+                service_type, prefix))
+        return self._remove_daemon(args)
 
     def get_inventory(self, node_filter=None, refresh=False):
         """
