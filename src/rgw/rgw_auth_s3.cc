@@ -934,7 +934,7 @@ bool AWSv4ComplMulti::is_signature_mismatched()
   }
 }
 
-size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
+size_t AWSv4ComplMulti::recv_chunk_body(char* const buf, const size_t buf_max)
 {
   /* Buffer stores only parsed stream. Raw values reflect the stream
    * we're getting from a client. */
@@ -1016,6 +1016,32 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
     buf_pos += received;
     stream_pos += received;
     to_extract -= received;
+  }
+
+  dout(20) << "AWSv4ComplMulti: filled=" << buf_pos << dendl;
+  return buf_pos;
+}
+
+size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
+{
+  /* get total buf_max data from the stream, buf_max's default is  rgw_max_chunk_size
+   * we're getting from a client. */
+  size_t buf_pos = 0; 
+  size_t buf_incomplement_size = buf_max; //bul_max is 4M, exclude the last muiltpart
+
+  size_t len  = 0;
+  while (buf_incomplement_size > 0){
+          const auto read_len = recv_chunk_body( buf+buf_pos, buf_max);
+          cout << "AWSv4ComplMulti: recv_chunk_body len=" << read_len << std::endl;
+
+         if (read_len == 0)
+         {
+            break;
+         }
+
+          len =  read_len;
+          buf_pos += len;
+          buf_incomplement_size -= len;
   }
 
   dout(20) << "AWSv4ComplMulti: filled=" << buf_pos << dendl;
