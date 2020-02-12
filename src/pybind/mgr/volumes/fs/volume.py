@@ -95,10 +95,14 @@ class ConnectionPool(object):
         recurring timer variant of Timer
         """
         def run(self):
-            while not self.finished.is_set():
-                self.finished.wait(self.interval)
-                self.function(*self.args, **self.kwargs)
-            self.finished.set()
+            try:
+                while not self.finished.is_set():
+                    self.finished.wait(self.interval)
+                    self.function(*self.args, **self.kwargs)
+                self.finished.set()
+            except Exception as e:
+                log.error("ConnectionPool.RTimer: %s", e)
+                raise
 
     # TODO: make this configurable
     TIMER_TASK_RUN_INTERVAL = 30.0  # seconds
@@ -115,7 +119,7 @@ class ConnectionPool(object):
     def cleanup_connections(self):
         with self.lock:
             log.info("scanning for idle connections..")
-            idle_fs = [fs_name for fs_name,conn in self.connections.iteritems()
+            idle_fs = [fs_name for fs_name,conn in self.connections.items()
                        if conn.is_connection_idle(ConnectionPool.CONNECTION_IDLE_INTERVAL)]
             for fs_name in idle_fs:
                 log.info("cleaning up connection for '{}'".format(fs_name))
