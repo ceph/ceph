@@ -501,13 +501,17 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orch service',
+        'orch',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
-        "name=svc_type,type=CephString "
         "name=svc_name,type=CephString",
         'Start, stop, restart, redeploy, or reconfig an entire service (i.e. all daemons)')
-    def _service_action(self, action, svc_type, svc_name):
-        completion = self.service_action(action, svc_type, svc_name)
+    def _service_action(self, action, svc_name):
+        if '.' in svc_name:
+            (service_type, service_id) = svc_name.split('.', 1)
+        else:
+            service_type = svc_name;
+            service_id = None
+        completion = self.service_action(action, service_type, service_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
