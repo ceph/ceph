@@ -40,7 +40,7 @@ CLUSTER_SUBNET = settings['cluster_subnet']
 BOX            = settings['vagrant_box']
 CLIENT_BOX     = settings['client_vagrant_box']
 BOX_URL        = settings['vagrant_box_url']
-SYNC_DIR       = settings['vagrant_sync_dir']
+SYNC_DIR       = settings.fetch('vagrant_sync_dir', '/vagrant')
 MEMORY         = settings['memory']
 ETH            = settings['eth']
 USER           = settings['ssh_username']
@@ -72,16 +72,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     # set libvirt storage pool if present
     if not LIBVIRT_STORAGE_POOL.empty?
       lv.storage_pool_name = LIBVIRT_STORAGE_POOL
-    end
-  end
-
-  # Faster bootup. Disables mounting the sync folder for libvirt and virtualbox
-  if DISABLE_SYNCED_FOLDER
-    config.vm.provider :virtualbox do |v,override|
-      override.vm.synced_folder '.', SYNC_DIR, disabled: true
-    end
-    config.vm.provider :libvirt do |v,override|
-      override.vm.synced_folder '.', SYNC_DIR, disabled: true
     end
   end
 
@@ -395,12 +385,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       end
 
       # Libvirt
-      driverletters = ('a'..'z').to_a
+      driverletters = ('b'..'z').to_a
       osd.vm.provider :libvirt do |lv|
         # always make /dev/sd{a/b/c/d} so that CI can ensure that
         # virtualbox and libvirt will have the same devices to use for OSDs
         (0..3).each do |d|
-          lv.storage :file, :device => "hd#{driverletters[d]}", :path => "disk-#{i}-#{d}-#{DISK_UUID}.disk", :size => '12G', :bus => "ide"
+          lv.storage :file, :device => "sd#{driverletters[d]}", :size => '12G'
         end
         lv.memory = MEMORY
         lv.random_hostname = true
@@ -426,4 +416,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
     end
   end
+
+  # Faster bootup. Disables mounting the sync folder for libvirt and virtualbox
+  config.vm.synced_folder './', SYNC_DIR, disabled: DISABLE_SYNCED_FOLDER
+
 end

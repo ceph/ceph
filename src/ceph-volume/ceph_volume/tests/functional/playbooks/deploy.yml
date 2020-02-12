@@ -115,7 +115,7 @@
     - name: rsync ceph-volume to test nodes on centos
       synchronize:
         src: "{{ toxinidir }}/../../../../ceph_volume"
-        dest: "/usr/lib/python2.7/site-packages"
+        dest: "/usr/lib/python3.6/site-packages"
         use_ssh_args: true
       when:
         - ansible_os_family == "RedHat"
