@@ -878,8 +878,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_daemons(self, names):
-        # type: (List[str]) -> Completion
+    def remove_daemons(self, names, force):
+        # type: (List[str], bool) -> Completion
         """
         Remove specific daemon(s).
 

@@ -1454,15 +1454,17 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             daemon_type=daemon_type,
             daemon_id=daemon_id).then(_proc_daemons)
 
-    def remove_daemons(self, names):
-        # type: (List[str]) -> orchestrator.Completion
+    def remove_daemons(self, names, force):
+        # type: (List[str], bool) -> orchestrator.Completion
         def _filter(daemons):
             args = []
             for d in daemons:
                 for name in names:
                     if d.name() == name:
                         args.append(
-                            ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
+                            ('%s.%s' % (d.daemon_type, d.daemon_id),
+                             d.nodename,
+                             force)
                         )
             if not args:
                 raise OrchestratorError('Unable to find daemon(s) %s' % (names))
@@ -1769,13 +1771,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
-    def _remove_daemon(self, name, host):
+    def _remove_daemon(self, name, host, force=False):
         """
         Remove a daemon
         """
+        self.log.debug('_remove_daemon %s on %s force=%s' % (name, host, force))
+        args = ['--name', name]
+        if force:
+            args.extend(['--force'])
         out, err, code = self._run_cephadm(
-            host, name, 'rm-daemon',
-            ['--name', name])
+            host, name, 'rm-daemon', args)
         self.log.debug('_remove_daemon code %s out %s' % (code, out))
         if not code and host in self.daemon_cache:
             # remove item from cache

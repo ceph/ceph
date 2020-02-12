@@ -532,13 +532,14 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orch daemon rm',
-        "name=names,type=CephString,n=N",
+        "name=names,type=CephString,n=N "
+        'name=force,type=CephBool,req=false',
         'Remove specific daemon(s)')
-    def _daemon_rm(self, names):
+    def _daemon_rm(self, names, force=False):
         for name in names:
             if '.' not in name:
                 raise orchestrator.OrchestratorError('%s is not a valid daemon name' % name)
-        completion = self.remove_daemons(names)
+        completion = self.remove_daemons(names, force)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
