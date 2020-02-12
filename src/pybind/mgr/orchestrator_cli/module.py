@@ -179,7 +179,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_write_command(
-        'orchestrator host set-addr',
+        'orch host set-addr',
         'name=host,type=CephString '
         'name=addr,type=CephString',
         'Update a host address')
