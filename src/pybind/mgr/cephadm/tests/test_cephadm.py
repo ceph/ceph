@@ -151,7 +151,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
-            c = cephadm_module.remove_daemons(['osd.0'])
+            c = cephadm_module.remove_daemons(['osd.0'], False)
             out = wait(cephadm_module, c)
             assert out == ["Removed osd.0 from host 'test'"]
 
@@ -237,7 +237,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
-            c = cephadm_module.remove_daemons(['rgw.myrgw.myhost.myid'])
+            c = cephadm_module.remove_daemons(['rgw.myrgw.myhost.myid'], False)
             out = wait(cephadm_module, c)
             assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
 
