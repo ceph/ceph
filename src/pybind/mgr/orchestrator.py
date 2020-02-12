@@ -579,6 +579,8 @@ class Completion(_Promise):
         """Force a string."""
         if self.result is None:
             return ''
+        if isinstance(self.result, list):
+            return '\n'.join(str(x) for x in self.result)
         return str(self.result)
 
     @property
