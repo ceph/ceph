@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Tuple, Any
 
 import orchestrator
 from orchestrator import HostPlacementSpec, OrchestratorValidationError
@@ -75,6 +75,7 @@ class HostAssignment(object):
         """
         self.load_labeled_hosts()
         self.assign_hosts()
+        self.validate_placement()
         return self.spec
 
     def load_labeled_hosts(self):
@@ -122,3 +123,18 @@ class HostAssignment(object):
             logger.info('Assigning hosts to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
             return None
+        else:
+            logger.info('Using hosts: {}'.format(self.spec.placement.hosts))
+
+    def validate_placement(self):
+        count = self.spec.placement.count
+        if count is None:
+            raise orchestrator.OrchestratorValidationError(
+                "must specify a number of daemons (count)")
+        if count <= 0:
+            raise orchestrator.OrchestratorValidationError(
+                "number of daemons (count) must be at least 1")
+
+        if not self.spec.placement.hosts or len(self.spec.placement.hosts) < count:
+            raise orchestrator.OrchestratorValidationError("must specify at least %d hosts" % count)
+
