@@ -121,7 +121,9 @@ void PurgeQueue::create_logger()
 
   pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   pcb.add_u64(l_pq_executing_ops, "pq_executing_ops", "Purge queue ops in flight");
+  pcb.add_u64(l_pq_executing_ops_high_water, "pq_executing_ops_high_water", "Maximum number of executing file purge ops");
   pcb.add_u64(l_pq_executing, "pq_executing", "Purge queue tasks in flight");
+  pcb.add_u64(l_pq_executing_high_water, "pq_executing_high_water", "Maximum number of executing file purges");
 
   logger.reset(pcb.create_perf_counters());
   g_ceph_context->get_perfcounters_collection()->add(logger.get());
@@ -471,9 +473,13 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
+  files_high_water = std::max(files_high_water, in_flight.size());
+  logger->set(l_pq_executing_high_water, files_high_water);
   auto ops = _calculate_ops(item);
   ops_in_flight += ops;
   logger->set(l_pq_executing_ops, ops_in_flight);
+  ops_high_water = std::max(ops_high_water, ops_in_flight);
+  logger->set(l_pq_executing_ops_high_water, ops_high_water);
 
   SnapContext nullsnapc;
 
@@ -541,8 +547,12 @@ void PurgeQueue::_execute_item(
             "dropping it" << dendl;
     ops_in_flight -= ops;
     logger->set(l_pq_executing_ops, ops_in_flight);
+    ops_high_water = std::max(ops_high_water, ops_in_flight);
+    logger->set(l_pq_executing_ops_high_water, ops_high_water);
     in_flight.erase(expire_to);
     logger->set(l_pq_executing, in_flight.size());
+    files_high_water = std::max(files_high_water, in_flight.size());
+    logger->set(l_pq_executing_high_water, files_high_water);
     return;
   }
   ceph_assert(gather.has_subs());
@@ -605,11 +615,15 @@ void PurgeQueue::_execute_item_complete(
 
   ops_in_flight -= _calculate_ops(iter->second);
   logger->set(l_pq_executing_ops, ops_in_flight);
+  ops_high_water = std::max(ops_high_water, ops_in_flight);
+  logger->set(l_pq_executing_ops_high_water, ops_high_water);
 
   dout(10) << "completed item for ino " << iter->second.ino << dendl;
 
   in_flight.erase(iter);
   logger->set(l_pq_executing, in_flight.size());
+  files_high_water = std::max(files_high_water, in_flight.size());
+  logger->set(l_pq_executing_high_water, files_high_water);
   dout(10) << "in_flight.size() now " << in_flight.size() << dendl;
 
   logger->inc(l_pq_executed);
