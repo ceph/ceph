@@ -303,7 +303,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
 {
   struct notifyack_ctx_t {
     const entity_name_t entity;
-    std::optional<uint64_t> watch_cookie;
+    uint64_t watch_cookie;
     uint64_t notify_id;
     ceph::bufferlist reply_bl;
 
@@ -311,29 +311,25 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
     }
   };
   return with_effect_on_obc(notifyack_ctx_t{ get_message() },
-    [&] (auto& ctx) {
+    [&] (auto& ctx) -> watch_errorator::future<> {
       try {
         auto bp = osd_op.indata.cbegin();
-        uint64_t wc = 0;
         ceph::decode(ctx.notify_id, bp);
-        ceph::decode(wc, bp);
-        ctx.watch_cookie = wc;
+        ceph::decode(ctx.watch_cookie, bp);
         if (!bp.end()) {
           ceph::decode(ctx.reply_bl, bp);
         }
       } catch (const buffer::error&) {
-        // op.watch.cookie is actually the notify_id for historical reasons
-        ctx.notify_id = osd_op.op.watch.cookie;
+        // here we behave differently than ceph-osd. For historical reasons,
+        // it falls back to using `osd_op.op.watch.cookie` as `ctx.notify_id`.
+        // crimson just returns EINVAL if the data cannot be decoded.
+        return crimson::ct_error::invarg::make();
       }
-      return seastar::now();
+      return watch_errorator::now();
     },
     [] (auto&& ctx, ObjectContextRef obc) {
-      if (ctx.watch_cookie) {
-        logger().info("notify_ack watch_cookie={}, notify_id={}",
-                      *ctx.watch_cookie, ctx.notify_id);
-      } else {
-        logger().info("notify_ack notify_id={}", ctx.notify_id);
-      }
+      logger().info("notify_ack watch_cookie={}, notify_id={}",
+                    ctx.watch_cookie, ctx.notify_id);
       return seastar::do_for_each(obc->watchers,
         [ctx=std::move(ctx)] (auto& kv) {
           const auto& [key, watchp] = kv;
@@ -341,7 +337,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
           if (ctx.entity != entity) {
             return seastar::now();
           }
-          if (ctx.watch_cookie && *ctx.watch_cookie != cookie) {
+          if (ctx.watch_cookie != cookie) {
             return seastar::now();
           }
           logger().info("acking notify on watch {}", key);
