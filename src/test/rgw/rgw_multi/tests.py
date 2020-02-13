@@ -270,16 +270,12 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
         assert(retcode == 2) # ENOENT
 
     bucket_sync_status_json = bucket_sync_status_json.decode('utf-8')
-    log.debug('current bucket sync markers=%s', bucket_sync_status_json)
     sync_status = json.loads(bucket_sync_status_json)
 
     markers={}
     for entry in sync_status:
         val = entry['val']
-        if val['status'] == 'incremental-sync':
-            pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
-        else:
-            pos = ''
+        pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
         markers[entry['key']] = pos
 
     return markers
