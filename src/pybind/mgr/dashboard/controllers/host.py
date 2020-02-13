@@ -2,7 +2,13 @@
 from __future__ import absolute_import
 import copy
 
+try:
+    from typing import List
+except ImportError:
+    pass
+
 from mgr_util import merge_dicts
+from orchestrator import HostSpec
 from . import ApiController, RESTController, Task
 from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
@@ -18,16 +24,17 @@ def host_task(name, metadata, wait_for=10.0):
 
 
 def merge_hosts_by_hostname(ceph_hosts, orch_hosts):
+    # type: (List[dict], List[HostSpec]) -> List[dict]
     """Merge Ceph hosts with orchestrator hosts by hostnames.
 
-    :param mgr_hosts: hosts returned from mgr
-    :type mgr_hosts: list of dict
+    :param ceph_hosts: hosts returned from mgr
+    :type ceph_hosts: list of dict
     :param orch_hosts: hosts returned from ochestrator
-    :type orch_hosts: list of InventoryNode
+    :type orch_hosts: list of HostSpec
     :return list of dict
     """
     _ceph_hosts = copy.deepcopy(ceph_hosts)
-    orch_hostnames = {host.name for host in orch_hosts}
+    orch_hostnames = {host.hostname for host in orch_hosts}
 
     # hosts in both Ceph and Orchestrator
     for ceph_host in _ceph_hosts:
