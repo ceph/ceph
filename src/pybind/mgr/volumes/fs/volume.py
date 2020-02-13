@@ -83,10 +83,10 @@ class VolumeClient(object):
 
     ### volume operations -- create, rm, ls
 
-    def create_fs_volume(self, volname):
+    def create_fs_volume(self, volname, placement):
         if self.is_stopping():
             return -errno.ESHUTDOWN, "", "shutdown in progress"
-        return create_volume(self.mgr, volname)
+        return create_volume(self.mgr, volname, placement)
 
     def delete_fs_volume(self, volname, confirm):
         if self.is_stopping():
