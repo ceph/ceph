@@ -191,12 +191,12 @@ create_users()
 
     CEPH_ARGS='' ceph --cluster "${cluster}" \
         auth get-or-create client.${CEPH_ID} \
-        mon 'profile rbd' osd 'profile rbd' >> \
+        mon 'profile rbd' osd 'profile rbd' mgr 'profile rbd' >> \
         ${CEPH_ROOT}/run/${cluster}/keyring
     for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
         CEPH_ARGS='' ceph --cluster "${cluster}" \
             auth get-or-create client.${MIRROR_USER_ID_PREFIX}${instance} \
-            mon 'profile rbd-mirror' osd 'profile rbd' >> \
+            mon 'profile rbd-mirror' osd 'profile rbd' mgr 'profile rbd' >> \
             ${CEPH_ROOT}/run/${cluster}/keyring
     done
 }
