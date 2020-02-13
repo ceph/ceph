@@ -9,6 +9,7 @@
 #include "services/svc_bucket_sobj.h"
 #include "services/svc_bucket_sync_sobj.h"
 #include "services/svc_cls.h"
+#include "services/svc_config_key_rados.h"
 #include "services/svc_datalog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
@@ -54,6 +55,7 @@ int RGWServices_Def::init(CephContext *cct,
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
   bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
+  config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWSI_DataLog_RADOS>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
   meta = std::make_unique<RGWSI_Meta>(cct);
@@ -87,6 +89,7 @@ int RGWServices_Def::init(CephContext *cct,
                          sysobj_cache.get(),
                          bucket_sobj.get());
   cls->init(zone.get(), rados.get());
+  config_key_rados->init(rados.get());
   datalog_rados->init(zone.get(), cls.get());
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
@@ -284,6 +287,8 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   bucket_sync_sobj = _svc.bucket_sync_sobj.get();
   bucket_sync = bucket_sync_sobj;
   cls = _svc.cls.get();
+  config_key_rados = _svc.config_key_rados.get();
+  config_key = config_key_rados;
   datalog_rados = _svc.datalog_rados.get();
   mdlog = _svc.mdlog.get();
   meta = _svc.meta.get();
