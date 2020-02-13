@@ -574,7 +574,7 @@ Usage:
 
         spec = orchestrator.ServiceSpec(placement=placement)
 
-        completion = self.service_apply(spec)
+        completion = self.apply_mgr(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -594,7 +594,7 @@ Usage:
 
         spec = orchestrator.ServiceSpec(placement=placement)
 
-        completion = self.service_apply(spec)
+        completion = self.apply_mon(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -614,7 +614,7 @@ Usage:
             fs_name,
             placement=placement)
 
-        completion = self.service_apply(spec)
+        completion = self.apply_mds(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -628,7 +628,7 @@ Usage:
     def _apply_rbd_mirror(self, num, label=None, hosts=[]):
         spec = orchestrator.ServiceSpec(
             placement=orchestrator.PlacementSpec(hosts=hosts, count=num, label=label))
-        completion = self.service_apply(spec)
+        completion = self.apply_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -646,7 +646,7 @@ Usage:
             rgw_realm=realm_name,
             rgw_zone=zone_name,
             placement=orchestrator.PlacementSpec(hosts=hosts, label=label, count=num))
-        completion = self.service_apply(spec)
+        completion = self.apply_rgw(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -664,7 +664,7 @@ Usage:
             svc_id,
             placement=orchestrator.PlacementSpec(label=label, hosts=hosts, count=num),
         )
-        completion = self.service_apply(spec)
+        completion = self.apply_nfs(spec)
         self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 

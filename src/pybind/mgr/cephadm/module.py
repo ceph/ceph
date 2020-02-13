@@ -1490,19 +1490,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return self._remove_daemon(args)
         return self._get_daemons(daemon_type=service_type).then(_filter)
 
-    def service_apply(self, spec):
-        if spec.service_type == 'mgr':
-            return self.update_mgrs(spec)
-        if spec.service_type == 'mon':
-            return self.update_mons(spec)
-        if spec.service_type == 'mds':
-            return self.update_mds(spec)
-        if spec.service_type == 'rgw':
-            return self.update_rgw(spec)
-        if spec.service_type == 'rbd-mirror':
-            return self.update_rbd_mirror(spec)
-        raise NotImplementedError()
-
     def get_inventory(self, node_filter=None, refresh=False):
         """
         Return the storage inventory of nodes matching the given filter.
@@ -1899,7 +1886,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return self._get_daemons('mon').then(add_mons)
 
-    def update_mons(self, spec):
+    def apply_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
@@ -1975,7 +1962,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._add_new_daemon('mgr', daemons, spec, self._create_mgr)
 
     @with_daemons('mgr')
-    def update_mgrs(self, spec, daemons):
+    def apply_mgr(self, spec, daemons):
         # type: (orchestrator.ServiceSpec, List[orchestrator.DaemonDescription]) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
@@ -2071,7 +2058,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return self._get_daemons('mds').then(_add_mds)
 
-    def update_mds(self, spec):
+    def apply_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
 
@@ -2122,7 +2109,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         })
         return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
-    def update_rgw(self, spec):
+    def apply_rgw(self, spec):
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rgw').load()
         return self._update_service('rgw', self.add_rgw, spec)
 
@@ -2147,7 +2134,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._create_daemon('rbd-mirror', daemon_id, host,
                                    keyring=keyring)
 
-    def update_rbd_mirror(self, spec):
+    def apply_rbd_mirror(self, spec):
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rbd-mirror').load()
         return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
 

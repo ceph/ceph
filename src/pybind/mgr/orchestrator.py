@@ -922,15 +922,6 @@ class Orchestrator(object):
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def service_apply(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """
-        Create or update a service.
-
-        :pram spec: a ServiceSpec (or derivative type)
-        """
-        raise NotImplementedError()
-
     def create_osds(self, drive_groups):
         # type: (List[DriveGroupSpec]) -> Completion
         """
@@ -962,32 +953,62 @@ class Orchestrator(object):
 
     def add_mon(self, spec):
         # type: (ServiceSpec) -> Completion
-        """Create a new mon daemon"""
+        """Create mon daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_mon(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update mon cluster"""
         raise NotImplementedError()
 
     def add_mgr(self, spec):
         # type: (ServiceSpec) -> Completion
-        """Create a new mgr daemon"""
+        """Create mgr daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_mgr(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update mgr cluster"""
         raise NotImplementedError()
 
     def add_mds(self, spec):
         # type: (ServiceSpec) -> Completion
-        """Create a new MDS cluster"""
+        """Create MDS daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_mds(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update MDS cluster"""
         raise NotImplementedError()
 
     def add_rbd_mirror(self, spec):
         # type: (ServiceSpec) -> Completion
-        """Create rbd-mirror cluster"""
+        """Create rbd-mirror daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_rbd_mirror(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update rbd-mirror cluster"""
         raise NotImplementedError()
 
     def add_nfs(self, spec):
         # type: (NFSServiceSpec) -> Completion
-        """Create a new MDS cluster"""
+        """Create NFS daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_nfs(self, spec):
+        # type: (NFSServiceSpec) -> Completion
+        """Update NFS cluster"""
         raise NotImplementedError()
 
     def add_rgw(self, spec):
         # type: (RGWSpec) -> Completion
-        """Create a new MDS zone"""
+        """Create RGW daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_rgw(self, spec):
+        # type: (RGWSpec) -> Completion
+        """Update RGW cluster"""
         raise NotImplementedError()
 
     def upgrade_check(self, image, version):
