@@ -634,7 +634,6 @@ protected:
   {
     uint64_t prev_allocated = *allocated;
     uint64_t d = L1_ENTRIES_PER_SLOT;
-    ceph_assert(isp2(min_length));
     ceph_assert(min_length <= l2_granularity);
     ceph_assert(max_length == 0 || max_length >= min_length);
     ceph_assert(max_length == 0 || (max_length % min_length) == 0);
