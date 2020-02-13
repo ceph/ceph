@@ -8,6 +8,7 @@
 #include "include/ceph_assert.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/CloneRequest.h"
@@ -391,90 +392,32 @@ void CloneRequest<I>::handle_attach_child(int r) {
     return;
   }
 
-  metadata_list();
+  copy_metadata();
 }
 
 template <typename I>
-void CloneRequest<I>::metadata_list() {
-  ldout(m_cct, 15) << "start_key=" << m_last_metadata_key << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, 0);
-
-  using klass = CloneRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_metadata_list>(this);
-  m_out_bl.clear();
-  m_parent_image_ctx->md_ctx.aio_operate(m_parent_image_ctx->header_oid,
-				comp, &op, &m_out_bl);
-  comp->release();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_metadata_list(int r) {
-  ldout(m_cct, 15) << "r=" << r << dendl;
-
-  map<string, bufferlist> metadata;
-  if (r == 0) {
-    auto it = m_out_bl.cbegin();
-    r = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
-  if (r < 0) {
-    if (r == -EOPNOTSUPP || r == -EIO) {
-      ldout(m_cct, 10) << "config metadata not supported by OSD" << dendl;
-      get_mirror_mode();
-    } else {
-      lderr(m_cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-      m_r_saved = r;
-      close_child();
-    }
-    return;
-  }
-
-  if (!metadata.empty()) {
-    m_pairs.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = m_pairs.rbegin()->first;
-  }
-
-  if (metadata.size() == MAX_KEYS) {
-    metadata_list();
-  } else {
-    metadata_set();
-  }
-}
-
-template <typename I>
-void CloneRequest<I>::metadata_set() {
-  if (m_pairs.empty()) {
-    get_mirror_mode();
-    return;
-  }
-
+void CloneRequest<I>::copy_metadata() {
   ldout(m_cct, 15) << dendl;
 
-  librados::ObjectWriteOperation op;
-  cls_client::metadata_set(&op, m_pairs);
-
-  using klass = CloneRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_metadata_set>(this);
-  int r = m_ioctx.aio_operate(m_imctx->header_oid, comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
+  auto ctx = create_context_callback<
+    CloneRequest<I>, &CloneRequest<I>::handle_copy_metadata>(this);
+  auto req = deep_copy::MetadataCopyRequest<I>::create(
+    m_parent_image_ctx, m_imctx, ctx);
+  req->send();
 }
 
 template <typename I>
-void CloneRequest<I>::handle_metadata_set(int r) {
+void CloneRequest<I>::handle_copy_metadata(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to copy metadata: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
     close_child();
-  } else {
-    get_mirror_mode();
+    return;
   }
+
+  get_mirror_mode();
 }
 
 template <typename I>

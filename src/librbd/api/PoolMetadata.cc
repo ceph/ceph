@@ -5,8 +5,10 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
+#include "librbd/image/GetMetadataRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -94,15 +96,18 @@ int PoolMetadata<I>::list(librados::IoCtx& io_ctx, const std::string &start,
                           std::map<std::string, ceph::bufferlist> *pairs) {
   CephContext *cct = (CephContext *)io_ctx.cct();
 
-  int r = cls_client::metadata_list(&io_ctx, RBD_INFO, start, max, pairs);
-  if (r == -ENOENT) {
-    r = 0;
-  } else if (r < 0) {
+  pairs->clear();
+  C_SaferCond ctx;
+  auto req = image::GetMetadataRequest<I>::create(
+    io_ctx, RBD_INFO, "", start, max, pairs, &ctx);
+  req->send();
+
+  int r = ctx.wait();
+  if (r < 0) {
     lderr(cct) << "failed listing metadata: " << cpp_strerror(r)
                << dendl;
     return r;
   }
-
   return 0;
 }
 
