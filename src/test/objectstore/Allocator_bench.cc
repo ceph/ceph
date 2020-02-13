@@ -361,4 +361,4 @@ TEST_P(AllocTest, mempoolAccounting)
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl"));
+  ::testing::Values("stupid", "bitmap", "avl", "hybrid"));
