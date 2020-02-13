@@ -32,7 +32,7 @@
 # PR number for each.
 #
 # For each GitHub PR, the script interactively displays all relevant information
-# (NOTE: this includes displaying the GitHub PR and Redmine backport issue in 
+# (NOTE: this includes displaying the GitHub PR and Redmine backport issue in
 # web browser tabs!) and prompts the user for her preferred disposition.
 #
 #
@@ -76,7 +76,7 @@
 # Copyright (C) 2019, SUSE LLC
 #
 # Author: Nathan Cutler <ncutler@suse.com>
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
 # published by the Free Software Foundation, either version 3 of the
@@ -95,6 +95,7 @@ import logging
 import json
 import os
 import re
+import sys
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
 from redminelib.exceptions import ResourceAttrError
@@ -117,6 +118,7 @@ redmine = None
 bri_tag = None
 github_token_file = "~/.github_token"
 github_token = None
+github_user = None
 redmine_key_file = "~/.redmine_key"
 redmine_key = None
 
@@ -155,6 +157,21 @@ def connect_to_redmine(a):
         return Redmine(redmine_endpoint, key=redmine_key)
     else:
         usage()
+
+def derive_github_user_from_token(gh_token):
+    retval = None
+    if gh_token:
+        curl_opt = "-u :{} --silent".format(gh_token)
+        cmd = "curl {} https://api.github.com/user".format(curl_opt)
+        logging.debug("Running curl command ->{}<-".format(cmd))
+        json_str = os.popen(cmd).read()
+        github_api_result = json.loads(json_str)
+        if "login" in github_api_result:
+            retval = github_api_result['login']
+            if "message" in github_api_result:
+                assert False, \
+                    "GitHub API unexpectedly returned ->{}<-".format(github_api_result['message'])
+    return retval
 
 def ensure_bri_tag_exists(repo, release):
     global bri_tag
@@ -198,7 +215,8 @@ def parse_arguments():
                         action="store_true")
     parser.add_argument("--no-browser", help="Do not use web browser even if it is running",
                         action="store_true")
-    parser.add_argument("pr_or_commit", nargs='*', help="GitHub PR ID, or last merge commit successfully processed")
+    parser.add_argument("pr_or_commit", nargs='*',
+                        help="GitHub PR ID, or last merge commit successfully processed")
     return parser.parse_args()
 
 def populate_ceph_release(repo):
@@ -250,10 +268,17 @@ def process_merge(repo, merge, merges_remaining):
         possible_to_resolve = False
     if tag_merge_commits:
         if possible_to_resolve:
-            prompt = "[a] Abort, [i] Ignore and advance {bri} tag, [u] Update tracker and advance {bri} tag (default 'u') --> ".format(bri=bri_tag)
+            prompt = ("[a] Abort, "
+                      "[i] Ignore and advance {bri} tag, "
+                      "[u] Update tracker and advance {bri} tag (default 'u') --> "
+                      .format(bri=bri_tag)
+                     )
             default_input_val = "u"
         else:
-            prompt = "[a] Abort, [i] Ignore and advance {bri} tag (default 'i') --> ".format(bri=bri_tag)
+            prompt = ("[a] Abort, "
+                      "[i] Ignore and advance {bri} tag (default 'i') --> "
+                      .format(bri=bri_tag)
+                     )
             default_input_val = "i"
     else:
         if possible_to_resolve:
@@ -288,7 +313,7 @@ def process_merge(repo, merge, merges_remaining):
 
 def read_from_file(fs):
     retval = None
-    full_path=os.path.expanduser(fs)
+    full_path = os.path.expanduser(fs)
     try:
         with open(full_path, "r") as f:
             retval = f.read().strip()
@@ -304,15 +329,12 @@ def releases():
 def report_params(a):
     global dry_run
     global no_browser
-    global github_token
     if a.dry_run:
-         dry_run = True
-         logging.warning("Dry run: nothing will be written to Redmine")
+        dry_run = True
+        logging.warning("Dry run: nothing will be written to Redmine")
     if a.no_browser:
-         no_browser = True
-         logging.warning("Web browser will not be used even if it is running")
-    if github_token:
-         logging.info("GitHub token was read from '%s'; using it" % github_token_file)
+        no_browser = True
+        logging.warning("Web browser will not be used even if it is running")
 
 def set_logging_level(a):
     if a.debug:
@@ -332,12 +354,14 @@ def ver_to_release():
 
 def usage():
     logging.error("Redmine credentials are required to perform this operation. "
-                  "Please provide either a Redmine key (via %s) "
+                  "Please provide either a Redmine key (via {}) "
                   "or a Redmine username and password (via --user and --password). "
                   "Optionally, one or more issue numbers can be given via positional "
                   "argument(s). In the absence of positional arguments, the script "
-                  "will loop through all merge commits after the tag \"BRI-{release}\". If there "
-                  "is no such tag in the local branch, one will be created for you." % redmine_key_file)
+                  "will loop through all merge commits after the tag \"BRI-{release}\". "
+                  "If there is no such tag in the local branch, one will be created "
+                  "for you.".format(redmine_key_file)
+                 )
     exit(-1)
 
 
@@ -351,6 +375,7 @@ class Backport:
         global browser_cmd
         global ceph_release
         global github_token
+        global github_user
         self.repo = repo
         self.merge_commit_string = merge_commit_string
         #
@@ -361,9 +386,14 @@ class Backport:
         p = re.compile('\\S+')
         self.merge_commit_sha1_short = p.match(merge_commit_sha1_short).group()
         assert self.merge_commit_sha1_short == merge_commit_sha1_short, \
-            "Failed to extract merge commit short SHA1 from merge commit string ->{}<-".format(merge_commit_string)
+            ("Failed to extract merge commit short SHA1 from merge commit string ->{}<-"
+             .format(merge_commit_string)
+            )
         logging.debug("Short merge commit SHA1 is {}".format(self.merge_commit_sha1_short))
-        self.merge_commit_sha1 = self.repo.git.rev_list('--max-count=1', self.merge_commit_sha1_short)
+        self.merge_commit_sha1 = self.repo.git.rev_list(
+            '--max-count=1',
+            self.merge_commit_sha1_short,
+            )
         logging.debug("Full merge commit SHA1 is {}".format(self.merge_commit_sha1))
         self.merge_commit_gd = repo.git.describe('--match', 'v*', self.merge_commit_sha1)
         self.populate_base_version()
@@ -371,18 +401,24 @@ class Backport:
         self.populate_github_url()
         #
         # GitHub PR description and merged status from GitHub
-        cmd = "curl --silent https://api.github.com/repos/ceph/ceph/pulls/{}".format(self.github_pr_id)
-        # if GitHub token was provided, use it to avoid throttling - 
-        if github_token:
-            cmd = "{}?access_token={}".format(cmd, github_token)
+        curl_opt = "--silent"
+        # if GitHub token was provided, use it to avoid throttling -
+        if github_token and github_user:
+            curl_opt = "-u {}:{} {}".format(github_user, github_token, curl_opt)
+        cmd = (
+            "curl {} https://api.github.com/repos/ceph/ceph/pulls/{}"
+            .format(curl_opt, self.github_pr_id)
+            )
+        logging.debug("Running curl command ->{}<-".format(cmd))
         json_str = os.popen(cmd).read()
         github_api_result = json.loads(json_str)
-        if "title" not in github_api_result:
-            # rate limiting
-            assert False, \
-                "GitHub API unexpectedly returned ->{}<- (rate limiting? maybe use --token?)".format(github_api_result)
-        self.github_pr_title = github_api_result["title"]
-        self.github_pr_desc = github_api_result["body"]
+        if "title" in github_api_result and "body" in github_api_result:
+            self.github_pr_title = github_api_result["title"]
+            self.github_pr_desc = github_api_result["body"]
+        else:
+            logging.error("GitHub API unexpectedly returned: {}".format(github_api_result))
+            logging.info("Curl command was: {}".format(cmd))
+            sys.exit(-1)
         self.mogrify_github_pr_desc()
         self.github_pr_merged = github_api_result["merged"]
         if not no_browser:
@@ -396,11 +432,16 @@ GitHub PR URL:    {}
 GitHub PR title:  {}
 Merge commit:     {} ({})
 Merged:           {}
-Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, self.merge_commit_sha1, self.merge_commit_gd, self.github_pr_merged, self.base_version, self.target_version))
+Ceph version:     base {}, target {}'''
+              .format(self.github_url, pr_title_trunc, self.merge_commit_sha1,
+                      self.merge_commit_gd, self.github_pr_merged, self.base_version,
+                      self.target_version
+                     )
+             )
         if no_browser or not browser_running():
             print('''----------------------- PR DESCRIPTION --------------------------
 {}
------------------------------------------------------------------'''.format(self.github_pr_desc)) 
+-----------------------------------------------------------------'''.format(self.github_pr_desc))
         assert self.github_pr_merged, "GitHub PR {} has not been merged!".format(self.github_pr_id)
         #
         # obtain backport tracker from GitHub PR description
@@ -434,7 +475,10 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
             # does the Backport Tracker's release field match the Ceph release?
             tracker_release = get_issue_release(bt.redmine_issue)
             assert ceph_release == tracker_release, \
-                "Backport Tracker {} is a {} backport - expected {}".format(bt.issue_id, tracker_release, ceph_release)
+                (
+                    "Backport Tracker {} is a {} backport - expected {}"
+                    .format(bt.issue_id, tracker_release, ceph_release)
+                )
             #
             # is the Backport Tracker's "Target version" custom field populated?
             try:
@@ -445,11 +489,15 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
                 bt.set_target_version = True
             else:
                 bt.tracker_target_version = ttv
-                logging.info("Backport Tracker {} target version already populated with correct value {}"
+                logging.info("Backport Tracker {} target version already populated "
+                             "with correct value {}"
                              .format(bt.issue_id, bt.tracker_target_version))
                 bt.set_target_version = False
                 assert bt.tracker_target_version == self.target_version, \
-                     "Tracker target version {} is wrong; should be {}".format(bt.tracker_target_version, self.target_version)
+                    (
+                        "Tracker target version {} is wrong; should be {}"
+                        .format(bt.tracker_target_version, self.target_version)
+                    )
             #
             # is the Backport Tracker's status already set to Resolved?
             resolved_id = status2status_id['Resolved']
@@ -465,7 +513,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
 
     def populate_base_version(self):
         self.base_version = ceph_version(self.repo, self.merge_commit_sha1)
-    
+
     def populate_target_version(self):
         x, y, z = self.base_version.split('v')[1].split('.')
         maybe_stable = "v{}.{}".format(x, y)
@@ -486,16 +534,20 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
             logging.debug("GitHub PR description not mogrified")
         else:
             self.github_pr_desc = new_str
-        
+
     def populate_github_url(self):
         global github_endpoint
         # GitHub PR ID from merge commit string
-        p = re.compile('\\d+')
+        p = re.compile('(pull request|PR) #(\\d+)')
         try:
-            self.github_pr_id = p.search(self.merge_commit_description).group()
+            self.github_pr_id = p.search(self.merge_commit_description).group(2)
         except AttributeError:
             assert False, \
-                "Failed to extract GitHub PR ID from merge commit string ->{}<-".format(self.merge_commit_string)
+                (
+                    "Failed to extract GitHub PR ID from merge commit string ->{}<-"
+                    .format(self.merge_commit_string)
+                )
+        logging.debug("Merge commit string: {}".format(self.merge_commit_string))
         logging.debug("GitHub PR ID from merge commit string: {}".format(self.github_pr_id))
         self.github_url = "{}/pull/{}".format(github_endpoint, self.github_pr_id)
 
@@ -503,7 +555,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
         global redmine_endpoint
         p = re.compile('http.?://tracker.ceph.com/issues/\\d+')
         matching_strings = p.findall(self.github_pr_desc)
-        if not matching_strings: 
+        if not matching_strings:
             print_outer_divider()
             assert False, \
                 "GitHub PR description does not contain a Tracker URL"
@@ -553,7 +605,11 @@ class BackportTracker(Backport):
     def get_tracker_target_version(self):
         if self.redmine_issue.fixed_version:
             logging.debug("Target version: ID {}, name {}"
-                          .format(self.redmine_issue.fixed_version.id, self.redmine_issue.fixed_version.name))
+                          .format(
+                              self.redmine_issue.fixed_version.id,
+                              self.redmine_issue.fixed_version.name
+                          )
+                         )
             return self.redmine_issue.fixed_version.name
         return None
 
@@ -577,13 +633,15 @@ class BackportTracker(Backport):
                     )
             else:
                 kwargs['description'] = self.parent.github_url
-        kwargs['notes'] = """This update was made using the script "backport-resolve-issue".
-backport PR {}
-merge commit {} ({})""".format(
-            self.parent.github_url,
-            self.parent.merge_commit_sha1,
-            self.parent.merge_commit_gd,
+        kwargs['notes'] = (
+            "This update was made using the script \"backport-resolve-issue\".\n"
+            "backport PR {}\n"
+            "merge commit {} ({})\n".format(
+                self.parent.github_url,
+                self.parent.merge_commit_sha1,
+                self.parent.merge_commit_gd,
             )
+        )
         my_delay_seconds = delay_seconds
         if dry_run:
             logging.info("--dry-run was given: NOT updating Redmine")
@@ -595,7 +653,10 @@ merge commit {} ({})""".format(
             if browser_running():
                 os.system("{} {}".format(browser_cmd, self.issue_url()))
                 my_delay_seconds = 3
-        logging.debug("Delaying {} seconds to avoid seeming like a spammer".format(my_delay_seconds))
+        logging.debug(
+            "Delaying {} seconds to avoid seeming like a spammer"
+            .format(my_delay_seconds)
+        )
         time.sleep(my_delay_seconds)
 
 
@@ -604,6 +665,13 @@ if __name__ == '__main__':
     set_logging_level(args)
     logging.debug(args)
     github_token = read_from_file(github_token_file)
+    if github_token:
+        logging.info("GitHub token was read from ->{}<-; using it".format(github_token_file))
+        github_user = derive_github_user_from_token(github_token)
+        if github_user:
+            logging.info(
+                "GitHub user ->{}<- was derived from the GitHub token".format(github_user)
+                )
     report_params(args)
     #
     # set up Redmine variables
@@ -613,8 +681,10 @@ if __name__ == '__main__':
     logging.debug("Project {} has ID {}".format(project_name, ceph_project_id))
     populate_status_dict(redmine)
     pending_backport_status_id = status2status_id["Pending Backport"]
-    logging.debug("Pending Backport status has ID {}"
-        .format(pending_backport_status_id))
+    logging.debug(
+        "Pending Backport status has ID {}"
+        .format(pending_backport_status_id)
+    )
     populate_tracker_dict(redmine)
     populate_version_dict(redmine, ceph_project_id)
     #
@@ -648,7 +718,13 @@ if __name__ == '__main__':
         merges_raw_str = repo.git.log(c_r, '--merges', '--oneline', '--no-decorate', '--reverse')
     else:
         pr_id = args.pr_or_commit[0]
-        merges_raw_str = repo.git.log('--merges', '--grep=#{}'.format(pr_id), '--oneline', '--no-decorate', '--reverse')
+        merges_raw_str = repo.git.log(
+            '--merges',
+            '--grep=#{}'.format(pr_id),
+            '--oneline',
+            '--no-decorate',
+            '--reverse',
+        )
     if merges_raw_str:
         merges_raw_list = merges_raw_str.split('\n')
     else:
