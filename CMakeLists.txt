@@ -605,6 +605,9 @@ set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
   "List of comma separated ceph-dashboard frontend languages to build. \
   Use value `ALL` to build all languages")
 
+# TODO: make this an option and set it to the same value as WITH_MGR_DASHBOARD_FRONTEND
+set(WITH_MGR_ROOK_CLIENT WITH_MGR_DASHBOARD_FRONTEND)
+
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)

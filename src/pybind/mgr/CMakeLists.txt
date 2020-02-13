@@ -2,6 +2,7 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
   add_subdirectory(dashboard)
 endif()
 add_subdirectory(insights)
+add_subdirectory(rook)
 
 if(WITH_TESTS)
   include(AddCephTest)
@@ -18,6 +19,7 @@ install(DIRECTORY
   REGEX ".*\\.pyi" EXCLUDE
   REGEX "hello/.*" EXCLUDE
   REGEX "tests/.*" EXCLUDE
+  REGEX "rook/rook-client-python.*" EXCLUDE
   REGEX "osd_perf_query/.*" EXCLUDE
   REGEX "tox.ini" EXCLUDE
   REGEX "requirements.txt" EXCLUDE)
