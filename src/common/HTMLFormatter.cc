@@ -111,7 +111,7 @@ void HTMLFormatter::dump_float(const char *name, double d)
 
 void HTMLFormatter::dump_string(const char *name, boost::string_view s)
 {
-  dump_template(name, xml_stream_escaper(s.data()));
+  dump_template(name, xml_stream_escaper(s));
 }
 
 void HTMLFormatter::dump_string_with_attrs(const char *name, boost::string_view s, const FormatterAttrs& attrs)
@@ -120,7 +120,7 @@ void HTMLFormatter::dump_string_with_attrs(const char *name, boost::string_view 
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
   print_spaces();
-  m_ss << "<li>" << e << ": " << xml_stream_escaper(s.data()) << attrs_str << "</li>";
+  m_ss << "<li>" << e << ": " << xml_stream_escaper(s) << attrs_str << "</li>";
   if (m_pretty)
     m_ss << "\n";
 }
@@ -136,14 +136,16 @@ std::ostream& HTMLFormatter::dump_stream(const char *name)
 void HTMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
-  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  size_t len = vsnprintf(buf, LARGE_SIZE, fmt, ap);
 
   std::string e(name);
   print_spaces();
   if (ns) {
-    m_ss << "<li xmlns=\"" << ns << "\">" << e << ": " << xml_stream_escaper(buf) << "</li>";
+    m_ss << "<li xmlns=\"" << ns << "\">" << e << ": "
+	 << xml_stream_escaper(boost::string_view(buf, len)) << "</li>";
   } else {
-    m_ss << "<li>" << e << ": " << xml_stream_escaper(buf) << "</li>";
+    m_ss << "<li>" << e << ": "
+	 << xml_stream_escaper(boost::string_view(buf, len)) << "</li>";
   }
 
   if (m_pretty)
