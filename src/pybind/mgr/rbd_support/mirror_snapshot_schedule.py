@@ -694,15 +694,19 @@ class MirrorSnapshotScheduleHandler:
             return -errno.EINVAL, '', "Invalid level spec {}: {}".format(
                 level_spec_name, e)
 
-        result = ""
+        scheduled_images = []
         with self.lock:
             for schedule_time in sorted(self.queue):
                 for pool_id, namespace, image_id in self.queue[schedule_time]:
                     if not level_spec.matches(pool_id, namespace, image_id):
                         continue
                     image_name = self.images[pool_id][namespace][image_id]
-                    result += "{} {}\n".format(schedule_time, image_name)
-        return 0, result, ""
+                    scheduled_images.append({
+                        'schedule_time' : schedule_time,
+                        'image' : image_name
+                    })
+        return 0, json.dumps({'scheduled_images' : scheduled_images},
+                             indent=4, sort_keys=True), ""
 
     def handle_command(self, inbuf, prefix, cmd):
         if prefix == 'add':
