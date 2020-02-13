@@ -272,14 +272,12 @@ class FsNewHandler : public FileSystemCommandHandler
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
 
     // assign a standby to rank 0 to avoid health warnings
-    std::string _name;
-    mds_gid_t gid = fsmap.find_replacement_for({fs->fscid, 0}, _name);
+    auto info = fsmap.find_replacement_for({fs->fscid, 0});
 
-    if (gid != MDS_GID_NONE) {
-      const auto &info = fsmap.get_info_gid(gid);
-      mon->clog->info() << info.human_name() << " assigned to filesystem "
+    if (info) {
+      mon->clog->info() << info->human_name() << " assigned to filesystem "
           << fs_name << " as rank 0";
-      fsmap.promote(gid, *fs, 0);
+      fsmap.promote(info->global_id, *fs, 0);
     }
 
     return 0;
