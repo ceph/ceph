@@ -1391,8 +1391,8 @@ def deploy_crash(fsid, uid, gid, config, keyring):
     # type: (str, int, int, str, str) -> None
     crash_dir = os.path.join(args.data_dir, fsid, 'crash')
     makedirs(crash_dir, uid, gid, DATA_DIR_MODE)
-    c = get_container(args.fsid, 'crash', get_hostname())
-    deploy_daemon(args.fsid, 'crash', get_hostname(), c, uid, gid,
+    c = get_container(fsid, 'crash', get_hostname())
+    deploy_daemon(fsid, 'crash', get_hostname(), c, uid, gid,
                   config, keyring)
 
 def get_unit_file(fsid, uid, gid):
