@@ -24,7 +24,7 @@ import shutil
 import subprocess
 
 from ceph.deployment import inventory, translate
-from ceph.deployment.drive_group import DriveGroupSpecs
+from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
 
 from mgr_module import MgrModule
@@ -1563,11 +1563,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self.get_inventory().then(call_create)
 
     def create_osds(self, drive_groups):
+        # type: (List[DriveGroupSpec]) -> AsyncCompletion
         return self.get_hosts().then(lambda hosts: self.call_inventory(hosts, drive_groups))
 
     def _prepare_deployment(self,
                             all_hosts,  # type: List[orchestrator.InventoryNode]
-                            drive_groups,  # type: List[DriveGroupSpecs]
+                            drive_groups,  # type: List[DriveGroupSpec]
                             inventory_list  # type: List[orchestrator.InventoryNode]
                             ):
         # type: (...) -> orchestrator.Completion
