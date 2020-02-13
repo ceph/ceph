@@ -990,8 +990,8 @@ EOF
         ceph_adm config-key set mgr/ssh/ssh_identity_key -i ~/.ssh/id_rsa
         ceph_adm config-key set mgr/ssh/ssh_identity_pub -i ~/.ssh/id_rsa.pub
         ceph_adm mgr module enable cephadm
-        ceph_adm orchestrator set backend cephadm
-        ceph_adm orchestrator host add $HOSTNAME
+        ceph_adm orch set backend cephadm
+        ceph_adm orch host add $HOSTNAME
     fi
 }
 
