@@ -340,17 +340,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 'NFS', service_name, lambda: self.rook_cluster.rm_service('cephnfses', service_name)
             )
 
-    def service_apply(self, spec):
-        if spec.service_type == 'mon':
-            return self.update_mons(spec)
-        if spec.service_type == 'mgr':
-            raise NotImplementedError()
-        if spec.service_type == 'mds':
-            return self.update_mds(spec)
-        if spec.service_type == 'nfs':
-            return self.update_nfs(spec)
-
-    def update_mons(self, spec):
+    def apply_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> RookCompletion
         if spec.placement.hosts or spec.placement.label:
             raise RuntimeError("Host list or label is not supported by rook.")
@@ -361,7 +351,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def update_mds(self, spec):
+    def apply_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
@@ -370,7 +360,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def update_nfs(self, spec):
+    def apply_nfs(self, spec):
         # type: (orchestrator.NFSServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(

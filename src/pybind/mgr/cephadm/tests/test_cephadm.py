@@ -110,7 +110,7 @@ class TestCephadm(object):
     def test_mon_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.update_mons(ServiceSpec(placement=ps))
+            c = cephadm_module.apply_mon(ServiceSpec(placement=ps))
             assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
@@ -120,7 +120,7 @@ class TestCephadm(object):
     def test_mgr_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.update_mgrs(ServiceSpec(placement=ps))
+            c = cephadm_module.apply_mgr(ServiceSpec(placement=ps))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed mgr.* on host 'test'")
 
@@ -193,7 +193,7 @@ class TestCephadm(object):
                 match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
 
                 ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
-                c = cephadm_module.update_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                c = cephadm_module.apply_rgw(RGWSpec('realm', 'zone1', placement=ps))
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed rgw.realm.zone1.host2.* on host 'host2'")
 
@@ -217,7 +217,7 @@ class TestCephadm(object):
 
                 with pytest.raises(OrchestratorError):
                     ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
-                    c = cephadm_module.update_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                    c = cephadm_module.apply_rgw(RGWSpec('realm', 'zone1', placement=ps))
                     [out] = wait(cephadm_module, c)
 
 
