@@ -387,8 +387,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         drive_group = drive_groups[0]
 
         targets = []  # type: List[str]
-        if drive_group.data_devices:
-            targets += drive_group.data_devices.paths
+        if drive_group.data_devices and drive_group.data_devices.paths:
+            targets += [d.path for d in drive_group.data_devices.paths]
         if drive_group.data_directories:
             targets += drive_group.data_directories
 
@@ -409,7 +409,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return orchestrator.Completion.with_progress(
                 message="Creating OSD on {0}:{1}".format(
-                        drive_group.hosts(drive_group.host_pattern),
+                        drive_group.hosts(all_hosts),
                         targets),
                 mgr=self,
                 on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),

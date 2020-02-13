@@ -1349,6 +1349,8 @@ Instructions
 
      # ceph osd require-osd-release nautilus
 
+   .. important:: This step is mandatory. Failure to execute this step will make it impossible for OSDs to communicate after msgrv2 is enabled.
+
 #. If you set ``noout`` at the beginning, be sure to clear it with::
 
      # ceph osd unset noout
@@ -1390,6 +1392,13 @@ Instructions
 
    and verify that each monitor has both a ``v2:`` and ``v1:`` address
    listed.
+
+   .. important:: 
+      Before this step is run, the following command must already have been run:
+
+      # ceph osd require-osd-release nautilus
+
+      If this command (step 10 in this procedure) has not been run, OSDs will lose the ability to communicate.
 
 #. For each host that has been upgraded, you should update your
    ``ceph.conf`` file so that it either specifies no monitor port (if

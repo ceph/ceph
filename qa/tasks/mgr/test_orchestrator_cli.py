@@ -61,12 +61,12 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertIn("localhost", ret)
         self.assertIsInstance(json.loads(ret), list)
 
-    def test_service_ls(self):
-        ret = self._orch_cmd("service", "ls")
+    def test_ps(self):
+        ret = self._orch_cmd("ps")
         self.assertIn("ceph-mgr", ret)
 
-    def test_service_ls_json(self):
-        ret = self._orch_cmd("service", "ls", "--format", "json")
+    def test_ps_json(self):
+        ret = self._orch_cmd("ps", "--format", "json")
         self.assertIsInstance(json.loads(ret), list)
         self.assertIn("ceph-mgr", ret)
 
@@ -77,9 +77,9 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("service", "start", "mds", "cephfs")
 
     def test_service_instance_action(self):
-        self._orch_cmd("service-instance", "restart", "mds", "a")
-        self._orch_cmd("service-instance", "stop", "mds", "a")
-        self._orch_cmd("service-instance", "start", "mds", "a")
+        self._orch_cmd("daemon", "restart", "mds", "a")
+        self._orch_cmd("daemon", "stop", "mds", "a")
+        self._orch_cmd("daemon", "start", "mds", "a")
 
     def test_osd_create(self):
         self._orch_cmd("osd", "create", "*:device")

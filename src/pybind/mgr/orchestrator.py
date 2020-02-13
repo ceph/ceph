@@ -579,6 +579,8 @@ class Completion(_Promise):
         """Force a string."""
         if self.result is None:
             return ''
+        if isinstance(self.result, list):
+            return '\n'.join(str(x) for x in self.result)
         return str(self.result)
 
     @property
@@ -866,31 +868,62 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_action(self, action, service_type, service_name=None, service_id=None):
-        # type: (str, str, Optional[str], Optional[str]) -> Completion
+    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion
         """
-        Perform an action (start/stop/reload) on a service.
+        Describe a daemon (of any kind) that is already configured in
+        the orchestrator.
 
-        Either service_name or service_id must be specified:
+        :return: list of DaemonDescription objects.
+        """
+        raise NotImplementedError()
 
-        * If using service_name, perform the action on that entire logical
-          service (i.e. all daemons providing that named service).
-        * If using service_id, perform the action on a single specific daemon
-          instance.
+    def remove_daemons(self, names):
+        # type: (List[str]) -> Completion
+        """
+        Remove specific daemon(s).
+
+        :return: None
+        """
+        raise NotImplementedError()
+
+    def remove_service(self, service_type, service_name=None):
+        # type: (str, Optional[str]) -> Completion
+        """
+        Remove a service (a collection of daemons).
+
+        :return: None
+        """
+        raise NotImplementedError()
+
+    def service_action(self, action, service_type, service_name):
+        # type: (str, str, str) -> Completion
+        """
+        Perform an action (start/stop/reload) on a service (i.e., all daemons
+        providing the logical service).
 
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
         :param service_type: e.g. "mds", "rgw", ...
         :param service_name: name of logical service ("cephfs", "us-east", ...)
-        :param service_id: service daemon instance (usually a short hostname)
         :rtype: Completion
         """
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
-        #assert service_name or service_id
-        #assert not (service_name and service_id)
+        raise NotImplementedError()
+
+    def daemon_action(self, action, daemon_type, daemon_id):
+        # type: (str, str, str) -> Completion
+        """
+        Perform an action (start/stop/reload) on a daemon.
+
+        :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
+        :param name: name of daemon
+        :rtype: Completion
+        """
+        #assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
     def create_osds(self, drive_groups):
-        # type: (DriveGroupSpec) -> Completion
+        # type: (List[DriveGroupSpec]) -> Completion
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -1084,13 +1117,13 @@ class PlacementSpec(object):
     def __init__(self, label=None, hosts=None, count=None):
         # type: (Optional[str], Optional[List], Optional[int]) -> None
         self.label = label
+        self.hosts = []  # type: List[HostPlacementSpec]
         if hosts:
             if all([isinstance(host, HostPlacementSpec) for host in hosts]):
-                self.hosts = hosts  # type: List[HostPlacementSpec]
+                self.hosts = hosts
             else:
                 self.hosts = [parse_host_placement_specs(x, require_network=False) for x in hosts if x]
-        else:
-            self.hosts = []
+
 
         self.count = count  # type: Optional[int]
 
@@ -1124,6 +1157,86 @@ def handle_type_error(method):
     return inner
 
 
+class DaemonDescription(object):
+    """
+    For responding to queries about the status of a particular daemon,
+    stateful or stateless.
+
+    This is not about health or performance monitoring of daemons: it's
+    about letting the orchestrator tell Ceph whether and where a
+    daemon is scheduled in the cluster.  When an orchestrator tells
+    Ceph "it's running on node123", that's not a promise that the process
+    is literally up this second, it's a description of where the orchestrator
+    has decided the daemon should run.
+    """
+
+    def __init__(self,
+                 daemon_type=None,
+                 daemon_id=None,
+                 nodename=None,
+                 container_id=None,
+                 container_image_id=None,
+                 container_image_name=None,
+                 version=None,
+                 status=None,
+                 status_desc=None):
+        # Node is at the same granularity as InventoryNode
+        self.nodename = nodename
+
+        # Not everyone runs in containers, but enough people do to
+        # justify having the container_id (runtime id) and container_image
+        # (image name)
+        self.container_id = container_id                  # runtime id
+        self.container_image_id = container_image_id      # image hash
+        self.container_image_name = container_image_name  # image friendly name
+
+        # The type of service (osd, mon, mgr, etc.)
+        self.daemon_type = daemon_type
+
+        # The orchestrator will have picked some names for daemons,
+        # typically either based on hostnames or on pod names.
+        # This is the <foo> in mds.<foo>, the ID that will appear
+        # in the FSMap/ServiceMap.
+        self.daemon_id = daemon_id
+
+        # Service version that was deployed
+        self.version = version
+
+        # Service status: -1 error, 0 stopped, 1 running
+        self.status = status
+
+        # Service status description when status == -1.
+        self.status_desc = status_desc
+
+        # datetime when this info was last refreshed
+        self.last_refresh = None   # type: Optional[datetime.datetime]
+
+    def name(self):
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def __repr__(self):
+        return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
+                                                         id=self.daemon_id)
+
+    def to_json(self):
+        out = {
+            'nodename': self.nodename,
+            'container_id': self.container_id,
+            'container_image_id': self.container_image_id,
+            'container_image_name': self.container_image_name,
+            'daemon_id': self.daemon_id,
+            'daemon_type': self.daemon_type,
+            'version': self.version,
+            'status': self.status,
+            'status_desc': self.status_desc,
+        }
+        return {k: v for (k, v) in out.items() if v is not None}
+
+    @classmethod
+    @handle_type_error
+    def from_json(cls, data):
+        return cls(**data)
+
 class ServiceDescription(object):
     """
     For responding to queries about the status of a particular service,
@@ -1144,7 +1257,7 @@ class ServiceDescription(object):
                  service_type=None, version=None, rados_config_location=None,
                  service_url=None, status=None, status_desc=None):
         # Node is at the same granularity as InventoryNode
-        self.nodename = nodename
+        self.nodename = nodename  # type: Optional[str]
 
         # Not everyone runs in containers, but enough people do to
         # justify having the container_id (runtime id) and container_image
