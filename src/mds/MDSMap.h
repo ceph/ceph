@@ -147,6 +147,7 @@ public:
     entity_addrvec_t addrs;
     utime_t laggy_since;
     std::set<mds_rank_t> export_targets;
+    fs_cluster_id_t join_fscid = FS_CLUSTER_ID_NONE;
     uint64_t mds_features = 0;
     uint64_t flags = 0;
     enum mds_flags : uint64_t {

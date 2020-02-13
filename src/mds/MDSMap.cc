@@ -79,6 +79,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->dump_int("state_seq", state_seq);
   f->dump_stream("addr") << addrs.get_legacy_str();
   f->dump_object("addrs", addrs);
+  f->dump_int("join_fscid", join_fscid);
   if (laggy_since != utime_t())
     f->dump_stream("laggy_since") << laggy_since;
   
@@ -105,6 +106,9 @@ void MDSMap::mds_info_t::dump(std::ostream& o) const
   }
   if (is_frozen()) {
     o << " frozen";
+  }
+  if (join_fscid != FS_CLUSTER_ID_NONE) {
+    o << " join_fscid=" << join_fscid;
   }
   o << " addr " << addrs << "]";
 }
@@ -526,7 +530,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   encode(std::string(), bl); /* standby_for_name */
   encode(export_targets, bl);
   encode(mds_features, bl);
-  encode(FS_CLUSTER_ID_NONE, bl); /* standby_for_fscid */
+  encode(join_fscid, bl); /* formerly: standby_for_fscid */
   encode(false, bl);
   if (v >= 9) {
     encode(flags, bl);
@@ -576,8 +580,7 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   if (struct_v >= 5)
     decode(mds_features, bl);
   if (struct_v >= 6) {
-    fs_cluster_id_t standby_for_fscid;
-    decode(standby_for_fscid, bl);
+    decode(join_fscid, bl);
   }
   if (struct_v >= 7) {
     bool standby_replay;
