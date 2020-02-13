@@ -464,7 +464,7 @@ def ceph_mons(ctx, config):
                 log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'mon', 'update',
+                    'ceph', 'orch', 'apply', 'mon',
                     str(num_mons),
                     remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
                 ])
@@ -534,7 +534,7 @@ def ceph_mgrs(ctx, config):
                 daemons[mgr] = (remote, id_)
         if nodes:
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'mgr', 'update',
+                'ceph', 'orch', 'apply', 'mgr',
                 str(len(nodes) + 1)] + nodes
             )
         for mgr, i in daemons.items():
@@ -623,7 +623,7 @@ def ceph_mdss(ctx, config):
             daemons[role] = (remote, id_)
     if nodes:
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'orch', 'mds', 'update',
+            'ceph', 'orch', 'apply', 'mds',
             'all',
             str(len(nodes))] + nodes
         )
