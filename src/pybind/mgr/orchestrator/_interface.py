@@ -1361,18 +1361,17 @@ class ServiceSpec(object):
 
     """
 
-    def __init__(self, name=None, placement=None):
-        # type: (Optional[str], Optional[PlacementSpec]) -> None
+    def __init__(self, name: Optional[str]=None, placement: Optional[PlacementSpec]=None):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         #: Give this set of stateless services a name: typically it would
         #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
         #: within one ceph cluster. Note: Not all clusters have a name
-        self.name = name  # type: Optional[str]
+        self.name: Optional[str] = name
 
         if self.placement is not None and self.placement.count is not None:
             #: Count of service instances. Deprecated.
-            self.count = self.placement.count  # type: int
+            self.count: int = self.placement.count
         else:
             self.count = 1
 
