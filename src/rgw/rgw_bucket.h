@@ -24,9 +24,6 @@
 #include "services/svc_bucket_sync.h"
 
 
-static constexpr size_t listing_max_entries = 1000;
-
-
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
