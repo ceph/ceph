@@ -46,6 +46,9 @@ class NVMEDevice : public BlockDevice {
    */
   SharedDriverData *driver;
   string name;
+  std::atomic_int queue_index = {0};
+  std::vector<SharedDriverQueueData*> queues;
+  SharedDriverQueueData* get_next_queue();
 
  public:
   std::atomic_int queue_number = {0};
