@@ -1454,15 +1454,17 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             daemon_type=daemon_type,
             daemon_id=daemon_id).then(_proc_daemons)
 
-    def remove_daemons(self, names):
-        # type: (List[str]) -> orchestrator.Completion
+    def remove_daemons(self, names, force):
+        # type: (List[str], bool) -> orchestrator.Completion
         def _filter(daemons):
             args = []
             for d in daemons:
                 for name in names:
                     if d.name() == name:
                         args.append(
-                            ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
+                            ('%s.%s' % (d.daemon_type, d.daemon_id),
+                             d.nodename,
+                             force)
                         )
             if not args:
                 raise OrchestratorError('Unable to find daemon(s) %s' % (names))
@@ -1669,18 +1671,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return "Created osd(s) on host '{}'".format(host)
 
-    @with_daemons('osd')
-    def remove_osds(self, osd_ids, daemons):
-        # type: (List[str], List[orchestrator.DaemonDescription]) -> AsyncCompletion
-        args = [(d.name(), d.nodename) for d in daemons if
-                d.daemon_id in osd_ids]
-
-        found = list(zip(*args))[0] if args else []
-        not_found = {osd_id for osd_id in osd_ids if 'osd.%s' % osd_id not in found}
-        if not_found:
-            raise OrchestratorError('Unable to find OSD: %s' % not_found)
-        return self._remove_daemon(args)
-
     def _create_daemon(self, daemon_type, daemon_id, host,
                        keyring=None,
                        extra_args=None, extra_config=None,
@@ -1768,13 +1758,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
-    def _remove_daemon(self, name, host):
+    def _remove_daemon(self, name, host, force=False):
         """
         Remove a daemon
         """
+        self.log.debug('_remove_daemon %s on %s force=%s' % (name, host, force))
+        args = ['--name', name]
+        if force:
+            args.extend(['--force'])
         out, err, code = self._run_cephadm(
-            host, name, 'rm-daemon',
-            ['--name', name])
+            host, name, 'rm-daemon', args)
         self.log.debug('_remove_daemon code %s out %s' % (code, out))
         if not code and host in self.daemon_cache:
             # remove item from cache
@@ -1868,7 +1861,32 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                    keyring=keyring,
                                    extra_config=extra_config)
 
-    def update_mons(self, spec):
+    def add_mon(self, spec):
+        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
+
+        # current support requires a network to be specified
+        for host, network, _ in spec.placement.hosts:
+            if not network:
+                raise RuntimeError("Host '{}' is missing a network spec".format(host))
+
+        def add_mons(daemons):
+            for _, _, name in spec.placement.hosts:
+                if name and len([d for d in daemons if d.daemon_id == name]):
+                    raise RuntimeError('name %s already exists', name)
+
+            # explicit placement: enough hosts provided?
+            if len(spec.placement.hosts) < spec.count:
+                raise RuntimeError("Error: {} hosts provided, expected {}".format(
+                    len(spec.placement.hosts), spec.count))
+            self.log.info("creating {} monitors on hosts: '{}'".format(
+                spec.count, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
+            # TODO: we may want to chain the creation of the monitors so they join
+            # the quorum one at a time.
+            return self._create_mon(spec.placement.hosts)
+
+        return self._get_daemons('mon').then(add_mons)
+
+    def apply_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
@@ -1920,25 +1938,31 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._get_daemons('mon').then(update_mons_with_daemons)
 
     @async_map_completion
-    def _create_mgr(self, host, name):
+    def _create_mgr(self, mgr_id, host):
         """
         Create a new manager instance on a host.
         """
-        self.log.info("create_mgr({}, mgr.{}): starting".format(host, name))
+        self.log.info("create_mgr({}, mgr.{}): starting".format(host, mgr_id))
 
         # get mgr. key
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % name,
+            'entity': 'mgr.%s' % mgr_id,
             'caps': ['mon', 'profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
 
-        return self._create_daemon('mgr', name, host, keyring=keyring)
+        return self._create_daemon('mgr', mgr_id, host, keyring=keyring)
 
     @with_daemons('mgr')
-    def update_mgrs(self, spec, daemons):
+    def add_mgr(self, spec, daemons):
+        # type: (orchestrator.ServiceSpec, List[orchestrator.DaemonDescription]) -> orchestrator.Completion
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
+        return self._add_new_daemon('mgr', daemons, spec, self._create_mgr)
+
+    @with_daemons('mgr')
+    def apply_mgr(self, spec, daemons):
         # type: (orchestrator.ServiceSpec, List[orchestrator.DaemonDescription]) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
@@ -2009,7 +2033,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for host_spec in spec.placement.hosts:
                 host = host_spec.hostname
                 name = host_spec.name or self.get_unique_name(host, daemons)
-                args.append((host, name))
+                args.append((name, host))
             c = self._create_mgr(args)
             c.add_progress('Creating MGRs', self)
             c.update_progress = True
@@ -2034,7 +2058,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return self._get_daemons('mds').then(_add_mds)
 
-    def update_mds(self, spec):
+    def apply_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
 
@@ -2051,21 +2075,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'mds', 'allow'],
         })
         return self._create_daemon('mds', mds_id, host, keyring=keyring)
-
-    def remove_mds(self, name):
-        self.log.debug("Attempting to remove volume: {}".format(name))
-
-        def _remove_mds(daemons):
-            args = []
-            for d in daemons:
-                if d.daemon_id == name or d.daemon_id.startswith(name + '.'):
-                    args.append(
-                        ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
-                    )
-            if not args:
-                raise OrchestratorError('Unable to find mds.%s[-*] daemon(s)' % name)
-            return self._remove_daemon(args)
-        return self._get_daemons('mds').then(_remove_mds)
 
     def add_rgw(self, spec):
         if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
@@ -2100,21 +2109,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         })
         return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
-    def remove_rgw(self, name):
-
-        def _remove_rgw(daemons):
-            args = []
-            for d in daemons:
-                if d.daemon_id == name or d.daemon_id.startswith(name + '.'):
-                    args.append(('%s.%s' % (d.daemon_type, d.daemon_id),
-                                d.nodename))
-            if args:
-                return self._remove_daemon(args)
-            raise RuntimeError('Unable to find rgw.%s[-*] daemon(s)' % name)
-
-        return self._get_daemons('rgw').then(_remove_rgw)
-
-    def update_rgw(self, spec):
+    def apply_rgw(self, spec):
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rgw').load()
         return self._update_service('rgw', self.add_rgw, spec)
 
@@ -2139,22 +2134,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._create_daemon('rbd-mirror', daemon_id, host,
                                    keyring=keyring)
 
-    def remove_rbd_mirror(self, name):
-        def _remove_rbd_mirror(daemons):
-            args = []
-            for d in daemons:
-                if not name or d.daemon_id == name:
-                    args.append(
-                        ('%s.%s' % (d.daemon_type, d.daemon_id),
-                         d.nodename)
-                    )
-            if not args and name:
-                raise RuntimeError('Unable to find rbd-mirror.%s daemon' % name)
-            return self._remove_daemon(args)
-
-        return self._get_daemons('rbd-mirror').then(_remove_rbd_mirror)
-
-    def update_rbd_mirror(self, spec):
+    def apply_rbd_mirror(self, spec):
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rbd-mirror').load()
         return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
 
