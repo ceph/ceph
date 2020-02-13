@@ -1994,23 +1994,34 @@ bool DaemonServer::_handle_command(
     string name;
     if (cmd_getval(cmdctx->cmdmap, "key", name)) {
       // handle special options
+      std::string value;
       if (name == "fsid") {
-       cmdctx->odata.append(stringify(monc->get_fsid()) + "\n");
-       cmdctx->reply(r, ss);
-       return true;
-      }
-      auto p = daemon->config.find(name);
-      if (p != daemon->config.end() &&
-	  !p->second.empty()) {
-	cmdctx->odata.append(p->second.rbegin()->second + "\n");
+        value = stringify(monc->get_fsid());
       } else {
-	auto& defaults = daemon->_get_config_defaults();
-	auto q = defaults.find(name);
-	if (q != defaults.end()) {
-	  cmdctx->odata.append(q->second + "\n");
-	} else {
-	  r = -ENOENT;
-	}
+        auto p = daemon->config.find(name);
+        if (p != daemon->config.end() &&
+            !p->second.empty()) {
+          value = p->second.rbegin()->second;
+        } else {
+          auto& defaults = daemon->_get_config_defaults();
+          auto q = defaults.find(name);
+          if (q != defaults.end()) {
+            value = q->second;
+          } else {
+            cmdctx->reply(-ENOENT, ss);
+            return true;
+          }
+        }
+      }
+
+      if (f) {
+        f->open_object_section("option");
+        f->dump_string(name, value);
+        f->close_section();
+        f->flush(cmdctx->odata);
+      } else {
+        cmdctx->odata.append(value);
+        cmdctx->odata.append("\n");
       }
     } else if (daemon->config_defaults_bl.length() > 0) {
       TextTable tbl;

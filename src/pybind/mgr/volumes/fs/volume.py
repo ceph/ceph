@@ -102,15 +102,16 @@ class VolumeClient(CephfsClient["Module"]):
                 "stored in the filesystem '{0}'. If you are *ABSOLUTELY CERTAIN* " \
                 "that is what you want, re-issue the command followed by " \
                 "--yes-i-really-mean-it.".format(volname)
-
+        key = 'mon_allow_pool_delete'
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config get',
-            'key': 'mon_allow_pool_delete',
+            'key': key,
             'who': 'mon',
             'format': 'json',
         })
-        mon_allow_pool_delete = json.loads(out)
-        if not mon_allow_pool_delete:
+        config = json.loads(out)
+        # config values are returned as strings
+        if not json.loads(config[key]):
             return -errno.EPERM, "", "pool deletion is disabled; you must first " \
                 "set the mon_allow_pool_delete config option to true before volumes " \
                 "can be deleted"

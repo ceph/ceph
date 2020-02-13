@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+      mon:
+        mon warn on pool no app: false
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.tests.test_commands

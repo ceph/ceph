@@ -323,6 +323,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 
     if (cmd_getval(cmdmap, "key", name)) {
       name = ConfFile::normalize_key_name(name);
+      Option::value_t value;
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon.mgrmon()->find_module_option(name);
@@ -333,30 +334,34 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
       if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
-	// handle special options
-	if (name == "fsid") {
-	  odata.append(stringify(mon.monmap->get_fsid()));
-	  odata.append("\n");
-	  goto reply;
-	}
-	err = -EINVAL;
-	ss << name << " is special and cannot be stored by the mon";
-	goto reply;
+        // handle special options
+        if (name == "fsid") {
+          value = stringify(mon.monmap->get_fsid());
+        } else {
+          err = -EINVAL;
+          ss << name << " is special and cannot be stored by the mon";
+          goto reply;
+        }
       }
       // get a single value
       auto p = config.find(name);
       if (p != config.end()) {
-	odata.append(p->second);
-	odata.append("\n");
-	goto reply;
-      }
-      if (!entity.is_client() &&
-	  opt->daemon_value != Option::value_t{}) {
-	odata.append(Option::to_str(opt->daemon_value));
+        value = p->second;
+      } else if (!entity.is_client() &&
+              opt->daemon_value != Option::value_t{} ) {
+        value = opt->daemon_value;
       } else {
-	odata.append(Option::to_str(opt->value));
+        value = opt->value;
       }
-      odata.append("\n");
+      if (f) {
+        f->open_object_section("option");
+        f->dump_string(name, Option::to_str(value));
+        f->close_section();
+        f->flush(odata);
+      } else {
+        odata.append(Option::to_str(value));
+        odata.append("\n");
+      }
     } else {
       // dump all (non-default) values for this entity
       TextTable tbl;
