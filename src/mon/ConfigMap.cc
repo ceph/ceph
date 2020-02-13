@@ -204,6 +204,20 @@ bool ConfigMap::parse_mask(
   return true;
 }
 
+void ConfigMap::print_value(Formatter *f, bufferlist &odata,
+                 const string &name, const string &value)
+{
+  if (f) {
+    f->open_object_section("config");
+    f->dump_string("name", name);
+    f->dump_string("value", value);
+    f->close_section();
+    f->flush(odata);
+  } else {
+    odata.append(value);
+    odata.append("\n");
+  }
+}
 
 // --------------
 

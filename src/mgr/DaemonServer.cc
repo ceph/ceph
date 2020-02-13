@@ -1812,12 +1812,12 @@ bool DaemonServer::_handle_command(
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
 	  !p->second.empty()) {
-	cmdctx->odata.append(p->second.rbegin()->second + "\n");
+	monc->configmap.print_value(f.get(), cmdctx->odata, name, p->second.rbegin()->second);
       } else {
 	auto& defaults = daemon->_get_config_defaults();
 	auto q = defaults.find(name);
 	if (q != defaults.end()) {
-	  cmdctx->odata.append(q->second + "\n");
+	  monc->configmap.print_value(f.get(), cmdctx->odata, name, q->second);
 	} else {
 	  r = -ENOENT;
 	}

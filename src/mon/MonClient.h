@@ -24,6 +24,7 @@
 
 #include "msg/Messenger.h"
 
+#include "ConfigMap.h"
 #include "MonMap.h"
 #include "MonSub.h"
 
@@ -247,6 +248,7 @@ class MonClient : public Dispatcher,
 public:
   MonMap monmap;
   std::map<std::string,std::string> config_mgr;
+  ConfigMap configmap;
 
 private:
   Messenger *messenger;

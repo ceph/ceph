@@ -308,6 +308,7 @@ set(libcommon_files
   global/global_context.cc
   xxHash/xxhash.c
   log/Log.cc
+  mon/ConfigMap.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc

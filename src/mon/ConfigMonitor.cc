@@ -306,8 +306,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
 	// handle special options
 	if (name == "fsid") {
-	  odata.append(stringify(mon->monmap->get_fsid()));
-	  odata.append("\n");
+	  config_map.print_value(f.get(), odata, name, stringify(mon->monmap->get_fsid()));
 	  goto reply;
 	}
 	err = -EINVAL;
@@ -317,17 +316,15 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       // get a single value
       auto p = config.find(name);
       if (p != config.end()) {
-	odata.append(p->second);
-	odata.append("\n");
+	config_map.print_value(f.get(), odata, name, p->second);
 	goto reply;
       }
       if (!entity.is_client() &&
 	  !boost::get<boost::blank>(&opt->daemon_value)) {
-	odata.append(Option::to_str(opt->daemon_value));
+	config_map.print_value(f.get(), odata, name, Option::to_str(opt->daemon_value));
       } else {
-	odata.append(Option::to_str(opt->value));
+	config_map.print_value(f.get(), odata, name, Option::to_str(opt->value));
       }
-      odata.append("\n");
     } else {
       // dump all (non-default) values for this entity
       TextTable tbl;
