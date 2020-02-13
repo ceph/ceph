@@ -57,7 +57,7 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
 
 void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
 {
-  assert(size != 0);
+  ceph_assert(size != 0);
 
   uint64_t end = start + size;
 
@@ -92,19 +92,9 @@ void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
   }
 }
 
-void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
+void AvlAllocator::_process_range_removal(uint64_t start, uint64_t end,
+  AvlAllocator::range_tree_t::iterator& rs)
 {
-  uint64_t end = start + size;
-
-  assert(size != 0);
-  assert(size <= num_free);
-
-  auto rs = range_tree.find(range_t{start, end}, range_tree.key_comp());
-  /* Make sure we completely overlap with someone */
-  assert(rs != range_tree.end());
-  assert(rs->start <= start);
-  assert(rs->end >= end);
-
   bool left_over = (rs->start != start);
   bool right_over = (rs->end != end);
 
@@ -132,6 +122,58 @@ void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
     _range_size_tree_try_insert(*rs);
   } else {
     range_tree.erase_and_dispose(rs, dispose_rs{});
+  }
+}
+
+void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
+{
+  uint64_t end = start + size;
+
+  ceph_assert(size != 0);
+  ceph_assert(size <= num_free);
+
+  auto rs = range_tree.find(range_t{start, end}, range_tree.key_comp());
+  /* Make sure we completely overlap with someone */
+  ceph_assert(rs != range_tree.end());
+  ceph_assert(rs->start <= start);
+  ceph_assert(rs->end >= end);
+
+  _process_range_removal(start, end, rs);
+}
+
+void AvlAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
+  std::function<void(uint64_t, uint64_t, bool)> cb)
+{
+  uint64_t end = start + size;
+
+  ceph_assert(size != 0);
+
+  auto rs = range_tree.find(range_t{ start, end },
+    range_tree.key_comp());
+
+  if (rs == range_tree.end() || rs->start >= end) {
+    cb(start, size, false);
+    return;
+  }
+
+  do {
+
+    auto next_rs = rs;
+    ++next_rs;
+
+    if (start < rs->start) {
+      cb(start, rs->start - start, false);
+      start = rs->start;
+    }
+    auto range_end = std::min(rs->end, end);
+    _process_range_removal(start, range_end, rs);
+    cb(start, range_end - start, true);
+    start = range_end;
+
+    rs = next_rs;
+  } while (rs != range_tree.end() && rs->start < end && start < end);
+  if (start < end) {
+    cb(start, end - start, false);
   }
 }
 
@@ -174,7 +216,7 @@ int AvlAllocator::_allocate(
       return -ENOSPC;
     }
     size = p2align(max_size, unit);
-    assert(size > 0);
+    ceph_assert(size > 0);
     force_range_size_alloc = true;
   }
   /*
@@ -185,7 +227,7 @@ int AvlAllocator::_allocate(
    * region.
    */
   const uint64_t align = size & -size;
-  assert(align != 0);
+  ceph_assert(align != 0);
   uint64_t *cursor = &lbas[cbits(align) - 1];
 
   const int free_pct = num_free * 100 / num_total;
@@ -223,6 +265,16 @@ void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
       << " length 0x" << length
       << std::dec << dendl;
     _add_to_tree(offset, length);
+  }
+}
+
+void AvlAllocator::_release(const PExtentVector& release_set) {
+  for (auto& e : release_set) {
+    ldout(cct, 10) << __func__ << std::hex
+      << " offset 0x" << e.offset
+      << " length 0x" << e.length
+      << std::dec << dendl;
+    _add_to_tree(e.offset, e.length);
   }
 }
 
@@ -280,15 +332,15 @@ int64_t AvlAllocator::allocate(
                  << " max_alloc_size 0x" << max_alloc_size
                  << " hint 0x" << hint
                  << std::dec << dendl;
-  assert(isp2(unit));
-  assert(want % unit == 0);
+  ceph_assert(isp2(unit));
+  ceph_assert(want % unit == 0);
 
   if (max_alloc_size == 0) {
     max_alloc_size = want;
   }
   if (constexpr auto cap = std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
       max_alloc_size >= cap) {
-    max_alloc_size = cap;
+    max_alloc_size = p2align(uint64_t(cap), (uint64_t)block_size);
   }
   std::lock_guard l(lock);
   return _allocate(want, unit, max_alloc_size, hint, extents);

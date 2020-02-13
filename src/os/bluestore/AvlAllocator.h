@@ -78,6 +78,13 @@ public:
     int64_t  hint,
     PExtentVector *extents) override;
   void release(const interval_set<uint64_t>& release_set) override;
+  int64_t get_capacity() const {
+    return num_total;
+  }
+
+  uint64_t get_block_size() const {
+    return block_size;
+  }
   uint64_t get_free() override;
   double get_fragmentation() override;
 
@@ -232,8 +239,16 @@ protected:
     PExtentVector *extents);
 
   void _release(const interval_set<uint64_t>& release_set);
+  void _release(const PExtentVector&  release_set);
   void _shutdown();
 
   void _add_to_tree(uint64_t start, uint64_t size);
+  void _process_range_removal(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
   void _remove_from_tree(uint64_t start, uint64_t size);
+  void _try_remove_from_tree(uint64_t start, uint64_t size,
+    std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
+
+  uint64_t _get_free() const {
+    return num_free;
+  }
 };
