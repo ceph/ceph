@@ -1378,12 +1378,13 @@ public:
   using check_filter_t = bool (*)(const std::string&);
 
   int cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
-			      int shard_id,
+			      const int shard_id,
 			      const rgw_obj_index_key& start_after,
 			      const string& prefix,
 			      const string& delimiter,
-			      uint32_t num_entries,
-			      bool list_versions,
+			      const uint32_t num_entries,
+			      const bool list_versions,
+			      const uint16_t attempt, // 0 means ignore
 			      ent_map_t& m,
 			      bool* is_truncated,
 			      bool* cls_filtered,

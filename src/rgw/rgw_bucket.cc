@@ -1015,18 +1015,27 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
+  constexpr uint32_t NUM_ENTRIES = 1000;
+  uint16_t attempt = 1;
   while (is_truncated) {
     RGWRados::ent_map_t result;
     result.reserve(listing_max_entries);
 
     int r = store->getRados()->cls_bucket_list_ordered(
       bucket_info, RGW_NO_SHARD, marker, prefix, empty_delimiter,
-      listing_max_entries, true, result, &is_truncated, &cls_filtered,
-      &marker, y, rgw_bucket_object_check_filter);
+      listing_max_entries, true, attempt,
+      result, &is_truncated, &cls_filtered, &marker,
+      y, rgw_bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
+    }
+
+    if (result.size() < NUM_ENTRIES / 8) {
+      ++attempt;
+    } else if (result.size() > NUM_ENTRIES * 7 / 8 && attempt > 1) {
+      --attempt;
     }
 
     dump_bucket_index(result, formatter);
