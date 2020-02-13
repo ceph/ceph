@@ -21,7 +21,7 @@ For example, one may use s3cmd to set or delete a policy thus::
     "Version": "2012-10-17",
     "Statement": [{
       "Effect": "Allow",
-      "Principal": {"AWS": ["arn:aws:iam::usfolks:user/fred"]},
+      "Principal": {"AWS": ["arn:aws:iam::usfolks:user/fred:subuser"]},
       "Action": "s3:PutObjectAcl",
       "Resource": [
         "arn:aws:s3:::happybucket/*"
