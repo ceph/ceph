@@ -1783,6 +1783,8 @@ void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
     state = StateFullSync;
   } else if (s == "incremental-sync") {
     state = StateIncrementalSync;
+  } else if (s == "stopped") {
+    state = StateStopped;
   } else {
     state = StateInit;
   }
