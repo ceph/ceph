@@ -20,6 +20,8 @@
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 #include <boost/asio/ssl.hpp>
+
+#include "services/svc_config_key.h"
 #endif
 
 #include "rgw_dmclock_async_scheduler.h"
@@ -249,6 +251,11 @@ class AsioFrontend {
   boost::asio::io_context context;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   boost::optional<ssl::context> ssl_context;
+  int get_config_key_val(string name,
+                         const string& type,
+                         bufferlist *pbl);
+  int ssl_set_private_key(const string& name);
+  int ssl_set_certificate_chain(const string& name);
   int init_ssl();
 #endif
   SharedMutex pause_mutex;
@@ -502,6 +509,81 @@ int AsioFrontend::init()
 }
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
+
+static string config_val_prefix = "config://";
+
+int AsioFrontend::get_config_key_val(string name,
+                                     const string& type,
+                                     bufferlist *pbl)
+{
+  if (name.empty()) {
+    lderr(ctx()) << "bad " << type << " config value" << dendl;
+    return -EINVAL;
+  }
+
+  auto svc = env.store->svc()->config_key;
+  int r = svc->get(name, pbl);
+  if (r < 0) {
+    lderr(ctx()) << type << " was not found: " << name << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int AsioFrontend::ssl_set_private_key(const string& name)
+{
+  boost::system::error_code ec;
+
+  if (!boost::algorithm::starts_with(name, config_val_prefix)) {
+    ssl_context->use_private_key_file(name, ssl::context::pem, ec);
+  } else {
+    bufferlist bl;
+    int r = get_config_key_val(name.substr(config_val_prefix.size()),
+                               "ssl_private_key",
+                               &bl);
+    if (r < 0) {
+      return r;
+    }
+    ssl_context->use_private_key(boost::asio::buffer(bl.c_str(), bl.length()),
+                                 ssl::context::pem, ec);
+  }
+
+  if (ec) {
+    lderr(ctx()) << "failed to add ssl_private_key=" << name
+      << ": " << ec.message() << dendl;
+    return -ec.value();
+  }
+
+  return 0;
+}
+
+int AsioFrontend::ssl_set_certificate_chain(const string& name)
+{
+  boost::system::error_code ec;
+
+  if (!boost::algorithm::starts_with(name, config_val_prefix)) {
+    ssl_context->use_certificate_chain_file(name, ec);
+  } else {
+    bufferlist bl;
+    int r = get_config_key_val(name.substr(config_val_prefix.size()),
+                               "ssl_certificate",
+                               &bl);
+    if (r < 0) {
+      return r;
+    }
+    ssl_context->use_certificate_chain(boost::asio::buffer(bl.c_str(), bl.length()),
+                                 ec);
+  }
+
+  if (ec) {
+    lderr(ctx()) << "failed to use ssl_certificate=" << name
+      << ": " << ec.message() << dendl;
+    return -ec.value();
+  }
+
+  return 0;
+}
+
 int AsioFrontend::init_ssl()
 {
   boost::system::error_code ec;
@@ -522,27 +604,21 @@ int AsioFrontend::init_ssl()
       lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
       return -EINVAL;
     }
-    ssl_context->use_private_key_file(key->second, ssl::context::pem, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to add ssl_private_key=" << key->second
-          << ": " << ec.message() << dendl;
-      return -ec.value();
+    int r = ssl_set_private_key(key->second);
+    if (r < 0) {
+      return r;
     }
   }
   if (have_cert) {
-    ssl_context->use_certificate_chain_file(cert->second, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to use ssl_certificate=" << cert->second
-          << ": " << ec.message() << dendl;
-      return -ec.value();
+    int r = ssl_set_certificate_chain(cert->second);
+    if (r < 0) {
+      return r;
     }
     if (!have_private_key) {
       // attempt to use it as a private key if a separate one wasn't provided
-      ssl_context->use_private_key_file(cert->second, ssl::context::pem, ec);
-      if (ec) {
-        lderr(ctx()) << "failed to use ssl_certificate=" << cert->second
-            << " as a private key: " << ec.message() << dendl;
-        return -ec.value();
+      r = ssl_set_private_key(cert->second);
+      if (r < 0) {
+        return r;
       }
     }
   }
