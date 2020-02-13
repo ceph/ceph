@@ -4342,7 +4342,6 @@ void Monitor::_ms_dispatch(Message *m)
         // exist only while the op is being handled.
         remove_session(s);
       }
-      s->put();
       s = nullptr;
     }
   }
