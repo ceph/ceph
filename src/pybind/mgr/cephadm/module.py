@@ -2167,6 +2167,40 @@ scrape_configs:
         })
         return j
 
+    def add_prometheus(self, spec):
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
+        self.log.debug('nodes %s' % spec.placement.hosts)
+
+        def _add(daemons):
+            args = []
+            num_added = 0
+            for host, _, name in spec.placement.hosts:
+                if num_added >= spec.count:
+                    break
+                daemon_id = self.get_unique_name(host, daemons, None, name)
+                self.log.debug('placing prometheus.%s on host %s' % (daemon_id,
+                                                                     host))
+                args.append((daemon_id, host))
+
+                # add to daemon list so next name(s) will also be unique
+                sd = orchestrator.ServiceDescription()
+                sd.service_instance = daemon_id
+                sd.service_type = 'prometheus'
+                sd.nodename = host
+                daemons.append(sd)
+                num_added += 1
+            return self._create_prometheus(args)
+
+        return self._get_daemons('prometheus').then(_add)
+
+    @async_map_completion
+    def _create_prometheus(self, daemon_id, host):
+        return self._create_daemon('prometheus', daemon_id, host)
+
+    def apply_prometheus(self, spec):
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
+        return self._update_service('prometheus', self.add_prometheus, spec)
+
     def _get_container_image_id(self, image_name):
         # pick a random host...
         host = None

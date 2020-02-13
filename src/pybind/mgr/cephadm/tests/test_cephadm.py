@@ -277,6 +277,25 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    def test_prometheus(self, _send_command, _get_connection, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            ps = PlacementSpec(hosts=['test'], count=1)
+
+            c = cephadm_module.add_prometheus(ServiceSpec(placement=ps))
+            [out] = wait(cephadm_module, c)
+            assert "Deployed prometheus." in out
+            assert " on host 'test'" in out
+
+            ps = PlacementSpec(hosts=['test'], count=2)
+            c = cephadm_module.apply_prometheus(ServiceSpec(placement=ps))
+            [out] = wait(cephadm_module, c)
+            assert "Deployed prometheus." in out
+            assert " on host 'test'" in out
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     def test_blink_device_light(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
