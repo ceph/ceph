@@ -676,6 +676,46 @@ def ceph_prometheus(ctx, config):
     yield
 
 @contextlib.contextmanager
+def ceph_rgw(ctx, config):
+    """
+    Deploy rgw
+    """
+    cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
+
+    nodes = {}
+    daemons = {}
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('rgw', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            realmzone = '.'.join(id_.split('.')[0:2])
+            if realmzone not in nodes:
+                nodes[realmzone] = []
+            nodes[realmzone].append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    for realmzone, nodes in nodes.items():
+        (realm, zone) = realmzone.split('.', 1)
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'apply', 'rgw',
+            realm, zone,
+            str(len(nodes))] + nodes
+        )
+    for role, i in daemons.items():
+        remote, id_ = i
+        ctx.daemons.register_daemon(
+            remote, 'rgw', id_,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild(role),
+            wait=False,
+            started=True,
+        )
+
+    yield
+
+@contextlib.contextmanager
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
@@ -989,6 +1029,7 @@ def task(ctx, config):
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
+            lambda: ceph_rgw(ctx=ctx, config=config),
             lambda: ceph_prometheus(ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
