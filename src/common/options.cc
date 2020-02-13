@@ -7891,6 +7891,18 @@ std::vector<Option> get_mds_options() {
      .set_default(0)
      .set_description("threshold for cache usage to disallow \"dump cache\" operation to file")
      .set_long_description("Disallow MDS from dumping caches to file via \"dump cache\" command if cache usage exceeds this threshold."),
+
+    Option("mds_task_status_update_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+     .set_default(2.0)
+     .set_description("task status update interval to manager")
+     .set_long_description("interval (in seconds) for sending mds task status to ceph manager"),
+
+    Option("mds_max_snaps_per_dir", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(100)
+     .set_min_max(0, 4096)
+     .set_flag(Option::FLAG_RUNTIME)
+     .set_description("max snapshots per directory")
+     .set_long_description("maximum number of snapshots that can be created per directory"),
   });
 }
 
