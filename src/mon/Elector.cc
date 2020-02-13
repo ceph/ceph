@@ -288,8 +288,8 @@ void Elector::handle_propose(MonOpRequestRef op)
       mon->start_election();
     } else {
       dout(5) << " ignoring old propose" << dendl;
-      return;
     }
+    return;
   }
 
   if (mon->rank < from) {
