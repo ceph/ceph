@@ -43,14 +43,13 @@ def has_common_vg(ssd_devices):
     Ensure that devices have a common VG between them
     """
     msg = 'Could not find a common VG between devices: %s'
-    system_vgs = lvm.VolumeGroups()
     ssd_vgs = {}
 
     for ssd_device in ssd_devices:
-        for pv in ssd_device.pvs_api:
-            vg = system_vgs.get(vg_name=pv.vg_name)
-            if not vg:
-                continue
+        vgs = lvm.get_device_vgs(ssd_device.abspath)
+        if not vgs:
+            continue
+        for vg in vgs:
             try:
                 ssd_vgs[vg.name].append(ssd_device.abspath)
             except KeyError:
