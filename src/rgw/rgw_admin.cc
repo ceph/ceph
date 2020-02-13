@@ -6253,20 +6253,27 @@ next:
     formatter->open_object_section("result");
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
+
+    constexpr uint32_t NUM_ENTRIES = 1000;
+    uint16_t attempt = 1;
     while (is_truncated) {
       map<string, rgw_bucket_dir_entry> result;
       int r =
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
-				       prefix, 1000, true,
+				       prefix, NUM_ENTRIES, true, attempt,
 				       result, &is_truncated, &marker,
 				       bucket_object_check_filter);
-
       if (r < 0 && r != -ENOENT) {
         cerr << "ERROR: failed operation r=" << r << std::endl;
+      } else if (r == -ENOENT) {
+        break;
       }
 
-      if (r == -ENOENT)
-        break;
+      if (result.size() < NUM_ENTRIES / 8) {
+	++attempt;
+      } else if (result.size() > NUM_ENTRIES * 7 / 8 && attempt > 1) {
+	--attempt;
+      }
 
       map<string, rgw_bucket_dir_entry>::iterator iter;
       for (iter = result.begin(); iter != result.end(); ++iter) {
