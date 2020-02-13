@@ -295,6 +295,7 @@ if(WITH_SEASTAR)
     endif()
   endif()
   set(Seastar_CXX_FLAGS "-Wno-error;-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member" CACHE STRING "" FORCE)
+  include_directories(seastar INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/c-ares")
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
