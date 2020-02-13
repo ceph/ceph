@@ -141,6 +141,21 @@ static string indent_who(const string& who)
   return "    " + who;
 }
 
+static void print_value(Formatter *f, bufferlist &odata,
+                        const string &name, const string &value)
+{
+  if (f) {
+    f->open_object_section("config");
+    f->dump_string("name", name);
+    f->dump_string("value", value);
+    f->close_section();
+    f->flush(odata);
+  } else {
+    odata.append(value);
+    odata.append("\n");
+ }
+}
+
 bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
@@ -306,8 +321,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
 	// handle special options
 	if (name == "fsid") {
-	  odata.append(stringify(mon->monmap->get_fsid()));
-	  odata.append("\n");
+	  print_value(f.get(), odata, name, stringify(mon->monmap->get_fsid()));
 	  goto reply;
 	}
 	err = -EINVAL;
@@ -317,17 +331,15 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       // get a single value
       auto p = config.find(name);
       if (p != config.end()) {
-	odata.append(p->second);
-	odata.append("\n");
+	print_value(f.get(), odata, name, p->second);
 	goto reply;
       }
       if (!entity.is_client() &&
 	  !boost::get<boost::blank>(&opt->daemon_value)) {
-	odata.append(Option::to_str(opt->daemon_value));
+	print_value(f.get(), odata, name, Option::to_str(opt->daemon_value));
       } else {
-	odata.append(Option::to_str(opt->value));
+	print_value(f.get(), odata, name, Option::to_str(opt->value));
       }
-      odata.append("\n");
     } else {
       // dump all (non-default) values for this entity
       TextTable tbl;

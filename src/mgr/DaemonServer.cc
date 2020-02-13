@@ -837,6 +837,21 @@ void DaemonServer::log_access_denied(
         "#client-authentication";
 }
 
+static void print_value(Formatter *f, bufferlist &odata,
+                        const string &name, const string &value)
+{
+  if (f) {
+    f->open_object_section("config");
+    f->dump_string("name", name);
+    f->dump_string("value", value);
+    f->close_section();
+    f->flush(odata);
+  } else {
+    odata.append(value);
+    odata.append("\n");
+ }
+}
+
 bool DaemonServer::_handle_command(
   std::shared_ptr<CommandContext>& cmdctx)
 {
@@ -1812,12 +1827,12 @@ bool DaemonServer::_handle_command(
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
 	  !p->second.empty()) {
-	cmdctx->odata.append(p->second.rbegin()->second + "\n");
+	print_value(f.get(), cmdctx->odata, name, p->second.rbegin()->second);
       } else {
 	auto& defaults = daemon->_get_config_defaults();
 	auto q = defaults.find(name);
 	if (q != defaults.end()) {
-	  cmdctx->odata.append(q->second + "\n");
+	  print_value(f.get(), cmdctx->odata, name, q->second);
 	} else {
 	  r = -ENOENT;
 	}
