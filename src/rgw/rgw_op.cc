@@ -5663,16 +5663,6 @@ void RGWDeleteLC::execute()
       return;
     }
   }
-  map<string, bufferlist> attrs = s->bucket_attrs;
-  attrs.erase(RGW_ATTR_LC);
-  op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							&s->bucket_info.objv_tracker,
-							s->yield);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
-        << s->bucket.name << " returned err=" << op_ret << dendl;
-    return;
-  }
 
   op_ret = store->getRados()->get_lc()->remove_bucket_config(s->bucket_info, s->bucket_attrs);
   if (op_ret < 0) {
