@@ -30,6 +30,8 @@ public:
   void release(
     const interval_set<uint64_t>& release_set) override;
 
+  using Allocator::release;
+
   uint64_t get_free() override
   {
     return get_available();
