@@ -173,7 +173,7 @@ In detail, orchestrators need to explicitly deal with different kinds of errors:
 3. Missing features within implemented methods.
 
    E.g. optional parameters to a command that are not supported by the
-   backend (e.g. the hosts field in :func:`Orchestrator.update_mons` command with the rook backend).
+   backend (e.g. the hosts field in :func:`Orchestrator.apply_mons` command with the rook backend).
 
    See :class:`OrchestratorValidationError`.
 
@@ -215,9 +215,14 @@ Host management
 .. automethod:: Orchestrator.add_host
 .. automethod:: Orchestrator.remove_host
 .. automethod:: Orchestrator.get_hosts
+.. automethod:: Orchestrator.update_host_addr
+.. automethod:: Orchestrator.add_host_label
+.. automethod:: Orchestrator.remove_host_label
 
-Inventory and status
---------------------
+.. autoclass:: HostSpec
+
+Devices
+-------
 
 .. automethod:: Orchestrator.get_inventory
 .. autoclass:: InventoryFilter
@@ -233,16 +238,25 @@ Inventory and status
 .. py:currentmodule:: orchestrator
 
 
+Services
+--------
 
-.. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription
 
-Service Actions
----------------
+.. autoclass:: ServiceSpec
+
+.. automethod:: Orchestrator.describe_service
 
 .. automethod:: Orchestrator.service_action
+.. automethod:: Orchestrator.remove_service
 
-.. autoclass:: ServiceSpec
+
+Daemons
+-------
+
+.. automethod:: Orchestrator.list_daemons
+.. automethod:: Orchestrator.remove_daemons
+.. automethod:: Orchestrator.daemon_action
 
 OSD management
 --------------
@@ -285,18 +299,31 @@ Phase two is a call to  :meth:`Orchestrator.create_osds` with a Drive Group with
 
 .. py:currentmodule:: orchestrator
 
+Monitors
+--------
+
+.. automethod:: Orchestrator.add_mon
+.. automethod:: Orchestrator.apply_mon
+
 Stateless Services
 ------------------
 
+.. automethod:: Orchestrator.add_mgr
+.. automethod:: Orchestrator.apply_mgr
 .. automethod:: Orchestrator.add_mds
-.. automethod:: Orchestrator.update_mds
+.. automethod:: Orchestrator.apply_mds
+.. automethod:: Orchestrator.add_rbd_mirror
+.. automethod:: Orchestrator.apply_rbd_mirror
+
+.. autoclass:: RGWSpec
+
 .. automethod:: Orchestrator.add_rgw
-.. automethod:: Orchestrator.update_rgw
+.. automethod:: Orchestrator.apply_rgw
 
 .. autoclass:: NFSServiceSpec
 
 .. automethod:: Orchestrator.add_nfs
-.. automethod:: Orchestrator.update_nfs
+.. automethod:: Orchestrator.apply_nfs
 
 Upgrades
 --------
