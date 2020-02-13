@@ -170,6 +170,11 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
+            "cmd": "telemetry show-device",
+            "desc": "Show last device report or device report to be sent",
+            "perm": "r"
+        },
+        {
             "cmd": "telemetry on name=license,type=CephString,req=false",
             "desc": "Enable telemetry reports from this cluster",
             "perm": "rw",
@@ -394,9 +399,9 @@ class Module(MgrModule):
                                                            host, anon_host))
 
             # anonymize the smartctl report itself
-            for k in ['serial_number']:
-                if k in m:
-                    m.pop(k)
+            serial = devid.rsplit('_', 1)[1]
+            m_str = json.dumps(m)
+            m = json.loads(m_str.replace(serial, 'deleted'))
 
             if anon_host not in res:
                 res[anon_host] = {}
@@ -752,7 +757,12 @@ class Module(MgrModule):
             report = self.compile_report(
                 channels=command.get('channels', None)
             )
-            return 0, json.dumps(report, indent=4), ''
+            report = json.dumps(report, indent=4)
+            if self.channel_device:
+               report += '\n \nDevice report is generated separately. To see it run \'ceph telemetry show-device\'.'
+            return 0, report, ''
+        elif command['prefix'] == 'telemetry show-device':
+            return 0, json.dumps(self.gather_device_report(), indent=4, sort_keys=True), ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
