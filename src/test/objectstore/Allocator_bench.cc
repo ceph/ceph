@@ -361,10 +361,10 @@ TEST_P(AllocTest, mempoolAccounting)
   ASSERT_EQ(mempool::bluestore_alloc::allocated_items(), items);
 }
 
-INSTANTIATE_TEST_SUITE_P(
+INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl"));
+  ::testing::Values("stupid", "bitmap", "avl", "hybrid"));
 
 #else
 

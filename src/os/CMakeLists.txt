@@ -33,6 +33,7 @@ if(WITH_BLUESTORE)
     bluestore/StupidAllocator.cc
     bluestore/BitmapAllocator.cc
     bluestore/AvlAllocator.cc
+    bluestore/HybridAllocator.cc
   )
 endif(WITH_BLUESTORE)
 

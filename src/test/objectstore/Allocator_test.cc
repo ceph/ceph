@@ -15,7 +15,6 @@
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
 
-#include <boost/random/uniform_int.hpp>
 typedef boost::mt11213b gen_type;
 
 #if GTEST_HAS_PARAM_TEST
@@ -257,11 +256,16 @@ TEST_P(AllocTest, test_alloc_fragmentation)
       EXPECT_EQ(0.0, alloc->get_fragmentation());
     }
   }
+  tmp.clear();
   EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
 
   if (GetParam() == string("avl")) {
     // AVL allocator uses a different allocating strategy
     cout << "skipping for AVL allocator";
+    return;
+  } else if (GetParam() == string("hybrid")) {
+    // AVL allocator uses a different allocating strategy
+    cout << "skipping for Hybrid allocator";
     return;
   }
 
@@ -417,6 +421,7 @@ TEST_P(AllocTest, test_alloc_big2)
   EXPECT_EQ(need,
       alloc->allocate(need, mas, 0, &extents));
   need = block_size * blocks / 4; // 2GB
+  extents.clear();
   EXPECT_EQ(need,
       alloc->allocate(need, mas, 0, &extents));
   EXPECT_TRUE(extents[0].length > 0);
@@ -440,11 +445,40 @@ TEST_P(AllocTest, test_alloc_big3)
   EXPECT_TRUE(extents[0].length > 0);
 }
 
+TEST_P(AllocTest, test_alloc_contiguous)
+{
+  int64_t block_size = 0x1000;
+  int64_t capacity = block_size * 1024 * 1024;
+
+  {
+    init_alloc(capacity, block_size);
+
+    alloc->init_add_free(0, capacity);
+    PExtentVector extents;
+    uint64_t need = 4 * block_size;
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)0, &extents));
+    EXPECT_EQ(1u, extents.size());
+    EXPECT_EQ(extents[0].offset, 0);
+    EXPECT_EQ(extents[0].length, 4 * block_size);
+
+    extents.clear();
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)0, &extents));
+    EXPECT_EQ(1u, extents.size());
+    EXPECT_EQ(extents[0].offset, 4 * block_size);
+    EXPECT_EQ(extents[0].length, 4 * block_size);
+  }
+
+  alloc->shutdown();
+}
+
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl"));
-
+  ::testing::Values("stupid", "bitmap", "avl", "hybrid"));
 #else
 
 TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
