@@ -56,13 +56,14 @@ private:
   CephContext *m_cct;
   bufferlist m_out_bl;
 
+  std::map<std::string, bufferlist> m_metadata;
   std::string m_last_metadata_key;
   bool m_more_metadata = false;
 
   void list_src_metadata();
   void handle_list_src_metadata(int r);
 
-  void set_dst_metadata(const Metadata& metadata);
+  void set_dst_metadata();
   void handle_set_dst_metadata(int r);
 
   void finish(int r);

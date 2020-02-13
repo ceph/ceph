@@ -77,10 +77,7 @@ private:
    * ATTACH CHILD * * * * * * * * * * * *
    *    |                               *
    *    v                               *
-   * GET PARENT META  * * * * * * * * * ^
-   *    |                               *
-   *    v (skip if not needed)          *
-   * SET CHILD META * * * * * * * * * * ^
+   * COPY META DATA * * * * * * * * * * ^
    *    |                               *
    *    v (skip if not needed)          *
    * GET MIRROR MODE  * * * * * * * * * ^
@@ -126,8 +123,6 @@ private:
   uint64_t m_clone_format = 2;
   bool m_use_p_features;
   uint64_t m_features;
-  map<string, bufferlist> m_pairs;
-  std::string m_last_metadata_key;
   bufferlist m_out_bl;
   uint64_t m_size;
   int m_r_saved = 0;
@@ -154,11 +149,8 @@ private:
   void attach_child();
   void handle_attach_child(int r);
 
-  void metadata_list();
-  void handle_metadata_list(int r);
-
-  void metadata_set();
-  void handle_metadata_set(int r);
+  void copy_metadata();
+  void handle_copy_metadata(int r);
 
   void get_mirror_mode();
   void handle_get_mirror_mode(int r);
