@@ -46,6 +46,8 @@ Options
 ``ssl_certificate``
 
 :Description: Path to the SSL certificate file used for SSL-enabled endpoints.
+              If path is prefixed with ``config://``, the certificate will be
+              pulled from the ceph monitor ``config-key`` database.
 
 :Type: String
 :Default: None
@@ -56,6 +58,8 @@ Options
 :Description: Optional path to the private key file used for SSL-enabled
               endpoints. If one is not given, the ``ssl_certificate`` file
               is used as the private key.
+              If path is prefixed with ``config://``, the certificate will be
+              pulled from the ceph monitor ``config-key`` database.
 
 :Type: String
 :Default: None
