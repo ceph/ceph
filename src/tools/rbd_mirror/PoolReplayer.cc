@@ -817,9 +817,11 @@ void PoolReplayer<I>::print_status(Formatter *f) {
   std::lock_guard l{m_lock};
 
   f->open_object_section("pool_replayer_status");
-  f->dump_string("pool", m_local_io_ctx.get_pool_name());
   f->dump_stream("peer") << m_peer;
-  f->dump_stream("instance_id") << m_local_io_ctx.get_instance_id();
+  if (m_local_io_ctx.is_valid()) {
+    f->dump_string("pool", m_local_io_ctx.get_pool_name());
+    f->dump_stream("instance_id") << m_local_io_ctx.get_instance_id();
+  }
 
   std::string state("running");
   if (m_manual_stop) {
@@ -900,7 +902,9 @@ void PoolReplayer<I>::start() {
 
   m_manual_stop = false;
 
-  m_default_namespace_replayer->start();
+  if (m_default_namespace_replayer) {
+    m_default_namespace_replayer->start();
+  }
   for (auto &it : m_namespace_replayers) {
     it.second->start();
   }
@@ -921,7 +925,9 @@ void PoolReplayer<I>::stop(bool manual) {
 
   m_manual_stop = true;
 
-  m_default_namespace_replayer->stop();
+  if (m_default_namespace_replayer) {
+    m_default_namespace_replayer->stop();
+  }
   for (auto &it : m_namespace_replayers) {
     it.second->stop();
   }
@@ -937,7 +943,9 @@ void PoolReplayer<I>::restart() {
     return;
   }
 
-  m_default_namespace_replayer->restart();
+  if (m_default_namespace_replayer) {
+    m_default_namespace_replayer->restart();
+  }
   for (auto &it : m_namespace_replayers) {
     it.second->restart();
   }
@@ -953,7 +961,9 @@ void PoolReplayer<I>::flush() {
     return;
   }
 
-  m_default_namespace_replayer->flush();
+  if (m_default_namespace_replayer) {
+    m_default_namespace_replayer->flush();
+  }
   for (auto &it : m_namespace_replayers) {
     it.second->flush();
   }
