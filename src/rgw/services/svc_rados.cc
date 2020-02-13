@@ -350,6 +350,15 @@ int RGWSI_RADOS::Handle::watch_flush()
   return rad->watch_flush();
 }
 
+int RGWSI_RADOS::Handle::mon_command(std::string cmd,
+                                     const bufferlist& inbl,
+                                     bufferlist *outbl,
+                                     std::string *outs)
+{
+  librados::Rados *rad = rados_svc->get_rados_handle();
+  return rad->mon_command(cmd, inbl, outbl, outs);
+}
+
 int RGWSI_RADOS::Pool::List::get_marker(string *marker)
 {
   if (!ctx.initialized) {
