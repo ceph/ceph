@@ -212,9 +212,14 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
 
-    @deferred_write("remove_osds")
-    def remove_osds(self, osd_ids, destroy=False):
-        assert isinstance(osd_ids, list)
+    @deferred_write("remove_daemons")
+    def remove_daemons(self, names):
+        assert isinstance(names, list)
+
+    @deferred_write("remove_service")
+    def remove_service(self, service_type, service_name):
+        assert isinstance(service_type, str)
+        assert isinstance(service_name, str)
 
     @deferred_write("blink_device_light")
     def blink_device_light(self, ident_fault, on, locations):
@@ -231,10 +236,6 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: (orchestrator.NFSServiceSpec) -> None
         assert isinstance(spec.pool, str)
 
-    @deferred_write("remove_nfs")
-    def remove_nfs(self, name):
-        pass
-
     @deferred_write("update_nfs")
     def update_nfs(self, spec):
         pass
@@ -243,18 +244,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_mds(self, spec):
         pass
 
-    @deferred_write("remove_mds")
-    def remove_mds(self, name):
-        pass
-
     @deferred_write("add_rgw")
     def add_rgw(self, spec):
         pass
-
-    @deferred_write("remove_rgw")
-    def remove_rgw(self, zone):
-        pass
-
 
     @deferred_read
     def get_hosts(self):

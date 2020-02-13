@@ -878,8 +878,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_daemons(self, names):
-        # type: (List[str]) -> Completion
+    def remove_daemons(self, names, force):
+        # type: (List[str], bool) -> Completion
         """
         Remove specific daemon(s).
 
@@ -940,17 +940,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_osds(self, osd_ids):
-        # type: (List[str]) -> Completion
-        """
-        :param osd_ids: list of OSD IDs
-        :param destroy: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
-
-        Note that this can only remove OSDs that were successfully
-        created (i.e. got an OSD ID).
-        """
-        raise NotImplementedError()
-
     def blink_device_light(self, ident_fault, on, locations):
         # type: (str, bool, List[DeviceLightLoc]) -> Completion
         """
@@ -962,96 +951,64 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def update_mgrs(self, spec):
+    def add_mon(self, spec):
         # type: (ServiceSpec) -> Completion
-        """
-        Update the number of cluster managers.
-
-        :param num: requested number of managers.
-        :param hosts: list of hosts (optional)
-        """
+        """Create mon daemon(s)"""
         raise NotImplementedError()
 
-    def update_mons(self, spec):
+    def apply_mon(self, spec):
         # type: (ServiceSpec) -> Completion
-        """
-        Update the number of cluster monitors.
+        """Update mon cluster"""
+        raise NotImplementedError()
 
-        :param num: requested number of monitors.
-        :param hosts: list of hosts + network + name (optional)
-        """
+    def add_mgr(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Create mgr daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_mgr(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update mgr cluster"""
         raise NotImplementedError()
 
     def add_mds(self, spec):
         # type: (ServiceSpec) -> Completion
-        """Create a new MDS cluster"""
+        """Create MDS daemon(s)"""
         raise NotImplementedError()
 
-    def remove_mds(self, name):
-        # type: (str) -> Completion
-        """Remove an MDS cluster"""
-        raise NotImplementedError()
-
-    def update_mds(self, spec):
+    def apply_mds(self, spec):
         # type: (ServiceSpec) -> Completion
-        """
-        Update / redeploy existing MDS cluster
-        Like for example changing the number of service instances.
-        """
+        """Update MDS cluster"""
         raise NotImplementedError()
 
     def add_rbd_mirror(self, spec):
         # type: (ServiceSpec) -> Completion
-        """Create rbd-mirror cluster"""
+        """Create rbd-mirror daemon(s)"""
         raise NotImplementedError()
 
-    def remove_rbd_mirror(self, name):
-        # type: (str) -> Completion
-        """Remove rbd-mirror cluster"""
-        raise NotImplementedError()
-
-    def update_rbd_mirror(self, spec):
+    def apply_rbd_mirror(self, spec):
         # type: (ServiceSpec) -> Completion
-        """
-        Update / redeploy rbd-mirror cluster
-        Like for example changing the number of service instances.
-        """
+        """Update rbd-mirror cluster"""
         raise NotImplementedError()
 
     def add_nfs(self, spec):
         # type: (NFSServiceSpec) -> Completion
-        """Create a new MDS cluster"""
+        """Create NFS daemon(s)"""
         raise NotImplementedError()
 
-    def remove_nfs(self, name):
-        # type: (str) -> Completion
-        """Remove a NFS cluster"""
-        raise NotImplementedError()
-
-    def update_nfs(self, spec):
+    def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> Completion
-        """
-        Update / redeploy existing NFS cluster
-        Like for example changing the number of service instances.
-        """
+        """Update NFS cluster"""
         raise NotImplementedError()
 
     def add_rgw(self, spec):
         # type: (RGWSpec) -> Completion
-        """Create a new MDS zone"""
+        """Create RGW daemon(s)"""
         raise NotImplementedError()
 
-    def remove_rgw(self, zone):
-        # type: (str) -> Completion
-        """Remove a RGW zone"""
-        raise NotImplementedError()
-
-    def update_rgw(self, spec):
+    def apply_rgw(self, spec):
         # type: (RGWSpec) -> Completion
-        """
-        Update / redeploy existing RGW zone
-        Like for example changing the number of service instances.
-        """
+        """Update RGW cluster"""
         raise NotImplementedError()
 
     def upgrade_check(self, image, version):
