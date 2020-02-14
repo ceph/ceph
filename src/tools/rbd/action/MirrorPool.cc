@@ -295,7 +295,7 @@ int format_mirror_peers(librados::IoCtx& io_ctx,
       formatter->dump_string("uuid", peer.uuid);
       formatter->dump_string("direction", direction);
       formatter->dump_string("site_name", peer.site_name);
-      formatter->dump_string("fsid", peer.fsid);
+      formatter->dump_string("mirror_uuid", peer.mirror_uuid);
       formatter->dump_string("client_name", peer.client_name);
       for (auto& pair : attributes) {
         formatter->dump_string(pair.first.c_str(), pair.second);
@@ -306,8 +306,8 @@ int format_mirror_peers(librados::IoCtx& io_ctx,
                 << "UUID: " << peer.uuid << std::endl
                 << "Name: " << peer.site_name << std::endl;
       if (peer.direction != RBD_MIRROR_PEER_DIRECTION_RX ||
-          !peer.fsid.empty()) {
-        std::cout << "FSID: " << peer.fsid << std::endl;
+          !peer.mirror_uuid.empty()) {
+        std::cout << "Mirror UUID: " << peer.mirror_uuid << std::endl;
       }
       std::cout << "Direction: " << direction << std::endl;
       if (peer.direction != RBD_MIRROR_PEER_DIRECTION_TX ||
@@ -593,12 +593,12 @@ public:
       const std::string &image_name,
       const std::map<std::string, std::string> &instance_ids,
       const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
-      const std::map<std::string, std::string> &peer_fsid_to_name,
+      const std::map<std::string, std::string> &peer_mirror_uuids_to_name,
       const MirrorDaemonServiceInfo &daemon_service_info,
       at::Format::Formatter formatter)
     : ImageRequestBase(io_ctx, throttle, image_name),
       m_instance_ids(instance_ids), m_mirror_peers(mirror_peers),
-      m_peer_fsid_to_name(peer_fsid_to_name),
+      m_peer_mirror_uuids_to_name(peer_mirror_uuids_to_name),
       m_daemon_service_info(daemon_service_info), m_formatter(formatter) {
   }
 
@@ -630,7 +630,8 @@ protected:
       std::remove_if(m_mirror_image_global_status.site_statuses.begin(),
                      m_mirror_image_global_status.site_statuses.end(),
                      [](auto& status) {
-          return (status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+          return (status.mirror_uuid ==
+                    RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
         }),
       m_mirror_image_global_status.site_statuses.end());
 
@@ -659,10 +660,11 @@ protected:
         for (auto& status : m_mirror_image_global_status.site_statuses) {
           m_formatter->open_object_section("peer_site");
 
-          auto name_it = m_peer_fsid_to_name.find(status.fsid);
+          auto name_it = m_peer_mirror_uuids_to_name.find(status.mirror_uuid);
           m_formatter->dump_string("site_name",
-            (name_it != m_peer_fsid_to_name.end() ? name_it->second : ""));
-          m_formatter->dump_string("fsid", status.fsid);
+            (name_it != m_peer_mirror_uuids_to_name.end() ?
+               name_it->second : ""));
+          m_formatter->dump_string("mirror_uuids", status.mirror_uuid);
 
           m_formatter->dump_string(
             "state", utils::mirror_image_site_status_state(status));
@@ -699,10 +701,10 @@ protected:
           }
           first_site = false;
 
-          auto name_it = m_peer_fsid_to_name.find(site.fsid);
+          auto name_it = m_peer_mirror_uuids_to_name.find(site.mirror_uuid);
           std::cout << "    name: "
-                    << (name_it != m_peer_fsid_to_name.end() ? name_it->second :
-                                                               site.fsid)
+                    << (name_it != m_peer_mirror_uuids_to_name.end() ?
+                          name_it->second : site.mirror_uuid)
                     << std::endl
                     << "    state: " << utils::mirror_image_site_status_state(
                       site) << std::endl
@@ -721,7 +723,7 @@ protected:
 private:
   const std::map<std::string, std::string> &m_instance_ids;
   const std::vector<librbd::mirror_peer_site_t> &m_mirror_peers;
-  const std::map<std::string, std::string> &m_peer_fsid_to_name;
+  const std::map<std::string, std::string> &m_peer_mirror_uuids_to_name;
   const MirrorDaemonServiceInfo &m_daemon_service_info;
   at::Format::Formatter m_formatter;
   std::string m_image_id;
@@ -1545,8 +1547,9 @@ int execute_status(const po::variables_map &vm,
     std::vector<librbd::mirror_peer_site_t> mirror_peers;
     utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
 
-    std::map<std::string, std::string> peer_fsid_to_name;
-    utils::get_mirror_peer_fsid_to_names(mirror_peers, &peer_fsid_to_name);
+    std::map<std::string, std::string> peer_mirror_uuids_to_name;
+    utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,
+                                                 &peer_mirror_uuids_to_name);
 
     if (formatter != nullptr) {
       formatter->open_array_section("images");
@@ -1579,7 +1582,7 @@ int execute_status(const po::variables_map &vm,
     }
 
     ImageRequestGenerator<StatusImageRequest> generator(
-      io_ctx, instance_ids, mirror_peers, peer_fsid_to_name,
+      io_ctx, instance_ids, mirror_peers, peer_mirror_uuids_to_name,
       daemon_service_info, formatter);
     ret = generator.execute();
 

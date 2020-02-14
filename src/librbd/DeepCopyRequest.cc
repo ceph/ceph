@@ -27,18 +27,20 @@ using librbd::util::unique_lock_name;
 
 template <typename I>
 DeepCopyRequest<I>::DeepCopyRequest(I *src_image_ctx, I *dst_image_ctx,
-                                    librados::snap_t snap_id_start,
-                                    librados::snap_t snap_id_end, bool flatten,
+                                    librados::snap_t src_snap_id_start,
+                                    librados::snap_t src_snap_id_end,
+                                    librados::snap_t dst_snap_id_start,
+                                    bool flatten,
                                     const ObjectNumber &object_number,
                                     ContextWQ *work_queue, SnapSeqs *snap_seqs,
                                     ProgressContext *prog_ctx,
                                     Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
-    m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
-    m_snap_id_end(snap_id_end), m_flatten(flatten),
-    m_object_number(object_number), m_work_queue(work_queue),
-    m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx), m_on_finish(on_finish),
-    m_cct(dst_image_ctx->cct),
+    m_dst_image_ctx(dst_image_ctx), m_src_snap_id_start(src_snap_id_start),
+    m_src_snap_id_end(src_snap_id_end), m_dst_snap_id_start(dst_snap_id_start),
+    m_flatten(flatten), m_object_number(object_number),
+    m_work_queue(work_queue), m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx),
+    m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(ceph::make_mutex(unique_lock_name("DeepCopyRequest::m_lock", this))) {
 }
 
@@ -102,8 +104,8 @@ void DeepCopyRequest<I>::send_copy_snapshots() {
   Context *ctx = create_context_callback<
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_snapshots>(this);
   m_snapshot_copy_request = SnapshotCopyRequest<I>::create(
-    m_src_image_ctx, m_dst_image_ctx, m_snap_id_end, m_flatten, m_work_queue,
-    m_snap_seqs, ctx);
+    m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_src_snap_id_end,
+    m_dst_snap_id_start, m_flatten, m_work_queue, m_snap_seqs, ctx);
   m_snapshot_copy_request->get();
   m_lock.unlock();
 
@@ -134,7 +136,7 @@ void DeepCopyRequest<I>::handle_copy_snapshots(int r) {
     return;
   }
 
-  if (m_snap_id_end == CEPH_NOSNAP) {
+  if (m_src_snap_id_end == CEPH_NOSNAP) {
     (*m_snap_seqs)[CEPH_NOSNAP] = CEPH_NOSNAP;
   }
 
@@ -155,8 +157,9 @@ void DeepCopyRequest<I>::send_copy_image() {
   Context *ctx = create_context_callback<
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_image>(this);
   m_image_copy_request = ImageCopyRequest<I>::create(
-      m_src_image_ctx, m_dst_image_ctx, m_snap_id_start, m_snap_id_end,
-      m_flatten, m_object_number, *m_snap_seqs, m_prog_ctx, ctx);
+    m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_src_snap_id_end,
+    m_dst_snap_id_start, m_flatten, m_object_number, *m_snap_seqs, m_prog_ctx,
+    ctx);
   m_image_copy_request->get();
   m_lock.unlock();
 
@@ -201,7 +204,7 @@ void DeepCopyRequest<I>::send_copy_object_map() {
     send_copy_metadata();
     return;
   }
-  if (m_snap_id_end == CEPH_NOSNAP) {
+  if (m_src_snap_id_end == CEPH_NOSNAP) {
     m_dst_image_ctx->image_lock.unlock_shared();
     m_dst_image_ctx->owner_lock.unlock_shared();
     send_refresh_object_map();
@@ -230,8 +233,8 @@ void DeepCopyRequest<I>::send_copy_object_map() {
       handle_copy_object_map(r);
       finish_op_ctx->complete(0);
     });
-  ceph_assert(m_snap_seqs->count(m_snap_id_end) > 0);
-  librados::snap_t copy_snap_id = (*m_snap_seqs)[m_snap_id_end];
+  ceph_assert(m_snap_seqs->count(m_src_snap_id_end) > 0);
+  librados::snap_t copy_snap_id = (*m_snap_seqs)[m_src_snap_id_end];
   m_dst_image_ctx->object_map->rollback(copy_snap_id, ctx);
   m_dst_image_ctx->image_lock.unlock_shared();
   m_dst_image_ctx->owner_lock.unlock_shared();
@@ -327,17 +330,17 @@ template <typename I>
 int DeepCopyRequest<I>::validate_copy_points() {
   std::shared_lock image_locker{m_src_image_ctx->image_lock};
 
-  if (m_snap_id_start != 0 &&
-      m_src_image_ctx->snap_info.find(m_snap_id_start) ==
+  if (m_src_snap_id_start != 0 &&
+      m_src_image_ctx->snap_info.find(m_src_snap_id_start) ==
       m_src_image_ctx->snap_info.end()) {
-    lderr(m_cct) << "invalid start snap_id " << m_snap_id_start << dendl;
+    lderr(m_cct) << "invalid start snap_id " << m_src_snap_id_start << dendl;
     return -EINVAL;
   }
 
-  if (m_snap_id_end != CEPH_NOSNAP &&
-      m_src_image_ctx->snap_info.find(m_snap_id_end) ==
+  if (m_src_snap_id_end != CEPH_NOSNAP &&
+      m_src_image_ctx->snap_info.find(m_src_snap_id_end) ==
       m_src_image_ctx->snap_info.end()) {
-    lderr(m_cct) << "invalid end snap_id " << m_snap_id_end << dendl;
+    lderr(m_cct) << "invalid end snap_id " << m_src_snap_id_end << dendl;
     return -EINVAL;
   }
 

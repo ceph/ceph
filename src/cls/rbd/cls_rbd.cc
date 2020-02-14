@@ -4628,16 +4628,16 @@ std::string global_key(const string &global_id) {
 }
 
 std::string remote_status_global_key(const std::string& global_id,
-                                     const std::string& fsid) {
-  return REMOTE_STATUS_GLOBAL_KEY_PREFIX + global_id + "_" + fsid;
+                                     const std::string& mirror_uuid) {
+  return REMOTE_STATUS_GLOBAL_KEY_PREFIX + global_id + "_" + mirror_uuid;
 }
 
 std::string status_global_key(const std::string& global_id,
-                              const std::string& fsid) {
-  if (fsid == cls::rbd::MirrorImageSiteStatus::LOCAL_FSID) {
+                              const std::string& mirror_uuid) {
+  if (mirror_uuid == cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
     return STATUS_GLOBAL_KEY_PREFIX + global_id;
   } else {
-    return remote_status_global_key(global_id, fsid);
+    return remote_status_global_key(global_id, mirror_uuid);
   }
 }
 
@@ -4765,13 +4765,13 @@ int check_mirroring_enabled(cls_method_context_t hctx) {
 }
 
 int peer_ping(cls_method_context_t hctx, const std::string& site_name,
-              const std::string& fsid) {
+              const std::string& mirror_uuid) {
   int r = check_mirroring_enabled(hctx);
   if (r < 0) {
     return r;
   }
 
-  if (site_name.empty() || fsid.empty()) {
+  if (site_name.empty() || mirror_uuid.empty()) {
     return -EINVAL;
   }
 
@@ -4788,27 +4788,27 @@ int peer_ping(cls_method_context_t hctx, const std::string& site_name,
       return (peer.site_name == site_name);
     });
 
-  auto fsid_it = peers.end();
+  auto mirror_uuid_it = peers.end();
   if (site_it == peers.end() ||
-      (!site_it->fsid.empty() && site_it->fsid != fsid)) {
-    // search for existing peer w/ same fsid
-    fsid_it = std::find_if(peers.begin(), peers.end(),
-                           [&fsid](auto& peer) {
-        return (peer.fsid == fsid);
+      (!site_it->mirror_uuid.empty() && site_it->mirror_uuid != mirror_uuid)) {
+    // search for existing peer w/ same mirror_uuid
+    mirror_uuid_it = std::find_if(peers.begin(), peers.end(),
+                                  [&mirror_uuid](auto& peer) {
+        return (peer.mirror_uuid == mirror_uuid);
       });
   }
 
   auto it = peers.end();
-  if (site_it != peers.end() && fsid_it != peers.end()) {
-    // implies two peers -- match by fsid but don't update site name
-    it = fsid_it;
-  } else if (fsid_it != peers.end()) {
+  if (site_it != peers.end() && mirror_uuid_it != peers.end()) {
+    // implies two peers -- match by mirror_uuid but don't update site name
+    it = mirror_uuid_it;
+  } else if (mirror_uuid_it != peers.end()) {
     // implies site name has been updated in remote
-    fsid_it->site_name = site_name;
-    it = fsid_it;
+    mirror_uuid_it->site_name = site_name;
+    it = mirror_uuid_it;
   } else if (site_it != peers.end()) {
-    // implies empty fsid in peer
-    site_it->fsid = fsid;
+    // implies empty mirror_uuid in peer
+    site_it->mirror_uuid = mirror_uuid;
     it = site_it;
   } else {
     CLS_LOG(10, "auto-generating new TX-only peer: %s", site_name.c_str());
@@ -4830,7 +4830,7 @@ int peer_ping(cls_method_context_t hctx, const std::string& site_name,
 
     mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_TX;
     mirror_peer.site_name = site_name;
-    mirror_peer.fsid = fsid;
+    mirror_peer.mirror_uuid = mirror_uuid;
   }
 
   if (it != peers.end()) {
@@ -4900,9 +4900,10 @@ int peer_add(cls_method_context_t hctx, cls::rbd::MirrorPeer mirror_peer) {
       CLS_ERR("peer site name '%s' already exists",
               peer.site_name.c_str());
       return -EEXIST;
-    } else if (!mirror_peer.fsid.empty() && peer.fsid == mirror_peer.fsid) {
-      CLS_ERR("peer fsid '%s' already exists",
-              peer.fsid.c_str());
+    } else if (!mirror_peer.mirror_uuid.empty() &&
+               peer.mirror_uuid == mirror_peer.mirror_uuid) {
+      CLS_ERR("peer mirror uuid '%s' already exists",
+              peer.mirror_uuid.c_str());
       return -EEXIST;
     }
   }
@@ -5044,7 +5045,7 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
 int image_status_set(cls_method_context_t hctx, const string &global_image_id,
 		     const cls::rbd::MirrorImageSiteStatus &status) {
   cls::rbd::MirrorImageSiteStatusOnDisk ondisk_status(status);
-  ondisk_status.fsid = ""; // fsid stored in key
+  ondisk_status.mirror_uuid = ""; // mirror_uuid stored in key
   ondisk_status.up = false;
   ondisk_status.last_update = ceph_clock_now();
 
@@ -5055,19 +5056,20 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   encode(ondisk_status, bl, cls_get_features(hctx));
 
   r = cls_cxx_map_set_val(hctx, status_global_key(global_image_id,
-                                                  status.fsid), &bl);
+                                                  status.mirror_uuid), &bl);
   if (r < 0) {
     CLS_ERR("error setting status for mirrored image, global id '%s', "
-            "site '%s': %s", global_image_id.c_str(), status.fsid.c_str(),
+            "site '%s': %s", global_image_id.c_str(),
+            status.mirror_uuid.c_str(),
             cpp_strerror(r).c_str());
     return r;
   }
   return 0;
 }
 
-int get_remote_image_status_fsids(cls_method_context_t hctx,
-                                  const std::string& global_image_id,
-                                  std::set<std::string>* fsids) {
+int get_remote_image_status_mirror_uuids(cls_method_context_t hctx,
+                                         const std::string& global_image_id,
+                                         std::set<std::string>* mirror_uuids) {
   std::string filter = remote_status_global_key(global_image_id, "");
   std::string last_read = filter;
   int max_read = 4; // we don't expect lots of peers
@@ -5086,7 +5088,7 @@ int get_remote_image_status_fsids(cls_method_context_t hctx,
         break;
       }
 
-      fsids->insert(key.substr(filter.length()));
+      mirror_uuids->insert(key.substr(filter.length()));
     }
 
     if (!keys.empty()) {
@@ -5100,16 +5102,18 @@ int get_remote_image_status_fsids(cls_method_context_t hctx,
 int image_status_remove(cls_method_context_t hctx,
 			const string &global_image_id) {
   // remove all local/remote image statuses
-  std::set<std::string> fsids;
-  int r = get_remote_image_status_fsids(hctx, global_image_id, &fsids);
+  std::set<std::string> mirror_uuids;
+  int r = get_remote_image_status_mirror_uuids(hctx, global_image_id,
+                                               &mirror_uuids);
   if (r < 0 && r != -ENOENT) {
     return r;
   }
 
-  fsids.insert(cls::rbd::MirrorImageSiteStatus::LOCAL_FSID);
-  for (auto& fsid : fsids) {
-    CLS_LOG(20, "removing status object for fsid %s", fsid.c_str());
-    auto key = status_global_key(global_image_id, fsid);
+  mirror_uuids.insert(cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID);
+  for (auto& mirror_uuid : mirror_uuids) {
+    CLS_LOG(20, "removing status object for mirror_uuid %s",
+            mirror_uuid.c_str());
+    auto key = status_global_key(global_image_id, mirror_uuid);
     r = cls_cxx_map_remove_key(hctx, key);
     if (r < 0 && r != -ENOENT) {
       CLS_ERR("error removing stale status for key '%s': %s",
@@ -5122,7 +5126,7 @@ int image_status_remove(cls_method_context_t hctx,
 }
 
 int image_status_get(cls_method_context_t hctx, const string &global_image_id,
-                     const std::string& fsid, const bufferlist& bl,
+                     const std::string& mirror_uuid, const bufferlist& bl,
                      const std::set<entity_inst_t> &watchers,
                      cls::rbd::MirrorImageStatus* status) {
   cls::rbd::MirrorImageSiteStatusOnDisk ondisk_status;
@@ -5132,14 +5136,14 @@ int image_status_get(cls_method_context_t hctx, const string &global_image_id,
   } catch (const buffer::error &err) {
     CLS_ERR("could not decode status for mirrored image, global id '%s', "
             "site '%s'",
-            global_image_id.c_str(), fsid.c_str());
+            global_image_id.c_str(), mirror_uuid.c_str());
     return -EIO;
   }
 
   auto site_status = static_cast<cls::rbd::MirrorImageSiteStatus>(
     ondisk_status);
   site_status.up = (watchers.find(ondisk_status.origin) != watchers.end());
-  site_status.fsid = fsid;
+  site_status.mirror_uuid = mirror_uuid;
   status->mirror_image_site_statuses.push_back(site_status);
   return 0;
 }
@@ -5151,20 +5155,21 @@ int image_status_get_local(cls_method_context_t hctx,
   bufferlist bl;
   int r = cls_cxx_map_get_val(
     hctx, status_global_key(global_image_id,
-                            cls::rbd::MirrorImageSiteStatus::LOCAL_FSID), &bl);
+                            cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID),
+                            &bl);
   if (r == -ENOENT) {
     return 0;
   } else if (r < 0) {
     CLS_ERR("error reading status for mirrored image, global id '%s', "
             "site '%s': '%s'",
             global_image_id.c_str(),
-            cls::rbd::MirrorImageSiteStatus::LOCAL_FSID.c_str(),
+            cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID.c_str(),
             cpp_strerror(r).c_str());
     return r;
   }
 
   return image_status_get(hctx, global_image_id,
-                          cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
+                          cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID,
                           bl, watchers, status);
 }
 
@@ -5189,10 +5194,10 @@ int image_status_get_remote(cls_method_context_t hctx,
     }
 
     for (auto& it : vals) {
-      auto fsid = it.first.substr(filter.length());
-      CLS_LOG(20, "fsid = '%s'", fsid.c_str());
-      r = image_status_get(hctx, global_image_id, fsid, it.second, watchers,
-                           status);
+      auto mirror_uuid = it.first.substr(filter.length());
+      CLS_LOG(20, "mirror_uuid = '%s'", mirror_uuid.c_str());
+      r = image_status_get(hctx, global_image_id, mirror_uuid, it.second,
+                           watchers, status);
       if (r < 0) {
         return r;
       }
@@ -5291,7 +5296,7 @@ int image_status_list(cls_method_context_t hctx,
 
 cls::rbd::MirrorImageStatusState compute_image_status_summary_state(
     cls::rbd::MirrorPeerDirection mirror_peer_direction,
-    const std::set<std::string>& tx_peer_fsids,
+    const std::set<std::string>& tx_peer_mirror_uuids,
     const cls::rbd::MirrorImageStatus& status) {
   std::optional<cls::rbd::MirrorImageStatusState> state = {};
 
@@ -5314,14 +5319,15 @@ cls::rbd::MirrorImageStatusState compute_image_status_summary_state(
     [[fallthrough]];
   case cls::rbd::MIRROR_PEER_DIRECTION_TX:
     // if we are TX-only, summary is based on remote status
-    unmatched_tx_peers = tx_peer_fsids.size();
+    unmatched_tx_peers = tx_peer_mirror_uuids.size();
     for (auto& remote_status : status.mirror_image_site_statuses) {
-      if (remote_status.fsid == cls::rbd::MirrorImageSiteStatus::LOCAL_FSID) {
+      if (remote_status.mirror_uuid ==
+            cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
         continue;
       }
 
       if (unmatched_tx_peers > 0 &&
-          tx_peer_fsids.count(remote_status.fsid) > 0) {
+          tx_peer_mirror_uuids.count(remote_status.mirror_uuid) > 0) {
         --unmatched_tx_peers;
       }
 
@@ -5349,7 +5355,7 @@ cls::rbd::MirrorImageStatusState compute_image_status_summary_state(
 int image_status_get_summary(
     cls_method_context_t hctx,
     cls::rbd::MirrorPeerDirection mirror_peer_direction,
-    const std::set<std::string>& tx_peer_fsids,
+    const std::set<std::string>& tx_peer_mirror_uuids,
     std::map<cls::rbd::MirrorImageStatusState, int> *states) {
   std::set<entity_inst_t> watchers;
   int r = list_watchers(hctx, &watchers);
@@ -5398,7 +5404,7 @@ int image_status_get_summary(
       }
 
       auto state = compute_image_status_summary_state(
-        mirror_peer_direction, tx_peer_fsids, status);
+        mirror_peer_direction, tx_peer_mirror_uuids, status);
       (*states)[state]++;
     }
 
@@ -5479,7 +5485,7 @@ int image_instance_get(cls_method_context_t hctx,
   bufferlist bl;
   int r = cls_cxx_map_get_val(
     hctx, status_global_key(global_image_id,
-                            cls::rbd::MirrorImageSiteStatus::LOCAL_FSID),
+                            cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID),
     &bl);
   if (r < 0) {
     if (r != -ENOENT) {
@@ -5898,7 +5904,7 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param unique peer site name (std::string)
- * @param fsid (std::string)
+ * @param mirror_uuid (std::string)
  * @param direction (MirrorPeerDirection) -- future use
  *
  * Output:
@@ -5907,12 +5913,12 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
 int mirror_peer_ping(cls_method_context_t hctx, bufferlist *in,
                      bufferlist *out) {
   std::string site_name;
-  std::string fsid;
+  std::string mirror_uuid;
   cls::rbd::MirrorPeerDirection mirror_peer_direction;
   try {
     auto it = in->cbegin();
     decode(site_name, it);
-    decode(fsid, it);
+    decode(mirror_uuid, it);
 
     uint8_t direction;
     decode(direction, it);
@@ -5926,7 +5932,7 @@ int mirror_peer_ping(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
-  int r = mirror::peer_ping(hctx, site_name, fsid);
+  int r = mirror::peer_ping(hctx, site_name, mirror_uuid);
   if (r < 0) {
     return r;
   }
@@ -6448,13 +6454,13 @@ int mirror_image_status_get_summary(cls_method_context_t hctx, bufferlist *in,
     mirror_peer_direction = peers.begin()->mirror_peer_direction;
   }
 
-  std::set<std::string> tx_peer_fsids;
+  std::set<std::string> tx_peer_mirror_uuids;
   for (auto& peer : peers) {
     if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
       continue;
     }
 
-    tx_peer_fsids.insert(peer.fsid);
+    tx_peer_mirror_uuids.insert(peer.mirror_uuid);
     if (mirror_peer_direction != cls::rbd::MIRROR_PEER_DIRECTION_RX_TX &&
         mirror_peer_direction != peer.mirror_peer_direction) {
       mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX_TX;
@@ -6463,7 +6469,7 @@ int mirror_image_status_get_summary(cls_method_context_t hctx, bufferlist *in,
 
   std::map<cls::rbd::MirrorImageStatusState, int> states;
   int r = mirror::image_status_get_summary(hctx, mirror_peer_direction,
-                                           tx_peer_fsids, &states);
+                                           tx_peer_mirror_uuids, &states);
   if (r < 0) {
     return r;
   }

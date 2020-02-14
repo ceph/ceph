@@ -103,7 +103,7 @@ namespace librbd {
     std::string uuid;
     mirror_peer_direction_t direction;
     std::string site_name;
-    std::string fsid;
+    std::string mirror_uuid;
     std::string client_name;
     time_t last_seen;
   } mirror_peer_site_t;
@@ -129,7 +129,7 @@ namespace librbd {
   } mirror_image_status_t CEPH_RBD_DEPRECATED;
 
   typedef struct {
-    std::string fsid;
+    std::string mirror_uuid;
     mirror_image_status_state_t state;
     std::string description;
     time_t last_update;
@@ -314,6 +314,8 @@ public:
 
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+
+  int mirror_uuid_get(IoCtx& io_ctx, std::string* mirror_uuid);
 
   int mirror_peer_bootstrap_create(IoCtx& io_ctx, std::string* token);
   int mirror_peer_bootstrap_import(IoCtx& io_ctx,

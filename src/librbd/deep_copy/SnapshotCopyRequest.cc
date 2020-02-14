@@ -45,22 +45,34 @@ using librbd::util::unique_lock_name;
 template <typename I>
 SnapshotCopyRequest<I>::SnapshotCopyRequest(I *src_image_ctx,
                                             I *dst_image_ctx,
-                                            librados::snap_t snap_id_end,
+                                            librados::snap_t src_snap_id_start,
+                                            librados::snap_t src_snap_id_end,
+                                            librados::snap_t dst_snap_id_start,
                                             bool flatten, ContextWQ *work_queue,
                                             SnapSeqs *snap_seqs,
                                             Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
-    m_dst_image_ctx(dst_image_ctx), m_snap_id_end(snap_id_end),
+    m_dst_image_ctx(dst_image_ctx), m_src_snap_id_start(src_snap_id_start),
+    m_src_snap_id_end(src_snap_id_end), m_dst_snap_id_start(dst_snap_id_start),
     m_flatten(flatten), m_work_queue(work_queue), m_snap_seqs_result(snap_seqs),
     m_snap_seqs(*snap_seqs), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(ceph::make_mutex(unique_lock_name("SnapshotCopyRequest::m_lock", this))) {
+  ceph_assert((m_src_snap_id_start == 0 && m_dst_snap_id_start == 0) ||
+              (m_src_snap_id_start > 0 && m_dst_snap_id_start > 0));
+
   // snap ids ordered from oldest to newest
+  m_src_image_ctx->image_lock.lock_shared();
   m_src_snap_ids.insert(src_image_ctx->snaps.begin(),
                         src_image_ctx->snaps.end());
+  m_src_image_ctx->image_lock.unlock_shared();
+
+  m_dst_image_ctx->image_lock.lock_shared();
   m_dst_snap_ids.insert(dst_image_ctx->snaps.begin(),
                         dst_image_ctx->snaps.end());
-  if (m_snap_id_end != CEPH_NOSNAP) {
-    m_src_snap_ids.erase(m_src_snap_ids.upper_bound(m_snap_id_end),
+  m_dst_image_ctx->image_lock.unlock_shared();
+
+  if (m_src_snap_id_end != CEPH_NOSNAP) {
+    m_src_snap_ids.erase(m_src_snap_ids.upper_bound(m_src_snap_id_end),
                          m_src_snap_ids.end());
   }
 }
@@ -99,6 +111,8 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
   SnapIdSet::iterator snap_id_it = m_dst_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_dst_snap_ids.upper_bound(m_prev_snap_id);
+  } else if (m_dst_snap_id_start > 0) {
+    snap_id_it = m_dst_snap_ids.upper_bound(m_dst_snap_id_start);
   }
 
   for (; snap_id_it != m_dst_snap_ids.end(); ++snap_id_it) {
@@ -197,7 +211,7 @@ void SnapshotCopyRequest<I>::handle_snap_unprotect(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "failed to unprotect snapshot '" << m_snap_name << "': "
-         << cpp_strerror(r) << dendl;
+                 << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -224,6 +238,8 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
   SnapIdSet::iterator snap_id_it = m_dst_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_dst_snap_ids.upper_bound(m_prev_snap_id);
+  } else if (m_dst_snap_id_start > 0) {
+    snap_id_it = m_dst_snap_ids.upper_bound(m_dst_snap_id_start);
   }
 
   for (; snap_id_it != m_dst_snap_ids.end(); ++snap_id_it) {
@@ -310,6 +326,8 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   SnapIdSet::iterator snap_id_it = m_src_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_src_snap_ids.upper_bound(m_prev_snap_id);
+  } else if (m_src_snap_id_start > 0) {
+    snap_id_it = m_src_snap_ids.upper_bound(m_src_snap_id_start);
   }
 
   for (; snap_id_it != m_src_snap_ids.end(); ++snap_id_it) {
@@ -326,10 +344,17 @@ void SnapshotCopyRequest<I>::send_snap_create() {
       return;
     }
 
-    // if the source snapshot isn't in our mapping table, create it
-    if (m_snap_seqs.find(src_snap_id) == m_snap_seqs.end() &&
-	boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) != nullptr) {
-      break;
+    if (m_snap_seqs.find(src_snap_id) == m_snap_seqs.end()) {
+      // the source snapshot is not in our mapping table, ...
+      if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) !=
+            nullptr) {
+        // ... create it since it's a user snapshot
+        break;
+      } else if (src_snap_id == m_src_snap_id_end) {
+        // ... map it to destination HEAD since it's not a user snapshot that we
+        // will create (e.g. MirrorPrimarySnapshotNamespace)
+        m_snap_seqs[src_snap_id] = CEPH_NOSNAP;
+      }
     }
   }
 
@@ -396,7 +421,7 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "failed to create snapshot '" << m_snap_name << "': "
-         << cpp_strerror(r) << dendl;
+                 << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -423,6 +448,8 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
   SnapIdSet::iterator snap_id_it = m_src_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_src_snap_ids.upper_bound(m_prev_snap_id);
+  } else if (m_src_snap_id_start > 0) {
+    snap_id_it = m_src_snap_ids.upper_bound(m_src_snap_id_start);
   }
 
   for (; snap_id_it != m_src_snap_ids.end(); ++snap_id_it) {
@@ -449,6 +476,11 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     // if destination snapshot is not protected, protect it
     auto snap_seq_it = m_snap_seqs.find(src_snap_id);
     ceph_assert(snap_seq_it != m_snap_seqs.end());
+    if (snap_seq_it->second == CEPH_NOSNAP) {
+      // implies src end snapshot is mapped to a non-copyable snapshot
+      ceph_assert(src_snap_id == m_src_snap_id_end);
+      break;
+    }
 
     m_dst_image_ctx->image_lock.lock_shared();
     bool dst_protected;
@@ -516,7 +548,11 @@ void SnapshotCopyRequest<I>::handle_snap_protect(int r) {
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_set_head() {
-  if (m_snap_id_end != CEPH_NOSNAP) {
+  auto snap_seq_it = m_snap_seqs.find(m_src_snap_id_end);
+  if (m_src_snap_id_end != CEPH_NOSNAP &&
+      (snap_seq_it == m_snap_seqs.end() ||
+       snap_seq_it->second != CEPH_NOSNAP)) {
+    // not copying to src nor dst HEAD revision
     finish(0);
     return;
   }
@@ -528,10 +564,20 @@ void SnapshotCopyRequest<I>::send_set_head() {
   uint64_t parent_overlap = 0;
   {
     std::shared_lock src_locker{m_src_image_ctx->image_lock};
-    size = m_src_image_ctx->size;
-    if (!m_flatten) {
-      parent_spec = m_src_image_ctx->parent_md.spec;
-      parent_overlap = m_src_image_ctx->parent_md.overlap;
+    auto snap_info_it = m_src_image_ctx->snap_info.find(m_src_snap_id_end);
+    if (snap_info_it != m_src_image_ctx->snap_info.end()) {
+      auto& snap_info = snap_info_it->second;
+      size = snap_info.size;
+      if (!m_flatten) {
+        parent_spec = snap_info.parent.spec;
+        parent_overlap = snap_info.parent.overlap;
+      }
+    } else {
+      size = m_src_image_ctx->size;
+      if (!m_flatten) {
+        parent_spec = m_src_image_ctx->parent_md.spec;
+        parent_overlap = m_src_image_ctx->parent_md.overlap;
+      }
     }
   }
 
@@ -563,8 +609,7 @@ template <typename I>
 void SnapshotCopyRequest<I>::send_resize_object_map() {
   int r = 0;
 
-  if (m_snap_id_end == CEPH_NOSNAP &&
-      m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+  if (m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP)) {
     std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
     std::shared_lock image_locker{m_dst_image_ctx->image_lock};
 
