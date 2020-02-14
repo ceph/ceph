@@ -352,7 +352,7 @@ class MixedType(MixedStrategy):
         else:
             journal_vg = self.common_vg
 
-        journal_size = prepare.get_journal_size(lv_format=True)
+        journal_size = prepare.get_journal_size(lv_format=False)
 
         # create 1 vg per data device first, mapping them to the device path,
         # when the lv gets created later, it can create as many as needed (or
