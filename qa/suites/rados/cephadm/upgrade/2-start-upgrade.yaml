@@ -1,0 +1,5 @@
+tasks:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph upgrade start --image quay.io/ceph-ci/ceph:$sha1
