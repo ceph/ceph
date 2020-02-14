@@ -3,13 +3,13 @@ overrides:
     fs: xfs
     conf:
       osd:
-        osd objectstore: filestore
+        osd objectstore: bluestore
         osd sloppy crc: true
   ceph-deploy:
     fs: xfs
-    filestore: True
+    bluestore: True
     conf:
       osd:
-        osd objectstore: filestore
+        osd objectstore: bluestore
         osd sloppy crc: true
 
