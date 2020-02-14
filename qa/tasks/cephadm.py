@@ -642,9 +642,9 @@ def ceph_mdss(ctx, config):
     yield
 
 @contextlib.contextmanager
-def ceph_prometheus(ctx, config):
+def ceph_monitoring(daemon_type, ctx, config):
     """
-    Deploy prometheus
+    Deploy prometheus, node-exporter, etc.
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
@@ -653,20 +653,20 @@ def ceph_prometheus(ctx, config):
     daemons = {}
     for remote, roles in ctx.cluster.remotes.items():
         for role in [r for r in roles
-                    if teuthology.is_type('prometheus', cluster_name)(r)]:
+                    if teuthology.is_type(daemon_type, cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
             nodes.append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
     if nodes:
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'orch', 'apply', 'prometheus',
+            'ceph', 'orch', 'apply', daemon_type,
             str(len(nodes))] + nodes
         )
     for role, i in daemons.items():
         remote, id_ = i
         ctx.daemons.register_daemon(
-            remote, 'prometheus', id_,
+            remote, daemon_type, id_,
             cluster=cluster_name,
             fsid=fsid,
             logger=log.getChild(role),
@@ -1039,7 +1039,8 @@ def task(ctx, config):
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: ceph_rgw(ctx=ctx, config=config),
-            lambda: ceph_prometheus(ctx=ctx, config=config),
+            lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),
+            lambda: ceph_monitoring('node-exporter', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):
