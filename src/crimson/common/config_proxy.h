@@ -9,6 +9,10 @@
 #include "common/config_obs_mgr.h"
 #include "common/errno.h"
 
+namespace ceph {
+class Formatter;
+}
+
 namespace crimson::common {
 
 // a facade for managing config. each shard has its own copy of ConfigProxy.
@@ -146,6 +150,8 @@ public:
       get_config().set_mon_vals(nullptr, values, obs_mgr, kv, nullptr);
     });
   }
+
+  void show_config(ceph::Formatter* f) const;
 
   seastar::future<> parse_argv(std::vector<const char*>& argv) {
     // we could pass whatever is unparsed to seastar, but seastar::app_template

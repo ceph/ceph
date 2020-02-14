@@ -281,15 +281,14 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
  * false, ss is valid */
 
 bool
-cmdmap_from_json(vector<string> cmd, cmdmap_t *mapp, stringstream &ss)
+cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
 {
   json_spirit::mValue v;
 
   string fullcmd;
   // First, join all cmd strings
-  for (vector<string>::iterator it = cmd.begin();
-       it != cmd.end(); ++it)
-    fullcmd += *it;
+  for (auto& c : cmd)
+    fullcmd += c;
 
   try {
     if (!json_spirit::read(fullcmd, v))
