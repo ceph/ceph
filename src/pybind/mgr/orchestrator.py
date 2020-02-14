@@ -1011,6 +1011,16 @@ class Orchestrator(object):
         """Update RGW cluster"""
         raise NotImplementedError()
 
+    def add_prometheus(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Create new prometheus daemon"""
+        raise NotImplementedError()
+
+    def apply_prometheus(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update prometheus cluster"""
+        raise NotImplementedError()
+
     def upgrade_check(self, image, version):
         # type: (Optional[str], Optional[str]) -> Completion
         raise NotImplementedError()
