@@ -6,7 +6,8 @@ from tests import mock
 import pytest
 
 from ceph.deployment import inventory
-from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference
+from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference, \
+    servicespec_validate_add
 from orchestrator import InventoryNode, ServiceDescription
 from orchestrator import OrchestratorValidationError
 from orchestrator import HostPlacementSpec
@@ -110,7 +111,7 @@ def test_rgwspec():
     """
     example = json.loads(test_rgwspec.__doc__.strip())
     spec = RGWSpec.from_json(example)
-    assert spec.validate_add() is None
+    assert servicespec_validate_add(spec) is None
 
 
 def test_promise():
