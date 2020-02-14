@@ -1379,8 +1379,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def list_daemons(self, daemon_type=None, daemon_id=None,
                      host=None, refresh=False):
         if refresh:
-            ######### FIXME #########
-            raise NotImplementedError()
+            # ugly sync path, FIXME someday perhaps?
+            if host:
+                self._refresh_host_daemons(host)
+            else:
+                for host, hi in self.inventory.items():
+                    self._refresh_host_daemons(host)
         result = []
         for h, di in self.daemon_cache.items():
             if host and h != host:
