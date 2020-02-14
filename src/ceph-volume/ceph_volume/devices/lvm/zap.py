@@ -223,7 +223,13 @@ class Zap(object):
         Requirements: An LV or VG present in the device, making it an LVM member
         """
         for lv in device.lvs:
-            self.zap_lv(Device(lv.lv_path))
+            if lv.lv_name:
+                mlogger.info('Zapping lvm member {}. lv_path is {}'.format(device.abspath, lv.lv_path))
+                self.zap_lv(Device(lv.lv_path))
+            else:
+                mlogger.info('Found empty VG {}, removing'.format(lv.vg_name))
+                api.remove_vg(lv.vg_name)
+
 
 
     def zap_raw_device(self, device):
