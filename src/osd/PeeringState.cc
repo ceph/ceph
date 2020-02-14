@@ -1996,7 +1996,8 @@ void PeeringState::choose_async_recovery_replicated(
  */
 bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 				 bool restrict_to_up_acting,
-				 bool *history_les_bound)
+				 bool *history_les_bound,
+				 bool request_pg_temp_change_only)
 {
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[pg_whoami] = info;
@@ -2105,6 +2106,8 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     }
     return false;
   }
+  if (request_pg_temp_change_only)
+    return true;
   want_acting.clear();
   acting_recovery_backfill = want_acting_backfill;
   psdout(10) << "acting_recovery_backfill is "
@@ -5652,6 +5655,16 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     if (ps->have_unfound() || (ps->is_degraded() && ps->might_have_unfound.count(notevt.from))) {
       ps->discover_all_missing(
 	context<PeeringMachine>().get_recovery_ctx().msgs);
+    }
+    // check if it is a previous down acting member that's coming back.
+    // if so, request pg_temp change to trigger a new interval transition
+    pg_shard_t auth_log_shard;
+    bool history_les_bound = false;
+    ps->choose_acting(auth_log_shard, false, &history_les_bound, true);
+    if (!ps->want_acting.empty() && ps->want_acting != ps->acting) {
+      psdout(10) << "Active: got notify from previous acting member "
+                 << notevt.from << ", requesting pg_temp change"
+                 << dendl;
     }
   }
   return discard_event();
