@@ -1396,9 +1396,6 @@ void PG::calc_replicated_acting(
       usable++;
       ss << " osd." << *i << " (up) accepted " << cur_info << std::endl;
     }
-    if (want->size() >= size) {
-      break;
-    }
   }
 
   // This no longer has backfill OSDs, but they are covered above.
