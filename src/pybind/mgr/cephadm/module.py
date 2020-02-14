@@ -1302,32 +1302,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         }
         return host, dm
 
-    def _get_daemons(self,
-                     daemon_type=None,
-                     daemon_id=None,
-                     service_name=None,
-                     want_host=None,
-                     refresh=False):
-        if refresh:
-            ######### FIXME #########
-            raise NotImplementedError()
-        result = []
-        self.log.debug('_get_daemons')
-        for host, info in self.daemon_cache.items():
-            self.log.debug('_get_daemons info %s' % info)
-            if want_host and host != want_host:
-                continue
-            for name, dd in info.get('daemons', {}).items():
-                if daemon_type and daemon_type != dd.daemon_type:
-                    continue
-                if daemon_id and daemon_id != dd.daemon_id:
-                    continue
-                if service_name and not dd.name().startswith(service_name + '.'):
-                    continue
-                result.append(dd)
-        self.log.debug('_get_daemons returns %s' % result)
-        return trivial_result(result)
-
 #    def describe_service(self, service_type=None, service_id=None,
 #                         node_name=None, refresh=False):
 #        if service_type not in ("mds", "osd", "mgr", "mon", 'rgw', "nfs", None):
@@ -1341,11 +1315,20 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def list_daemons(self, daemon_type=None, daemon_id=None,
                      host=None, refresh=False):
-        result = self._get_daemons(daemon_type=daemon_type,
-                                   daemon_id=daemon_id,
-                                   want_host=host,
-                                   refresh=refresh)
-        return result
+        if refresh:
+            ######### FIXME #########
+            raise NotImplementedError()
+        result = []
+        for h, di in self.daemon_cache.items():
+            if host and h != host:
+                continue
+            for name, dd in di['daemons'].items():
+                if daemon_type and daemon_type != dd.daemon_type:
+                    continue
+                if daemon_id and daemon_id != dd.daemon_id:
+                    continue
+                result.append(dd)
+        return trivial_result(result)
 
     def service_action(self, action, service_type, service_name):
         self.log.debug('service_action action %s type %s name %s' % (
