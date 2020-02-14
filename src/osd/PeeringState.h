@@ -1556,7 +1556,8 @@ public:
   bool recoverable(const vector<int> &want) const;
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
-		     bool *history_les_bound);
+		     bool *history_les_bound,
+		     bool request_pg_temp_change_only = false);
 
   bool search_for_missing(
     const pg_info_t &oinfo, const pg_missing_t &omissing,
