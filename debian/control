@@ -298,6 +298,7 @@ Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python3-six,
+         python3-jsonpatch
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
