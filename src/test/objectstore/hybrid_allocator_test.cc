@@ -34,7 +34,8 @@ TEST(HybridAllocator, basic)
   {
     uint64_t block_size = 0x1000;
     uint64_t capacity = 0x10000 * _1m; // = 64GB
-    TestHybridAllocator ha(g_ceph_context, capacity, block_size, 4, "test_hybrid_allocator");
+    TestHybridAllocator ha(g_ceph_context, capacity, block_size,
+      4 * sizeof(range_seg_t), "test_hybrid_allocator");
 
     ASSERT_EQ(0, ha.get_free());
     ASSERT_EQ(0, ha.get_avl_free());
