@@ -393,7 +393,6 @@ public:
 
   /// initialize created PG
   void init(
-    crimson::os::CollectionRef coll_ref,
     int role,
     const std::vector<int>& up,
     int up_primary,

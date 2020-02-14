@@ -134,7 +134,9 @@ private:
   seastar::future<> _send_boot();
   seastar::future<> _add_me_to_crush();
 
-  seastar::future<Ref<PG>> make_pg(cached_map_t create_map, spg_t pgid);
+  seastar::future<Ref<PG>> make_pg(cached_map_t create_map,
+				   spg_t pgid,
+				   bool do_create);
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
 
