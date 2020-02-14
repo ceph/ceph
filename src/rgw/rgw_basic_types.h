@@ -359,19 +359,19 @@ struct rgw_bucket {
   rgw_bucket& operator=(const rgw_bucket&) = default;
 
   bool operator<(const rgw_bucket& b) const {
+    if (tenant < b.tenant) {
+      return true;
+    } else if (tenant > b.tenant) {
+      return false;
+    }
+
     if (name < b.name) {
       return true;
     } else if (name > b.name) {
       return false;
     }
 
-    if (bucket_id < b.bucket_id) {
-      return true;
-    } else if (bucket_id > b.bucket_id) {
-      return false;
-    }
-
-    return (tenant < b.tenant);
+    return (bucket_id < b.bucket_id);
   }
 
   bool operator==(const rgw_bucket& b) const {
