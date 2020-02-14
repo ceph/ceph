@@ -4627,6 +4627,10 @@ std::vector<Option> get_global_options() {
     .set_default(4)
     .set_description(""),
 
+    Option("bluestore_hybrid_alloc_mem_cap", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(64_M)
+    .set_description("Maximum RAM hybrid allocator should use before enabling bitmap supplement"),
+
     Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb_original")
     .set_enum_allowed({ "rocksdb_original", "use_some_extra" })

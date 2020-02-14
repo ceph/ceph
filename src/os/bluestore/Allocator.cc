@@ -116,7 +116,9 @@ Allocator *Allocator::create(CephContext* cct, string type,
   } else if (type == "avl") {
     return new AvlAllocator(cct, size, block_size, name);
   } else if (type == "hybrid") {
-    return new HybridAllocator(cct, size, block_size, 1024 /*FIXME*/, name);
+    return new HybridAllocator(cct, size, block_size,
+      cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+      name);
   }
   if (alloc == nullptr) {
     lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
