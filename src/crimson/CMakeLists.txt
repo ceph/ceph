@@ -104,7 +104,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${crimson_common_srcs}
-  $<TARGET_OBJECTS:crimson-auth>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crimson-crush>)
 
@@ -124,14 +123,26 @@ endif()
 target_link_libraries(crimson-common
   PUBLIC
     json_spirit
+    crimson::cflags
   PRIVATE
     crc32
-    crimson::cflags
     ${crimson_common_deps}
     OpenSSL::Crypto)
 
 set(crimson_auth_srcs
-  auth/KeyRing.cc)
+  auth/KeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthClientHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthMethodList.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthRegistry.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthSessionHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/KeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/RotatingKeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxAuthorizeHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxClientHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxProtocol.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxSessionHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/none/AuthNoneAuthorizeHandler.cc)
 set(crimson_mgr_srcs
   mgr/client.cc)
 set(crimson_mon_srcs
