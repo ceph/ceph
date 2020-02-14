@@ -61,6 +61,7 @@ class TestProgress(MgrTestCase):
         return len(osd_map['osds'])
 
     def setUp(self):
+        super(TestProgress, self).setUp()
         # Ensure we have at least four OSDs
         if self._osd_count() < 4:
             raise SkipTest("Not enough OSDS!")
