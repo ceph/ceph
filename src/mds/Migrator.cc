@@ -173,9 +173,13 @@ void Migrator::dispatch(Message *m)
 class C_MDC_EmptyImport : public MigratorContext {
   CDir *dir;
 public:
-  C_MDC_EmptyImport(Migrator *m, CDir *d) : MigratorContext(m), dir(d) {}
+  C_MDC_EmptyImport(Migrator *m, CDir *d) :
+    MigratorContext(m), dir(d) {
+    dir->get(CDir::PIN_PTRWAITER);
+  }
   void finish(int r) override {
     mig->export_empty_import(dir);
+    dir->put(CDir::PIN_PTRWAITER);
   }
 };
 
@@ -735,16 +739,17 @@ void Migrator::maybe_do_queued_export()
 
 
 class C_MDC_ExportFreeze : public MigratorContext {
-  CDir *ex;   // dir i'm exporting
+  CDir *dir;   // dir i'm exporting
   uint64_t tid;
 public:
   C_MDC_ExportFreeze(Migrator *m, CDir *e, uint64_t t) :
-	MigratorContext(m), ex(e), tid(t) {
-          assert(ex != NULL);
-        }
+    MigratorContext(m), dir(e), tid(t) {
+    dir->get(CDir::PIN_PTRWAITER);
+  }
   void finish(int r) override {
     if (r >= 0)
-      mig->export_frozen(ex, tid);
+      mig->export_frozen(dir, tid);
+    dir->put(CDir::PIN_PTRWAITER);
   }
 };
 
@@ -866,6 +871,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
 
   MDRequestRef mdr = mds->mdcache->request_start_internal(CEPH_MDS_OP_EXPORTDIR);
   mdr->more()->export_dir = dir;
+  mdr->pin(dir);
 
   assert(export_state.count(dir) == 0);
   export_state_t& stat = export_state[dir];
@@ -1154,6 +1160,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
 
     MDRequestRef _mdr = mds->mdcache->request_start_internal(CEPH_MDS_OP_EXPORTDIR);
     _mdr->more()->export_dir = sub;
+    _mdr->pin(sub);
 
     assert(export_state.count(sub) == 0);
     auto& stat = export_state[sub];
@@ -1325,12 +1332,13 @@ class C_M_ExportSessionsFlushed : public MigratorContext {
   CDir *dir;
   uint64_t tid;
 public:
-  C_M_ExportSessionsFlushed(Migrator *m, CDir *d, uint64_t t)
-   : MigratorContext(m), dir(d), tid(t) {
-    assert(dir != NULL);
+  C_M_ExportSessionsFlushed(Migrator *m, CDir *d, uint64_t t) :
+    MigratorContext(m), dir(d), tid(t) {
+    dir->get(CDir::PIN_PTRWAITER);
   }
   void finish(int r) override {
     mig->export_sessions_flushed(dir, tid);
+    dir->put(CDir::PIN_PTRWAITER);
   }
 };
 
@@ -1619,10 +1627,11 @@ class C_M_ExportGo : public MigratorContext {
 public:
   C_M_ExportGo(Migrator *m, CDir *d, uint64_t t) :
     MigratorContext(m), dir(d), tid(t) {
-      assert(dir != NULL);
-    }
+    dir->get(CDir::PIN_PTRWAITER);
+  }
   void finish(int r) override {
     mig->export_go_synced(dir, tid);
+    dir->put(CDir::PIN_PTRWAITER);
   }
 };
 
@@ -2714,9 +2723,11 @@ public:
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f) :
     MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f) {
+    dir->get(CDir::PIN_PTRWAITER);
   }
   void finish(int r) override {
     mig->import_logged_start(df, dir, from, imported_session_map);
+    dir->put(CDir::PIN_PTRWAITER);
   }
 };
 
@@ -3087,6 +3098,8 @@ void Migrator::import_reverse_final(CDir *dir)
 void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
 				   map<client_t,pair<Session*,uint64_t> >& imported_session_map)
 {
+  dout(7) << "import_logged " << *dir << dendl;
+
   map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
   if (it == import_state.end() ||
       it->second.state != IMPORT_LOGGINGSTART) {
@@ -3094,8 +3107,6 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
     mds->server->finish_force_open_sessions(imported_session_map);
     return;
   }
-
-  dout(7) << "import_logged " << *dir << dendl;
 
   // note state
   it->second.state = IMPORT_ACKING;
