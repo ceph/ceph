@@ -24,7 +24,6 @@ void ImageStateHeader::decode(bufferlist::const_iterator& bl) {
 
 void SnapState::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  encode(id, bl);
   encode(snap_namespace, bl);
   encode(name, bl);
   encode(protection_status, bl);
@@ -33,14 +32,13 @@ void SnapState::encode(bufferlist& bl) const {
 
 void SnapState::decode(bufferlist::const_iterator& bl) {
   DECODE_START(1, bl);
-  decode(id, bl);
   decode(snap_namespace, bl);
   decode(name, bl);
+  decode(protection_status, bl);
   DECODE_FINISH(bl);
 }
 
 void SnapState::dump(Formatter *f) const {
-  f->dump_unsigned("id", id);
   f->open_object_section("namespace");
   snap_namespace.dump(f);
   f->close_section();
@@ -49,8 +47,11 @@ void SnapState::dump(Formatter *f) const {
 }
 
 std::ostream& operator<<(std::ostream& os, const SnapState& snap_state) {
-  os << "[" << snap_state.id << " " << snap_state.snap_namespace << " "
-     << snap_state.name << " " << snap_state.protection_status << "]";
+  os << "["
+     << "namespace=" << snap_state.snap_namespace << ", "
+     << "name=" << snap_state.name << ", "
+     << "protection=" << static_cast<int>(snap_state.protection_status)
+     << "]";
   return os;
 }
 
@@ -93,9 +94,13 @@ void ImageState::dump(Formatter *f) const {
 }
 
 std::ostream& operator<<(std::ostream& os, const ImageState& image_state) {
-  os << "[" << image_state.name << " " << image_state.features << " "
-     << image_state.snap_limit << " " << image_state.snapshots.size()
-     << " " << image_state.metadata.size() << "]";
+  os << "["
+     << "name=" << image_state.name << ", "
+     << "features=" << image_state.features << ", "
+     << "snap_limit=" << image_state.snap_limit << ", "
+     << "snaps=" << image_state.snapshots << ", "
+     << "metadata_count=" << image_state.metadata.size()
+     << "]";
   return os;
 }
 

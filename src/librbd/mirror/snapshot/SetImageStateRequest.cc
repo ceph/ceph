@@ -130,7 +130,7 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
       if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
         continue;
       }
-      m_image_state.snapshots[snap_id] = {snap_id, snap_info.snap_namespace,
+      m_image_state.snapshots[snap_id] = {snap_info.snap_namespace,
                                           snap_info.name,
                                           snap_info.protection_status};
     }
