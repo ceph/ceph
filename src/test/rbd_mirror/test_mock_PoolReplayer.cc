@@ -213,7 +213,7 @@ struct RemotePoolPoller<librbd::MockTestImageCtx> {
       Threads<librbd::MockTestImageCtx>* threads,
       librados::IoCtx& remote_io_ctx,
       const std::string& local_site_name,
-      const std::string& local_fsid,
+      const std::string& local_mirror_uuid,
       remote_pool_poller::Listener& listener) {
     ceph_assert(s_instance != nullptr);
     s_instance->listener = &listener;

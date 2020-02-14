@@ -1494,8 +1494,8 @@ bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
                      m_migration_spec.image_name, m_migration_spec.image_id, {},
                      overlap, m_migration_spec.flatten};
 
-  deep_copy::util::compute_snap_map(0, CEPH_NOSNAP, snap_seqs,
-                                    &migration_info->snap_map);
+  deep_copy::util::compute_snap_map(m_image_ctx.cct, 0, CEPH_NOSNAP, {},
+                                    snap_seqs, &migration_info->snap_map);
   return true;
 }
 

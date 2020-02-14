@@ -205,7 +205,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, Success) {
   expect_can_create_primary_snapshot(mock_utils, false, false, true);
   expect_get_mirror_peers(mock_image_ctx,
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
-                            "mirror", "fsid"}}, 0);
+                            "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, 0);
 
   C_SaferCond ctx;
@@ -251,7 +251,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, GetMirrorPeersError) {
   expect_can_create_primary_snapshot(mock_utils, false, false, true);
   expect_get_mirror_peers(mock_image_ctx,
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
-                            "mirror", "fsid"}}, -EINVAL);
+                            "mirror", "mirror uuid"}}, -EINVAL);
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", 0U, nullptr,
@@ -275,7 +275,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, CreateSnapshotError) {
   expect_can_create_primary_snapshot(mock_utils, false, false, true);
   expect_get_mirror_peers(mock_image_ctx,
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
-                            "mirror", "fsid"}}, 0);
+                            "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
@@ -305,7 +305,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPeer) {
   expect_can_create_primary_snapshot(mock_utils, false, false, true);
   expect_get_mirror_peers(mock_image_ctx,
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
-                            "mirror", "fsid"}}, 0);
+                            "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, 0);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   auto it = mock_image_ctx.snap_info.rbegin();

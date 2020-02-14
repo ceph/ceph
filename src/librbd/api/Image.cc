@@ -680,7 +680,7 @@ int Image<I>::deep_copy(I *src, I *dest, bool flatten,
   C_SaferCond cond;
   SnapSeqs snap_seqs;
   auto req = DeepCopyRequest<I>::create(src, dest, snap_id_start, snap_id_end,
-                                        flatten, boost::none, op_work_queue,
+                                        0U, flatten, boost::none, op_work_queue,
                                         &snap_seqs, &prog_ctx, &cond);
   req->send();
   int r = cond.wait();

@@ -255,7 +255,7 @@ void ImageSync<I>::send_copy_image() {
   m_image_copy_prog_ctx = new ImageCopyProgressContext(this);
   m_image_copy_request = librbd::DeepCopyRequest<I>::create(
       m_remote_image_ctx, m_local_image_ctx, snap_id_start, snap_id_end,
-      false, object_number, m_threads->work_queue, &m_snap_seqs_copy,
+      0, false, object_number, m_threads->work_queue, &m_snap_seqs_copy,
       m_image_copy_prog_ctx, ctx);
   m_image_copy_request->get();
   m_lock.unlock();

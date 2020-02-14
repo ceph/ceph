@@ -1905,6 +1905,10 @@ class TestMirroring(object):
         remove_image()
         self.rbd.mirror_mode_set(ioctx, self.initial_mirror_mode)
 
+    def test_uuid(self):
+        mirror_uuid = self.rbd.mirror_uuid_get(ioctx)
+        assert(mirror_uuid)
+
     def test_site_name(self):
         site_name = "us-west-1"
         self.rbd.mirror_site_name_set(rados, site_name)
@@ -1942,7 +1946,7 @@ class TestMirroring(object):
             'direction': RBD_MIRROR_PEER_DIRECTION_RX_TX,
             'site_name' : site_name,
             'cluster_name' : site_name,
-            'fsid': '',
+            'mirror_uuid': '',
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
@@ -1955,7 +1959,7 @@ class TestMirroring(object):
             'direction': RBD_MIRROR_PEER_DIRECTION_RX_TX,
             'site_name' : cluster_name,
             'cluster_name' : cluster_name,
-            'fsid': '',
+            'mirror_uuid': '',
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))

@@ -21,6 +21,7 @@
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/GetStatusRequest.h"
+#include "librbd/mirror/GetUuidRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
@@ -341,7 +342,7 @@ struct C_ImageGetGlobalStatus : public C_ImageGetInfo {
     for (auto& site_status :
            mirror_image_status_internal.mirror_image_site_statuses) {
       mirror_image_global_status->site_statuses.push_back({
-        site_status.fsid,
+        site_status.mirror_uuid,
         static_cast<mirror_image_status_state_t>(site_status.state),
         site_status.description, site_status.last_update.sec(),
         site_status.up});
@@ -1098,6 +1099,35 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 }
 
 template <typename I>
+int Mirror<I>::uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  C_SaferCond ctx;
+  uuid_get(io_ctx, mirror_uuid, &ctx);
+  int r = ctx.wait();
+  if (r < 0) {
+    if (r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring uuid: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+void Mirror<I>::uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid,
+                         Context* on_finish) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  auto req = mirror::GetUuidRequest<I>::create(io_ctx, mirror_uuid, on_finish);
+  req->send();
+}
+
+template <typename I>
 int Mirror<I>::peer_bootstrap_create(librados::IoCtx& io_ctx,
                                      std::string* token) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
@@ -1498,7 +1528,7 @@ int Mirror<I>::peer_site_list(librados::IoCtx& io_ctx,
     peer.direction = static_cast<mirror_peer_direction_t>(
       mirror_peer.mirror_peer_direction);
     peer.site_name = mirror_peer.site_name;
-    peer.fsid = mirror_peer.fsid;
+    peer.mirror_uuid = mirror_peer.mirror_uuid;
     peer.client_name = mirror_peer.client_name;
     peer.last_seen = mirror_peer.last_seen.sec();
     peers->push_back(peer);
@@ -1712,7 +1742,7 @@ int Mirror<I>::image_global_status_list(
         status.mirror_image_site_statuses.size());
       for (auto& site_status : status.mirror_image_site_statuses) {
         global_status.site_statuses.push_back(mirror_image_site_status_t{
-          site_status.fsid,
+          site_status.mirror_uuid,
           static_cast<mirror_image_status_state_t>(site_status.state),
           site_status.state == cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN ?
             STATUS_NOT_FOUND : site_status.description,
@@ -1721,7 +1751,7 @@ int Mirror<I>::image_global_status_list(
     } else {
       // older OSD that only returns local status
       global_status.site_statuses.push_back(mirror_image_site_status_t{
-        cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
+        cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID,
         MIRROR_IMAGE_STATUS_STATE_UNKNOWN, STATUS_NOT_FOUND, 0, false});
     }
   }
