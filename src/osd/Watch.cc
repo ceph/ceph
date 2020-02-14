@@ -37,7 +37,8 @@ Notify::Notify(
   uint64_t notify_id,
   uint64_t version,
   OSDService *osd)
-  : client(client), client_gid(client_gid),
+  : client(client),
+    client_gid(client_gid),
     complete(false),
     discarded(false),
     timed_out(false),
@@ -47,7 +48,7 @@ Notify::Notify(
     notify_id(notify_id),
     version(version),
     osd(osd),
-    cb(NULL) {}
+    cb(nullptr) {}
 
 NotifyRef Notify::makeNotifyRef(
   ConnectionRef client,
@@ -191,9 +192,13 @@ void Notify::maybe_complete_notify()
     encode(missed, bl);
 
     bufferlist empty;
-    MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
-					 CEPH_WATCH_EVENT_NOTIFY_COMPLETE, empty));
-    reply->notifier_gid = client_gid;
+    auto* const reply = new MWatchNotify(
+      cookie,
+      version,
+      notify_id,
+      CEPH_WATCH_EVENT_NOTIFY_COMPLETE,
+      empty,
+      client_gid);
     reply->set_data(bl);
     if (timed_out)
       reply->return_code = -ETIMEDOUT;
@@ -305,10 +310,8 @@ Watch::~Watch() {
   dout(10) << "~Watch" << dendl;
   // users must have called remove() or discard() prior to this point
   ceph_assert(!obc);
-  ceph_assert(!conn);
+  ceph_assert(!is_connected());
 }
-
-bool Watch::connected() { return !!conn; }
 
 Context *Watch::get_delayed_cb()
 {
@@ -350,14 +353,14 @@ void Watch::unregister_cb()
 void Watch::got_ping(utime_t t)
 {
   last_ping = t;
-  if (conn) {
+  if (is_connected()) {
     register_cb();
   }
 }
 
 void Watch::connect(ConnectionRef con, bool _will_ping)
 {
-  if (conn == con) {
+  if (is_connected(con.get())) {
     dout(10) << __func__ << " con " << con << " - already connected" << dendl;
     return;
   }
@@ -410,7 +413,7 @@ void Watch::discard_state()
   in_progress_notifies.clear();
   unregister_cb();
   discarded = true;
-  if (conn) {
+  if (is_connected()) {
     if (auto priv = conn->get_priv(); priv) {
       auto session = static_cast<Session*>(priv.get());
       session->wstate.removeWatch(self.lock());
@@ -428,7 +431,7 @@ bool Watch::is_discarded() const
 void Watch::remove(bool send_disconnect)
 {
   dout(10) << "remove" << dendl;
-  if (send_disconnect && conn) {
+  if (send_disconnect && is_connected()) {
     bufferlist empty;
     MWatchNotify *reply(new MWatchNotify(cookie, 0, 0,
 					 CEPH_WATCH_EVENT_DISCONNECT, empty));
@@ -460,7 +463,7 @@ void Watch::start_notify(NotifyRef notif)
   dout(10) << "start_notify " << notif->notify_id << dendl;
   in_progress_notifies[notif->notify_id] = notif;
   notif->start_watcher(self.lock());
-  if (connected())
+  if (is_connected())
     send_notify(notif);
 }
 
@@ -474,9 +477,12 @@ void Watch::send_notify(NotifyRef notif)
 {
   dout(10) << "send_notify" << dendl;
   MWatchNotify *notify_msg = new MWatchNotify(
-    cookie, notif->version, notif->notify_id,
-    CEPH_WATCH_EVENT_NOTIFY, notif->payload);
-  notify_msg->notifier_gid = notif->client_gid;
+    cookie,
+    notif->version,
+    notif->notify_id,
+    CEPH_WATCH_EVENT_NOTIFY,
+    notif->payload,
+    notif->client_gid);
   conn->send_message(notify_msg);
 }
 
