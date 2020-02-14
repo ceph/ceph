@@ -794,7 +794,7 @@ sends them to the other OSDs. It is also responsible for maintaining an
 authoritative version of the placement group logs.
 
 In the following diagram, an erasure coded placement group has been created with
-``K = 2 + M = 1`` and is supported by three OSDs, two for ``K`` and one for
+``K = 2, M = 1`` and is supported by three OSDs, two for ``K`` and one for
 ``M``. The acting set of the placement group is made of **OSD 1**, **OSD 2** and
 **OSD 3**. An object has been encoded and stored in the OSDs : the chunk
 ``D1v1`` (i.e. Data chunk number 1, version 1) is on **OSD 1**, ``D2v1`` on
