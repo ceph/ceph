@@ -385,7 +385,7 @@ class _Promise(object):
         assert self._state in (self.INITIALIZED, self.RUNNING)
         logger.exception('_Promise failed')
         self._exception = e
-        self._value = 'exception'
+        self._value = f'_exception: {e}'
         if self._next_promise:
             self._next_promise.fail(e)
         self._state = self.FINISHED
