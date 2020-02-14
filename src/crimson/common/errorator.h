@@ -880,7 +880,15 @@ namespace ct_error {
     ct_error_code<std::errc::operation_not_supported>;
   using not_connected = ct_error_code<std::errc::not_connected>;
   using timed_out = ct_error_code<std::errc::timed_out>;
+  using erange =
+    ct_error_code<std::errc::result_out_of_range>;
+  using ebadf =
+    ct_error_code<std::errc::bad_file_descriptor>;
+  using enospc =
+    ct_error_code<std::errc::no_space_on_device>;
   using value_too_large = ct_error_code<std::errc::value_too_large>;
+  using eagain =
+    ct_error_code<std::errc::resource_unavailable_try_again>;
 
   struct pass_further_all {
     template <class ErrorT>
