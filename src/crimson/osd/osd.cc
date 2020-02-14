@@ -430,10 +430,12 @@ seastar::future<> OSD::load_pgs()
   });
 }
 
-seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map, spg_t pgid)
+seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
+				      spg_t pgid,
+				      bool do_create)
 {
   using ec_profile_t = map<string,string>;
-  return ([&]() {
+  auto get_pool_info = [create_map, pgid, this] {
     if (create_map->have_pg_pool(pgid.pool())) {
       pg_pool_t pi = *create_map->get_pg_pool(pgid.pool());
       string name = create_map->get_pool_name(pgid.pool());
@@ -449,21 +451,30 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map, spg_t pgid)
       // pool was deleted; grab final pg_pool_t off disk.
       return meta_coll->load_final_pool_info(pgid.pool());
     }
-  })().then([pgid, this, create_map](pg_pool_t&& pool,
-                       string&& name,
-                       ec_profile_t&& ec_profile) {
-    return shard_services.get_store().open_collection(coll_t::meta()).then(
-      [this, pgid, create_map, pool=std::move(pool), name, ec_profile]
-      (auto coll_ref) mutable {
-      return seastar::make_ready_future<Ref<PG>>(new PG{pgid,
-	    pg_shard_t{whoami, pgid.shard},
-	    coll_ref,
-	    std::move(pool),
-	    std::move(name),
-	    create_map,
-	    shard_services,
-	    ec_profile});
-    });
+  };
+  auto get_collection = [pgid, do_create, this] {
+    const coll_t cid{pgid};
+    if (do_create) {
+      return store->create_new_collection(cid);
+    } else {
+      return store->open_collection(cid);
+    }
+  };
+  return seastar::when_all_succeed(
+    std::move(get_pool_info),
+    std::move(get_collection)
+  ).then([pgid, create_map, this] (auto info,
+				   auto coll) {
+    auto [pool, name, ec_profile] = std::move(info);
+    return seastar::make_ready_future<Ref<PG>>(
+      new PG{pgid,
+	     pg_shard_t{whoami, pgid.shard},
+	     std::move(coll),
+	     std::move(pool),
+	     std::move(name),
+	     create_map,
+	     shard_services,
+	     ec_profile});
   });
 }
 
@@ -472,15 +483,13 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   return PGMeta{store.get(), pgid}.get_epoch().then([this](epoch_t e) {
     return get_map(e);
   }).then([pgid, this] (auto&& create_map) {
-    return make_pg(std::move(create_map), pgid);
+    return make_pg(std::move(create_map), pgid, false);
   }).then([this, pgid](Ref<PG> pg) {
-    return pg->read_state(store.get()).then([pg] {
-      return seastar::make_ready_future<Ref<PG>>(std::move(pg));
-    }).handle_exception([pgid](auto ep) {
-      logger().info("pg {} saw exception on load {}", pgid, ep);
-      ceph_abort("Could not load pg" == 0);
-      return seastar::make_exception_future<Ref<PG>>(ep);
-    });
+    return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+  }).handle_exception([pgid](auto ep) {
+    logger().info("pg {} saw exception on load {}", pgid, ep);
+    ceph_abort("Could not load pg" == 0);
+    return seastar::make_exception_future<Ref<PG>>(ep);
   });
 }
 
@@ -695,56 +704,53 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 		startmap);
 	    }
 	  }
-	  return make_pg(startmap, pgid).then(
+	  return make_pg(startmap, pgid, true).then(
 	    [startmap=std::move(startmap)](auto pg) mutable {
 	      return seastar::make_ready_future<Ref<PG>, cached_map_t>(
 		std::move(pg),
 		std::move(startmap));
 	    });
-      }).then(
-	[this, &info](auto pg, auto startmap) -> seastar::future<Ref<PG>> {
-	  if (!pg)
-	    return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
-        return store->create_new_collection(coll_t(info->pgid)).then([this, &info, startmap, pg] (auto coll) {
-	  PeeringCtx rctx{ceph_release_t::octopus};
-	  const pg_pool_t* pp = startmap->get_pg_pool(info->pgid.pool());
+      }).then([this, &info](auto pg, auto startmap) ->
+              seastar::future<Ref<PG>> {
+        if (!pg)
+          return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
+        PeeringCtx rctx{ceph_release_t::octopus};
+        const pg_pool_t* pp = startmap->get_pg_pool(info->pgid.pool());
 
-	  int up_primary, acting_primary;
-	  vector<int> up, acting;
-	  startmap->pg_to_up_acting_osds(
-	    info->pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+        int up_primary, acting_primary;
+        vector<int> up, acting;
+        startmap->pg_to_up_acting_osds(
+          info->pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
-	  int role = startmap->calc_pg_role(pg_shard_t(whoami, info->pgid.shard),
-					    acting);
+        int role = startmap->calc_pg_role(pg_shard_t(whoami, info->pgid.shard),
+                                          acting);
 
-	  create_pg_collection(
-	    rctx.transaction,
-	    info->pgid,
-	    info->pgid.get_split_bits(pp->get_pg_num()));
-	  init_pg_ondisk(
-	    rctx.transaction,
-	    info->pgid,
-	    pp);
+        create_pg_collection(
+          rctx.transaction,
+          info->pgid,
+          info->pgid.get_split_bits(pp->get_pg_num()));
+        init_pg_ondisk(
+          rctx.transaction,
+          info->pgid,
+          pp);
 
-	  pg->init(
-	    coll,
-	    role,
-	    up,
-	    up_primary,
-	    acting,
-	    acting_primary,
-	    info->history,
-	    info->past_intervals,
-	    false,
-	    rctx.transaction);
+        pg->init(
+          role,
+          up,
+          up_primary,
+          acting,
+          acting_primary,
+          info->history,
+          info->past_intervals,
+          false,
+          rctx.transaction);
 
-	  return shard_services.start_operation<PGAdvanceMap>(
-	    *this, pg, pg->get_osdmap_epoch(),
-	    osdmap->get_epoch(), std::move(rctx), true).second.then([pg] {
-	      return seastar::make_ready_future<Ref<PG>>(pg);
-	  });
-	});
-    });
+        return shard_services.start_operation<PGAdvanceMap>(
+          *this, pg, pg->get_osdmap_epoch(),
+          osdmap->get_epoch(), std::move(rctx), true).second.then([pg] {
+            return seastar::make_ready_future<Ref<PG>>(pg);
+        });
+      });
   });
 }
 

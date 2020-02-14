@@ -107,7 +107,7 @@ PG::PG(
 	osdmap,
 	pgid.pool(),
 	pool,
-	osdmap->get_pool_name(pgid.pool())),
+	name),
       osdmap,
       this,
       this),
@@ -343,7 +343,6 @@ void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
 
 
 void PG::init(
-  crimson::os::CollectionRef coll,
   int role,
   const vector<int>& newup, int new_up_primary,
   const vector<int>& newacting, int new_acting_primary,
@@ -352,7 +351,6 @@ void PG::init(
   bool backfill,
   ObjectStore::Transaction &t)
 {
-  coll_ref = coll;
   peering_state.init(
     role, newup, new_up_primary, newacting,
     new_acting_primary, history, pi, backfill, t);
