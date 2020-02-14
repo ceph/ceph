@@ -2001,6 +2001,7 @@ public:
 
   void proc_lease(const pg_lease_t& l);
   void proc_lease_ack(int from, const pg_lease_ack_t& la);
+  void proc_renew_lease();
 
   pg_lease_ack_t get_lease_ack() {
     return pg_lease_ack_t(readable_until_ub_from_primary);
