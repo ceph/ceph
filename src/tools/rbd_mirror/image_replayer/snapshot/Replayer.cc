@@ -21,6 +21,7 @@
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayerListener.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/ApplyImageStateRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 
 #define dout_context g_ceph_context
@@ -424,7 +425,7 @@ void Replayer<I>::scan_remote_mirror_snapshots() {
         // attempt to resume image-sync
         dout(10) << "local image contains in-progress mirror snapshot"
                  << dendl;
-        copy_image();
+        get_local_image_state();
       } else {
         copy_snapshots();
       }
@@ -468,7 +469,9 @@ void Replayer<I>::scan_remote_mirror_snapshots() {
 
 template <typename I>
 void Replayer<I>::copy_snapshots() {
-  dout(10) << dendl;
+  dout(10) << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
+           << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
+           << "local_snap_id_start=" << m_local_snap_id_start << dendl;
 
   ceph_assert(m_remote_snap_id_start != CEPH_NOSNAP);
   ceph_assert(m_remote_snap_id_end > 0 &&
@@ -502,15 +505,15 @@ void Replayer<I>::handle_copy_snapshots(int r) {
            << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
            << "local_snap_id_start=" << m_local_snap_id_start << ", "
            << "snap_seqs=" << m_local_mirror_snap_ns.snap_seqs << dendl;
-  get_image_state();
+  get_remote_image_state();
 }
 
 template <typename I>
-void Replayer<I>::get_image_state() {
+void Replayer<I>::get_remote_image_state() {
   dout(10) << dendl;
 
   auto ctx = create_context_callback<
-    Replayer<I>, &Replayer<I>::handle_get_image_state>(this);
+    Replayer<I>, &Replayer<I>::handle_get_remote_image_state>(this);
   auto req = librbd::mirror::snapshot::GetImageStateRequest<I>::create(
     m_state_builder->remote_image_ctx, m_remote_snap_id_end,
     &m_image_state, ctx);
@@ -518,7 +521,7 @@ void Replayer<I>::get_image_state() {
 }
 
 template <typename I>
-void Replayer<I>::handle_get_image_state(int r) {
+void Replayer<I>::handle_get_remote_image_state(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
@@ -529,6 +532,33 @@ void Replayer<I>::handle_get_image_state(int r) {
   }
 
   create_non_primary_snapshot();
+}
+
+template <typename I>
+void Replayer<I>::get_local_image_state() {
+  dout(10) << dendl;
+
+  ceph_assert(m_local_snap_id_end != CEPH_NOSNAP);
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_get_local_image_state>(this);
+  auto req = librbd::mirror::snapshot::GetImageStateRequest<I>::create(
+    m_state_builder->local_image_ctx, m_local_snap_id_end,
+    &m_image_state, ctx);
+  req->send();
+}
+
+template <typename I>
+void Replayer<I>::handle_get_local_image_state(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to retrieve local snapshot image state: "
+         << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "failed to retrieve local snapshot image state");
+    return;
+  }
+
+  copy_image();
 }
 
 template <typename I>
@@ -555,12 +585,19 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
     return;
   }
 
+  dout(15) << "local_snap_id_end=" << m_local_snap_id_end << dendl;
+
   copy_image();
 }
 
 template <typename I>
 void Replayer<I>::copy_image() {
-  dout(10) << dendl;
+  dout(10) << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
+           << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
+           << "local_snap_id_start=" << m_local_snap_id_start << ", "
+           << "last_copied_object_number="
+           << m_local_mirror_snap_ns.last_copied_object_number << ", "
+           << "snap_seqs=" << m_local_mirror_snap_ns.snap_seqs << dendl;
 
   m_progress_ctx = new ProgressContext(this);
   auto ctx = create_context_callback<
@@ -590,7 +627,7 @@ void Replayer<I>::handle_copy_image(int r) {
     return;
   }
 
-  update_non_primary_snapshot(true);
+  apply_image_state();
 }
 
 template <typename I>
@@ -598,6 +635,35 @@ void Replayer<I>::handle_copy_image_progress(uint64_t offset, uint64_t total) {
   dout(10) << "offset=" << offset << ", total=" << total << dendl;
 
   // TODO
+}
+
+template <typename I>
+void Replayer<I>::apply_image_state() {
+  dout(10) << dendl;
+
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_apply_image_state>(this);
+  auto req = ApplyImageStateRequest<I>::create(
+    m_local_mirror_uuid,
+    m_state_builder->remote_mirror_uuid,
+    m_state_builder->local_image_ctx,
+    m_state_builder->remote_image_ctx,
+    m_image_state, ctx);
+  req->send();
+}
+
+template <typename I>
+void Replayer<I>::handle_apply_image_state(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to apply remote image state to local image: "
+         << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "failed to apply remote image state");
+    return;
+  }
+
+  update_non_primary_snapshot(true);
 }
 
 template <typename I>

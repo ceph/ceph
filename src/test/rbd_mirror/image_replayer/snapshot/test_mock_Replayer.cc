@@ -11,6 +11,7 @@
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayerListener.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/ApplyImageStateRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
@@ -268,6 +269,30 @@ CloseImageRequest<librbd::MockTestImageCtx>* CloseImageRequest<librbd::MockTestI
 
 namespace snapshot {
 
+template <>
+struct ApplyImageStateRequest<librbd::MockTestImageCtx> {
+  Context* on_finish = nullptr;
+
+  static ApplyImageStateRequest* s_instance;
+  static ApplyImageStateRequest* create(
+      const std::string& local_mirror_uuid,
+      const std::string& remote_mirror_uuid,
+      librbd::MockTestImageCtx* local_image_ctx,
+      librbd::MockTestImageCtx* remote_image_ctx,
+      const librbd::mirror::snapshot::ImageState& image_state,
+      Context* on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  ApplyImageStateRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
 template<>
 struct StateBuilder<librbd::MockTestImageCtx> {
   StateBuilder(librbd::MockTestImageCtx& local_image_ctx,
@@ -281,6 +306,8 @@ struct StateBuilder<librbd::MockTestImageCtx> {
 
   std::string remote_mirror_uuid = "remote mirror uuid";
 };
+
+ApplyImageStateRequest<librbd::MockTestImageCtx>* ApplyImageStateRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace snapshot
 } // namespace image_replayer
@@ -306,6 +333,7 @@ using ::testing::WithArg;
 class TestMockImageReplayerSnapshotReplayer : public TestMockFixture {
 public:
   typedef Replayer<librbd::MockTestImageCtx> MockReplayer;
+  typedef ApplyImageStateRequest<librbd::MockTestImageCtx> MockApplyImageStateRequest;
   typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
   typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
@@ -465,6 +493,14 @@ public:
                         mirror_peer_uuid, r]() {
         ASSERT_EQ(snap_id, req.snap_id);
         ASSERT_EQ(mirror_peer_uuid, req.mirror_peer_uuid);
+        m_threads->work_queue->queue(req.on_finish, r);
+      }));
+  }
+
+  void expect_apply_image_state(
+      MockApplyImageStateRequest& mock_request, int r) {
+    EXPECT_CALL(mock_request, send())
+      .WillOnce(Invoke([this, &req=mock_request, r]() {
         m_threads->work_queue->queue(req.on_finish, r);
       }));
   }
@@ -648,6 +684,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 0, 1, 0, {},
                     {{1, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 11, true, 0, 0);
   expect_notify_update(mock_local_image_ctx);
@@ -670,10 +708,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
                                     {{1, 11}, {4, CEPH_NOSNAP}}, 14, 0);
   expect_image_copy(mock_image_copy_request, 1, 4, 11, {},
                     {{1, 11}, {4, CEPH_NOSNAP}}, 0);
-  MockUnlinkPeerRequest mock_unlink_peer_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 14, true, 0, 0);
   expect_notify_update(mock_local_image_ctx);
+  MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
                      0);
 
@@ -748,10 +787,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSync) {
   // re-sync snap1
   expect_is_refresh_required(mock_local_image_ctx, false);
   expect_is_refresh_required(mock_remote_image_ctx, false);
+  MockGetImageStateRequest mock_get_image_state_request;
+  expect_get_image_state(mock_get_image_state_request, 11, 0);
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 0, 1, 0,
                     librbd::deep_copy::ObjectNumber{123U},
                     {{1, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 11, true, 123, 0);
   expect_notify_update(mock_local_image_ctx);
@@ -827,6 +870,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 0, 1, 0, {},
                     {{1, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 11, true, 0, 0);
   expect_notify_update(mock_local_image_ctx);
@@ -1342,6 +1387,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 0, 1, 0, {},
                     {{1, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 11, true, 0, -EINVAL);
 
@@ -1416,6 +1463,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 1, 2, 11, {},
                     {{2, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 12, true, 0, 0);
   expect_notify_update(mock_local_image_ctx);
