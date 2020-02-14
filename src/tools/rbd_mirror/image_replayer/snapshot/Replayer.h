@@ -122,13 +122,13 @@ private:
    *    |                 COPY_IMAGE                    |
    *    |                     |                         |
    *    |                     v                         |
-   *    |                 UNLINK_PEER                   |
-   *    |                     |                         |
-   *    |                     v                         |
    *    |                 UPDATE_NON_PRIMARY_SNAPSHOT   |
    *    |                     |                         |
    *    |                     v                         |
    *    |                 NOTIFY_IMAGE_UPDATE           |
+   *    |                     |                         |
+   *    |                     v                         |
+   *    |                 UNLINK_PEER                   |
    *    |                     |                         |
    *    |                     v                         |
    *    |                 NOTIFY_LISTENER               |
@@ -225,14 +225,14 @@ private:
   void handle_copy_image(int r);
   void handle_copy_image_progress(uint64_t offset, uint64_t total);
 
-  void unlink_peer();
-  void handle_unlink_peer(int r);
-
   void update_non_primary_snapshot(bool complete);
   void handle_update_non_primary_snapshot(bool complete, int r);
 
   void notify_image_update();
   void handle_notify_image_update(int r);
+
+  void unlink_peer();
+  void handle_unlink_peer(int r);
 
   void register_update_watcher();
   void handle_register_update_watcher(int r);

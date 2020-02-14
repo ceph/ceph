@@ -585,7 +585,7 @@ void Replayer<I>::handle_copy_image(int r) {
     return;
   }
 
-  unlink_peer();
+  update_non_primary_snapshot(true);
 }
 
 template <typename I>
@@ -593,32 +593,6 @@ void Replayer<I>::handle_copy_image_progress(uint64_t offset, uint64_t total) {
   dout(10) << "offset=" << offset << ", total=" << total << dendl;
 
   // TODO
-}
-
-template <typename I>
-void Replayer<I>::unlink_peer() {
-  dout(10) << dendl;
-
-  auto ctx = create_context_callback<
-    Replayer<I>, &Replayer<I>::handle_unlink_peer>(this);
-  auto req = librbd::mirror::snapshot::UnlinkPeerRequest<I>::create(
-    m_state_builder->remote_image_ctx, m_remote_snap_id_end,
-    m_remote_mirror_peer_uuid, ctx);
-  req->send();
-}
-
-template <typename I>
-void Replayer<I>::handle_unlink_peer(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  if (r < 0 && r != -ENOENT) {
-    derr << "failed to unlink local peer from remote image: " << cpp_strerror(r)
-         << dendl;
-    handle_replay_complete(r, "failed to unlink local peer from remote image");
-    return;
-  }
-
-  update_non_primary_snapshot(true);
 }
 
 template <typename I>
@@ -655,11 +629,6 @@ void Replayer<I>::handle_update_non_primary_snapshot(bool complete, int r) {
     return;
   }
 
-  {
-    std::unique_lock locker{m_lock};
-    notify_status_updated();
-  }
-
   notify_image_update();
 }
 
@@ -684,6 +653,49 @@ void Replayer<I>::handle_notify_image_update(int r) {
     return;
   }
 
+  unlink_peer();
+}
+
+template <typename I>
+void Replayer<I>::unlink_peer() {
+  if (m_remote_snap_id_start == 0) {
+    {
+      std::unique_lock locker{m_lock};
+      notify_status_updated();
+    }
+
+    refresh_local_image();
+    return;
+  }
+
+  // local snapshot fully synced -- we no longer depend on the sync
+  // start snapshot in the remote image
+  dout(10) << "remote_snap_id=" << m_remote_snap_id_start << dendl;
+
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_unlink_peer>(this);
+  auto req = librbd::mirror::snapshot::UnlinkPeerRequest<I>::create(
+    m_state_builder->remote_image_ctx, m_remote_snap_id_start,
+    m_remote_mirror_peer_uuid, ctx);
+  req->send();
+}
+
+template <typename I>
+void Replayer<I>::handle_unlink_peer(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to unlink local peer from remote image: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(r, "failed to unlink local peer from remote image");
+    return;
+  }
+
+  {
+    std::unique_lock locker{m_lock};
+    notify_status_updated();
+  }
+
   refresh_local_image();
 }
 
@@ -698,7 +710,6 @@ void Replayer<I>::register_update_watcher() {
     Replayer<I>, &Replayer<I>::handle_register_update_watcher>(this);
   m_threads->work_queue->queue(ctx, r);
 }
-
 
 template <typename I>
 void Replayer<I>::handle_register_update_watcher(int r) {
