@@ -64,7 +64,7 @@ protected:
   * (when entry count >= max_entries)
   */
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
-    uint64_t max_entries,
+    uint64_t max_mem,
     const std::string& name);
 
 public:
