@@ -1366,9 +1366,28 @@ class ServiceSpec(object):
         else:
             self.count = 1
 
-    def validate_add(self):
-        if not self.name:
-            raise OrchestratorValidationError('Cannot add Service: Name required')
+
+def servicespec_validate_add(self: ServiceSpec):
+    # This must not be a method of ServiceSpec, otherwise you'll hunt
+    # sub-interpreter affinity bugs.
+    if not self.name:
+        raise OrchestratorValidationError('Cannot add Service: Name required')
+
+
+def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
+    # This must not be a method of ServiceSpec, otherwise you'll hunt
+    # sub-interpreter affinity bugs.
+    if not self.placement.hosts:
+        raise OrchestratorValidationError('Service specification: no hosts provided')
+
+    for host, network, _ in self.placement.hosts:
+        if not network:
+            m = "Host '{host}' is missing a network spec\nE.g. {host}:1.2.3.0/24".format(
+                host=host)
+            logger.error(
+                f'validate_hosts_have_network_spec: id(OrchestratorValidationError)={id(OrchestratorValidationError)}')
+            raise OrchestratorValidationError(m)
+
 
 
 class NFSServiceSpec(ServiceSpec):
@@ -1382,8 +1401,8 @@ class NFSServiceSpec(ServiceSpec):
         self.namespace = namespace
 
     def validate_add(self):
-        super(NFSServiceSpec, self).validate_add()
-
+        servicespec_validate_add(self)
+        
         if not self.pool:
             raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
 
