@@ -147,13 +147,15 @@ size_t PGRecovery::start_primary_recovery_ops(
       pg->get_recovery_backend()->is_recovering(head) ? " (recovering head)":"");
 
     // TODO: handle lost/unfound
-    if (!pg->get_recovery_backend()->is_recovering(soid)) {
-      if (pg->get_recovery_backend()->is_recovering(head)) {
-	++skipped;
-      } else {
-	out->push_back(recover_missing(soid, item.need));
-	++started;
-      }
+    if (pg->get_recovery_backend()->is_recovering(soid)) {
+      auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
+      out->push_back(recovery_waiter.wait_for_recovered_blocking());
+      ++started;
+    } else if (pg->get_recovery_backend()->is_recovering(head)) {
+      ++skipped;
+    } else {
+      out->push_back(recover_missing(soid, item.need));
+      ++started;
     }
 
     if (!skipped)
