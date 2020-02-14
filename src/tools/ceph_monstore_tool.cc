@@ -496,7 +496,9 @@ static int update_auth(MonitorDBStore& st, const string& keyring_path)
   return 0;
 }
 
-static int update_mkfs(MonitorDBStore& st, const string& monmap_path)
+static int update_mkfs(MonitorDBStore& st,
+		       const string& monmap_path,
+		       const vector<string>& mon_ids)
 {
   MonMap monmap;
   if (!monmap_path.empty()) {
@@ -516,6 +518,29 @@ static int update_mkfs(MonitorDBStore& st, const string& monmap_path)
     if (r) {
       cerr << "no initial monitors" << std::endl;
       return -EINVAL;
+    }
+    vector<string> new_names;
+    if (!mon_ids.empty()) {
+      if (mon_ids.size() != monmap.size()) {
+	cerr << "Please pass the same number of <mon-ids> to name the hosts "
+	     << "listed in 'mon_host'. "
+	     << mon_ids.size() << " mon-id(s) specified, "
+	     << "while you have " << monmap.size() << " mon hosts." << std::endl;
+	return -EINVAL;
+      }
+      new_names = mon_ids;
+    } else {
+      for (unsigned rank = 0; rank < monmap.size(); rank++) {
+	string new_name{"a"};
+	new_name[0] += rank;
+	new_names.push_back(std::move(new_name));
+      }
+    }
+    for (unsigned rank = 0; rank < monmap.size(); rank++) {
+      auto name = monmap.get_name(rank);
+      if (name.compare(0, 7, "noname-") == 0) {
+	monmap.rename(name, new_names[rank]);
+      }
     }
   }
   monmap.print(cout);
@@ -597,7 +622,7 @@ static int update_mgrmap(MonitorDBStore& st)
     }
     bufferlist bl;
     encode(mgr_command_descs, bl);
-    t->put("mgr_command_desc", "", bl);
+    t->put("mgr_command_descs", "", bl);
   }
   return st.apply_transaction(t);
 }
@@ -641,13 +666,18 @@ int rebuild_monstore(const char* progname,
   po::options_description op_desc("Allowed 'rebuild' options");
   string keyring_path;
   string monmap_path;
+  vector<string> mon_ids;
   op_desc.add_options()
     ("keyring", po::value<string>(&keyring_path),
      "path to the client.admin key")
     ("monmap", po::value<string>(&monmap_path),
-     "path to the initial monmap");
+     "path to the initial monmap")
+    ("mon-ids", po::value<vector<string>>(&mon_ids)->multitoken(),
+     "mon ids, use 'a', 'b', ... if not specified");
+  po::positional_options_description pos_desc;
+  pos_desc.add("mon-ids", -1);
   po::variables_map op_vm;
-  int r = parse_cmd_args(&op_desc, nullptr, nullptr, subcmds, &op_vm);
+  int r = parse_cmd_args(&op_desc, nullptr, &pos_desc, subcmds, &op_vm);
   if (r) {
     return -r;
   }
@@ -666,7 +696,7 @@ int rebuild_monstore(const char* progname,
   if ((r = update_paxos(st))) {
     return r;
   }
-  if ((r = update_mkfs(st, monmap_path))) {
+  if ((r = update_mkfs(st, monmap_path, mon_ids))) {
     return r;
   }
   if ((r = update_monitor(st))) {
