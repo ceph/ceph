@@ -243,7 +243,11 @@ class _Promise(object):
     @_exception.setter
     def _exception(self, e):
         self._exception_ = e
-        self._serialized_exception_ = pickle.dumps(e) if e is not None else None
+        try:
+            self._serialized_exception_ = pickle.dumps(e) if e is not None else None
+        except Exception:
+            logger.exception("failed to pickle {}".format(e))
+            # We can't properly raise anything here. Just hope for the best.
 
     @property
     def _serialized_exception(self):
