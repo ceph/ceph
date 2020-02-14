@@ -7,6 +7,8 @@
 
 #include <boost/asio.hpp>
 #define BOOST_COROUTINES_NO_DEPRECATION_WARNING
+#include <boost/range/begin.hpp>
+#include <boost/range/end.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/intrusive/list.hpp>
 
@@ -67,8 +69,7 @@ class StreamIO : public rgw::asio::ClientIO {
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
       http::read_some(stream, buffer, parser, ec);
-      if (ec == http::error::partial_message ||
-          ec == http::error::need_buffer) {
+      if (ec == http::error::need_buffer) {
         break;
       }
       if (ec) {
@@ -83,7 +84,8 @@ class StreamIO : public rgw::asio::ClientIO {
 using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_type>;
 
 template <typename Stream>
-void handle_connection(RGWProcessEnv& env, Stream& stream,
+void handle_connection(boost::asio::io_context& context,
+                       RGWProcessEnv& env, Stream& stream,
                        parse_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
@@ -160,7 +162,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
                                   rgw::io::add_conlen_controlling(
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
-      auto y = optional_yield{socket.get_io_context(), yield};
+      auto y = optional_yield{context, yield};
       process_request(env.store, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y, scheduler);
     }
@@ -604,7 +606,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
           return;
         }
         buffer->consume(bytes);
-        handle_connection(env, stream, *buffer, true, pause_mutex,
+        handle_connection(context, env, stream, *buffer, true, pause_mutex,
                           scheduler.get(), ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
@@ -622,7 +624,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto c = connections.add(conn);
         auto buffer = std::make_unique<parse_buffer>();
         boost::system::error_code ec;
-        handle_connection(env, s, *buffer, false, pause_mutex,
+        handle_connection(context, env, s, *buffer, false, pause_mutex,
                           scheduler.get(), ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
       });

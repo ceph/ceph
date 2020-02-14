@@ -278,6 +278,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   user_id = cct->_conf->client_mount_uid;
   group_id = cct->_conf->client_mount_gid;
+  fuse_default_permissions = cct->_conf.get_val<bool>(
+    "fuse_default_permissions");
 
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
@@ -1047,20 +1049,6 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
 
   // replicated
   in->dir_replicated = !dst->dist.empty();  // FIXME that's just one frag!
-  
-  // dist
-  /*
-  if (!st->dirfrag_dist.empty()) {   // FIXME
-    set<int> dist = st->dirfrag_dist.begin()->second;
-    if (dist.empty() && !in->dir_contacts.empty())
-      ldout(cct, 9) << "lost dist spec for " << in->ino 
-              << " " << dist << dendl;
-    if (!dist.empty() && in->dir_contacts.empty()) 
-      ldout(cct, 9) << "got dist spec for " << in->ino 
-              << " " << dist << dendl;
-    in->dir_contacts = dist;
-  }
-  */
 }
 
 void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
@@ -4025,7 +4013,9 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
      * don't remove caps.
      */
     if (ceph_seq_cmp(seq, cap.seq) <= 0) {
-      ceph_assert(&cap == in->auth_cap);
+      if (&cap != in->auth_cap)
+         ldout(cct, 0) << "WARNING: " <<  "inode " << *in << " caps on mds." << mds << " != auth_cap." << dendl;
+
       ceph_assert(cap.cap_id == cap_id);
       seq = cap.seq;
       mseq = cap.mseq;
@@ -5174,7 +5164,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 		<< " mds." << mds << " seq " << m->get_seq()
 		<< " caps now " << ccap_string(new_caps)
 		<< " was " << ccap_string(cap->issued)
-		<< (was_stale ? "" : " (stale)") << dendl;
+		<< (was_stale ? " (stale)" : "") << dendl;
 
   if (was_stale)
       cap->issued = cap->implemented = CEPH_CAP_PIN;
@@ -6341,7 +6331,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 	ldout(cct, 20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
 		       << " vs lease_gen " << dn->lease_gen << dendl;
       }
-      // dir lease?
+      // dir shared caps?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
 	if (dn->cap_shared_gen == dir->shared_gen &&
 	    (!dn->inode || dn->inode->caps_issued_mask(mask, true)))
@@ -8007,9 +7997,15 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       continue;
     }
 
+    int idx = pd - dir->readdir_cache.begin();
     int r = _getattr(dn->inode, caps, dirp->perms);
     if (r < 0)
       return r;
+    
+    // the content of readdir_cache may change after _getattr(), so pd may be invalid iterator    
+    pd = dir->readdir_cache.begin() + idx;
+    if (pd >= dir->readdir_cache.end() || *pd != dn)
+      return -EAGAIN;
 
     struct ceph_statx stx;
     struct dirent de;
@@ -8887,24 +8883,46 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
   int r;
   loff_t pos = -1;
 
+  if (whence == SEEK_END || whence == SEEK_DATA || whence == SEEK_HOLE) {
+    r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   switch (whence) {
   case SEEK_SET:
     pos = offset;
     break;
 
   case SEEK_CUR:
-    pos += offset;
+    pos = f->pos + offset;
     break;
 
   case SEEK_END:
-    r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
-    if (r < 0)
-      return r;
     pos = in->size + offset;
     break;
 
+  case SEEK_DATA:
+    if (offset < 0 || offset >= in->size) {
+      r = -ENXIO;
+      return offset; 
+    }
+    pos = offset;
+    break;
+
+  case SEEK_HOLE:
+    if (offset < 0 || offset >= in->size) {
+      r = -ENXIO;
+      pos = offset; 
+    } else {
+      pos = in->size;
+    }
+    break;
+
   default:
-    ceph_abort();
+    ldout(cct, 1) << __func__ << ": invalid whence value " << whence << dendl;
+    return -EINVAL;
   }
 
   if (pos < 0) {
@@ -10475,10 +10493,10 @@ int Client::ll_lazyio(Fh *fh, int enable)
   return _lazyio(fh, enable);
 }
 
-int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
+int Client::lazyio_propagate(int fd, loff_t offset, size_t count)
 {
   std::lock_guard l(client_lock);
-  ldout(cct, 3) << "op: client->lazyio_propogate(" << fd
+  ldout(cct, 3) << "op: client->lazyio_propagate(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
   Fh *f = get_filehandle(fd);
@@ -10503,8 +10521,11 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   Inode *in = f->inode.get();
   
   _fsync(f, true);
-  if (_release(in))
-    check_caps(in, 0);
+  if (_release(in)) {
+    int r =_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+    if (r < 0) 
+      return r;
+  }
   return 0;
 }
 
@@ -10635,8 +10656,6 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
     return -ENOTCONN;
 
   int r = 0;
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     if (strcmp(name, ".") && strcmp(name, "..")) {
       r = may_lookup(parent, perms);
@@ -10732,8 +10751,6 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
     return -ENOTCONN;
 
   int r = 0;
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     r = may_lookup(parent, perms);
     if (r < 0)
@@ -11004,8 +11021,6 @@ int Client::_ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
   tout(cct) << stx->stx_btime << std::endl;
   tout(cct) << mask << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int res = may_setattr(in, stx, mask, perms);
     if (res < 0)
@@ -11331,8 +11346,6 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = xattr_permission(in, name, MAY_READ, perms);
     if (r < 0)
@@ -11610,8 +11623,6 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = xattr_permission(in, name, MAY_WRITE, perms);
     if (r < 0)
@@ -11676,8 +11687,6 @@ int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = xattr_permission(in, name, MAY_WRITE, perms);
     if (r < 0)
@@ -12048,8 +12057,6 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
     if (r < 0)
@@ -12089,8 +12096,6 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
     if (r < 0)
@@ -12278,8 +12283,6 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_create(parent, perm);
     if (r < 0)
@@ -12316,8 +12319,6 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
     if (r < 0)
@@ -12403,8 +12404,6 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   tout(cct) << name << std::endl;
   tout(cct) << value << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
     if (r < 0)
@@ -12442,8 +12441,6 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
   tout(cct) << name << std::endl;
   tout(cct) << value << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
     if (r < 0)
@@ -12527,8 +12524,6 @@ int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_delete(in, name, perm);
     if (r < 0)
@@ -12604,8 +12599,6 @@ int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_delete(in, name, perms);
     if (r < 0)
@@ -12741,8 +12734,6 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
   tout(cct) << vnewparent.ino.val << std::endl;
   tout(cct) << newname << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_delete(parent, name, perm);
     if (r < 0)
@@ -12820,8 +12811,6 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 
   InodeRef target;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     if (S_ISDIR(in->mode))
       return -EPERM;
@@ -12951,8 +12940,6 @@ int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
   tout(cct) << "ll_opendir" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
 
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     int r = may_open(in, flags, perms);
     if (r < 0)
@@ -13011,8 +12998,6 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
   tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
   int r;
-  auto fuse_default_permissions = cct->_conf.get_val<bool>(
-    "fuse_default_permissions");
   if (!fuse_default_permissions) {
     r = may_open(in, flags, perms);
     if (r < 0)
@@ -13056,8 +13041,6 @@ int Client::_ll_create(Inode *parent, const char *name, mode_t mode,
     return -EEXIST;
 
   if (r == -ENOENT && (flags & O_CREAT)) {
-    auto fuse_default_permissions = cct->_conf.get_val<bool>(
-      "fuse_default_permissions");
     if (!fuse_default_permissions) {
       r = may_create(parent, perms);
       if (r < 0)
@@ -13076,8 +13059,6 @@ int Client::_ll_create(Inode *parent, const char *name, mode_t mode,
 
   ldout(cct, 20) << "_ll_create created = " << created << dendl;
   if (!created) {
-    auto fuse_default_permissions = cct->_conf.get_val<bool>(
-      "fuse_default_permissions");
     if (!fuse_default_permissions) {
       r = may_open(in->get(), flags, perms);
       if (r < 0) {

@@ -163,8 +163,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
     while (!upkeep_trim_shutdown.load()) {
       auto now = clock::now();
       auto since = now-upkeep_last_trim;
-      auto interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_trim_interval"));
-      if (since >= interval*.90) {
+      auto trim_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_trim_interval"));
+      if (since >= trim_interval*.90) {
         lock.unlock(); /* mds_lock -> upkeep_mutex */
         std::scoped_lock mds_lock(mds->mds_lock);
         lock.lock();
@@ -175,14 +175,27 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
           trim_client_leases();
           trim();
           check_memory_usage();
-          mds->server->recall_client_state(nullptr, Server::RecallFlags::ENFORCE_MAX);
+          auto flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
+          mds->server->recall_client_state(nullptr, flags);
           upkeep_last_trim = clock::now();
+          upkeep_last_trim = now = clock::now();
         } else {
           dout(10) << "cache not ready for trimming" << dendl;
         }
       } else {
-        interval -= since;
+        trim_interval -= since;
       }
+      since = now-upkeep_last_release;
+      auto release_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_release_free_interval"));
+      if (since >= release_interval) {
+        /* XXX not necessary once MDCache uses PriorityCache */
+        dout(10) << "releasing free memory" << dendl;
+        ceph_heap_release_free_memory();
+        upkeep_last_release = clock::now();
+      } else {
+        release_interval -= since;
+      }
+      auto interval = std::min(release_interval, trim_interval);
       dout(20) << "upkeep thread waiting interval " << interval << dendl;
       upkeep_cvar.wait_for(lock, interval);
     }
@@ -198,9 +211,7 @@ MDCache::~MDCache()
     upkeeper.join();
 }
 
-void MDCache::handle_conf_change(const ConfigProxy& conf,
-                                 const std::set <std::string> &changed,
-                                 const MDSMap &mdsmap)
+void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
   if (changed.count("mds_cache_size"))
     cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
@@ -216,8 +227,8 @@ void MDCache::handle_conf_change(const ConfigProxy& conf,
     trim_counter = DecayCounter(g_conf().get_val<double>("mds_cache_trim_decay_rate"));
   }
 
-  migrator->handle_conf_change(conf, changed, mdsmap);
-  mds->balancer->handle_conf_change(conf, changed, mdsmap);
+  migrator->handle_conf_change(changed, mdsmap);
+  mds->balancer->handle_conf_change(changed, mdsmap);
 }
 
 void MDCache::log_stat()
@@ -383,6 +394,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   in->inode.change_attr = 0;
   in->inode.export_pin = MDS_RANK_NONE;
 
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
@@ -7629,7 +7641,7 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
   if (cache_toofull()) {
-    mds->server->recall_client_state(nullptr);
+    mds->server->recall_client_state(nullptr, Server::RecallFlags::TRIM);
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
@@ -8665,7 +8677,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
   if (err == 0) {
     if (backtrace.ancestors.empty()) {
       dout(10) << " got empty backtrace " << dendl;
-      err = -EIO;
+      err = -ESTALE;
     } else if (!info.ancestors.empty()) {
       if (info.ancestors[0] == backtrace.ancestors[0]) {
 	dout(10) << " got same parents " << info.ancestors[0] << " 2 times" << dendl;

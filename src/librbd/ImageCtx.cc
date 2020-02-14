@@ -135,6 +135,7 @@ public:
     if (snap)
       snap_name = snap;
 
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&header, 0, sizeof(header));
 
     ThreadPool *thread_pool;
@@ -799,6 +800,14 @@ public:
     }
     if (!skip_partial_discard) {
       discard_granularity_bytes = 0;
+    }
+
+    alloc_hint_flags = 0;
+    auto compression_hint = config.get_val<std::string>("rbd_compression_hint");
+    if (compression_hint == "compressible") {
+      alloc_hint_flags |= librados::ALLOC_HINT_FLAG_COMPRESSIBLE;
+    } else if (compression_hint == "incompressible") {
+      alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
     }
 
     io_work_queue->apply_qos_schedule_tick_min(

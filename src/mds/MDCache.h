@@ -775,9 +775,7 @@ public:
  public:
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed,
-                          const MDSMap &mds_map);
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
   
   // debug
   void log_stat();
@@ -1331,6 +1329,7 @@ private:
   ceph::mutex upkeep_mutex = ceph::make_mutex("MDCache::upkeep_mutex");
   ceph::condition_variable upkeep_cvar;
   time upkeep_last_trim = time::min();
+  time upkeep_last_release = time::min();
   std::atomic<bool> upkeep_trim_shutdown{false};
 };
 

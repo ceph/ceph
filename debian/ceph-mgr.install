@@ -1,5 +1,6 @@
 lib/systemd/system/ceph-mgr*
 usr/bin/ceph-mgr
+usr/share/ceph/mgr/alerts
 usr/share/ceph/mgr/ansible
 usr/share/ceph/mgr/balancer
 usr/share/ceph/mgr/crash

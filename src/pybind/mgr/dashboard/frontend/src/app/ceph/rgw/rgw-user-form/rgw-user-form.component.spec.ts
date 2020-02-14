@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
@@ -13,6 +14,8 @@ import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
+import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 
@@ -29,7 +32,8 @@ describe('RgwUserFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      TooltipModule.forRoot()
     ],
     providers: [BsModalService, i18nProviders]
   });
@@ -57,17 +61,34 @@ describe('RgwUserFormComponent', () => {
       expect(rgwUserService.addS3Key).not.toHaveBeenCalled();
     });
 
-    it('should set key', () => {
+    it('should set user defined key', () => {
       const key = new RgwUserS3Key();
       key.user = 'test1:subuser2';
+      key.access_key = 'my-access-key';
+      key.secret_key = 'my-secret-key';
       component.setS3Key(key);
       expect(component.s3Keys.length).toBe(1);
       expect(component.s3Keys[0].user).toBe('test1:subuser2');
       expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
         subuser: 'subuser2',
         generate_key: 'false',
-        access_key: undefined,
-        secret_key: undefined
+        access_key: 'my-access-key',
+        secret_key: 'my-secret-key'
+      });
+    });
+
+    it('should set params for auto-generating key', () => {
+      const key = new RgwUserS3Key();
+      key.user = 'test1:subuser2';
+      key.generate_key = true;
+      key.access_key = 'my-access-key';
+      key.secret_key = 'my-secret-key';
+      component.setS3Key(key);
+      expect(component.s3Keys.length).toBe(1);
+      expect(component.s3Keys[0].user).toBe('test1:subuser2');
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
+        subuser: 'subuser2',
+        generate_key: 'true'
       });
     });
 
@@ -197,6 +218,33 @@ describe('RgwUserFormComponent', () => {
         NotificationType.success,
         'Updated Object Gateway user ""'
       );
+    });
+  });
+
+  describe('RgwUserCapabilities', () => {
+    it('capability button disabled when all capabilities are added', () => {
+      component.editing = true;
+      for (const capabilityType of RgwUserCapabilities.getAll()) {
+        const capability = new RgwUserCapability();
+        capability.type = capabilityType;
+        capability.perm = 'read';
+        component.setCapability(capability);
+      }
+
+      fixture.detectChanges();
+
+      expect(component.hasAllCapabilities()).toBeTruthy();
+      const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
+      expect(capabilityButton.disabled).toBeTruthy();
+    });
+
+    it('capability button not disabled when not all capabilities are added', () => {
+      component.editing = true;
+
+      fixture.detectChanges();
+
+      const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
+      expect(capabilityButton.disabled).toBeFalsy();
     });
   });
 });

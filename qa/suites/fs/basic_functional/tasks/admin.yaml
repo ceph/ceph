@@ -8,4 +8,4 @@ overrides:
 tasks:
   - cephfs_test_runner:
       modules:
-        - tasks.cephfs.test_config_commands
+        - tasks.cephfs.test_admin

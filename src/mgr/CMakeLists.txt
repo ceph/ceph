@@ -1,3 +1,6 @@
+add_library(mgr_cap_obj OBJECT
+  MgrCap.cc)
+
 set(mgr_srcs
   ${CMAKE_SOURCE_DIR}/src/ceph_mgr.cc
   ${CMAKE_SOURCE_DIR}/src/mon/PGMap.cc
@@ -20,7 +23,8 @@ set(mgr_srcs
   PyModuleRunner.cc
   PyOSDMap.cc
   StandbyPyModules.cc
-  mgr_commands.cc)
+  mgr_commands.cc
+  $<TARGET_OBJECTS:mgr_cap_obj>)
 add_executable(ceph-mgr ${mgr_srcs})
 target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
 target_link_libraries(ceph-mgr

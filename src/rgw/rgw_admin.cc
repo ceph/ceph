@@ -25,6 +25,7 @@ extern "C" {
 
 #include "include/util.h"
 
+#include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "global/global_init.h"
@@ -155,6 +156,7 @@ void usage()
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
   cout << "  zonegroup placement list   list zonegroup's placement targets\n";
+  cout << "  zonegroup placement get    get a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement add    add a placement target id to a zonegroup\n";
   cout << "  zonegroup placement modify modify a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
@@ -167,6 +169,7 @@ void usage()
   cout << "  zone list                  list all zones set on this cluster\n";
   cout << "  zone rename                rename a zone\n";
   cout << "  zone placement list        list zone's placement targets\n";
+  cout << "  zone placement get         get a zone placement target\n";
   cout << "  zone placement add         add a zone placement target\n";
   cout << "  zone placement modify      modify a zone placement target\n";
   cout << "  zone placement rm          remove a zone placement target\n";
@@ -460,6 +463,7 @@ enum {
   OPT_ZONEGROUP_PLACEMENT_MODIFY,
   OPT_ZONEGROUP_PLACEMENT_RM,
   OPT_ZONEGROUP_PLACEMENT_LIST,
+  OPT_ZONEGROUP_PLACEMENT_GET,
   OPT_ZONEGROUP_PLACEMENT_DEFAULT,
   OPT_ZONE_CREATE,
   OPT_ZONE_DELETE,
@@ -473,6 +477,7 @@ enum {
   OPT_ZONE_PLACEMENT_MODIFY,
   OPT_ZONE_PLACEMENT_RM,
   OPT_ZONE_PLACEMENT_LIST,
+  OPT_ZONE_PLACEMENT_GET,
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
   OPT_METADATA_GET,
@@ -828,6 +833,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_PLACEMENT_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_PLACEMENT_LIST;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_GET;
     if (strcmp(cmd, "default") == 0)
       return OPT_ZONEGROUP_PLACEMENT_DEFAULT;
   } else if (strcmp(prev_cmd, "zonegroup") == 0) {
@@ -871,6 +878,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONE_PLACEMENT_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONE_PLACEMENT_LIST;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ZONE_PLACEMENT_GET;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (match_str(cmd, "rm", "delete"))
       return OPT_ZONE_DELETE;
@@ -2135,22 +2144,24 @@ static void get_md_sync_status(list<string>& status)
     if (ret < 0) {
       derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      ceph::real_time oldest;
+      std::optional<std::pair<int, ceph::real_time>> oldest;
+
       for (auto iter : master_pos) {
         rgw_mdlog_shard_data& shard_data = iter.second;
 
         if (!shard_data.entries.empty()) {
           rgw_mdlog_entry& entry = shard_data.entries.front();
-          if (ceph::real_clock::is_zero(oldest)) {
-            oldest = entry.timestamp;
-          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest) {
-            oldest = entry.timestamp;
+          if (!oldest) {
+            oldest.emplace(iter.first, entry.timestamp);
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest->second) {
+            oldest.emplace(iter.first, entry.timestamp);
           }
         }
       }
 
-      if (!ceph::real_clock::is_zero(oldest)) {
-        push_ss(ss, status) << "oldest incremental change not applied: " << oldest;
+      if (oldest) {
+        push_ss(ss, status) << "oldest incremental change not applied: "
+            << oldest->second << " [" << oldest->first << ']';
       }
     }
   }
@@ -2288,22 +2299,24 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     if (ret < 0) {
       derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      ceph::real_time oldest;
+      std::optional<std::pair<int, ceph::real_time>> oldest;
+
       for (auto iter : master_pos) {
         rgw_datalog_shard_data& shard_data = iter.second;
 
         if (!shard_data.entries.empty()) {
           rgw_datalog_entry& entry = shard_data.entries.front();
-          if (ceph::real_clock::is_zero(oldest)) {
-            oldest = entry.timestamp;
-          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest) {
-            oldest = entry.timestamp;
+          if (!oldest) {
+            oldest.emplace(iter.first, entry.timestamp);
+          } else if (!ceph::real_clock::is_zero(entry.timestamp) && entry.timestamp < oldest->second) {
+            oldest.emplace(iter.first, entry.timestamp);
           }
         }
       }
 
-      if (!ceph::real_clock::is_zero(oldest)) {
-        push_ss(ss, status, tab) << "oldest incremental change not applied: " << oldest;
+      if (oldest) {
+        push_ss(ss, status, tab) << "oldest incremental change not applied: "
+            << oldest->second << " [" << oldest->first << ']';
       }
     }
   }
@@ -2599,6 +2612,13 @@ int check_reshard_bucket_params(RGWRados *store,
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
+  }
+
+  if (bucket_info.reshard_status != CLS_RGW_RESHARD_NOT_RESHARDING) {
+    // if in_progress or done then we have an old BucketInfo
+    cerr << "ERROR: the bucket is currently undergoing resharding and "
+      "cannot be added to the reshard list at this time" << std::endl;
+    return -EBUSY;
   }
 
   int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
@@ -3346,12 +3366,14 @@ int main(int argc, const char **argv)
 			 OPT_ZONEGROUP_REMOVE,
 			 OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
 			 OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
+			 OPT_ZONEGROUP_PLACEMENT_GET,
 			 OPT_ZONEGROUP_PLACEMENT_DEFAULT,
 			 OPT_ZONE_CREATE, OPT_ZONE_DELETE,
                          OPT_ZONE_GET, OPT_ZONE_SET, OPT_ZONE_RENAME,
                          OPT_ZONE_LIST, OPT_ZONE_MODIFY, OPT_ZONE_DEFAULT,
 			 OPT_ZONE_PLACEMENT_ADD, OPT_ZONE_PLACEMENT_RM,
 			 OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
+			 OPT_ZONE_PLACEMENT_GET,
 			 OPT_REALM_CREATE,
 			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
 			 OPT_PERIOD_PULL,
@@ -3386,9 +3408,11 @@ int main(int argc, const char **argv)
 			 OPT_ZONEGROUP_GET,
 			 OPT_ZONEGROUP_LIST,
 			 OPT_ZONEGROUP_PLACEMENT_LIST,
+			 OPT_ZONEGROUP_PLACEMENT_GET,
 			 OPT_ZONE_GET,
 			 OPT_ZONE_LIST,
 			 OPT_ZONE_PLACEMENT_LIST,
+			 OPT_ZONE_PLACEMENT_GET,
 			 OPT_METADATA_GET,
 			 OPT_METADATA_LIST,
 			 OPT_METADATA_SYNC_STATUS,
@@ -4312,6 +4336,29 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
+    case OPT_ZONEGROUP_PLACEMENT_GET:
+      {
+	if (placement_id.empty()) {
+	  cerr << "ERROR: --placement-id not specified" << std::endl;
+	  return EINVAL;
+	}
+
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	int ret = zonegroup.init(g_ceph_context, store->svc.sysobj);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	auto p = zonegroup.placement_targets.find(placement_id);
+	if (p == zonegroup.placement_targets.end()) {
+	  cerr << "failed to find a zonegroup placement target named '" << placement_id << "'" << std::endl;
+	  return -ENOENT;
+	}
+	encode_json("placement_targets", p->second, formatter);
+	formatter->flush(cout);
+      }
+      break;
     case OPT_ZONEGROUP_PLACEMENT_ADD:
     case OPT_ZONEGROUP_PLACEMENT_MODIFY:
     case OPT_ZONEGROUP_PLACEMENT_RM:
@@ -4885,6 +4932,28 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 	encode_json("placement_pools", zone.placement_pools, formatter);
+	formatter->flush(cout);
+      }
+      break;
+    case OPT_ZONE_PLACEMENT_GET:
+      {
+	if (placement_id.empty()) {
+	  cerr << "ERROR: --placement-id not specified" << std::endl;
+	  return EINVAL;
+	}
+
+	RGWZoneParams zone(zone_id, zone_name);
+	int ret = zone.init(g_ceph_context, store->svc.sysobj);
+	if (ret < 0) {
+	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	auto p = zone.placement_pools.find(placement_id);
+	if (p == zone.placement_pools.end()) {
+	  cerr << "ERROR: zone placement target '" << placement_id << "' not found" << std::endl;
+	  return -ENOENT;
+	}
+	encode_json("placement_pools", p->second, formatter);
 	formatter->flush(cout);
       }
       break;
@@ -6400,26 +6469,39 @@ next:
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
-    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    bool bucket_initable = true;
+    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket,
+                      &attrs);
     if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+      if (yes_i_really_mean_it) {
+        bucket_initable = false;
+      } else {
+        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
+          "; if you want to cancel the reshard request nonetheless, please "
+          "use the --yes-i-really-mean-it option" << std::endl;
+        return -ret;
+      }
     }
 
-    RGWBucketReshard br(store, bucket_info, attrs, nullptr /* no callback */);
-    int ret = br.cancel();
-    if (ret < 0) {
-      if (ret == -EBUSY) {
-	cerr << "There is ongoing resharding, please retry after " <<
-	  store->ctx()->_conf.get_val<uint64_t>(
-	    "rgw_reshard_bucket_lock_duration") <<
-	  " seconds " << std::endl;
-      } else {
-	cerr << "Error canceling bucket " << bucket_name <<
-	  " resharding: " << cpp_strerror(-ret) << std::endl;
+    if (bucket_initable) {
+      // we did not encounter an error, so let's work with the bucket
+      RGWBucketReshard br(store, bucket_info, attrs,
+                          nullptr /* no callback */);
+      int ret = br.cancel();
+      if (ret < 0) {
+        if (ret == -EBUSY) {
+          cerr << "There is ongoing resharding, please retry after " <<
+            store->ctx()->_conf.get_val<uint64_t>(
+              "rgw_reshard_bucket_lock_duration") <<
+            " seconds " << std::endl;
+        } else {
+          cerr << "Error canceling bucket " << bucket_name <<
+            " resharding: " << cpp_strerror(-ret) << std::endl;
+        }
+        return ret;
       }
-      return ret;
     }
+
     RGWReshard reshard(store);
 
     cls_rgw_reshard_entry entry;
@@ -6429,10 +6511,11 @@ next:
 
     ret = reshard.remove(entry);
     if (ret < 0 && ret != -ENOENT) {
-      cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+      cerr << "Error in updating reshard log with bucket " <<
+        bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
-  }
+  } // OPT_RESHARD_CANCEL
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
     RGWBucketInfo bucket_info;

@@ -3553,6 +3553,7 @@ void *BlueStore::MempoolThread::entry()
 {
   std::unique_lock l(lock);
 
+  uint32_t prev_config_change = store->config_changed.load();
   uint64_t base = store->osd_memory_base;
   double fragmentation = store->osd_memory_expected_fragmentation;
   uint64_t target = store->osd_memory_target;
@@ -3581,6 +3582,13 @@ void *BlueStore::MempoolThread::entry()
 
   bool interval_stats_trim = false;
   while (!stop) {
+    // Update pcm cache settings if related configuration was changed
+    uint32_t cur_config_change = store->config_changed.load();
+    if (cur_config_change != prev_config_change) {
+      _update_cache_settings();
+      prev_config_change = cur_config_change;
+    }
+
     // Before we trim, check and see if it's time to rebalance/resize.
     double autotune_interval = store->cache_autotune_interval;
     double resize_interval = store->osd_memory_cache_resize_interval;
@@ -3680,6 +3688,36 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   for (auto i : store->cache_shards) {
     i->trim(max_shard_onodes, max_shard_buffer);
   }
+}
+
+void BlueStore::MempoolThread::_update_cache_settings()
+{
+  // Nothing to do if pcm is not used.
+  if (pcm == nullptr) {
+    return;
+  }
+
+  auto cct = store->cct;
+  uint64_t target = store->osd_memory_target;
+  uint64_t base = store->osd_memory_base;
+  uint64_t min = store->osd_memory_cache_min;
+  uint64_t max = min;
+  double fragmentation = store->osd_memory_expected_fragmentation;
+
+  uint64_t ltarget = (1.0 - fragmentation) * target;
+  if (ltarget > base + min) {
+    max = ltarget - base;
+  }
+
+  // set pcm cache levels
+  pcm->set_target_memory(target);
+  pcm->set_min_memory(min);
+  pcm->set_max_memory(max);
+
+  ldout(cct, 5) << __func__  << " updated pcm target: " << target
+                << " pcm min: " << min
+                << " pcm max: " << max
+                << dendl;
 }
 
 // =======================================================
@@ -3943,6 +3981,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "osd_memory_target_cgroup_limit_ratio",
     "osd_memory_base",
     "osd_memory_cache_min",
+    "osd_memory_expected_fragmentation",
     "bluestore_cache_autotune",
     "bluestore_cache_autotune_interval",
     "bluestore_warn_on_legacy_statfs",
@@ -4004,6 +4043,12 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_throttle_deferred_bytes")) {
     throttle_deferred_bytes.reset_max(
       conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
+  }
+  if (changed.count("osd_memory_target") ||
+      changed.count("osd_memory_base") ||
+      changed.count("osd_memory_cache_min") ||
+      changed.count("osd_memory_expected_fragmentation")) {
+    _update_osd_memory_options();
   }
 }
 
@@ -4107,6 +4152,21 @@ void BlueStore::_set_blob_size()
   }
   dout(10) << __func__ << " max_blob_size 0x" << std::hex << max_blob_size
            << std::dec << dendl;
+}
+
+void BlueStore::_update_osd_memory_options()
+{
+  osd_memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
+  osd_memory_base = cct->_conf.get_val<Option::size_t>("osd_memory_base");
+  osd_memory_expected_fragmentation = cct->_conf.get_val<double>("osd_memory_expected_fragmentation");
+  osd_memory_cache_min = cct->_conf.get_val<Option::size_t>("osd_memory_cache_min");
+  config_changed++;
+  dout(10) << __func__
+           << " osd_memory_target " << osd_memory_target
+           << " osd_memory_base " << osd_memory_base
+           << " osd_memory_expected_fragmentation " << osd_memory_expected_fragmentation
+           << " osd_memory_cache_min " << osd_memory_cache_min
+           << dendl;
 }
 
 int BlueStore::_set_cache_sizes()
@@ -4278,12 +4338,14 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_stored, "bluestore_stored",
     "Sum for stored bytes");
   b.add_u64(l_bluestore_compressed, "bluestore_compressed",
-    "Sum for stored compressed bytes");
+    "Sum for stored compressed bytes",
+    "c", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_compressed_allocated, "bluestore_compressed_allocated",
-    "Sum for bytes allocated for compressed data");
+    "Sum for bytes allocated for compressed data",
+    "c_a", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_compressed_original, "bluestore_compressed_original",
-    "Sum for original bytes that were compressed");
-
+    "Sum for original bytes that were compressed",
+    "c_o", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_onodes, "bluestore_onodes",
 	    "Number of onodes in cache");
   b.add_u64_counter(l_bluestore_onode_hits, "bluestore_onode_hits",

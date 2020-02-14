@@ -814,6 +814,11 @@ void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
       continue;
     }
 
+    if (peer_purged.count(peer)) {
+      dout(20) << __func__ << " skipping purged osd." << peer << dendl;
+      continue;
+    }
+
     map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(peer);
     if (iter != peer_info.end() &&
         (iter->second.is_empty() || iter->second.dne())) {
@@ -1423,9 +1428,6 @@ void PG::calc_replicated_acting(
       acting_backfill->insert(up_cand);
       ss << " osd." << i << " (up) accepted " << cur_info << std::endl;
     }
-    if (want->size() >= size) {
-      break;
-    }
   }
 
   if (want->size() >= size) {
@@ -1790,6 +1792,14 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     } else {
       choose_async_recovery_replicated(all_info, auth_log_shard->second, &want, &want_async_recovery, get_osdmap());
     }
+  }
+  while (want.size() > pool.info.size) {
+    // async recovery should have taken out as many osds as it can.
+    // if not, then always evict the last peer
+    // (will get synchronously recovered later)
+    dout(10) << __func__ << " evicting osd." << want.back()
+               << " from oversized want " << want << dendl;
+    want.pop_back();
   }
   if (want != acting) {
     dout(10) << __func__ << " want " << want << " != acting " << acting
@@ -3266,6 +3276,16 @@ void PG::_update_calc_stats()
   info.stats.avail_no_missing.clear();
   info.stats.object_location_counts.clear();
 
+  // We should never hit this condition, but if end up hitting it,
+  // make sure to update num_objects and set PG_STATE_INCONSISTENT.
+  if (info.stats.stats.sum.num_objects < 0) {
+    dout(0) << __func__ << " negative num_objects = "
+            << info.stats.stats.sum.num_objects << " setting it to 0 "
+            << dendl;
+    info.stats.stats.sum.num_objects = 0;
+    state_set(PG_STATE_INCONSISTENT);
+  }
+
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
     dout(20) << __func__ << " actingset " << actingset << " upset "
              << upset << " acting_recovery_backfill " << acting_recovery_backfill << dendl;
@@ -4146,6 +4166,9 @@ void PG::read_state(ObjectStore *store)
     else
       set_role(-1);
   }
+
+  // init pool options
+  store->set_collection_opts(ch, pool.info.opts);
 
   PG::RecoveryCtx rctx(0, 0, 0, new ObjectStore::Transaction);
   handle_initialize(&rctx);
@@ -6992,12 +7015,17 @@ void PG::handle_query_state(Formatter *f)
   recovery_state.handle_event(q, 0);
 }
 
-void PG::update_store_with_options()
+void PG::init_collection_pool_opts()
 {
   auto r = osd->store->set_collection_opts(ch, pool.info.opts);
-  if(r < 0 && r != -EOPNOTSUPP) {
+  if (r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << " set_collection_opts returns error:" << r << dendl;
   }
+}
+
+void PG::update_store_with_options()
+{
+  init_collection_pool_opts();
 }
 
 struct C_DeleteMore : public Context {

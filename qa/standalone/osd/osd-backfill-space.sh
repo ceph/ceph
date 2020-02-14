@@ -49,7 +49,7 @@ function get_num_in_state() {
 }
 
 
-function wait_for_state() {
+function wait_for_not_state() {
     local state=$1
     local num_in_state=-1
     local cur_in_state
@@ -78,15 +78,15 @@ function wait_for_state() {
 }
 
 
-function wait_for_backfill() {
+function wait_for_not_backfilling() {
     local timeout=$1
-    wait_for_state backfilling $timeout
+    wait_for_not_state backfilling $timeout
 }
 
 
-function wait_for_active() {
+function wait_for_not_activating() {
     local timeout=$1
-    wait_for_state activating $timeout
+    wait_for_not_state activating $timeout
 }
 
 # All tests are created in an environment which has fake total space
@@ -149,8 +149,8 @@ function TEST_backfill_test_simple() {
     done
     sleep 5
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     ERRORS=0
     if [ "$(ceph pg dump pgs | grep +backfill_toofull | wc -l)" != "1" ];
@@ -228,8 +228,8 @@ function TEST_backfill_test_multi() {
     done
     sleep 5
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     ERRORS=0
     full="$(ceph pg dump pgs | grep +backfill_toofull | wc -l)"
@@ -380,8 +380,8 @@ function TEST_backfill_test_sametarget() {
     ceph osd pool set $pool2 size 2
     sleep 5
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     ERRORS=0
     if [ "$(ceph pg dump pgs | grep +backfill_toofull | wc -l)" != "1" ];
@@ -515,8 +515,8 @@ function TEST_backfill_multi_partial() {
     ceph osd in osd.$fillosd
     sleep 15
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     flush_pg_stats || return 1
     ceph pg dump pgs
@@ -698,8 +698,8 @@ function TEST_ec_backfill_simple() {
 
     ceph pg dump pgs
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     ceph pg dump pgs
 
@@ -822,8 +822,8 @@ function TEST_ec_backfill_multi() {
 
     sleep 10
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     ceph pg dump pgs
 
@@ -961,8 +961,8 @@ function SKIP_TEST_ec_backfill_multi_partial() {
     sleep 10
     ceph pg dump pgs
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     ceph pg dump pgs
 
@@ -1069,8 +1069,8 @@ function SKIP_TEST_ec_backfill_multi_partial() {
     ceph osd in osd.$fillosd
     sleep 15
 
-    wait_for_backfill 240 || return 1
-    wait_for_active 60 || return 1
+    wait_for_not_backfilling 240 || return 1
+    wait_for_not_activating 60 || return 1
 
     ERRORS=0
     if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep +backfill_toofull | wc -l)" != "1" ];

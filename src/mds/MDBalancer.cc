@@ -82,9 +82,7 @@ MDBalancer::MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) :
   bal_fragment_interval = g_conf().get_val<int64_t>("mds_bal_fragment_interval");
 }
 
-void MDBalancer::handle_conf_change(const ConfigProxy& conf,
-				    const std::set <std::string> &changed,
-				    const MDSMap &mds_map)
+void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
   if (changed.count("mds_bal_fragment_dirs"))
     bal_fragment_dirs = g_conf().get_val<bool>("mds_bal_fragment_dirs");

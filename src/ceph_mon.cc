@@ -194,8 +194,10 @@ entity_addrvec_t make_mon_addrs(entity_addr_t a)
   } else if (a.get_port() == CEPH_MON_PORT_LEGACY) {
     a.set_type(entity_addr_t::TYPE_LEGACY);
     addrs.v.push_back(a);
-  } else {
+  } else if (a.get_type() == entity_addr_t::TYPE_ANY) {
     a.set_type(entity_addr_t::TYPE_MSGR2);
+    addrs.v.push_back(a);
+  } else {
     addrs.v.push_back(a);
   }
   return addrs;

@@ -1,17 +1,32 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import PLUGIN_MANAGER as PM, Interface
+from . import PLUGIN_MANAGER as PM, Interface, Mixin  # pylint: disable=cyclic-import
 
 
-class CanMgr(Interface):
+class CanMgr(Mixin):
     from .. import mgr
     mgr = mgr
 
 
-class CanLog(Interface):
+class CanLog(Mixin):
     from .. import logger
     log = logger
+
+
+class CanCherrypy(Mixin):
+    import cherrypy
+    request = cherrypy.request
+    response = cherrypy.response
+
+
+@PM.add_interface
+class Initializable(Interface):
+    @PM.add_abcspec
+    def init(self):
+        """
+        Placeholder for module scope initialization
+        """
 
 
 @PM.add_interface
@@ -43,7 +58,14 @@ class HasControllers(Interface):
     def get_controllers(self): pass
 
 
-class FilterRequest:
+@PM.add_interface
+class ConfiguresCherryPy(Interface):
+    @PM.add_abcspec
+    def configure_cherrypy(self, config):
+        pass
+
+
+class FilterRequest(object):
     @PM.add_interface
     class BeforeHandler(Interface):
         @PM.add_abcspec

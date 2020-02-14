@@ -4,6 +4,7 @@ overrides:
   ceph:
     log-whitelist:
       - evicting unresponsive client
+      - RECENT_CRASH
 
 tasks:
 - cephfs_test_runner:

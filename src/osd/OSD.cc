@@ -740,7 +740,7 @@ OSDService::s_names OSDService::recalc_full_state(float ratio, float pratio, str
     return FULL;
   } else if (ratio > backfillfull_ratio) {
     return BACKFILLFULL;
-  } else if (ratio > nearfull_ratio) {
+  } else if (pratio > nearfull_ratio) {
     return NEARFULL;
   }
    return NONE;
@@ -2425,11 +2425,11 @@ int OSD::set_numa_affinity()
     cct,
     cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
   int r = get_iface_numa_node(front_iface, &front_node);
-  if (r >= 0) {
+  if (r >= 0 && front_node >= 0) {
     dout(1) << __func__ << " public network " << front_iface << " numa node "
-	      << front_node << dendl;
+            << front_node << dendl;
     r = get_iface_numa_node(back_iface, &back_node);
-    if (r >= 0) {
+    if (r >= 0 && back_node >= 0) {
       dout(1) << __func__ << " cluster network " << back_iface << " numa node "
 	      << back_node << dendl;
       if (front_node == back_node &&
@@ -2438,11 +2438,23 @@ int OSD::set_numa_affinity()
 	if (g_conf().get_val<bool>("osd_numa_auto_affinity")) {
 	  numa_node = front_node;
 	}
+      } else if (front_node != back_node) {
+        dout(1) << __func__ << " public and cluster network numa nodes do not match"
+                << dendl;
       } else {
 	dout(1) << __func__ << " objectstore and network numa nodes do not match"
 		<< dendl;
       }
+    } else if (back_node == -2) {
+      dout(1) << __func__ << " cluster network " << back_iface
+              << " ports numa nodes do not match" << dendl;
+    } else {
+      derr << __func__ << " unable to identify cluster interface '" << back_iface
+           << "' numa node: " << cpp_strerror(r) << dendl;
     }
+  } else if (front_node == -2) {
+    dout(1) << __func__ << " public network " << front_iface
+            << " ports numa nodes do not match" << dendl;
   } else {
     derr << __func__ << " unable to identify public interface '" << front_iface
 	 << "' numa node: " << cpp_strerror(r) << dendl;
@@ -2462,7 +2474,7 @@ int OSD::set_numa_affinity()
 	      << " cpus "
 	      << cpu_set_to_str_list(numa_cpu_set_size, &numa_cpu_set)
 	      << dendl;
-      r = sched_setaffinity(getpid(), numa_cpu_set_size, &numa_cpu_set);
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
       if (r < 0) {
 	r = -errno;
 	derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
@@ -3983,6 +3995,12 @@ void OSD::create_recoverystate_perf()
 
 int OSD::shutdown()
 {
+  if (cct->_conf->osd_fast_shutdown) {
+    derr << "*** Immediate shutdown (osd_fast_shutdown=true) ***" << dendl;
+    cct->_log->flush();
+    _exit(0);
+  }
+
   if (!service.prepare_to_stop())
     return 0; // already shutting down
   osd_lock.Lock();
@@ -4756,6 +4774,8 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     info->past_intervals,
     false,
     rctx.transaction);
+
+  pg->init_collection_pool_opts();
 
   if (pg->is_primary()) {
     Mutex::Locker locker(m_perf_queries_lock);
@@ -9405,6 +9425,8 @@ void OSD::split_pgs(
       i->pgid,
       child,
       split_bits);
+
+    child->init_collection_pool_opts();
 
     child->finish_split_stats(*stat_iter, rctx->transaction);
     child->unlock();

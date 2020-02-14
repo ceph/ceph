@@ -65,6 +65,7 @@ void lockdep_register_ceph_context(CephContext *cct)
     lockdep_dout(1) << "lockdep start" << dendl;
     if (!free_ids_inited) {
       free_ids_inited = true;
+      // FIPS zeroization audit 20191115: this memset is not security related.
       memset((void*) &free_ids[0], 255, sizeof(free_ids));
     }
   }
@@ -90,6 +91,7 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     held.clear();
     lock_names.clear();
     lock_ids.clear();
+    // FIPS zeroization audit 20191115: these memsets are not security related.
     memset((void*)&follows[0][0], 0, current_maxid * MAX_LOCKS/8);
     memset((void*)&follows_bt[0][0], 0, sizeof(BackTrace*) * current_maxid * MAX_LOCKS);
   }
@@ -213,6 +215,7 @@ void lockdep_unregister(int id)
   if (--refs == 0) {
     if (p != lock_names.end()) {
       // reset dependency ordering
+      // FIPS zeroization audit 20191115: this memset is not security related.
       memset((void*)&follows[id][0], 0, MAX_LOCKS/8);
       for (unsigned i=0; i<current_maxid; ++i) {
         delete follows_bt[id][i];

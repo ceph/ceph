@@ -132,9 +132,9 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
-    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images'
-    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd-read-only pool=images'
-    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups'
+    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images' mgr 'profile rbd pool=images'
+    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=volumes, profile rbd pool=vms'
+    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups' mgr 'profile rbd pool=backups'
 
 Add the keyrings for ``client.cinder``, ``client.glance``, and
 ``client.cinder-backup`` to the appropriate nodes and change their ownership::

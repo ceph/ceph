@@ -146,7 +146,7 @@ void MonCapGrant::parse_network()
 				  &network_prefix);
 }
 
-void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
+void MonCapGrant::expand_profile(const EntityName& name) const
 {
   // only generate this list once
   if (!profile_grants.empty())
@@ -166,25 +166,6 @@ void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
     return;
   }
 
-  switch (daemon_type) {
-  case CEPH_ENTITY_TYPE_MON:
-    expand_profile_mon(name);
-    return;
-  case CEPH_ENTITY_TYPE_MGR:
-    expand_profile_mgr(name);
-    return;
-  }
-}
-
-void MonCapGrant::expand_profile_mgr(const EntityName& name) const
-{
-  if (profile == "crash") {
-    profile_grants.push_back(MonCapGrant("crash post"));
-  }
-}
-
-void MonCapGrant::expand_profile_mon(const EntityName& name) const
-{
   if (profile == "mon") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_ALL));
@@ -333,17 +314,16 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
 }
 
 mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
-				    int daemon_type,
 				    EntityName name,
 				    const std::string& s, const std::string& c,
 				    const map<string,string>& c_args) const
 {
   if (profile.length()) {
-    expand_profile(daemon_type, name);
+    expand_profile(name);
     mon_rwxa_t a;
     for (list<MonCapGrant>::const_iterator p = profile_grants.begin();
 	 p != profile_grants.end(); ++p)
-      a = a | p->get_allowed(cct, daemon_type, name, s, c, c_args);
+      a = a | p->get_allowed(cct, name, s, c, c_args);
     return a;
   }
   if (service.length()) {
@@ -420,7 +400,6 @@ void MonCap::set_allow_all()
 
 bool MonCap::is_capable(
   CephContext *cct,
-  int daemon_type,
   EntityName name,
   const string& service,
   const string& command, const map<string,string>& command_args,
@@ -458,8 +437,7 @@ bool MonCap::is_capable(
     }
 
     // check enumerated caps
-    allow = allow | p->get_allowed(cct, daemon_type, name, service, command,
-				   command_args);
+    allow = allow | p->get_allowed(cct, name, service, command, command_args);
     if ((!op_may_read || (allow & MON_CAP_R)) &&
 	(!op_may_write || (allow & MON_CAP_W)) &&
 	(!op_may_exec || (allow & MON_CAP_X))) {

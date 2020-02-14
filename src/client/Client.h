@@ -454,7 +454,7 @@ public:
 
   // hpc lazyio
   int lazyio(int fd, int enable);
-  int lazyio_propogate(int fd, loff_t offset, size_t count);
+  int lazyio_propagate(int fd, loff_t offset, size_t count);
   int lazyio_synchronize(int fd, loff_t offset, size_t count);
 
   // expose file layout
@@ -755,6 +755,7 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
 
+  bool fuse_default_permissions;
 
 protected:
   /* Flags for check_caps() */

@@ -315,7 +315,7 @@ class TestJournalRepair(CephFSTestCase):
         # Should see one session
         session_data = json.loads(self.fs.table_tool(
             ["all", "show", "session"]))
-        self.assertEqual(len(session_data["0"]["data"]["Sessions"]), 1)
+        self.assertEqual(len(session_data["0"]["data"]["sessions"]), 1)
         self.assertEqual(session_data["0"]["result"], 0)
 
         # Should see no snaps
@@ -344,7 +344,7 @@ class TestJournalRepair(CephFSTestCase):
         # Should see 0 sessions
         session_data = json.loads(self.fs.table_tool(
             ["all", "show", "session"]))
-        self.assertEqual(len(session_data["0"]["data"]["Sessions"]), 0)
+        self.assertEqual(len(session_data["0"]["data"]["sessions"]), 0)
         self.assertEqual(session_data["0"]["result"], 0)
 
         # Should see entire inode range now marked free

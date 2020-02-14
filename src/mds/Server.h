@@ -105,6 +105,7 @@ private:
   feature_bitset_t supported_features;
   feature_bitset_t required_client_features;
 
+  bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
 
   friend class MDSContinuation;
@@ -169,12 +170,14 @@ public:
   void reconnect_tick();
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
-  enum RecallFlags {
+  enum class RecallFlags : uint64_t {
     NONE = 0,
     STEADY = (1<<0),
     ENFORCE_MAX = (1<<1),
+    TRIM = (1<<2),
+    ENFORCE_LIVENESS = (1<<3),
   };
-  std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, enum RecallFlags=RecallFlags::NONE);
+  std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, RecallFlags=RecallFlags::NONE);
   void force_clients_readonly();
 
   // -- requests --
@@ -343,8 +346,7 @@ public:
 			       bool finish_mdr);
 
   void evict_cap_revoke_non_responders();
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed);
+  void handle_conf_change(const std::set<std::string>& changed);
 
 private:
   void reply_client_request(MDRequestRef& mdr, const MClientReply::ref &reply);
@@ -353,5 +355,22 @@ private:
   DecayCounter recall_throttle;
   time last_recall_state;
 };
+
+static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return static_cast<Server::RecallFlags>(static_cast<T>(a) | static_cast<T>(b));
+}
+static inline constexpr auto operator&(Server::RecallFlags a, Server::RecallFlags b) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return static_cast<Server::RecallFlags>(static_cast<T>(a) & static_cast<T>(b));
+}
+static inline std::ostream& operator<<(std::ostream& os, const Server::RecallFlags& f) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return os << "0x" << std::hex << static_cast<T>(f) << std::dec;
+}
+static inline constexpr bool operator!(const Server::RecallFlags& f) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return static_cast<T>(f) == static_cast<T>(0);
+}
 
 #endif

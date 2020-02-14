@@ -32,6 +32,10 @@ Options
    PG id to which the command will be directed. With this option, certain
    commands like ``ls`` allow users to limit the scope of the command to the given PG.
 
+.. option:: -N namespace, --namespace namespace
+
+   Specify the rados namespace to use for the object.
+
 .. option:: -s snap, --snap snap
 
    Read from the given pool snapshot. Valid for all pool-specific read operations.

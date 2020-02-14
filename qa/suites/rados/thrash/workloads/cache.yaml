@@ -2,6 +2,11 @@ overrides:
   ceph:
     log-whitelist:
       - must scrub before tier agent can activate
+    conf:
+      osd:
+        # override short_pg_log_entries.yaml (which sets these under [global])
+        osd_min_pg_log_entries: 3000
+        osd_max_pg_log_entries: 3000
 tasks:
 - exec:
     client.0:

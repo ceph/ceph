@@ -62,7 +62,8 @@ export class SparklineComponent implements OnInit, OnChanges {
           } else {
             return tooltipItem.yLabel;
           }
-        }
+        },
+        title: () => ''
       }
     },
     scales: {

@@ -1,10 +1,10 @@
-
 #ifndef CEPH_MDS_LOCKS_H
 #define CEPH_MDS_LOCKS_H
+#include <stdbool.h>
 
 struct sm_state_t {
   int next;         // 0 if stable
-  char loner;
+  bool loner;
   int replica_state;
   char can_read;
   char can_read_projected;

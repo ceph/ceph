@@ -830,6 +830,12 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
+    Option("thp", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("enable transparent huge page (THP) support")
+    .set_long_description("Ceph is known to suffer from memory fragmentation due to THP use. This is indicated by RSS usage above configured memory targets. Enabling THP is currently discouraged until selective use of THP by Ceph is implemented."),
+
     Option("key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Authentication key")
@@ -1012,16 +1018,6 @@ std::vector<Option> get_global_options() {
     Option("ms_dispatch_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Limit messages that are read off the network but still being processed"),
-
-    Option("ms_msgr2_sign_messages", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("Sign msgr2 frames' payload")
-    .add_see_also("ms_msgr2_encrypt_messages"),
-
-    Option("ms_msgr2_encrypt_messages", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("Encrypt msgr2 frames' payload")
-    .add_see_also("ms_msgr2_sign_messages"),
 
     Option("ms_bind_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -1739,6 +1735,11 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("issue POOL_APP_NOT_ENABLED health warning if pool has not application enabled"),
 
+    Option("mon_warn_on_pool_pg_num_not_power_of_two", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two pg_num value"),
+
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mgr")
@@ -2366,12 +2367,6 @@ std::vector<Option> get_global_options() {
                      "by doing a fairly exhaustive search of existing PGs "
                      "that can be unmapped or upmapped"),
 
-    Option("osd_calc_pg_upmaps_max_stddev", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.0)
-    .set_flag(Option::FLAG_RUNTIME)
-    .set_description("standard deviation below which there is no attempt made "
-                     "while trying to calculate PG upmaps"),
-
     Option("osd_calc_pg_upmaps_local_fallback_retries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_flag(Option::FLAG_RUNTIME)
@@ -2565,7 +2560,7 @@ std::vector<Option> get_global_options() {
     .add_service("mon"),
 
     Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(8)
+    .set_default(16)
     .set_description("number of PGs for new pools")
     .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
@@ -3868,6 +3863,11 @@ std::vector<Option> get_global_options() {
     .set_default(.97)
     .set_description(""),
 
+    Option("osd_fast_shutdown", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Fast, immediate shutdown")
+    .set_long_description("Setting this to false makes the OSD do a slower teardown of all state when it receives a SIGINT or SIGTERM or when shutting down for any other reason.  That slow shutdown is primarilyy useful for doing memory leak checking with valgrind."),
+
     Option("osd_fast_fail_on_connection_refused", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -4187,8 +4187,13 @@ std::vector<Option> get_global_options() {
 
     Option("osd_memory_target", Option::TYPE_SIZE, Option::LEVEL_BASIC)
     .set_default(4_G)
+    .set_min(896_M)
+    .set_flag(Option::FLAG_RUNTIME)
     .add_see_also("bluestore_cache_autotune")
-    .set_description("When tcmalloc and cache autotuning is enabled, try to keep this many bytes mapped in memory."),
+    .add_see_also("osd_memory_cache_min")
+    .add_see_also("osd_memory_base")
+    .set_description("When tcmalloc and cache autotuning is enabled, try to keep this many bytes mapped in memory.")
+    .set_long_description("The minimum value must be at least equal to osd_memory_base + osd_memory_cache_min."),
 
     Option("osd_memory_target_cgroup_limit_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.8)
@@ -4199,17 +4204,21 @@ std::vector<Option> get_global_options() {
 
     Option("osd_memory_base", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(768_M)
+    .set_flag(Option::FLAG_RUNTIME)
     .add_see_also("bluestore_cache_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, estimate the minimum amount of memory in bytes the OSD will need."),
 
     Option("osd_memory_expected_fragmentation", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.15)
     .set_min_max(0.0, 1.0)
+    .set_flag(Option::FLAG_RUNTIME)
     .add_see_also("bluestore_cache_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, estimate the percent of memory fragmentation."),
 
     Option("osd_memory_cache_min", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(128_M)
+    .set_min(128_M)
+    .set_flag(Option::FLAG_RUNTIME)
     .add_see_also("bluestore_cache_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, set the minimum amount of memory used for caches."),
 
@@ -4422,7 +4431,7 @@ std::vector<Option> get_global_options() {
     .set_description("Path to block device/file"),
 
     Option("bluestore_block_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
-    .set_default(10_G)
+    .set_default(100_G)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for backing bluestore"),
 
@@ -4503,7 +4512,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_min_alloc_size"),
 
     Option("bluestore_min_alloc_size_ssd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(16_K)
+    .set_default(4_K)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for non-rotational (solid state)  media")
     .add_see_also("bluestore_min_alloc_size"),
@@ -5708,7 +5717,7 @@ std::vector<Option> get_rgw_options() {
         "will be located in the path that is specified here. "),
 
     Option("rgw_enable_apis", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("s3, s3website, swift, swift_auth, admin, sts, pubsub")
+    .set_default("s3, s3website, swift, swift_auth, admin, sts, iam, pubsub")
     .set_description("A list of set of RESTful APIs that rgw handles."),
 
     Option("rgw_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -7334,6 +7343,12 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("when writing a object, it will issue a hint to osd backend to indicate the expected size object need"),
 
+    Option("rbd_compression_hint", Option::TYPE_STR, Option::LEVEL_BASIC)
+    .set_enum_allowed({"none", "compressible", "incompressible"})
+    .set_default("none")
+    .set_description("Compression hint to send to the OSDs during writes")
+    .set_flag(Option::FLAG_RUNTIME),
+
     Option("rbd_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("true if LTTng-UST tracepoints should be enabled"),
@@ -7621,7 +7636,13 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_cache_trim_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description("interval in seconds between cache trimming"),
+    .set_description("interval in seconds between cache trimming")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("mds_cache_release_free_interval", Option::TYPE_SECS, Option::LEVEL_DEV)
+    .set_default(10)
+    .set_description("interval in seconds between heap releases")
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -7721,6 +7742,18 @@ std::vector<Option> get_mds_options() {
     .set_default(60.0)
     .set_description("decay rate for warning on slow session cap recall"),
 
+    Option("mds_session_cache_liveness_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .add_see_also("mds_session_cache_liveness_magnitude")
+    .set_default(5_min)
+    .set_description("decay rate for session liveness leading to preemptive cap recall")
+    .set_long_description("This determines how long a session needs to be quiescent before the MDS begins preemptively recalling capabilities. The default of 5 minutes will cause 10 halvings of the decay counter after 1 hour, or 1/1024. The default magnitude of 10 (1^10 or 1024) is chosen so that the MDS considers a previously chatty session (approximately) to be quiescent after 1 hour."),
+
+    Option("mds_session_cache_liveness_magnitude", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .add_see_also("mds_session_cache_liveness_decay_rate")
+    .set_default(10)
+    .set_description("decay magnitude for preemptively recalling caps on quiet client")
+    .set_long_description("This is the order of magnitude difference (in base 2) of the internal liveness decay counter and the number of capabilities the session holds. When this difference occurs, the MDS treats the session as quiescent and begins recalling capabilities."),
+
     Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(30)
     .set_description(""),
@@ -7752,6 +7785,11 @@ std::vector<Option> get_mds_options() {
     Option("mds_early_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("additional reply to clients that metadata requests are complete but not yet durable"),
+
+    Option("mds_replay_unsafe_with_closed_session", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("complete all the replay request when mds is restarted, no matter the session is closed or not"),
 
     Option("mds_default_dir_hash", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(CEPH_STR_HASH_RJENKINS)
@@ -8281,7 +8319,8 @@ std::vector<Option> get_mds_client_options() {
 
     Option("fuse_default_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description("pass default_permisions to FUSE on mount"),
+    .set_description("pass default_permisions to FUSE on mount")
+    .set_flag(Option::FLAG_STARTUP),
 
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)

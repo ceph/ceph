@@ -874,6 +874,11 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "mgr module ls") {
     f->open_object_section("modules");
     {
+      f->open_array_section("always_on_modules");
+      for (auto& p : map.get_always_on_modules()) {
+        f->dump_string("module", p);
+      }
+      f->close_section();
       f->open_array_section("enabled_modules");
       for (auto& p : map.modules) {
         if (map.get_always_on_modules().count(p) > 0)

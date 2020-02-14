@@ -238,15 +238,6 @@ class MDSRank {
 
     void handle_write_error(int err);
 
-    void handle_conf_change(const ConfigProxy& conf,
-                            const std::set <std::string> &changed)
-    {
-      sessionmap.handle_conf_change(conf, changed);
-      server->handle_conf_change(conf, changed);
-      mdcache->handle_conf_change(conf, changed, *mdsmap);
-      purge_queue.handle_conf_change(conf, changed, *mdsmap);
-    }
-
     void update_mlogger();
   protected:
     // Flag to indicate we entered shutdown: anyone seeing this to be true
@@ -318,7 +309,6 @@ class MDSRank {
 
     void create_logger();
   public:
-
     void queue_waiter(MDSContext *c) {
       finished_queue.push_back(c);
       progress_thread.signal();
@@ -469,6 +459,9 @@ class MDSRank {
 
     bool evict_client(int64_t session_id, bool wait, bool blacklist,
                       std::ostream& ss, Context *on_killed=nullptr);
+    int config_client(int64_t session_id, bool remove,
+		      const std::string& option, const std::string& value,
+		      std::ostream& ss);
 
     void mark_base_recursively_scrubbed(inodeno_t ino);
 
@@ -621,7 +614,7 @@ private:
  * the service/dispatcher stuff like init/shutdown that subsystems should
  * never touch.
  */
-class MDSRankDispatcher : public MDSRank
+class MDSRankDispatcher : public MDSRank, public md_config_obs_t
 {
 public:
   void init();
@@ -632,6 +625,9 @@ public:
   void handle_mds_map(const MMDSMap::const_ref &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
+
+  const char** get_tracked_conf_keys() const override final;
+  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
   bool handle_command(
     const cmdmap_t &cmdmap,

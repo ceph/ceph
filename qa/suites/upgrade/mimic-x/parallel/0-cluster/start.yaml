@@ -13,11 +13,9 @@ roles:
   - mds.a
   - osd.0
   - osd.1
-  - mon.b
   - mgr.y
   - osd.2
   - osd.3
-  - mon.c
   - mds.b
   - osd.4
   - osd.5
@@ -25,6 +23,8 @@ roles:
   - client.1
   - client.2
   - client.3
+  - mon.b
+- - mon.c
 overrides:
   ceph:
     mon_bind_msgr2: false

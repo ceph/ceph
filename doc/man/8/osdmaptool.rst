@@ -13,6 +13,12 @@ Synopsis
 
 | **osdmaptool** *mapfilename* [--print] [--createsimple *numosd*
   [--pgbits *bitsperosd* ] ] [--clobber]
+| **osdmaptool** *mapfilename* [--import-crush *crushmap*]
+| **osdmaptool** *mapfilename* [--export-crush *crushmap*]
+| **osdmaptool** *mapfilename* [--upmap *file*] [--upmap-max *max-optimizations*]
+  [--upmap-deviation *max-deviation*] [--upmap-pool *poolname*]
+  [--upmap-save *file*] [--upmap-save *newosdmap*] [--upmap-active]
+| **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap-save *newosdmap*]
 
 
 Description
@@ -21,6 +27,8 @@ Description
 **osdmaptool** is a utility that lets you create, view, and manipulate
 OSD cluster maps from the Ceph distributed storage system. Notably, it
 lets you extract the embedded CRUSH map or import a new CRUSH map.
+It can also simulate the upmap balancer mode so you can get a sense of
+what is needed to balance your PGs.
 
 
 Options
@@ -111,6 +119,10 @@ Options
 
    mark osds up and in (but do not persist).
 
+.. option:: --mark-out
+
+   mark an osd as out (but do not persist)
+
 .. option:: --tree
 
    Displays a hierarchical tree of the map.
@@ -118,6 +130,43 @@ Options
 .. option:: --clear-temp
 
    clears pg_temp and primary_temp variables.
+
+.. option:: --health
+
+   dump health checks
+
+.. option:: --with-default-pool
+
+   include default pool when creating map
+
+.. option:: --upmap-cleanup <file>
+
+   clean up pg_upmap[_items] entries, writing commands to <file> [default: - for stdout]
+
+.. option:: --upmap <file>
+
+   calculate pg upmap entries to balance pg layout writing commands to <file> [default: - for stdout]
+
+.. option:: --upmap-max <max-optimizations>
+
+   set max upmap entries to calculate [default: 10]
+
+.. option:: --upmap-deviation <max-deviation>
+
+   max deviation from target [default: 5]
+
+.. option:: --upmap-pool <poolname>
+
+   restrict upmap balancing to 1 pool or the option can be repeated for multiple pools
+
+.. option:: --upmap-save
+
+   write modified OSDMap with upmap changes
+
+.. option:: --upmap-active
+
+   Act like an active balancer, keep applying changes until balanced
+
 
 Example
 =======
@@ -130,19 +179,19 @@ To view the result::
 
         osdmaptool --print osdmap
 
-To view the mappings of placement groups for pool 0::
+To view the mappings of placement groups for pool 1::
 
-        osdmaptool --test-map-pgs-dump rbd --pool 0
+        osdmaptool osdmap --test-map-pgs-dump --pool 1
 
         pool 0 pg_num 8
-        0.0     [0,2,1] 0
-        0.1     [2,0,1] 2
-        0.2     [0,1,2] 0
-        0.3     [2,0,1] 2
-        0.4     [0,2,1] 0
-        0.5     [0,2,1] 0
-        0.6     [0,1,2] 0
-        0.7     [1,0,2] 1
+        1.0     [0,2,1] 0
+        1.1     [2,0,1] 2
+        1.2     [0,1,2] 0
+        1.3     [2,0,1] 2
+        1.4     [0,2,1] 0
+        1.5     [0,2,1] 0
+        1.6     [0,1,2] 0
+        1.7     [1,0,2] 1
         #osd    count   first   primary c wt    wt
         osd.0   8       5       5       1       1
         osd.1   8       1       1       1       1
@@ -157,7 +206,7 @@ To view the mappings of placement groups for pool 0::
         size 3  8
 
 In which,
- #. pool 0 has 8 placement groups. And two tables follow:
+ #. pool 1 has 8 placement groups. And two tables follow:
  #. A table for placement groups. Each row presents a placement group. With columns of:
 
     * placement group id,
@@ -200,6 +249,56 @@ placement group distribution, whose standard deviation is 1.41421::
         size 10
         size 20
         size 364
+
+   To simulate the active balancer in upmap mode::
+
+        osdmaptool --upmap upmaps.out --upmap-active --upmap-deviation 6 --upmap-max 11 osdmap
+
+   osdmaptool: osdmap file 'osdmap'
+   writing upmap command output to: upmaps.out
+   checking for upmap cleanups
+   upmap, max-count 11, max deviation 6
+   pools movies photos metadata data
+   prepared 11/11 changes
+   Time elapsed 0.00310404 secs
+   pools movies photos metadata data
+   prepared 11/11 changes
+   Time elapsed 0.00283402 secs
+   pools data metadata movies photos
+   prepared 11/11 changes
+   Time elapsed 0.003122 secs
+   pools photos metadata data movies
+   prepared 11/11 changes
+   Time elapsed 0.00324372 secs
+   pools movies metadata data photos
+   prepared 1/11 changes
+   Time elapsed 0.00222609 secs
+   pools data movies photos metadata
+   prepared 0/11 changes
+   Time elapsed 0.00209916 secs
+   Unable to find further optimization, or distribution is already perfect
+   osd.0 pgs 41
+   osd.1 pgs 42
+   osd.2 pgs 42
+   osd.3 pgs 41
+   osd.4 pgs 46
+   osd.5 pgs 39
+   osd.6 pgs 39
+   osd.7 pgs 43
+   osd.8 pgs 41
+   osd.9 pgs 46
+   osd.10 pgs 46
+   osd.11 pgs 46
+   osd.12 pgs 46
+   osd.13 pgs 41
+   osd.14 pgs 40
+   osd.15 pgs 40
+   osd.16 pgs 39
+   osd.17 pgs 46
+   osd.18 pgs 46
+   osd.19 pgs 39
+   osd.20 pgs 42
+   Total time elapsed 0.0167765 secs, 5 rounds
 
 
 Availability

@@ -30,7 +30,7 @@ if [ "$WITH_PYTHON2" = "ON" ]; then
   if [[ -n "$@" ]]; then
     ENV_LIST+="py27-run,"
   else
-    ENV_LIST+="py27-cov,py27-lint,"
+    ENV_LIST+="py27-cov,py27-lint,py27-check,"
   fi
 fi
 # WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
@@ -39,7 +39,7 @@ if [[ "$WITH_PYTHON3" =~ (^3|^ON) ]]; then
   if [[ -n "$@" ]]; then
     ENV_LIST+="py3-run,"
   else
-    ENV_LIST+="py3-cov,py3-lint"
+    ENV_LIST+="py3-cov,py3-lint,py3-check,"
   fi
 fi
 # use bash string manipulation to strip off any trailing comma

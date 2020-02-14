@@ -17,6 +17,7 @@ import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { ListPipe } from './list.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
+import { NotAvailablePipe } from './not-available.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
 import { RbdConfigurationSourcePipe } from './rbd-configuration-source.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
@@ -44,6 +45,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     RoundPipe,
     OrdinalPipe,
     MillisecondsPipe,
+    NotAvailablePipe,
     IopsPipe,
     UpperFirstPipe,
     RbdConfigurationSourcePipe
@@ -67,6 +69,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     RoundPipe,
     OrdinalPipe,
     MillisecondsPipe,
+    NotAvailablePipe,
     IopsPipe,
     UpperFirstPipe,
     RbdConfigurationSourcePipe
@@ -89,6 +92,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     OrdinalPipe,
     IopsPipe,
     MillisecondsPipe,
+    NotAvailablePipe,
     UpperFirstPipe
   ]
 })

@@ -19,7 +19,7 @@ def node(host, request):
     ceph_dev_branch = os.environ.get("CEPH_DEV_BRANCH", "master")
     group_names = ansible_vars["group_names"]
     num_osd_ports = 4
-    if ceph_dev_branch in ['luminous', 'mimic']:
+    if 'mimic' in ceph_dev_branch or 'luminous' in ceph_dev_branch:
         num_osd_ports = 2
 
     # capture the initial/default state

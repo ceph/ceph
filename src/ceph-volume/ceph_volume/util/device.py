@@ -2,7 +2,7 @@
 
 import os
 from functools import total_ordering
-from ceph_volume import sys_info
+from ceph_volume import sys_info, process
 from ceph_volume.api import lvm
 from ceph_volume.util import disk
 from ceph_volume.util.constants import ceph_disk_guids
@@ -318,6 +318,15 @@ class Device(object):
         return is_member
 
     @property
+    def has_bluestore_label(self):
+        out, err, ret = process.call([
+            'ceph-bluestore-tool', 'show-label',
+            '--dev', self.path])
+        if ret:
+            return False
+        return True
+
+    @property
     def is_mapper(self):
         return self.path.startswith(('/dev/mapper', '/dev/dm-'))
 
@@ -389,8 +398,13 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
+        # reject disks small than 5GB
+        if int(self.sys_api.get('size', 0)) < 5368709120:
+            rejected.append('Insufficient space (<5GB)')
         if self.is_ceph_disk_member:
             rejected.append("Used by ceph-disk")
+        if self.has_bluestore_label:
+            rejected.append('Has BlueStore device label')
 
         return len(rejected) == 0, rejected
 

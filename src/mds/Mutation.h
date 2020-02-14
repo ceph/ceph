@@ -229,8 +229,8 @@ typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 
 
-/** active_request_t
- * state we track for requests we are currently processing.
+/**
+ * MDRequestImpl: state we track for requests we are currently processing.
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */

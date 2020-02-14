@@ -1399,12 +1399,13 @@ public:
     pg_t pg,                       ///< pg to potentially remap
     const set<int>& overfull,      ///< osds we'd want to evacuate
     const vector<int>& underfull,  ///< osds to move to, in order of preference
+    const vector<int>& more_underfull,  ///< less full osds to move to, in order of preference
     vector<int> *orig,
     vector<int> *out);             ///< resulting alternative mapping
 
   int calc_pg_upmaps(
     CephContext *cct,
-    float max_deviation, ///< max deviation from target (value < 1.0)
+    uint32_t max_deviation, ///< max deviation from target (value >= 1)
     int max_iterations,  ///< max iterations to run
     const set<int64_t>& pools,        ///< [optional] restrict to pool
     Incremental *pending_inc
@@ -1498,7 +1499,7 @@ public:
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }
 
-  void check_health(health_check_map_t *checks) const;
+  void check_health(CephContext *cct, health_check_map_t *checks) const;
 
   int parse_osd_id_list(const vector<string>& ls,
 			set<int> *out,

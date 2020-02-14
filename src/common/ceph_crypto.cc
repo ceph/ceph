@@ -115,3 +115,27 @@ void ceph::crypto::ssl::OpenSSLDigest::Final(unsigned char *digest) {
   EVP_DigestFinal_ex(mpContext, digest, &s);
 }
 #endif /*USE_OPENSSL*/
+
+
+void ceph::crypto::zeroize_for_security(void* const s, const size_t n) {
+#ifdef USE_OPENSSL
+  // NSS lacks its own cleaning procedure that would be resilient to
+  // dead-store-elimination of nowadays compilers [1]. To avoid writing
+  // our own security code, let's always use the OpenSSL's one.
+  // [1]: "NSS [3.27.1] does not have a reliable memory scrubbing
+  //      implementation since it either calls memset or uses the macro
+  //      PORT_Memset, which expands to memset"
+  // https://klevchen.ece.illinois.edu/pubs/yjoll-usesec17.pdf, page 11.
+  OPENSSL_cleanse(s, n);
+#else
+  // OpenSSL is available even when NSS is turned on. The performance-
+  // critical Cephx's signature crafting machinery already follows this
+  // assumption and uses OpenSSL directly (see src/auth/Crypto.cc).
+  // Also, in CMakeList.txt we explicitly require both NSS and OpenSSL:
+  //
+  //  find_package(NSS REQUIRED)
+  //  find_package(NSPR REQUIRED)
+  //  find_package(OpenSSL REQUIRED)
+# error "No supported crypto implementation found."
+#endif /*USE_OPENSSL*/
+}

@@ -3009,8 +3009,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	mgrmon()->get_map().print_summary(nullptr, &ss);
 	ss << "\n";
       }
-      if (mdsmon()->get_fsmap().filesystem_count() > 0) {
-	ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
+      if (mdsmon()->should_print_status()) {
+        ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
       }
       ss << "    osd: " << spacing;
       osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
@@ -3088,7 +3088,6 @@ bool Monitor::_allowed_command(MonSession *s, const string &module,
 
   bool capable = s->caps.is_capable(
     g_ceph_context,
-    CEPH_ENTITY_TYPE_MON,
     s->entity_name,
     module, prefix, param_str_map,
     cmd_r, cmd_w, cmd_x,

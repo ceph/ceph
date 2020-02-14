@@ -391,6 +391,11 @@
             <span class="form-control no-border">
               <button type="button"
                       class="btn btn-sm btn-default btn-label pull-right tc_addCapButton"
+                      [disabled]="hasAllCapabilities()"
+                      i18n-tooltip
+                      tooltip="All capabilities are already added."
+                      [isDisabled]="!hasAllCapabilities()"
+                      triggers="pointerenter pointerleave"
                       (click)="showCapabilityModal()">
                 <i class="fa fa-fw fa-plus"></i>
                 <ng-container i18n>{{ actionLabels.ADD | titlecase }} {{ capabilityLabel | upperFirst }}</ng-container>

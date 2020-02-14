@@ -223,8 +223,7 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
   typedef std::map<std::string, std::string> CommandArgs;
 
   if (mon_caps.is_capable(
-	cct, CEPH_ENTITY_TYPE_MON,
-	entity_name, "osd",
+	cct, entity_name, "osd",
 	"osd pool op unmanaged-snap",
 	(pool_name == nullptr ?
 	 CommandArgs{} /* pool DNE, require unrestricted cap */ :
@@ -422,7 +421,7 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
            << g_conf()->mon_memory_target
            << " rocksdb_cache_size:"
            << g_conf()->rocksdb_cache_size
-           << ". Invalid size provided."
+           << ". Unable to update cache size."
            << dendl;
     }
   }
@@ -430,20 +429,22 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
 
 void OSDMonitor::_set_cache_autotuning()
 {
-  mon_memory_autotune = g_conf()->mon_memory_autotune;
-  if (!mon_memory_autotune && pcm != nullptr) {
+  if (!g_conf()->mon_memory_autotune && pcm != nullptr) {
     // Disable cache autotuning
     std::lock_guard l(balancer_lock);
     pcm = nullptr;
   }
 
-  if (mon_memory_autotune && pcm == nullptr) {
+  if (g_conf()->mon_memory_autotune && pcm == nullptr) {
     int r = register_cache_with_pcm();
     if (r < 0) {
       dout(10) << __func__
                << " Error while registering osdmon caches with pcm."
                << " Cache auto tuning not enabled."
                << dendl;
+      mon_memory_autotune = false;
+    } else {
+      mon_memory_autotune = true;
     }
   }
 }
@@ -453,6 +454,11 @@ int OSDMonitor::_update_mon_cache_settings()
   if (g_conf()->mon_memory_target <= 0 ||
       g_conf()->mon_memory_target < mon_memory_min ||
       g_conf()->rocksdb_cache_size <= 0) {
+    return -EINVAL;
+  }
+
+  if (pcm == nullptr && rocksdb_binned_kv_cache == nullptr) {
+    derr << __func__ << " not using pcm and rocksdb" << dendl;
     return -EINVAL;
   }
 
@@ -494,7 +500,7 @@ int OSDMonitor::_update_mon_cache_settings()
     pcm->tune_memory();
     pcm->balance();
     _set_new_cache_sizes();
-    dout(10) << __func__ << " Updated mon cache setting."
+    dout(1) << __func__ << " Updated mon cache setting."
              << " target: " << target
              << " min: " << min
              << " max: " << max
@@ -879,7 +885,10 @@ int OSDMonitor::register_cache_with_pcm()
   }
 
   rocksdb_binned_kv_cache = mon->store->get_priority_cache();
-  ceph_assert(rocksdb_binned_kv_cache);
+  if (!rocksdb_binned_kv_cache) {
+    derr << __func__ << " not using rocksdb" << dendl;
+    return -EINVAL;
+  }
 
   int r = _set_cache_ratios();
   if (r < 0) {
@@ -894,7 +903,7 @@ int OSDMonitor::register_cache_with_pcm()
   pcm->insert("kv", rocksdb_binned_kv_cache, true);
   pcm->insert("inc", inc_cache, true);
   pcm->insert("full", full_cache, true);
-  dout(10) << __func__ << " pcm target: " << target
+  dout(1) << __func__ << " pcm target: " << target
            << " pcm max: " << max
            << " pcm min: " << min
            << " inc_osd_cache size: " << inc_osd_cache.get_size()
@@ -920,7 +929,7 @@ int OSDMonitor::_set_cache_ratios()
   inc_cache->set_cache_ratio(cache_inc_ratio);
   full_cache->set_cache_ratio(cache_full_ratio);
 
-  dout(10) << __func__ << " kv ratio " << cache_kv_ratio
+  dout(1) << __func__ << " kv ratio " << cache_kv_ratio
            << " inc ratio " << cache_inc_ratio
            << " full ratio " << cache_full_ratio
            << dendl;
@@ -1861,7 +1870,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // health
   health_check_map_t next;
-  tmp.check_health(&next);
+  tmp.check_health(cct, &next);
   encode_health(next, t);
 }
 
@@ -3851,7 +3860,6 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
     goto ignore;
   if (!session->caps.is_capable(
 	cct,
-	CEPH_ENTITY_TYPE_MON,
 	session->entity_name,
         "osd", "osd pool rmsnap", {}, true, true, false,
 	session->get_peer_socket_addr())) {
@@ -4831,7 +4839,7 @@ void OSDMonitor::_set_new_cache_sizes()
   inc_osd_cache.set_bytes(inc_alloc);
   full_osd_cache.set_bytes(full_alloc);
 
-  dout(10) << __func__ << " cache_size:" << cache_size
+  dout(1) << __func__ << " cache_size:" << cache_size
            << " inc_alloc: " << inc_alloc
            << " full_alloc: " << full_alloc
            << " kv_alloc: " << kv_alloc
@@ -4989,11 +4997,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
-    osdmap.print_summary(f.get(), ds, "", true);
-    if (f)
+    if (f) {
+      f->open_object_section("osdmap");
+      osdmap.print_summary(f.get(), ds, "", true);
+      f->close_section();
       f->flush(rdata);
-    else
+    } else {
+      osdmap.print_summary(nullptr, ds, "", true);
       rdata.append(ds);
+    }
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
@@ -7500,10 +7512,21 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   int64_t uf = 0;  // micro-f
   cmd_getval(cct, cmdmap, "val", val);
 
-  // parse string as both int and float; different fields use different types.
-  n = strict_strtoll(val.c_str(), 10, &interr);
-  f = strict_strtod(val.c_str(), &floaterr);
-  uf = llrintl(f * (double)1000000.0);
+  // create list of properties that use SI units
+  std::set<std::string> si_items = {};
+  // create list of properties that use IEC units
+  std::set<std::string> iec_items = {"target_size_bytes"};
+
+  if (si_items.count(var)) {
+    n = strict_si_cast<int64_t>(val.c_str(), &interr);
+  } else if (iec_items.count(var)) {
+    n = strict_iec_cast<int64_t>(val.c_str(), &interr);
+  } else {
+    // parse string as both int and float; different fields use different types.
+    n = strict_strtoll(val.c_str(), 10, &interr);
+    f = strict_strtod(val.c_str(), &floaterr);
+    uf = llrintl(f * (double)1000000.0);
+  }
 
   if (!p.is_tier() &&
       (var == "hit_set_type" || var == "hit_set_period" ||
@@ -8013,6 +8036,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           ss << "unrecognized fingerprint_algorithm '" << val << "'";
 	  return -EINVAL;
         }
+      }
+    } else if (var == "target_size_bytes") {
+      if (interr.length()) {
+        ss << "error parsing unit value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
+        ss << "must set require_osd_release to nautilus or "
+           << "later before setting target_size_bytes";
+        return -EINVAL;
       }
     } else if (var == "pg_num_min") {
       if (interr.length()) {

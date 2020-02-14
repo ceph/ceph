@@ -249,6 +249,7 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
   }
 
   char addr_buf[64];
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(addr_buf, 0, sizeof(addr_buf));
   inet_ntop(family, ns_rr_rdata(rr), addr_buf, sizeof(addr_buf));
   if (!addr->parse(addr_buf)) {
@@ -339,6 +340,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     uint16_t priority = ns_get16(rdata); rdata += NS_INT16SZ;
     rdata += NS_INT16SZ;	// weight
     uint16_t port = ns_get16(rdata); rdata += NS_INT16SZ;
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(full_target, 0, sizeof(full_target));
     ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
                        rdata, full_target, sizeof(full_target));

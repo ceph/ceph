@@ -183,7 +183,14 @@ class RGWReshardWait {
   ceph::condition_variable cond;
 
   struct Waiter : boost::intrusive::list_base_hook<> {
-    boost::asio::basic_waitable_timer<Clock> timer;
+#if BOOST_VERSION < 107000
+    using Timer = boost::asio::basic_waitable_timer<Clock>;
+#else
+    using Executor = boost::asio::io_context::executor_type;
+    using Timer = boost::asio::basic_waitable_timer<Clock,
+          boost::asio::wait_traits<Clock>, Executor>;
+#endif
+    Timer timer;
     explicit Waiter(boost::asio::io_context& ioc) : timer(ioc) {}
   };
   boost::intrusive::list<Waiter> waiters;

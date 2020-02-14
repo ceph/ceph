@@ -163,7 +163,7 @@ void MgrClient::reconnect()
 
   // Don't send an open if we're just a client (i.e. doing
   // command-sending, not stats etc)
-  if (!cct->_conf->name.is_client() || service_daemon) {
+  if (msgr->get_mytype() != CEPH_ENTITY_TYPE_CLIENT || service_daemon) {
     _send_open();
   }
 
@@ -499,7 +499,7 @@ int MgrClient::service_daemon_register(
   daemon_dirty_status = true;
 
   // late register?
-  if (cct->_conf->name.is_client() && session && session->con) {
+  if (msgr->get_mytype() == CEPH_ENTITY_TYPE_CLIENT && session && session->con) {
     _send_open();
   }
 

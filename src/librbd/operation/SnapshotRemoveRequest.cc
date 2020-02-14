@@ -120,6 +120,7 @@ void SnapshotRemoveRequest<I>::get_snap() {
   auto aio_comp = create_rados_callback<
     SnapshotRemoveRequest<I>,
     &SnapshotRemoveRequest<I>::handle_get_snap>(this);
+  m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op,
                                        &m_out_bl);
   ceph_assert(r == 0);
@@ -137,8 +138,10 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
 
     auto it = m_out_bl.cbegin();
     r = cls_client::snapshot_get_finish(&it, &snap_info);
-    if (r == 0) {
-      m_child_attached = (snap_info.child_count > 0);
+    m_child_attached = (snap_info.child_count > 0);
+    if (r == 0 && m_child_attached) {
+      list_children();
+      return;
     }
   }
 
@@ -150,6 +153,98 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
   }
 
   detach_child();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::list_children() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::children_list_start(&op, m_snap_id);
+
+  m_out_bl.clear();
+  m_child_images.clear();
+  auto aio_comp = create_rados_callback<
+    SnapshotRemoveRequest<I>,
+    &SnapshotRemoveRequest<I>::handle_list_children>(this);
+  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op,
+                                       &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::handle_list_children(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = cls_client::children_list_finish(&it, &m_child_images);
+  }
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve child: " << cpp_strerror(r)
+               << dendl;
+    this->complete(r);
+    return;
+  }
+
+  detach_stale_child();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::detach_stale_child() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  for (auto& child_image : m_child_images) {
+    m_child_attached = true;
+    IoCtx ioctx;
+    int r = util::create_ioctx(image_ctx.md_ctx, "child image",
+                               child_image.pool_id,
+                               child_image.pool_namespace, &ioctx);
+    if (r == -ENOENT) {
+      librados::ObjectWriteOperation op;
+      cls_client::child_detach(&op, m_snap_id,
+                               {child_image.pool_id,
+                                child_image.pool_namespace,
+                                child_image.image_id});
+      auto aio_comp = create_rados_callback<
+        SnapshotRemoveRequest<I>,
+        &SnapshotRemoveRequest<I>::handle_detach_stale_child>(this);
+      r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op);
+      ceph_assert(r == 0);
+      aio_comp->release();
+      return;
+    } else if (r < 0) {
+      this->async_complete(r);
+      return;
+    }
+  }
+
+  detach_child();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::handle_detach_stale_child(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to detach stale child: " << cpp_strerror(r)
+               << dendl;
+    this->complete(r);
+    return;
+  }
+
+  m_child_attached = false;
+  list_children();
 }
 
 template <typename I>

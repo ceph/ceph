@@ -193,6 +193,7 @@ Server::Server(MDSRank *m) :
   terminating_sessions(false),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
+  replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
@@ -205,13 +206,23 @@ void Server::dispatch(const Message::const_ref &m)
     return;
   }
 
+/*
+ *In reconnect phase, client sent unsafe requests to mds before reconnect msg. Seting sessionclosed_isok will handle scenario like this:
+
+1. In reconnect phase, client sent unsafe requests to mds.
+2. It reached reconnect timeout. All sessions without sending reconnect msg in time, some of which may had sent unsafe requests, are marked as closed.
+(Another situation is #31668, which will deny all client reconnect msg to speed up reboot).
+3.So these unsafe request from session without sending reconnect msg in time or being denied could be handled in clientreplay phase.
+
+*/
+  bool sessionclosed_isok = replay_unsafe_with_closed_session;
   // active?
   // handle_slave_request()/handle_client_session() will wait if necessary
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST && !mds->is_active()) {
     const auto &req = MClientRequest::msgref_cast(m);
     if (mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
       Session *session = mds->get_session(req);
-      if (!session || session->is_closed()) {
+      if (!session || (!session->is_open() && !sessionclosed_isok)) {
 	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
 	return;
       }
@@ -442,6 +453,9 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
+    auto reply = MClientSession::create(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     return;
   }
 
@@ -541,8 +555,9 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 	stringstream ss;
 	ss << "missing required features '" << missing_features << "'";
 	send_reject_message(ss.str());
-	mds->clog->warn() << "client session lacks required features '"
-			  << missing_features << "' denied (" << session->info.inst << ")";
+	mds->clog->warn() << "client session (" << session->info.inst
+                          << ") lacks required features " << missing_features
+                          << "; client supports " << client_metadata.features;
 	session->clear();
 	break;
       }
@@ -776,8 +791,9 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     } else if (session->is_killing()) {
       // destroy session, close connection
       if (session->get_connection()) {
-	session->get_connection()->mark_down();
-	session->get_connection()->set_priv(NULL);
+        session->get_connection()->mark_down();
+        mds->sessionmap.set_state(session, Session::STATE_CLOSED);
+        session->set_connection(nullptr);
       }
       mds->sessionmap.remove_session(session);
     } else {
@@ -1082,8 +1098,10 @@ void Server::evict_cap_revoke_non_responders() {
   }
 }
 
-void Server::handle_conf_change(const ConfigProxy& conf,
-                                const std::set <std::string> &changed) {
+void Server::handle_conf_change(const std::set<std::string>& changed) {
+  if (changed.count("mds_replay_unsafe_with_closed_session")) {
+    replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
+  }
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
@@ -1209,6 +1227,7 @@ void Server::reconnect_clients(MDSContext *reconnect_done_)
   for (auto session : sessions) {
     if (session->is_open()) {
       client_reconnect_gather.insert(session->get_client());
+      session->set_reconnecting(true);
       session->last_cap_renew = now;
     }
   }
@@ -1232,8 +1251,20 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
 	  << (m->has_more() ? " (more)" : "") << dendl;
   client_t from = m->get_source().num();
   Session *session = mds->get_session(m);
-  if (!session)
+  if (!session) {
+    dout(0) << " ignoring sessionless msg " << *m << dendl;
+    auto reply = MClientSession::create(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     return;
+  }
+
+  if (!session->is_open()) {
+    dout(0) << " ignoring msg from not-open session" << *m << dendl;
+    auto reply = MClientSession::create(CEPH_SESSION_CLOSE);
+    mds->send_message(reply, m->get_connection());
+    return;
+  }
 
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
     dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
@@ -1358,6 +1389,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
 
     // remove from gather set
     client_reconnect_gather.erase(from);
+    session->set_reconnecting(false);
     if (client_reconnect_gather.empty())
       reconnect_gather_finish();
   }
@@ -1563,27 +1595,31 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, RecallFlags flags)
 {
   const auto now = clock::now();
-  const bool steady = flags&RecallFlags::STEADY;
-  const bool enforce_max = flags&RecallFlags::ENFORCE_MAX;
+  const bool steady = !!(flags&RecallFlags::STEADY);
+  const bool enforce_max = !!(flags&RecallFlags::ENFORCE_MAX);
+  const bool enforce_liveness = !!(flags&RecallFlags::ENFORCE_LIVENESS);
+  const bool trim = !!(flags&RecallFlags::TRIM);
 
   const auto max_caps_per_client = g_conf().get_val<uint64_t>("mds_max_caps_per_client");
   const auto min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
   const auto recall_global_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_global_max_decay_threshold");
   const auto recall_max_caps = g_conf().get_val<Option::size_t>("mds_recall_max_caps");
   const auto recall_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_max_decay_threshold");
+  const auto cache_liveness_magnitude = g_conf().get_val<Option::size_t>("mds_session_cache_liveness_magnitude");
 
   dout(7) << __func__ << ":"
            << " min=" << min_caps_per_client
            << " max=" << max_caps_per_client
            << " total=" << Capability::count()
-           << " flags=0x" << std::hex << flags
+           << " flags=" << flags
            << dendl;
 
   /* trim caps of sessions with the most caps first */
   std::multimap<uint64_t, Session*> caps_session;
-  auto f = [&caps_session, enforce_max, max_caps_per_client](auto& s) {
+  auto f = [&caps_session, enforce_max, enforce_liveness, trim, max_caps_per_client, cache_liveness_magnitude](auto& s) {
     auto num_caps = s->caps.size();
-    if (!enforce_max || num_caps > max_caps_per_client) {
+    auto cache_liveness = s->get_session_cache_liveness();
+    if (trim || (enforce_max && num_caps > max_caps_per_client) || (enforce_liveness && cache_liveness < (num_caps>>cache_liveness_magnitude))) {
       caps_session.emplace(std::piecewise_construct, std::forward_as_tuple(num_caps), std::forward_as_tuple(s));
     }
   };
@@ -2135,13 +2171,14 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
     return;
   }
 
+  bool sessionclosed_isok = replay_unsafe_with_closed_session;
   // active session?
   Session *session = 0;
   if (req->get_source().is_client()) {
     session = mds->get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
-    } else if (session->is_closed() ||
+    } else if ((session->is_closed() && (!mds->is_clientreplay() || !sessionclosed_isok)) ||
 	       session->is_closing() ||
 	       session->is_killing()) {
       dout(5) << "session closed|closing|killing, dropping" << dendl;
@@ -2167,6 +2204,8 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
     inodeno_t created;
     if (session->have_completed_request(req->get_reqid().tid, &created)) {
       has_completed = true;
+      if (!session->is_open())
+        return;
       // Don't send traceless reply if the completed request has created
       // new inode. Treat the request as lookup request instead.
       if (req->is_replay() ||
@@ -3090,7 +3129,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   // state. In that corner case, session's prealloc_inos are being freed.
   // To simplify the code, we disallow using/refilling session's prealloc_ino
   // while session is opening.
-  bool allow_prealloc_inos = !mdr->session->is_opening();
+  bool allow_prealloc_inos = mdr->session->is_open();
 
   // assign ino
   if (allow_prealloc_inos &&
@@ -3105,7 +3144,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 	     << dendl;
   } else {
     mdr->alloc_ino = 
-      in->inode.ino = mds->inotable->project_alloc_id();
+      in->inode.ino = mds->inotable->project_alloc_id(useino);
     dout(10) << "prepare_new_inode alloc " << mdr->alloc_ino << dendl;
   }
 
@@ -3133,6 +3172,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   in->inode.mode = mode;
 
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
@@ -5776,6 +5816,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   le->metablob.add_primary_dentry(dn, newi, true, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+  mds->balancer->maybe_fragment(dn->get_dir(), false);
 }
 
 
@@ -5922,6 +5963,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   le->metablob.add_primary_dentry(dn, newi, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+  mds->balancer->maybe_fragment(dir, false);
 }
 
 
@@ -5990,6 +6032,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
     _link_local(mdr, dn, targeti);
   else 
     _link_remote(mdr, true, dn, targeti);
+  mds->balancer->maybe_fragment(dir, false);  
 }
 
 
