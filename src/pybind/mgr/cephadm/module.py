@@ -140,10 +140,15 @@ class AsyncCompletion(orchestrator.Completion):
                 self._on_complete_ = None
                 self._finalize(result)
             except Exception as e:
-                self.fail(e)
+                try:
+                    self.fail(e)
+                except Exception:
+                    logger.exception(f'failed to fail AsyncCompletion: >{repr(self)}<')
+                    if 'UNITTEST' in os.environ:
+                        assert False
 
         def error_callback(e):
-            self.fail(e)
+            pass
 
         def run(value):
             def do_work(*args, **kwargs):
@@ -155,11 +160,8 @@ class AsyncCompletion(orchestrator.Completion):
                         self.progress_reference.progress += 1.0 / len(value)
                     return res
                 except Exception as e:
-                    if six.PY3:
-                        raise
-                    else:
-                        # Py2 only: _worker_pool doesn't call error_callback
-                        self.fail(e)
+                    self.fail(e)
+                    raise
 
             assert CephadmOrchestrator.instance
             if self.many:
