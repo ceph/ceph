@@ -1561,7 +1561,9 @@ bool DaemonServer::_handle_command(
 		found = true;
 		continue;
 	      }
-	      pg_acting.insert(anm.osd);
+	      if (anm.osd != CRUSH_ITEM_NONE) {
+		pg_acting.insert(anm.osd);
+	      }
 	    }
 	  } else {
 	    for (auto& a : q.second.acting) {
@@ -1569,7 +1571,9 @@ bool DaemonServer::_handle_command(
 		found = true;
 		continue;
 	      }
-	      pg_acting.insert(a);
+	      if (a != CRUSH_ITEM_NONE) {
+		pg_acting.insert(a);
+	      }
 	    }
 	  }
 	  if (!found) {
