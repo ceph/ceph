@@ -227,8 +227,10 @@ class Zap(object):
                 mlogger.info('Zapping lvm member {}. lv_path is {}'.format(device.abspath, lv.lv_path))
                 self.zap_lv(Device(lv.lv_path))
             else:
-                mlogger.info('Found empty VG {}, removing'.format(lv.vg_name))
-                api.remove_vg(lv.vg_name)
+                vg = api.get_first_vg(filters={'vg_name': lv.vg_name})
+                if vg:
+                    mlogger.info('Found empty VG {}, removing'.format(vg.vg_name))
+                    api.remove_vg(vg.vg_name)
 
 
 
