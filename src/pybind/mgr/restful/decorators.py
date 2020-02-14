@@ -13,6 +13,9 @@ from . import context
 def auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        if not context.instance.enable_auth:
+            return f(*args, **kwargs)
+            
         if not request.authorization:
             response.status = 401
             response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'

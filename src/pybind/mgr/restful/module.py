@@ -198,6 +198,7 @@ class Module(MgrModule):
         {'name': 'server_addr'},
         {'name': 'server_port'},
         {'name': 'key_file'},
+        {'name': 'enable_auth', 'type': 'bool', 'default': True},
     ]
 
     COMMANDS = [
@@ -236,7 +237,7 @@ class Module(MgrModule):
         self.requests_lock = threading.RLock()
 
         self.keys = {}
-        self.disable_auth = False
+        self.enable_auth = True
 
         self.server = None
 
@@ -302,6 +303,8 @@ class Module(MgrModule):
         else:
             pkey_fname = self.get_localized_module_option('key_file')
 
+        self.enable_auth = self.get_localized_module_option('enable_auth', True)
+        
         if not cert_fname or not pkey_fname:
             raise CannotServe('no certificate configured')
         if not os.path.isfile(cert_fname):
@@ -384,6 +387,9 @@ class Module(MgrModule):
         except StopIteration:
             # the command was not issued by me
             pass
+
+    def config_notify(self):
+        self.enable_auth = self.get_localized_module_option('enable_auth', True)
 
 
     def create_self_signed_cert(self):
