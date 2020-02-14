@@ -4968,6 +4968,10 @@ std::vector<Option> get_global_options() {
     .set_default(4)
     .set_description(""),
 
+    Option("bluestore_hybrid_alloc_mem_cap", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(64_M)
+    .set_description("Maximum RAM hybrid allocator should use before enabling bitmap supplement"),
+
     // -----------------------------------------
     // kstore
 
