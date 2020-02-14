@@ -753,13 +753,28 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self._check_hosts()
 
             # refresh daemons
-            cutoff = datetime.datetime.utcnow() - datetime.timedelta(seconds=self.daemon_cache_timeout)
+            cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+                seconds=self.daemon_cache_timeout)
             cutoffs = cutoff.strftime(DATEFMT)
             self.log.debug('refreshing daemons, cutoff %s' % cutoffs)
+            failures = []
             for host, di in self.daemon_cache.items():
                 if not di['last_update'] or di['last_update'] < cutoffs:
                     self.log.debug('refreshing %s' % host)
-                    self._refresh_host_daemons(host)
+                    r = self._refresh_host_daemons(host)
+                    if r:
+                        failures.append(r)
+            if failures:
+                self.health_checks['CEPHADM_REFRESH_FAILED'] = {
+                    'severity': 'warning',
+                    'summary': 'failed to probe %s hosts' % len(failures),
+                    'count': 1,
+                    'detail': failures,
+                }
+                self.set_health_checks(self.health_checks)
+            elif 'CEPHADM_REFRESH_FAILED' in self.health_checks:
+                del self.health_checks['CEPHADM_REFRESH_FAILED']
+                self.set_health_checks(self.health_checks)
 
             self._check_for_strays()
 
@@ -1262,8 +1277,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return result
 
     def _refresh_host_daemons(self, host):
-        out, err, code = self._run_cephadm(
-            host, 'mon', 'ls', [], no_fsid=True)
+        try:
+            out, err, code = self._run_cephadm(
+                host, 'mon', 'ls', [], no_fsid=True)
+            if code:
+                return 'host %s cephadm ls returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s scrape failed: %s' % (host, e)
         ls = json.loads(''.join(out))
         dm = {}
         for d in ls:
@@ -1304,7 +1325,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'daemons': dm,
         }
         self._daemon_cache_save_host(host)
-        return host, dm
+        return None
 
     def _daemon_cache_load(self):
         for k, v in six.iteritems(self.get_store_prefix(DAEMON_CACHE_PREFIX)):
