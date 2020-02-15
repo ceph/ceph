@@ -4,4 +4,4 @@ overrides:
       global:
         ms die on skipped message: false
       client:
-        rbd default features: 37
+              rbd default features: 1
