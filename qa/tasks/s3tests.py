@@ -1,13 +1,14 @@
 """
 Run a set of s3 tests on rgw.
 """
-from cStringIO import StringIO
+from io import BytesIO
 from configobj import ConfigObj
 import base64
 import contextlib
 import logging
 import os
 import random
+import six
 import string
 
 from teuthology import misc as teuthology
@@ -78,10 +79,14 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
-    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in range(20)))
-    s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
-    s3tests_conf[section].setdefault('totp_serial', ''.join(random.choice(string.digits) for i in range(10)))
-    s3tests_conf[section].setdefault('totp_seed', base64.b32encode(os.urandom(40)))
+    s3tests_conf[section].setdefault('access_key',
+        ''.join(random.choice(string.ascii_uppercase) for i in range(20)))
+    s3tests_conf[section].setdefault('secret_key',
+        six.ensure_str(base64.b64encode(os.urandom(40))))
+    s3tests_conf[section].setdefault('totp_serial',
+        ''.join(random.choice(string.digits) for i in range(10)))
+    s3tests_conf[section].setdefault('totp_seed',
+        six.ensure_str(base64.b32encode(os.urandom(40))))
     s3tests_conf[section].setdefault('totp_seconds', '5')
 
 
@@ -141,7 +146,7 @@ def create_users(ctx, config):
         yield
     finally:
         for client in config['clients']:
-            for user in users.itervalues():
+            for user in users.values():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
                 client_with_id = daemon_type + '.' + client_id
@@ -229,7 +234,7 @@ def configure(ctx, config):
                 './bootstrap',
                 ],
             )
-        conf_fp = StringIO()
+        conf_fp = BytesIO()
         s3tests_conf.write(conf_fp)
         teuthology.write_file(
             remote=remote,
@@ -242,13 +247,13 @@ def configure(ctx, config):
     for client, properties in config['clients'].items():
         with open(boto_src, 'rb') as f:
             (remote,) = ctx.cluster.only(client).remotes.keys()
-            conf = f.read().format(
+            conf = six.ensure_str(f.read()).format(
                 idle_timeout=config.get('idle_timeout', 30)
                 )
             teuthology.write_file(
                 remote=remote,
                 path='{tdir}/boto.cfg'.format(tdir=testdir),
-                data=conf,
+                data=six.ensure_binary(conf),
                 )
 
     try:
