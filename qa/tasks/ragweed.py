@@ -1,7 +1,7 @@
 """
 Run a set of s3 tests on rgw.
 """
-from cStringIO import StringIO
+from io import BytesIO
 from configobj import ConfigObj
 import base64
 import contextlib
@@ -201,7 +201,7 @@ def configure(ctx, config, run_stages):
         if properties is not None and 'slow_backend' in properties:
             ragweed_conf['fixtures']['slow backend'] = properties['slow_backend']
 
-        conf_fp = StringIO()
+        conf_fp = BytesIO()
         ragweed_conf.write(conf_fp)
         teuthology.write_file(
             remote=remote,
