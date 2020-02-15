@@ -27,7 +27,7 @@ CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
 log = logging.getLogger(__name__)
 
 
-def _shell(ctx, cluster_name, remote, args, **kwargs):
+def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
     testdir = teuthology.get_testdir(ctx)
     return remote.run(
         args=[
@@ -38,6 +38,7 @@ def _shell(ctx, cluster_name, remote, args, **kwargs):
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
             '-k', '{}/{}.keyring'.format(testdir, cluster_name),
             '--fsid', ctx.ceph[cluster_name].fsid,
+            ] + extra_cephadm_args + [
             '--',
             ] + args,
         **kwargs
@@ -767,6 +768,12 @@ def shell(ctx, config):
     """
     cluster_name = config.get('cluster', 'ceph')
 
+    env = []
+    if 'env' in config:
+        for k in config['env']:
+            env.extend(['-e', k + '=' + ctx.config.get(k, '')])
+        del config['env']
+
     if 'all' in config and len(config) == 1:
         a = config['all']
         roles = teuthology.all_roles(ctx.cluster)
@@ -776,7 +783,9 @@ def shell(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
         for c in ls:
-            _shell(ctx, cluster_name, remote, c.split(' '))
+            _shell(ctx, cluster_name, remote,
+                   ['bash', '-c', c],
+                   extra_cephadm_args=env)
 
 @contextlib.contextmanager
 def tweaked_option(ctx, config):
