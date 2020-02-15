@@ -1,4 +1,4 @@
-from cStringIO import StringIO
+from io import BytesIO
 import logging
 import json
 import time
@@ -7,7 +7,7 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
+def rgwadmin(ctx, client, cmd, stdin=BytesIO(), check_status=False,
              format='json', decode=True, log_level=logging.DEBUG):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
@@ -29,8 +29,8 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
     proc = remote.run(
         args=pre,
         check_status=check_status,
-        stdout=StringIO(),
-        stderr=StringIO(),
+        stdout=BytesIO(),
+        stderr=BytesIO(),
         stdin=stdin,
         )
     r = proc.exitstatus
@@ -81,9 +81,9 @@ def wait_for_radosgw(url, remote):
         proc = remote.run(
             args=curl_cmd,
             check_status=False,
-            stdout=StringIO(),
-            stderr=StringIO(),
-            stdin=StringIO(),
+            stdout=BytesIO(),
+            stderr=BytesIO(),
+            stdin=BytesIO(),
             )
         exit_status = proc.exitstatus
         if exit_status == 0:
