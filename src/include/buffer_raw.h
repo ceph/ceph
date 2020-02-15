@@ -24,7 +24,7 @@
 #include "include/spinlock.h"
 
 namespace ceph::buffer {
-inline namespace v14_2_0 {
+inline namespace v15_2_0 {
 
   class raw {
   public:
@@ -115,7 +115,7 @@ public:
     }
   };
 
-} // inline namespace v14_2_0
+} // inline namespace v15_2_0
 } // namespace ceph::buffer
 
 #endif // CEPH_BUFFER_RAW_H

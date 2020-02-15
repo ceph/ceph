@@ -5,7 +5,7 @@ LIBRADOS_PRIVATE {
 LIBRADOS_14.2.0 {
         global:
                 extern "C++" {
-			ceph::buffer::v14_2_0::*;
+			ceph::buffer::v15_2_0::*;
 			librados::v14_2_0::*;
 
                         "typeinfo for librados::v14_2_0::ObjectOperation";
