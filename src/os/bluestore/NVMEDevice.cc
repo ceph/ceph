@@ -129,7 +129,6 @@ class SharedDriverData {
 };
 
 class SharedDriverQueueData {
-  NVMEDevice *bdev;
   SharedDriverData *driver;
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
@@ -148,9 +147,9 @@ class SharedDriverQueueData {
     PerfCounters *logger = nullptr;
     void _aio_handle(Task *t, IOContext *ioc);
 
-    SharedDriverQueueData(NVMEDevice *bdev, SharedDriverData *driver)
-      : bdev(bdev),
-        driver(driver) {
+    SharedDriverQueueData(SharedDriverData *driver)
+      : driver(driver) {
+
     ctrlr = driver->ctrlr;
     ns = driver->ns;
     block_size = driver->block_size;
@@ -161,7 +160,10 @@ class SharedDriverQueueData {
     // usable queue depth should minus 1 to aovid overflow.
     max_queue_depth = opts.io_queue_size - 1;
     qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, &opts, sizeof(opts));
-    ceph_assert(qpair != NULL);
+    if (qpair == nullptr) {
+      derr << __func__ << " failed to create io pair queue" << dendl;
+      ceph_assert(qpair);
+    }
 
     // allocate spdk dma memory
     for (uint16_t i = 0; i < data_buffer_default_num; i++) {
@@ -186,16 +188,11 @@ class SharedDriverQueueData {
     b.add_u64_counter(l_bluestore_nvmedevice_buffer_alloc_failed, "buffer_alloc_failed", "Alloc data buffer failed count");
     logger = b.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
-    bdev->queue_number++;
-    if (bdev->queue_number.load() == 1)
-      reap_io = true;
   }
 
   ~SharedDriverQueueData() {
-    g_ceph_context->get_perfcounters_collection()->remove(logger);
     if (qpair) {
       spdk_nvme_ctrlr_free_io_qpair(qpair);
-      bdev->queue_number--;
     }
 
     // free all spdk dma memory;
@@ -208,7 +205,10 @@ class SharedDriverQueueData {
       data_buf_mempool.clear();
     }
 
-    delete logger;
+    if (logger) {
+      g_ceph_context->get_perfcounters_collection()->remove(logger);
+      delete logger;
+    }
   }
 };
 
@@ -481,8 +481,6 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
     start = ceph::coarse_real_clock::now();
   }
 
-  if (reap_io)
-    bdev->reap_ioc();
   dout(20) << __func__ << " end" << dendl;
 }
 
@@ -596,7 +594,7 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
   }
   // at least one core is needed for using spdk
   if (m_core_arg == 0) {
-    derr << __func__ << " invaaio_lid bluestore_spdk_coremask, "
+    derr << __func__ << " invalid bluestore_spdk_coremask, "
 	 << "at least one core is needed" << dendl;
     return -ENOENT;
   }
@@ -769,7 +767,8 @@ int NVMEDevice::open(const string& p)
           << ")" << dendl;
 
   for(auto i = 0; i < max_queue_count; i++) {
-    queues.push_back(new SharedDriverQueueData(this, driver));
+    auto queue = new SharedDriverQueueData(driver);
+    queues.push_back(queue);
   }
 
   return 0;
@@ -778,7 +777,7 @@ int NVMEDevice::open(const string& p)
 SharedDriverQueueData* NVMEDevice::get_next_queue()
 {
   auto index = queue_index.fetch_add(1, std::memory_order_relaxed);
-  index = index % max_queue_count;
+  index = index % queues.size();
   return queues[index];
 }
 
@@ -790,6 +789,7 @@ void NVMEDevice::close()
     delete queue;
   }
   queues.clear();
+  reap_ioc();
 
   name.clear();
   driver->remove_device(this);
