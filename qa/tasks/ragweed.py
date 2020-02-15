@@ -156,7 +156,7 @@ def create_users(ctx, config, run_stages):
             if not 'check' in run_stages[client]:
                 # only remove user if went through the check stage
                 continue
-            for user in users.itervalues():
+            for user in users.values():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 ctx.cluster.only(client).run(
                     args=[
