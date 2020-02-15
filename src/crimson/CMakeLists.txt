@@ -170,6 +170,8 @@ add_library(crimson STATIC
 target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")
 target_link_libraries(crimson
+  PRIVATE
+    pthread
   PUBLIC
     crimson-common
     crimson::cflags)
