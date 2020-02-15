@@ -91,7 +91,7 @@ requestsexceptions==1.2.0  # via os-client-config
 rfc3986==0.4.1            # via oslo.config
 s3transfer==0.2.1         # via boto3
 simplejson==3.10.0        # via osc-lib, python-cinderclient, python-neutronclient, python-novaclient
-six==1.10.0               # via bcrypt, cliff, cmd2, configobj, cryptography, debtcollector, keystoneauth1, more-itertools, openstacksdk, osc-lib, oslo.config, oslo.i18n, oslo.serialization, oslo.utils, pip-tools, pynacl, pyopenssl, pytest, python-cinderclient, python-dateutil, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, stevedore, tox, warlock
+six==1.14.0               # via bcrypt, cliff, cmd2, configobj, cryptography, debtcollector, keystoneauth1, more-itertools, openstacksdk, osc-lib, oslo.config, oslo.i18n, oslo.serialization, oslo.utils, pip-tools, pynacl, pyopenssl, pytest, python-cinderclient, python-dateutil, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, stevedore, tox, warlock
 stevedore==1.21.0         # via cliff, keystoneauth1, openstacksdk, osc-lib, oslo.config, python-keystoneclient
 tox==3.0.0
 urllib3==1.25.3           # via botocore, requests
