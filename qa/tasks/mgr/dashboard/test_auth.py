@@ -14,6 +14,7 @@ class AuthTest(DashboardTestCase):
     AUTO_AUTHENTICATE = False
 
     def setUp(self):
+        super(AuthTest, self).setUp()
         self.reset_session()
 
     def _validate_jwt_token(self, token, username, permissions):
