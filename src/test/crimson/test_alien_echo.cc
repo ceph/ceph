@@ -7,7 +7,6 @@
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Config.h"
-#include "crimson/thread/Condition.h"
 #include "crimson/thread/Throttle.h"
 
 #include <seastar/core/alien.hh>
@@ -95,7 +94,7 @@ struct Client {
 
 class SeastarContext {
   seastar::file_desc begin_fd;
-  crimson::thread::Condition on_end;
+  seastar::readable_eventfd on_end;
 
 public:
   SeastarContext()
@@ -112,7 +111,7 @@ public:
         // alien: i've sent my request. have you replied it?
         // wait_for_seastar();
         // alien: you are free to go!
-        on_end.notify();
+        on_end.write_side().signal(1);
       }};
   }
 
@@ -122,7 +121,7 @@ public:
         return set_seastar_ready();
       }).then([this] {
         // seastar: let me know once i am free to leave.
-        return on_end.wait();
+        return on_end.wait().then([](size_t){});
       }).handle_exception([](auto ep) {
         std::cerr << "Error: " << ep << std::endl;
       }).finally([] {
