@@ -66,5 +66,5 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining watch_notify_stress')
-        for i in testwatch.itervalues():
+        for i in testwatch.values():
             i.join()
