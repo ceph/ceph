@@ -14,6 +14,7 @@ class TestPrometheus(MgrTestCase):
     MGRS_REQUIRED = 3
 
     def setUp(self):
+        super(TestPrometheus, self).setUp()
         self.setup_mgrs()
 
     def test_file_sd_command(self):
