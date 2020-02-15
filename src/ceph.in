@@ -594,7 +594,7 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
             sleep(parsed_args.period)
         except KeyboardInterrupt:
             print('Interrupted')
-            return ret, '', ''
+            return errno.EINTR, '', ''
     if ret == errno.ETIMEDOUT:
         ret = -ret
         if not outs:
