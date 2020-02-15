@@ -99,7 +99,7 @@ struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
 };
 
 namespace buffer CEPH_BUFFER_API {
-inline namespace v14_2_0 {
+inline namespace v15_2_0 {
 
   /*
    * exceptions
@@ -1200,7 +1200,7 @@ inline namespace v14_2_0 {
     static list static_from_string(std::string& s);
   };
 
-} // inline namespace v14_2_0
+} // inline namespace v15_2_0
 
   /*
    * efficient hash of one or more bufferlists
