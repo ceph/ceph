@@ -66,8 +66,8 @@ def task(ctx, config):
 		wait = False
 	    )
             log.info('waiting for pool and object creates')
-	    poolprocs[remote] = proc
-        
-        run.wait(poolprocs.itervalues())
-    
+            poolprocs[remote] = proc
+
+        run.wait(poolprocs.values())
+
     log.info('created all {n} pools and wrote 16 objects to each'.format(n=poolnum))
