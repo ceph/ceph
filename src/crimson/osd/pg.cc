@@ -365,14 +365,14 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
     return peering_state.init_from_disk_state(
 	std::move(pg_info),
 	std::move(past_intervals),
-	[this, store, &pg_info] (PGLog &pglog) {
+	[this, store] (PGLog &pglog) {
 	  return pglog.read_log_and_missing_crimson(
 	    *store,
 	    coll_ref,
 	    peering_state.get_info(),
 	    pgmeta_oid);
       });
-  }).then([this, store]() {
+  }).then([this]() {
     int primary, up_primary;
     vector<int> acting, up;
     peering_state.get_osdmap()->pg_to_up_acting_osds(
@@ -516,7 +516,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   auto ox =
     std::make_unique<OpsExecuter>(obc, *this/* as const& */, m);
   return crimson::do_for_each(
-    m->ops, [this, obc, m, ox = ox.get()](OSDOp& osd_op) {
+    m->ops, [obc, m, ox = ox.get()](OSDOp& osd_op) {
     logger().debug(
       "do_osd_ops: {} - object {} - handling op {}",
       *m,
@@ -554,7 +554,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       *m,
       obc->obs.oi.soid);
     return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }, OpsExecuter::osd_op_errorator::all_same_way([=,&oid] (const std::error_code& e) {
+  }, OpsExecuter::osd_op_errorator::all_same_way([=] (const std::error_code& e) {
     assert(e.value() > 0);
     logger().debug(
       "do_osd_ops: {} - object {} got error code {}, {}",
@@ -586,7 +586,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
 seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
 {
   auto ox = std::make_unique<OpsExecuter>(*this/* as const& */, m);
-  return seastar::do_for_each(m->ops, [this, ox = ox.get()](OSDOp& osd_op) {
+  return seastar::do_for_each(m->ops, [ox = ox.get()](OSDOp& osd_op) {
     logger().debug("will be handling pg op {}", ceph_osd_op_name(osd_op.op.op));
     return ox->execute_pg_op(osd_op);
   }).then([m, this, ox = std::move(ox)] {
@@ -677,7 +677,7 @@ PG::get_or_load_clone_obc(hobject_t oid, ObjectContextRef head)
     bool got = obc->maybe_get_excl();
     ceph_assert(got);
     return backend->load_metadata(*coid).safe_then(
-      [oid, obc=std::move(obc), head, this](auto &&md) mutable {
+      [oid, obc=std::move(obc), head](auto &&md) mutable {
 	obc->set_clone_state(std::move(md->os), std::move(head));
 	return load_obc_ertr::make_ready_future<
 	  std::pair<crimson::osd::ObjectContextRef, bool>>(
@@ -710,7 +710,7 @@ PG::get_or_load_head_obc(hobject_t oid)
     bool got = obc->maybe_get_excl();
     ceph_assert(got);
     return backend->load_metadata(oid).safe_then(
-      [oid, obc=std::move(obc), this](auto md) ->
+      [oid, obc=std::move(obc)](auto md) ->
         load_obc_ertr::future<
           std::pair<crimson::osd::ObjectContextRef, bool>>
       {
@@ -759,10 +759,10 @@ PG::get_locked_obc(
 	}
       } else {
 	return head_obc->get_lock_type(op, RWState::RWREAD).then(
-	  [this, head_obc=head_obc, op, oid, type] {
+	  [this, head_obc=head_obc, oid] {
 	    ceph_assert(head_obc->loaded);
 	    return get_or_load_clone_obc(oid, head_obc);
-	  }).safe_then([this, head_obc=head_obc, op, oid, type](auto p) {
+	  }).safe_then([head_obc=head_obc, op, oid, type](auto p) {
 	      auto &[obc, existed] = p;
 	      if (existed) {
 		return load_obc_ertr::future<>(
