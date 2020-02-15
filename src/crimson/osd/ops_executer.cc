@@ -111,8 +111,8 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   );
 }
 
-static watch_info_t create_watch_info(const auto& osd_op,
-                                      const auto& msg)
+static watch_info_t create_watch_info(const OSDOp& osd_op,
+                                      const MOSDOp& msg)
 {
   using crimson::common::local_conf;
   const uint32_t timeout =
