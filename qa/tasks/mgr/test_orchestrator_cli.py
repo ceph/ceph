@@ -240,12 +240,12 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertEqual(len(inventory_result), 1)
         self.assertEqual(inventory_result[0]['name'], 'host0')
 
-        out = self._orch_cmd('service', 'ls', '--format=json')
+        out = self._orch_cmd('ps', '--format=json')
         services = data['services']
         services_result = json.loads(out)
         self.assertEqual(len(services), len(services_result))
 
-        out = self._orch_cmd('service', 'ls', 'host0', '--format=json')
+        out = self._orch_cmd('ps', 'host0', '--format=json')
         services_result = json.loads(out)
         self.assertEqual(len(services_result), 1)
         self.assertEqual(services_result[0]['nodename'], 'host0')
