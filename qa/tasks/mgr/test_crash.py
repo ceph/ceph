@@ -46,13 +46,13 @@ class TestCrash(MgrTestCase):
         self.oldest_crashid = crash_id
 
     def tearDown(self):
-        for crash in self.crashes.itervalues():
+        for crash in self.crashes.values():
             self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
                 'crash', 'rm', crash['crash_id']
             )
 
     def test_info(self):
-        for crash in self.crashes.itervalues():
+        for crash in self.crashes.values():
             log.warning('test_info: crash %s' % crash)
             retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
                 'crash', 'ls'
@@ -70,7 +70,7 @@ class TestCrash(MgrTestCase):
         retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'crash', 'ls',
         )
-        for crash in self.crashes.itervalues():
+        for crash in self.crashes.values():
             self.assertIn(crash['crash_id'], retstr)
 
     def test_rm(self):
