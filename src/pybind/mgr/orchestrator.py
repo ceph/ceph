@@ -1487,7 +1487,7 @@ class InventoryNode(object):
         try:
             _data = copy.deepcopy(data)
             name = _data.pop('name')
-            addr = _data.pop('addr') or name
+            addr = _data.pop('addr', None) or name
             devices = inventory.Devices.from_json(_data.pop('devices'))
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
