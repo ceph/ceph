@@ -64,23 +64,18 @@ void string_to_vec(std::vector<std::string>& args, std::string argstr)
   }
 }
 
-bool split_dashdash(const std::vector<const char*>& args,
-		    std::vector<const char*>& options,
-		    std::vector<const char*>& arguments) {
-  bool dashdash = false;
-  for (std::vector<const char*>::const_iterator i = args.begin();
-       i != args.end();
-       ++i) {
-    if (dashdash) {
-      arguments.push_back(*i);
-    } else {
-      if (strcmp(*i, "--") == 0)
-	dashdash = true;
-      else
-	options.push_back(*i);
-    }
+std::pair<std::vector<const char*>, std::vector<const char*>>
+split_dashdash(const std::vector<const char*>& args) {
+  auto dashdash = std::find_if(args.begin(), args.end(),
+			       [](const char* arg) {
+				 return strcmp(arg, "--") == 0;
+			       });
+  std::vector<const char*> options{args.begin(), dashdash};
+  if (dashdash != args.end()) {
+    ++dashdash;
   }
-  return dashdash;
+  std::vector<const char*> arguments{dashdash, args.end()};
+  return {std::move(options), std::move(arguments)};
 }
 
 static std::mutex g_str_vec_lock;
@@ -98,15 +93,7 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   if (!name)
     name = "CEPH_ARGS";
 
-  bool dashdash = false;
-  std::vector<const char*> options;
-  std::vector<const char*> arguments;
-  if (split_dashdash(args, options, arguments))
-    dashdash = true;
-
-  std::vector<const char*> env_options;
-  std::vector<const char*> env_arguments;
-  std::vector<const char*> env;
+  auto [options, arguments] = split_dashdash(args);
 
   /*
    * We can only populate str_vec once. Other threads could hold pointers into
@@ -123,19 +110,21 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   }
   g_str_vec_lock.unlock();
 
-  vector<string>::iterator i;
-  for (i = g_str_vec.begin(); i != g_str_vec.end(); ++i)
-    env.push_back(i->c_str());
-  if (split_dashdash(env, env_options, env_arguments))
-    dashdash = true;
+  std::vector<const char*> env;
+  for (const auto& s : g_str_vec) {
+    env.push_back(s.c_str());
+  }
+  auto [env_options, env_arguments] = split_dashdash(env);
 
   args.clear();
-  args.insert(args.end(), options.begin(), options.end());
   args.insert(args.end(), env_options.begin(), env_options.end());
-  if (dashdash)
-    args.push_back("--");
-  args.insert(args.end(), arguments.begin(), arguments.end());
+  args.insert(args.end(), options.begin(), options.end());
+  if (arguments.empty() && env_arguments.empty()) {
+    return;
+  }
+  args.push_back("--");
   args.insert(args.end(), env_arguments.begin(), env_arguments.end());
+  args.insert(args.end(), arguments.begin(), arguments.end());
 }
 
 void argv_to_vec(int argc, const char **argv,
