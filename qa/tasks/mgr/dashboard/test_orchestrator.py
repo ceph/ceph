@@ -26,26 +26,26 @@ test_data = {
             ]
         }
     ],
-    'services': [
+    'daemons': [
         {
             'nodename': 'test-host0',
-            'service_type': 'mon',
-            'service_instance': 'a'
+            'daemon_type': 'mon',
+            'daemon_id': 'a'
         },
         {
             'nodename': 'test-host0',
-            'service_type': 'mgr',
-            'service_instance': 'x'
+            'daemon_type': 'mgr',
+            'daemon_id': 'x'
         },
         {
             'nodename': 'test-host0',
-            'service_type': 'osd',
-            'service_instance': '0'
+            'daemon_type': 'osd',
+            'daemon_id': '0'
         },
         {
             'nodename': 'test-host1',
-            'service_type': 'osd',
-            'service_instance': '1'
+            'daemon_type': 'osd',
+            'daemon_id': '1'
         }
     ]
 }
@@ -66,8 +66,8 @@ class OrchestratorControllerTest(DashboardTestCase):
         return test_data['inventory']
 
     @property
-    def test_data_services(self):
-        return test_data['services']
+    def test_data_daemons(self):
+        return test_data['daemons']
 
     @classmethod
     def setUpClass(cls):
@@ -100,7 +100,7 @@ class OrchestratorControllerTest(DashboardTestCase):
         for key, value in data.items():
             self.assertEqual(value, resp_data[key])
 
-    def _validate_service(self, data, resp_data):
+    def _validate_daemon(self, data, resp_data):
         for key, value in data.items():
             self.assertEqual(value, resp_data[key])
 
@@ -136,26 +136,26 @@ class OrchestratorControllerTest(DashboardTestCase):
         self.assertEqual(len(data), 1)
         self._validate_inventory(node, data[0])
 
-    def test_service_list(self):
-        # get all services
+    def test_daemon_list(self):
+        # get all daemons
         data = self._get(self.URL_SERVICE)
         self.assertStatus(200)
 
-        sorting_key = lambda svc: '%(nodename)s.%(service_type)s.%(service_instance)s' % svc
-        test_services = sorted(self.test_data_services, key=sorting_key)
-        resp_services = sorted(data, key=sorting_key)
-        self.assertEqual(len(test_services), len(resp_services))
-        for test, resp in zip(test_services, resp_services):
-            self._validate_service(test, resp)
+        sorting_key = lambda svc: '%(nodename)s.%(daemon_type)s.%(daemon_id)s' % svc
+        test_daemons = sorted(self.test_data_daemons, key=sorting_key)
+        resp_daemons = sorted(data, key=sorting_key)
+        self.assertEqual(len(test_daemons), len(resp_daemons))
+        for test, resp in zip(test_daemons, resp_daemons):
+            self._validate_daemon(test, resp)
 
         # get service by hostname
-        nodename = self.test_data_services[-1]['nodename']
-        test_services = sorted(filter(lambda svc: svc['nodename'] == nodename, test_services),
+        nodename = self.test_data_daemons[-1]['nodename']
+        test_daemons = sorted(filter(lambda svc: svc['nodename'] == nodename, test_daemons),
                           key=sorting_key)
         data = self._get('{}?hostname={}'.format(self.URL_SERVICE, nodename))
-        resp_services = sorted(data, key=sorting_key)
-        for test, resp in zip(test_services, resp_services):
-            self._validate_service(test, resp)
+        resp_daemons = sorted(data, key=sorting_key)
+        for test, resp in zip(test_daemons, resp_daemons):
+            self._validate_daemon(test, resp)
 
     def test_create_osds(self):
         data = {
