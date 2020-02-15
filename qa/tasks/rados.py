@@ -263,7 +263,7 @@ def task(ctx, config):
                     wait=False
                     )
                 tests[id_] = proc
-            run.wait(tests.itervalues())
+            run.wait(tests.values())
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool);
