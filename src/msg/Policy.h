@@ -25,6 +25,14 @@ struct Policy {
   bool standby;
   /// If true, we will try to detect session resets
   bool resetcheck;
+
+  /// Server: register lossy client connections.
+  bool register_lossy_clients = true;
+  // The net result of this is that a given client can only have one
+  // open connection with the server.  If a new connection is made,
+  // the old (registered) one is closed by the messenger during the accept
+  // process.
+  
   /**
    *  The throttler is used to limit how much data is held by Messages from
    *  the associated Connection(s). When reading in a new Message, the Messenger
@@ -45,8 +53,9 @@ struct Policy {
       features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
       features_required(0) {}
 private:
-  Policy(bool l, bool s, bool st, bool r, uint64_t req)
+  Policy(bool l, bool s, bool st, bool r, bool rlc, uint64_t req)
     : lossy(l), server(s), standby(st), resetcheck(r),
+      register_lossy_clients(rlc),
       throttler_bytes(NULL),
       throttler_messages(NULL),
       features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
@@ -54,22 +63,25 @@ private:
   
 public:
   static Policy stateful_server(uint64_t req) {
-    return Policy(false, true, true, true, req);
+    return Policy(false, true, true, true, true, req);
   }
   static Policy stateless_server(uint64_t req) {
-    return Policy(true, true, false, false, req);
+    return Policy(true, true, false, false, true, req);
+  }
+  static Policy stateless_anon_server(uint64_t req) {
+    return Policy(true, true, false, false, false, req);
   }
   static Policy lossless_peer(uint64_t req) {
-    return Policy(false, false, true, false, req);
+    return Policy(false, false, true, false, true, req);
   }
   static Policy lossless_peer_reuse(uint64_t req) {
-    return Policy(false, false, true, true, req);
+    return Policy(false, false, true, true, true, req);
   }
   static Policy lossy_client(uint64_t req) {
-    return Policy(true, false, false, false, req);
+    return Policy(true, false, false, false, true, req);
   }
   static Policy lossless_client(uint64_t req) {
-    return Policy(false, false, false, true, req);
+    return Policy(false, false, false, true, true, req);
   }
 };
 
