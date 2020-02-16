@@ -6982,7 +6982,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_crypt_s3_kms_backend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("barbican")
-    .set_enum_allowed({"barbican", "vault", "testing"})
+    .set_enum_allowed({"barbican", "vault", "testing", "kmip"})
     .set_description(
         "Where the SSE-KMS encryption keys are stored. Supported KMS "
         "systems are OpenStack Barbican ('barbican', the default) and HashiCorp "

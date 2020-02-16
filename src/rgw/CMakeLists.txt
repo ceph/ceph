@@ -121,8 +121,9 @@ set(librgw_common_srcs
   rgw_perf_counters.cc
   rgw_object_lock.cc
   rgw_rest_iam.cc
-  rgw_url.cc
-  rgw_kms.cc)
+  rgw_kms.cc
+  rgw_kmip_client.cc
+  rgw_url.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
@@ -146,6 +147,13 @@ add_library(rgw_common OBJECT ${librgw_common_srcs})
 
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+set(librgw_kmip_srcs
+  rgw_kmip_client_impl.cc)
+
+add_library(rgw_kmip OBJECT ${librgw_kmip_srcs})
+
+target_include_directories(rgw_kmip PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
+
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -248,6 +256,7 @@ if(WITH_RADOSGW_BEAST_FRONTEND)
 endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
+  $<TARGET_OBJECTS:rgw_kmip>
   $<TARGET_OBJECTS:civetweb_common_objs>)
 target_link_libraries(radosgw_a PRIVATE ${rgw_libs})
 if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
@@ -260,6 +269,7 @@ target_link_libraries(radosgw radosgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
+  kmip
   global dmclock::dmclock
   ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
