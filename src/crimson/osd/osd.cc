@@ -409,6 +409,7 @@ seastar::future<> OSD::start_asok_admin()
   using namespace crimson::admin;
   return asok->start(asok_path).then([this] {
     return seastar::when_all_succeed(
+      asok->register_admin_commands(),
       asok->register_command(make_asok_hook<OsdStatusHook>(*this)),
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<ConfigShowHook>()),

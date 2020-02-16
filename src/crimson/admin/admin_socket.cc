@@ -234,8 +234,7 @@ seastar::future<> AdminSocket::start(const std::string& path)
   logger().debug("{}: asok socket path={}", __func__, path);
   auto sock_path = seastar::socket_address{ seastar::unix_domain_addr{ path } };
 
-  std::ignore = register_admin_hooks().then([this, sock_path] {
-    return seastar::do_with(
+  std::ignore = return seastar::do_with(
       seastar::engine().listen(sock_path),
       [this](seastar::server_socket& lstn) {
         m_server_sock = &lstn;  // used for 'abort_accept()'
@@ -395,7 +394,7 @@ class GetdescsHook final : public AdminSocketHook {
 };
 
 /// the hooks that are served directly by the admin_socket server
-seastar::future<> AdminSocket::register_admin_hooks()
+seastar::future<> AdminSocket::register_admin_commands()
 {
   return seastar::when_all_succeed(
     register_command(std::make_unique<VersionHook>()),
