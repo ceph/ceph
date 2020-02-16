@@ -293,6 +293,58 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout='\n'.join(out))
 
     @_cli_read_command(
+        'orch ls',
+        "name=service_type,type=CephString,req=false "
+        "name=service_name,type=CephString,req=false "
+        "name=format,type=CephChoices,strings=json|plain,req=false "
+        "name=refresh,type=CephBool,req=false",
+        'List services known to orchestrator')
+    def _list_services(self, host=None, service_type=None, service_name=None, format='plain', refresh=False):
+        completion = self.describe_service(service_type,
+                                           service_name,
+                                           refresh=refresh)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        services = completion.result
+
+        def ukn(s):
+            return '<unknown>' if s is None else s
+
+        # Sort the list for display
+        services.sort(key=lambda s: (ukn(s.service_name)))
+
+        if len(services) == 0:
+            return HandleCommandResult(stdout="No services reported")
+        elif format == 'json':
+            data = [s.to_json() for s in services]
+            return HandleCommandResult(stdout=json.dumps(data))
+        else:
+            now = datetime.datetime.utcnow()
+            table = PrettyTable(
+                ['NAME', 'RUNNING', 'REFRESHED', 'IMAGE NAME', 'IMAGE ID'],
+                border=False)
+            table.align['NAME'] = 'l'
+            table.align['RUNNING'] = 'r'
+            table.align['REFRESHED'] = 'l'
+            table.align['IMAGE NAME'] = 'l'
+            table.align['IMAGE ID'] = 'l'
+            table.left_padding_width = 0
+            table.right_padding_width = 1
+            for s in sorted(services, key=lambda s: s.service_name):
+                if s.last_refresh:
+                    age = to_pretty_timedelta(now - s.last_refresh) + ' ago'
+                else:
+                    age = '-'
+                table.add_row((
+                    s.service_name,
+                    '%d/%d' % (s.running, s.size),
+                    age,
+                    ukn(s.container_image_name),
+                    ukn(s.container_image_id)[0:12]))
+
+            return HandleCommandResult(stdout=table.get_string())
+
+    @_cli_read_command(
         'orch ps',
         "name=host,type=CephString,req=false "
         "name=daemon_type,type=CephChoices,strings=mon|mgr|osd|mds|iscsi|nfs|rgw|rbd-mirror,req=false "

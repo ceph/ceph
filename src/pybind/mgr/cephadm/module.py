@@ -1423,16 +1423,37 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return None
 
 
-#    def describe_service(self, service_type=None, service_id=None,
-#                         node_name=None, refresh=False):
-#        if service_type not in ("mds", "osd", "mgr", "mon", 'rgw', "nfs", None):
-#            raise orchestrator.OrchestratorValidationError(
-#                service_type + " unsupported")
-#        result = self._get_daemons(service_type,
-#                                    service_id=service_id,
-#                                    node_name=node_name,
-#                                    refresh=refresh)
-#        return result
+    def describe_service(self, service_type=None, service_name=None,
+                         refresh=False):
+        if refresh:
+            # ugly sync path, FIXME someday perhaps?
+            for host, hi in self.inventory.items():
+                self._refresh_host_daemons(host)
+        sm = {}  # type: Dict[str, orchestrator.ServiceDescription]
+        for h, dm in self.daemon_cache.data.items():
+            for name, dd in dm.items():
+                if service_type and service_type != dd.daemon_type:
+                    continue
+                n = dd.service_name()
+                if service_name and service_name != n:
+                    continue
+                if n not in sm:
+                    sm[n] = orchestrator.ServiceDescription(
+                        service_name=n,
+                        last_refresh=dd.last_refresh,
+                        container_image_id=dd.container_image_id,
+                        container_image_name=dd.container_image_name,
+                    )
+                sm[n].size += 1
+                if dd.status == 1:
+                    sm[n].running += 1
+                if not sm[n].last_refresh or not dd.last_refresh or dd.last_refresh < sm[n].last_refresh:  # type: ignore
+                    sm[n].last_refresh = dd.last_refresh
+                if sm[n].container_image_id != dd.container_image_id:
+                    sm[n].container_image_id = 'mix'
+                if sm[n].container_image_name != dd.container_image_name:
+                    sm[n].container_image_name = 'mix'
+        return trivial_result([s for n, s in sm.items()])
 
     def list_daemons(self, daemon_type=None, daemon_id=None,
                      host=None, refresh=False):
