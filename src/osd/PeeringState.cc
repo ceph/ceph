@@ -1201,6 +1201,16 @@ void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
   }
 }
 
+void PeeringState::proc_renew_lease()
+{
+  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
+    return;
+  }
+  renew_lease(pl->get_mnow());
+  send_lease();
+  schedule_renew_lease();
+}
+
 void PeeringState::recalc_readable_until()
 {
   assert(is_primary());
@@ -5845,9 +5855,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
 boost::statechart::result PeeringState::Active::react(const RenewLease& rl)
 {
   DECLARE_LOCALS;
-  ps->renew_lease(pl->get_mnow());
-  ps->send_lease();
-  ps->schedule_renew_lease();
+  ps->proc_renew_lease();
   return discard_event();
 }
 
