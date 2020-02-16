@@ -168,7 +168,7 @@ struct line_consumer {
     size_t consumed = 0;
     for (auto c : buf) {
       consumed++;
-      if (c == '\0' || c == '\n') {
+      if (c == '\0') {
 	buf.trim_front(consumed);
 	return seastar::make_ready_future<consumption_result_type>(
 	  consumption_result_type::stop_consuming_type(std::move(buf)));
