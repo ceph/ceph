@@ -3,9 +3,6 @@
 
 #pragma once
 
-#include <map>
-#include <tuple>
-#include <optional>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/gate.hh>

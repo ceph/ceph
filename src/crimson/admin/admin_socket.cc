@@ -3,7 +3,6 @@
 
 #include "crimson/admin/admin_socket.h"
 
-#include <boost/algorithm/string.hpp>
 #include <fmt/format.h>
 #include <seastar/net/api.hh>
 #include <seastar/net/inet_address.hh>

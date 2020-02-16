@@ -3,18 +3,23 @@
 
 #pragma once
 
+#include <map>
+#include <optional>
+#include <utility>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/shared_ptr.hh>
 
-#include <boost/intrusive_ptr.hpp>
-#include <boost/intrusive/list.hpp>
-#include <boost/intrusive/set.hpp>
-#include <boost/smart_ptr/intrusive_ref_counter.hpp>
-
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
-#include "crimson/common/config_proxy.h"
 #include "crimson/osd/osd_operation.h"
+
+namespace ceph {
+  class Formatter;
+}
+
+namespace crimson::common {
+  class ConfigProxy;
+}
 
 namespace crimson::osd {
 
@@ -227,7 +232,7 @@ public:
   }
 
   const char** get_tracked_conf_keys() const final;
-  void handle_conf_change(const ConfigProxy& conf,
+  void handle_conf_change(const crimson::common::ConfigProxy& conf,
                           const std::set <std::string> &changed) final;
 };
 
