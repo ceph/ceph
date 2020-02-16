@@ -137,16 +137,12 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
                         const std::string& command_text,
                         ceph::bufferlist& out) const;
 
-  /**
-   * Non-owning ptr to the UNIX-domain "server-socket".
-   * Named here to allow a call to abort_accept().
-   */
-  seastar::api_v2::server_socket* m_server_sock{ nullptr };
+  std::optional<seastar::server_socket> server_sock;
 
   /**
    * stopping incoming ASOK requests at shutdown
    */
-  seastar::gate arrivals_gate;
+  seastar::gate stop_gate;
 
   /**
    *  parse the incoming command line into the sequence of words that identifies
