@@ -131,6 +131,8 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
 
+  void dump_status(Formatter*) const;
+
 private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
