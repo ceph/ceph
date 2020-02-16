@@ -1008,6 +1008,9 @@ seastar::future<> OSD::shutdown()
 
 seastar::future<> OSD::send_beacon()
 {
+  if (!state.is_active()) {
+    return seastar::now();
+  }
   // FIXME: min lec should be calculated from pg_stat
   //        and should set m->pgs
   epoch_t min_last_epoch_clean = osdmap->get_epoch();
