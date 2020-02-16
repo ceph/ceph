@@ -812,6 +812,7 @@ int NVMEDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
 
 int NVMEDevice::flush()
 {
+  dout(10) << __func__ << dendl;
   return 0;
 }
 
