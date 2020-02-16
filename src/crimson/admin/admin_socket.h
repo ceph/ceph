@@ -20,11 +20,7 @@
 
 #include "common/cmdparse.h"
 
-class CephContext;
-
 using namespace std::literals;
-
-inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
 namespace crimson::admin {
 

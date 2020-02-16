@@ -3,9 +3,6 @@
 
 #include "crimson/admin/osd_admin.h"
 
-#include <iostream>
-
-#include <boost/algorithm/string.hpp>
 #include <fmt/format.h>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/future.hh>

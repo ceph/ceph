@@ -3,8 +3,7 @@
 #pragma once
 
 #include <memory>
-
-#include "crimson/common/config_proxy.h"
+#include <seastar/core/future.hh>
 
 namespace crimson::osd {
 class OSD;
