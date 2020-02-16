@@ -74,7 +74,6 @@ OSD::OSD(int id, uint32_t nonce,
     // do this in background
     heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
-    admin{std::make_unique<crimson::admin::OsdAdmin>(this)},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -407,17 +406,14 @@ seastar::future<> OSD::_send_alive()
 seastar::future<> OSD::start_asok_admin()
 {
   auto asok_path = local_conf().get_val<std::string>("admin_socket");
-
+  using namespace crimson::admin;
   return asok->start(asok_path).then([this] {
-    // register OSD-specific admin-socket hooks
-    return admin->register_admin_commands();
-  });
-}
-
-seastar::future<> OSD::stop_asok_admin()
-{
-  return admin->unregister_admin_commands().then([this] {
-    return asok->stop();
+    return seastar::when_all_succeed(
+      asok->register_command(make_asok_hook<OsdStatusHook>(*this)),
+      asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
+      asok->register_command(make_asok_hook<ConfigShowHook>()),
+      asok->register_command(make_asok_hook<ConfigGetHook>()),
+      asok->register_command(make_asok_hook<ConfigSetHook>()));
   });
 }
 
@@ -428,7 +424,7 @@ seastar::future<> OSD::stop()
   state.set_stopping();
 
   return gate.close().then([this] {
-    return stop_asok_admin();
+    return asok->stop();
   }).then([this] {
     return heartbeat->stop();
   }).then([this] {
