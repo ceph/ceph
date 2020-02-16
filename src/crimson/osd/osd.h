@@ -3,9 +3,6 @@
 
 #pragma once
 
-#include <map>
-#include <tuple>
-#include <optional>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/gate.hh>
@@ -119,7 +116,6 @@ class OSD final : public crimson::net::Dispatcher,
 
   // admin-socket
   seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;
-  std::unique_ptr<crimson::admin::OsdAdmin> admin;
 
 public:
   OSD(int id, uint32_t nonce,
@@ -133,6 +129,8 @@ public:
 
   seastar::future<> start();
   seastar::future<> stop();
+
+  void dump_status(Formatter*) const;
 
 private:
   seastar::future<> start_boot();
@@ -188,7 +186,6 @@ private:
 
   void check_osdmap_features();
 
-  seastar::future<> stop_asok_admin();
   seastar::future<> start_asok_admin();
 
 public:
@@ -219,7 +216,6 @@ public:
   seastar::future<> update_heartbeat_peers();
 
   friend class PGAdvanceMap;
-  friend class crimson::admin::OsdAdminImp;
 };
 
 }

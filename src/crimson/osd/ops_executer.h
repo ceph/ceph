@@ -4,7 +4,6 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <type_traits>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>

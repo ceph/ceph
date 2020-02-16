@@ -74,7 +74,6 @@ OSD::OSD(int id, uint32_t nonce,
     // do this in background
     heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
-    admin{std::make_unique<crimson::admin::OsdAdmin>(this)},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -407,40 +406,15 @@ seastar::future<> OSD::_send_alive()
 seastar::future<> OSD::start_asok_admin()
 {
   auto asok_path = local_conf().get_val<std::string>("admin_socket");
-
+  using namespace crimson::admin;
   return asok->start(asok_path).then([this] {
-    // register OSD-specific admin-socket hooks
-    return admin->register_admin_commands();
-  });
-}
-
-/*
-  Note: stop_asok_admin() is executed as part of a destruction process,
-  and may occur even before 'start' is complete. We thus take nothing for granted,
-  and all interfaces are checked for existence.
-*/
-seastar::future<> OSD::stop_asok_admin()
-{
-  return ([this] {
-    if (admin) {
-      return admin->unregister_admin_commands();
-    } else {
-      return seastar::make_ready_future<>();
-    }
-  })().then([this] {
-    if (asok) {
-      return asok->stop().then([this]() {
-        asok.release();
-        return seastar::make_ready_future<>();
-      });
-    } else {
-      return seastar::make_ready_future<>();
-    }
-  }).handle_exception([](auto ep) {
-    logger().error("exception on admin-stop: {}", ep);
-    return seastar::make_ready_future<>();
-  }).finally([] {
-    logger().info("OSD::stop_asok_admin(): Admin-sock service destructed");
+    return seastar::when_all_succeed(
+      asok->register_admin_commands(),
+      asok->register_command(make_asok_hook<OsdStatusHook>(*this)),
+      asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
+      asok->register_command(make_asok_hook<ConfigShowHook>()),
+      asok->register_command(make_asok_hook<ConfigGetHook>()),
+      asok->register_command(make_asok_hook<ConfigSetHook>()));
   });
 }
 
@@ -451,7 +425,7 @@ seastar::future<> OSD::stop()
   state.set_stopping();
 
   return gate.close().then([this] {
-    return stop_asok_admin();
+    return asok->stop();
   }).then([this] {
     return heartbeat->stop();
   }).then([this] {
@@ -461,6 +435,17 @@ seastar::future<> OSD::stop()
   }).handle_exception([](auto ep) {
     logger().error("error while stopping osd: {}", ep);
   });
+}
+
+void OSD::dump_status(Formatter* f) const
+{
+  f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
+  f->dump_stream("osd_fsid") << superblock.osd_fsid;
+  f->dump_unsigned("whoami", superblock.whoami);
+  f->dump_string("state", state.to_string());
+  f->dump_unsigned("oldest_map", superblock.oldest_map);
+  f->dump_unsigned("newest_map", superblock.newest_map);
+  f->dump_unsigned("num_pgs", pg_map.get_pgs().size());
 }
 
 seastar::future<> OSD::load_pgs()
@@ -1020,6 +1005,9 @@ seastar::future<> OSD::shutdown()
 
 seastar::future<> OSD::send_beacon()
 {
+  if (!state.is_active()) {
+    return seastar::now();
+  }
   // FIXME: min lec should be calculated from pg_stat
   //        and should set m->pgs
   epoch_t min_last_epoch_clean = osdmap->get_epoch();
