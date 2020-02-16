@@ -138,6 +138,7 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
                         ceph::bufferlist& out) const;
 
   std::optional<seastar::server_socket> server_sock;
+  std::optional<seastar::connected_socket> connected_sock;
 
   /**
    * stopping incoming ASOK requests at shutdown
