@@ -414,33 +414,10 @@ seastar::future<> OSD::start_asok_admin()
   });
 }
 
-/*
-  Note: stop_asok_admin() is executed as part of a destruction process,
-  and may occur even before 'start' is complete. We thus take nothing for granted,
-  and all interfaces are checked for existence.
-*/
 seastar::future<> OSD::stop_asok_admin()
 {
-  return ([this] {
-    if (admin) {
-      return admin->unregister_admin_commands();
-    } else {
-      return seastar::make_ready_future<>();
-    }
-  })().then([this] {
-    if (asok) {
-      return asok->stop().then([this]() {
-        asok.release();
-        return seastar::make_ready_future<>();
-      });
-    } else {
-      return seastar::make_ready_future<>();
-    }
-  }).handle_exception([](auto ep) {
-    logger().error("exception on admin-stop: {}", ep);
-    return seastar::make_ready_future<>();
-  }).finally([] {
-    logger().info("OSD::stop_asok_admin(): Admin-sock service destructed");
+  return admin->unregister_admin_commands().then([this] {
+    return asok->stop();
   });
 }
 
