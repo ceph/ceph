@@ -42,6 +42,8 @@ void usage()
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs to osds" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)" << std::endl;
+  cout << "   --mark-up <osdid>       mark an osd as up (but do not persist)" << std::endl;
+  cout << "   --mark-in <osdid>       mark an osd as in (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
   cout << "   --clean-temps           clean pg_temps" << std::endl;
@@ -136,6 +138,8 @@ int main(int argc, const char **argv)
   int pool = -1;
   bool mark_up_in = false;
   int marked_out = -1;
+  int marked_up = -1;
+  int marked_in = -1;
   bool clear_temp = false;
   bool clean_temps = false;
   bool test_map_pgs = false;
@@ -201,6 +205,10 @@ int main(int argc, const char **argv)
       mark_up_in = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--mark-out", (char*)NULL)) {
       marked_out = std::stoi(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--mark-up", (char*)NULL)) {
+      marked_up  = std::stod(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--mark-in", (char*)NULL)) {
+      marked_in  = std::stod(val);
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--clean-temps", (char*)NULL)) {
@@ -357,6 +365,19 @@ int main(int argc, const char **argv)
     osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
     osdmap.set_weight(id, CEPH_OSD_OUT);
   }
+
+  if (marked_up >=0 && marked_up < osdmap.get_max_osd()) {
+    cout << "marking OSD@" << marked_up << " as up" << std::endl;
+    int id = marked_up;
+    osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
+  }
+
+  if (marked_in >=0 && marked_in < osdmap.get_max_osd()) {
+    cout << "marking OSD@" << marked_up << " as up" << std::endl;
+    int id = marked_up;
+    osdmap.set_weight(id, CEPH_OSD_IN);
+  }
+
 
   if (clear_temp) {
     cout << "clearing pg/primary temp" << std::endl;
