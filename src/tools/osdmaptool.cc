@@ -345,6 +345,9 @@ int main(int argc, const char **argv)
     for (int i=0; i<n; i++) {
       osdmap.set_state(i, osdmap.get_state(i) | CEPH_OSD_UP);
       osdmap.set_weight(i, CEPH_OSD_IN);
+      if (osdmap.crush->get_item_weight(i) == 0 ) {
+        osdmap.crush->adjust_item_weightf(g_ceph_context, i, 1.0);
+      }
     }
   }
 
