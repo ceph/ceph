@@ -928,22 +928,19 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   dout(5) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
   ceph_assert(is_valid_io(off, len));
 
-  Task *t = new Task(this, IOCommand::READ_COMMAND, off, len, 1);
+  Task t(this, IOCommand::READ_COMMAND, off, len, 1);
   bufferptr p = buffer::create_small_page_aligned(len);
-  int r = 0;
   char *buf = p.c_str();
 
   ceph_assert(ioc->nvme_task_first == nullptr);
   ceph_assert(ioc->nvme_task_last == nullptr);
-  make_read_tasks(this, off, ioc, buf, len, t, off, len);
+  make_read_tasks(this, off, ioc, buf, len, &t, off, len);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   aio_submit(ioc);
   ioc->aio_wait();
 
   pbl->push_back(std::move(p));
-  r = t->return_code;
-  delete t;
-  return r;
+  return t.return_code;
 }
 
 int NVMEDevice::aio_read(
@@ -974,16 +971,13 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   dout(5) << __func__ << " " << off << "~" << len
           << " aligned " << aligned_off << "~" << aligned_len << dendl;
   IOContext ioc(g_ceph_context, nullptr);
-  Task *t = new Task(this, IOCommand::READ_COMMAND, aligned_off, aligned_len, 1);
-  int r = 0;
+  Task t(this, IOCommand::READ_COMMAND, aligned_off, aligned_len, 1);
 
-  make_read_tasks(this, aligned_off, &ioc, buf, aligned_len, t, off, len);
+  make_read_tasks(this, aligned_off, &ioc, buf, aligned_len, &t, off, len);
   aio_submit(&ioc);
   ioc.aio_wait();
 
-  r = t->return_code;
-  delete t;
-  return r;
+  return t.return_code;
 }
 
 int NVMEDevice::invalidate_cache(uint64_t off, uint64_t len)
