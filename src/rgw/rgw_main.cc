@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <boost/intrusive/list.hpp>
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -38,6 +39,8 @@
 #include "rgw_process.h"
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
+#include "rgw_kmip_client.h"
+#include "rgw_kmip_client_impl.h"
 #include "rgw_perf_counters.h"
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
@@ -322,6 +325,7 @@ int radosgw_Main(int argc, const char **argv)
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
   rgw_http_client_init(g_ceph_context);
+  rgw_kmip_client_init(*new RGWKMIPManagerImpl(g_ceph_context));
   
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
@@ -679,6 +683,7 @@ int radosgw_Main(int argc, const char **argv)
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
   rgw_http_client_cleanup();
+  rgw_kmip_client_cleanup();
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(&implicit_tenant_context);
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
