@@ -1327,7 +1327,6 @@ OPTION(rgw_s3_auth_use_keystone, OPT_BOOL)  // should we try to use keystone for
 OPTION(rgw_s3_auth_order, OPT_STR) // s3 authentication order to try
 OPTION(rgw_barbican_url, OPT_STR)  // url for barbican server
 OPTION(rgw_opa_url, OPT_STR)  // url for OPA server
-OPTION(rgw_opa_send_policy_url, OPT_STR)  // url for sending policies to OPA server
 OPTION(rgw_opa_token, OPT_STR)  // Bearer token OPA uses to authenticate client requests
 OPTION(rgw_opa_verify_ssl, OPT_BOOL) // should we try to verify OPA's ssl
 OPTION(rgw_use_opa_authz, OPT_BOOL) // should we use OPA to authorize client requests?

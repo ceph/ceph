@@ -3613,24 +3613,24 @@ int RGWPutObj::verify_permission()
           else if (usr_policy_res == Effect::Allow)
             break;
         }
-  rgw::IAM::Effect e = Effect::Pass;
-  if (policy) {
-	  e = policy->eval(s->env, *s->auth.identity,
-			      cs_object.instance.empty() ?
-			      rgw::IAM::s3GetObject :
-			      rgw::IAM::s3GetObjectVersion,
-			      rgw::ARN(obj));
-  }
-	if (e == Effect::Deny) {
-	  return -EACCES; 
-	} else if (usr_policy_res == Effect::Pass && e == Effect::Pass &&
-		   !cs_acl.verify_permission(this, *s->auth.identity, s->perm_mask,
-						RGW_PERM_READ)) {
-	  return -EACCES;
-	}
+        rgw::IAM::Effect e = Effect::Pass;
+        if (policy) {
+	        e = policy->eval(s->env, *s->auth.identity,
+	      		      cs_object.instance.empty() ?
+	      		      rgw::IAM::s3GetObject :
+	      		      rgw::IAM::s3GetObjectVersion,
+	      		      rgw::ARN(obj));
+        }
+	      if (e == Effect::Deny) {
+	        return -EACCES; 
+	      } else if (usr_policy_res == Effect::Pass && e == Effect::Pass &&
+	      	   !cs_acl.verify_permission(this, *s->auth.identity, s->perm_mask,
+	      					RGW_PERM_READ)) {
+	        return -EACCES;
+	      }
       } else if (!cs_acl.verify_permission(this, *s->auth.identity, s->perm_mask,
 					   RGW_PERM_READ)) {
-	return -EACCES;
+	      return -EACCES;
       }
     }
   }
@@ -3698,6 +3698,14 @@ int RGWPutObj::verify_permission()
 
   if (!verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
+
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   return 0;
@@ -4822,6 +4830,14 @@ int RGWDeleteObj::verify_permission()
     return -ERR_MFA_REQUIRED;
   }
 
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   return 0;
 }
 
@@ -5090,22 +5106,22 @@ int RGWCopyObj::verify_permission()
     /* admin request overrides permission checks */
     if (!s->auth.identity->is_admin_of(src_acl.get_owner().get_id())) {
       if (src_policy) {
-	auto e = src_policy->eval(s->env, *s->auth.identity,
+	      auto e = src_policy->eval(s->env, *s->auth.identity,
 				  src_object.instance.empty() ?
 				  rgw::IAM::s3GetObject :
 				  rgw::IAM::s3GetObjectVersion,
 				  ARN(src_obj));
-	if (e == Effect::Deny) {
-	  return -EACCES;
-	} else if (e == Effect::Pass &&
-		   !src_acl.verify_permission(this, *s->auth.identity, s->perm_mask,
+	      if (e == Effect::Deny) {
+	        return -EACCES;
+	      } else if (e == Effect::Pass &&
+		      !src_acl.verify_permission(this, *s->auth.identity, s->perm_mask,
 					      RGW_PERM_READ)) { 
-	  return -EACCES;
-	}
+	        return -EACCES;
+	      }
       } else if (!src_acl.verify_permission(this, *s->auth.identity,
 					       s->perm_mask,
 					    RGW_PERM_READ)) {
-	return -EACCES;
+	      return -EACCES;
       }
     }
   }
@@ -5170,6 +5186,14 @@ int RGWCopyObj::verify_permission()
   op_ret = init_dest_policy();
   if (op_ret < 0) {
     return op_ret;
+  }
+
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   return 0;
@@ -5896,6 +5920,14 @@ int RGWInitMultipart::verify_permission()
     return -EACCES;
   }
 
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   return 0;
 }
 
@@ -6002,6 +6034,14 @@ int RGWCompleteMultipart::verify_permission()
 
   if (!verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
+
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   return 0;
@@ -6344,6 +6384,14 @@ int RGWAbortMultipart::verify_permission()
     return -EACCES;
   }
 
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   return 0;
 }
 
@@ -6509,6 +6557,14 @@ int RGWDeleteMultiObj::verify_permission()
   acl_allowed = verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE);
   if (!acl_allowed)
     return -EACCES;
+  
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   return 0;
 }
@@ -7148,6 +7204,14 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
       return true;
     }
   }
+
+  /* Check for OPA when there is no special policy on action */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    int ret = rgw_opa_authorize(this, s);
+    if (ret < 0) {
+      return false;
+    }
+  }
     
   return verify_bucket_permission_no_policy(this, s, s->user_acl.get(),
 					    &bacl, RGW_PERM_WRITE);
@@ -7711,10 +7775,6 @@ void RGWPutBucketPolicy::execute()
 							      &s->bucket_info.objv_tracker,
 							      s->yield);
 
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    op_ret = rgw_send_bucket_policy_to_opa(this, s, p.text);
-  }
-
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -7787,22 +7847,10 @@ void RGWDeleteBucketPolicy::execute()
 {
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
       auto attrs = s->bucket_attrs;
-      
-      std::string policy = "";
-      auto pos = attrs.find(RGW_ATTR_IAM_POLICY);
-      if (pos != attrs.end()) {
-        policy = pos->second.c_str();
-      }
-
       attrs.erase(RGW_ATTR_IAM_POLICY);
       op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							    &s->bucket_info.objv_tracker,
 							    s->yield);
-
-      if (s->cct->_conf->rgw_use_opa_authz) {
-        op_ret = rgw_send_bucket_policy_to_opa(this, s, policy);
-      }
-
       return op_ret;
     });
 }
