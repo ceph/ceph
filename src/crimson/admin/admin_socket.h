@@ -106,6 +106,11 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    */
   seastar::future<> register_command(std::unique_ptr<AdminSocketHook>&& hook);
 
+  /**
+   * Registering the APIs that are served directly by the admin_socket server.
+   */
+  seastar::future<> register_admin_commands();
+
  private:
   /**
    * the result of analyzing an incoming command, and locating it in
@@ -118,11 +123,6 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
   };
   // and the shorthand:
   using maybe_parsed_t = std::optional<AdminSocket::parsed_command_t>;
-
-  /**
-   * Registering the APIs that are served directly by the admin_socket server.
-   */
-  seastar::future<> register_admin_hooks();
 
   seastar::future<> handle_client(seastar::input_stream<char>& inp,
                                   seastar::output_stream<char>& out);
