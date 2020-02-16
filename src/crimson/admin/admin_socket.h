@@ -20,11 +20,7 @@
 
 #include "common/cmdparse.h"
 
-class CephContext;
-
 using namespace std::literals;
-
-inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
 namespace crimson::admin {
 
@@ -45,6 +41,11 @@ class AdminSocket;
  */
 class AdminSocketHook {
  public:
+  AdminSocketHook(std::string_view prefix,
+		  std::string_view desc,
+		  std::string_view help) :
+    prefix{prefix}, desc{desc}, help{help}
+  {}
   /**
    * \retval 'false' for hook execution errors
    */
@@ -53,27 +54,10 @@ class AdminSocketHook {
        std::string_view format,
        const cmdmap_t& cmdmap) const = 0;
   virtual ~AdminSocketHook() {}
+  const std::string_view prefix;
+  const std::string_view desc;
+  const std::string_view help;
 };
-
-/**
- * The details of a single API in a server's hooks block
- */
-struct AsokServiceDef {
-  const std::string command;  ///< the sequence of words that should be used
-  const std::string cmddesc;  ///< the command syntax
-  const AdminSocketHook* hook;
-  const std::string help;  ///< help message
-};
-
-class AdminHooksIter;  ///< an iterator over all APIs in all server blocks
-
-/// a ref-count owner of the AdminSocket, used to guarantee its existence until
-/// all server-blocks are unregistered
-using AdminSocketRef = seastar::lw_shared_ptr<AdminSocket>;
-
-using AsokRegistrationRes =
-  std::optional<AdminSocketRef>;  // holding the server alive until after our
-                                  // unregistration
 
 class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
  public:
@@ -120,16 +104,12 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    * \retval a shared ptr to the asok server itself, or nullopt if
    *         a block with same tag is already registered.
    */
-  seastar::future<AsokRegistrationRes> register_server(
-    hook_server_tag server_tag, const std::vector<AsokServiceDef>& apis_served);
+  seastar::future<> register_command(std::unique_ptr<AdminSocketHook>&& hook);
 
   /**
-   * unregister all hooks registered by this hooks-server. The caller
-   * gives up on its shared-ownership of the asok server once the
-   * deregistration is complete.
+   * Registering the APIs that are served directly by the admin_socket server.
    */
-  seastar::future<> unregister_server(hook_server_tag server_tag,
-                                      AdminSocketRef&& server_ref);
+  seastar::future<> register_admin_commands();
 
  private:
   /**
@@ -137,28 +117,12 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    * the registered APIs collection.
    */
   struct parsed_command_t {
-    std::string cmd;
     cmdmap_t parameters;
     std::string format;
-    const AsokServiceDef* api;
-    const AdminSocketHook* hook;
-    /**
-     *  the length of the whole command-sequence under the 'prefix' header
-     */
-    std::size_t cmd_seq_len;
+    const AdminSocketHook& hook;
   };
   // and the shorthand:
   using maybe_parsed_t = std::optional<AdminSocket::parsed_command_t>;
-
-  /**
-   * Registering the APIs that are served directly by the admin_socket server.
-   */
-  seastar::future<AsokRegistrationRes> register_admin_hooks();
-
-  /**
-   * unregister all hooks registered by this hooks-server
-   */
-  seastar::future<> unregister_server(hook_server_tag server_tag);
 
   seastar::future<> handle_client(seastar::input_stream<char>& inp,
                                   seastar::output_stream<char>& out);
@@ -173,23 +137,13 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
                         const std::string& command_text,
                         ceph::bufferlist& out) const;
 
-  /**
-   * Non-owning ptr to the UNIX-domain "server-socket".
-   * Named here to allow a call to abort_accept().
-   */
-  seastar::api_v2::server_socket* m_server_sock{ nullptr };
+  std::optional<seastar::server_socket> server_sock;
+  std::optional<seastar::connected_socket> connected_sock;
 
   /**
    * stopping incoming ASOK requests at shutdown
    */
-  seastar::gate arrivals_gate;
-
-  std::unique_ptr<AdminSocketHook> version_hook;
-  std::unique_ptr<AdminSocketHook> git_ver_hook;
-  std::unique_ptr<AdminSocketHook> the0_hook;
-  std::unique_ptr<AdminSocketHook> help_hook;
-  std::unique_ptr<AdminSocketHook> getdescs_hook;
-  std::unique_ptr<AdminSocketHook> test_throw_hook;  // for dev unit-tests
+  seastar::gate stop_gate;
 
   /**
    *  parse the incoming command line into the sequence of words that identifies
@@ -198,77 +152,29 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    */
   maybe_parsed_t parse_cmd(std::string command_text, bufferlist& out);
 
-  struct server_block {
-    server_block(const std::vector<AsokServiceDef>& hooks) : m_hooks{ hooks } {}
-    const std::vector<AsokServiceDef>& m_hooks;
-  };
-
   /**
    *  The servers table is protected by a rw-lock, to be acquired exclusively
    *  only when registering or removing a server.
    *  The lock is locked-shared when executing any hook.
    */
   mutable seastar::shared_mutex servers_tbl_rwlock;
-  std::map<hook_server_tag, server_block> servers;
-
-  using maybe_service_def_t = std::optional<const AsokServiceDef*>;
-
-  /**
-   * Find the longest subset of words in 'match' that is a registered API (in
-   * any of the servers' control blocks).
-   * locate_subcmd() is expected to be called with the servers table RW-lock
-   * held.
-   */
-  maybe_service_def_t locate_subcmd(std::string match) const;
+  using hooks_t = std::map<std::string_view, std::unique_ptr<AdminSocketHook>>;
+  hooks_t hooks;
 
  public:
   /**
    * iterator support
    */
-  AdminHooksIter begin() const;
-  AdminHooksIter end() const;
-
-  using ServersListIt = std::map<hook_server_tag, server_block>::const_iterator;
-  using ServerApiIt = std::vector<AsokServiceDef>::const_iterator;
+  hooks_t::const_iterator begin() const {
+    return hooks.cbegin();
+  }
+  hooks_t::const_iterator end() const {
+    return hooks.cend();
+  }
 
   friend class AdminSocketTest;
   friend class HelpHook;
   friend class GetdescsHook;
-  friend class AdminHooksIter;
-};
-
-/**
- * An iterator over all registered APIs.
- */
-struct AdminHooksIter
-    : public std::iterator<std::output_iterator_tag, AsokServiceDef> {
- public:
-  explicit AdminHooksIter(const AdminSocket& master, bool end_flag = false);
-
-  ~AdminHooksIter() = default;
-
-  const AsokServiceDef* operator*() const
-  {
-    return &(*m_siter);
-  }
-
-  /**
-   * The (in)equality test is only used to compare to 'end'.
-   */
-  bool operator!=(const AdminHooksIter& other) const
-  {
-    return m_end_marker != other.m_end_marker;
-  }
-
-  AdminHooksIter& operator++();
-
- private:
-  const AdminSocket& m_master;
-  AdminSocket::ServersListIt m_miter;
-  AdminSocket::ServerApiIt m_siter;
-  bool m_end_marker;
-
-  friend class AdminSocket;
 };
 
 }  // namespace crimson::admin
