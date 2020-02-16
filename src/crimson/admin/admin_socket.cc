@@ -202,17 +202,6 @@ seastar::future<> AdminSocket::handle_client(seastar::input_stream<char>& in,
   }).discard_result();
 }
 
-namespace {
-struct connection_t {
-  seastar::connected_socket cs;
-  seastar::input_stream<char> input;
-  seastar::output_stream<char> output;
-  connection_t(seastar::connected_socket&& s) :
-    cs(std::move(s)), input(cs.input()), output(cs.output())
-  {}
-};
-}
-
 seastar::future<> AdminSocket::start(const std::string& path)
 {
   if (path.empty()) {
@@ -229,10 +218,16 @@ seastar::future<> AdminSocket::start(const std::string& path)
     [this] { return stop_gate.is_closed(); },
     [this] {
       return seastar::with_gate(stop_gate, [this] {
+        assert(!connected_sock.has_value());
         return server_sock->accept().then([this](seastar::accept_result acc) {
-          return seastar::do_with(connection_t{std::move(acc.connection)},
-            [this](auto& conn) mutable {
-            return handle_client(conn.input, conn.output);
+          connected_sock = std::move(acc.connection);
+          return seastar::do_with(connected_sock->input(),
+                                  connected_sock->output(),
+            [this](auto& input, auto& output) mutable {
+            return handle_client(input, output);
+          }).finally([this] {
+            assert(connected_sock.has_value());
+            connected_sock.reset();
           });
         }).handle_exception([this](auto ep) {
           if (!stop_gate.is_closed()) {
@@ -254,6 +249,12 @@ seastar::future<> AdminSocket::stop()
     return seastar::now();
   }
   server_sock->abort_accept();
+  server_sock.reset();
+  if (connected_sock) {
+    connected_sock->shutdown_input();
+    connected_sock->shutdown_output();
+    connected_sock.reset();
+  }
   return stop_gate.close();
 }
 
