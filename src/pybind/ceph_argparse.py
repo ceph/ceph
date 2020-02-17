@@ -513,7 +513,7 @@ class CephBool(CephArgtype):
         self.strings = strings.split('|')
 
     def valid(self, s, partial=False):
-        lower_case = s.lower()
+        lower_case = str(s).lower()
         if lower_case in ['true', '1']:
             self.val = True
         elif lower_case in ['false', '0']:
