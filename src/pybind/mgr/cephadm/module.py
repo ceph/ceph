@@ -203,8 +203,10 @@ class DaemonCache():
                 r.append(name)
         return r
 
-    def host_needs_refresh(self, host, cutoff):
-        # type: (str, datetime.datetime) -> bool
+    def host_needs_refresh(self, host):
+        # type: (str) -> bool
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+            seconds=self.mgr.daemon_cache_timeout)
         if host not in self.last_update or self.last_update[host] < cutoff:
             return True
         return False
@@ -860,12 +862,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self._check_hosts()
 
             # refresh daemons
-            cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-                seconds=self.daemon_cache_timeout)
-            self.log.debug('refreshing daemons, cutoff %s' % cutoff)
+            self.log.debug('refreshing daemons')
             failures = []
             for host in self.daemon_cache.get_hosts():
-                if self.daemon_cache.host_needs_refresh(host, cutoff):
+                if self.daemon_cache.host_needs_refresh(host):
                     self.log.debug('refreshing %s' % host)
                     r = self._refresh_host_daemons(host)
                     if r:
