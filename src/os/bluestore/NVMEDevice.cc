@@ -714,6 +714,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     ceph_assert(task->command == IOCommand::FLUSH_COMMAND);
     ceph_assert(!spdk_nvme_cpl_is_error(completion));
     queue->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
+    --ctx->num_running;
     dout(20) << __func__ << " flush op successfully" << dendl;
     task->return_code = 0;
   }
@@ -810,12 +811,6 @@ int NVMEDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
   return 0;
 }
 
-int NVMEDevice::flush()
-{
-  dout(10) << __func__ << dendl;
-  return 0;
-}
-
 void NVMEDevice::aio_submit(IOContext *ioc)
 {
   dout(20) << __func__ << " ioc " << ioc << " pending "
@@ -837,6 +832,7 @@ static void ioc_append_task(IOContext *ioc, Task *t)
 {
   Task *first, *last;
 
+  t->ctx = ioc;
   first = static_cast<Task*>(ioc->nvme_task_first);
   last = static_cast<Task*>(ioc->nvme_task_last);
   if (last)
@@ -865,7 +861,6 @@ static void write_split(
     // we can reduce this copy
     bl.splice(0, write_size, &t->bl);
     remain_len -= write_size;
-    t->ctx = ioc;
     ioc_append_task(ioc, t);
     begin += write_size;
   }
@@ -894,8 +889,6 @@ static void make_read_tasks(
       t = new Task(dev, IOCommand::READ_COMMAND, begin, read_size, 0, primary);
     }
 
-    t->ctx = ioc;
-
     // TODO: if upper layer alloc memory with known physical address,
     // we can reduce this copy
     t->fill_cb = [buf, t, tmp_off, tmp_len]  {
@@ -907,6 +900,18 @@ static void make_read_tasks(
     buf += tmp_len;
     tmp_off = 0;
   }
+}
+
+int NVMEDevice::flush()
+{
+  dout(10) << __func__ << dendl;
+  IOContext ioc(g_ceph_context, nullptr);
+  Task t(this, IOCommand::FLUSH_COMMAND, 0, 0);
+  ioc_append_task(&ioc, &t);
+  aio_submit(&ioc);
+  ioc.aio_wait();
+
+  return t.return_code;
 }
 
 int NVMEDevice::aio_write(
