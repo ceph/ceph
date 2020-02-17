@@ -1450,23 +1450,18 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.log.debug('list_daemons result %s' % result)
         return trivial_result(result)
 
-    def service_action(self, action, service_type, service_name):
-        self.log.debug('service_action action %s type %s name %s' % (
-            action, service_type, service_name))
-        if service_name:
-            prefix = service_name + '.'
-        else:
-            prefix = ''
+    def service_action(self, action, service_name):
+        self.log.debug('service_action action %s name %s' % (
+            action, service_name))
         args = []
         for host, dm in self.daemon_cache.data.items():
             for name, d in dm.items():
-                if d.daemon_type == service_type and d.daemon_id.startswith(prefix):
+                if d.matches_service(service_name):
                     args.append((d.daemon_type, d.daemon_id,
                                  d.nodename, action))
         if not args:
             raise orchestrator.OrchestratorError(
-                'Unable to find %s.%s.* daemon(s)' % (
-                    service_type, service_name))
+                'Unable to find %s.%s.* daemon(s)' % (service_name))
         return self._daemon_action(args)
 
     @async_map_completion
@@ -1520,22 +1515,17 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         return self._remove_daemon(args)
 
-    def remove_service(self, service_type, service_name):
-        if service_name:
-            prefix = service_name + '.'
-        else:
-            prefix = ''
+    def remove_service(self, service_name):
         args = []
         for host, dm in self.daemon_cache.data.items():
             for name, d in dm.items():
-                if d.daemon_type == service_type and \
-                   d.daemon_id.startswith(prefix):
+                if d.matches_service(service_name):
                     args.append(
                         ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
                     )
         if not args:
-            raise OrchestratorError('Unable to find daemons in %s.%s* service' % (
-                service_type, prefix))
+            raise OrchestratorError('Unable to find daemons in %s service' % (
+                service_name))
         return self._remove_daemon(args)
 
     def get_inventory(self, node_filter=None, refresh=False):
