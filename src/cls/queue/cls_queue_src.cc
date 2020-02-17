@@ -67,10 +67,9 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
     return -EINVAL;
   }
 
-  constexpr auto decoded_head_size = sizeof(queue_head_start) + sizeof(encoded_len);
-  if (encoded_len > (chunk_size - decoded_head_size)) {
+  if (encoded_len > (chunk_size - QUEUE_ENTRY_OVERHEAD)) {
     start_offset = chunk_size;
-    chunk_size = (encoded_len - (chunk_size - decoded_head_size));
+    chunk_size = (encoded_len - (chunk_size - QUEUE_ENTRY_OVERHEAD));
     bufferlist bl_remaining_head;
     const auto ret = cls_cxx_read2(hctx, start_offset, chunk_size, &bl_remaining_head, CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL);
     if (ret < 0) {
@@ -138,6 +137,32 @@ int queue_get_capacity(cls_method_context_t hctx, cls_queue_get_capacity_ret& op
 
   return 0;
 }
+
+
+/*
+enqueue of new bufferlist happens in the free spaces of the queue, the queue can be in
+one of two states:
+
+(1) split free space
++-------------+--------------------------------------------------------------------+
+| object head |                XXXXXXXXXXXXXXXXXXXXXXXXXXX                         |
+|             |                ^                         ^                         |
+| front  tail |                |                         |                         |
++---+------+--+----------------|-------------------------|-------------------------+
+    |      |                   |                         |
+    |      +-------------------|-------------------------+
+    +--------------------------+
+
+(2) continuous free space
++-------------+--------------------------------------------------------------------+
+| object head |XXXXXXXXXXXXXXXXX                         XXXXXXXXXXXXXXXXXXXXXXXXXX|
+|             |                ^                         ^                         |
+| front  tail |                |                         |                         |
++---+------+--+----------------|-------------------------|-------------------------+
+    |      |                   |                         |
+    |      +-------------------+                         |
+    +----------------------------------------------------+
+*/
 
 int queue_enqueue(cls_method_context_t hctx, cls_queue_enqueue_op& op, cls_queue_head& head)
 {
@@ -314,7 +339,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       }
       // Magic number + Data size - process if not done in previous iteration
       if (! entry_start_processed ) {
-        if (size_to_process >= (sizeof(uint16_t) + sizeof(uint64_t))) {
+        if (size_to_process >= QUEUE_ENTRY_OVERHEAD) {
           // Decode magic number at start
           try {
             decode(entry_start, it);
