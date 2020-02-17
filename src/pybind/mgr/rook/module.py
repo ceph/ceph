@@ -94,7 +94,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     for the corresponding change to appear in the
     Ceph cluster (slow)
 
-    Right now, wre calling the k8s API synchronously.
+    Right now, we are calling the k8s API synchronously.
     """
 
     MODULE_OPTIONS = [
@@ -135,7 +135,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         super(RookOrchestrator, self).__init__(*args, **kwargs)
 
         self._initialized = threading.Event()
-        self._k8s = None
+        self._k8s_CoreV1_api = None
+        self._k8s_BatchV1_api = None
         self._rook_cluster = None
         self._rook_env = RookEnv()
 
@@ -150,8 +151,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     def k8s(self):
         # type: () -> client.CoreV1Api
         self._initialized.wait()
-        assert self._k8s is not None
-        return self._k8s
+        assert self._k8s_CoreV1_api is not None
+        return self._k8s_CoreV1_api
 
     @property
     def rook_cluster(self):
@@ -178,20 +179,22 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             from kubernetes.client import configuration
             configuration.verify_ssl = False
 
-        self._k8s = client.CoreV1Api()
+        self._k8s_CoreV1_api = client.CoreV1Api()
+        self._k8s_BatchV1_api = client.BatchV1Api()
 
         try:
             # XXX mystery hack -- I need to do an API call from
             # this context, or subsequent API usage from handle_command
             # fails with SSLError('bad handshake').  Suspect some kind of
             # thread context setup in SSL lib?
-            self._k8s.list_namespaced_pod(cluster_name)
+            self._k8s_CoreV1_api.list_namespaced_pod(cluster_name)
         except ApiException:
             # Ignore here to make self.available() fail with a proper error message
             pass
 
         self._rook_cluster = RookCluster(
-            self._k8s,
+            self._k8s_CoreV1_api,
+            self._k8s_BatchV1_api,
             self._rook_env)
 
         self._initialized.set()
@@ -550,3 +553,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         c = self.get_hosts().then(execute)
         return c
+
+    def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> RookCompletion:
+        return write_completion(
+            on_complete=lambda: self.rook_cluster.blink_light(
+                ident_fault, on, locs),
+            message="Switching <{}> identification light in {}".format(
+                on, ",".join(["{}:{}".format(loc.host, loc.dev) for loc in locs])),
+            mgr=self
+        )
