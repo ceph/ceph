@@ -141,6 +141,9 @@ namespace librbd {
 namespace cache {
 namespace rwl {
 
+const int IN_FLIGHT_FLUSH_WRITE_LIMIT = 64;
+const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
+
 /* Limit work between sync points */
 const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
 const uint64_t MAX_BYTES_PER_SYNC_POINT = (1024 * 1024 * 8);

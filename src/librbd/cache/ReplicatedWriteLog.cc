@@ -42,6 +42,7 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::rwl::Imag
     m_image_ctx(image_ctx),
     m_log_pool_config_size(DEFAULT_POOL_SIZE),
     m_image_writeback(image_ctx), m_write_log_guard(image_ctx.cct),
+    m_entry_reader_lock("librbd::cache::ReplicatedWriteLog::m_entry_reader_lock"),
     m_deferred_dispatch_lock(ceph::make_mutex(util::unique_lock_name(
       "librbd::cache::ReplicatedWriteLog::m_deferred_dispatch_lock", this))),
     m_log_append_lock(ceph::make_mutex(util::unique_lock_name(
@@ -544,11 +545,6 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
                                                   uint64_t *mismatch_offset,
                                                   int fadvise_flags,
                                                   Context *on_finish) {
-}
-
-template <typename I>
-void ReplicatedWriteLog<I>::wake_up() {
-  //TODO: handle the task to flush data from cache device to OSD
 }
 
 template <typename I>
@@ -1352,6 +1348,215 @@ C_FlushRequest<ReplicatedWriteLog<I>>* ReplicatedWriteLog<I>::make_flush_req(Con
   return flush_req;
 }
 
+template <typename I>
+void ReplicatedWriteLog<I>::wake_up() {
+  CephContext *cct = m_image_ctx.cct;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  if (!m_wake_up_enabled) {
+    // wake_up is disabled during shutdown after flushing completes
+    ldout(m_image_ctx.cct, 6) << "deferred processing disabled" << dendl;
+    return;
+  }
+
+  if (m_wake_up_requested && m_wake_up_scheduled) {
+    return;
+  }
+
+  ldout(cct, 20) << dendl;
+
+  /* Wake-up can be requested while it's already scheduled */
+  m_wake_up_requested = true;
+
+  /* Wake-up cannot be scheduled if it's already scheduled */
+  if (m_wake_up_scheduled) {
+    return;
+  }
+  m_wake_up_scheduled = true;
+  m_async_process_work++;
+  m_async_op_tracker.start_op();
+  m_work_queue.queue(new LambdaContext(
+    [this](int r) {
+      process_work();
+      m_async_op_tracker.finish_op();
+      m_async_process_work--;
+    }), 0);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::process_work() {
+  // TODO: handle retiring entries in later PRs
+  CephContext *cct = m_image_ctx.cct;
+  int max_iterations = 4;
+  bool wake_up_requested = false;
+
+  ldout(cct, 20) << dendl;
+
+  do {
+    {
+      std::lock_guard locker(m_lock);
+      m_wake_up_requested = false;
+    }
+    // TODO: retire entries if fulfill conditions
+    dispatch_deferred_writes();
+    process_writeback_dirty_entries();
+
+    {
+      std::lock_guard locker(m_lock);
+      wake_up_requested = m_wake_up_requested;
+    }
+  } while (wake_up_requested && --max_iterations > 0);
+
+  {
+    std::lock_guard locker(m_lock);
+    m_wake_up_scheduled = false;
+    /* Reschedule if it's still requested */
+    if (m_wake_up_requested) {
+      wake_up();
+    }
+  }
+}
+
+template <typename I>
+bool ReplicatedWriteLog<I>::can_flush_entry(std::shared_ptr<GenericLogEntry> log_entry) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << "" << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  //TODO handle invalidate
+
+  /* For OWB we can flush entries with the same sync gen number (write between
+   * aio_flush() calls) concurrently. Here we'll consider an entry flushable if
+   * its sync gen number is <= the lowest sync gen number carried by all the
+   * entries currently flushing.
+   *
+   * If the entry considered here bears a sync gen number lower than a
+   * previously flushed entry, the application had to have submitted the write
+   * bearing the higher gen number before the write with the lower gen number
+   * completed. So, flushing these concurrently is OK.
+   *
+   * If the entry considered here bears a sync gen number higher than a
+   * currently flushing entry, the write with the lower gen number may have
+   * completed to the application before the write with the higher sync gen
+   * number was submitted, and the application may rely on that completion
+   * order for volume consistency. In this case the entry will not be
+   * considered flushable until all the entries bearing lower sync gen numbers
+   * finish flushing.
+   */
+
+  if (m_flush_ops_in_flight &&
+      (log_entry->ram_entry.sync_gen_number > m_lowest_flushing_sync_gen)) {
+    return false;
+  }
+
+  return (log_entry->can_writeback() &&
+         (m_flush_ops_in_flight <= IN_FLIGHT_FLUSH_WRITE_LIMIT) &&
+         (m_flush_bytes_in_flight <= IN_FLIGHT_FLUSH_BYTES_LIMIT));
+}
+
+template <typename I>
+Context* ReplicatedWriteLog<I>::construct_flush_entry_ctx(std::shared_ptr<GenericLogEntry> log_entry) {
+  //TODO handle writesame, invalidate and discard in later PRs
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << "" << dendl;
+  ceph_assert(m_entry_reader_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  if (!m_flush_ops_in_flight ||
+      (log_entry->ram_entry.sync_gen_number < m_lowest_flushing_sync_gen)) {
+    m_lowest_flushing_sync_gen = log_entry->ram_entry.sync_gen_number;
+  }
+  m_flush_ops_in_flight += 1;
+  /* For write same this is the bytes affected bt the flush op, not the bytes transferred */
+  m_flush_bytes_in_flight += log_entry->ram_entry.write_bytes;
+
+  /* Flush write completion action */
+  Context *ctx = new LambdaContext(
+    [this, log_entry](int r) {
+      {
+        std::lock_guard locker(m_lock);
+        if (r < 0) {
+          lderr(m_image_ctx.cct) << "failed to flush log entry"
+                                 << cpp_strerror(r) << dendl;
+          m_dirty_log_entries.push_front(log_entry);
+        } else {
+          ceph_assert(m_bytes_dirty >= log_entry->bytes_dirty());
+          m_bytes_dirty -= log_entry->bytes_dirty();
+          sync_point_writer_flushed(log_entry->get_sync_point_entry());
+          ldout(m_image_ctx.cct, 20) << "flushed: " << log_entry
+                                     << dendl;
+        }
+        m_flush_ops_in_flight -= 1;
+        m_flush_bytes_in_flight -= log_entry->ram_entry.write_bytes;
+        wake_up();
+      }
+    });
+  /* Flush through lower cache before completing */
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      if (r < 0) {
+        lderr(m_image_ctx.cct) << "failed to flush log entry"
+                               << cpp_strerror(r) << dendl;
+        ctx->complete(r);
+      } else {
+        m_image_writeback.aio_flush(ctx);
+      }
+    });
+
+  return new LambdaContext(
+    [this, log_entry, ctx](int r) {
+      m_image_ctx.op_work_queue->queue(new LambdaContext(
+        [this, log_entry, ctx](int r) {
+          ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+                                     << " " << *log_entry << dendl;
+          log_entry->writeback(m_image_writeback, ctx);
+        }), 0);
+    });
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::process_writeback_dirty_entries() {
+  CephContext *cct = m_image_ctx.cct;
+  bool all_clean = false;
+  int flushed = 0;
+
+  ldout(cct, 20) << "Look for dirty entries" << dendl;
+  {
+    DeferredContexts post_unlock;
+    std::shared_lock entry_reader_locker(m_entry_reader_lock);
+    while (flushed < IN_FLIGHT_FLUSH_WRITE_LIMIT) {
+      std::lock_guard locker(m_lock);
+      if (m_shutting_down) {
+        ldout(cct, 5) << "Flush during shutdown supressed" << dendl;
+        /* Do flush complete only when all flush ops are finished */
+        all_clean = !m_flush_ops_in_flight;
+        break;
+      }
+      if (m_dirty_log_entries.empty()) {
+        ldout(cct, 20) << "Nothing new to flush" << dendl;
+        /* Do flush complete only when all flush ops are finished */
+        all_clean = !m_flush_ops_in_flight;
+        break;
+      }
+      auto candidate = m_dirty_log_entries.front();
+      bool flushable = can_flush_entry(candidate);
+      if (flushable) {
+        post_unlock.add(construct_flush_entry_ctx(candidate));
+        flushed++;
+        m_dirty_log_entries.pop_front();
+      } else {
+        ldout(cct, 20) << "Next dirty entry isn't flushable yet" << dendl;
+        break;
+      }
+    }
+  }
+
+  if (all_clean) {
+    // TODO: all flusing complete
+  }
+}
+
 /* Update/persist the last flushed sync point in the log */
 template <typename I>
 void ReplicatedWriteLog<I>::persist_last_flushed_sync_gen()
@@ -1415,6 +1620,21 @@ bool ReplicatedWriteLog<I>::handle_flushed_sync_point(std::shared_ptr<SyncPointL
     return true;
   }
   return false;
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::sync_point_writer_flushed(std::shared_ptr<SyncPointLogEntry> log_entry)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(log_entry);
+  log_entry->writes_flushed++;
+
+  /* If this entry might be completely flushed, look closer */
+  if ((log_entry->writes_flushed == log_entry->writes) && log_entry->completed) {
+    ldout(m_image_ctx.cct, 15) << "All writes flushed for sync point="
+                               << *log_entry << dendl;
+    handle_flushed_sync_point(log_entry);
+  }
 }
 
 /* Make a new sync point and flush the previous during initialization, when there may or may
