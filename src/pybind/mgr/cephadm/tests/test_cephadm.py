@@ -289,7 +289,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
-            c = cephadm_module.remove_service('rgw', 'myrgw')
+            c = cephadm_module.remove_service('rgw.myrgw')
             out = wait(cephadm_module, c)
             assert out == ["Removed rgw.myrgw.foobar from host 'test'"]
 

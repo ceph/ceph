@@ -920,8 +920,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_service(self, service_type, service_name=None):
-        # type: (str, Optional[str]) -> Completion
+    def remove_service(self, service_name):
+        # type: (str) -> Completion
         """
         Remove a service (a collection of daemons).
 
@@ -929,8 +929,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_action(self, action, service_type, service_name):
-        # type: (str, str, str) -> Completion
+    def service_action(self, action, service_name):
+        # type: (str, str) -> Completion
         """
         Perform an action (start/stop/reload) on a service (i.e., all daemons
         providing the logical service).
@@ -1214,6 +1214,12 @@ class DaemonDescription(object):
 
     def name(self):
         return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def matches_service(self, service_name):
+        # type: (Optional[str]) -> bool
+        if service_name:
+            return self.name().startswith(service_name + '.')
+        return False
 
     def __repr__(self):
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
