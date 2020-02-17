@@ -2491,7 +2491,9 @@ def command_rm_cluster():
 
 def check_time_sync():
     units = [
-        'chronyd.service', 'systemd-timesyncd.service',
+        'chrony.service',  # 18.04 (at least)
+        'chronyd.service', # el
+        'systemd-timesyncd.service',
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
     ]
