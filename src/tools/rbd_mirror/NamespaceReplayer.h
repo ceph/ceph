@@ -233,7 +233,8 @@ private:
   void handle_shut_down_local_status_updater(int r);
 
   void init_image_map(Context *on_finish);
-  void handle_init_image_map(int r, Context *on_finish);
+  void handle_init_image_map(int r, ImageMap<ImageCtxT> *image_map,
+                             Context *on_finish);
 
   void init_local_pool_watcher(Context *on_finish);
   void handle_init_local_pool_watcher(int r, Context *on_finish);
