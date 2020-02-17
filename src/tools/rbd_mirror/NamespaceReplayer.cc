@@ -245,7 +245,10 @@ void NamespaceReplayer<I>::handle_instances_added(
 
   std::lock_guard locker{m_lock};
 
-  ceph_assert(m_image_map);
+  if (!m_image_map) {
+    return;
+  }
+
   m_image_map->update_instances_added(instance_ids);
 }
 
@@ -256,7 +259,10 @@ void NamespaceReplayer<I>::handle_instances_removed(
 
   std::lock_guard locker{m_lock};
 
-  ceph_assert(m_image_map);
+  if (!m_image_map) {
+    return;
+  }
+
   m_image_map->update_instances_removed(instance_ids);
 }
 
@@ -567,31 +573,34 @@ template <typename I>
 void NamespaceReplayer<I>::init_image_map(Context *on_finish) {
   dout(10) << dendl;
 
-  std::lock_guard locker{m_lock};
-  ceph_assert(!m_image_map);
-  m_image_map.reset(ImageMap<I>::create(m_local_io_ctx, m_threads,
-                                        m_instance_watcher->get_instance_id(),
-                                        m_image_map_listener));
+  auto image_map = ImageMap<I>::create(m_local_io_ctx, m_threads,
+                                       m_instance_watcher->get_instance_id(),
+                                       m_image_map_listener);
 
   auto ctx = new LambdaContext(
-      [this, on_finish](int r) {
-        handle_init_image_map(r, on_finish);
+      [this, image_map, on_finish](int r) {
+        handle_init_image_map(r, image_map, on_finish);
       });
-  m_image_map->init(create_async_context_callback(
+  image_map->init(create_async_context_callback(
     m_threads->work_queue, ctx));
 }
 
 template <typename I>
-void NamespaceReplayer<I>::handle_init_image_map(int r, Context *on_finish) {
+void NamespaceReplayer<I>::handle_init_image_map(int r, ImageMap<I> *image_map,
+                                                 Context *on_finish) {
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "failed to init image map: " << cpp_strerror(r) << dendl;
-    on_finish = new LambdaContext([on_finish, r](int) {
+    on_finish = new LambdaContext([image_map, on_finish, r](int) {
+        delete image_map;
         on_finish->complete(r);
       });
-    shut_down_image_map(on_finish);
+    image_map->shut_down(on_finish);
     return;
   }
+
+  ceph_assert(!m_image_map);
+  m_image_map.reset(image_map);
 
   init_local_pool_watcher(on_finish);
 }
