@@ -1275,8 +1275,6 @@ int md_config_t::_get_val_cstr(
     return (l > len) ? -ENAMETOOLONG : 0;
   }
 
-  string k(ConfFile::normalize_key_name(key));
-
   // couldn't find a configuration option with key 'k'
   return -ENOENT;
 }
