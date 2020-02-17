@@ -218,7 +218,7 @@ BuildRequires:	python%{python3_version_nodots}-virtualenv
 BuildRequires:	python%{python3_pkgversion}-six
 BuildRequires:	python%{python3_pkgversion}-virtualenv
 %endif
-%if 0%{?rhel} < 8
+%if 0%{?rhel} == 7
 BuildRequires:	python%{python3_version_nodots}-coverage
 %else
 BuildRequires:	python%{python3_pkgversion}-coverage
