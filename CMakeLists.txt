@@ -186,11 +186,18 @@ if(WITH_BLUESTORE)
 endif()
 
 include(CMakeDependentOption)
+CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Build with liburing library support" OFF
+  "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
+set(HAVE_LIBURING ${WITH_LIBURING})
+
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
 
+CMAKE_DEPENDENT_OPTION(WITH_RBD_RWL "Enable librbd persistent write back cache" OFF
+  "WITH_RBD" OFF)
+
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
-  "WITH_BLUESTORE_PMEM" OFF)
+  "WITH_RBD_RWL OR WITH_BLUESTORE_PMEM" OFF)
 
 if(WITH_BLUESTORE_PMEM)
   set(HAVE_BLUESTORE_PMEM ON)
@@ -322,7 +329,7 @@ set(CRYPTO_LIBS OpenSSL::Crypto)
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
   find_package(dpdk)
-  if(NOT DPDK_FOUND AND NOT TARGET dpdk-ext)
+  if(NOT DPDK_FOUND)
     include(BuildDPDK)
     build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
   endif()
@@ -346,6 +353,7 @@ option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF
 option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
 option(WITH_RADOSGW_BEAST_OPENSSL "Rados Gateway's Beast frontend uses OpenSSL" ON)
 option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push endpoint" ON)
+option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -410,23 +418,26 @@ endif (WITH_RADOSGW)
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
 
-#option for Mgr
+# Please specify 3.[0-7] if you want to build with a certain version of python3.
+set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
+if(NOT WITH_PYTHON3)
+  message(FATAL_ERROR "WITH_PYTHON3 should always be enabled")
+elseif(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
+  set(WITH_PYTHON3 "3")
+  message(NOTICE "Please specify a Python3 version instead of a BOOLEAN")
+elseif(NOT WITH_PYTHON3 STREQUAL "3")
+  set(find_python3_exact "EXACT")
+endif()
+find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
+  COMPONENTS Interpreter Development)
+unset(find_python3_exact)
+
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
-  # Please specify 3 or 3.[0-7] if you want to build with python3 support.
-  # FindPython thinks they belong to different families.
-  set(MGR_PYTHON_VERSION "2.7" CACHE
-    STRING "required version of python runtime for running mgr plugins. ")
-  if(NOT MGR_PYTHON_VERSION MATCHES "^[23]$")
-    set(find_python_exact "EXACT")
-  endif()
-  find_package(Python ${MGR_PYTHON_VERSION} ${find_python_exact} REQUIRED
-    COMPONENTS Interpreter Development)
-  unset(find_python_exact)
-  set(MGR_PYTHON_EXECUTABLE ${Python_EXECUTABLE})
-  set(MGR_PYTHON_LIBRARIES ${Python_LIBRARIES})
-  set(MGR_PYTHON_VERSION_MAJOR ${Python_VERSION_MAJOR})
-  set(MGR_PYTHON_VERSION_MINOR ${Python_VERSION_MINOR})
+  set(MGR_PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+  set(MGR_PYTHON_LIBRARIES ${Python3_LIBRARIES})
+  set(MGR_PYTHON_VERSION_MAJOR ${Python3_VERSION_MAJOR})
+  set(MGR_PYTHON_VERSION_MINOR ${Python3_VERSION_MINOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
@@ -532,7 +543,7 @@ endif()
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
-  find_package(RocksDB 5.8 REQUIRED)
+  find_package(RocksDB 5.14 REQUIRED)
 endif()
 
 option(WITH_SEASTAR "Build seastar components")
@@ -620,6 +631,8 @@ add_custom_target(check
 
 add_subdirectory(src)
 
+add_subdirectory(qa)
+
 add_subdirectory(doc)
 if(WITH_MANPAGE)
   add_subdirectory(man)
@@ -647,3 +660,6 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
+
+find_package(CppCheck)
+find_package(IWYU)

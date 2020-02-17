@@ -78,7 +78,7 @@ TEST(LibRadosCmd, MonDescribe) {
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  cmd[0] = (char *)"{\"prefix\":\"mon_status\"}";
+  cmd[0] = (char *)"{\"prefix\":\"quorum_status\"}";
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);
   //ASSERT_LT(0u, stlen);

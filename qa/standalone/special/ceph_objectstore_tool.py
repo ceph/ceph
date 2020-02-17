@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
 from __future__ import print_function
 from subprocess import call
@@ -46,7 +46,7 @@ if sys.version_info[0] >= 3:
     def decode(s):
         return s.decode('utf-8')
 
-    def check_output(*args, **kwargs):
+    def check_output(*args, **kwargs): # noqa
         return decode(subprocess.check_output(*args, **kwargs))
 else:
     def decode(s):
@@ -150,7 +150,7 @@ def cat_file(level, filename):
     print("<EOF>")
 
 
-def vstart(new, opt=""):
+def vstart(new, opt="-o osd_pool_default_pg_autoscale_mode=off"):
     print("vstarting....", end="")
     NEW = new and "-n" or "-N"
     call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
@@ -337,7 +337,7 @@ def check_entry_transactions(entry, enum):
 
 
 def check_transaction_ops(ops, enum, tnum):
-    if len(ops) is 0:
+    if len(ops) == 0:
         logging.warning("No ops found in entry {e} trans {t}".format(e=enum, t=tnum))
     errors = 0
     for onum in range(len(ops)):
@@ -376,7 +376,7 @@ def test_dump_journal(CFSD_PREFIX, osds):
         os.unlink(TMPFILE)
 
         journal_errors = check_journal(jsondict)
-        if journal_errors is not 0:
+        if journal_errors != 0:
             logging.error(jsondict)
         ERRORS += journal_errors
 
@@ -520,7 +520,7 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     for line in output.strip().split('\n'):
         print(line)
         linev = re.split('\s+', line)
-        if linev[0] is '':
+        if linev[0] == '':
             linev.pop(0)
         print('linev %s' % linev)
         weights.append(float(linev[2]))
@@ -1542,7 +1542,10 @@ def main(argv):
                             logging.debug("FOUND: {json} in {osd} has value '{val}'".format(osd=osd, json=JSON, val=out))
                             found += 1
                         except subprocess.CalledProcessError as e:
-                            if "No such file or directory" not in e.output and "No data available" not in e.output:
+                            logging.debug("Error message: {output}".format(output=e.output))
+                            if "No such file or directory" not in e.output and \
+                               "No data available" not in e.output and \
+                               "not contained by pg" not in e.output:
                                 raise
                 # Assuming k=2 m=1 for the default ec pool
                 if found != 3:

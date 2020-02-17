@@ -3,10 +3,10 @@
 #pragma once
 
 #ifdef WITH_SEASTAR
-namespace ceph::common {
+namespace crimson::common {
   class ConfigProxy;
 }
-using ConfigProxy = ceph::common::ConfigProxy;
+using ConfigProxy = crimson::common::ConfigProxy;
 #else
 class ConfigProxy;
 #endif

@@ -9,7 +9,7 @@
 #include "msg/async/frames_v2.h"
 #include "msg/async/crypto_onwire.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 class ProtocolV2 final : public Protocol {
  public:
@@ -208,4 +208,4 @@ class ProtocolV2 final : public Protocol {
   void execute_server_wait();
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

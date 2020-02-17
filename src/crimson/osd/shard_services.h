@@ -11,20 +11,21 @@
 #include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
 #include "crimson/osd/osdmap_service.h"
+#include "crimson/osd/object_context.h"
 
-namespace ceph::net {
+namespace crimson::net {
   class Messenger;
 }
 
-namespace ceph::mgr {
+namespace crimson::mgr {
   class Client;
 }
 
-namespace ceph::mon {
+namespace crimson::mon {
   class Client;
 }
 
-namespace ceph::os {
+namespace crimson::os {
   class FuturizedStore;
 }
 
@@ -33,7 +34,7 @@ class OSDMap;
 class PeeringCtx;
 class BufferedRecoveryMessages;
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 /**
  * Represents services available to each PG
@@ -41,11 +42,11 @@ namespace ceph::osd {
 class ShardServices {
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
   OSDMapService &osdmap_service;
-  ceph::net::Messenger &cluster_msgr;
-  ceph::net::Messenger &public_msgr;
-  ceph::mon::Client &monc;
-  ceph::mgr::Client &mgrc;
-  ceph::os::FuturizedStore &store;
+  crimson::net::Messenger &cluster_msgr;
+  crimson::net::Messenger &public_msgr;
+  crimson::mon::Client &monc;
+  crimson::mgr::Client &mgrc;
+  crimson::os::FuturizedStore &store;
 
   CephContext cct;
 
@@ -55,18 +56,18 @@ class ShardServices {
 public:
   ShardServices(
     OSDMapService &osdmap_service,
-    ceph::net::Messenger &cluster_msgr,
-    ceph::net::Messenger &public_msgr,
-    ceph::mon::Client &monc,
-    ceph::mgr::Client &mgrc,
-    ceph::os::FuturizedStore &store);
+    crimson::net::Messenger &cluster_msgr,
+    crimson::net::Messenger &public_msgr,
+    crimson::mon::Client &monc,
+    crimson::mgr::Client &mgrc,
+    crimson::os::FuturizedStore &store);
 
   seastar::future<> send_to_osd(
     int peer,
     MessageRef m,
     epoch_t from_epoch);
 
-  ceph::os::FuturizedStore &get_store() {
+  crimson::os::FuturizedStore &get_store() {
     return store;
   }
 
@@ -98,7 +99,7 @@ public:
 
   /// Dispatch and reset ctx transaction
   seastar::future<> dispatch_context_transaction(
-    ceph::os::CollectionRef col, PeeringCtx &ctx);
+    crimson::os::CollectionRef col, PeeringCtx &ctx);
 
   /// Dispatch and reset ctx messages
   seastar::future<> dispatch_context_messages(
@@ -106,7 +107,7 @@ public:
 
   /// Dispatch ctx and dispose of context
   seastar::future<> dispatch_context(
-    ceph::os::CollectionRef col,
+    crimson::os::CollectionRef col,
     PeeringCtx &&ctx);
 
   /// Dispatch ctx and dispose of ctx, transaction must be empty
@@ -158,7 +159,8 @@ public:
   }
   HeartbeatStampsRef get_hb_stamps(int peer);
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
-};
 
+  crimson::osd::ObjectContextRegistry obc_registry;
+};
 
 }

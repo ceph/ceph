@@ -27,20 +27,16 @@ class KernelMount(CephFSMount):
         self.ipmi_password = ipmi_password
         self.ipmi_domain = ipmi_domain
 
-    def mount(self, mount_path=None, mount_fs_name=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
+        if mountpoint is not None:
+            self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
-        self.client_remote.run(
-            args=[
-                'mkdir',
-                '--',
-                self.mountpoint,
-            ],
-            timeout=(5*60),
-        )
+        self.client_remote.run(args=['mkdir', '-p', self.mountpoint],
+                               timeout=(5*60))
 
         if mount_path is None:
             mount_path = "/"
@@ -188,6 +184,7 @@ class KernelMount(CephFSMount):
                 self.mountpoint,
             ],
             timeout=(5*60),
+            check_status=False,
         )
 
     def _find_debug_dir(self):
@@ -208,11 +205,11 @@ class KernelMount(CephFSMount):
                     result[client_id] = dir
                 return result
 
-            print json.dumps(get_id_to_dir())
+            print(json.dumps(get_id_to_dir()))
             """)
 
         p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
+            'sudo', 'python3', '-c', pyscript
         ], stdout=StringIO(), timeout=(5*60))
         client_id_to_dir = json.loads(p.stdout.getvalue())
 
@@ -230,11 +227,11 @@ class KernelMount(CephFSMount):
         pyscript = dedent("""
             import os
 
-            print open(os.path.join("{debug_dir}", "{filename}")).read()
+            print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
         p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
+            'sudo', 'python3', '-c', pyscript
         ], stdout=StringIO(), timeout=(5*60))
         return p.stdout.getvalue()
 

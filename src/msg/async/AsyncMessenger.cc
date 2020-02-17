@@ -158,7 +158,9 @@ void Processor::start()
       for (auto& listen_socket : listen_sockets) {
 	if (listen_socket) {
           if (listen_socket.fd() == -1) {
-            ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
+            ldout(msgr->cct, 1) << __func__ 
+                << " Error: processor restart after listen_socket.fd closed. " 
+                << this << dendl;
             return;
           }
 	  worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE,
@@ -639,8 +641,6 @@ entity_addrvec_t AsyncMessenger::_filter_addrs(const entity_addrvec_t& addrs)
 
 int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
 {
-  std::lock_guard l{lock};
-
   FUNCTRACE(cct);
   ceph_assert(m);
 
@@ -662,26 +662,37 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
     return -EINVAL;
   }
 
-  auto av = _filter_addrs(addrs);
-  const AsyncConnectionRef& conn = _lookup_conn(av);
-  submit_message(m, conn, av, type);
+  if (cct->_conf->ms_dump_on_send) {
+    m->encode(-1, MSG_CRC_ALL);
+    ldout(cct, 0) << __func__ << " submit_message " << *m << "\n";
+    m->get_payload().hexdump(*_dout);
+    if (m->get_data().length() > 0) {
+      *_dout << " data:\n";
+      m->get_data().hexdump(*_dout);
+    }
+    *_dout << dendl;
+    m->clear_payload();
+  }
+
+  connect_to(type, addrs, false)->send_message(m);
   return 0;
 }
 
 ConnectionRef AsyncMessenger::connect_to(int type,
 					 const entity_addrvec_t& addrs,
-					 bool anon)
+					 bool anon, bool not_local_dest)
 {
-  std::lock_guard l{lock};
-  if (*my_addrs == addrs ||
-      (addrs.v.size() == 1 &&
-       my_addrs->contains(addrs.front()))) {
-    // local
-    return local_connection;
+  if (!not_local_dest) {
+    if (*my_addrs == addrs ||
+	(addrs.v.size() == 1 &&
+	 my_addrs->contains(addrs.front()))) {
+      // local
+      return local_connection;
+    }
   }
 
   auto av = _filter_addrs(addrs);
-
+  std::lock_guard l{lock};
   if (anon) {
     return create_connect(av, type, anon);
   }
@@ -695,52 +706,6 @@ ConnectionRef AsyncMessenger::connect_to(int type,
   }
 
   return conn;
-}
-
-void AsyncMessenger::submit_message(Message *m, const AsyncConnectionRef& con,
-                                    const entity_addrvec_t& dest_addrs,
-				    int dest_type)
-{
-  if (cct->_conf->ms_dump_on_send) {
-    m->encode(-1, MSG_CRC_ALL);
-    ldout(cct, 0) << __func__ << " submit_message " << *m << "\n";
-    m->get_payload().hexdump(*_dout);
-    if (m->get_data().length() > 0) {
-      *_dout << " data:\n";
-      m->get_data().hexdump(*_dout);
-    }
-    *_dout << dendl;
-    m->clear_payload();
-  }
-
-  // existing connection?
-  if (con) {
-    con->send_message(m);
-    return ;
-  }
-
-  // local?
-  if (*my_addrs == dest_addrs ||
-      (dest_addrs.v.size() == 1 &&
-       my_addrs->contains(dest_addrs.front()))) {
-    // local
-    local_connection->send_message(m);
-    return ;
-  }
-
-  // remote, no existing connection.
-  const Policy& policy = get_policy(dest_type);
-  if (policy.server) {
-    ldout(cct, 20) << __func__ << " " << *m << " remote, " << dest_addrs
-        << ", lossy server for target type "
-        << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
-    m->put();
-  } else {
-    ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addrs
-		  << ", new connection." << dendl;
-    auto&& new_con = create_connect(dest_addrs, dest_type, false);
-    new_con->send_message(m);
-  }
 }
 
 /**
@@ -939,10 +904,9 @@ bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   return false;
 }
 
-int AsyncMessenger::reap_dead()
+void AsyncMessenger::reap_dead()
 {
   ldout(cct, 1) << __func__ << " start" << dendl;
-  int num = 0;
 
   std::lock_guard l1{lock};
 
@@ -955,10 +919,7 @@ int AsyncMessenger::reap_dead()
         conns.erase(conns_it);
       accepting_conns.erase(c);
       anon_conns.erase(c);
-      ++num;
     }
     deleted_conns.clear();
   }
-
-  return num;
 }

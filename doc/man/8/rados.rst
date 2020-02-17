@@ -32,6 +32,10 @@ Options
    PG id to which the command will be directed. With this option, certain
    commands like ``ls`` allow users to limit the scope of the command to the given PG.
 
+.. option:: -N namespace, --namespace namespace
+
+   Specify the rados namespace to use for the object.
+
 .. option:: -s snap, --snap snap
 
    Read from the given pool snapshot. Valid for all pool-specific read operations.
@@ -66,6 +70,16 @@ Options
    Uses the striping API of rados rather than the default one.
    Available for stat, stat2, get, put, append, truncate, rm, ls
    and all xattr related operation
+
+.. option:: -O object_size
+
+   Set the object size for put/get ops and for write benchmarking
+
+.. option:: --lock-cookie locker-cookie
+
+   Will set the lock cookie for acquiring advisory lock (lock get command). 
+   If the cookie is not empty, this option must be passed to lock break command
+   to find the correct lock when releasing lock.
 
 
 Global commands

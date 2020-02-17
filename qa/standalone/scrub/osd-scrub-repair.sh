@@ -600,8 +600,8 @@ function TEST_repair_stats() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
@@ -673,8 +673,8 @@ function TEST_repair_stats_ec() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
@@ -1139,7 +1139,7 @@ function TEST_corrupt_scrub_replicated() {
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -2020,7 +2020,7 @@ function TEST_corrupt_scrub_replicated() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -2117,7 +2117,7 @@ EOF
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -3496,7 +3496,7 @@ EOF
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -3634,7 +3634,7 @@ function corrupt_scrub_erasure() {
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -4254,7 +4254,7 @@ function corrupt_scrub_erasure() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -4280,7 +4280,7 @@ EOF
 
     if [ "$allow_overwrites" = "true" ]
     then
-      jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+      jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -4935,7 +4935,7 @@ EOF
 
     else
 
-      jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+      jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -5668,7 +5668,7 @@ EOF
 
     fi
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -5934,7 +5934,7 @@ function TEST_corrupt_snapset_scrub_rep() {
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "epoch": 34,
   "inconsistents": [
@@ -6100,7 +6100,7 @@ function TEST_corrupt_snapset_scrub_rep() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then

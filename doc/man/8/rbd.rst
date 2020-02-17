@@ -64,8 +64,9 @@ Parameters
      format is understood by all versions of librbd and the kernel rbd module,
      but does not support newer features like cloning.
 
-   * format 2 - Use the second rbd format, which is supported by
-     librbd and kernel since version 3.11 (except for striping). This adds
+   * format 2 - Use the second rbd format, which is supported by librbd since
+     the Bobtail release and the kernel rbd module since kernel 3.10 (except
+     for "fancy" striping, which is supported since kernel 4.17). This adds
      support for cloning and is more easily extensible to allow more
      features in the future.
 
@@ -273,13 +274,15 @@ Commands
   (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
   whether the region is known to be zeros or may contain other data.
 
-:command:`du` [-p | --pool *pool-name*] [*image-spec* | *snap-spec*]
+:command:`du` [-p | --pool *pool-name*] [*image-spec* | *snap-spec*] [--merge-snapshots]
   Will calculate the provisioned and actual disk usage of all images and
   associated snapshots within the specified pool.  It can also be used against
   individual images and snapshots.
 
   If the RBD fast-diff feature is not enabled on images, this operation will
   require querying the OSDs for every potential object within the image.
+
+  The --merge-snapshots will merge snapshots used space into their parent images.
 
 :command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Export image to dest path (use - for stdout).
@@ -611,7 +614,7 @@ Commands
   Reclaim space for zeroed image extents. The default sparse size is
   4096 bytes and can be changed via --sparse-size option with the
   following restrictions: it should be power of two, not less than
-  4096, and not larger image object size.
+  4096, and not larger than image object size.
 
 :command:`status` *image-spec*
   Show the status of the image, including which clients have it open.
@@ -682,8 +685,7 @@ The striping is controlled by three parameters:
   we move on to the next [*stripe_count*] objects.
 
 By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] is 1.  Specifying a different
-[*stripe_unit*] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
-used.
+[*stripe_unit*] and/or [*stripe_count*] is often referred to as using "fancy" striping and requires format 2.
 
 
 Kernel rbd (krbd) options

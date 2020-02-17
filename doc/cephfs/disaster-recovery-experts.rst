@@ -68,7 +68,10 @@ truncate it like so:
 
 ::
 
-    cephfs-journal-tool journal reset
+    cephfs-journal-tool [--rank=N] journal reset
+
+Specify the MDS rank using the ``--rank`` option when the file system has/had
+multiple active MDS.
 
 .. warning::
 
@@ -247,8 +250,17 @@ with:
 After recovery, some recovered directories will have incorrect statistics.
 Ensure the parameters mds_verify_scatter and mds_debug_scatterstat are set
 to false (the default) to prevent the MDS from checking the statistics, then
-run a forward scrub to repair them. Ensure you have an MDS running and issue:
+run a forward :doc:`scrub </cephfs/scrub>` to repair them. Ensure you have an
+MDS running and issue:
 
 ::
 
     ceph tell mds.a scrub start / recursive repair
+
+.. note::
+
+    In Nautilus and above versions, tell interface scrub command is preferred
+    than scrub_path. For older versions only scrub_path asok command is
+    supported. Example::
+
+        ceph daemon mds.a scrub_path / recursive repair

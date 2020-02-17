@@ -3,7 +3,6 @@
 
 #include "include/compat.h"
 #include "CloseImageRequest.h"
-#include "IsPrimaryRequest.h"
 #include "OpenLocalImageRequest.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -15,6 +14,7 @@
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/journal/Policy.h"
+#include "librbd/mirror/GetInfoRequest.h"
 #include <type_traits>
 
 #define dout_context g_ceph_context
@@ -60,6 +60,14 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
     return r;
   }
 
+  bool accept_blocked_request(
+      librbd::exclusive_lock::OperationRequestType request_type) override {
+    if (request_type ==
+        librbd::exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE) {
+      return true;
+    }
+    return false;
+  }
 };
 
 struct MirrorJournalPolicy : public librbd::journal::Policy {
@@ -138,23 +146,24 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
     return;
   }
 
-  send_is_primary();
+  send_get_mirror_info();
 }
 
 template <typename I>
-void OpenLocalImageRequest<I>::send_is_primary() {
+void OpenLocalImageRequest<I>::send_get_mirror_info() {
   dout(20) << dendl;
 
   Context *ctx = create_context_callback<
-    OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_is_primary>(
+    OpenLocalImageRequest<I>,
+    &OpenLocalImageRequest<I>::handle_get_mirror_info>(
       this);
-  IsPrimaryRequest<I> *request = IsPrimaryRequest<I>::create(*m_local_image_ctx,
-                                                             &m_primary, ctx);
+  auto request = librbd::mirror::GetInfoRequest<I>::create(
+    **m_local_image_ctx, &m_mirror_image, &m_promotion_state, ctx);
   request->send();
 }
 
 template <typename I>
-void OpenLocalImageRequest<I>::handle_is_primary(int r) {
+void OpenLocalImageRequest<I>::handle_get_mirror_info(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r == -ENOENT) {
@@ -168,9 +177,22 @@ void OpenLocalImageRequest<I>::handle_is_primary(int r) {
     return;
   }
 
+  if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+    dout(5) << ": local image mirroring is being disabled" << dendl;
+    send_close_image(-ENOENT);
+    return;
+  }
+
+  if (m_mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    dout(5) << ": local image is in unsupported mode: " << m_mirror_image.mode
+            << dendl;
+    send_close_image(-EOPNOTSUPP);
+    return;
+  }
+
   // if the local image owns the tag -- don't steal the lock since
   // we aren't going to mirror peer data into this image anyway
-  if (m_primary) {
+  if (m_promotion_state == librbd::mirror::PROMOTION_STATE_PRIMARY) {
     dout(10) << ": local image is primary -- skipping image replay" << dendl;
     send_close_image(-EREMOTEIO);
     return;

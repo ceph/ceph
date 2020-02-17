@@ -121,6 +121,10 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     this.notificationService.removeAll();
   }
 
+  remove(index: number) {
+    this.notificationService.remove(index);
+  }
+
   closeSidebar() {
     this.notificationService.toggleSidebar(true);
   }

@@ -32,10 +32,10 @@ conn = S3Connection(calling_format=OrdinaryCallingFormat(), is_secure=False,
                 aws_secret_access_key=os.environ["SKEY"])
 bucket = conn.lookup(bucket_name)
 if (bucket == None):
-    print "bucket '%s' no longer exists" % bucket_name
+    print("bucket '%s' no longer exists" % bucket_name)
     sys.exit(0)
 
-print "deleting bucket '%s' ..." % bucket_name
+print("deleting bucket '%s' ..." % bucket_name)
 bucket.delete()
-print "done."
+print("done.")
 sys.exit(0)

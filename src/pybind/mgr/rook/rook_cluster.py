@@ -20,11 +20,17 @@ from urllib3.exceptions import ProtocolError
 from mgr_util import merge_dicts
 
 try:
+    from typing import Optional
+except ImportError:
+    pass  # just for type annotations
+
+try:
     from kubernetes.client.rest import ApiException
     from kubernetes.client import V1ListMeta, CoreV1Api, V1Pod
     from kubernetes import watch
 except ImportError:
-    class ApiException(Exception): pass
+    class ApiException(Exception):  # type: ignore
+        status = 0
 
 
 import orchestrator
@@ -85,7 +91,7 @@ class KubernetesResource(object):
 
         # ``_items`` is accessed by different threads. I assume assignment is atomic.
         self._items = dict()
-        self.thread = None  # type: threading.Thread
+        self.thread = None  # type: Optional[threading.Thread]
         self.exception = None
         if not _urllib3_supports_read_chunked:
             logging.info('urllib3 is too old. Fallback to full fetches')
@@ -115,7 +121,7 @@ class KubernetesResource(object):
             if _urllib3_supports_read_chunked:
                 # Start a thread which will use the kubernetes watch client against a resource
                 log.debug("Attaching resource watcher for k8s {}".format(self.api_func))
-                self.thread = self._watch(resource_version)  # type: threading.Thread
+                self.thread = self._watch(resource_version)
 
         return self._items.values()
 
@@ -376,7 +382,7 @@ class RookCluster(object):
         }
 
         if spec.namespace:
-            rook_nfsgw["spec"]["rados"]["namespace"] = spec.namespace
+            rook_nfsgw["spec"]["rados"]["namespace"] = spec.namespace  # type: ignore
 
         with self.ignore_409("NFS cluster '{0}' already exists".format(spec.name)):
             self.rook_api_post("cephnfses/", body=rook_nfsgw)
@@ -454,6 +460,20 @@ class RookCluster(object):
 
         return "Updated mon count to {0}".format(newcount)
 
+    def update_mds_count(self, svc_id, newcount):
+        patch = [{"op": "replace", "path": "/spec/metadataServer/activeCount",
+                  "value": newcount}]
+
+        try:
+            self.rook_api_patch(
+                "cephfilesystems/{0}".format(svc_id),
+                body=patch)
+        except ApiException as e:
+            log.exception("API exception: {0}".format(e))
+            raise ApplyException(
+                "Failed to update NFS server count for {0}: {1}".format(svc_id, e))
+        return "Updated NFS server count for {0} to {1}".format(svc_id, newcount)
+
     def update_nfs_count(self, svc_id, newcount):
         patch = [{"op": "replace", "path": "/spec/server/active", "value": newcount}]
 
@@ -511,7 +531,7 @@ class RookCluster(object):
             if directories:
                 pd["directories"] = [{'path': p} for p in directories]
 
-            patch.append({ "op": "add", "path": "/spec/storage/nodes/-", "value": pd })
+            patch.append({ "op": "add", "path": "/spec/storage/nodes/-", "value": pd })  # type: ignore
         else:
             # Extend existing node
             node_idx = None
@@ -530,7 +550,7 @@ class RookCluster(object):
                 patch.append({
                     "op": "add",
                     "path": "/spec/storage/nodes/{0}/devices/-".format(node_idx),
-                    "value": {'name': n}
+                    "value": {'name': n}  # type: ignore
                 })
 
             new_dirs = list(set(directories) - set(current_node['directories']))
@@ -538,7 +558,7 @@ class RookCluster(object):
                 patch.append({
                     "op": "add",
                     "path": "/spec/storage/nodes/{0}/directories/-".format(node_idx),
-                    "value": {'path': p}
+                    "value": {'path': p}  # type: ignore
                 })
 
         if len(patch) == 0:

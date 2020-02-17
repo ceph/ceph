@@ -41,7 +41,6 @@ describe('PoolDetailsComponent', () => {
           pool: 0
         }
       ];
-      poolDetailsComponent.selection.update();
     });
 
     it('should recognize a tabset child', () => {
@@ -64,14 +63,13 @@ describe('PoolDetailsComponent', () => {
           tiers: []
         }
       ];
-      poolDetailsComponent.selection.update();
       fixture.detectChanges();
       const tabs = poolDetailsComponent.tabsetChild.tabs;
       expect(tabs.length).toEqual(2);
       expect(tabs[0].active).toBeTruthy();
     });
 
-    it('current active status of tabs should not change when selection is same with previour selection', () => {
+    it('current active status of tabs should not change when selection is the same as previous selection', () => {
       fixture.detectChanges();
       const tabs = poolDetailsComponent.tabsetChild.tabs;
       expect(tabs[0].active).toBeTruthy();
@@ -79,6 +77,24 @@ describe('PoolDetailsComponent', () => {
       tabs[1].active = true;
       fixture.detectChanges();
       expect(tabs[1].active).toBeTruthy();
+    });
+
+    it('returns pool details correctly', () => {
+      const pool = { prop1: 1, cdIsBinary: true, prop2: 2, cdExecuting: true, prop3: 3 };
+      const expectedPool = { prop1: 1, prop2: 2, prop3: 3 };
+
+      expect(poolDetailsComponent.filterNonPoolData(pool)).toEqual(expectedPool);
+    });
+
+    it('pool data filtering is called', () => {
+      const filterNonPoolDataSpy = spyOn(
+        poolDetailsComponent,
+        'filterNonPoolData'
+      ).and.callThrough();
+
+      fixture.detectChanges();
+
+      expect(filterNonPoolDataSpy).toHaveBeenCalled();
     });
   });
 });

@@ -280,7 +280,7 @@ Optionally, the JSON blob can be sent to stdout for further inspection.
 
 Usage on all running OSDs::
 
-    ceph-voume simple scan
+    ceph-volume simple scan
 
 Usage on data devices::
 

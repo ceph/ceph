@@ -3,7 +3,7 @@
 #include "common/perf_counters.h"
 #include <seastar/core/sharded.hh>
 
-namespace ceph::common {
+namespace crimson::common {
 class PerfCountersCollection: public seastar::sharded<PerfCountersCollection>
 {
   using ShardedPerfCountersCollection = seastar::sharded<PerfCountersCollection>;

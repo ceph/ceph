@@ -3,7 +3,7 @@
 #include <seastar/util/log.hh>
 #include "common/subsys_types.h"
 
-namespace ceph {
+namespace crimson {
 seastar::logger& get_logger(int subsys);
 static inline seastar::log_level to_log_level(int level) {
   if (level < 0) {

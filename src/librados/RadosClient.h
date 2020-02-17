@@ -167,6 +167,8 @@ public:
   bool put();
   void blacklist_self(bool set);
 
+  std::string get_addrs() const;
+
   int service_daemon_register(
     const std::string& service,  ///< service name (e.g., 'rgw')
     const std::string& name,     ///< daemon name (e.g., 'gwfoo')

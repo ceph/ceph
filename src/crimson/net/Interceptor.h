@@ -10,7 +10,7 @@
 #include "Fwd.h"
 #include "msg/async/frames_v2.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 enum class custom_bp_t : uint8_t {
   BANNER_WRITE = 0,
@@ -162,4 +162,4 @@ struct Interceptor {
   virtual bp_action_t intercept(Connection& conn, Breakpoint bp) = 0;
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

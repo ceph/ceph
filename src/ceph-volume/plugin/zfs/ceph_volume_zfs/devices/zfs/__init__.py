@@ -1,2 +1,4 @@
 # -*- coding: utf-8 -*-
-from .main import ZFS
+
+import logging
+logger = logging.getLogger(__name__)

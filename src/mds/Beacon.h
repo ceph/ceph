@@ -66,7 +66,7 @@ public:
   void handle_mds_beacon(const cref_t<MMDSBeacon> &m);
   void send();
 
-  void set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState const newstate);
+  void set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState newstate);
   MDSMap::DaemonState get_want_state() const;
 
   /**

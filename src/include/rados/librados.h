@@ -1857,7 +1857,7 @@ typedef void (*rados_callback_t)(rados_completion_t cb, void *arg);
  *
  * @param cb_arg application-defined data passed to the callback functions
  * @param cb_complete the function to be called when the operation is
- * in memory on all relpicas
+ * in memory on all replicas
  * @param cb_safe the function to be called when the operation is on
  * stable storage on all replicas
  * @param pc where to store the completion
@@ -1867,6 +1867,23 @@ CEPH_RADOS_API int rados_aio_create_completion(void *cb_arg,
                                                rados_callback_t cb_complete,
                                                rados_callback_t cb_safe,
 				               rados_completion_t *pc);
+
+/**
+ * Constructs a completion to use with asynchronous operations
+ *
+ * The complete callback corresponds to operation being acked.
+ *
+ * @note BUG: this should check for ENOMEM instead of throwing an exception
+ *
+ * @param cb_arg application-defined data passed to the callback functions
+ * @param cb_complete the function to be called when the operation is committed
+ * on all replicas
+ * @param pc where to store the completion
+ * @returns 0
+ */
+CEPH_RADOS_API int rados_aio_create_completion2(void *cb_arg,
+						rados_callback_t cb_complete,
+						rados_completion_t *pc);
 
 /**
  * Block until an operation completes
@@ -1890,7 +1907,8 @@ CEPH_RADOS_API int rados_aio_wait_for_complete(rados_completion_t c);
  * @param c operation to wait for
  * @returns 0
  */
-CEPH_RADOS_API int rados_aio_wait_for_safe(rados_completion_t c);
+CEPH_RADOS_API int rados_aio_wait_for_safe(rados_completion_t c)
+  __attribute__((deprecated));
 
 /**
  * Has an asynchronous operation completed?
@@ -1936,7 +1954,8 @@ CEPH_RADOS_API int rados_aio_wait_for_complete_and_cb(rados_completion_t c);
  * @param c operation to wait for
  * @returns 0
  */
-CEPH_RADOS_API int rados_aio_wait_for_safe_and_cb(rados_completion_t c);
+CEPH_RADOS_API int rados_aio_wait_for_safe_and_cb(rados_completion_t c)
+  __attribute__((deprecated));
 
 /**
  * Has an asynchronous operation and callback completed
@@ -3646,6 +3665,15 @@ CEPH_RADOS_API int rados_break_lock(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
 				       char *client_address,
 				       uint32_t expire_seconds);
+
+/**
+ * Gets addresses of the RADOS session, suitable for blacklisting.
+ *
+ * @param cluster cluster handle
+ * @param addrs the output string.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_getaddrs(rados_t cluster, char** addrs);
 
 CEPH_RADOS_API void rados_set_osdmap_full_try(rados_ioctx_t io)
   __attribute__((deprecated));

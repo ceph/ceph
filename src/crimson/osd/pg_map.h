@@ -14,7 +14,7 @@
 #include "crimson/osd/pg.h"
 #include "osd/osd_types.h"
 
-namespace ceph::osd {
+namespace crimson::osd {
 class PG;
 
 class PGMap {

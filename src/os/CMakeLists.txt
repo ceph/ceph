@@ -13,6 +13,7 @@ set(libos_srcs
   filestore/IndexManager.cc
   filestore/LFNIndex.cc
   filestore/WBThrottle.cc
+  filestore/os_xattr.c
   memstore/MemStore.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
@@ -32,6 +33,8 @@ if(WITH_BLUESTORE)
     bluestore/FreelistManager.cc
     bluestore/StupidAllocator.cc
     bluestore/BitmapAllocator.cc
+    bluestore/AvlAllocator.cc
+    bluestore/io_uring.cc
   )
 endif(WITH_BLUESTORE)
 
@@ -129,3 +132,29 @@ endif()
 if(WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)
 endif()
+
+if(WITH_LIBURING)
+  include(ExternalProject)
+  if("${CMAKE_GENERATOR}" MATCHES "Make")
+    set(make_cmd "$(MAKE)")
+  else()
+    set(make_cmd "make")
+  endif()
+  ExternalProject_Add(liburing_ext
+    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
+    GIT_REPOSITORY http://git.kernel.dk/liburing
+    GIT_TAG "4e360f71131918c36774f51688e5c65dea8d43f2"
+    SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
+    CONFIGURE_COMMAND <SOURCE_DIR>/configure
+    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} ${make_cmd} -C src -s
+    BUILD_IN_SOURCE 1
+    INSTALL_COMMAND "")
+  unset(make_cmd)
+  add_library(liburing STATIC IMPORTED GLOBAL)
+  add_dependencies(liburing liburing_ext)
+  set_target_properties(liburing PROPERTIES
+    IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/liburing/src/liburing.a")
+  target_link_libraries(os liburing)
+  target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/liburing/src/include")
+endif(WITH_LIBURING)

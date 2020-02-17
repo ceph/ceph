@@ -62,6 +62,7 @@ class Device(object):
         'available',
         'path',
         'sys_api',
+        'device_id',
     ]
     pretty_report_sys_fields = [
         'human_readable_size',
@@ -388,6 +389,9 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
+        # reject disks small than 5GB
+        if int(self.sys_api.get('size', 0)) < 5368709120:
+            rejected.append('Insufficient space (<5GB)')
         if self.is_ceph_disk_member:
             rejected.append("Used by ceph-disk")
 

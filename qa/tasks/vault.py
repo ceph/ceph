@@ -6,9 +6,10 @@ import argparse
 import contextlib
 import logging
 import time
-
 import httplib
 import json
+from os import path
+from urlparse import urljoin
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -25,7 +26,7 @@ def assign_ports(ctx, config, initial_port):
     """
     port = initial_port
     role_endpoints = {}
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for remote, roles_for_host in ctx.cluster.remotes.items():
         for role in roles_for_host:
             if role in config:
                 role_endpoints[role] = (remote.name.split('@')[1], port)
@@ -45,24 +46,27 @@ def download(ctx, config):
     testdir = teuthology.get_testdir(ctx)
 
     for (client, cconf) in config.items():
-        vault_version = cconf.get('version', '1.2.2')
+        install_url = cconf.get('install_url')
+        install_sha256 = cconf.get('install_sha256')
+        if not install_url or not install_sha256:
+            raise ConfigError("Missing Vault install_url and/or install_sha256")
+        install_zip = path.join(testdir, 'vault.zip')
+        install_dir = path.join(testdir, 'vault')
 
+        log.info('Downloading Vault...')
         ctx.cluster.only(client).run(
-            args=['mkdir', '-p', '{tdir}/vault'.format(tdir=testdir)])
+            args=['curl', '-L', install_url, '-o', install_zip])
 
-        cmd = [
-            'curl', '-L',
-            'https://releases.hashicorp.com/vault/{version}/vault_{version}_linux_amd64.zip'.format(version=vault_version), '-o',
-            '{tdir}/vault_{version}.zip'.format(tdir=testdir, version=vault_version)
-        ]
-        ctx.cluster.only(client).run(args=cmd)
+        log.info('Verifying SHA256 signature...')
+        ctx.cluster.only(client).run(
+            args=['echo', ' '.join([install_sha256, install_zip]), run.Raw('|'),
+                  'sha256sum', '--check', '--status'])
 
         log.info('Extracting vault...')
+        ctx.cluster.only(client).run(args=['mkdir', '-p', install_dir])
         # Using python in case unzip is not installed on hosts
-        cmd = ['python', '-m', 'zipfile', '-e',
-               '{tdir}/vault_{version}.zip'.format(tdir=testdir, version=vault_version),
-               '{tdir}/vault'.format(tdir=testdir)]
-        ctx.cluster.only(client).run(args=cmd)
+        ctx.cluster.only(client).run(
+            args=['python', '-m', 'zipfile', '-e', install_zip, install_dir])
 
     try:
         yield
@@ -71,13 +75,7 @@ def download(ctx, config):
         testdir = teuthology.get_testdir(ctx)
         for client in config:
             ctx.cluster.only(client).run(
-                args=[
-                    'rm',
-                    '-rf',
-                    '{tdir}/vault_{version}.zip'.format(tdir=testdir, version=vault_version),
-                    '{tdir}/vault'.format(tdir=testdir),
-                    ],
-                )
+                args=['rm', '-rf', install_dir, install_zip])
 
 
 def get_vault_dir(ctx):
@@ -128,19 +126,30 @@ def run_vault(ctx, config):
 @contextlib.contextmanager
 def setup_vault(ctx, config):
     """
-    Mount simple kv Secret Engine
-    Note: this will be extended to support transit secret engine
+    Mount Transit or KV version 2 secrets engine
     """
-    data = {
-        "type": "kv",
-        "options": {
-            "version": "2"
-        }
-    }
-
     (cclient, cconfig) = config.items()[0]
-    log.info('Mount kv version 2 secret engine')
-    send_req(ctx, cconfig, cclient, '/v1/sys/mounts/kv', json.dumps(data))
+    engine = cconfig.get('engine')
+
+    if engine == 'kv':
+        log.info('Mounting kv version 2 secrets engine')
+        mount_path = '/v1/sys/mounts/kv'
+        data = {
+            "type": "kv",
+            "options": {
+                "version": "2"
+            }
+        }
+    elif engine == 'transit':
+        log.info('Mounting transit secrets engine')
+        mount_path = '/v1/sys/mounts/transit'
+        data = {
+            "type": "transit"
+        }
+    else:
+        raise Exception("Unknown or missing secrets engine")
+
+    send_req(ctx, cconfig, cclient, mount_path, json.dumps(data))
     yield
 
 
@@ -148,36 +157,46 @@ def send_req(ctx, cconfig, client, path, body, method='POST'):
     host, port = ctx.vault.endpoints[client]
     req = httplib.HTTPConnection(host, port, timeout=30)
     token = cconfig.get('root_token', 'atoken')
-    log.info("Send request to Vault: %s:%s with token: %s", host, port, token)
+    log.info("Send request to Vault: %s:%s at %s with token: %s", host, port, path, token)
     headers = {'X-Vault-Token': token}
     req.request(method, path, headers=headers, body=body)
     resp = req.getresponse()
     log.info(resp.read())
     if not (resp.status >= 200 and resp.status < 300):
-        raise Exception("Error Contacting Vault Server")
+        raise Exception("Request to Vault server failed with status %d" % resp.status)
     return resp
 
 
 @contextlib.contextmanager
 def create_secrets(ctx, config):
     (cclient, cconfig) = config.items()[0]
+    engine = cconfig.get('engine')
+    prefix = cconfig.get('prefix')
     secrets = cconfig.get('secrets')
     if secrets is None:
         raise ConfigError("No secrets specified, please specify some.")
 
     for secret in secrets:
         try:
-            data = {
-                "data": {
-                    "key": secret['secret']
+            path = secret['path']
+        except KeyError:
+            raise ConfigError('Missing "path" field in secret')
+
+        if engine == 'kv':
+            try:
+                data = {
+                    "data": {
+                        "key": secret['secret']
+                    }
                 }
-            }
-        except KeyError:
-            raise ConfigError('vault.secrets must have "secret" field')
-        try:
-            send_req(ctx, cconfig, cclient, secret['path'], json.dumps(data))
-        except KeyError:
-            raise ConfigError('vault.secrets must have "path" field')
+            except KeyError:
+                raise ConfigError('Missing "secret" field in secret')
+        elif engine == 'transit':
+            data = {"exportable": "true"}
+        else:
+            raise Exception("Unknown or missing secrets engine")
+
+        send_req(ctx, cconfig, cclient, urljoin(prefix, path), json.dumps(data))
 
     log.info("secrets created")
     yield
@@ -195,6 +214,8 @@ def task(ctx, config):
         client.0:
           version: 1.2.2
           root_token: test_root_token
+          engine: kv
+          prefix: /v1/kv/data/
           secrets:
             - path: kv/teuthology/key_a
               secret: YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
@@ -220,6 +241,8 @@ def task(ctx, config):
     ctx.vault = argparse.Namespace()
     ctx.vault.endpoints = assign_ports(ctx, config, 8200)
     ctx.vault.root_token = None
+    ctx.vault.prefix = config[client].get('prefix')
+    ctx.vault.engine = config[client].get('engine')
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),

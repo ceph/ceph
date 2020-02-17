@@ -15,7 +15,7 @@
 #include "crimson/net/Fwd.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
-#include "osd/osd_internal_types.h"
+#include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
 
 #include "crimson/common/type_helpers.h"
@@ -34,15 +34,15 @@ namespace recovery {
   class Context;
 }
 
-namespace ceph::net {
+namespace crimson::net {
   class Messenger;
 }
 
-namespace ceph::os {
+namespace crimson::os {
   class FuturizedStore;
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 class ClientRequest;
 
 class PG : public boost::intrusive_ref_counter<
@@ -61,12 +61,12 @@ class PG : public boost::intrusive_ref_counter<
   spg_t pgid;
   pg_shard_t pg_whoami;
   coll_t coll;
-  ceph::os::CollectionRef coll_ref;
+  crimson::os::CollectionRef coll_ref;
   ghobject_t pgmeta_oid;
 public:
   PG(spg_t pgid,
      pg_shard_t pg_shard,
-     ceph::os::CollectionRef coll_ref,
+     crimson::os::CollectionRef coll_ref,
      pg_pool_t&& pool,
      std::string&& name,
      cached_map_t osdmap,
@@ -106,7 +106,7 @@ public:
     return ceph_subsys_osd;
   }
 
-  ceph::os::CollectionRef get_collection_ref() {
+  crimson::os::CollectionRef get_collection_ref() {
     return coll_ref;
   }
 
@@ -119,7 +119,7 @@ public:
     bool dirty_info,
     bool dirty_big_info,
     bool need_write_epoch,
-    ObjectStore::Transaction &t) final {
+    ceph::os::Transaction &t) final {
     std::map<string,bufferlist> km;
     if (dirty_big_info || dirty_info) {
       int ret = prepare_info_keymap(
@@ -168,7 +168,7 @@ public:
   bool try_flush_or_schedule_async() final;
 
   void start_flush_on_transaction(
-    ObjectStore::Transaction &t) final {
+    ceph::os::Transaction &t) final {
     t.register_on_commit(
       new LambdaContext([this](int r){
 	peering_state.complete_flush();
@@ -213,7 +213,7 @@ public:
   }
 
   void schedule_event_on_commit(
-    ObjectStore::Transaction &t,
+    ceph::os::Transaction &t,
     PGPeeringEventRef on_commit) final {
     t.register_on_commit(
       new LambdaContext(
@@ -268,7 +268,7 @@ public:
   void on_role_change() final {
     // Not needed yet
   }
-  void on_change(ObjectStore::Transaction &t) final {
+  void on_change(ceph::os::Transaction &t) final {
     // Not needed yet
   }
   void on_activate(interval_set<snapid_t> to_trim) final;
@@ -287,10 +287,10 @@ public:
     // Not needed yet
   }
 
-  void on_removal(ObjectStore::Transaction &t) final {
+  void on_removal(ceph::os::Transaction &t) final {
     // TODO
   }
-  void do_delete_work(ObjectStore::Transaction &t) final {
+  void do_delete_work(ceph::os::Transaction &t) final {
     // TODO
   }
 
@@ -332,8 +332,8 @@ public:
 
   struct PGLogEntryHandler : public PGLog::LogEntryHandler {
     PG *pg;
-    ObjectStore::Transaction *t;
-    PGLogEntryHandler(PG *pg, ObjectStore::Transaction *t) : pg(pg), t(t) {}
+    ceph::os::Transaction *t;
+    PGLogEntryHandler(PG *pg, ceph::os::Transaction *t) : pg(pg), t(t) {}
 
     // LogEntryHandler
     void remove(const hobject_t &hoid) override {
@@ -353,7 +353,7 @@ public:
     }
   };
   PGLog::LogEntryHandlerRef get_log_handler(
-    ObjectStore::Transaction &t) final {
+    ceph::os::Transaction &t) final {
     return std::make_unique<PG::PGLogEntryHandler>(this, &t);
   }
 
@@ -416,7 +416,7 @@ public:
 
   /// initialize created PG
   void init(
-    ceph::os::CollectionRef coll_ref,
+    crimson::os::CollectionRef coll_ref,
     int role,
     const std::vector<int>& up,
     int up_primary,
@@ -425,9 +425,9 @@ public:
     const pg_history_t& history,
     const PastIntervals& pim,
     bool backfill,
-    ObjectStore::Transaction &t);
+    ceph::os::Transaction &t);
 
-  seastar::future<> read_state(ceph::os::FuturizedStore* store);
+  seastar::future<> read_state(crimson::os::FuturizedStore* store);
 
   void do_peering_event(
     PGPeeringEvent& evt, PeeringCtx &rctx);
@@ -435,10 +435,48 @@ public:
   void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rctx);
-  seastar::future<> handle_op(ceph::net::Connection* conn,
-			      Ref<MOSDOp> m);
+
+  static std::pair<hobject_t, RWState::State> get_oid_and_lock(
+    const MOSDOp &m,
+    const OpInfo &op_info);
+  static std::optional<hobject_t> resolve_oid(
+    const SnapSet &snapset,
+    const hobject_t &oid);
+
+  using load_obc_ertr = crimson::errorator<
+    crimson::ct_error::object_corrupted>;
+  load_obc_ertr::future<
+    std::pair<crimson::osd::ObjectContextRef, bool>>
+  get_or_load_clone_obc(
+    hobject_t oid, crimson::osd::ObjectContextRef head_obc);
+
+  load_obc_ertr::future<
+    std::pair<crimson::osd::ObjectContextRef, bool>>
+  get_or_load_head_obc(hobject_t oid);
+
+  load_obc_ertr::future<ObjectContextRef> get_locked_obc(
+    Operation *op,
+    const hobject_t &oid,
+    RWState::State type);
+public:
+  template <typename F>
+  auto with_locked_obc(
+    Ref<MOSDOp> &m,
+    const OpInfo &op_info,
+    Operation *op,
+    F &&f) {
+    auto [oid, type] = get_oid_and_lock(*m, op_info);
+    return get_locked_obc(op, oid, type)
+      .safe_then([this, f=std::forward<F>(f), type](auto obc) {
+	return f(obc).finally([this, obc, type] {
+	  obc->put_lock_type(type);
+	  return load_obc_ertr::now();
+	});
+      });
+  }
+
   seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
-  void handle_rep_op_reply(ceph::net::Connection* conn,
+  void handle_rep_op_reply(crimson::net::Connection* conn,
 			   const MOSDRepOpReply& m);
 
   void print(std::ostream& os) const;
@@ -447,7 +485,9 @@ private:
   void do_peering_event(
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
-  seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
+  seastar::future<Ref<MOSDOpReply>> do_osd_ops(
+    Ref<MOSDOp> m,
+    ObjectContextRef obc);
   seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,
@@ -456,7 +496,7 @@ private:
   seastar::future<ceph::bufferlist> do_pgnls(ceph::bufferlist& indata,
 					     const std::string& nspace,
 					     uint64_t limit);
-  seastar::future<> submit_transaction(boost::local_shared_ptr<ObjectState>&& os,
+  seastar::future<> submit_transaction(ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
 				       const MOSDOp& req);
 
@@ -465,13 +505,32 @@ private:
   ShardServices &shard_services;
 
   cached_map_t osdmap;
+
+public:
+  cached_map_t get_osdmap() { return osdmap; }
+
+private:
   std::unique_ptr<PGBackend> backend;
 
   PeeringState peering_state;
   eversion_t projected_last_update;
 
-  seastar::shared_promise<> active_promise;
-  seastar::future<> wait_for_active();
+  class WaitForActiveBlocker : public BlockerT<WaitForActiveBlocker> {
+    PG *pg;
+
+    const spg_t pgid;
+    seastar::shared_promise<> p;
+
+  protected:
+    void dump_detail(Formatter *f) const;
+
+  public:
+    static constexpr const char *type_name = "WaitForActiveBlocker";
+
+    WaitForActiveBlocker(PG *pg) : pg(pg) {}
+    void on_active();
+    blocking_future<> wait();
+  } wait_for_active_blocker;
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;

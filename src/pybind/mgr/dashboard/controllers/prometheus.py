@@ -13,7 +13,9 @@ from ..exceptions import DashboardException
 
 @Controller('/api/prometheus_receiver', secure=False)
 class PrometheusReceiver(BaseController):
-    ''' The receiver is needed in order to receive alert notifications (reports) '''
+    """
+    The receiver is needed in order to receive alert notifications (reports)
+    """
     notifications = []
 
     @Endpoint('POST', path='/')
@@ -56,12 +58,7 @@ class Prometheus(PrometheusRESTController):
 
     @RESTController.Collection(method='GET')
     def rules(self, **params):
-        data = self.prometheus_proxy('GET', '/rules', params)
-        configs = data['groups']
-        rules = []
-        for config in configs:
-            rules += config['rules']
-        return rules
+        return self.prometheus_proxy('GET', '/rules', params)
 
     @RESTController.Collection(method='GET', path='/silences')
     def get_silences(self, **params):

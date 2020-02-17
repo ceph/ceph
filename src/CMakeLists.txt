@@ -67,6 +67,11 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-varargs")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-designator")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces -Wno-parentheses -Wno-deprecated-register")
+  if(FREEBSD)
+    # Need to use the GNU binutils linker to get versioning right.
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
+  endif()
   if(APPLE)
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -undefined dynamic_lookup")
   endif()
@@ -151,8 +156,8 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
 endif()
 
 set(EXTRALIBS ${CMAKE_DL_LIBS})
-if(NOT APPLE)
-  list(APPEND EXTRALIBS rt)
+if(HAVE_POSIX_TIMERS)
+  list(APPEND EXTRALIBS ${RT_LIBRARY})
 endif()
 if(LINUX OR APPLE)
   set(LIB_RESOLV resolv)
@@ -176,7 +181,9 @@ set(GCOV_PREFIX_STRIP 4)
 option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
 if(${ENABLE_GIT_VERSION})
   get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
-  git_describe(CEPH_GIT_NICE_VER --always)
+  git_describe(CEPH_GIT_NICE_VER_WITH_V --always)
+  # remove leading 'v'
+  string(SUBSTRING ${CEPH_GIT_NICE_VER_WITH_V} 1 -1 CEPH_GIT_NICE_VER)
   #if building from a source tarball via make-dist
   if(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
     message(STATUS "Ceph/.git directory not found, parsing ${CMAKE_CURRENT_SOURCE_DIR}/.git_version for CEPH_GIT_VER and CEPH_GIT_NICE_VER")
@@ -211,42 +218,9 @@ if(WITH_CEPHFS_JAVA)
 endif()
 
 # Python stuff
-option(WITH_PYTHON2 "build python2 bindings" ON)
+option(WITH_PYTHON2 "build python2 bindings" OFF)
 if(WITH_PYTHON2)
-  find_package(Python2 REQUIRED
-    COMPONENTS Interpreter Development)
-endif()
-
-set(WITH_PYTHON3 "OFF" CACHE STRING "build python3 bindings with specified python3 version")
-if(WITH_PYTHON3)
-  if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
-    set(WITH_PYTHON3 "3")
-  endif()
-  if(NOT WITH_PYTHON3 STREQUAL "3")
-    set(find_python3_exact "EXACT")
-  endif()
-  find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
-    COMPONENTS Interpreter Development)
-  unset(find_python3_exact)
-endif()
-
-# the major version of the python bindings as a dependency of other
-# targets
-if(WITH_PYTHON2)
-  set(PY_BINDING_INFIX 2)
-else()
-  set(PY_BINDING_INFIX 3)
-endif()
-# use python2 by default for python bindings, tools and tests, before
-# switching to python3
-# Python_EXECUTABLE` can be set by `find_package(Python ...)` also. and we do
-# call `find_package(Python ...)` in `ceph/CMakeLists.txt`. but we do so before
-# `add_subdirectory(src)` where `Python_EXECUTABLE` is set. so it's safe to
-# use this variable name and call `find_package(Python ...)`.
-if(WITH_PYTHON2)
-  set(Python_EXECUTABLE ${Python2_EXECUTABLE})
-else()
-  set(Python_EXECUTABLE ${Python3_EXECUTABLE})
+  message(FATAL_ERROR "Python 2 is not supported anymore")
 endif()
 
 # sort out which allocator to use
@@ -286,9 +260,12 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 find_package(fmt 5.2.1 QUIET)
-if(NOT fmt_FOUND)
+if(fmt_FOUND)
+  include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
+else()
   message(STATUS "Could not find fmt, will build it")
   add_subdirectory(fmt)
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 
 if(WITH_SEASTAR)
@@ -305,6 +282,13 @@ if(WITH_SEASTAR)
   endmacro ()
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
+  if(Seastar_DPDK)
+    find_package(dpdk QUIET)
+    if(NOT DPDK_FOUND)
+      include(BuildDPDK)
+      build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
+    endif()
+  endif()
   set(Seastar_CXX_FLAGS "-Wno-error;-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
@@ -332,6 +316,8 @@ set(libcommon_files
   osd/osd_types.cc
   osd/PGPeeringEvent.cc
   osd/OpRequest.cc
+  osd/ClassHandler.cc
+  osd/osd_op_util.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   librbd/Features.cc
@@ -368,6 +354,7 @@ set(ceph_common_deps
   Boost::date_time
   Boost::iostreams
   StdFilesystem::filesystem
+  fmt::fmt
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
@@ -399,9 +386,14 @@ if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()
 
-if(WITH_BLUESTORE_PMEM)
+if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
   if(WITH_SYSTEM_PMDK)
-    find_package(pmem REQUIRED)
+    if(WITH_BLUESTORE_PMEM)
+      find_package(pmem REQUIRED COMPONENTS pmem)
+    endif()
+    if(WITH_RBD_RWL)
+      find_package(pmem REQUIRED COMPONENTS pmemobj)
+    endif()
   else()
     include(Buildpmem)
     build_pmem()
@@ -415,7 +407,7 @@ add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
-  SOVERSION 0
+  SOVERSION 2
   SKIP_RPATH TRUE)
 if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
@@ -466,14 +458,12 @@ if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
-if(WITH_MGR)
-  add_subdirectory(mgr)
-endif()
+add_subdirectory(mgr)
 
 set(librados_config_srcs
   librados-config.cc)
 add_executable(librados-config ${librados_config_srcs})
-target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+target_link_libraries(librados-config librados Boost::program_options)
 
 install(TARGETS librados-config DESTINATION bin)
 
@@ -486,6 +476,7 @@ endif()
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(python-common)
+add_subdirectory(cephadm)
 
 # Monitor
 add_subdirectory(mon)
@@ -683,7 +674,7 @@ if(WITH_FUSE)
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
   target_link_libraries(ceph-fuse ${FUSE_LIBRARIES}
-    ${GSSAPI_LIBRARIES} client ceph-common global-static)
+    ${GSSAPI_LIBRARIES} client ceph-common global-static ${EXTRALIBS})
   set_target_properties(ceph-fuse PROPERTIES
     COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
@@ -763,17 +754,17 @@ add_custom_target(vstart-base DEPENDS
     monmaptool
     crushtool
     rados
-    cython${PY_BINDING_INFIX}_rados)
+    cython_rados)
 if (WITH_MGR)
   add_dependencies(vstart-base ceph-mgr)
 endif()
 
 add_custom_target(vstart DEPENDS vstart-base)
-if (WITH_RBD)
-  add_dependencies(vstart cython${PY_BINDING_INFIX}_rbd)
+if(WITH_RBD)
+  add_dependencies(vstart cython_rbd)
 endif()
 if (WITH_CEPHFS)
-  add_dependencies(vstart ceph-mds cephfs cython${PY_BINDING_INFIX}_cephfs)
+  add_dependencies(vstart ceph-mds cephfs cython_cephfs)
 endif()
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
@@ -795,7 +786,7 @@ endif()
 add_custom_target(cephfs_testing DEPENDS
     vstart
     rados
-    cython${PY_BINDING_INFIX}_modules
+    cython_modules
     cephfs
     cls_cephfs
     ceph-fuse

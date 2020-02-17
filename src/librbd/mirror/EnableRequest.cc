@@ -23,9 +23,11 @@ using util::create_rados_callback;
 template <typename I>
 EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
                                 const std::string &image_id,
+                                mirror_image_mode_t mode,
                                 const std::string &non_primary_global_image_id,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_io_ctx(io_ctx), m_image_id(image_id),
+    m_mode(static_cast<cls::rbd::MirrorImageMode>(mode)),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish),
     m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())) {
@@ -62,7 +64,10 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   }
 
   if (*result == 0) {
-    if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    if (m_mirror_image.mode != m_mode) {
+      lderr(m_cct) << "invalid current image mirror mode" << dendl;
+      *result = -EINVAL;
+    } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
       ldout(m_cct, 10) << this << " " << __func__
                        << ": mirroring is already enabled" << dendl;
     } else {
@@ -79,7 +84,7 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   }
 
   *result = 0;
-  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+  m_mirror_image.mode = m_mode;
   if (m_non_primary_global_image_id.empty()) {
     uuid_d uuid_gen;
     uuid_gen.generate_random();
@@ -87,6 +92,7 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   } else {
     m_mirror_image.global_image_id = m_non_primary_global_image_id;
   }
+  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
 
   send_get_tag_owner();
   return nullptr;
@@ -94,7 +100,8 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
 
 template <typename I>
 void EnableRequest<I>::send_get_tag_owner() {
-  if (!m_non_primary_global_image_id.empty()) {
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
+      !m_non_primary_global_image_id.empty()) {
     send_set_mirror_image();
     return;
   }
@@ -166,8 +173,7 @@ void EnableRequest<I>::send_notify_mirroring_watcher() {
     klass, &klass::handle_notify_mirroring_watcher>(this);
 
   MirroringWatcher<>::notify_image_updated(m_io_ctx,
-                                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-                                           m_image_id,
+                                           m_mirror_image.state, m_image_id,
                                            m_mirror_image.global_image_id, ctx);
 }
 

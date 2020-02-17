@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-from . import ApiController, RESTController, UpdatePermission
-from .. import mgr, logger
+import json
+import logging
+from . import ApiController, RESTController, Endpoint, ReadPermission, UpdatePermission
+from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_send_command_error
@@ -10,6 +12,9 @@ try:
     from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
+
+
+logger = logging.getLogger('controllers.osd')
 
 
 @ApiController('/osd', Scope.OSD)
@@ -57,6 +62,7 @@ class Osd(RESTController):
         def add_id(osd):
             osd['id'] = osd['osd']
             return osd
+
         resp = {
             osd['osd']: add_id(osd)
             for osd in mgr.get('osd_map')['osds'] if svc_id is None or osd['osd'] == int(svc_id)
@@ -64,28 +70,13 @@ class Osd(RESTController):
         return resp if svc_id is None else resp[int(svc_id)]
 
     @staticmethod
-    def _get_smart_data(svc_id):
+    def _get_smart_data(osd_id):
         # type: (str) -> dict
-        """
-        Returns S.M.A.R.T data for the given OSD ID.
-        :type svc_id: Numeric ID of the OSD
-        """
-        devices = CephService.send_command(
-            'mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
-        smart_data = {}
-        for dev_id in [d['devid'] for d in devices]:
-            if dev_id not in smart_data:
-                dev_smart_data = mgr.remote('devicehealth', 'do_scrape_daemon', 'osd', svc_id,
-                                            dev_id)
-                for _, dev_data in dev_smart_data.items():
-                    if 'error' in dev_data:
-                        logger.warning('[OSD] Error retrieving smartctl data for device ID %s: %s',
-                                       dev_id, dev_smart_data)
-                smart_data.update(dev_smart_data)
-        return smart_data
+        """Returns S.M.A.R.T data for the given OSD ID."""
+        return CephService.get_smart_data_by_daemon('osd', osd_id)
 
     @RESTController.Resource('GET')
-    def get_smart_data(self, svc_id):
+    def smart(self, svc_id):
         # type: (str) -> dict
         return self._get_smart_data(svc_id)
 
@@ -111,6 +102,19 @@ class Osd(RESTController):
             'osd_metadata': mgr.get_metadata('osd', svc_id),
             'histogram': histogram,
         }
+
+    def set(self, svc_id, device_class):
+        old_device_class = CephService.send_command('mon', 'osd crush get-device-class',
+                                                    ids=[svc_id])
+        old_device_class = old_device_class[0]['device_class']
+        if old_device_class != device_class:
+            CephService.send_command('mon', 'osd crush rm-device-class',
+                                     ids=[svc_id])
+            if device_class:
+                CephService.send_command('mon', 'osd crush set-device-class', **{
+                    'class': device_class,
+                    'ids': [svc_id]
+                })
 
     @RESTController.Resource('POST', query_params=['deep'])
     @UpdatePermission
@@ -196,18 +200,23 @@ class Osd(RESTController):
         CephService.send_command(
             'mon', 'osd destroy-actual', id=int(svc_id), yes_i_really_mean_it=True)
 
-    @RESTController.Resource('GET')
-    def safe_to_destroy(self, svc_id):
+    @Endpoint('GET', query_params=['ids'])
+    @ReadPermission
+    def safe_to_destroy(self, ids):
         """
-        :type svc_id: int|[int]
+        :type ids: int|[int]
         """
-        if not isinstance(svc_id, list):
-            svc_id = [svc_id]
-        svc_id = list(map(str, svc_id))
+
+        ids = json.loads(ids)
+        if isinstance(ids, list):
+            ids = list(map(str, ids))
+        else:
+            ids = [str(ids)]
+
         try:
             result = CephService.send_command(
-                'mon', 'osd safe-to-destroy', ids=svc_id, target=('mgr', ''))
-            result['is_safe_to_destroy'] = set(result['safe_to_destroy']) == set(map(int, svc_id))
+                'mon', 'osd safe-to-destroy', ids=ids, target=('mgr', ''))
+            result['is_safe_to_destroy'] = set(result['safe_to_destroy']) == set(map(int, ids))
             return result
 
         except SendCommandError as e:
@@ -215,6 +224,11 @@ class Osd(RESTController):
                 'message': str(e),
                 'is_safe_to_destroy': False,
             }
+
+    @RESTController.Resource('GET')
+    def devices(self, svc_id):
+        # (str) -> dict
+        return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
 
 
 @ApiController('/osd/flags', Scope.OSD)

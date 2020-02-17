@@ -5,7 +5,8 @@
             class="btn btn-{{btnColor}}"
             [ngClass]="{'disabled': disableSelectionAction(action)}"
             (click)="useClickAction(action)"
-            [routerLink]="useRouterLink(action)">
+            [routerLink]="useRouterLink(action)"
+            [preserveFragment]="action.preserveFragment ? '' : null">
       <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
     </button>
   </ng-container>
@@ -23,10 +24,12 @@
     <ng-container *ngFor="let action of dropDownActions">
       <li role="menuitem"
           class="{{ toClassName(action['name']) }}"
-          data-toggle="tooltip" title="{{ useDisableDesc(action) }}">
+          data-toggle="tooltip"
+          title="{{ useDisableDesc(action) }}">
         <a class="dropdown-item"
            (click)="useClickAction(action)"
            [routerLink]="useRouterLink(action)"
+           [preserveFragment]="action.preserveFragment ? '' : null"
            [ngClass]="{'disabled': disableSelectionAction(action)}">
           <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
         </a>

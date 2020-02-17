@@ -3,6 +3,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
 
@@ -12,8 +13,6 @@ import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
   styleUrls: ['./iscsi.component.scss']
 })
 export class IscsiComponent implements OnInit {
-  @ViewChild('statusColorTpl', { static: true })
-  statusColorTpl: TemplateRef<any>;
   @ViewChild('iscsiSparklineTpl', { static: true })
   iscsiSparklineTpl: TemplateRef<any>;
   @ViewChild('iscsiPerSecondTpl', { static: true })
@@ -42,7 +41,14 @@ export class IscsiComponent implements OnInit {
       {
         name: this.i18n('State'),
         prop: 'state',
-        cellTemplate: this.statusColorTpl
+        flexGrow: 1,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            up: { class: 'badge-success' },
+            down: { class: 'badge-danger' }
+          }
+        }
       },
       {
         name: this.i18n('# Targets'),

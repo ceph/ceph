@@ -11,14 +11,14 @@
 #include "mon/MgrMap.h"
 
 template<typename Message> using Ref = boost::intrusive_ptr<Message>;
-namespace ceph::net {
+namespace crimson::net {
   class Messenger;
 }
 
 class MMgrMap;
 class MMgrConfigure;
 
-namespace ceph::mgr
+namespace crimson::mgr
 {
 
 // implement WithStats if you want to report stats to mgr periodically
@@ -30,28 +30,28 @@ public:
   virtual ~WithStats() {}
 };
 
-class Client : public ceph::net::Dispatcher {
+class Client : public crimson::net::Dispatcher {
 public:
-  Client(ceph::net::Messenger& msgr,
+  Client(crimson::net::Messenger& msgr,
 	 WithStats& with_stats);
   seastar::future<> start();
   seastar::future<> stop();
 private:
-  seastar::future<> ms_dispatch(ceph::net::Connection* conn,
+  seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				Ref<Message> m) override;
-  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
-  seastar::future<> handle_mgr_map(ceph::net::Connection* conn,
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  seastar::future<> handle_mgr_map(crimson::net::Connection* conn,
 				   Ref<MMgrMap> m);
-  seastar::future<> handle_mgr_conf(ceph::net::Connection* conn,
+  seastar::future<> handle_mgr_conf(crimson::net::Connection* conn,
 				    Ref<MMgrConfigure> m);
   seastar::future<> reconnect();
   void report();
 
 private:
   MgrMap mgrmap;
-  ceph::net::Messenger& msgr;
+  crimson::net::Messenger& msgr;
   WithStats& with_stats;
-  ceph::net::ConnectionRef conn;
+  crimson::net::ConnectionRef conn;
   std::chrono::seconds report_period{0};
   seastar::timer<seastar::lowres_clock> report_timer;
   seastar::gate gate;

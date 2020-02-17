@@ -1,4 +1,11 @@
 overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: barbican
+        rgw keystone barbican tenant: rgwcrypt
+        rgw keystone barbican user: rgwcrypt-user
+        rgw keystone barbican password: rgwcrypt-pass
   rgw:
     client.0:
       use-keystone-role: client.0

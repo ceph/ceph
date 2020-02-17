@@ -327,7 +327,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                     if osdid not in pgs:
                         continue
 
-                    for pg, JSON in db[basename]["pg2json"].iteritems():
+                    for pg, JSON in db[basename]["pg2json"].items():
                         if pg in pgs[osdid]:
                             cmd = ((prefix + "--pgid {pg}").
                                    format(id=osdid, pg=pg).split())
@@ -419,7 +419,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                 if osdid not in pgs:
                     continue
 
-                for pg, JSON in db[basename]["pg2json"].iteritems():
+                for pg, JSON in db[basename]["pg2json"].items():
                     if pg in pgs[osdid]:
                         cmd = ((prefix + "--pgid {pg}").
                                format(id=osdid, pg=pg).split())

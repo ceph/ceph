@@ -1,4 +1,6 @@
 overrides:
-  rgw:
-    client.0:
-      use-testing-role: client.0
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: testing
+        rgw crypt s3 kms encryption_keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=

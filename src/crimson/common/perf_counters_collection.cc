@@ -1,6 +1,6 @@
 #include "perf_counters_collection.h"
 
-namespace ceph::common {
+namespace crimson::common {
 PerfCountersCollection::PerfCountersCollection()
 {
   perf_collection = std::make_unique<PerfCountersCollectionImpl>();

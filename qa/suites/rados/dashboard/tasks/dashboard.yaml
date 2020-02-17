@@ -1,0 +1,54 @@
+
+tasks:
+  - install:
+  - ceph:
+      # tests may leave mgrs broken, so don't try and call into them
+      # to invoke e.g. pg dump during teardown.
+      wait-for-scrub: false
+      log-whitelist:
+        - overall HEALTH_
+        - \(MGR_DOWN\)
+        - \(PG_
+        - replacing it with standby
+        - No standby daemons available
+        - \(FS_DEGRADED\)
+        - \(MDS_FAILED\)
+        - \(MDS_DEGRADED\)
+        - \(FS_WITH_FAILED_MDS\)
+        - \(MDS_DAMAGE\)
+        - \(MDS_ALL_DOWN\)
+        - \(MDS_UP_LESS_THAN_MAX\)
+        - \(OSD_DOWN\)
+        - \(OSD_HOST_DOWN\)
+        - \(POOL_APP_NOT_ENABLED\)
+        - \(OSDMAP_FLAGS\)
+        - pauserd,pausewr flag\(s\) set
+        - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
+        - evicting unresponsive client .+
+  - rgw: [client.0]
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.mgr.test_dashboard
+        - tasks.mgr.dashboard.test_auth
+        - tasks.mgr.dashboard.test_cephfs
+        - tasks.mgr.dashboard.test_cluster_configuration
+        - tasks.mgr.dashboard.test_erasure_code_profile
+        - tasks.mgr.dashboard.test_ganesha
+        - tasks.mgr.dashboard.test_health
+        - tasks.mgr.dashboard.test_host
+        - tasks.mgr.dashboard.test_logs
+        - tasks.mgr.dashboard.test_mgr_module
+        - tasks.mgr.dashboard.test_monitor
+        - tasks.mgr.dashboard.test_orchestrator
+        - tasks.mgr.dashboard.test_osd
+        - tasks.mgr.dashboard.test_perf_counters
+        - tasks.mgr.dashboard.test_pool
+        - tasks.mgr.dashboard.test_rbd
+        - tasks.mgr.dashboard.test_rbd_mirroring
+        - tasks.mgr.dashboard.test_requests
+        - tasks.mgr.dashboard.test_rgw
+        - tasks.mgr.dashboard.test_role
+        - tasks.mgr.dashboard.test_settings
+        - tasks.mgr.dashboard.test_summary
+        - tasks.mgr.dashboard.test_user

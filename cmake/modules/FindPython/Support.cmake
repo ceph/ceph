@@ -25,6 +25,10 @@ else()
 endif()
 
 get_property(_${_PYTHON_PREFIX}_CMAKE_ROLE GLOBAL PROPERTY CMAKE_ROLE)
+if (NOT DEFINED _${_PYTHON_PREFIX}_CMAKE_ROLE)
+  # CMake 3.14 introduced CMAKE_ROLE
+  set(_${_PYTHON_PREFIX}_CMAKE_ROLE "PROJECT")
+endif()
 
 
 #

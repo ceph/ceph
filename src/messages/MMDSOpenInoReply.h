@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSOpenInoReply : public Message {
+class MMDSOpenInoReply : public SafeMessage {
 public:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -27,9 +27,9 @@ public:
   int32_t error;
 
 protected:
-  MMDSOpenInoReply() : Message{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, error(0) {}
+  MMDSOpenInoReply() : SafeMessage{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    Message{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, ino(i), hint(h), error(e) {
+    SafeMessage{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, ino(i), hint(h), error(e) {
     header.tid = t;
   }
 

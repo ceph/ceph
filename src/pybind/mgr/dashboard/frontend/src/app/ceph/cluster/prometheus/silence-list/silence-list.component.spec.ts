@@ -19,7 +19,6 @@ import { TableActionsComponent } from '../../../../shared/datatable/table-action
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
-import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
 import { SilenceListComponent } from './silence-list.component';
 
 describe('SilenceListComponent', () => {
@@ -37,7 +36,7 @@ describe('SilenceListComponent', () => {
       RouterTestingModule,
       HttpClientTestingModule
     ],
-    declarations: [SilenceListComponent, PrometheusTabsComponent],
+    declarations: [SilenceListComponent],
     providers: [i18nProviders]
   });
 
@@ -95,10 +94,8 @@ describe('SilenceListComponent', () => {
   });
 
   describe('expire silence', () => {
-    const setSelectedSilence = (silenceName: string) => {
-      component.selection.selected = [{ id: silenceName }];
-      component.selection.update();
-    };
+    const setSelectedSilence = (silenceName: string) =>
+      (component.selection.selected = [{ id: silenceName }]);
 
     const expireSilence = () => {
       component.expireSilence();

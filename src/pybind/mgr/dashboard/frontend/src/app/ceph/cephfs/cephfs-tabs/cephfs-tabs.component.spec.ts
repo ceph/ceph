@@ -3,6 +3,7 @@ import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import * as _ from 'lodash';
+import { TreeModule } from 'ng2-tree';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
@@ -14,6 +15,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsClientsComponent } from '../cephfs-clients/cephfs-clients.component';
 import { CephfsDetailComponent } from '../cephfs-detail/cephfs-detail.component';
+import { CephfsDirectoriesComponent } from '../cephfs-directories/cephfs-directories.component';
 import { CephfsTabsComponent } from './cephfs-tabs.component';
 
 describe('CephfsTabsComponent', () => {
@@ -49,7 +51,6 @@ describe('CephfsTabsComponent', () => {
 
   const setSelection = (selection: object[]) => {
     component.selection.selected = selection;
-    component.selection.update();
     component.ngOnChanges();
   };
 
@@ -80,11 +81,18 @@ describe('CephfsTabsComponent', () => {
   }
 
   configureTestBed({
-    imports: [SharedModule, TabsModule.forRoot(), HttpClientTestingModule, ToastrModule.forRoot()],
+    imports: [
+      SharedModule,
+      TabsModule.forRoot(),
+      HttpClientTestingModule,
+      TreeModule,
+      ToastrModule.forRoot()
+    ],
     declarations: [
       CephfsTabsComponent,
       CephfsChartStubComponent,
       CephfsDetailComponent,
+      CephfsDirectoriesComponent,
       CephfsClientsComponent
     ],
     providers: [i18nProviders]

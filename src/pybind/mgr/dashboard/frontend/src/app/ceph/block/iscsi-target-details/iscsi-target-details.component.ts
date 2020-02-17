@@ -54,7 +54,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       {
         prop: 'displayName',
         name: this.i18n('Name'),
-        flexGrow: 2,
+        flexGrow: 1,
         cellTemplate: this.highlightTpl
       },
       {
@@ -122,7 +122,11 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         controls: disk.controls,
         backstore: disk.backstore
       };
-
+      ['wwn', 'lun'].forEach((k) => {
+        if (k in disk) {
+          this.metadata[id][k] = disk[k];
+        }
+      });
       disks.push({
         value: `${disk.pool}/${disk.image}`,
         id: id
@@ -302,6 +306,15 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
           displayName: 'backstore',
           default: this.iscsiBackstorePipe.transform(this.settings.default_backstore),
           current: this.iscsiBackstorePipe.transform(tempData.backstore)
+        });
+        ['wwn', 'lun'].forEach((k) => {
+          if (k in tempData) {
+            this.data.push({
+              displayName: k,
+              default: undefined,
+              current: tempData[k]
+            });
+          }
         });
       } else {
         this.columns[2].isHidden = true;

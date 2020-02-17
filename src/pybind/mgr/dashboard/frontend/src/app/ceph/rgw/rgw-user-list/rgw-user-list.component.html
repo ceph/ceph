@@ -3,7 +3,7 @@
           [data]="users"
           [columns]="columns"
           columnMode="flex"
-          selectionType="multi"
+          selectionType="multiClick"
           (updateSelection)="updateSelection($event)"
           identifier="uid"
           (fetchData)="getUserList($event)">

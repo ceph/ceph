@@ -3,11 +3,7 @@ rgw routines
 """
 import argparse
 import contextlib
-import json
 import logging
-import os
-import errno
-import util.rgw as rgw_utils
 
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
@@ -15,9 +11,9 @@ from teuthology import contextutil
 from teuthology.exceptions import ConfigError
 from util import get_remote_for_role
 from util.rgw import rgwadmin, wait_for_radosgw
-from util.rados import (rados, create_ec_pool,
-                                        create_replicated_pool,
-                                        create_cache_pool)
+from util.rados import (create_ec_pool,
+                        create_replicated_pool,
+                        create_cache_pool)
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +111,6 @@ def start_rgw(ctx, config, clients):
 
 
         vault_role = client_config.get('use-vault-role', None)
-        testing_role = client_config.get('use-testing-role', None)
         barbican_role = client_config.get('use-barbican-role', None)
 
         token_path = teuthology.get_testdir(ctx) + '/vault-token'
@@ -132,33 +127,19 @@ def start_rgw(ctx, config, clients):
                 'http://{bhost}:{bport}'.format(bhost=barbican_host,
                                                 bport=barbican_port),
                 ])
-
-            log.info("Barbican access data: %s",ctx.barbican.token[barbican_role])
-            access_data = ctx.barbican.token[barbican_role]
-            rgw_cmd.extend([
-                '--rgw_crypt_s3_kms_backend', 'barbican',
-                '--rgw_keystone_barbican_user', access_data['username'],
-                '--rgw_keystone_barbican_password', access_data['password'],
-                '--rgw_keystone_barbican_tenant', access_data['tenant'],
-                ])
         elif vault_role is not None:
             if not ctx.vault.root_token:
                 raise ConfigError('vault: no "root_token" specified')
             # create token on file
             ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
+            log.info("Restrict access to token file")
+            ctx.cluster.only(client).run(args=['chmod', '600', token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
 
             rgw_cmd.extend([
-                '--rgw_crypt_s3_kms_backend', 'vault',
-                '--rgw_crypt_vault_auth', 'token',
                 '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
                 '--rgw_crypt_vault_token_file', token_path
-            ])
-        elif testing_role is not None:
-            rgw_cmd.extend([
-                '--rgw_crypt_s3_kms_backend', 'testing',
-                '--rgw_crypt_s3_kms_encryption_keys', 'testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo='
             ])
 
         rgw_cmd.extend([
@@ -219,7 +200,7 @@ def start_rgw(ctx, config, clients):
 
 def assign_endpoints(ctx, config, default_cert):
     role_endpoints = {}
-    for role, client_config in config.iteritems():
+    for role, client_config in config.items():
         client_config = client_config or {}
         remote = get_remote_for_role(ctx, role)
 

@@ -1,8 +1,28 @@
 # Dashboard team to review dashboard related code
 /src/pybind/mgr/dashboard                       @ceph/dashboard
-/qa/suites/rados/mgr/tasks/dashboard.yaml       @ceph/dashboard
+/qa/suites/rados/dashboard                      @ceph/dashboard
 /qa/tasks/mgr/test_dashboard.py                 @ceph/dashboard
 /qa/tasks/mgr/dashboard                         @ceph/dashboard
 /monitoring/grafana                             @ceph/dashboard
 /monitoring/prometheus                          @ceph/dashboard
 /doc/mgr/dashboard.rst                          @ceph/dashboard
+
+# For Orchestrator related PRs
+/src/cephadm                                    @ceph/orchestrators
+/src/pybind/mgr/ansible                         @ceph/orchestrators
+/src/pybind/mgr/orchestrator_cli                @ceph/orchestrators
+/src/pybind/mgr/orchestrator.py                 @ceph/orchestrators
+/src/pybind/mgr/rook                            @ceph/orchestrators
+/src/pybind/mgr/cephadm                         @ceph/orchestrators
+/src/pybind/mgr/test_orchestrator               @ceph/orchestrators
+/src/python-common/ceph/deployment              @ceph/orchestrators
+/qa/workunits/cephadm/test_cephadm.sh           @ceph/orchestrators
+/qa/tasks/cephadm.py                            @ceph/orchestrators
+/qa/tasks/mgr/test_orchestrator_cli.py          @ceph/orchestrators
+/qa/tasks/mgr/test_cephadm_orchestrator.py      @ceph/orchestrators
+/doc/mgr/orchestrator_cli.rst                   @ceph/orchestrators
+/doc/mgr/orchestrator_modules.rst               @ceph/orchestrators
+
+#ceph-volume
+/src/ceph-volume                                @ceph/ceph-volume
+/doc/ceph-volume                                @ceph/ceph-volume

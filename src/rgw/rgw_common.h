@@ -22,6 +22,7 @@
 #include <boost/utility/string_view.hpp>
 
 #include "common/ceph_crypto.h"
+#include "common/random_string.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
@@ -257,15 +258,6 @@ using ceph::crypto::MD5;
 struct req_state;
 
 typedef void *RGWAccessHandle;
-
-/* size should be the required string size + 1 */
-int gen_rand_base64(CephContext *cct, char *dest, int size);
-void gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
-void gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size);
-void gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size);
-void gen_rand_alphanumeric_no_underscore(CephContext *cct, char *dest, int size);
-void gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size);
-void gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length);
 
 enum RGWIntentEvent {
   DEL_OBJ = 0,

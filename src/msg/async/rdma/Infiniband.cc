@@ -30,7 +30,8 @@ static const uint32_t MAX_INLINE_DATA = 0;
 static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 static const uint32_t CQ_DEPTH = 30000;
 
-Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn), gid_idx(0)
+Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn),
+  gid_idx(cct->_conf.get_val<int64_t>("ms_async_rdma_gid_idx"))
 {
   int r = ibv_query_port(ctxt, port_num, &port_attr);
   if (r == -1) {
@@ -39,7 +40,7 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
   }
 
   lid = port_attr.lid;
-
+  ceph_assert(gid_idx < port_attr.gid_tbl_len);
 #ifdef HAVE_IBV_EXP
   union ibv_gid cgid;
   struct ibv_exp_gid_attr gid_attr;
@@ -95,7 +96,7 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
     ceph_abort();
   }
 #else
-  r = ibv_query_gid(ctxt, port_num, 0, &gid);
+  r = ibv_query_gid(ctxt, port_num, gid_idx, &gid);
   if (r) {
     lderr(cct) << __func__  << " query gid failed  " << cpp_strerror(errno) << dendl;
     ceph_abort();
@@ -186,6 +187,7 @@ Infiniband::QueuePair::QueuePair(
 int Infiniband::QueuePair::modify_qp_to_error(void)
 {
     ibv_qp_attr qpa;
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(&qpa, 0, sizeof(qpa));
     qpa.qp_state = IBV_QPS_ERR;
     if (ibv_modify_qp(qp, &qpa, IBV_QP_STATE)) {
@@ -200,6 +202,7 @@ int Infiniband::QueuePair::modify_qp_to_rts(void)
 {
   // move from RTR state RTS
   ibv_qp_attr qpa;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpa, 0, sizeof(qpa));
   qpa.qp_state = IBV_QPS_RTS;
   /*
@@ -234,6 +237,7 @@ int Infiniband::QueuePair::modify_qp_to_rtr(void)
 {
   // move from INIT to RTR state
   ibv_qp_attr qpa;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpa, 0, sizeof(qpa));
   qpa.qp_state = IBV_QPS_RTR;
   qpa.path_mtu = IBV_MTU_1024;
@@ -270,6 +274,7 @@ int Infiniband::QueuePair::modify_qp_to_init(void)
 {
   // move from RESET to INIT state
   ibv_qp_attr qpa;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpa, 0, sizeof(qpa));
   qpa.qp_state   = IBV_QPS_INIT;
   qpa.pkey_index = 0;
@@ -306,6 +311,7 @@ int Infiniband::QueuePair::init()
 {
   ldout(cct, 20) << __func__ << " started." << dendl;
   ibv_qp_init_attr qpia;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpia, 0, sizeof(qpia));
   qpia.send_cq = txcq->get_cq();
   qpia.recv_cq = rxcq->get_cq();
@@ -478,6 +484,7 @@ int Infiniband::QueuePair::to_dead()
                  << " bound remote QueuePair, qp number: " << local_cm_meta.peer_qpn << dendl;
 
   struct ibv_send_wr *bad_wr = nullptr, beacon;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&beacon, 0, sizeof(beacon));
   beacon.wr_id = BEACON_WRID;
   beacon.opcode = IBV_WR_SEND;
@@ -769,6 +776,7 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
   end = base + bytes;
   ceph_assert(base);
   chunk_base = static_cast<Chunk*>(::malloc(sizeof(Chunk) * num));
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(static_cast<void*>(chunk_base), 0, sizeof(Chunk) * num);
   free_chunks.reserve(num);
   ibv_mr* m = ibv_reg_mr(manager.pd->pd, base, bytes, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
@@ -843,20 +851,22 @@ void Infiniband::MemoryManager::MemPoolContext::update_stats(int nbufs)
 
 void *Infiniband::MemoryManager::mem_pool::slow_malloc()
 {
-  void *p;
-
-  std::lock_guard l{PoolAllocator::lock};
-  PoolAllocator::g_ctx = ctx;
   // this will trigger pool expansion via PoolAllocator::malloc()
-  p = boost::pool<PoolAllocator>::malloc();
-  PoolAllocator::g_ctx = nullptr;
-  return p;
+  return PoolAllocator::with_context(ctx, [this] {
+    return boost::pool<PoolAllocator>::malloc();
+  });
 }
-Infiniband::MemoryManager::MemPoolContext *Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
-ceph::mutex Infiniband::MemoryManager::PoolAllocator::lock =
-			    ceph::make_mutex("pool-alloc-lock");
+
+Infiniband::MemoryManager::MemPoolContext*
+Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
 
 // lock is taken by mem_pool::slow_malloc()
+ceph::mutex& Infiniband::MemoryManager::PoolAllocator::get_lock()
+{
+  static ceph::mutex lock = ceph::make_mutex("pool-alloc-lock");
+  return lock;
+}
+
 char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_size)
 {
   ceph_assert(g_ctx);
@@ -904,7 +914,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
 void Infiniband::MemoryManager::PoolAllocator::free(char * const block)
 {
   mem_info *m;
-  std::lock_guard l{lock};
+  std::lock_guard l{get_lock()};
     
   Chunk *mem_info_chunk = reinterpret_cast<Chunk *>(block);
   m = reinterpret_cast<mem_info *>(reinterpret_cast<char *>(mem_info_chunk) - offsetof(mem_info, chunks));
@@ -1128,6 +1138,7 @@ Infiniband::~Infiniband()
 ibv_srq* Infiniband::create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge)
 {
   ibv_srq_init_attr sia;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&sia, 0, sizeof(sia));
   sia.srq_context = device->ctxt;
   sia.attr.max_wr = max_wr;

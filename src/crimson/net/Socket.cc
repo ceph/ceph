@@ -6,12 +6,12 @@
 #include "crimson/common/log.h"
 #include "Errors.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 namespace {
 
 seastar::logger& logger() {
-  return ceph::get_logger(ceph_subsys_ms);
+  return crimson::get_logger(ceph_subsys_ms);
 }
 
 // an input_stream consumer that reads buffer segments into a bufferlist up to
@@ -145,7 +145,7 @@ seastar::future<> Socket::try_trap_pre(bp_action_t& trap) {
     break;
    case bp_action_t::FAULT:
     logger().info("[Test] got FAULT");
-    throw std::system_error(make_error_code(ceph::net::error::negotiation_failure));
+    throw std::system_error(make_error_code(crimson::net::error::negotiation_failure));
    case bp_action_t::BLOCK:
     logger().info("[Test] got BLOCK");
     return blocker->block();
@@ -192,4 +192,4 @@ void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocke
 }
 #endif
 
-} // namespace ceph::net
+} // namespace crimson::net

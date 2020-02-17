@@ -142,6 +142,7 @@ int RGWCivetWebFrontend::run()
   options.push_back(nullptr);
   /* Initialize the CivetWeb right now. */
   struct mg_callbacks cb;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset((void *)&cb, 0, sizeof(cb));
   cb.begin_request = civetweb_callback;
   cb.log_message = rgw_civetweb_log_callback;

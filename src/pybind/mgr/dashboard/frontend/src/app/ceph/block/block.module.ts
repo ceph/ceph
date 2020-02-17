@@ -32,6 +32,8 @@ import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './rbd-images/rbd-images.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
+import { RbdNamespaceFormComponent } from './rbd-namespace-form/rbd-namespace-form.component';
+import { RbdNamespaceListComponent } from './rbd-namespace-list/rbd-namespace-list.component';
 import { RbdSnapshotFormComponent } from './rbd-snapshot-form/rbd-snapshot-form.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.component';
 import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component';
@@ -42,6 +44,7 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
 @NgModule({
   entryComponents: [
     RbdDetailsComponent,
+    RbdNamespaceFormComponent,
     RbdSnapshotFormComponent,
     RbdTrashMoveModalComponent,
     RbdTrashRestoreModalComponent,
@@ -75,6 +78,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     IscsiTargetListComponent,
     RbdDetailsComponent,
     RbdFormComponent,
+    RbdNamespaceFormComponent,
+    RbdNamespaceListComponent,
     RbdSnapshotListComponent,
     RbdSnapshotFormComponent,
     RbdTrashListComponent,
@@ -112,22 +117,22 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
-        path: `${URLVerbs.EDIT}/:pool/:name`,
+        path: `${URLVerbs.EDIT}/:image_spec`,
         component: RbdFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
       },
       {
-        path: `${URLVerbs.CLONE}/:pool/:name/:snap`,
+        path: `${URLVerbs.CLONE}/:image_spec/:snap`,
         component: RbdFormComponent,
         data: { breadcrumbs: ActionLabels.CLONE }
       },
       {
-        path: `${URLVerbs.COPY}/:pool/:name`,
+        path: `${URLVerbs.COPY}/:image_spec`,
         component: RbdFormComponent,
         data: { breadcrumbs: ActionLabels.COPY }
       },
       {
-        path: `${URLVerbs.COPY}/:pool/:name/:snap`,
+        path: `${URLVerbs.COPY}/:image_spec/:snap`,
         component: RbdFormComponent,
         data: { breadcrumbs: ActionLabels.COPY }
       }

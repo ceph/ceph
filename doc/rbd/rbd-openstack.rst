@@ -55,7 +55,10 @@ Three parts of OpenStack integrate with Ceph's block devices:
   advantageous because it allows you to perform maintenance operations easily
   with the live-migration process. Additionally, if your hypervisor dies it is
   also convenient to trigger ``nova evacuate`` and  run the virtual machine
-  elsewhere almost seamlessly.
+  elsewhere almost seamlessly. In doing so,
+  :ref:`exclusive locks <rbd-exclusive-locks>` prevent multiple
+  compute nodes from concurrently accessing the guest disk.
+
 
 You can use OpenStack Glance to store images in a Ceph Block Device, and you
 can use Cinder to boot a VM using a copy-on-write clone of an image.
@@ -128,9 +131,9 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
-    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images'
-    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd-read-only pool=images'
-    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups'
+    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images' mgr 'profile rbd pool=images'
+    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=volumes, profile rbd pool=vms'
+    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups' mgr 'profile rbd pool=backups'
 
 Add the keyrings for ``client.cinder``, ``client.glance``, and
 ``client.cinder-backup`` to the appropriate nodes and change their ownership::

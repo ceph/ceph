@@ -3,6 +3,12 @@
                 i18n>Failed to load data.</cd-alert-panel>
 
 <div class="dataTables_wrapper">
+  <div *ngIf="onlyActionHeader"
+       class="dataTables_header clearfix">
+    <div class="cd-datatable-actions">
+      <ng-content select=".only-table-actions"></ng-content>
+    </div>
+  </div>
   <div class="dataTables_header clearfix"
        *ngIf="toolHeader">
     <!-- actions -->
@@ -16,7 +22,8 @@
     <!-- end filters -->
 
     <!-- search -->
-    <div class="input-group search">
+    <div class="input-group search"
+         *ngIf="searchField">
       <span class="input-group-prepend">
         <span class="input-group-text">
         <i [ngClass]="[icons.search]"></i>
@@ -97,7 +104,7 @@
                  [cssClasses]="paginationClasses"
                  [selectionType]="selectionType"
                  [selected]="selection.selected"
-                 (select)="onSelect()"
+                 (select)="onSelect($event)"
                  [sorts]="userConfig.sorts"
                  (sort)="changeSorting($event)"
                  [columns]="tableColumns"
@@ -119,9 +126,6 @@
                    let-offset="offset"
                    let-isVisible="isVisible">
         <div class="page-count">
-          <span *ngIf="selectionType == 'multi'">
-            <cd-helper i18n>Press and hold control button to select multiple rows to execute a common action on.</cd-helper>
-          </span>
           <span *ngIf="selectionType">
             {{ selectedCount }} <ng-container i18n="X selected">selected</ng-container> /
           </span>
@@ -173,7 +177,7 @@
 <ng-template #checkIconTpl
              let-value="value">
   <i [ngClass]="[icons.check]"
-     [hidden]="!value"></i>
+     [hidden]="!(value | boolean)"></i>
 </ng-template>
 
 <ng-template #perSecondTpl
@@ -195,4 +199,17 @@
 <ng-template #classAddingTpl
              let-value="value">
   <span class="{{useCustomClass(value)}}">{{ value }}</span>
+</ng-template>
+
+<ng-template #badgeTpl
+             let-column="column"
+             let-value="value">
+  <span *ngFor="let item of (value | array); last as last">
+    <span class="badge"
+          [ngClass]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')"
+          *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
+      {{ (column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
+    </span>
+    <span *ngIf="!last">&nbsp;</span>
+  </span>
 </ng-template>

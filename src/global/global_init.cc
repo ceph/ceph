@@ -111,6 +111,10 @@ void global_pre_init(
     }
   }
 
+  if (conf.get_val<bool>("no_config_file")) {
+    flags |= CINIT_FLAG_NO_DEFAULT_CONFIG_FILE;
+  }
+
   int ret = conf.parse_config_files(c_str_or_null(conf_file_list),
 				    &cerr, flags);
   if (ret == -EDOM) {
@@ -126,7 +130,8 @@ void global_pre_init(
 	     << conf_file_list << std::endl;
         _exit(1);
       } else {
-	cerr << "did not load config file, using default settings." << std::endl;
+	cerr << "did not load config file, using default settings."
+	     << std::endl;
       }
     }
   }
@@ -312,6 +317,11 @@ global_init(const std::map<std::string,std::string> *defaults,
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
     cerr << "warning: unable to set dumpable flag: " << cpp_strerror(errno) << std::endl;
   }
+#  if defined(PR_SET_THP_DISABLE)
+  if (!g_conf().get_val<bool>("thp") && prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0) == -1) {
+    cerr << "warning: unable to disable THP: " << cpp_strerror(errno) << std::endl;
+  }
+#  endif
 #endif
 
   //

@@ -1,7 +1,7 @@
 <ng-template #tasksTpl>
   <!-- Executing -->
   <div *ngFor="let executingTask of executingTasks; trackBy:trackByFn">
-    <div class="card border-0 mb-3">
+    <div class="card tc_task border-0 mb-3">
       <div class="row no-gutters">
         <div class="col-md-3 text-center">
           <span [ngClass]="[icons.stack, icons.large2x]"
@@ -54,8 +54,8 @@
 
     <hr>
 
-    <div *ngFor="let notification of notifications">
-      <div class="card border-0 mb-3">
+    <div *ngFor="let notification of notifications; let i = index">
+      <div class="card tc_notification border-0 mb-3">
         <div class="row no-gutters">
           <div class="col-md-3 text-center">
             <span [ngClass]="[icons.stack, icons.large2x, notification.textClass]">
@@ -65,6 +65,13 @@
           </div>
           <div class="col-md-9">
             <div class="card-body p-0">
+              <button class="btn btn-link float-right mt-0 pt-0"
+                      title="Remove notification"
+                      i18n-title
+                      (click)="remove(i); $event.stopPropagation()">
+                <i [ngClass]="[icons.trash]"></i>
+              </button>
+
               <h6 class="card-title bold">{{ notification.title }}</h6>
               <p class="card-text"
                  [innerHtml]="notification.message"></p>

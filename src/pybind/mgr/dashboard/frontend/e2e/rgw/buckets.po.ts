@@ -44,7 +44,7 @@ export class BucketsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index)
   async edit(name: string, new_owner: string) {
-    await this.getFirstTableCellWithText(name).click(); // click on the bucket you want to edit in the table
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
     await expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
@@ -89,7 +89,8 @@ export class BucketsPageHelper extends PageHelper {
     await expect(versioningValueCell.getText()).toEqual(this.versioningStateEnabled);
 
     // Disable versioning:
-    await this.getFirstTableCellWithText(name).click(); // click on the bucket you want to edit in the table
+    await this.uncheckAllTableRows();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
     await element(by.css('input[id=suspended]')).click();
@@ -184,10 +185,7 @@ export class BucketsPageHelper extends PageHelper {
   async testInvalidEdit(name) {
     await this.navigateTo();
 
-    await this.waitClickableAndClick(
-      this.getFirstTableCellWithText(name),
-      'Failed waiting for bucket to be present in table'
-    ); // wait for table to load
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');

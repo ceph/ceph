@@ -3,13 +3,14 @@
 import copy
 import errno
 import json
+import unittest
 
 try:
     import mock
 except ImportError:
     import unittest.mock as mock
 
-from . import CmdException, ControllerTestCase, CLICommandTestMixin
+from . import CmdException, ControllerTestCase, CLICommandTestMixin, KVStoreMockMixin
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient
@@ -17,16 +18,7 @@ from ..services.orchestrator import OrchClient
 from ..rest_client import RequestException
 
 
-class IscsiTest(ControllerTestCase, CLICommandTestMixin):
-
-    @classmethod
-    def setup_server(cls):
-        OrchClient.instance().available = lambda: False
-        mgr.rados.side_effect = None
-        # pylint: disable=protected-access
-        Iscsi._cp_config['tools.authenticate.on'] = False
-        IscsiTarget._cp_config['tools.authenticate.on'] = False
-        cls.setup_controllers([Iscsi, IscsiTarget])
+class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
 
     def setUp(self):
         self.mock_kv_store()
@@ -68,6 +60,36 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                 'service_url': 'https://admin:admin@10.17.5.2:5001'
             }
         })
+
+
+class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
+
+    @classmethod
+    def setup_server(cls):
+        OrchClient.instance().available = lambda: False
+        mgr.rados.side_effect = None
+        # pylint: disable=protected-access
+        Iscsi._cp_config['tools.authenticate.on'] = False
+        IscsiTarget._cp_config['tools.authenticate.on'] = False
+        cls.setup_controllers([Iscsi, IscsiTarget])
+
+    def setUp(self):
+        self.mock_kv_store()
+        self.CONFIG_KEY_DICT['_iscsi_config'] = '''
+            {
+                "gateways": {
+                    "node1": {
+                        "service_url": "https://admin:admin@10.17.5.1:5001"
+                    },
+                    "node2": {
+                        "service_url": "https://admin:admin@10.17.5.2:5001"
+                    }
+                }
+            }
+        '''
+        # pylint: disable=protected-access
+        IscsiClientMock._instance = IscsiClientMock()
+        IscsiClient.instance = IscsiClientMock.instance
 
     def test_enable_discoveryauth(self):
         discoveryauth = {
@@ -225,7 +247,10 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                 "image": "lun3",
                 "pool": "rbd",
                 "controls": {},
-                "backstore": "user:rbd"
+                "backstore": "user:rbd",
+                "wwn": "64af6678-9694-4367-bacc-f8eb0baa2",
+                "lun": 2
+
             })
         response['clients'][0]['luns'].append({"image": "lun3", "pool": "rbd"})
         self._update_iscsi_target(create_request, update_request, response)
@@ -431,8 +456,10 @@ iscsi_target_response = {
     ],
     'disks': [
         {'pool': 'rbd', 'image': 'lun1', 'backstore': 'user:rbd',
+         'wwn': '64af6678-9694-4367-bacc-f8eb0baa0', 'lun': 0,
          'controls': {'max_data_area_mb': 128}},
         {'pool': 'rbd', 'image': 'lun2', 'backstore': 'user:rbd',
+         'wwn': '64af6678-9694-4367-bacc-f8eb0baa1', 'lun': 1,
          'controls': {'max_data_area_mb': 128}}
     ],
     'clients': [
@@ -565,7 +592,7 @@ class IscsiClientMock(object):
         }
 
     def get_config(self):
-        return self.config
+        return copy.deepcopy(self.config)
 
     def create_target(self, target_iqn, target_controls):
         self.config['targets'][target_iqn] = {
@@ -581,7 +608,7 @@ class IscsiClientMock(object):
             },
             "controls": target_controls,
             "created": "2019/01/17 09:22:34",
-            "disks": [],
+            "disks": {},
             "groups": {},
             "portals": {}
         }
@@ -602,18 +629,25 @@ class IscsiClientMock(object):
             target_config['ip_list'].remove(ip)
         target_config['portals'].pop(gateway_name)
 
-    def create_disk(self, pool, image, backstore):
+    def create_disk(self, pool, image, backstore, wwn):
+        if wwn is None:
+            wwn = '64af6678-9694-4367-bacc-f8eb0baa' + str(len(self.config['disks']))
         image_id = '{}/{}'.format(pool, image)
         self.config['disks'][image_id] = {
             "pool": pool,
             "image": image,
             "backstore": backstore,
-            "controls": {}
+            "controls": {},
+            "wwn": wwn
         }
 
-    def create_target_lun(self, target_iqn, image_id):
+    def create_target_lun(self, target_iqn, image_id, lun):
         target_config = self.config['targets'][target_iqn]
-        target_config['disks'].append(image_id)
+        if lun is None:
+            lun = len(target_config['disks'])
+        target_config['disks'][image_id] = {
+            "lun_id": lun
+        }
         self.config['disks'][image_id]['owner'] = list(target_config['portals'].keys())[0]
 
     def reconfigure_disk(self, pool, image, controls):
@@ -646,6 +680,10 @@ class IscsiClientMock(object):
         target_config = self.config['targets'][target_iqn]
         target_config['clients'][client_iqn]['luns'][image_id] = {}
 
+    def delete_client_lun(self, target_iqn, client_iqn, image_id):
+        target_config = self.config['targets'][target_iqn]
+        del target_config['clients'][client_iqn]['luns'][image_id]
+
     def create_client_auth(self, target_iqn, client_iqn, user, password, m_user, m_password):
         target_config = self.config['targets'][target_iqn]
         target_config['clients'][client_iqn]['auth']['username'] = user
@@ -673,7 +711,7 @@ class IscsiClientMock(object):
 
     def delete_target_lun(self, target_iqn, image_id):
         target_config = self.config['targets'][target_iqn]
-        target_config['disks'].remove(image_id)
+        target_config['disks'].pop(image_id)
         del self.config['disks'][image_id]['owner']
 
     def delete_disk(self, pool, image):

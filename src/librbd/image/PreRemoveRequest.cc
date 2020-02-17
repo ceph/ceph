@@ -26,6 +26,8 @@ bool auto_delete_snapshot(const SnapInfo& snap_info) {
     snap_info.snap_namespace);
   switch (snap_namespace_type) {
   case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
+  case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY:
+  case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY:
     return true;
   default:
     return false;
@@ -68,10 +70,12 @@ void PreRemoveRequest<I>::acquire_exclusive_lock() {
     m_image_ctx->set_journal_policy(new journal::DisabledPolicy());
   }
 
-  auto ctx = create_context_callback<
-    PreRemoveRequest<I>, &PreRemoveRequest<I>::handle_exclusive_lock>(this);
+  m_exclusive_lock = m_image_ctx->exclusive_lock;
 
-  m_image_ctx->exclusive_lock->try_acquire_lock(ctx);
+  auto ctx = create_context_callback<
+    PreRemoveRequest<I>, &PreRemoveRequest<I>::handle_exclusive_lock>(this, m_exclusive_lock);
+
+  m_exclusive_lock->try_acquire_lock(ctx);
 }
 
 template <typename I>
@@ -118,7 +122,7 @@ void PreRemoveRequest<I>::handle_shut_down_exclusive_lock(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "r=" << r << dendl;
 
-  delete m_exclusive_lock;
+  m_exclusive_lock->put();
   m_exclusive_lock = nullptr;
 
   if (r < 0) {

@@ -259,13 +259,13 @@ static int testrados(void)
 
 	/* aio */
 	rados_completion_t a, b;
-	rados_aio_create_completion(0, 0, 0, &a);
-	rados_aio_create_completion(0, 0, 0, &b);
+	rados_aio_create_completion2(NULL, NULL, &a);
+	rados_aio_create_completion2(NULL, NULL, &b);
 	rados_aio_write(io_ctx, "a", a, buf, 100, 0);
 	rados_aio_write(io_ctx, "../b/bb_bb_bb\\foo\\bar", b, buf, 100, 0);
-	rados_aio_wait_for_safe(a);
+	rados_aio_wait_for_complete(a);
 	printf("a safe\n");
-	rados_aio_wait_for_safe(b);
+	rados_aio_wait_for_complete(b);
 	printf("b safe\n");
 	rados_aio_release(a);
 	rados_aio_release(b);
@@ -273,7 +273,7 @@ static int testrados(void)
 	/* test flush */
 	printf("testing aio flush\n");
 	rados_completion_t c;
-	rados_aio_create_completion(0, 0, 0, &c);
+	rados_aio_create_completion2(NULL, NULL,  &c);
 	rados_aio_write(io_ctx, "c", c, buf, 100, 0);
 	safe = rados_aio_is_safe(c);
 	printf("a should not yet be safe and ... %s\n", safe ? "is":"is not");

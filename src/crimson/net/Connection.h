@@ -20,7 +20,7 @@
 
 #include "Fwd.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
 class Interceptor;
@@ -153,4 +153,4 @@ inline ostream& operator<<(ostream& out, const Connection& conn) {
   return out;
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

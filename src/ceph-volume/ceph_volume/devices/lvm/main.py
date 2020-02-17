@@ -2,6 +2,7 @@ import argparse
 from textwrap import dedent
 from ceph_volume import terminal
 from . import activate
+from . import deactivate
 from . import prepare
 from . import create
 from . import trigger
@@ -22,6 +23,7 @@ class LVM(object):
 
     mapper = {
         'activate': activate.Activate,
+        'deactivate': deactivate.Deactivate,
         'batch': batch.Batch,
         'prepare': prepare.Prepare,
         'create': create.Create,

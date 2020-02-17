@@ -82,7 +82,7 @@ class Scrubber:
         else:
             def tmp(x):
                 """Local display"""
-                print x
+                print(x)
             self.log = tmp
 
         self.stopping = False

@@ -21,7 +21,7 @@
 #include "crimson/net/Socket.h"
 #include "crimson/thread/Throttle.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 class Dispatcher;
 class Protocol;
@@ -47,7 +47,7 @@ class SocketConnection : public Connection {
     side = _side;
   }
 
-  ceph::net::Policy<ceph::thread::Throttle> policy;
+  ceph::net::Policy<crimson::thread::Throttle> policy;
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
@@ -114,4 +114,4 @@ class SocketConnection : public Connection {
   friend class ProtocolV2;
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

@@ -1,6 +1,5 @@
 import contextlib
 import logging
-import time
 from teuthology import misc
 from teuthology.orchestra import run
 
@@ -169,7 +168,7 @@ conn = boto.connect_s3(
         )
 bucket = conn.create_bucket('{bucket_name}')
 for bucket in conn.get_all_buckets():
-        print bucket.name + "\t" + bucket.creation_date
+        print(bucket.name + "\t" + bucket.creation_date)
 """.format(access_key=access_key, secret_key=secret_key, dns_name=dns_name, bucket_name=bucket_name)
     py_bucket_file = '{testdir}/create_bucket.py'.format(testdir=testdir)
     misc.sudo_write_file(

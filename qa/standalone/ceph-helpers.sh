@@ -293,8 +293,6 @@ function test_kill_daemon() {
         kill_daemon $pidfile TERM || return 1
     done
 
-    ceph osd dump | grep "osd.0 down" || return 1
-
     name_prefix=mgr
     for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
         #
@@ -381,7 +379,6 @@ function test_kill_daemons() {
     # killing just the osd and verify the mon still is responsive
     #
     kill_daemons $dir TERM osd || return 1
-    ceph osd dump | grep "osd.0 down" || return 1
     #
     # kill the mgr
     #
@@ -785,6 +782,7 @@ function destroy_osd() {
 
     ceph osd out osd.$id || return 1
     kill_daemons $dir TERM osd.$id || return 1
+    ceph osd down osd.$id || return 1
     ceph osd purge osd.$id --yes-i-really-mean-it || return 1
     teardown $dir/$id || return 1
     rm -fr $dir/$id
@@ -935,8 +933,10 @@ function test_wait_for_osd() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
     wait_for_osd up 0 || return 1
-    kill_daemons $dir TERM osd || return 1
+    wait_for_osd up 1 || return 1
+    kill_daemons $dir TERM osd.0 || return 1
     wait_for_osd down 0 || return 1
     ( TIMEOUT=1 ; ! wait_for_osd up 0 ) || return 1
     teardown $dir || return 1
@@ -996,7 +996,7 @@ function wait_for_quorum() {
     fi
 
     if [[ -z "$quorumsize" ]]; then
-      timeout $timeout ceph mon_status --format=json >&/dev/null || return 1
+      timeout $timeout ceph quorum_status --format=json >&/dev/null || return 1
       return 0
     fi
 
@@ -1004,7 +1004,7 @@ function wait_for_quorum() {
     wait_until=$((`date +%s` + $timeout))
     while [[ $(date +%s) -lt $wait_until ]]; do
         jqfilter='.quorum | length == '$quorumsize
-        jqinput="$(timeout $timeout ceph mon_status --format=json 2>/dev/null)"
+        jqinput="$(timeout $timeout ceph quorum_status --format=json 2>/dev/null)"
         res=$(echo $jqinput | jq "$jqfilter")
         if [[ "$res" == "true" ]]; then
           no_quorum=0

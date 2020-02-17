@@ -4,6 +4,8 @@ Cram tests
 import logging
 import os
 
+import six
+
 from util.workunit import get_refspec_after_overrides
 
 from teuthology import misc as teuthology
@@ -60,7 +62,7 @@ def task(ctx, config):
     log.info('Pulling tests from %s ref %s', git_url, refspec)
 
     try:
-        for client, tests in clients.iteritems():
+        for client, tests in clients.items():
             (remote,) = ctx.cluster.only(client).remotes.keys()
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             remote.run(
@@ -88,7 +90,7 @@ def task(ctx, config):
             for role in clients.keys():
                 p.spawn(_run_tests, ctx, role)
     finally:
-        for client, tests in clients.iteritems():
+        for client, tests in clients.items():
             (remote,) = ctx.cluster.only(client).remotes.keys()
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             test_files = set([test.rsplit('/', 1)[1] for test in tests])
@@ -124,7 +126,7 @@ def _run_tests(ctx, role):
     :param ctx: Context
     :param role: Roles
     """
-    assert isinstance(role, basestring)
+    assert isinstance(role, six.string_types)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]

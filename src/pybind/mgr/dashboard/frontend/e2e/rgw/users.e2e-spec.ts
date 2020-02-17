@@ -12,8 +12,8 @@ describe('RGW users page', () => {
     await UsersPageHelper.checkConsole();
   });
 
-  describe('breadcrumb test', () => {
-    beforeAll(async () => {
+  describe('breadcrumb tests', () => {
+    beforeEach(async () => {
       await users.navigateTo();
     });
 
@@ -22,19 +22,20 @@ describe('RGW users page', () => {
     });
   });
 
-  describe('create, edit & delete user test', () => {
-    beforeAll(async () => {
+  describe('create, edit & delete user tests', () => {
+    beforeEach(async () => {
       await users.navigateTo();
+      await users.uncheckAllTableRows();
     });
 
     it('should create user', async () => {
+      await users.navigateTo('create');
       await users.create(user_name, 'Some Name', 'original@website.com', '1200');
       await expect(users.getFirstTableCellWithText(user_name).isPresent()).toBe(true);
     });
 
     it('should edit users full name, email and max buckets', async () => {
       await users.edit(user_name, 'Another Identity', 'changed@othersite.com', '1969');
-      // checks for succsessful editing are done within edit function
     });
 
     it('should delete user', async () => {
@@ -42,11 +43,7 @@ describe('RGW users page', () => {
     });
   });
 
-  describe('Invalid input test', () => {
-    beforeAll(async () => {
-      await users.navigateTo();
-    });
-
+  describe('Invalid input tests', () => {
     it('should put invalid input into user creation form and check fields are marked invalid', async () => {
       await users.invalidCreate();
     });

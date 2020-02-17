@@ -1,5 +1,3 @@
-<cd-prometheus-tabs></cd-prometheus-tabs>
-
 <cd-table [data]="silences"
           [columns]="columns"
           [forceIdentifier]="true"
@@ -13,7 +11,8 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <tabset cdTableDetail *ngIf="selection.hasSingleSelection">
+  <tabset cdTableDetail
+          *ngIf="selection.hasSingleSelection">
     <tab i18n-heading
          heading="Details">
       <cd-table-key-value [renderObjects]="true"
@@ -26,4 +25,3 @@
     </tab>
   </tabset>
 </cd-table>
-

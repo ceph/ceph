@@ -45,6 +45,36 @@ namespace dpdk {
     return std::bitset<CHAR_BIT * sizeof(n)>{n}.count();
   }
 
+  static int hex2bitcount(unsigned char c)
+  {
+    int val;
+
+    if (isdigit(c))
+      val = c - '0';
+    else if (isupper(c))
+      val = c - 'A' + 10;
+    else
+      val = c - 'a' + 10;
+    return bitcount(val);
+  }
+
+  static int coremask_bitcount(const char *buf)
+  {
+    int count = 0;
+
+    if (buf[0] == '0' && 
+        ((buf[1] == 'x') || (buf[1] == 'X')))
+      buf += 2;
+
+    for (int i = 0; buf[i] != '\0'; i++) {
+      char c = buf[i];
+      if (isxdigit(c) == 0)
+        return -EINVAL;
+      count += hex2bitcount(c);
+    }
+    return count;
+  }
+
   int eal::init(CephContext *c)
   {
     if (initialized) {
@@ -52,11 +82,12 @@ namespace dpdk {
     }
 
     bool done = false;
-    auto num = std::stoull(c->_conf.get_val<std::string>("ms_dpdk_coremask"),
-                           nullptr, 16);
-    unsigned int coremaskbit = bitcount(num);
+    auto coremask = c->_conf.get_val<std::string>("ms_dpdk_coremask");
+    int coremaskbit = coremask_bitcount(coremask.c_str());
 
-    ceph_assert(coremaskbit > c->_conf->ms_async_op_threads);
+    if (coremaskbit <= 0
+        || static_cast<uint64_t>(coremaskbit) < c->_conf->ms_async_op_threads)
+      return -EINVAL;
 
     t = std::thread([&]() {
       // TODO: Inherit these from the app parameters - "opts"

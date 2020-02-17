@@ -36,13 +36,13 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
 };
 
 struct Server {
-  ceph::thread::Throttle byte_throttler;
-  ceph::net::Messenger& msgr;
-  ceph::auth::DummyAuthClientServer dummy_auth;
-  struct ServerDispatcher : ceph::net::Dispatcher {
+  crimson::thread::Throttle byte_throttler;
+  crimson::net::Messenger& msgr;
+  crimson::auth::DummyAuthClientServer dummy_auth;
+  struct ServerDispatcher : crimson::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(ceph::net::Connection* c,
+    seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                   MessageRef m) override {
       std::cout << "server got ping " << *m << std::endl;
       // reply with a pong
@@ -51,16 +51,16 @@ struct Server {
         on_reply.signal();
       });
     }
-    seastar::future<ceph::net::msgr_tag_t, bufferlist>
+    seastar::future<crimson::net::msgr_tag_t, bufferlist>
     ms_verify_authorizer(entity_type_t peer_type,
                          auth_proto_t protocol,
                          bufferlist& auth) override {
-      return seastar::make_ready_future<ceph::net::msgr_tag_t, bufferlist>(
+      return seastar::make_ready_future<crimson::net::msgr_tag_t, bufferlist>(
           0, bufferlist{});
     }
   } dispatcher;
-  Server(ceph::net::Messenger& msgr)
-    : byte_throttler(ceph::net::conf.osd_client_message_size_cap),
+  Server(crimson::net::Messenger& msgr)
+    : byte_throttler(crimson::net::conf.osd_client_message_size_cap),
       msgr{msgr}
   {
     msgr.set_crc_header();
@@ -69,13 +69,13 @@ struct Server {
 };
 
 struct Client {
-  ceph::thread::Throttle byte_throttler;
-  ceph::net::Messenger& msgr;
-  ceph::auth::DummyAuthClientServer dummy_auth;
-  struct ClientDispatcher : ceph::net::Dispatcher {
+  crimson::thread::Throttle byte_throttler;
+  crimson::net::Messenger& msgr;
+  crimson::auth::DummyAuthClientServer dummy_auth;
+  struct ClientDispatcher : crimson::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(ceph::net::Connection* c,
+    seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                   MessageRef m) override {
       std::cout << "client got pong " << *m << std::endl;
       ++count;
@@ -83,8 +83,8 @@ struct Client {
       return seastar::now();
     }
   } dispatcher;
-  Client(ceph::net::Messenger& msgr)
-    : byte_throttler(ceph::net::conf.osd_client_message_size_cap),
+  Client(crimson::net::Messenger& msgr)
+    : byte_throttler(crimson::net::conf.osd_client_message_size_cap),
       msgr{msgr}
   {
     msgr.set_crc_header();
@@ -95,7 +95,7 @@ struct Client {
 
 class SeastarContext {
   seastar::file_desc begin_fd;
-  ceph::thread::Condition on_end;
+  crimson::thread::Condition on_end;
 
 public:
   SeastarContext()
@@ -151,14 +151,14 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
 {
   std::cout << "seastar/";
   if (role == echo_role::as_server) {
-    return ceph::net::Messenger::create(entity_name_t::OSD(0), "server",
+    return crimson::net::Messenger::create(entity_name_t::OSD(0), "server",
                                         addr.get_nonce(), 0)
       .then([addr, count] (auto msgr) {
         return seastar::do_with(seastar_pingpong::Server{*msgr},
           [addr, count](auto& server) mutable {
             std::cout << "server listening at " << addr << std::endl;
             // bind the server
-            server.msgr.set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
+            server.msgr.set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
             server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &server.byte_throttler);
             server.msgr.set_require_authorizer(false);
@@ -178,13 +178,13 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
           });
       });
   } else {
-    return ceph::net::Messenger::create(entity_name_t::OSD(1), "client",
+    return crimson::net::Messenger::create(entity_name_t::OSD(1), "client",
                                         addr.get_nonce(), 0)
       .then([addr, count] (auto msgr) {
         return seastar::do_with(seastar_pingpong::Client{*msgr},
           [addr, count](auto& client) {
             std::cout << "client sending to " << addr << std::endl;
-            client.msgr.set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
+            client.msgr.set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
             client.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &client.byte_throttler);
             client.msgr.set_require_authorizer(false);
@@ -193,7 +193,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
             return client.msgr.start(&client.dispatcher)
               .then([addr, &client] {
                 return client.msgr.connect(addr, entity_name_t::TYPE_OSD);
-              }).then([&disp=client.dispatcher, count](ceph::net::ConnectionXRef conn) {
+              }).then([&disp=client.dispatcher, count](crimson::net::ConnectionXRef conn) {
                 return seastar::do_until(
                   [&disp,count] { return disp.count >= count; },
                   [&disp,conn] { return (*conn)->send(make_message<MPing>())

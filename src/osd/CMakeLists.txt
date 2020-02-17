@@ -22,17 +22,15 @@ set(osd_srcs
   PGBackend.cc
   OSDCap.cc
   Watch.cc
-  ClassHandler.cc
   Session.cc
   SnapMapper.cc
   ScrubStore.cc
   osd_types.cc
   ECUtil.cc
   ExtentCache.cc
-  mClockOpClassSupport.cc
-  mClockOpClassQueue.cc
-  mClockClientQueue.cc
-  OpQueueItem.cc
+  scheduler/OpScheduler.cc
+  scheduler/OpSchedulerItem.cc
+  scheduler/mClockScheduler.cc
   PeeringState.cc
   PGStateUtils.cc
   MissingLoc.cc
@@ -70,5 +68,5 @@ if(WITH_RBD)
   add_dependencies(osd cls_rbd)
 endif()
 if(WITH_RADOSGW)
-  add_dependencies(osd cls_otp cls_rgw)
+  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc)
 endif()

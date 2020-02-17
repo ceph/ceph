@@ -748,8 +748,9 @@ class DPDKDevice {
   unsigned _home_cpu;
   bool _use_lro;
   bool _enable_fc;
-  std::vector<uint8_t> _redir_table;
+  std::vector<uint16_t> _redir_table;
   rss_key_type _rss_key;
+  struct rte_flow *_flow = nullptr;
   bool _is_i40e_device = false;
   bool _is_vmxnet3_device = false;
 
@@ -823,6 +824,8 @@ class DPDKDevice {
   }
 
   ~DPDKDevice() {
+    if (_flow)
+       rte_flow_destroy(_port_idx, _flow, nullptr);
     rte_eth_dev_stop(_port_idx);
   }
 

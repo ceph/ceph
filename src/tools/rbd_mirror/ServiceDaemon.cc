@@ -109,6 +109,38 @@ void ServiceDaemon<I>::remove_pool(int64_t pool_id) {
 }
 
 template <typename I>
+void ServiceDaemon<I>::add_namespace(int64_t pool_id,
+                                     const std::string& namespace_name) {
+  dout(20) << "pool_id=" << pool_id << ", namespace=" << namespace_name
+           << dendl;
+
+  std::lock_guard locker{m_lock};
+  auto pool_it = m_pools.find(pool_id);
+  if (pool_it == m_pools.end()) {
+    return;
+  }
+  pool_it->second.ns_attributes[namespace_name];
+
+  // don't schedule update status as the namespace attributes are empty yet
+}
+
+template <typename I>
+void ServiceDaemon<I>::remove_namespace(int64_t pool_id,
+                                        const std::string& namespace_name) {
+  dout(20) << "pool_id=" << pool_id << ", namespace=" << namespace_name
+           << dendl;
+  {
+    std::lock_guard locker{m_lock};
+    auto pool_it = m_pools.find(pool_id);
+    if (pool_it == m_pools.end()) {
+      return;
+    }
+    pool_it->second.ns_attributes.erase(namespace_name);
+  }
+  schedule_update_status();
+}
+
+template <typename I>
 uint64_t ServiceDaemon<I>::add_or_update_callout(int64_t pool_id,
                                                  uint64_t callout_id,
                                                  CalloutLevel callout_level,
@@ -173,6 +205,38 @@ void ServiceDaemon<I>::add_or_update_attribute(int64_t pool_id,
 }
 
 template <typename I>
+void ServiceDaemon<I>::add_or_update_namespace_attribute(
+    int64_t pool_id, const std::string& namespace_name, const std::string& key,
+    const AttributeValue& value) {
+  if (namespace_name.empty()) {
+    add_or_update_attribute(pool_id, key, value);
+    return;
+  }
+
+  dout(20) << "pool_id=" << pool_id << ", "
+           << "namespace=" << namespace_name << ", "
+           << "key=" << key << ", "
+           << "value=" << value << dendl;
+
+  {
+    std::lock_guard locker{m_lock};
+    auto pool_it = m_pools.find(pool_id);
+    if (pool_it == m_pools.end()) {
+      return;
+    }
+
+    auto ns_it = pool_it->second.ns_attributes.find(namespace_name);
+    if (ns_it == pool_it->second.ns_attributes.end()) {
+      return;
+    }
+
+    ns_it->second[key] = value;
+  }
+
+  schedule_update_status();
+}
+
+template <typename I>
 void ServiceDaemon<I>::remove_attribute(int64_t pool_id,
                                         const std::string& key) {
   dout(20) << "pool_id=" << pool_id << ", "
@@ -228,6 +292,19 @@ void ServiceDaemon<I>::update_status() {
       for (auto& attribute : pool_pair.second.attributes) {
         AttributeDumpVisitor attribute_dump_visitor(&f, attribute.first);
         boost::apply_visitor(attribute_dump_visitor, attribute.second);
+      }
+
+      if (!pool_pair.second.ns_attributes.empty()) {
+        f.open_object_section("namespaces");
+        for (auto& [ns, attributes] : pool_pair.second.ns_attributes) {
+          f.open_object_section(ns.c_str());
+          for (auto& [key, value] : attributes) {
+            AttributeDumpVisitor attribute_dump_visitor(&f, key);
+            boost::apply_visitor(attribute_dump_visitor, value);
+          }
+          f.close_section(); // namespace
+        }
+        f.close_section(); // namespaces
       }
       f.close_section(); // pool
     }

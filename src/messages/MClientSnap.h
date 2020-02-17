@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MClientSnap : public Message {
+class MClientSnap : public SafeMessage {
 public:
   ceph_mds_snap_head head;
   bufferlist bl;
@@ -28,7 +28,7 @@ public:
 
 protected:
   MClientSnap(int o=0) : 
-    Message{CEPH_MSG_CLIENT_SNAP} {
+    SafeMessage{CEPH_MSG_CLIENT_SNAP} {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }

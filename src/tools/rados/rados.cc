@@ -142,9 +142,9 @@ void usage(ostream& out)
 "ADVISORY LOCKS\n"
 "   lock list <obj-name>\n"
 "       List all advisory locks on an object\n"
-"   lock get <obj-name> <lock-name>\n"
+"   lock get <obj-name> <lock-name> [--lock-cookie locker-cookie] [--lock-tag locker-tag] [--lock-description locker-desc] [--lock-duration locker-dur] [--lock-type locker-type]\n"
 "       Try to acquire a lock\n"
-"   lock break <obj-name> <lock-name> <locker-name>\n"
+"   lock break <obj-name> <lock-name> <locker-name> [--lock-cookie locker-cookie]\n"
 "       Try to break a lock acquired by another client\n"
 "   lock info <obj-name> <lock-name>\n"
 "       Show lock information\n"
@@ -182,7 +182,7 @@ void usage(ostream& out)
 "   --format=[--format plain|json|json-pretty]\n"
 "   -b op_size\n"
 "        set the block size for put/get ops and for write benchmarking\n"
-"   -o object_size\n"
+"   -O object_size\n"
 "        set the object size for put/get ops and for write benchmarking\n"
 "   --max-objects\n"
 "        set the max number of objects for write benchmarking\n"
@@ -552,7 +552,7 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
 
 static int do_put(IoCtx& io_ctx, 
             const char *objname, const char *infile, int op_size,
-            uint64_t obj_offset,
+            uint64_t obj_offset, bool create_object,
             const bool use_striper)
 {
   string oid(objname);
@@ -595,7 +595,7 @@ static int do_put(IoCtx& io_ctx,
      continue;
     }
 
-    if (0 == offset)
+    if (0 == offset && create_object)
       ret = detail::write_full(io_ctx, oid, indata, use_striper);
     else
       ret = detail::write(io_ctx, oid, indata, count, offset, use_striper);
@@ -863,7 +863,7 @@ int LoadGen::bootstrap(const char *pool)
       }
     }
 
-    librados::AioCompletion *c = rados->aio_create_completion(NULL, NULL, NULL);
+    librados::AioCompletion *c = rados->aio_create_completion(nullptr, nullptr);
     completions.push_back(c);
     // generate object
     ret = io_ctx.aio_write(info.name, c, bl, buf_len, info.len - buf_len);
@@ -890,7 +890,7 @@ int LoadGen::bootstrap(const char *pool)
 
 void LoadGen::run_op(LoadGenOp *op)
 {
-  op->completion = rados->aio_create_completion(op, _load_gen_cb, NULL);
+  op->completion = rados->aio_create_completion(op, _load_gen_cb);
 
   switch (op->type) {
   case OP_READ:
@@ -1053,7 +1053,7 @@ protected:
     completions = NULL;
   }
   int create_completion(int slot, void (*cb)(void *, void*), void *arg) override {
-    completions[slot] = rados.aio_create_completion((void *) arg, 0, cb);
+    completions[slot] = rados.aio_create_completion((void *) arg, cb);
 
     if (!completions[slot])
       return -EINVAL;
@@ -1115,11 +1115,11 @@ protected:
   }
 
   bool completion_is_done(int slot) override {
-    return completions[slot]->is_safe();
+    return completions[slot]->is_complete();
   }
 
   int completion_wait(int slot) override {
-    return completions[slot]->wait_for_safe_and_cb();
+    return completions[slot]->wait_for_complete_and_cb();
   }
   int completion_ret(int slot) override {
     return completions[slot]->get_return_value();
@@ -1330,7 +1330,7 @@ static int do_cache_flush(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_CACHE |
 		     librados::OPERATION_IGNORE_OVERLAY,
 		     NULL);
-  completion->wait_for_safe();
+  completion->wait_for_complete();
   int r = completion->get_return_value();
   completion->release();
   return r;
@@ -1347,7 +1347,7 @@ static int do_cache_try_flush(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_OVERLAY |
 		     librados::OPERATION_SKIPRWLOCKS,
 		     NULL);
-  completion->wait_for_safe();
+  completion->wait_for_complete();
   int r = completion->get_return_value();
   completion->release();
   return r;
@@ -1364,7 +1364,7 @@ static int do_cache_evict(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_OVERLAY |
 		     librados::OPERATION_SKIPRWLOCKS,
 		     NULL);
-  completion->wait_for_safe();
+  completion->wait_for_complete();
   int r = completion->get_return_value();
   completion->release();
   return r;
@@ -1789,7 +1789,7 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     auto completion = librados::Rados::aio_create_completion();
     ret = do_get_inconsistent(rados, pg, start, max_item_num, completion,
 			      &items, &interval);
-    completion->wait_for_safe();
+    completion->wait_for_complete();
     ret = completion->get_return_value();
     completion->release();
     if (ret < 0) {
@@ -1846,6 +1846,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   unsigned object_size = 0;
   unsigned max_objects = 0;
   uint64_t obj_offset = 0;
+  bool obj_offset_specified = false;
   bool block_size_specified = false;
   int bench_write_dest = 0;
   bool cleanup = true;
@@ -1955,6 +1956,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (rados_sistrtoll(i, &obj_offset)) {
       return -EINVAL;
     }
+    obj_offset_specified = true;
   }
   i = opts.find("snap");
   if (i != opts.end()) {
@@ -2562,7 +2564,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage(cerr);
       return 1;
     }
-    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, obj_offset, use_striper);
+    bool create_object = !obj_offset_specified;
+    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, obj_offset, create_object, use_striper);
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       return 1;
@@ -3980,7 +3983,7 @@ int main(int argc, const char **argv)
       opts["max-objects"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--offset", (char*)NULL)) {
       opts["offset"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-o", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-O", (char*)NULL)) {
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {
       opts["snap"] = val;

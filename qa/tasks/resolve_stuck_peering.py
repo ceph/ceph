@@ -82,7 +82,7 @@ def task(ctx, config):
     pgnum=0
     pgstr = manager.get_pgid(pool, pgnum)
     stats = manager.get_single_pg_stats(pgstr)
-    print stats['state']
+    print(stats['state'])
 
     timeout=60
     start=time.time()
@@ -100,7 +100,7 @@ def task(ctx, config):
     #expect the pg status to be active+undersized+degraded
     #pg should recover and become active+clean within timeout
     stats = manager.get_single_pg_stats(pgstr)
-    print stats['state']
+    print(stats['state'])
 
     timeout=10
     start=time.time()

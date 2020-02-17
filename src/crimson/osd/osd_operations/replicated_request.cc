@@ -12,14 +12,14 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 RepRequest::RepRequest(OSD &osd,
-		       ceph::net::ConnectionRef&& conn,
+		       crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDRepOp> &&req)
   : osd{osd},
     conn{std::move(conn)},
@@ -58,7 +58,7 @@ RepRequest::PGPipeline &RepRequest::pp(PG &pg)
 
 seastar::future<> RepRequest::start()
 {
-  logger().info("{} start", *this);
+  logger().debug("{} start", *this);
   IRef ref = this;
   return with_blocking_future(handle.enter(cp().await_map))
     .then([this]() {

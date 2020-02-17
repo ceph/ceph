@@ -285,17 +285,17 @@ TEST_F(TestMockImagePreRemoveRequest, ExclusiveLockTryAcquireNotLockOwner) {
 TEST_F(TestMockImagePreRemoveRequest, Force) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
-  MockExclusiveLock *mock_exclusive_lock = new MockExclusiveLock();
-  m_mock_imctx->exclusive_lock = mock_exclusive_lock;
+  MockExclusiveLock mock_exclusive_lock;
+  m_mock_imctx->exclusive_lock = &mock_exclusive_lock;
 
   expect_op_work_queue(*m_mock_imctx);
   expect_test_features(*m_mock_imctx);
 
   InSequence seq;
   expect_set_journal_policy(*m_mock_imctx);
-  expect_try_acquire_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock,
+  expect_try_acquire_exclusive_lock(*m_mock_imctx, mock_exclusive_lock,
                                     -EINVAL);
-  expect_shut_down_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock, 0);
+  expect_shut_down_exclusive_lock(*m_mock_imctx, mock_exclusive_lock, 0);
 
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_image_watchers(*m_mock_imctx, mock_list_watchers_request, 0);
@@ -312,16 +312,16 @@ TEST_F(TestMockImagePreRemoveRequest, Force) {
 TEST_F(TestMockImagePreRemoveRequest, ExclusiveLockShutDownFailed) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
-  MockExclusiveLock *mock_exclusive_lock = new MockExclusiveLock();
-  m_mock_imctx->exclusive_lock = mock_exclusive_lock;
+  MockExclusiveLock mock_exclusive_lock;
+  m_mock_imctx->exclusive_lock = &mock_exclusive_lock;
 
   expect_op_work_queue(*m_mock_imctx);
   expect_test_features(*m_mock_imctx);
 
   InSequence seq;
   expect_set_journal_policy(*m_mock_imctx);
-  expect_try_acquire_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock, -EINVAL);
-  expect_shut_down_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock, -EINVAL);
+  expect_try_acquire_exclusive_lock(*m_mock_imctx, mock_exclusive_lock, -EINVAL);
+  expect_shut_down_exclusive_lock(*m_mock_imctx, mock_exclusive_lock, -EINVAL);
 
   C_SaferCond ctx;
   auto req = MockPreRemoveRequest::create(m_mock_imctx, true, &ctx);

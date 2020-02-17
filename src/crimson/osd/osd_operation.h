@@ -3,20 +3,23 @@
 
 #pragma once
 
-#include <seastar/core/shared_mutex.hh>
-#include <seastar/core/future.hh>
-
-#include <vector>
-#include <array>
 #include <algorithm>
+#include <array>
 #include <set>
+#include <vector>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
+#include <seastar/core/shared_mutex.hh>
+#include <seastar/core/future.hh>
 
-#include "common/Formatter.h"
+#include "include/ceph_assert.h"
 
-namespace ceph::osd {
+namespace ceph {
+  class Formatter;
+}
+
+namespace crimson::osd {
 
 enum class OperationTypeCode {
   client_request = 0,
@@ -80,7 +83,7 @@ blocking_future<V...> make_ready_blocking_future(U&&... args) {
  */
 class Blocker {
 protected:
-  virtual void dump_detail(Formatter *f) const = 0;
+  virtual void dump_detail(ceph::Formatter *f) const = 0;
 
 public:
   template <typename... T>
@@ -88,7 +91,7 @@ public:
     return blocking_future(this, std::move(f));
   }
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
   virtual const char *get_type_name() const = 0;
 
@@ -121,7 +124,7 @@ class Operation : public boost::intrusive_ref_counter<
     id = in_id;
   }
 protected:
-  virtual void dump_detail(Formatter *f) const = 0;
+  virtual void dump_detail(ceph::Formatter *f) const = 0;
 
 public:
   uint64_t get_id() const {
@@ -145,10 +148,10 @@ public:
 
   template <typename... T>
   seastar::future<T...> with_blocking_future(blocking_future<T...> &&f) {
-    if (f.fut.available() || f.fut.failed()) {
+    if (f.fut.available()) {
       return std::move(f.fut);
     }
-    ceph_assert(f.blocker);
+    assert(f.blocker);
     add_blocker(f.blocker);
     return std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
       clear_blocker(blocker);
@@ -156,8 +159,8 @@ public:
     });
   }
 
-  void dump(Formatter *f);
-  void dump_brief(Formatter *f);
+  void dump(ceph::Formatter *f);
+  void dump_brief(ceph::Formatter *f);
   virtual ~Operation() = default;
 };
 using OperationRef = boost::intrusive_ptr<Operation>;
@@ -168,7 +171,7 @@ template <typename T>
 class OperationT : public Operation {
 
 protected:
-  virtual void dump_detail(Formatter *f) const = 0;
+  virtual void dump_detail(ceph::Formatter *f) const = 0;
 
 public:
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
@@ -231,7 +234,7 @@ class OrderedPipelinePhase : public Blocker {
   const char * name;
 
 protected:
-  virtual void dump_detail(Formatter *f) const final;
+  virtual void dump_detail(ceph::Formatter *f) const final;
   const char *get_type_name() const final {
     return name;
   }

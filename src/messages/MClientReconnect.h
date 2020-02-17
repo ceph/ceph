@@ -20,7 +20,7 @@
 #include "include/ceph_features.h"
 
 
-class MClientReconnect : public Message {
+class MClientReconnect : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;
@@ -32,7 +32,7 @@ public:
 
 private:
   MClientReconnect() :
-    Message{CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION} {}
+    SafeMessage{CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION} {}
   ~MClientReconnect() override {}
 
   size_t cap_size = 0;

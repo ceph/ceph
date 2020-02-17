@@ -23,16 +23,22 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
+                 RBD_FEATURE_DEEP_FLATTEN, RBD_FEATURE_FAST_DIFF,
+                 RBD_FEATURE_OBJECT_MAP,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                 RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
+                 RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
+                 RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
                  RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
-                 RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX)
+                 RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                 RBD_SNAP_REMOVE_UNPROTECT)
 
 rados = None
 ioctx = None
@@ -477,6 +483,35 @@ def check_stat(info, size, order):
     eq(info['num_objs'], size // (1 << order))
     eq(info['obj_size'], 1 << order)
 
+@require_new_format()
+def test_features_to_string():
+    rbd = RBD()
+    features = RBD_FEATURE_DEEP_FLATTEN | RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_FAST_DIFF \
+               | RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP
+    expected_features_string = "deep-flatten,exclusive-lock,fast-diff,layering,object-map"
+    features_string = rbd.features_to_string(features)
+    eq(expected_features_string, features_string)
+
+    features = RBD_FEATURE_LAYERING
+    features_string = rbd.features_to_string(features)
+    eq(features_string, "layering")
+
+    features = 1024
+    assert_raises(InvalidArgument, rbd.features_to_string, features)
+
+@require_new_format()
+def test_features_from_string():
+    rbd = RBD()
+    features_string = "deep-flatten,exclusive-lock,fast-diff,layering,object-map"
+    expected_features_bitmask = RBD_FEATURE_DEEP_FLATTEN | RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_FAST_DIFF \
+                                | RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP
+    features = rbd.features_from_string(features_string)
+    eq(expected_features_bitmask, features)
+
+    features_string = "layering"
+    features = rbd.features_from_string(features_string)
+    eq(features, RBD_FEATURE_LAYERING)
+
 class TestImage(object):
 
     def setUp(self):
@@ -741,6 +776,11 @@ class TestImage(object):
         eq(snap_data, b'\0' * 256)
         self.image.remove_snap('snap1')
 
+    def test_create_snap_exists(self):
+        self.image.create_snap('snap1')
+        assert_raises(ImageExists, self.image.create_snap, 'snap1')
+        self.image.remove_snap('snap1')
+
     def test_list_snaps(self):
         eq([], list(self.image.list_snaps()))
         self.image.create_snap('snap1')
@@ -762,14 +802,25 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         eq([], list(self.image.list_snaps()))
 
+    def test_remove_snap_not_found(self):
+        assert_raises(ImageNotFound, self.image.remove_snap, 'snap1')
+
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_remove_snap2(self):
+        self.image.create_snap('snap1')
+        self.image.protect_snap('snap1')
+        assert(self.image.is_protected_snap('snap1'))
+        self.image.remove_snap2('snap1', RBD_SNAP_REMOVE_UNPROTECT)
+        eq([], list(self.image.list_snaps()))
+
     def test_remove_snap_by_id(self):
-	eq([], list(self.image.list_snaps()))
-	self.image.create_snap('snap1')
-	eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
-	for snap in self.image.list_snaps():
-	    snap_id = snap["id"]
-	self.image.remove_snap_by_id(snap_id)
-	eq([], list(self.image.list_snaps()))
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+        for snap in self.image.list_snaps():
+            snap_id = snap["id"]
+        self.image.remove_snap_by_id(snap_id)
+        eq([], list(self.image.list_snaps()))
 
     def test_rename_snap(self):
         eq([], list(self.image.list_snaps()))
@@ -938,6 +989,38 @@ class TestImage(object):
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.remove_snap('snap1')
+
+    def test_snap_get_name(self):
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        self.image.create_snap('snap2')
+        self.image.create_snap('snap3')
+
+        for snap in self.image.list_snaps():
+            expected_snap_name = self.image.snap_get_name(snap['id'])
+            eq(expected_snap_name, snap['name'])
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+        self.image.remove_snap('snap3')
+        eq([], list(self.image.list_snaps()))
+
+        assert_raises(ImageNotFound, self.image.snap_get_name, 1)
+
+    def test_snap_get_id(self):
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        self.image.create_snap('snap2')
+        self.image.create_snap('snap3')
+
+        for snap in self.image.list_snaps():
+            expected_snap_id = self.image.snap_get_id(snap['name'])
+            eq(expected_snap_id, snap['id'])
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+        self.image.remove_snap('snap3')
+        eq([], list(self.image.list_snaps()))
+
+        assert_raises(ImageNotFound, self.image.snap_get_id, 'snap1')
 
     def test_set_snap_sparse(self):
         self.image.create_snap('snap1')
@@ -1968,6 +2051,50 @@ class TestMirroring(object):
         for i in range(N):
             self.rbd.remove(ioctx, image_name + str(i))
 
+    def test_mirror_image_create_snapshot(self):
+        assert_raises(InvalidArgument, self.image.mirror_image_create_snapshot)
+
+        peer1_uuid = self.rbd.mirror_peer_add(ioctx, "cluster1", "client")
+        peer2_uuid = self.rbd.mirror_peer_add(ioctx, "cluster2", "client")
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        self.image.mirror_image_disable(False)
+        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+        mode = self.image.mirror_image_get_mode()
+        eq(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode)
+
+        snap_id = self.image.mirror_image_create_snapshot()
+
+        snaps = list(self.image.list_snaps())
+        eq(1, len(snaps))
+        snap = snaps[0]
+        eq(snap['id'], snap_id)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        eq(False, snap['mirror_primary']['demoted'])
+        eq(sorted([peer1_uuid, peer2_uuid]),
+           sorted(snap['mirror_primary']['mirror_peer_uuids']))
+
+        eq(RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
+           self.image.snap_get_namespace_type(snap_id))
+        mirror_snap = self.image.snap_get_mirror_primary_namespace(snap_id)
+        eq(mirror_snap, snap['mirror_primary'])
+
+        self.image.mirror_image_demote()
+
+        assert_raises(InvalidArgument, self.image.mirror_image_create_snapshot)
+
+        snaps = list(self.image.list_snaps())
+        eq(2, len(snaps))
+        snap = snaps[0]
+        eq(snap['id'], snap_id)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        snap = snaps[1]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        eq(True, snap['mirror_primary']['demoted'])
+        eq(sorted([peer1_uuid, peer2_uuid]),
+           sorted(snap['mirror_primary']['mirror_peer_uuids']))
+
+        self.rbd.mirror_peer_remove(ioctx, peer1_uuid)
+        self.rbd.mirror_peer_remove(ioctx, peer2_uuid)
 
 class TestTrash(object):
 

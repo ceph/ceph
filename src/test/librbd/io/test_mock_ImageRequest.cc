@@ -173,6 +173,38 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   ASSERT_EQ(0, aio_comp_ctx_2.wait());
 }
 
+TEST_F(TestMockIoImageRequest, AioWriteEarlyFinish) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  C_SaferCond aio_comp_ctx_1, aio_comp_ctx_2;
+  AioCompletion *aio_comp_1 = AioCompletion::create_and_start(
+    &aio_comp_ctx_1, ictx, AIO_TYPE_WRITE);
+  AioCompletion *aio_comp_2 = AioCompletion::create_and_start(
+    &aio_comp_ctx_2, ictx, AIO_TYPE_WRITE);
+
+  bufferlist bl;
+  MockImageWriteRequest mock_aio_image_write_1(mock_image_ctx, aio_comp_1,
+                                             {{0, 0}}, std::move(bl), 0, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_write_1.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx_1.wait());
+
+  mock_image_ctx.snap_id = 123;
+  bl.append("1");
+  MockImageWriteRequest mock_aio_image_write_2(mock_image_ctx, aio_comp_2,
+                                             {{0, 1}}, std::move(bl), 0, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_write_2.send();
+  }
+  ASSERT_EQ(-EROFS, aio_comp_ctx_2.wait());
+}
+
 TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
   REQUIRE_FORMAT_V2();
 

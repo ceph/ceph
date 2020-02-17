@@ -27,8 +27,8 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_collection.h"
-#include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
@@ -43,30 +43,30 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
   static constexpr int TICK_INTERVAL = 1;
 }
 
-using ceph::common::local_conf;
-using ceph::os::FuturizedStore;
+using crimson::common::local_conf;
+using crimson::os::FuturizedStore;
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 OSD::OSD(int id, uint32_t nonce,
-         ceph::net::Messenger& cluster_msgr,
-         ceph::net::Messenger& public_msgr,
-         ceph::net::Messenger& hb_front_msgr,
-         ceph::net::Messenger& hb_back_msgr)
+         crimson::net::Messenger& cluster_msgr,
+         crimson::net::Messenger& public_msgr,
+         crimson::net::Messenger& hb_front_msgr,
+         crimson::net::Messenger& hb_back_msgr)
   : whoami{id},
     nonce{nonce},
     // do this in background
     beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
-    monc{new ceph::mon::Client{public_msgr, *this}},
-    mgrc{new ceph::mgr::Client{public_msgr, *this}},
-    store{ceph::os::FuturizedStore::create(
+    monc{new crimson::mon::Client{public_msgr, *this}},
+    mgrc{new crimson::mgr::Client{public_msgr, *this}},
+    store{crimson::os::FuturizedStore::create(
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"))},
     shard_services{*this, cluster_msgr, public_msgr, *monc, *mgrc, *store},
@@ -222,7 +222,7 @@ seastar::future<> OSD::start()
       CEPH_FEATURE_UID |
       CEPH_FEATURE_PGID64 |
       CEPH_FEATURE_OSDENC;
-    using ceph::net::SocketPolicy;
+    using crimson::net::SocketPolicy;
 
     public_msgr.set_default_policy(SocketPolicy::stateless_server(0));
     public_msgr.set_policy(entity_name_t::TYPE_MON,
@@ -483,7 +483,7 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   });
 }
 
-seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
+seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
 {
   if (state.is_stopping()) {
     return seastar::now();
@@ -522,7 +522,7 @@ seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
   }
 }
 
-seastar::future<> OSD::ms_handle_connect(ceph::net::ConnectionRef conn)
+seastar::future<> OSD::ms_handle_connect(crimson::net::ConnectionRef conn)
 {
   if (conn->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
     return seastar::now();
@@ -531,14 +531,14 @@ seastar::future<> OSD::ms_handle_connect(ceph::net::ConnectionRef conn)
   }
 }
 
-seastar::future<> OSD::ms_handle_reset(ceph::net::ConnectionRef conn)
+seastar::future<> OSD::ms_handle_reset(crimson::net::ConnectionRef conn)
 {
   // TODO: cleanup the session attached to this connection
   logger().warn("ms_handle_reset");
   return seastar::now();
 }
 
-seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
+seastar::future<> OSD::ms_handle_remote_reset(crimson::net::ConnectionRef conn)
 {
   logger().warn("ms_handle_remote_reset");
   return seastar::now();
@@ -647,7 +647,7 @@ seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
   });
 }
 
-bool OSD::require_mon_peer(ceph::net::Connection *conn, Ref<Message> m)
+bool OSD::require_mon_peer(crimson::net::Connection *conn, Ref<Message> m)
 {
   if (!conn->peer_is_mon()) {
     logger().info("{} received from non-mon {}, {}",
@@ -713,11 +713,8 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	  startmap->pg_to_up_acting_osds(
 	    info->pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
-	  int role = startmap->calc_pg_role(whoami, acting, acting.size());
-	  if (!pp->is_replicated() && role != info->pgid.shard) {
-	    role = -1;
-	  }
-
+	  int role = startmap->calc_pg_role(pg_shard_t(whoami, info->pgid.shard),
+					    acting);
 
 	  create_pg_collection(
 	    rctx.transaction,
@@ -750,7 +747,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
   });
 }
 
-seastar::future<> OSD::handle_osd_map(ceph::net::Connection* conn,
+seastar::future<> OSD::handle_osd_map(crimson::net::Connection* conn,
                                       Ref<MOSDMap> m)
 {
   logger().info("handle_osd_map {}", *m);
@@ -882,7 +879,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   });
 }
 
-seastar::future<> OSD::handle_osd_op(ceph::net::Connection* conn,
+seastar::future<> OSD::handle_osd_op(crimson::net::Connection* conn,
                                      Ref<MOSDOp> m)
 {
   shard_services.start_operation<ClientRequest>(
@@ -892,7 +889,7 @@ seastar::future<> OSD::handle_osd_op(ceph::net::Connection* conn,
   return seastar::now();
 }
 
-seastar::future<> OSD::handle_rep_op(ceph::net::Connection* conn,
+seastar::future<> OSD::handle_rep_op(crimson::net::Connection* conn,
 				     Ref<MOSDRepOp> m)
 {
   m->finish_decode();
@@ -903,7 +900,7 @@ seastar::future<> OSD::handle_rep_op(ceph::net::Connection* conn,
   return seastar::now();
 }
 
-seastar::future<> OSD::handle_rep_op_reply(ceph::net::Connection* conn,
+seastar::future<> OSD::handle_rep_op_reply(crimson::net::Connection* conn,
 					   Ref<MOSDRepOpReply> m)
 {
   const auto& pgs = pg_map.get_pgs();
@@ -996,7 +993,7 @@ seastar::future<> OSD::update_heartbeat_peers()
 }
 
 seastar::future<> OSD::handle_peering_op(
-  ceph::net::Connection* conn,
+  crimson::net::Connection* conn,
   Ref<MOSDPeeringOp> m)
 {
   const int from = m->get_source().num();

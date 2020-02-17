@@ -1,7 +1,8 @@
 import logging
 import unittest
-import mock
+from tests import mock
 import json
+import os
 
 import requests_mock
 
@@ -20,7 +21,7 @@ PB_NAME = "test_playbook"
 PB_UUID = "1733c3ac"
 
 # Playbook execution data file
-PB_EVENTS_FILE = "./tests/pb_execution_events.data"
+PB_EVENTS_FILE = os.path.dirname( __file__) + "/pb_execution_events.data"
 
 # create console handler and set level to info
 logger = logging.getLogger()
@@ -33,8 +34,7 @@ logger.addHandler(handler)
 def mock_get_pb(mock_server, playbook_name, return_code):
 
     ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
-                        client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
-                        logger = logger)
+                        client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH")
 
     the_pb_url = "https://%s/%s/%s" % (SERVER_URL, PLAYBOOK_EXEC_URL, playbook_name)
 
@@ -53,7 +53,7 @@ def mock_get_pb(mock_server, playbook_name, return_code):
                                "data": { "play_uuid": "1733c3ac" }},
                         status_code=return_code)
 
-    return PlayBookExecution(ars_client, playbook_name, logger,
+    return PlayBookExecution(ars_client, playbook_name,
                              result_pattern = "RESULTS")
 
 class ARSclientTest(unittest.TestCase):
@@ -62,8 +62,7 @@ class ARSclientTest(unittest.TestCase):
 
         with self.assertRaises(AnsibleRunnerServiceError):
             ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
-                            client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
-                            logger = logger)
+                            client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH")
 
             status = ars_client.is_operative()
 
@@ -73,8 +72,7 @@ class ARSclientTest(unittest.TestCase):
         with requests_mock.Mocker() as mock_server:
 
             ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
-                                client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
-                                logger = logger)
+                                client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH")
 
             the_api_url = "https://%s/%s" % (SERVER_URL,API_URL)
             mock_server.register_uri("GET",
@@ -90,8 +88,7 @@ class ARSclientTest(unittest.TestCase):
         with requests_mock.Mocker() as mock_server:
 
             ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
-                                client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
-                                logger = logger)
+                                client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH")
 
             url = "https://%s/test" % (SERVER_URL)
             mock_server.register_uri("DELETE",

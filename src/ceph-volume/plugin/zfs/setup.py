@@ -23,8 +23,6 @@ setup(
         "Programming Language :: Python :: 2",
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
     description="Manage Ceph OSDs on ZFS pool/volume/filesystem",
@@ -34,14 +32,13 @@ setup(
     keywords='ceph-volume-zfs',
     name='ceph-volume-zfs',
     packages=find_packages(include=['ceph_volume_zfs']),
-    scripts=['bin/ceph-volume-zfs'],
     setup_requires=setup_requirements,
     url='https://github.com/ceph/ceph/src/ceph-volume/plugin/zfs',
     version='0.1.0',
     zip_safe=False,
     entry_points = dict(
         ceph_volume_handlers = [
-            'zfs = ceph_volume_zfs.main:ZFSVOL',
+            'zfs = ceph_volume_zfs.zfs:ZFS',
         ],
     ),
 )

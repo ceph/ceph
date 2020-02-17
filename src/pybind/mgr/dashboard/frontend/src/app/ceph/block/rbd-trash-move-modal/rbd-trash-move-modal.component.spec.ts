@@ -36,9 +36,10 @@ describe('RbdTrashMoveModalComponent', () => {
     component = fixture.componentInstance;
     httpTesting = TestBed.get(HttpTestingController);
 
-    component.metaType = 'RBD';
     component.poolName = 'foo';
     component.imageName = 'bar';
+
+    fixture.detectChanges();
   });
 
   it('should create', () => {
@@ -47,7 +48,6 @@ describe('RbdTrashMoveModalComponent', () => {
   });
 
   it('should finish running ngOnInit', () => {
-    fixture.detectChanges();
     expect(component.pattern).toEqual('foo/bar');
   });
 
@@ -67,7 +67,7 @@ describe('RbdTrashMoveModalComponent', () => {
 
     it('with normal delay', () => {
       component.moveImage();
-      const req = httpTesting.expectOne('api/block/image/foo/bar/move_trash');
+      const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
       expect(req.request.body).toEqual({ delay: 0 });
     });
@@ -79,7 +79,7 @@ describe('RbdTrashMoveModalComponent', () => {
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
-      const req = httpTesting.expectOne('api/block/image/foo/bar/move_trash');
+      const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
       expect(req.request.body).toEqual({ delay: 0 });
     });
@@ -88,11 +88,10 @@ describe('RbdTrashMoveModalComponent', () => {
       const oldDate = moment()
         .add(24, 'hour')
         .toISOString();
-      fixture.detectChanges();
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
-      const req = httpTesting.expectOne('api/block/image/foo/bar/move_trash');
+      const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
       expect(req.request.body.delay).toBeGreaterThan(86390);
     });

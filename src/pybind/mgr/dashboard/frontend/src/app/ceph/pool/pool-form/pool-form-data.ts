@@ -3,7 +3,6 @@ import { Validators } from '@angular/forms';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
-import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { Pool } from '../pool';
 
 export class PoolFormData {
@@ -16,11 +15,8 @@ export class PoolFormData {
     this.poolTypes = ['erasure', 'replicated'];
     this.applications = {
       selected: [],
-      available: [
-        new SelectOption(false, 'cephfs', ''),
-        new SelectOption(false, 'rbd', ''),
-        new SelectOption(false, 'rgw', '')
-      ],
+      default: ['cephfs', 'rbd', 'rgw'],
+      available: [], // Filled during runtime
       validators: [Validators.pattern('[A-Za-z0-9_]+'), Validators.maxLength(128)],
       messages: new SelectMessages(
         {

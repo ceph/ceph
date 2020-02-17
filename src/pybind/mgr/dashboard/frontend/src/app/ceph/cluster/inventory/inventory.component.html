@@ -9,14 +9,10 @@
   <legend i18n>Devices</legend>
   <div class="row">
     <div class="col-md-12">
-      <cd-table [data]="devices"
-                [columns]="columns"
-                identifier="uid"
-                forceIdentifier="true"
-                columnMode="flex"
-                (fetchData)="getInventory($event)"
-                selectionType="single">
-      </cd-table>
+      <cd-inventory-devices [devices]="devices"
+                            [hiddenColumns]="hostname === undefined ? [] : ['hostname']"
+                            selectionType="single">
+      </cd-inventory-devices>
     </div>
   </div>
 </ng-container>

@@ -92,6 +92,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   uint64_t overlap, features, flags, snap_limit;
   bool snap_protected = false;
   librbd::mirror_image_info_t mirror_image;
+  librbd::mirror_image_mode_t mirror_mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
   std::vector<librbd::snap_info_t> snaps;
   int r;
 
@@ -159,8 +160,14 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       return r;
   }
 
-  if (features & RBD_FEATURE_JOURNALING) {
-    r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
+  mirror_image.state = RBD_MIRROR_IMAGE_DISABLED;
+  r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
+  if (r < 0) {
+    return r;
+  }
+
+  if (mirror_image.state != RBD_MIRROR_IMAGE_DISABLED) {
+    r = image.mirror_image_get_mode(&mirror_mode);
     if (r < 0) {
       return r;
     }
@@ -361,9 +368,12 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     }
   }
 
-  if (features & RBD_FEATURE_JOURNALING) {
+  if (features & RBD_FEATURE_JOURNALING ||
+      mirror_image.state != RBD_MIRROR_IMAGE_DISABLED) {
     if (f) {
       f->open_object_section("mirroring");
+      f->dump_string("mode",
+          utils::mirror_image_mode(mirror_mode));
       f->dump_string("state",
           utils::mirror_image_state(mirror_image.state));
       if (mirror_image.state != RBD_MIRROR_IMAGE_DISABLED) {
@@ -372,6 +382,8 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       }
       f->close_section();
     } else {
+      std::cout << "\tmirroring mode: "
+                << utils::mirror_image_mode(mirror_mode) << std::endl;
       std::cout << "\tmirroring state: "
                 << utils::mirror_image_state(mirror_image.state) << std::endl;
       if (mirror_image.state != RBD_MIRROR_IMAGE_DISABLED) {

@@ -25,7 +25,7 @@
 #include "Messenger.h"
 #include "SocketConnection.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 class SocketMessenger final : public Messenger, public seastar::peering_sharded_service<SocketMessenger> {
   const int master_sid;
@@ -127,4 +127,4 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   }
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

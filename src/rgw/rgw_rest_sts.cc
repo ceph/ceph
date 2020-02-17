@@ -37,9 +37,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-namespace rgw {
-namespace auth {
-namespace sts {
+namespace rgw::auth::sts {
 
 bool
 WebTokenEngine::is_applicable(const std::string& token) const noexcept
@@ -118,9 +116,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   return result_t::deny(-EACCES);
 }
 
-}; /* namespace sts */
-}; /* namespace auth */
-}; /* namespace rgw */
+} // namespace rgw::auth::s3
 
 int RGWREST_STS::verify_permission()
 {

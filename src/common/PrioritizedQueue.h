@@ -343,6 +343,10 @@ public:
     }
     f->close_section();
   }
+
+  void print(std::ostream &ostream) const final {
+    ostream << "PrioritizedQueue";
+  }
 };
 
 #endif

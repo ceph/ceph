@@ -9,7 +9,7 @@
 
 #include "osd/osd_types.h"
 
-namespace ceph::os {
+namespace crimson::os {
 
 class FuturizedCollection
   : public boost::intrusive_ref_counter<FuturizedCollection,

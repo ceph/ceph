@@ -13,6 +13,7 @@
 #include "common/escape.h"
 
 #include "include/compat.h"
+#include <boost/lexical_cast.hpp>
 
 CLS_VER(1,0)
 CLS_NAME(rgw)
@@ -1462,6 +1463,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   if (ret < 0) {
     return ret;
   }
+  const uint64_t prev_epoch = olh.get_epoch();
 
   if (!olh.start_modify(op.olh_epoch)) {
     ret = obj.write(op.olh_epoch, false);
@@ -1474,6 +1476,12 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return 0;
   }
 
+  // promote this version to current if it's a newer epoch, or if it matches the
+  // current epoch and sorts after the current instance
+  const bool promote = (olh.get_epoch() > prev_epoch) ||
+      (olh.get_epoch() == prev_epoch &&
+       olh.get_entry().key.instance > op.key.instance);
+
   if (olh_found) {
     const string& olh_tag = olh.get_tag();
     if (op.olh_tag != olh_tag) {
@@ -1484,7 +1492,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       /* if pending removal, this is a new olh instance */
       olh.set_tag(op.olh_tag);
     }
-    if (olh.exists()) {
+    if (promote && olh.exists()) {
       rgw_bucket_olh_entry& olh_entry = olh.get_entry();
       /* found olh, previous instance is no longer the latest, need to update */
       if (!(olh_entry.key == op.key)) {
@@ -1501,7 +1509,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   } else {
     bool instance_only = (op.key.instance.empty() && op.delete_marker);
     cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only);
+    ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
@@ -1515,8 +1523,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
   }
 
-  olh.update(op.key, op.delete_marker);
-
+  if (promote) {
+    olh.update(op.key, op.delete_marker);
+  }
   olh.set_exists(true);
 
   ret = olh.write();
@@ -1526,7 +1535,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* write the instance and list entries */
-  ret = obj.write(olh.get_epoch(), true);
+  ret = obj.write(olh.get_epoch(), promote);
   if (ret < 0) {
     return ret;
   }
@@ -2944,11 +2953,9 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   CLS_LOG(10, "usage_iterate_range");
 
   map<string, bufferlist> keys;
-#define NUM_KEYS 32
   string filter_prefix;
   string start_key, end_key;
   bool by_user = !user.empty();
-  uint32_t i = 0;
   string user_key;
   bool truncated_status = false;
 
@@ -2982,12 +2989,11 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   if (iter == keys.end())
     return 0;
 
-  uint32_t num_keys = keys.size();
-
-  for (; iter != keys.end(); ++iter,++i) {
+  for (; iter != keys.end(); ++iter) {
     const string& key = iter->first;
     rgw_usage_log_entry e;
 
+    key_iter = key;
     if (!by_user && key.compare(end_key) >= 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
       *truncated = false;
@@ -3021,12 +3027,6 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
     ret = cb(hctx, key, e, param);
     if (ret < 0)
       return ret;
-
-
-    if (i == num_keys - 1) {
-      key_iter = key;
-      return 0;
-    }
   }
   return 0;
 }
@@ -3272,8 +3272,6 @@ static int gc_defer_entry(cls_method_context_t hctx, const string& tag, uint32_t
 {
   cls_rgw_gc_obj_info info;
   int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, tag, &info);
-  if (ret == -ENOENT)
-    return 0;
   if (ret < 0)
     return ret;
   return gc_update_entry(hctx, expiration_secs, info);
@@ -3943,7 +3941,6 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_clear_bucket_resharding;
   cls_method_handle_t h_rgw_guard_bucket_resharding;
   cls_method_handle_t h_rgw_get_bucket_resharding;
-
 
   cls_register(RGW_CLASS, &h_class);
 

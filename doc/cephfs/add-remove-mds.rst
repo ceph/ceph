@@ -15,9 +15,9 @@ Provisioning Hardware for an MDS
 ================================
 
 The present version of the MDS is single-threaded and CPU-bound for most
-activities, including responding to client requests. Even so, an MDS under the
-most aggressive client loads still uses about 2 to 3 CPU cores. This is due to
-the other miscellaneous upkeep threads working in tandem.
+activities, including responding to client requests. An MDS under the most
+aggressive client loads uses about 2 to 3 CPU cores. This is due to the other
+miscellaneous upkeep threads working in tandem.
 
 Even so, it is recommended that an MDS server be well provisioned with an
 advanced CPU with sufficient cores. Development is on-going to make better use
@@ -27,14 +27,17 @@ that the MDS server will improve performance by taking advantage of more cores.
 The other dimension to MDS performance is the available RAM for caching. The
 MDS necessarily manages a distributed and cooperative metadata cache among all
 clients and other active MDSs. Therefore it is essential to provide the MDS
-with sufficient RAM to enable faster metadata access and mutation.
+with sufficient RAM to enable faster metadata access and mutation. The default
+MDS cache size (see also :doc:`/cephfs/cache-size-limits`) is 4GB. It is
+recommended to provision at least 8GB of RAM for the MDS to support this cache
+size.
 
 Generally, an MDS serving a large cluster of clients (1000 or more) will use at
-least 64GB of cache (see also :doc:`/cephfs/cache-size-limits`). An MDS with a larger
-cache is not well explored in the largest known community clusters; there may
-be diminishing returns where management of such a large cache negatively
-impacts performance in surprising ways. It would be best to do analysis with
-expected workloads to determine if provisioning more RAM is worthwhile.
+least 64GB of cache. An MDS with a larger cache is not well explored in the
+largest known community clusters; there may be diminishing returns where
+management of such a large cache negatively impacts performance in surprising
+ways. It would be best to do analysis with expected workloads to determine if
+provisioning more RAM is worthwhile.
 
 In a bare-metal cluster, the best practice is to over-provision hardware for
 the MDS server. Even if a single MDS daemon is unable to fully utilize the
@@ -61,18 +64,13 @@ Adding an MDS
 
 #. Create an mds data point ``/var/lib/ceph/mds/ceph-${id}``. The daemon only uses this directory to store its keyring.
 
-#. Edit ``ceph.conf`` and add MDS section. ::
-
-	[mds.${id}]
-	host = {hostname}
-
 #. Create the authentication key, if you use CephX. ::
 
 	$ sudo ceph auth get-or-create mds.${id} mon 'profile mds' mgr 'profile mds' mds 'allow *' osd 'allow *' > /var/lib/ceph/mds/ceph-${id}/keyring
 
 #. Start the service. ::
 
-	$ sudo systemctl start mds.${id}
+	$ sudo systemctl start ceph-mds@${id}
 
 #. The status of the cluster should show: ::
 
@@ -92,7 +90,7 @@ the following method.
 
 #. Stop the MDS to be removed. ::
 
-	$ sudo systemctl stop mds.${id}
+	$ sudo systemctl stop ceph-mds@${id}
 
    The MDS will automatically notify the Ceph monitors that it is going down.
    This enables the monitors to perform instantaneous failover to an available

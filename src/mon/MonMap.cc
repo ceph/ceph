@@ -44,7 +44,16 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   ENCODE_START(v, 1, bl);
   encode(name, bl);
   if (v < 3) {
-    encode(public_addrs.legacy_addr(), bl, features);
+    auto a = public_addrs.legacy_addr();
+    if (a != entity_addr_t()) {
+      encode(a, bl, features);
+    } else {
+      // note: we don't have a legacy addr here, so lie so that it looks
+      // like one, just so that old clients get a valid-looking map.
+      // they won't be able to talk to the v2 mons, but that's better
+      // than nothing.
+      encode(public_addrs.as_legacy_addr(), bl, features);
+    }
   } else {
     encode(public_addrs, bl, features);
   }
@@ -494,7 +503,7 @@ int MonMap::init_with_hosts(const std::string& hostlist,
   vector<entity_addrvec_t> addrs;
   bool success = parse_ip_port_vec(
     hosts, addrs,
-    for_mkfs ? entity_addr_t::TYPE_MSGR2 : entity_addr_t::TYPE_ANY);
+    entity_addr_t::TYPE_ANY);
   free(hosts);
   if (!success)
     return -EINVAL;
@@ -507,8 +516,10 @@ int MonMap::init_with_hosts(const std::string& hostlist,
     string name = prefix;
     name += n;
     if (addrs[i].v.size() == 1) {
-      _add_ambiguous_addr(name, addrs[i].front(), 0, 0, false);
+      _add_ambiguous_addr(name, addrs[i].front(), 0, 0, for_mkfs);
     } else {
+      // they specified an addrvec, so let's assume they also specified
+      // the addr *type* and *port*.  (we could possibly improve this?)
       add(name, addrs[i], 0);
     }
   }
@@ -707,7 +718,7 @@ future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& name)
   });
 }
 
-seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf,
+seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 				       bool for_mkfs)
 {
   // -m foo?
@@ -741,7 +752,7 @@ seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf,
   });
 }
 
-future<> MonMap::build_initial(const ceph::common::ConfigProxy& conf, bool for_mkfs)
+future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
   // file?
   if (const auto monmap = conf.get_val<std::string>("monmap");

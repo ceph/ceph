@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from __future__ import print_function
 
@@ -9,13 +9,9 @@ import time
 import sys
 
 if sys.version_info[0] == 2:
-    from cStringIO import StringIO
-
-    range = xrange
+    range = xrange # noqa
 
 elif sys.version_info[0] == 3:
-    from io import StringIO
-
     range = range
 
 import rados as rados
@@ -47,8 +43,6 @@ def set_mds_config_param(ceph, param):
         if r != 0:
             raise Exception
 
-import ConfigParser
-import contextlib
 
 class _TrimIndentFile(object):
     def __init__(self, fp):
@@ -150,10 +144,10 @@ def verify(rados_ioctx, ino, values, pool):
 
     bt = decode(binbt)
 
+    ind = 0
     if bt['ino'] != ino:
         raise VerifyFailure('inode mismatch: {bi} != {ino}\n\tbacktrace:\n\t\t{bt}\n\tfailed verify against:\n\t\t{i}, {v}'.format(
                     bi=bt['ancestors'][ind]['dname'], ino=ino, bt=bt, i=ino, v=values))
-    ind = 0
     for (n, i) in values:
         if bt['ancestors'][ind]['dirino'] != i:
             raise VerifyFailure('ancestor dirino mismatch: {b} != {ind}\n\tbacktrace:\n\t\t{bt}\n\tfailed verify against:\n\t\t{i}, {v}'.format(

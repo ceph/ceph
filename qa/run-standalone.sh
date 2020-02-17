@@ -12,21 +12,13 @@ function get_cmake_variable() {
 }
 
 function get_python_path() {
-    local py_ver=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
-    if [ -z "${py_ver}" ]; then
-        if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
-            py_ver=2
-        else
-            py_ver=3
-        fi
-    fi
     python_common=$(realpath ../src/python-common)
-    echo $(realpath ../src/pybind):$(pwd)/lib/cython_modules/lib.$py_ver:$python_common
+    echo $(realpath ../src/pybind):$(pwd)/lib/cython_modules/lib.3:$python_common
 }
 
 if [ `uname` = FreeBSD ]; then
     # otherwise module prettytable will not be found
-    export PYTHONPATH=$(get_python_path):/usr/local/lib/python2.7/site-packages
+    export PYTHONPATH=$(get_python_path):/usr/local/lib/python3.6/site-packages
     exec_mode=+111
     KERNCORE="kern.corefile"
     COREPATTERN="core.%N.%P"
@@ -94,13 +86,9 @@ if ls $(dirname $(sysctl -n $KERNCORE)) | grep -q '^core\|core$' ; then
 fi
 
 ulimit -c unlimited
-for f in $(cd $location ; find . -perm $exec_mode -type f)
+for f in $(cd $location ; find . -mindepth 2 -perm $exec_mode -type f)
 do
     f=$(echo $f | sed 's/\.\///')
-    # This is tested with misc/test-ceph-helpers.sh
-    if [[ "$f" = "ceph-helpers.sh" ]]; then
-        continue
-    fi
     if [[ "$all" = "false" ]]; then
         found=false
         for c in "${!select[@]}"

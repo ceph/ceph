@@ -16,6 +16,8 @@ from teuthology.task.common_fs_utils import generic_mkfs
 from teuthology.task.common_fs_utils import generic_mount
 from teuthology.task.common_fs_utils import default_image_name
 
+import six
+
 #V1 image unsupported but required for testing purposes
 os.environ["RBD_FORCE_ALLOW_V1"] = "1"
 
@@ -355,7 +357,7 @@ def run_xfstests(ctx, config):
             except:
                 exc_info = sys.exc_info()
         if exc_info:
-            raise exc_info[0], exc_info[1], exc_info[2]
+            six.reraise(exc_info[0], exc_info[1], exc_info[2])
     yield
 
 def run_xfstests_one_client(ctx, role, properties):
@@ -605,7 +607,7 @@ def task(ctx, config):
         norm_config = teuthology.replace_all_with_clients(ctx.cluster, config)
     if isinstance(norm_config, dict):
         role_images = {}
-        for role, properties in norm_config.iteritems():
+        for role, properties in norm_config.items():
             if properties is None:
                 properties = {}
             role_images[role] = properties.get('image_name')

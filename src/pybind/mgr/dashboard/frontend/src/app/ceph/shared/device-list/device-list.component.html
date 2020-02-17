@@ -1,0 +1,24 @@
+<cd-table *ngIf="hostname || osdId !== null"
+          [data]="devices"
+          [columns]="columns"></cd-table>
+
+<cd-alert-panel type="warning"
+                *ngIf="hostname === '' && osdId === null"
+                i18n>Neither hostname nor OSD ID given</cd-alert-panel>
+
+<ng-template #deviceLocation
+             let-value="value">
+  <span *ngFor="let location of value">{{location.dev}}</span>
+</ng-template>
+
+<ng-template #lifeExpectancy
+             let-value="value">
+  <span *ngIf="value.min && !value.max">&gt; {{value.min | i18nPlural: translationMapping}}</span>
+  <span *ngIf="value.max && !value.min">&lt; {{value.max | i18nPlural: translationMapping}}</span>
+  <span *ngIf="value.max && value.min">{{value.min}} to {{value.max | i18nPlural: translationMapping}}</span>
+</ng-template>
+
+<ng-template #lifeExpectancyTimestamp
+             let-value="value">
+  {{value}}
+</ng-template>

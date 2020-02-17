@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, discardPeriodicTasks, fakeAsync, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -9,9 +9,12 @@ import { ToastrModule } from 'ngx-toastr';
 
 import { By } from '@angular/platform-browser';
 import { of } from 'rxjs';
+import { delay } from 'rxjs/operators';
+
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationFormComponent } from '../rbd-configuration-form/rbd-configuration-form.component';
 import { RbdFormMode } from './rbd-form-mode.enum';
@@ -55,6 +58,117 @@ describe('RbdFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('create/edit/clone/copy image', () => {
+    let createAction;
+    let editAction;
+    let cloneAction;
+    let copyAction;
+    let rbdServiceGetSpy;
+
+    beforeEach(() => {
+      createAction = spyOn(component, 'createAction').and.stub();
+      editAction = spyOn(component, 'editAction').and.stub();
+      cloneAction = spyOn(component, 'cloneAction').and.stub();
+      copyAction = spyOn(component, 'copyAction').and.stub();
+      spyOn(component, 'setResponse').and.stub();
+      spyOn(TestBed.get(Router), 'navigate').and.stub();
+      rbdServiceGetSpy = spyOn(TestBed.get(RbdService), 'get');
+      rbdServiceGetSpy.and.returnValue(of({ pool_name: 'foo', pool_image: 'bar' }));
+      component.mode = undefined;
+    });
+
+    it('should create image', () => {
+      component.ngOnInit();
+      component.submit();
+
+      expect(createAction).toHaveBeenCalledTimes(1);
+      expect(editAction).toHaveBeenCalledTimes(0);
+      expect(cloneAction).toHaveBeenCalledTimes(0);
+      expect(copyAction).toHaveBeenCalledTimes(0);
+    });
+
+    it('should not edit image if no image data is received', fakeAsync(() => {
+      component.mode = RbdFormMode.editing;
+      rbdServiceGetSpy.and.returnValue(
+        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(100))
+      );
+      component.ngOnInit();
+      component.submit();
+
+      expect(createAction).toHaveBeenCalledTimes(0);
+      expect(editAction).toHaveBeenCalledTimes(0);
+      expect(cloneAction).toHaveBeenCalledTimes(0);
+      expect(copyAction).toHaveBeenCalledTimes(0);
+
+      discardPeriodicTasks();
+    }));
+
+    it('should edit image after image data is received', () => {
+      component.mode = RbdFormMode.editing;
+      component.ngOnInit();
+      component.submit();
+
+      expect(createAction).toHaveBeenCalledTimes(0);
+      expect(editAction).toHaveBeenCalledTimes(1);
+      expect(cloneAction).toHaveBeenCalledTimes(0);
+      expect(copyAction).toHaveBeenCalledTimes(0);
+    });
+
+    it('should not clone image if no image data is received', fakeAsync(() => {
+      component.mode = RbdFormMode.cloning;
+      rbdServiceGetSpy.and.returnValue(
+        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(100))
+      );
+      component.ngOnInit();
+      component.submit();
+
+      expect(createAction).toHaveBeenCalledTimes(0);
+      expect(editAction).toHaveBeenCalledTimes(0);
+      expect(cloneAction).toHaveBeenCalledTimes(0);
+      expect(copyAction).toHaveBeenCalledTimes(0);
+
+      discardPeriodicTasks();
+    }));
+
+    it('should clone image after image data is received', () => {
+      component.mode = RbdFormMode.cloning;
+      component.ngOnInit();
+      component.submit();
+
+      expect(createAction).toHaveBeenCalledTimes(0);
+      expect(editAction).toHaveBeenCalledTimes(0);
+      expect(cloneAction).toHaveBeenCalledTimes(1);
+      expect(copyAction).toHaveBeenCalledTimes(0);
+    });
+
+    it('should not copy image if no image data is received', fakeAsync(() => {
+      component.mode = RbdFormMode.copying;
+      rbdServiceGetSpy.and.returnValue(
+        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(100))
+      );
+      component.ngOnInit();
+      component.submit();
+
+      expect(createAction).toHaveBeenCalledTimes(0);
+      expect(editAction).toHaveBeenCalledTimes(0);
+      expect(cloneAction).toHaveBeenCalledTimes(0);
+      expect(copyAction).toHaveBeenCalledTimes(0);
+
+      discardPeriodicTasks();
+    }));
+
+    it('should copy image after image data is received', () => {
+      component.mode = RbdFormMode.copying;
+      component.ngOnInit();
+      component.submit();
+
+      expect(createAction).toHaveBeenCalledTimes(0);
+      expect(editAction).toHaveBeenCalledTimes(0);
+      expect(cloneAction).toHaveBeenCalledTimes(0);
+      expect(copyAction).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('should test decodeURIComponent of params', () => {
     let rbdService: RbdService;
 
@@ -65,17 +179,23 @@ describe('RbdFormComponent', () => {
       spyOn(rbdService, 'get').and.callThrough();
     });
 
-    it('without snapName', () => {
-      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: undefined });
+    it('with namespace', () => {
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar%2Fbaz' });
 
-      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(rbdService.get).toHaveBeenCalledWith(new ImageSpec('foo', 'bar', 'baz'));
+    });
+
+    it('without snapName', () => {
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar', snap: undefined });
+
+      expect(rbdService.get).toHaveBeenCalledWith(new ImageSpec('foo', null, 'bar'));
       expect(component.snapName).toBeUndefined();
     });
 
     it('with snapName', () => {
-      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: 'baz%2Fbaz' });
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar', snap: 'baz%2Fbaz' });
 
-      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(rbdService.get).toHaveBeenCalledWith(new ImageSpec('foo', null, 'bar'));
       expect(component.snapName).toBe('baz/baz');
     });
   });

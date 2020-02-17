@@ -174,6 +174,10 @@ The procedure is as follows:
 	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
 	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
 
+#. Change the owner for ``ceph.mon.keyring``. ::
+
+	sudo chown ceph:ceph /tmp/ceph.mon.keyring
+
 #. Generate a monitor map using the hostname(s), host IP address(es) and the FSID.
    Save it as ``/tmp/monmap``::
 

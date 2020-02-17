@@ -20,17 +20,21 @@
 
 void MutationImpl::pin(MDSCacheObject *o)
 {
-  if (pins.count(o) == 0) {
+  auto& stat = object_states[o];
+  if (!stat.pinned) {
     o->get(MDSCacheObject::PIN_REQUEST);
-    pins.insert(o);
+    stat.pinned = true;
+    ++num_pins;
   }      
 }
 
 void MutationImpl::unpin(MDSCacheObject *o)
 {
-  ceph_assert(pins.count(o));
+  auto& stat = object_states[o];
+  ceph_assert(stat.pinned);
   o->put(MDSCacheObject::PIN_REQUEST);
-  pins.erase(o);
+  stat.pinned = false;
+  --num_pins;
 }
 
 void MutationImpl::set_stickydirs(CInode *in)
@@ -54,9 +58,13 @@ void MutationImpl::put_stickydirs()
 
 void MutationImpl::drop_pins()
 {
-  for (auto& o : pins)
-    o->put(MDSCacheObject::PIN_REQUEST);
-  pins.clear();
+  for (auto& p : object_states) {
+    if (p.second.pinned) {
+      p.first->put(MDSCacheObject::PIN_REQUEST);
+      p.second.pinned = false;
+      --num_pins;
+    }
+  }
 }
 
 void MutationImpl::start_locking(SimpleLock *lock, int target)
@@ -74,6 +82,24 @@ void MutationImpl::finish_locking(SimpleLock *lock)
   locking_target_mds = -1;
 }
 
+bool MutationImpl::is_rdlocked(SimpleLock *lock) const {
+  auto it = locks.find(lock);
+  if (it != locks.end() && it->is_rdlock())
+    return true;
+  if (lock_cache)
+    return static_cast<const MutationImpl*>(lock_cache)->is_rdlocked(lock);
+  return false;
+}
+
+bool MutationImpl::is_wrlocked(SimpleLock *lock) const {
+  auto it = locks.find(lock);
+  if (it != locks.end() && it->is_wrlock())
+    return true;
+  if (lock_cache)
+    return static_cast<const MutationImpl*>(lock_cache)->is_wrlocked(lock);
+  return false;
+}
+
 void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
 {
   for (int i = size() - 1; i >= 0; --i) {
@@ -84,10 +110,23 @@ void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
     }
   }
 }
-
 void MutationImpl::LockOpVec::sort_and_merge()
 {
-  std::sort(begin(), end(), SimpleLock::ptr_lt());
+  // sort locks on the same object
+  auto cmp = [](const LockOp &l, const LockOp &r) {
+    ceph_assert(l.lock->get_parent() == r.lock->get_parent());
+    return l.lock->type->type < r.lock->type->type;
+  };
+  for (auto i = begin(), j = i; ; ++i) {
+    if (i == end()) {
+      std::sort(j, i, cmp);
+      break;
+    }
+    if (j->lock->get_parent() != i->lock->get_parent()) {
+      std::sort(j, i, cmp);
+      j = i;
+    }
+  }
   // merge ops on the same lock
   for (auto i = end() - 1; i > begin(); ) {
     auto j = i;
@@ -99,7 +138,6 @@ void MutationImpl::LockOpVec::sort_and_merge()
       i = j;
       continue;
     }
-
     // merge
     ++j;
     for (auto k = i; k > j; --k) {
@@ -112,7 +150,7 @@ void MutationImpl::LockOpVec::sort_and_merge()
     if (j->is_xlock()) {
       // xlock overwrites other types
       ceph_assert(!j->is_remote_wrlock());
-      j->flags = MutationImpl::LockOp::XLOCK;
+      j->flags = LockOp::XLOCK;
     }
     erase(j + 1, i + 1);
     i = j - 1;
@@ -122,31 +160,59 @@ void MutationImpl::LockOpVec::sort_and_merge()
 // auth pins
 bool MutationImpl::is_auth_pinned(MDSCacheObject *object) const
 { 
-  return auth_pins.count(object) || remote_auth_pins.count(object); 
+  auto stat_p = find_object_state(object);
+  if (!stat_p)
+    return false;
+  return stat_p->auth_pinned || stat_p->remote_auth_pinned != MDS_RANK_NONE;
 }
 
 void MutationImpl::auth_pin(MDSCacheObject *object)
 {
-  if (!is_auth_pinned(object)) {
+  auto &stat = object_states[object];
+  if (!stat.auth_pinned) {
     object->auth_pin(this);
-    auth_pins.insert(object);
+    stat.auth_pinned = true;
+    ++num_auth_pins;
   }
 }
 
 void MutationImpl::auth_unpin(MDSCacheObject *object)
 {
-  ceph_assert(auth_pins.count(object));
+  auto &stat = object_states[object];
+  ceph_assert(stat.auth_pinned);
   object->auth_unpin(this);
-  auth_pins.erase(object);
+  stat.auth_pinned = false;
+  --num_auth_pins;
 }
 
 void MutationImpl::drop_local_auth_pins()
 {
-  for (const auto& p : auth_pins) {
-    ceph_assert(p->is_auth());
-    p->auth_unpin(this);
+  for (auto& p : object_states) {
+    if (p.second.auth_pinned) {
+      ceph_assert(p.first->is_auth());
+      p.first->auth_unpin(this);
+      p.second.auth_pinned = false;
+      --num_auth_pins;
+    }
   }
-  auth_pins.clear();
+}
+
+void MutationImpl::set_remote_auth_pinned(MDSCacheObject *object, mds_rank_t from)
+{
+  auto &stat = object_states[object];
+  if (stat.remote_auth_pinned == MDS_RANK_NONE) {
+    stat.remote_auth_pinned = from;
+    ++num_remote_auth_pins;
+  } else {
+    ceph_assert(stat.remote_auth_pinned == from);
+  }
+}
+
+void MutationImpl::_clear_remote_auth_pinned(ObjectState &stat)
+{
+  ceph_assert(stat.remote_auth_pinned != MDS_RANK_NONE);
+  stat.remote_auth_pinned = MDS_RANK_NONE;
+  --num_remote_auth_pins;
 }
 
 void MutationImpl::add_projected_inode(CInode *in)
@@ -365,6 +431,19 @@ bool MDRequestImpl::is_batch_op()
      client_request->get_filepath().depth() == 0);
 }
 
+int MDRequestImpl::compare_paths()
+{
+  if (dir_root[0] < dir_root[1])
+    return -1;
+  if (dir_root[0] > dir_root[1])
+    return 1;
+  if (dir_depth[0] < dir_depth[1])
+    return -1;
+  if (dir_depth[0] > dir_depth[1])
+    return 1;
+  return 0;
+}
+
 cref_t<MClientRequest> MDRequestImpl::release_client_request()
 {
   msg_lock.lock();
@@ -473,4 +552,54 @@ void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
     // FIXME
     stream << "rejoin:" << reqid;
   }
+}
+
+void MDLockCache::attach_locks()
+{
+  ceph_assert(!items_lock);
+  items_lock.reset(new LockItem[locks.size()]);
+  int i = 0;
+  for (auto& p : locks) {
+    items_lock[i].parent = this;
+    p.lock->add_cache(items_lock[i]);
+    ++i;
+  }
+}
+
+void MDLockCache::attach_dirfrags(std::vector<CDir*>&& dfv)
+{
+  std::sort(dfv.begin(), dfv.end());
+  auto last = std::unique(dfv.begin(), dfv.end());
+  dfv.erase(last, dfv.end());
+  auth_pinned_dirfrags = std::move(dfv);
+
+  ceph_assert(!items_dir);
+  items_dir.reset(new DirItem[auth_pinned_dirfrags.size()]);
+  int i = 0;
+  for (auto dir : auth_pinned_dirfrags) {
+    items_dir[i].parent = this;
+    dir->lock_caches_with_auth_pins.push_back(&items_dir[i].item_dir);
+    ++i;
+  }
+}
+
+void MDLockCache::detach_all()
+{
+  ceph_assert(items_lock);
+  int i = 0;
+  for (auto& p : locks) {
+    auto& item = items_lock[i];
+    p.lock->remove_cache(item);
+    ++i;
+  }
+  items_lock.reset();
+
+  ceph_assert(items_dir);
+  i = 0;
+  for (auto dir : auth_pinned_dirfrags) {
+    (void)dir;
+    items_dir[i].item_dir.remove_myself();
+    ++i;
+  }
+  items_dir.reset();
 }

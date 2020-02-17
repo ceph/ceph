@@ -20,10 +20,6 @@ setup(
     install_requires=(
         'six',
     ),
-    tests_require=[
-        'pytest >=2.1.3',
-        'tox',
-    ],
     classifiers = [
         'Intended Audience :: Developer',
         'Operating System :: POSIX :: Linux',

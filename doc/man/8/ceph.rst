@@ -29,8 +29,6 @@ Synopsis
 
 | **ceph** **health** *{detail}*
 
-| **ceph** **heap** [ *dump* \| *start_profiler* \| *stop_profiler* \| *release* \| *get_release_rate* \| *set_release_rate* \| *stats* ] ...
-
 | **ceph** **injectargs** *<injectedargs>* [ *<injectedargs>*... ]
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
@@ -52,8 +50,6 @@ Synopsis
 | **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
 
 | **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *stat* ] ...
-
-| **ceph** **quorum** [ *enter* \| *exit* ]
 
 | **ceph** **quorum_status**
 
@@ -421,13 +417,13 @@ Show heap usage info (available only if compiled with tcmalloc)
 
 Usage::
 
-	ceph heap dump|start_profiler|stop_profiler|stats
+	ceph tell <name (type.id)> heap dump|start_profiler|stop_profiler|stats
 
 Subcommand ``release`` to make TCMalloc to releases no-longer-used memory back to the kernel at once. 
 
 Usage::
 
-	ceph heap release
+	ceph tell <name (type.id)> heap release
 
 Subcommand ``(get|set)_release_rate`` get or set the TCMalloc memory release rate. TCMalloc releases 
 no-longer-used memory back to the kernel gradually. the rate controls how quickly this happens. 
@@ -436,7 +432,7 @@ memory to system, 1 means wait for 1000 pages after releasing a page to system. 
 
 Usage::
 
-	ceph heap get_release_rate|set_release_rate {<val>}
+	ceph tell <name (type.id)> heap get_release_rate|set_release_rate {<val>}
 
 injectargs
 ----------
@@ -1464,14 +1460,9 @@ Usage::
 quorum
 ------
 
-Cause MON to enter or exit quorum.
+Cause a specific MON to enter or exit quorum.
 
 Usage::
-
-	ceph quorum enter|exit
-
-Note: this only works on the MON to which the ``ceph`` command is connected.
-If you want a specific MON to enter or exit quorum, use this syntax::
 
 	ceph tell mon.<id> quorum enter|exit
 
@@ -1513,16 +1504,6 @@ Shows cluster status.
 Usage::
 
 	ceph status
-
-
-sync force
-----------
-
-Forces sync of and clear monitor store.
-
-Usage::
-
-	ceph sync force {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
 
 
 tell

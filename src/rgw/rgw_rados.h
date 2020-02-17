@@ -1390,9 +1390,11 @@ public:
   int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
 
   void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
-  int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync);
+  int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag);
+  void delete_objs_inline(cls_rgw_obj_chain& chain, const string& tag);
   int gc_operate(string& oid, librados::ObjectWriteOperation *op);
-  int gc_aio_operate(string& oid, librados::ObjectWriteOperation *op, librados::AioCompletion **pc = nullptr);
+  int gc_aio_operate(const std::string& oid, librados::AioCompletion *c,
+                     librados::ObjectWriteOperation *op);
   int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
 
   int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
@@ -1492,6 +1494,12 @@ public:
                    bool *is_truncated, RGWAccessListFilter *filter);
 
   uint64_t next_bucket_id();
+
+  /**
+   * This is broken out to facilitate unit testing.
+   */
+  static uint32_t calc_ordered_bucket_list_per_shard(uint32_t num_entries,
+						     uint32_t num_shards);
 };
 
 #endif

@@ -144,7 +144,7 @@ These sections include:
               the Ceph Storage Cluster, and override the same setting in
               ``global``.
 
-:Example: ``mds_cache_size = 10G``
+:Example: ``mds_cache_memory_limit = 10G``
 
 ``client``
 

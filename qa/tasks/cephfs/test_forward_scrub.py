@@ -202,7 +202,7 @@ class TestForwardScrub(CephFSTestCase):
         inotable_dict = {}
         for rank in ranks:
             inotable_oid = "mds{rank:d}_".format(rank=rank) + "inotable"
-            print "Trying to fetch inotable object: " + inotable_oid
+            print("Trying to fetch inotable object: " + inotable_oid)
 
             #self.fs.get_metadata_object("InoTable", "mds0_inotable")
             inotable_raw = self.fs.get_metadata_object_raw(inotable_oid)
@@ -248,7 +248,7 @@ class TestForwardScrub(CephFSTestCase):
                               "--inode={0}".format(inos["./file3_sixmegs"]), "summary"], 0)
 
         # Revert to old inotable.
-        for key, value in inotable_copy.iteritems():
+        for key, value in inotable_copy.items():
            self.fs.put_metadata_object_raw(key, value)
 
         self.mds_cluster.mds_restart()

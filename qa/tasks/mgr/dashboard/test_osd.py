@@ -99,8 +99,11 @@ class OsdTest(DashboardTestCase):
 
     def test_safe_to_destroy(self):
         osd_dump = json.loads(self._ceph_cmd(['osd', 'dump', '-f', 'json']))
-        unused_osd_id = max(map(lambda e: e['osd'], osd_dump['osds'])) + 10
-        self._get('/api/osd/{}/safe_to_destroy'.format(unused_osd_id))
+        max_id = max(map(lambda e: e['osd'], osd_dump['osds']))
+
+        # 1 OSD safe to destroy
+        unused_osd_id = max_id + 10
+        self._get('/api/osd/safe_to_destroy?ids={}'.format(unused_osd_id))
         self.assertStatus(200)
         self.assertJsonBody({
             'is_safe_to_destroy': True,
@@ -110,13 +113,39 @@ class OsdTest(DashboardTestCase):
             'stored_pgs': [],
         })
 
+        # multiple OSDs safe to destroy
+        unused_osd_ids = [max_id + 11, max_id + 12]
+        self._get('/api/osd/safe_to_destroy?ids={}'.format(str(unused_osd_ids)))
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'is_safe_to_destroy': True,
+            'active': [],
+            'missing_stats': [],
+            'safe_to_destroy': unused_osd_ids,
+            'stored_pgs': [],
+        })
+
+        # 1 OSD unsafe to destroy
         def get_destroy_status():
-            self._get('/api/osd/0/safe_to_destroy')
+            self._get('/api/osd/safe_to_destroy?ids=0')
             if 'is_safe_to_destroy' in self.jsonBody():
                 return self.jsonBody()['is_safe_to_destroy']
             return None
         self.wait_until_equal(get_destroy_status, False, 10)
         self.assertStatus(200)
+
+    def test_osd_devices(self):
+        data = self._get('/api/osd/0/devices')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(JObj({
+            'daemons': JList(str),
+            'devid': str,
+            'location': JList(JObj({
+                'host': str,
+                'dev': str,
+                'path': str
+            }))
+        })))
 
 
 class OsdFlagsTest(DashboardTestCase):

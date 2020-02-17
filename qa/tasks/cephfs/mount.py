@@ -26,6 +26,7 @@ class CephFSMount(object):
         self.client_id = client_id
         self.client_remote = client_remote
         self.mountpoint_dir_name = 'mnt.{id}'.format(id=self.client_id)
+        self._mountpoint = None
         self.fs = None
 
         self.test_files = ['a', 'b', 'c']
@@ -34,8 +35,16 @@ class CephFSMount(object):
 
     @property
     def mountpoint(self):
-        return os.path.join(
-            self.test_dir, '{dir_name}'.format(dir_name=self.mountpoint_dir_name))
+        if self._mountpoint == None:
+            self._mountpoint= os.path.join(
+                self.test_dir, '{dir_name}'.format(dir_name=self.mountpoint_dir_name))
+        return self._mountpoint
+
+    @mountpoint.setter
+    def mountpoint(self, path):
+        if not isinstance(path, str):
+            raise RuntimeError('path should be of str type.')
+        self._mountpoint = path
 
     def is_mounted(self):
         raise NotImplementedError()
@@ -49,7 +58,7 @@ class CephFSMount(object):
         self.fs.wait_for_daemons()
         log.info('Ready to start {}...'.format(type(self).__name__))
 
-    def mount(self, mount_path=None, mount_fs_name=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
         raise NotImplementedError()
 
     def umount(self):
@@ -171,13 +180,13 @@ class CephFSMount(object):
             'sudo', 'rm', '-f', os.path.join(self.mountpoint, filename)
         ])
 
-    def _run_python(self, pyscript, py_version='python'):
+    def _run_python(self, pyscript, py_version='python3'):
         return self.client_remote.run(
                args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',
                      py_version, '-c', pyscript], wait=False, stdin=run.PIPE,
                stdout=StringIO())
 
-    def run_python(self, pyscript, py_version='python'):
+    def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
         p.wait()
         return p.stdout.getvalue().strip()
@@ -368,7 +377,7 @@ class CephFSMount(object):
 
         log.info("check lock on file {0}".format(basename))
         self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
+            'sudo', 'python3', '-c', pyscript
         ])
 
     def write_background(self, basename="background_file", loop=False):
@@ -385,10 +394,10 @@ class CephFSMount(object):
             import os
             import time
 
-            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0644)
+            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0o644)
             try:
                 while True:
-                    os.write(fd, 'content')
+                    os.write(fd, b'content')
                     time.sleep(1)
                     if not {loop}:
                         break
@@ -594,9 +603,9 @@ class CephFSMount(object):
                 sys.exit(e.errno)
 
             attrs = ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"]
-            print json.dumps(
+            print(json.dumps(
                 dict([(a, getattr(s, a)) for a in attrs]),
-                indent=2)
+                indent=2))
             """).format(stat_call=stat_call)
         proc = self._run_python(pyscript)
         if wait:
@@ -636,14 +645,14 @@ class CephFSMount(object):
                 import os
                 import stat
 
-                print os.stat("{path}").st_ino
+                print(os.stat("{path}").st_ino)
                 """).format(path=abs_path)
         else:
             pyscript = dedent("""
                 import os
                 import stat
 
-                print os.lstat("{path}").st_ino
+                print(os.lstat("{path}").st_ino)
                 """).format(path=abs_path)
 
         proc = self._run_python(pyscript)
@@ -657,7 +666,7 @@ class CephFSMount(object):
             import os
             import stat
 
-            print os.stat("{path}").st_nlink
+            print(os.stat("{path}").st_nlink)
             """).format(path=abs_path)
 
         proc = self._run_python(pyscript)

@@ -10,12 +10,15 @@ class Error(Exception):
             return msg
         return '[errno {0}] {1}'.format(self.errno, msg)
 
+
 class InvalidArgumentError(Error):
     pass
+
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
     pass
+
 
 class InterruptedOrTimeoutError(OSError):
     """ `InterruptedOrTimeoutError` class, derived from `OSError` """

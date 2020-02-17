@@ -7,6 +7,8 @@ import json
 import time
 import unittest
 
+from datetime import datetime, timedelta
+
 from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
@@ -70,7 +72,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def validate_persistent_user(self, username, roles, password=None,
                                  name=None, email=None, last_update=None,
-                                 enabled=True):
+                                 enabled=True, pwdExpirationDate=None):
         db = self.load_persistent_db()
         self.assertIn('users', db)
         self.assertIn(username, db['users'])
@@ -84,6 +86,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             self.assertEqual(db['users'][username]['email'], email)
         if last_update:
             self.assertEqual(db['users'][username]['lastUpdate'], last_update)
+        if pwdExpirationDate:
+            self.assertEqual(db['users'][username]['pwdExpirationDate'], pwdExpirationDate)
         self.assertEqual(db['users'][username]['enabled'], enabled)
 
     def validate_persistent_no_user(self, username):
@@ -271,17 +275,20 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(str(ctx.exception),
                          "Cannot update system role 'read-only'")
 
-    def test_create_user(self, username='admin', rolename=None, enabled=True):
+    def test_create_user(self, username='admin', rolename=None, enabled=True,
+                         pwdExpirationDate=None):
         user = self.exec_cmd('ac-user-create', username=username,
                              rolename=rolename, password='admin',
                              name='{} User'.format(username),
                              email='{}@user.com'.format(username),
-                             enabled=enabled)
+                             enabled=enabled, force_password=True,
+                             pwd_expiration_date=pwdExpirationDate)
 
         pass_hash = password_hash('admin', user['password'])
         self.assertDictEqual(user, {
             'username': username,
             'password': pass_hash,
+            'pwdExpirationDate': pwdExpirationDate,
             'lastUpdate': user['lastUpdate'],
             'name': '{} User'.format(username),
             'email': '{}@user.com'.format(username),
@@ -296,6 +303,11 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_create_disabled_user(self):
         self.test_create_user(enabled=False)
+
+    def test_create_user_pwd_expiration_date(self):
+        expiration_date = datetime.utcnow() + timedelta(days=10)
+        expiration_date = int(time.mktime(expiration_date.timetuple()))
+        self.test_create_user(pwdExpirationDate=expiration_date)
 
     def test_create_user_with_role(self):
         self.test_add_role_scope_perms()
@@ -316,7 +328,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.test_create_user()
 
         with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('ac-user-create', username='admin', password='admin')
+            self.exec_cmd('ac-user-create', username='admin', password='admin',
+                          force_password=True)
 
         self.assertEqual(ctx.exception.retcode, -errno.EEXIST)
         self.assertEqual(str(ctx.exception), "User 'admin' already exists")
@@ -329,7 +342,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         try:
             self.exec_cmd('ac-user-create', username='foo',
                           rolename='dne_role', password='foopass',
-                          name='foo User', email='foo@user.com')
+                          name='foo User', email='foo@user.com',
+                          force_password=True)
         except CmdException as e:
             self.assertEqual(e.retcode, -errno.ENOENT)
 
@@ -349,7 +363,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.test_create_role()
         self.exec_cmd('ac-user-create', username='bar',
                       rolename='test_role', password='barpass',
-                      name='bar User', email='bar@user.com')
+                      name='bar User', email='bar@user.com',
+                      force_password=True)
 
         # validate db:
         #   user 'foo' should not exist
@@ -487,6 +502,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'username': 'admin',
             'lastUpdate': user['lastUpdate'],
             'password': pass_hash,
+            'pwdExpirationDate': None,
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'pool-manager'],
@@ -528,6 +544,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
+            'pwdExpirationDate': None,
             'name': 'Admin Name',
             'email': 'admin@admin.com',
             'lastUpdate': user['lastUpdate'],
@@ -549,11 +566,12 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password(self):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-set-password', username='admin',
-                             password='newpass')
+                             password='newpass', force_password=True)
         pass_hash = password_hash('newpass', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
+            'pwdExpirationDate': None,
             'name': 'admin User',
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
@@ -567,7 +585,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-user-set-password', username='admin',
-                          password='newpass')
+                          password='newpass', force_password=True)
 
         self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
         self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
@@ -581,6 +599,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
+            'pwdExpirationDate': None,
             'name': 'admin User',
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
@@ -617,6 +636,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
+            'pwdExpirationDate': None,
             'name': None,
             'email': None,
             'lastUpdate': user['lastUpdate'],
@@ -635,6 +655,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertDictEqual(user, {
             'username': 'admin',
             'password': pass_hash,
+            'pwdExpirationDate': None,
             'name': 'admin User',
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
@@ -689,6 +710,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'lastUpdate': user['lastUpdate'],
             'password':
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+            'pwdExpirationDate': None,
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'test_role'],
@@ -697,7 +719,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_load_v2(self):
         """
-        The `enabled` attribute of a user has been added in v2
+        The `enabled` and `pwdExpirationDate` attributes of a user have been added in v2
         """
         self.CONFIG_KEY_DICT['accessdb_v1'] = '''
             {{
@@ -706,6 +728,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                         "username": "admin",
                         "password":
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+                        "pwdExpirationDate": null,
                         "roles": ["block-manager", "test_role"],
                         "name": "admin User",
                         "email": "admin@user.com",
@@ -744,6 +767,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'lastUpdate': user['lastUpdate'],
             'password':
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+            'pwdExpirationDate': None,
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'test_role'],
@@ -761,6 +785,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'lastUpdate': user['lastUpdate'],
             'password':
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+            'pwdExpirationDate': None,
             'name': None,
             'email': None,
             'roles': ['administrator'],

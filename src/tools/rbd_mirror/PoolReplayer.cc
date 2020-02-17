@@ -31,6 +31,7 @@ using ::operator<<;
 
 namespace {
 
+const std::string SERVICE_DAEMON_INSTANCE_ID_KEY("instance_id");
 const std::string SERVICE_DAEMON_LEADER_KEY("leader");
 
 const std::vector<std::string> UNIQUE_PEER_CONFIG_KEYS {
@@ -352,6 +353,10 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     m_callout_id = service_daemon::CALLOUT_ID_NONE;
   }
 
+  m_service_daemon->add_or_update_attribute(
+    m_local_io_ctx.get_id(), SERVICE_DAEMON_INSTANCE_ID_KEY,
+    stringify(m_local_io_ctx.get_instance_id()));
+
   m_pool_replayer_thread.create("pool replayer");
 }
 
@@ -582,10 +587,11 @@ void PoolReplayer<I>::update_namespace_replayers() {
     if (iter == mirroring_namespaces.end()) {
       auto namespace_replayer = it->second;
       auto on_shut_down = new LambdaContext(
-        [this, namespace_replayer, ctx=gather_ctx->new_sub()](int r) {
+        [namespace_replayer, ctx=gather_ctx->new_sub()](int r) {
           delete namespace_replayer;
           ctx->complete(r);
         });
+      m_service_daemon->remove_namespace(m_local_pool_id, it->first);
       namespace_replayer->shut_down(on_shut_down);
       it = m_namespace_replayers.erase(it);
     } else {
@@ -603,14 +609,15 @@ void PoolReplayer<I>::update_namespace_replayers() {
     auto on_init = new LambdaContext(
         [this, namespace_replayer, name, &mirroring_namespaces,
          ctx=gather_ctx->new_sub()](int r) {
+          std::lock_guard locker{m_lock};
           if (r < 0) {
             derr << "failed to initialize namespace replayer for namespace "
                  << name << ": " << cpp_strerror(r) << dendl;
             delete namespace_replayer;
             mirroring_namespaces.erase(name);
           } else {
-            std::lock_guard locker{m_lock};
             m_namespace_replayers[name] = namespace_replayer;
+            m_service_daemon->add_namespace(m_local_pool_id, name);
           }
           ctx->complete(r);
         });
@@ -712,10 +719,11 @@ void PoolReplayer<I>::namespace_replayer_acquire_leader(const std::string &name,
           auto namespace_replayer = m_namespace_replayers[name];
           m_namespace_replayers.erase(name);
           auto on_shut_down = new LambdaContext(
-              [this, namespace_replayer, on_finish](int r) {
+              [namespace_replayer, on_finish](int r) {
                 delete namespace_replayer;
                 on_finish->complete(r);
               });
+          m_service_daemon->remove_namespace(m_local_pool_id, name);
           namespace_replayer->shut_down(on_shut_down);
           return;
         }

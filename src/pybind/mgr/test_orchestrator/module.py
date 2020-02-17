@@ -4,90 +4,54 @@ import re
 import os
 import threading
 import functools
-import uuid
 from subprocess import check_output, CalledProcessError
+try:
+    from typing import Callable, List
+except ImportError:
+    pass  # type checking
 
 import six
 
+from ceph.deployment import inventory
 from mgr_module import CLICommand, HandleCommandResult
-from mgr_module import MgrModule, PersistentStoreDict
+from mgr_module import MgrModule
 
 import orchestrator
 
 
-
-
-class TestCompletionMixin(object):
-    all_completions = []  # Hacky global
-
-    def __init__(self, cb, message, *args, **kwargs):
-        super(TestCompletionMixin, self).__init__(*args, **kwargs)
-        self.cb = cb
-        self._result = None
-        self._complete = False
-
-        self.message = message
-        self.id = str(uuid.uuid4())
-
-        TestCompletionMixin.all_completions.append(self)
-
-    @property
-    def result(self):
-        return self._result
-
-    @property
-    def is_complete(self):
-        return self._complete
-
-    def execute(self):
-        self._result = self.cb()
-        self.executed = True
-        self._complete = True
-
-    def __str__(self):
-        return "{}(result={} message={}, exception={})".format(self.__class__.__name__, self.result,
-                                                               self.message, self.exception)
-
-
-class TestReadCompletion(TestCompletionMixin, orchestrator.ReadCompletion):
-    def __init__(self, cb):
-        super(TestReadCompletion, self).__init__(cb, "<read op>")
-
-
-class TestWriteCompletion(TestCompletionMixin, orchestrator.WriteCompletion):
-    def __init__(self, cb, message):
-        super(TestWriteCompletion, self).__init__(cb, message)
-
-    @property
-    def is_persistent(self):
-        return (not self.is_errored) and self.executed
-
-    @property
-    def is_effective(self):
-        return self._complete
-
-
-def deferred_write(message):
-    def wrapper(f):
-        @functools.wraps(f)
-        def inner(*args, **kwargs):
-            return TestWriteCompletion(lambda: f(*args, **kwargs),
-                                       '{}, args={}, kwargs={}'.format(message, args, kwargs))
-        return inner
-    return wrapper
+class TestCompletion(orchestrator.Completion):
+    def evaluate(self):
+        self.finalize(None)
 
 
 def deferred_read(f):
+    # type: (Callable) -> Callable[..., TestCompletion]
     """
-    Decorator to make TestOrchestrator methods return
+    Decorator to make methods return
     a completion object that executes themselves.
     """
 
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        return TestReadCompletion(lambda: f(*args, **kwargs))
+        return TestCompletion(on_complete=lambda _: f(*args, **kwargs))
 
     return wrapper
+
+
+def deferred_write(message):
+    def inner(f):
+        # type: (Callable) -> Callable[..., TestCompletion]
+
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwargs):
+            return TestCompletion.with_progress(
+                message=message,
+                mgr=self,
+                on_complete=lambda _: f(self, *args, **kwargs),
+            )
+
+        return wrapper
+    return inner
 
 
 class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
@@ -100,32 +64,13 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     The implementation is similar to the Rook orchestrator, but simpler.
     """
 
-    def wait(self, completions):
-        self.log.info("wait: completions={0}".format(completions))
+    def process(self, completions):
+        # type: (List[TestCompletion]) -> None
+        if completions:
+            self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 
-        # Our `wait` implementation is very simple because everything's
-        # just an API call.
-        for c in completions:
-            if not isinstance(c, TestReadCompletion) and \
-                    not isinstance(c, TestWriteCompletion):
-                raise TypeError(
-                    "wait() requires list of completions, not {0}".format(
-                        c.__class__
-                    ))
-
-            if c.is_complete:
-                continue
-
-            try:
-                c.execute()
-            except Exception as e:
-                self.log.exception("Completion {0} threw an exception:".format(
-                    c.message
-                ))
-                c.exception = e
-                c._complete = True
-
-        return all(c.is_complete for c in completions)
+            for p in completions:
+                p.evaluate()
 
     @CLICommand('test_orchestrator load_data', '', 'load dummy data into test orchestrator', 'w')
     def _load_data(self, inbuf):
@@ -148,6 +93,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._initialized = threading.Event()
         self._shutdown = threading.Event()
         self._init_data({})
+        self.all_progress_references = list()  # type: List[orchestrator.ProgressReference]
 
     def shutdown(self):
         self._shutdown.set()
@@ -161,9 +107,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             # in case we had a caller that wait()'ed on them long enough
             # to get persistence but not long enough to get completion
 
-            self.wait(TestCompletionMixin.all_completions)
-            TestCompletionMixin.all_completions = [c for c in TestCompletionMixin.all_completions if
-                                                   not c.is_complete]
+            self.all_progress_references = [p for p in self.all_progress_references if not p.effective]
+            for p in self.all_progress_references:
+                p.update()
 
             self._shutdown.wait(5)
 
@@ -201,10 +147,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         for out in c_v_out.splitlines():
             self.log.error(out)
-            devs = []
-            for device in json.loads(out):
-                dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
-                devs.append(dev)
+            devs = inventory.Devices.from_json(json.loads(out))
             return [orchestrator.InventoryNode('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')
@@ -237,14 +180,27 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
+    def create_osds(self, drive_group):
+        def run(all_hosts):
+            drive_group.validate(orchestrator.InventoryNode.get_host_names(all_hosts))
+        return self.get_hosts().then(run).then(
+            on_complete=orchestrator.ProgressReference(
+                message='create_osds',
+                mgr=self,
+            )
 
-    @deferred_write("create_osds")
-    def create_osds(self, drive_group, all_hosts):
-        drive_group.validate(all_hosts)
+        )
+
 
     @deferred_write("remove_osds")
     def remove_osds(self, osd_ids, destroy=False):
         assert isinstance(osd_ids, list)
+
+    @deferred_write("blink_device_light")
+    def blink_device_light(self, ident_fault, on, locations):
+        assert ident_fault in ("ident", "fault")
+        assert len(locations)
+        return ''
 
     @deferred_write("service_action")
     def service_action(self, action, service_type, service_name=None, service_id=None):
@@ -283,7 +239,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def get_hosts(self):
         if self._inventory:
             return self._inventory
-        return [orchestrator.InventoryNode('localhost', [])]
+        return [orchestrator.InventoryNode('localhost', inventory.Devices([]))]
 
     @deferred_write("add_host")
     def add_host(self, host):
@@ -304,12 +260,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert isinstance(host, six.string_types)
 
     @deferred_write("update_mgrs")
-    def update_mgrs(self, num, hosts):
-        assert not hosts or len(hosts) == num
-        assert all([isinstance(h, str) for h in hosts])
+    def update_mgrs(self, spec):
+        assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
+        assert all([isinstance(h, str) for h in spec.placement.hosts])
 
     @deferred_write("update_mons")
-    def update_mons(self, num, hosts):
-        assert not hosts or len(hosts) == num
-        assert all([isinstance(h[0], str) for h in hosts])
-        assert all([isinstance(h[1], str) or h[1] is None for h in hosts])
+    def update_mons(self, spec):
+        assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
+        assert all([isinstance(h[0], str) for h in spec.placement.hosts])
+        assert all([isinstance(h[1], str) or h[1] is None for h in spec.placement.hosts])

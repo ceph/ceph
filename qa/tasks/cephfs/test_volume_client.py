@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 import os
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -20,7 +19,7 @@ class TestVolumeClient(CephFSTestCase):
     def setUp(self):
         CephFSTestCase.setUp(self)
         self.py_version = self.ctx.config.get('overrides', {}).\
-                          get('python', TestVolumeClient.default_py_version)
+                          get('python3', TestVolumeClient.default_py_version)
         log.info("using python version: {python_version}".format(
             python_version=self.py_version
         ))
@@ -361,33 +360,8 @@ vc.disconnect()
         :return:
         """
 
-        # Because the teuthology config template sets mon_max_pg_per_osd to
-        # 10000 (i.e. it just tries to ignore health warnings), reset it to something
-        # sane before using volume_client, to avoid creating pools with absurdly large
-        # numbers of PGs.
-        self.set_conf("global", "mon max pg per osd", "300")
-        for mon_daemon_state in self.ctx.daemons.iter_daemons_of_role('mon'):
-            mon_daemon_state.restart()
-
         self.mount_b.umount_wait()
         self._configure_vc_auth(self.mount_b, "manila")
-
-        # Calculate how many PGs we'll expect the new volume pool to have
-        osd_map = json.loads(self.fs.mon_manager.raw_cluster_cmd('osd', 'dump', '--format=json-pretty'))
-        max_per_osd = int(self.fs.get_config('mon_max_pg_per_osd'))
-        osd_count = len(osd_map['osds'])
-        max_overall = osd_count * max_per_osd
-
-        existing_pg_count = 0
-        for p in osd_map['pools']:
-            existing_pg_count += p['pg_num']
-
-        expected_pg_num = (max_overall - existing_pg_count) / 10
-        log.info("max_per_osd {0}".format(max_per_osd))
-        log.info("osd_count {0}".format(osd_count))
-        log.info("max_overall {0}".format(max_overall))
-        log.info("existing_pg_count {0}".format(existing_pg_count))
-        log.info("expected_pg_num {0}".format(expected_pg_num))
 
         pools_a = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
 
@@ -395,7 +369,7 @@ vc.disconnect()
         volume_id = "volid"
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
-            vc.create_volume(vp, 10, data_isolated=True)
+            vc.create_volume(vp, data_isolated=True)
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -406,12 +380,6 @@ vc.disconnect()
         # Should have created one new pool
         new_pools = set(p['pool_name'] for p in pools_b) - set([p['pool_name'] for p in pools_a])
         self.assertEqual(len(new_pools), 1)
-
-        # It should have followed the heuristic for PG count
-        # (this is an overly strict test condition, so we may want to remove
-        #  it at some point as/when the logic gets fancier)
-        created_pg_num = self.fs.mon_manager.get_pool_int_property(list(new_pools)[0], "pg_num")
-        self.assertEqual(expected_pg_num, created_pg_num)
 
     def test_15303(self):
         """
@@ -1109,7 +1077,7 @@ vc.disconnect()
         volume_prefix = "/myprefix"
         group_id = "grpid"
         volume_id = "volid"
-        mount_path = self._volume_client_python(vc_mount, dedent("""
+        self._volume_client_python(vc_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10, namespace_isolated=False)
             print(create_result['mount_path'])

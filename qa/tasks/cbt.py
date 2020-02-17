@@ -3,7 +3,6 @@ import os
 import yaml
 
 from teuthology import misc
-from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology.task import Task
 
@@ -75,10 +74,12 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'collectl']
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-dev', 'collectl']
+            # include py2 for the time being
+            cbt_depends += ['python-yaml', 'python-lxml']
         self.first_mon.run(args=install_cmd + cbt_depends)
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
@@ -249,6 +250,21 @@ class CBT(Task):
                 cosbench_version = 'cosbench-0.4.2.c3.1'
             else:
                 cosbench_version = '0.4.2.c3'
+            # note: stop-all requires 'nc'
+            self.first_mon.run(
+                args=[
+                    'cd', testdir, run.Raw('&&'),
+                    'cd', 'cos', run.Raw('&&'),
+                    'sh', 'stop-all.sh',
+                    run.Raw('||'), 'true'
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'sudo', 'killall', '-9', 'java',
+                    run.Raw('||'), 'true'
+                ]
+            )
             self.first_mon.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',

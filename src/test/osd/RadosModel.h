@@ -634,7 +634,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+    comp = context->rados.aio_create_completion((void*) cb_arg,
 						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
   }
@@ -724,8 +724,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
-						&write_callback);
+    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
   }
 
@@ -847,8 +846,7 @@ public:
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
       librados::AioCompletion *completion =
-	context->rados.aio_create_completion((void*) cb_arg, NULL,
-					     &write_callback);
+	context->rados.aio_create_completion((void*) cb_arg, &write_callback);
       waiting.insert(completion);
       librados::ObjectWriteOperation op;
       if (do_append) {
@@ -870,7 +868,7 @@ public:
 	this,
 	new TestOp::CallbackInfo(++tid));
     librados::AioCompletion *completion = context->rados.aio_create_completion(
-      (void*) cb_arg, NULL, &write_callback);
+      (void*) cb_arg, &write_callback);
     waiting.insert(completion);
     waiting_on++;
     write_op.setxattr("_header", contbl);
@@ -885,7 +883,7 @@ public:
 	this,
 	new TestOp::CallbackInfo(++tid));
     rcompletion = context->rados.aio_create_completion(
-         (void*) cb_arg, NULL, &write_callback);
+         (void*) cb_arg, &write_callback);
     waiting_on++;
     read_op.read(0, 1, &rbuffer, 0);
     context->io_ctx.aio_operate(
@@ -1028,7 +1026,7 @@ public:
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
       librados::AioCompletion *completion =
-	context->rados.aio_create_completion((void*) cb_arg, NULL,
+	context->rados.aio_create_completion((void*) cb_arg,
 					     &write_callback);
       waiting.insert(completion);
       librados::ObjectWriteOperation op;
@@ -1047,7 +1045,7 @@ public:
 	this,
 	new TestOp::CallbackInfo(++tid));
     librados::AioCompletion *completion = context->rados.aio_create_completion(
-      (void*) cb_arg, NULL, &write_callback);
+      (void*) cb_arg, &write_callback);
     waiting.insert(completion);
     waiting_on++;
     write_op.setxattr("_header", contbl);
@@ -1060,7 +1058,7 @@ public:
 	this,
 	new TestOp::CallbackInfo(++tid));
     rcompletion = context->rados.aio_create_completion(
-         (void*) cb_arg, NULL, &write_callback);
+         (void*) cb_arg, &write_callback);
     waiting_on++;
     read_op.read(0, 1, &rbuffer, 0);
     context->io_ctx.aio_operate(
@@ -1206,6 +1204,7 @@ public:
   ObjectDesc old_value;
   int snap;
   bool balance_reads;
+  bool localize_reads;
 
   std::shared_ptr<int> in_use;
 
@@ -1232,12 +1231,14 @@ public:
 	 RadosTestContext *context,
 	 const string &oid,
 	 bool balance_reads,
+	 bool localize_reads,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       completions(3),
       oid(oid),
       snap(0),
       balance_reads(balance_reads),
+      localize_reads(localize_reads),
       results(3),
       retvals(3),
       extent_results(3),
@@ -1284,7 +1285,7 @@ public:
     std::cout << num << ": read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     for (uint32_t i = 0; i < 3; i++) {
-      completions[i] = context->rados.aio_create_completion((void *) this, &read_callback, 0);
+      completions[i] = context->rados.aio_create_completion((void *) this, &read_callback);
     }
 
     context->oid_in_use.insert(oid);
@@ -1341,6 +1342,8 @@ public:
     unsigned flags = 0;
     if (balance_reads)
       flags |= librados::OPERATION_BALANCE_READS;
+    if (localize_reads)
+      flags |= librados::OPERATION_LOCALIZE_READS;
 
     ceph_assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
 					flags, NULL));
@@ -1786,7 +1789,7 @@ public:
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(0));
       comps[0] = 
-	context->rados.aio_create_completion((void*) cb_arg, NULL,
+	context->rados.aio_create_completion((void*) cb_arg,
 					     &write_callback);
       context->io_ctx.aio_operate(
 	context->prefix+oid, comps[0], &zero_write_op1);
@@ -1796,7 +1799,7 @@ public:
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(1));
       comps[1] =
-	context->rados.aio_create_completion((void*) cb_arg, NULL,
+	context->rados.aio_create_completion((void*) cb_arg,
 					     &write_callback);
       context->io_ctx.aio_operate(
 	context->prefix+oid, comps[1], &op);
@@ -1806,7 +1809,7 @@ public:
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(2));
       comps[2] =
-	context->rados.aio_create_completion((void*) cb_arg, NULL,
+	context->rados.aio_create_completion((void*) cb_arg,
 					     &write_callback);
       context->io_ctx.aio_operate(
 	context->prefix+oid, comps[2], &zero_write_op2);
@@ -1902,7 +1905,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+    comp = context->rados.aio_create_completion((void*) cb_arg,
 						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
 
@@ -1910,7 +1913,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *read_cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(1));
-    comp_racing_read = context->rados.aio_create_completion((void*) read_cb_arg, NULL, &write_callback);
+    comp_racing_read = context->rados.aio_create_completion((void*) read_cb_arg, &write_callback);
     rd_op.stat(NULL, NULL, NULL);
     context->io_ctx.aio_operate(context->prefix+oid, comp_racing_read, &rd_op,
 				librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
@@ -1987,6 +1990,7 @@ public:
   ObjectDesc tgt_value;
   int snap;
   bool balance_reads;
+  bool localize_reads;
 
   std::shared_ptr<int> in_use;
 
@@ -2008,12 +2012,14 @@ public:
 	 const string &oid,
 	 const string &tgt_pool_name,
 	 bool balance_reads,
+	 bool localize_reads,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       completions(2),
       oid(oid),
       snap(0),
       balance_reads(balance_reads),
+      localize_reads(localize_reads),
       results(2),
       retvals(2),
       waiting_on(0),
@@ -2042,7 +2048,7 @@ public:
     std::cout << num << ": chunk read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     for (uint32_t i = 0; i < 2; i++) {
-      completions[i] = context->rados.aio_create_completion((void *) this, &read_callback, 0);
+      completions[i] = context->rados.aio_create_completion((void *) this, &read_callback);
     }
 
     context->find_object(oid, &old_value);
@@ -2108,6 +2114,8 @@ public:
     unsigned flags = 0;
     if (balance_reads)
       flags |= librados::OPERATION_BALANCE_READS;
+    if (localize_reads)
+      flags |= librados::OPERATION_LOCALIZE_READS;
 
     ceph_assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
 					flags, NULL));
@@ -2244,8 +2252,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
-						&write_callback);
+    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback);
     if (tgt_pool_name == context->low_tier_pool_name) {
       context->low_tier_io_ctx.aio_operate(context->prefix+oid, comp, &op);
     } else {
@@ -2340,7 +2347,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+    comp = context->rados.aio_create_completion((void*) cb_arg,
 						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				librados::OPERATION_ORDER_READS_WRITES);
@@ -2446,7 +2453,7 @@ public:
       op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
       context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &op,
 					   librados::OPERATION_ORDER_READS_WRITES);
-      comp->wait_for_safe();
+      comp->wait_for_complete();
       if ((r = comp->get_return_value())) {
 	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
 	     << r << std::endl;
@@ -2462,7 +2469,7 @@ public:
       context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				  librados::OPERATION_ORDER_READS_WRITES |
 				  librados::OPERATION_IGNORE_REDIRECT);
-      comp->wait_for_safe();
+      comp->wait_for_complete();
       if ((r = comp->get_return_value())) {
 	if (!(r == -ENOENT && !present)) {
 	  cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
@@ -2481,7 +2488,7 @@ public:
      			  librados::OPERATION_ORDER_READS_WRITES |
      			  librados::OPERATION_IGNORE_REDIRECT,
      			  NULL);
-    comp->wait_for_safe();
+    comp->wait_for_complete();
     if ((r = comp->get_return_value()) && !src_value.deleted()) {
       cerr << "Error: oid " << oid << " stat returned error code "
 	   << r << std::endl;
@@ -2496,7 +2503,7 @@ public:
      			  librados::OPERATION_ORDER_READS_WRITES |
      			  librados::OPERATION_IGNORE_REDIRECT,
      			  NULL);
-    comp->wait_for_safe();
+    comp->wait_for_complete();
     if ((r = comp->get_return_value())) {
       cerr << "Error: oid " << oid_tgt << " stat returned error code "
 	   << r << std::endl;
@@ -2515,8 +2522,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
-						&write_callback);
+    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				librados::OPERATION_ORDER_READS_WRITES);
   }
@@ -2598,7 +2604,7 @@ public:
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				librados::OPERATION_ORDER_READS_WRITES |
 				librados::OPERATION_IGNORE_REDIRECT);
-    comp->wait_for_safe();
+    comp->wait_for_complete();
     int r = comp->get_return_value();
     if (r && !(r == -ENOENT && !present)) {
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
@@ -2647,7 +2653,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+    completion = context->rados.aio_create_completion((void *) cb_arg,
 						      &write_callback);
     context->state_lock.unlock();
 
@@ -2717,7 +2723,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+    completion = context->rados.aio_create_completion((void *) cb_arg, 
 						      &write_callback);
     context->state_lock.unlock();
 
@@ -2780,7 +2786,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp1 = context->rados.aio_create_completion((void*) cb_arg, NULL,
+    comp1 = context->rados.aio_create_completion((void*) cb_arg,
 						 &write_callback);
     int r = context->io_ctx.hit_set_list(hash, comp1, &ls);
     ceph_assert(r == 0);
@@ -2801,8 +2807,7 @@ public:
 	pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
 	  new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						   new TestOp::CallbackInfo(0));
-	comp2 = context->rados.aio_create_completion((void*) cb_arg, NULL,
-						     &write_callback);
+	comp2 = context->rados.aio_create_completion((void*) cb_arg, &write_callback);
 	r = context->io_ctx.hit_set_get(hash, comp2, p->second, &bl);
 	ceph_assert(r == 0);
       }
@@ -2855,7 +2860,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+    completion = context->rados.aio_create_completion((void *) cb_arg,
 						      &write_callback);
 
     context->oid_in_use.insert(oid);
@@ -2928,7 +2933,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+    completion = context->rados.aio_create_completion((void *) cb_arg,
 						      &write_callback);
 
     context->oid_in_use.insert(oid);
@@ -3035,7 +3040,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+    completion = context->rados.aio_create_completion((void *) cb_arg,
 						      &write_callback);
     context->oid_flushing.insert(oid);
     context->oid_not_flushing.erase(oid);
@@ -3128,7 +3133,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+    completion = context->rados.aio_create_completion((void *) cb_arg,
 						      &write_callback);
     context->state_lock.unlock();
 

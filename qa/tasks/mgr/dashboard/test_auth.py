@@ -44,7 +44,8 @@ class AuthTest(DashboardTestCase):
             'token': JLeaf(str),
             'username': JLeaf(str),
             'permissions': JObj(sub_elems={}, allow_unknown=True),
-            'sso': JLeaf(bool)
+            'sso': JLeaf(bool),
+            'pwdExpirationDate': JLeaf(int, none=True)
         }, allow_unknown=False))
         self._validate_jwt_token(data['token'], "admin", data['permissions'])
 
@@ -131,7 +132,8 @@ class AuthTest(DashboardTestCase):
         self._get("/api/host")
         self.assertStatus(200)
         time.sleep(1)
-        self._ceph_cmd(['dashboard', 'ac-user-set-password', 'user', 'user2'])
+        self._ceph_cmd(['dashboard', 'ac-user-set-password', '--force-password',
+                        'user', 'user2'])
         time.sleep(1)
         self._get("/api/host")
         self.assertStatus(401)

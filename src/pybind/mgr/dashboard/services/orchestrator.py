@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from orchestrator import InventoryFilter
+import logging
+
+from orchestrator import InventoryFilter, DeviceLightLoc, Completion
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
-from .. import mgr, logger
+from .. import mgr
 from ..tools import wraps
+
+
+logger = logging.getLogger('orchestrator')
 
 
 # pylint: disable=abstract-method
@@ -16,7 +21,7 @@ class OrchestratorAPI(OrchestratorClientMixin):
     def status(self):
         try:
             status, desc = super(OrchestratorAPI, self).available()
-            logger.info("[ORCH] is orchestrator available: %s, %s", status, desc)
+            logger.info("is orchestrator available: %s, %s", status, desc)
             return dict(available=status, description=desc)
         except (RuntimeError, OrchestratorError, ImportError):
             return dict(available=False,
@@ -86,6 +91,13 @@ class ServiceManager(ResourceManager):
             raise_if_exception(c)
 
 
+class OsdManager(ResourceManager):
+
+    @wait_api_result
+    def create(self, drive_group):
+        return self.api.create_osds(drive_group)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -102,9 +114,15 @@ class OrchClient(object):
         self.hosts = HostManger(self.api)
         self.inventory = InventoryManager(self.api)
         self.services = ServiceManager(self.api)
+        self.osds = OsdManager(self.api)
 
     def available(self):
         return self.status()['available']
 
     def status(self):
         return self.api.status()
+
+    @wait_api_result
+    def blink_device_light(self, hostname, device, ident_fault, on):
+        # type: (str, str, str, bool) -> Completion
+        return self.api.blink_device_light(ident_fault, on, [DeviceLightLoc(hostname, device)])

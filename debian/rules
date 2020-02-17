@@ -18,7 +18,8 @@ else
 endif
 
 extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
-extraopts += -DWITH_PYTHON3=ON -DWITH_MGR_DASHBOARD_FRONTEND=OFF
+extraopts += -DWITH_MGR_DASHBOARD_FRONTEND=OFF
+extraopts += -DWITH_PYTHON3=3
 extraopts += -DWITH_CEPHFS_JAVA=ON
 extraopts += -DWITH_CEPHFS_SHELL=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
@@ -40,7 +41,7 @@ else
 endif
 
 %:
-	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
+	dh $@ --buildsystem=cmake --with javahelper,python3,systemd --parallel
 
 override_dh_auto_configure:
 	env | sort
@@ -60,8 +61,9 @@ override_dh_auto_install:
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
 	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
 	install -D -m 600 sudoers.d/ceph-osd-smartctl $(DESTDIR)/etc/sudoers.d/ceph-osd-smartctl
+	install -D -m 600 sudoers.d/cephadm $(DESTDIR)/etc/sudoers.d/cephadm
 
-	install -m 755 src/ceph-daemon $(DESTDIR)/usr/sbin/ceph-daemon
+	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
 
 # doc/changelog is a directory, which confuses dh_installchangelogs
 override_dh_installchangelogs:
@@ -112,28 +114,13 @@ override_dh_strip:
 	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
-	dh_strip -ppython-rados --dbg-package=python-rados-dbg
 	dh_strip -ppython3-rados --dbg-package=python3-rados-dbg
-	dh_strip -ppython-rbd --dbg-package=python-rbd-dbg
 	dh_strip -ppython3-rbd --dbg-package=python3-rbd-dbg
-	dh_strip -ppython-rgw --dbg-package=python-rgw-dbg
 	dh_strip -ppython3-rgw --dbg-package=python3-rgw-dbg
-	dh_strip -ppython-cephfs --dbg-package=python-cephfs-dbg
 	dh_strip -ppython3-cephfs --dbg-package=python3-cephfs-dbg
 
 override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
-
-override_dh_python2:
-	for binding in rados cephfs rbd rgw; do \
-	  dh_python2 -p python-$$binding;       \
-	done
-	dh_python2 -p ceph-common
-	dh_python2 -p ceph-base
-	dh_python2 -p ceph-osd
-	dh_python2 -p ceph-mgr
-	# batch-compile, and set up for delete, all the module files
-	dh_python2 -p ceph-mgr usr/lib/ceph/mgr
 
 override_dh_python3:
 	for binding in rados cephfs rbd rgw; do \
@@ -142,6 +129,7 @@ override_dh_python3:
 	dh_python3 -p python3-ceph-argparse
 	dh_python3 -p python3-ceph-common
 	dh_python3 -p cephfs-shell
+	dh_python3 -p cephadm
 
 # do not run tests
 override_dh_auto_test:

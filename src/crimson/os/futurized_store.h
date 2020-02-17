@@ -11,48 +11,21 @@
 
 #include <seastar/core/future.hh>
 
+#include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
 #include "osd/osd_types.h"
 
 namespace ceph::os {
-
-class FuturizedCollection;
 class Transaction;
+}
+
+namespace crimson::os {
+class FuturizedCollection;
 
 class FuturizedStore {
 
 public:
-  // TODO: replace with the ceph::errorator concept
-  template <class ConcreteExceptionT>
-  class Exception : public std::logic_error {
-  public:
-    using std::logic_error::logic_error;
-
-    // Throwing an exception isn't the sole way to signalize an error
-    // with it. This approach nicely fits cold, infrequent issues but
-    // when applied to a hot one (like ENOENT on write path), it will
-    // likely hurt performance.
-    // Alternative approach for hot errors is to create exception_ptr
-    // on our own and place it in the future via make_exception_future.
-    // When ::handle_exception is called, handler would inspect stored
-    // exception whether it's hot-or-cold before rethrowing it.
-    // The main advantage is both types flow through very similar path
-    // based on future::handle_exception.
-    static bool is_class_of(const std::exception_ptr& ep) {
-      // Seastar offers hacks for making throwing lock-less but stack
-      // unwinding still can be a problem so painful to justify going
-      // with non-standard, obscure things like this one.
-      return *ep.__cxa_exception_type() == typeid(ConcreteExceptionT);
-    }
-  };
-
-  struct EnoentException : public Exception<EnoentException> {
-    using Exception<EnoentException>::Exception;
-  };
-  struct EnodataException : public Exception<EnodataException> {
-    using Exception<EnodataException>::Exception;
-  };
   static std::unique_ptr<FuturizedStore> create(const std::string& type,
                                                 const std::string& data);
   FuturizedStore() = default;
@@ -69,18 +42,29 @@ public:
   virtual store_statfs_t stat() const = 0;
 
   using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
-  virtual seastar::future<ceph::bufferlist> read(CollectionRef c,
-				   const ghobject_t& oid,
-				   uint64_t offset,
-				   size_t len,
-				   uint32_t op_flags = 0) = 0;
-  virtual seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
-					    const ghobject_t& oid,
-					    std::string_view name) const = 0;
+  using read_errorator = crimson::errorator<crimson::ct_error::enoent>;
+  virtual read_errorator::future<ceph::bufferlist> read(
+    CollectionRef c,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    uint32_t op_flags = 0) = 0;
 
+  using get_attr_errorator = crimson::errorator<
+    crimson::ct_error::enoent,
+    crimson::ct_error::enodata>;
+  virtual get_attr_errorator::future<ceph::bufferptr> get_attr(
+    CollectionRef c,
+    const ghobject_t& oid,
+    std::string_view name) const = 0;
+
+  using get_attrs_ertr = crimson::errorator<
+    crimson::ct_error::enoent>;
   using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
-  virtual seastar::future<attrs_t> get_attrs(CollectionRef c,
-                                             const ghobject_t& oid) = 0;
+  virtual get_attrs_ertr::future<attrs_t> get_attrs(
+    CollectionRef c,
+    const ghobject_t& oid) = 0;
+
   using omap_values_t = std::map<std::string, bufferlist, std::less<>>;
   using omap_keys_t = std::set<std::string>;
   virtual seastar::future<omap_values_t> omap_get_values(
@@ -103,7 +87,7 @@ public:
   virtual seastar::future<std::vector<coll_t>> list_collections() = 0;
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
-				   Transaction&& txn) = 0;
+					   ceph::os::Transaction&& txn) = 0;
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;

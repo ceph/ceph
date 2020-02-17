@@ -102,7 +102,7 @@ function TEST_mon_quorum() {
     port_forward ${MONC_PUBLIC} ${MONC_BIND}
 
     # expect monmap to contain 3 monitors (a, b, and c)
-    jqinput="$(ceph mon_status --format=json 2>/dev/null)"
+    jqinput="$(ceph quorum_status --format=json 2>/dev/null)"
     jq_success "$jqinput" '.monmap.mons | length == 3' || return 1
 
     # quorum should form

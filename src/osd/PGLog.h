@@ -25,7 +25,7 @@
 #ifdef WITH_SEASTAR
 #include <seastar/core/future.hh>
 #include "crimson/os/futurized_store.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/cyanstore/cyan_collection.h"
 #endif
 
 constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
@@ -326,6 +326,16 @@ public:
 	return true;
       }
 
+      return false;
+    }
+
+    bool has_write_since(const hobject_t &oid, const eversion_t &bound) const {
+      for (auto i = log.rbegin(); i != log.rend(); ++i) {
+	if (i->version <= bound)
+	  return false;
+	if (i->soid.get_head() == oid.get_head())
+	  return true;
+      }
       return false;
     }
 
@@ -1587,8 +1597,8 @@ public:
 
 #ifdef WITH_SEASTAR
   seastar::future<> read_log_and_missing_crimson(
-    ceph::os::FuturizedStore &store,
-    ceph::os::CollectionRef ch,
+    crimson::os::FuturizedStore &store,
+    crimson::os::CollectionRef ch,
     const pg_info_t &info,
     ghobject_t pgmeta_oid
     ) {
@@ -1600,8 +1610,8 @@ public:
 
   template <typename missing_type>
   struct FuturizedStoreLogReader {
-    ceph::os::FuturizedStore &store;
-    ceph::os::CollectionRef ch;
+    crimson::os::FuturizedStore &store;
+    crimson::os::CollectionRef ch;
     const pg_info_t &info;
     IndexedLog &log;
     missing_type &missing;
@@ -1674,7 +1684,7 @@ public:
 	[this]() {
 	  return store.omap_get_values(ch, pgmeta_oid, next).then(
 	    [this](
-	      bool done, ceph::os::FuturizedStore::omap_values_t values) {
+	      bool done, crimson::os::FuturizedStore::omap_values_t values) {
 	      for (auto &&p : values) {
 		process_entry(p);
 	      }
@@ -1696,8 +1706,8 @@ public:
 
   template <typename missing_type>
   static seastar::future<> read_log_and_missing_crimson(
-    ceph::os::FuturizedStore &store,
-    ceph::os::CollectionRef ch,
+    crimson::os::FuturizedStore &store,
+    crimson::os::CollectionRef ch,
     const pg_info_t &info,
     IndexedLog &log,
     missing_type &missing,

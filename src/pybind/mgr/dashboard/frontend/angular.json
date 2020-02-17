@@ -107,6 +107,11 @@
               "i18nFile": "src/locale/messages.ja-JP.xlf",
               "i18nLocale": "ja-JP"
             },
+            "ko-KR": {
+              "outputPath": "dist/ko-KR/",
+              "i18nFile": "src/locale/messages.ko-KR.xlf",
+              "i18nLocale": "ko-KR"
+            },
             "pl-PL": {
               "outputPath": "dist/pl-PL/",
               "i18nFile": "src/locale/messages.pl-PL.xlf",
@@ -163,6 +168,9 @@
             "ja-JP": {
               "browserTarget": "ceph-dashboard:build:ja-JP"
             },
+            "ko-KR": {
+              "browserTarget": "ceph-dashboard:build:ko-KR"
+            },
             "pl-PL": {
               "browserTarget": "ceph-dashboard:build:pl-PL"
             },
@@ -188,7 +196,7 @@
           "options": {
             "tsConfig": [
               "src/tsconfig.app.json",
-              "src/tsconfig.spec.json"
+              "tsconfig.spec.json"
             ],
             "exclude": [
               "**/node_modules/**"

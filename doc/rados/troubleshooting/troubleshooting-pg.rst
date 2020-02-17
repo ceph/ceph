@@ -6,7 +6,7 @@ Placement Groups Never Get Clean
 ================================
 
 When you create a cluster and your cluster remains in ``active``,
-``active+remapped`` or ``active+degraded`` status and never achieve an
+``active+remapped`` or ``active+degraded`` status and never achieves an
 ``active+clean`` status, you likely have a problem with your configuration.
 
 You may need to review settings in the `Pool, PG and CRUSH Config Reference`_

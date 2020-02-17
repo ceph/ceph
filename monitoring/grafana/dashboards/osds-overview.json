@@ -112,7 +112,7 @@
       "title": "OSD Read Latencies",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -289,7 +289,7 @@
       "title": "OSD Write Latencies",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -503,7 +503,7 @@
           "step": 240
         }
       ],
-      "timeFrom": "2m",
+      "timeFrom": null,
       "timeShift": null,
       "title": "OSD Objectstore Types",
       "type": "grafana-piechart-panel",
@@ -620,7 +620,7 @@
           "step": 2
         }
       ],
-      "timeFrom": "2m",
+      "timeFrom": null,
       "timeShift": null,
       "title": "OSD Size Summary",
       "type": "grafana-piechart-panel",
@@ -781,12 +781,12 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": "36h",
+      "timeFrom": null,
       "timeShift": null,
       "title": "Read/Write Profile",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",

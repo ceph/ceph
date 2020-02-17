@@ -192,7 +192,7 @@ void MgrStandby::send_beacon()
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
   dout(20) << state_str() << dendl;
 
-  std::list<PyModuleRef> modules = py_module_registry.get_modules();
+  auto modules = py_module_registry.get_modules();
 
   // Construct a list of the info about each loaded module
   // which we will transmit to the monitor.
@@ -204,6 +204,11 @@ void MgrStandby::send_beacon()
     info.can_run = module->get_can_run();
     info.module_options = module->get_options();
     module_info.push_back(std::move(info));
+  }
+
+  auto clients = py_module_registry.get_clients();
+  for (const auto& client : clients) {
+    dout(15) << "noting RADOS client for blacklist: " << client << dendl;
   }
 
   // Whether I think I am available (request MgrMonitor to set me
@@ -225,6 +230,7 @@ void MgrStandby::send_beacon()
                                  available,
 				 std::move(module_info),
 				 std::move(metadata),
+                                 std::move(clients),
 				 CEPH_FEATURES_ALL);
 
   if (available) {
@@ -257,14 +263,6 @@ void MgrStandby::tick()
           tick();
       }
   )); 
-}
-
-void MgrStandby::handle_signal(int signum)
-{
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
-  //shutdown();
 }
 
 void MgrStandby::shutdown()
@@ -458,31 +456,13 @@ bool MgrStandby::ms_handle_refused(Connection *con)
   return false;
 }
 
-// A reference for use by the signal handler
-static MgrStandby *signal_mgr = nullptr;
-
-static void handle_mgr_signal(int signum)
-{
-  if (signal_mgr) {
-    signal_mgr->handle_signal(signum);
-  }
-}
-
 int MgrStandby::main(vector<const char *> args)
 {
-  // Enable signal handlers
-  signal_mgr = this;
-  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
-
   client_messenger->wait();
 
   // Disable signal handlers
   unregister_async_signal_handler(SIGHUP, sighup_handler);
-  unregister_async_signal_handler(SIGINT, handle_mgr_signal);
-  unregister_async_signal_handler(SIGTERM, handle_mgr_signal);
   shutdown_async_signal_handler();
-  signal_mgr = nullptr;
 
   return 0;
 }

@@ -1,9 +1,11 @@
+import hashlib
 from mgr_module import MgrModule
 import datetime
 import errno
 import json
 from collections import defaultdict
 from prettytable import PrettyTable
+import re
 from threading import Event
 
 
@@ -134,6 +136,35 @@ class Module(MgrModule):
             return f(time)
         return filter(inner, self.crashes.items())
 
+    # stack signature helpers
+
+    def sanitize_backtrace(self, bt):
+        ret = list()
+        for func_record in bt:
+            # split into two fields on last space, take the first one,
+            # strip off leading ( and trailing )
+            func_plus_offset = func_record.rsplit(' ', 1)[0][1:-1]
+            ret.append(func_plus_offset.split('+')[0])
+
+        return ret
+
+    ASSERT_MATCHEXPR = re.compile(r'(?s)(.*) thread .* time .*(: .*)\n')
+
+    def sanitize_assert_msg(self, msg):
+        # (?s) allows matching newline.  get everything up to "thread" and
+        # then after-and-including the last colon-space.  This skips the
+        # thread id, timestamp, and file:lineno, because file is already in
+        # the beginning, and lineno may vary.
+        return ''.join(self.ASSERT_MATCHEXPR.match(msg).groups())
+
+    def calc_sig(self, bt, assert_msg):
+        sig = hashlib.sha256()
+        for func in self.sanitize_backtrace(bt):
+            sig.update(func.encode())
+        if assert_msg:
+            sig.update(self.sanitize_assert_msg(assert_msg).encode())
+        return ''.join('%02x' % c for c in sig.digest())
+
     # command handlers
 
     def do_info(self, cmd, inbuf):
@@ -141,7 +172,7 @@ class Module(MgrModule):
         crash = self.crashes.get(crashid)
         if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
-        val = json.dumps(crash, indent=4)
+        val = json.dumps(crash, indent=4, sort_keys=True)
         return 0, val, ''
 
     def do_post(self, cmd, inbuf):
@@ -149,6 +180,9 @@ class Module(MgrModule):
             metadata = self.validate_crash_metadata(inbuf)
         except Exception as e:
             return errno.EINVAL, '', 'malformed crash metadata: %s' % e
+        if 'backtrace' in metadata:
+            metadata['stack_sig'] = self.calc_sig(
+                metadata.get('backtrace'), metadata.get('assert_msg'))
         crashid = metadata['crash_id']
 
         if crashid not in self.crashes:
@@ -165,12 +199,13 @@ class Module(MgrModule):
 
     def do_ls(self, cmd, inbuf):
         if cmd['prefix'] == 'crash ls':
-            r = self.crashes.values()
+            t = self.crashes.values()
         else:
-            r = [crash for crashid, crash in self.crashes.items()
+            t = [crash for crashid, crash in self.crashes.items()
                  if 'archived' not in crash]
+        r = sorted(t, key=lambda i: i.get('crash_id'))
         if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
-            return 0, json.dumps(r, indent=4), ''
+            return 0, json.dumps(r, indent=4, sort_keys=True), ''
         else:
             table = PrettyTable(['ID', 'ENTITY', 'NEW'],
                                 border=False)
@@ -297,7 +332,7 @@ class Module(MgrModule):
                 pname = "unknown"
             report[pname] += 1
 
-        return 0, '', json.dumps(report)
+        return 0, '', json.dumps(report, sort_keys=True)
 
     def self_test(self):
         # test time conversion

@@ -52,7 +52,7 @@ struct C_GetClient : public Context {
     client::get_client_start(&op, client_id);
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, nullptr, &utils::rados_state_callback<
+      this, &utils::rados_state_callback<
         C_GetClient, &C_GetClient::handle_get_client>);
 
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
@@ -110,7 +110,7 @@ struct C_AllocateTag : public Context {
     client::get_next_tag_tid_start(&op);
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, nullptr, &utils::rados_state_callback<
+      this, &utils::rados_state_callback<
         C_AllocateTag, &C_AllocateTag::handle_get_next_tag_tid>);
 
     out_bl.clear();
@@ -140,7 +140,7 @@ struct C_AllocateTag : public Context {
     client::tag_create(&op, tag->tid, tag_class, tag->data);
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, nullptr, &utils::rados_state_callback<
+      this, &utils::rados_state_callback<
         C_AllocateTag, &C_AllocateTag::handle_tag_create>);
 
     int r = ioctx.aio_operate(oid, comp, &op);
@@ -169,7 +169,7 @@ struct C_AllocateTag : public Context {
     client::get_tag_start(&op, tag->tid);
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, nullptr, &utils::rados_state_callback<
+      this, &utils::rados_state_callback<
         C_AllocateTag, &C_AllocateTag::handle_get_tag>);
 
     out_bl.clear();
@@ -229,7 +229,7 @@ struct C_GetTag : public Context {
     client::get_tag_start(&op, tag_tid);
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, nullptr, &utils::rados_state_callback<
+      this, &utils::rados_state_callback<
         C_GetTag, &C_GetTag::handle_get_tag>);
 
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
@@ -289,7 +289,7 @@ struct C_GetTags : public Context {
                            tag_class);
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, nullptr, &utils::rados_state_callback<
+      this, &utils::rados_state_callback<
         C_GetTags, &C_GetTags::handle_tag_list>);
 
     out_bl.clear();
@@ -368,7 +368,7 @@ struct C_AssertActiveTag : public Context {
     client::tag_list_start(&op, tag_tid, 2, client_id, boost::none);
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, nullptr, &utils::rados_state_callback<
+      this, &utils::rados_state_callback<
         C_AssertActiveTag, &C_AssertActiveTag::handle_send>);
 
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
@@ -444,7 +444,7 @@ void JournalMetadata::init(Context *on_finish) {
     });
 
   librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-    on_finish, nullptr, utils::rados_ctx_callback);
+    on_finish, utils::rados_ctx_callback);
   int r = m_ioctx.aio_watch(m_oid, comp, &m_watch_handle, &m_watch_ctx);
   ceph_assert(r == 0);
   comp->release();
@@ -472,7 +472,7 @@ void JournalMetadata::shut_down(Context *on_finish) {
       ldout(m_cct, 20) << "shut_down: flushing watch" << dendl;
       librados::Rados rados(m_ioctx);
       librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-        on_finish, nullptr, utils::rados_ctx_callback);
+        on_finish, utils::rados_ctx_callback);
       r = rados.aio_watch_flush(comp);
       ceph_assert(r == 0);
       comp->release();
@@ -482,7 +482,7 @@ void JournalMetadata::shut_down(Context *on_finish) {
     });
   if (watch_handle != 0) {
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      on_finish, nullptr, utils::rados_ctx_callback);
+      on_finish, utils::rados_ctx_callback);
     int r = m_ioctx.aio_unwatch(watch_handle, comp);
     ceph_assert(r == 0);
     comp->release();
@@ -516,7 +516,7 @@ void JournalMetadata::register_client(const bufferlist &data,
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
 
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL,
+    librados::Rados::aio_create_completion(ctx, 
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   ceph_assert(r == 0);
@@ -532,8 +532,7 @@ void JournalMetadata::update_client(const bufferlist &data,
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
 
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL,
-                                           utils::rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   ceph_assert(r == 0);
   comp->release();
@@ -549,8 +548,7 @@ void JournalMetadata::unregister_client(Context *on_finish) {
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
 
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL,
-                                           utils::rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   ceph_assert(r == 0);
   comp->release();
@@ -618,8 +616,7 @@ void JournalMetadata::set_minimum_set(uint64_t object_set) {
 
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this);
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL,
-                                           utils::rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   ceph_assert(r == 0);
   comp->release();
@@ -648,8 +645,7 @@ void JournalMetadata::set_active_set(uint64_t object_set, Context *on_finish) {
 
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL,
-                                           utils::rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   ceph_assert(r == 0);
   comp->release();
@@ -865,8 +861,7 @@ void JournalMetadata::handle_commit_position_task() {
   librados::ObjectWriteOperation op;
   client::client_commit(&op, m_client_id, m_commit_position);
 
-  auto comp = librados::Rados::aio_create_completion(ctx, nullptr,
-                                                     utils::rados_ctx_callback);
+  auto comp = librados::Rados::aio_create_completion(ctx,                                                     utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   ceph_assert(r == 0);
   comp->release();
@@ -1068,8 +1063,7 @@ void JournalMetadata::async_notify_update(Context *on_safe) {
 
   C_AioNotify *ctx = new C_AioNotify(this, on_safe);
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL,
-                                           utils::rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, utils::rados_ctx_callback);
 
   bufferlist bl;
   int r = m_ioctx.aio_notify(m_oid, comp, bl, 5000, NULL);
@@ -1124,7 +1118,7 @@ void JournalMetadata::schedule_laggy_clients_disconnect(Context *on_finish) {
               &op, client_id, cls::journal::CLIENT_STATE_DISCONNECTED);
 
             auto comp = librados::Rados::aio_create_completion(
-              ctx, nullptr, utils::rados_ctx_callback);
+              ctx, utils::rados_ctx_callback);
             int r = m_ioctx.aio_operate(m_oid, comp, &op);
             ceph_assert(r == 0);
             comp->release();

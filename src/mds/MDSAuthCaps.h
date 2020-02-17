@@ -11,8 +11,6 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-
 #ifndef MDS_AUTH_CAPS_H
 #define MDS_AUTH_CAPS_H
 
@@ -34,8 +32,6 @@ enum {
   MAY_SET_VXATTR = (1 << 6),
   MAY_SNAPSHOT	= (1 << 7),
 };
-
-class CephContext;
 
 // what we can do
 struct MDSCapSpec {
@@ -92,10 +88,6 @@ private:
 struct MDSCapMatch {
   static const int64_t MDS_AUTH_UID_ANY = -1;
 
-  int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
-  std::vector<gid_t> gids;  // Use these GIDs
-  std::string path;  // Require path to be child of this (may be "" or "/" for any)
-
   MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
   MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
   explicit MDSCapMatch(const std::string &path_)
@@ -127,18 +119,13 @@ struct MDSCapMatch {
    * @param target_path filesystem path without leading '/'
    */
   bool match_path(std::string_view target_path) const;
+
+  int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  std::vector<gid_t> gids;  // Use these GIDs
+  std::string path;  // Require path to be child of this (may be "" or "/" for any)
 };
 
 struct MDSCapGrant {
-  MDSCapSpec spec;
-  MDSCapMatch match;
-
-  std::string network;
-
-  entity_addr_t network_parsed;
-  unsigned network_prefix = 0;
-  bool network_valid = true;
-
   MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_,
 	      boost::optional<std::string> n)
     : spec(spec_), match(match_) {
@@ -150,13 +137,21 @@ struct MDSCapGrant {
   MDSCapGrant() {}
 
   void parse_network();
+
+  MDSCapSpec spec;
+  MDSCapMatch match;
+
+  std::string network;
+
+  entity_addr_t network_parsed;
+  unsigned network_prefix = 0;
+  bool network_valid = true;
 };
+
+class CephContext;
 
 class MDSAuthCaps
 {
-  CephContext *cct = nullptr;
-  std::vector<MDSCapGrant> grants;
-
 public:
   MDSAuthCaps() = default;
   explicit MDSAuthCaps(CephContext *cct_) : cct(cct_) {}
@@ -180,8 +175,10 @@ public:
   bool path_capable(std::string_view inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
+private:
+  CephContext *cct = nullptr;
+  std::vector<MDSCapGrant> grants;
 };
-
 
 std::ostream &operator<<(std::ostream &out, const MDSCapMatch &match);
 std::ostream &operator<<(std::ostream &out, const MDSCapSpec &spec);

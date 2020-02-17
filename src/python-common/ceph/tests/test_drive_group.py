@@ -2,6 +2,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
 
+
 def test_DriveGroup():
     dg_json = {
         'host_pattern': 'hostname',
@@ -14,12 +15,12 @@ def test_DriveGroup():
 
 
 def test_DriveGroup_fail():
-    with pytest.raises(TypeError):
+    with pytest.raises(DriveGroupValidationError):
         DriveGroupSpec.from_json({})
 
 
 def test_drivegroup_pattern():
-    dg = DriveGroupSpec('node[1-3]', DeviceSelection())
+    dg = DriveGroupSpec('node[1-3]', DeviceSelection(all=True))
     assert dg.hosts(['node{}'.format(i) for i in range(10)]) == ['node1', 'node2', 'node3']
 
 
@@ -29,4 +30,4 @@ def test_drive_selection():
     assert spec.data_devices.paths == ['/dev/sda']
 
     with pytest.raises(DriveGroupValidationError, match='exclusive'):
-        DeviceSelection(paths=['/dev/sda'], rotates=False)
+        DeviceSelection(paths=['/dev/sda'], rotational=False)

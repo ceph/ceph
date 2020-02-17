@@ -17,6 +17,7 @@ $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-s
 
 $badge-font-size: 1rem;
 $form-feedback-font-size: 100%;
+$popover-max-width: 350px;
 
 @import '~bootstrap/scss/bootstrap';
 @import '~fork-awesome/scss/fork-awesome';
@@ -111,7 +112,7 @@ option {
   font-family: monospace;
 }
 .text-pre {
-  white-space: pre;
+  white-space: pre-wrap;
 }
 
 /* Buttons */
@@ -278,7 +279,8 @@ a {
   color: $color-required-text;
 }
 /* Forms */
-.form-group > .col-form-label > span.required {
+.form-group > .col-form-label > span.required,
+.form-group > .col-sm-12 > .col-form-label > span.required {
   @extend .fa;
   @extend .fa-asterisk;
   @extend .required;
@@ -320,7 +322,7 @@ a {
 }
 .custom-icon {
   padding: 10px;
-  margin-right: 1em;
+  margin-right: 8px;
   background-clip: padding-box;
   background-size: contain;
   background-repeat: no-repeat;
@@ -429,4 +431,18 @@ bfv-messages {
     width: 100%;
     background: $color-green;
   }
+}
+
+// Custom badges.
+.badge-hdd {
+  color: $color-solid-white;
+  background-color: $color-blue-gray;
+}
+.badge-ssd {
+  color: $color-solid-white;
+  background-color: $color-blue;
+}
+.badge-tab {
+  color: $color-solid-gray;
+  background-color: $color-light-shade-gray;
 }

@@ -21,7 +21,7 @@
 
 class AuthAuthorizer;
 
-namespace ceph::net {
+namespace crimson::net {
 
 class Dispatcher {
  public:
@@ -60,4 +60,4 @@ class Dispatcher {
   }
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

@@ -83,6 +83,8 @@ class Pool(RESTController):
     @pool_task('edit', ['{pool_name}'])
     def set(self, pool_name, flags=None, application_metadata=None, configuration=None, **kwargs):
         self._set_pool_values(pool_name, application_metadata, flags, True, kwargs)
+        if kwargs.get('pool'):
+            pool_name = kwargs['pool']
         RbdConfiguration(pool_name).set_configuration(configuration)
         self._wait_for_pgs(pool_name)
 
@@ -100,9 +102,9 @@ class Pool(RESTController):
 
     def _set_pool_values(self, pool, application_metadata, flags, update_existing, kwargs):
         update_name = False
-        if update_existing:
-            current_pool = self._get(pool)
-            self._handle_update_compression_args(current_pool.get('options'), kwargs)
+        current_pool = self._get(pool)
+        if update_existing and kwargs.get('compression_mode') == 'unset':
+            self._prepare_compression_removal(current_pool.get('options'), kwargs)
         if flags and 'ec_overwrites' in flags:
             CephService.send_command('mon', 'osd pool set', pool=pool, var='allow_ec_overwrites',
                                      val='true')
@@ -146,8 +148,18 @@ class Pool(RESTController):
                 CephService.send_command('mon', 'osd pool set-quota',
                                          pool=pool, field=field, val=str(value))
 
-    def _handle_update_compression_args(self, options, kwargs):
-        if kwargs.get('compression_mode') == 'unset' and options is not None:
+    def _prepare_compression_removal(self, options, kwargs):
+        """
+        Presets payload with values to remove compression attributes in case they are not
+        needed anymore.
+
+        In case compression is not needed the dashboard will send 'compression_mode' with the
+        value 'unset'.
+
+        :param options: All set options for the current pool.
+        :param kwargs: Payload of the PUT / POST call
+        """
+        if options is not None:
             def reset_arg(arg, value):
                 if options.get(arg):
                     kwargs[arg] = value

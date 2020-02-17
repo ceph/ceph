@@ -35,7 +35,18 @@ class DashboardTestCase(MgrTestCase):
     AUTH_ROLES = ['administrator']
 
     @classmethod
-    def create_user(cls, username, password, roles):
+    def create_user(cls, username, password, roles=None, force_password=True):
+        """
+        :param username: The name of the user.
+        :type username: str
+        :param password: The password.
+        :type password: str
+        :param roles: A list of roles.
+        :type roles: list
+        :param force_password: Force the use of the specified password. This
+          will bypass the password complexity check. Defaults to 'True'.
+        :type force_password: bool
+        """
         try:
             cls._ceph_cmd(['dashboard', 'ac-user-show', username])
             cls._ceph_cmd(['dashboard', 'ac-user-delete', username])
@@ -43,28 +54,32 @@ class DashboardTestCase(MgrTestCase):
             if ex.exitstatus != 2:
                 raise ex
 
-        cls._ceph_cmd(['dashboard', 'ac-user-create', username, password])
+        user_create_args = ['dashboard', 'ac-user-create', username, password]
+        if force_password:
+            user_create_args.append('--force-password')
+        cls._ceph_cmd(user_create_args)
 
-        set_roles_args = ['dashboard', 'ac-user-set-roles', username]
-        for idx, role in enumerate(roles):
-            if isinstance(role, str):
-                set_roles_args.append(role)
-            else:
-                assert isinstance(role, dict)
-                rolename = 'test_role_{}'.format(idx)
-                try:
-                    cls._ceph_cmd(['dashboard', 'ac-role-show', rolename])
-                    cls._ceph_cmd(['dashboard', 'ac-role-delete', rolename])
-                except CommandFailedError as ex:
-                    if ex.exitstatus != 2:
-                        raise ex
-                cls._ceph_cmd(['dashboard', 'ac-role-create', rolename])
-                for mod, perms in role.items():
-                    args = ['dashboard', 'ac-role-add-scope-perms', rolename, mod]
-                    args.extend(perms)
-                    cls._ceph_cmd(args)
-                set_roles_args.append(rolename)
-        cls._ceph_cmd(set_roles_args)
+        if roles:
+            set_roles_args = ['dashboard', 'ac-user-set-roles', username]
+            for idx, role in enumerate(roles):
+                if isinstance(role, str):
+                    set_roles_args.append(role)
+                else:
+                    assert isinstance(role, dict)
+                    rolename = 'test_role_{}'.format(idx)
+                    try:
+                        cls._ceph_cmd(['dashboard', 'ac-role-show', rolename])
+                        cls._ceph_cmd(['dashboard', 'ac-role-delete', rolename])
+                    except CommandFailedError as ex:
+                        if ex.exitstatus != 2:
+                            raise ex
+                    cls._ceph_cmd(['dashboard', 'ac-role-create', rolename])
+                    for mod, perms in role.items():
+                        args = ['dashboard', 'ac-role-add-scope-perms', rolename, mod]
+                        args.extend(perms)
+                        cls._ceph_cmd(args)
+                    set_roles_args.append(rolename)
+            cls._ceph_cmd(set_roles_args)
 
     @classmethod
     def login(cls, username, password):
@@ -368,6 +383,12 @@ class DashboardTestCase(MgrTestCase):
         log.info("command result: %s", res)
         return res
 
+    @classmethod
+    def _ceph_cmd_result(cls, cmd):
+        exitstatus = cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd)
+        log.info("command exit status: %d", exitstatus)
+        return exitstatus
+
     def set_config_key(self, key, value):
         self._ceph_cmd(['config-key', 'set', key, value])
 
@@ -398,7 +419,7 @@ class DashboardTestCase(MgrTestCase):
 
     @classmethod
     def mons(cls):
-        out = cls.ceph_cluster.mon_manager.raw_cluster_cmd('mon_status')
+        out = cls.ceph_cluster.mon_manager.raw_cluster_cmd('quorum_status')
         j = json.loads(out)
         return [mon['name'] for mon in j['monmap']['mons']]
 

@@ -109,7 +109,7 @@ int StandbyPyModule::load()
   // with us in logging etc.
   auto pThisPtr = PyCapsule_New(this, nullptr, nullptr);
   ceph_assert(pThisPtr != nullptr);
-  auto pModuleName = PyString_FromString(get_name().c_str());
+  auto pModuleName = PyUnicode_FromString(get_name().c_str());
   ceph_assert(pModuleName != nullptr);
   auto pArgs = PyTuple_Pack(2, pModuleName, pThisPtr);
   Py_DECREF(pThisPtr);

@@ -14,7 +14,7 @@
 #
 # Author: Loic Dachary <loic@dachary.org>
 # Author: Nathan Cutler <ncutler@suse.com>
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
 # published by the Free Software Foundation, either version 3 of the
@@ -30,6 +30,7 @@
 #
 import argparse
 import logging
+import os
 import re
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
@@ -38,6 +39,7 @@ redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
 delay_seconds = 5
+redmine_key_file="~/.redmine_key"
 #
 # NOTE: release_id is hard-coded because
 # http://www.redmine.org/projects/redmine/wiki/Rest_CustomFields
@@ -56,17 +58,17 @@ version2version_id = {}
 resolve_parent = None
 
 def usage():
-    logging.error("Command-line arguments must include either a Redmine key (--key) "
+    logging.error("Redmine credentials are required to perform this operation. "
+                  "Please provide either a Redmine key (via %s) "
                   "or a Redmine username and password (via --user and --password). "
                   "Optionally, one or more issue numbers can be given via positional "
                   "argument(s). In the absence of positional arguments, the script "
-                  "will loop through all issues in Pending Backport status.")
+                  "will loop through all issues in Pending Backport status." % redmine_key_file)
     exit(-1)
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("issue_numbers", nargs='*', help="Issue number")
-    parser.add_argument("--key", help="Redmine user key")
     parser.add_argument("--user", help="Redmine user")
     parser.add_argument("--password", help="Redmine password")
     parser.add_argument("--resolve-parent", help="Resolve parent issue if all backports resolved/rejected",
@@ -100,12 +102,20 @@ def process_resolve_parent_option(a):
         logging.warning("Parent issues with all backports resolved/rejected will be marked Resolved")
 
 def connect_to_redmine(a):
-    if a.key:
-        logging.info("Redmine key was provided; using it")
-        return Redmine(redmine_endpoint, key=a.key)
-    elif a.user and a.password:
+    full_path=os.path.expanduser(redmine_key_file)
+    redmine_key=''
+    try:
+        with open(full_path, "r") as f:
+            redmine_key = f.read().strip()
+    except FileNotFoundError:
+        pass
+
+    if a.user and a.password:
         logging.info("Redmine username and password were provided; using them")
         return Redmine(redmine_endpoint, username=a.user, password=a.password)
+    elif redmine_key:
+        logging.info("Redmine key was read from '%s'; using it" % redmine_key_file)
+        return Redmine(redmine_endpoint, key=redmine_key)
     else:
         usage()
 
@@ -236,6 +246,8 @@ def maybe_resolve(issue, backports, dry_run):
     global delay_seconds
     global redmine
     global status2status_id
+    if not backports:
+        return None
     pending_backport_status_id = status2status_id["Pending Backport"]
     resolved_status_id = status2status_id["Resolved"]
     rejected_status_id = status2status_id["Rejected"]
@@ -284,6 +296,7 @@ def iterate_over_backports(r, issues, dry_run=False):
         if len(issue['backports']) == 0:
             logging.error(url(issue) + " the backport field is empty")
         update_relations(r, issue, dry_run)
+    print('                                     \r', end='', flush=True)
     logging.info("Processed {} issues".format(counter))
     return None
 

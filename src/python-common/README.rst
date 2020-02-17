@@ -6,15 +6,15 @@ functions usable throughout the Ceph project.
 
 Like for example:
 
--  All different Cython bindings
--  MGR modules
--  ``ceph`` command line interface and other Ceph tools.
--  Also external tools
+- All different Cython bindings.
+- MGR modules.
+- ``ceph`` command line interface and other Ceph tools.
+- Also external tools.
 
 Requirements
 ============
 
--  ``python-six``
+- ``python-six``
 
 Usage
 =====

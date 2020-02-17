@@ -82,10 +82,9 @@ void GetInfoRequest<I>::handle_get_mirror_image(int r) {
     r = cls_client::mirror_image_get_finish(&iter, m_mirror_image);
   }
 
-  if (r == -ENOENT ||
-      m_mirror_image->state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+  if (r == -ENOENT) {
     ldout(cct, 20) << "mirroring is disabled" << dendl;
-    finish(0);
+    finish(r);
     return;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
@@ -94,22 +93,30 @@ void GetInfoRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  get_tag_owner();
+  if (m_mirror_image->mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    get_journal_tag_owner();
+  } else if (m_mirror_image->mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    get_snapshot_promotion_state();
+  } else {
+    ldout(cct, 20) << "unknown mirror image mode: " << m_mirror_image->mode
+                   << dendl;
+    finish(-EOPNOTSUPP);
+  }
 }
 
 template <typename I>
-void GetInfoRequest<I>::get_tag_owner() {
+void GetInfoRequest<I>::get_journal_tag_owner() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
   auto ctx = create_context_callback<
-    GetInfoRequest<I>, &GetInfoRequest<I>::handle_get_tag_owner>(this);
+    GetInfoRequest<I>, &GetInfoRequest<I>::handle_get_journal_tag_owner>(this);
   Journal<I>::get_tag_owner(m_image_ctx.md_ctx, m_image_ctx.id,
                             &m_mirror_uuid, m_image_ctx.op_work_queue, ctx);
 }
 
 template <typename I>
-void GetInfoRequest<I>::handle_get_tag_owner(int r) {
+void GetInfoRequest<I>::handle_get_journal_tag_owner(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "r=" << r << dendl;
 
@@ -128,6 +135,41 @@ void GetInfoRequest<I>::handle_get_tag_owner(int r) {
 
   finish(0);
 }
+
+template <typename I>
+void GetInfoRequest<I>::get_snapshot_promotion_state() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  *m_promotion_state = PROMOTION_STATE_PRIMARY;
+  {
+    std::shared_lock image_locker{m_image_ctx.image_lock};
+    for (auto it = m_image_ctx.snap_info.rbegin();
+         it != m_image_ctx.snap_info.rend(); it++) {
+      auto primary = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+        &it->second.snap_namespace);
+      if (primary != nullptr) {
+        if (primary->demoted) {
+          *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        }
+        break;
+      }
+      auto non_primary =
+        boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
+          &it->second.snap_namespace);
+      if (non_primary != nullptr) {
+        if (non_primary->primary_mirror_uuid.empty()) {
+          *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        } else {
+          *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+        }
+        break;
+      }
+    }
+  }
+  finish(0);
+}
+
 
 template <typename I>
 void GetInfoRequest<I>::finish(int r) {

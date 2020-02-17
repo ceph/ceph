@@ -3,19 +3,32 @@
 from __future__ import absolute_import
 
 import json
+import logging
 import threading
+import sys
 import time
 
 import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
+from pyfakefs import fake_filesystem
 
 from mgr_module import CLICommand
 
-from .. import logger, mgr
+from .. import mgr
 from ..controllers import json_error_page, generate_controller_routes
 from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
+
+from ..plugins import PLUGIN_MANAGER
+from ..plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+
+
+PLUGIN_MANAGER.hook.init()
+PLUGIN_MANAGER.hook.register_commands()
+
+
+logger = logging.getLogger('tests')
 
 
 class CmdException(Exception):
@@ -77,6 +90,17 @@ class CLICommandTestMixin(KVStoreMockMixin):
         return exec_dashboard_cmd(None, cmd, **kwargs)
 
 
+class FakeFsMixin(object):
+    fs = fake_filesystem.FakeFilesystem()
+    f_open = fake_filesystem.FakeFileOpen(fs)
+    f_os = fake_filesystem.FakeOsModule(fs)
+
+    if sys.version_info > (3, 0):
+        builtins_open = 'builtins.open'
+    else:
+        builtins_open = '__builtin__.open'
+
+
 class ControllerTestCase(helper.CPWebCase):
     _endpoints_cache = {}
 
@@ -118,9 +142,10 @@ class ControllerTestCase(helper.CPWebCase):
             'tools.json_in.on': True,
             'tools.json_in.force': False
         })
+        PLUGIN_MANAGER.hook.configure_cherrypy(config=cherrypy.config)
         super(ControllerTestCase, self).__init__(*args, **kwargs)
 
-    def _request(self, url, method, data=None):
+    def _request(self, url, method, data=None, headers=None):
         if not data:
             b = None
             h = None
@@ -128,10 +153,12 @@ class ControllerTestCase(helper.CPWebCase):
             b = json.dumps(data)
             h = [('Content-Type', 'application/json'),
                  ('Content-Length', str(len(b)))]
+        if headers:
+            h = headers
         self.getPage(url, method=method, body=b, headers=h)
 
-    def _get(self, url):
-        self._request(url, 'GET')
+    def _get(self, url, headers=None):
+        self._request(url, 'GET', headers=headers)
 
     def _post(self, url, data=None):
         self._request(url, 'POST', data)

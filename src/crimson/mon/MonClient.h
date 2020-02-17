@@ -24,7 +24,7 @@
 #include "mon/MonSub.h"
 
 template<typename Message> using Ref = boost::intrusive_ptr<Message>;
-namespace ceph::net {
+namespace crimson::net {
   class Messenger;
 }
 
@@ -37,13 +37,13 @@ struct MMonCommandAck;
 struct MLogAck;
 struct MConfig;
 
-namespace ceph::mon {
+namespace crimson::mon {
 
 class Connection;
 
-class Client : public ceph::net::Dispatcher,
-	       public ceph::auth::AuthClient,
-	       public ceph::auth::AuthServer
+class Client : public crimson::net::Dispatcher,
+	       public crimson::auth::AuthClient,
+	       public crimson::auth::AuthServer
 {
   EntityName entity_name;
   KeyRing keyring;
@@ -55,7 +55,7 @@ class Client : public ceph::net::Dispatcher,
   seastar::timer<seastar::lowres_clock> timer;
   seastar::gate tick_gate;
 
-  ceph::net::Messenger& msgr;
+  crimson::net::Messenger& msgr;
 
   // commands
   using get_version_t = seastar::future<version_t, version_t>;
@@ -71,7 +71,7 @@ class Client : public ceph::net::Dispatcher,
   MonSub sub;
 
 public:
-  Client(ceph::net::Messenger&, ceph::common::AuthHandler&);
+  Client(crimson::net::Messenger&, crimson::common::AuthHandler&);
   Client(Client&&);
   ~Client();
   seastar::future<> start();
@@ -99,7 +99,7 @@ private:
 			 const std::vector<uint32_t>& preferred_modes) final;
   AuthAuthorizeHandler* get_auth_authorize_handler(int peer_type,
 						   int auth_method) final;
-  int handle_auth_request(ceph::net::ConnectionRef conn,
+  int handle_auth_request(crimson::net::ConnectionRef conn,
 			  AuthConnectionMetaRef auth_meta,
 			  bool more,
 			  uint32_t auth_method,
@@ -108,27 +108,27 @@ private:
 
   CephContext cct; // for auth_registry
   AuthRegistry auth_registry;
-  ceph::common::AuthHandler& auth_handler;
+  crimson::common::AuthHandler& auth_handler;
 
   // AuthClient methods
-  ceph::auth::AuthClient::auth_request_t
-  get_auth_request(ceph::net::ConnectionRef conn,
+  crimson::auth::AuthClient::auth_request_t
+  get_auth_request(crimson::net::ConnectionRef conn,
 		   AuthConnectionMetaRef auth_meta) final;
 
    // Handle server's request to continue the handshake
-  ceph::bufferlist handle_auth_reply_more(ceph::net::ConnectionRef conn,
+  ceph::bufferlist handle_auth_reply_more(crimson::net::ConnectionRef conn,
 					  AuthConnectionMetaRef auth_meta,
 					  const bufferlist& bl) final;
 
    // Handle server's indication that authentication succeeded
-  int handle_auth_done(ceph::net::ConnectionRef conn,
+  int handle_auth_done(crimson::net::ConnectionRef conn,
 		       AuthConnectionMetaRef auth_meta,
 		       uint64_t global_id,
 		       uint32_t con_mode,
 		       const bufferlist& bl) final;
 
    // Handle server's indication that the previous auth attempt failed
-  int handle_auth_bad_method(ceph::net::ConnectionRef conn,
+  int handle_auth_bad_method(crimson::net::ConnectionRef conn,
 			     AuthConnectionMetaRef auth_meta,
 			     uint32_t old_auth_method,
 			     int result,
@@ -138,13 +138,13 @@ private:
 private:
   void tick();
 
-  seastar::future<> ms_dispatch(ceph::net::Connection* conn,
+  seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				MessageRef m) override;
-  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
 
-  seastar::future<> handle_monmap(ceph::net::Connection* conn,
+  seastar::future<> handle_monmap(crimson::net::Connection* conn,
 				  Ref<MMonMap> m);
-  seastar::future<> handle_auth_reply(ceph::net::Connection* conn,
+  seastar::future<> handle_auth_reply(crimson::net::Connection* conn,
 				      Ref<MAuthReply> m);
   seastar::future<> handle_subscribe_ack(Ref<MMonSubscribeAck> m);
   seastar::future<> handle_get_version_reply(Ref<MMonGetVersionReply> m);
@@ -162,4 +162,4 @@ private:
   seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
 };
 
-} // namespace ceph::mon
+} // namespace crimson::mon

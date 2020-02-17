@@ -13,6 +13,7 @@ import threading
 import traceback
 import six
 import socket
+import fcntl
 
 from . import common
 from . import context
@@ -159,37 +160,31 @@ class CommandsRequest(object):
     def __json__(self):
         return {
             'id': self.id,
-            'running': map(
-                lambda x: {
+            'running': [
+                {
                     'command': x.command,
                     'outs': x.outs,
                     'outb': x.outb,
-                },
-                self.running
-            ),
-            'finished': map(
-                lambda x: {
+                } for x in self.running
+            ],
+            'finished': [
+                {
                     'command': x.command,
                     'outs': x.outs,
                     'outb': x.outb,
-                },
-                self.finished
-            ),
-            'waiting': map(
-                lambda x: map(
-                    lambda y: common.humanify_command(y),
-                    x
-                ),
-                self.waiting
-            ),
-            'failed': map(
-                lambda x: {
+                } for x in self.finished
+            ],
+            'waiting': [
+                [common.humanify_command(y) for y in x]
+                for x in self.waiting
+            ],
+            'failed': [
+                {
                     'command': x.command,
                     'outs': x.outs,
                     'outb': x.outb,
-                },
-                self.failed
-            ),
+                } for x in self.failed
+            ],
             'is_waiting': self.is_waiting(),
             'is_finished': self.is_finished(),
             'has_failed': self.has_failed(),
@@ -250,6 +245,7 @@ class Module(MgrModule):
 
 
     def serve(self):
+        self.log.debug('serve enter')
         while not self.stop_server:
             try:
                 self._serve()
@@ -262,6 +258,7 @@ class Module(MgrModule):
             # Wait and clear the threading event
             self.serve_event.wait()
             self.serve_event.clear()
+        self.log.debug('serve exit')
 
     def refresh_keys(self):
         self.keys = {}
@@ -329,19 +326,30 @@ class Module(MgrModule):
             ),
             ssl_context=(cert_fname, pkey_fname),
         )
-
-        self.server.serve_forever()
+        sock_fd_flag = fcntl.fcntl(self.server.socket.fileno(), fcntl.F_GETFD)
+        if not (sock_fd_flag & fcntl.FD_CLOEXEC):
+            self.log.debug("set server socket close-on-exec")
+            fcntl.fcntl(self.server.socket.fileno(), fcntl.F_SETFD, sock_fd_flag | fcntl.FD_CLOEXEC)
+        if self.stop_server:
+            self.log.debug('made server, but stop flag set')
+        else:
+            self.log.debug('made server, serving forever')
+            self.server.serve_forever()
 
 
     def shutdown(self):
+        self.log.debug('shutdown enter')
         try:
             self.stop_server = True
             if self.server:
+                self.log.debug('calling server.shutdown')
                 self.server.shutdown()
+                self.log.debug('called server.shutdown')
             self.serve_event.set()
         except:
             self.log.error(str(traceback.format_exc()))
             raise
+        self.log.debug('shutdown exit')
 
 
     def restart(self):
@@ -432,7 +440,7 @@ class Module(MgrModule):
             self.refresh_keys()
             return (
                 0,
-                json.dumps(self.keys, indent=2),
+                json.dumps(self.keys, indent=4, sort_keys=True),
                 "",
             )
 

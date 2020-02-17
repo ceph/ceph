@@ -8,6 +8,12 @@ import uuid
 from ceph_volume import process, terminal
 from . import as_string
 
+# python2 has no FileNotFoundError
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = OSError
+
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
 
@@ -33,7 +39,21 @@ def generate_uuid():
 
 def which(executable):
     """find the location of an executable"""
-    locations = (
+    def _get_path(executable, locations):
+        for location in locations:
+            executable_path = os.path.join(location, executable)
+            if os.path.exists(executable_path) and os.path.isfile(executable_path):
+                return executable_path
+        return None
+
+    path = os.getenv('PATH', '')
+    path_locations = path.split(':')
+    exec_in_path = _get_path(executable, path_locations)
+    if exec_in_path:
+        return exec_in_path
+    mlogger.warning('Executable {} not in PATH: {}'.format(executable, path))
+
+    static_locations = (
         '/usr/local/bin',
         '/bin',
         '/usr/bin',
@@ -41,13 +61,10 @@ def which(executable):
         '/usr/sbin',
         '/sbin',
     )
-
-    for location in locations:
-        executable_path = os.path.join(location, executable)
-        if os.path.exists(executable_path) and os.path.isfile(executable_path):
-            return executable_path
-    mlogger.warning('Absolute path not found for executable: %s', executable)
-    mlogger.warning('Ensure $PATH environment variable contains common executable locations')
+    exec_in_static_locations = _get_path(executable, static_locations)
+    if exec_in_static_locations:
+        mlogger.warning('Found executable under {}, please ensure $PATH is set correctly!'.format(exec_in_static_locations))
+        return exec_in_static_locations
     # fallback to just returning the argument as-is, to prevent a hard fail,
     # and hoping that the system might have the executable somewhere custom
     return executable
@@ -156,6 +173,19 @@ class tmp_mount(object):
             # avoid a circular import from the encryption module
             from ceph_volume.util import encryption
             encryption.dmcrypt_close(self.device)
+
+
+def unmount_tmpfs(path):
+    """
+    Removes the mount at the given path iff the path is a tmpfs mount point.
+    Otherwise no action is taken.
+    """
+    _out, _err, rc = process.call(['findmnt', '-t', 'tmpfs', '-M', path])
+    if rc != 0:
+        logger.info('{} does not appear to be a tmpfs mount'.format(path))
+    else:
+        logger.info('Unmounting tmpfs path at {}'.format( path))
+        unmount(path)
 
 
 def unmount(path):
@@ -275,7 +305,39 @@ def get_mounts(devices=False, paths=False, realpath=False):
         return paths_mounted
 
 
-def set_context(path, recursive = False):
+def set_context(path, recursive=False):
+    """
+    Calls ``restorecon`` to set the proper context on SELinux systems. Only if
+    the ``restorecon`` executable is found anywhere in the path it will get
+    called.
+
+    If the ``CEPH_VOLUME_SKIP_RESTORECON`` environment variable is set to
+    any of: "1", "true", "yes" the call will be skipped as well.
+
+    Finally, if SELinux is not enabled, or not available in the system,
+    ``restorecon`` will not be called. This is checked by calling out to the
+    ``selinuxenabled`` executable. If that tool is not installed or returns
+    a non-zero exit status then no further action is taken and this function
+    will return.
+    """
+    skip = os.environ.get('CEPH_VOLUME_SKIP_RESTORECON', '')
+    if skip.lower() in ['1', 'true', 'yes']:
+        logger.info(
+            'CEPH_VOLUME_SKIP_RESTORECON environ is set, will not call restorecon'
+        )
+        return
+
+    try:
+        stdout, stderr, code = process.call(['selinuxenabled'],
+                                            verbose_on_failure=False)
+    except FileNotFoundError:
+        logger.info('No SELinux found, skipping call to restorecon')
+        return
+
+    if code != 0:
+        logger.info('SELinux is not enabled, will not call restorecon')
+        return
+
     # restore selinux context to default policy values
     if which('restorecon').startswith('/'):
         if recursive:

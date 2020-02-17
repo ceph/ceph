@@ -14,13 +14,15 @@
 #ifndef MGR_CLIENT_H_
 #define MGR_CLIENT_H_
 
+#include <boost/variant.hpp>
+
 #include "msg/Connection.h"
 #include "msg/Dispatcher.h"
 #include "mon/MgrMap.h"
 #include "mgr/DaemonHealthMetric.h"
 
 #include "messages/MMgrReport.h"
-#include "mgr/OSDPerfMetricTypes.h"
+#include "mgr/MetricTypes.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
@@ -84,10 +86,8 @@ protected:
   // If provided, use this to compose an MPGStats to send with
   // our reports (hook for use by OSD)
   std::function<MPGStats*()> pgstats_cb;
-  std::function<void(const std::map<OSDPerfMetricQuery,
-                                    OSDPerfMetricLimits> &)> set_perf_queries_cb;
-  std::function<void(std::map<OSDPerfMetricQuery,
-                              OSDPerfMetricReport> *)> get_perf_report_cb;
+  std::function<void(const ConfigPayload &)> set_perf_queries_cb;
+  std::function<MetricPayload()> get_perf_report_cb;
 
   // for service registration and beacon
   bool service_daemon = false;
@@ -131,10 +131,8 @@ public:
     int r);
 
   void set_perf_metric_query_cb(
-    std::function<void(const std::map<OSDPerfMetricQuery,
-                                      OSDPerfMetricLimits> &)> cb_set,
-          std::function<void(std::map<OSDPerfMetricQuery,
-                                      OSDPerfMetricReport> *)> cb_get)
+    std::function<void(const ConfigPayload &)> cb_set,
+    std::function<MetricPayload()> cb_get)
   {
       std::lock_guard l(lock);
       set_perf_queries_cb = cb_set;
@@ -168,10 +166,37 @@ public:
     std::map<std::string,std::string> &&task_status);
   void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
+  bool is_initialized() const { return initialized; }
+
 private:
+  void handle_config_payload(const OSDConfigPayload &payload) {
+    if (set_perf_queries_cb) {
+      set_perf_queries_cb(payload);
+    }
+  }
+
+  void handle_config_payload(const UnknownConfigPayload &payload) {
+    ceph_abort();
+  }
+
+  struct HandlePayloadVisitor : public boost::static_visitor<void> {
+    MgrClient *mgrc;
+
+    HandlePayloadVisitor(MgrClient *mgrc)
+      : mgrc(mgrc) {
+    }
+
+    template <typename ConfigPayload>
+    inline void operator()(const ConfigPayload &payload) const {
+      mgrc->handle_config_payload(payload);
+    }
+  };
+
   void _send_stats();
   void _send_pgstats();
   void _send_report();
+
+  bool initialized = false;
 };
 
 #endif

@@ -1,0 +1,20 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>OSD creation preview</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+        <h3>Drive Group</h3>
+        <pre>{{ driveGroup.spec | json}}</pre>
+      </div>
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="onSubmit()"
+                          [form]="formGroup">{{ action | titlecase }}</cd-submit-button>
+        <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

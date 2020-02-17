@@ -26,28 +26,26 @@ class DummyResonse:
 
 
 class TimeoutError(Exception):
-    pass
+    def __init__(self):
+        super(TimeoutError, self).__init__("Timer expired")
 
 
-def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
-    def decorator(func):
-        def _handle_timeout(signum, frame):
-            raise TimeoutError(error_message)
+def timeout(func):
+    DEFAULT_TIMEOUT = 10
 
-        def wrapper(*args, **kwargs):
-            if hasattr(args[0], '_timeout') is not None:
-                seconds = args[0]._timeout
-            signal.signal(signal.SIGALRM, _handle_timeout)
-            signal.alarm(seconds)
-            try:
-                result = func(*args, **kwargs)
-            finally:
-                signal.alarm(0)
-            return result
+    def _handle_timeout(signum, frame):
+        raise TimeoutError()
 
-        return wraps(func)(wrapper)
+    @wraps(func)
+    def wrapper(self):
+        signal.signal(signal.SIGALRM, _handle_timeout)
+        signal.alarm(getattr(self, '_timeout', DEFAULT_TIMEOUT))
+        try:
+            return func(self)
+        finally:
+            signal.alarm(0)
 
-    return decorator
+    return wrapper
 
 
 def get_human_readable(size, precision=2):

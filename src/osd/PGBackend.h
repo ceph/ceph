@@ -235,6 +235,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const std::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
+       const eversion_t &min_last_complete_ondisk,
        bool transaction_applied,
        ObjectStore::Transaction &t,
        bool async = false) = 0;
@@ -275,8 +276,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
 
-     virtual void send_message_osd_cluster(
+      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
+      virtual void send_message_osd_cluster(
+       std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
      virtual void send_message_osd_cluster(
        Message *m, Connection *con) = 0;
      virtual void send_message_osd_cluster(
@@ -446,7 +449,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const eversion_t &at_version,        ///< [in] version
      PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
-     const eversion_t &roll_forward_to,  ///< [in] trim rollback info to here
+     const eversion_t &min_last_complete_ondisk, ///< [in] lower bound on
+                                                 ///  committed version
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      std::optional<pg_hit_set_history_t> &hset_history,
@@ -563,7 +567,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual int objects_readv_sync(
      const hobject_t &hoid,
-     map<uint64_t, uint64_t>& m,
+     map<uint64_t, uint64_t>&& m,
      uint32_t op_flags,
      bufferlist *bl) {
      return -EOPNOTSUPP;

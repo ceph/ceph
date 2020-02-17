@@ -19,6 +19,7 @@ namespace image {
 enum {
   LIST_WATCHERS_FILTER_OUT_MY_INSTANCE = 1 << 0,
   LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES = 1 << 1,
+  LIST_WATCHERS_MIRROR_INSTANCES_ONLY = 1 << 3,
 };
 
 template<typename ImageCtxT = ImageCtx>

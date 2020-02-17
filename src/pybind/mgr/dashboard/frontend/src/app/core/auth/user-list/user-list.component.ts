@@ -13,6 +13,7 @@ import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
+import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { EmptyPipe } from '../../../shared/pipes/empty.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -48,6 +49,7 @@ export class UserListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
+    private cdDatePipe: CdDatePipe,
     public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().user;
@@ -103,12 +105,23 @@ export class UserListComponent implements OnInit {
         prop: 'enabled',
         flexGrow: 1,
         cellTransformation: CellTemplate.checkIcon
+      },
+      {
+        name: this.i18n('Password expiration date'),
+        prop: 'pwdExpirationDate',
+        flexGrow: 1,
+        pipe: this.cdDatePipe
       }
     ];
   }
 
   getUsers() {
     this.userService.list().subscribe((users: Array<any>) => {
+      users.forEach((user) => {
+        if (user['pwdExpirationDate'] && user['pwdExpirationDate'] > 0) {
+          user['pwdExpirationDate'] = user['pwdExpirationDate'] * 1000;
+        }
+      });
       this.users = users;
     });
   }

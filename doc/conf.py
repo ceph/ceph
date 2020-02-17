@@ -2,7 +2,7 @@ import sys
 import os
 
 project = u'Ceph'
-copyright = u'2016, Red Hat, Inc, and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
+copyright = u'2016, Ceph authors and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
 version = 'dev'
 release = 'dev'
 
@@ -17,6 +17,7 @@ if tags.has('man'):
                          'cephfs/*',
                          'dev/*',
                          'governance.rst',
+                         'foundation.rst',
                          'bootstrap.rst',
                          'install/*',
                          'mon/*',

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_H
-#define CEPH_RGW_REST_H
+#pragma once
 
 #define TIME_BUF_SIZE 128
 
@@ -544,7 +543,7 @@ public:
 class RGWHandler_REST : public RGWHandler {
 protected:
 
-  virtual bool is_obj_update_op() { return false; }
+  virtual bool is_obj_update_op() const { return false; }
   virtual RGWOp *op_get() { return NULL; }
   virtual RGWOp *op_put() { return NULL; }
   virtual RGWOp *op_delete() { return NULL; }
@@ -578,12 +577,10 @@ class RGWHandler_REST_SWIFT;
 class RGWHandler_SWIFT_Auth;
 class RGWHandler_REST_S3;
 
-namespace rgw {
-namespace auth {
+namespace rgw::auth {
 
 class StrategyRegistry;
 
-}
 }
 
 class RGWRESTMgr {
@@ -824,5 +821,3 @@ extern int dump_body(struct req_state* s, const char* buf, size_t len);
 extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
 extern int dump_body(struct req_state* s, const std::string& str);
 extern int recv_body(struct req_state* s, char* buf, size_t max);
-
-#endif /* CEPH_RGW_REST_H */

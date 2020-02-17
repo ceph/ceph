@@ -73,6 +73,10 @@ aspects of your Ceph cluster:
 * **Performance counters**: Display detailed service-specific statistics for
   each running service.
 * **Monitors**: List all MONs, their quorum status, open sessions.
+* **Monitoring**: Enables creation, re-creation, editing and expiration of
+  Prometheus' Silences, lists the alerting configuration of Prometheus and
+  currently firing alerts. Also shows notifications for firing alerts. Needs
+  configuration.
 * **Configuration Editor**: Display all available configuration options,
   their description, type and default values and edit the current values.
 * **Pools**: List all Ceph pools and their details (e.g. applications,
@@ -425,6 +429,12 @@ The format of url is : `<protocol>:<IP-address>:<port>`
   above, check your browser's documentation on how to unblock mixed content.
   Alternatively, consider enabling SSL/TLS support in Grafana.
 
+If you are using a self-signed certificate in your Grafana setup, then you should
+disable certificate verification in the dashboard to avoid refused connections,
+e.g. caused by certificates signed by unknown CA or not matching the host name::
+
+  $ ceph dashboard set-grafana-api-ssl-verify False
+
 You can directly access Grafana Instance as well to monitor your cluster.
 
 .. _dashboard-sso-support:
@@ -454,7 +464,7 @@ Parameters:
 * **<idp_metadata>**: URL to remote (`http://`, `https://`) or local (`file://`) path or content of the IdP metadata XML (e.g., `https://myidp/metadata`, `file:///home/myuser/metadata.xml`).
 * **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
 * **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
-* **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
+* **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
 
 .. note::
   The issuer value of SAML requests will follow this pattern:  **<ceph_dashboard_base_url>**/auth/saml2/metadata
@@ -528,9 +538,9 @@ in order to manage silences.
 
 #. Use the API of Prometheus and the Alertmanager
 
-   This allows you to manage alerts and silences. You will see all alerts and silences
-   the Alertmanager currently knows of in the corresponding listing.
-   Both can be found in the *Cluster* submenu.
+   This allows you to manage alerts and silences. This will enable the "Active
+   Alerts", "All Alerts" as well as the "Silences" tabs in the "Monitoring"
+   section of the "Cluster" menu entry.
 
    Alerts can be sorted by name, job, severity, state and start time.
    Unfortunately it's not possible to know when an alert
@@ -557,8 +567,11 @@ in order to manage silences.
 
      $ ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
 
-   To be able to show what a silence will match beforehand, you have to add the host
-   and port of the Prometheus server::
+   To be able to see all configured alerts, you will need to configure the URL
+   to the Prometheus API. Using this API, the UI will also help you in verifying
+   that a new silence will match a corresponding alert.
+
+   ::
 
      $ ceph dashboard set-prometheus-api-host <prometheus-host:port>  # default: ''
 
@@ -566,7 +579,7 @@ in order to manage silences.
 
      $ ceph dashboard set-prometheus-api-host 'http://localhost:9090'
 
-   After setting up the hosts, you have to refresh your the dashboard in your browser window.
+   After setting up the hosts, you have to refresh the dashboard in your browser window.
 
 #. Use both methods
 
@@ -609,7 +622,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Create User*::
 
-  $ ceph dashboard ac-user-create <username> [<password>] [<rolename>] [<name>] [<email>] [<enabled>]
+  $ ceph dashboard ac-user-create [--force-password] <username> [<password>] [<rolename>] [<name>] [<email>] [--enabled] [<pwd_expiration_date>]
 
 - *Delete User*::
 
@@ -617,7 +630,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Change Password*::
 
-  $ ceph dashboard ac-user-set-password <username> <password>
+  $ ceph dashboard ac-user-set-password [--force-password] <username> <password>
 
 - *Change Password Hash*::
 

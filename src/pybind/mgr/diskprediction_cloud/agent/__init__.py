@@ -29,10 +29,10 @@ class BaseAgent(object):
         else:
             return True
 
-    @timeout()
+    @timeout
     def _run(self):
         pass
 
-    @timeout()
+    @timeout
     def _collect_data(self):
         pass

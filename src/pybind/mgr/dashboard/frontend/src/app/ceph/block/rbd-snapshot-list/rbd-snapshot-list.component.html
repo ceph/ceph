@@ -10,18 +10,8 @@
   </cd-table-actions>
 </cd-table>
 
-<ng-template #protectTpl
-             let-value="value">
-  <span *ngIf="value"
-        class="badge badge-success"
-        i18n>PROTECTED</span>
-  <span *ngIf="!value"
-        class="badge badge-info"
-        i18n>UNPROTECTED</span>
-</ng-template>
-
 <ng-template #rollbackTpl
              let-value>
   <ng-container i18n>You are about to rollback</ng-container>
-  <strong>{{ value.snapName }}</strong>.
+  <strong> {{ value.snapName }}</strong>.
 </ng-template>

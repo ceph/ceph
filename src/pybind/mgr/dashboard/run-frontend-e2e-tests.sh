@@ -18,10 +18,7 @@ while getopts 'd:r:' flag; do
   case "${flag}" in
     d) DEVICE=$OPTARG;;
     r) REMOTE='true'
-       # jq is expecting a string literal, otherwise it will fail on the url ':'.
-       # We need to ensure that jq gets a json string for assignment; we achieve
-       # that by introducing literal double quotes (i.e., '"').
-       BASE_URL='"'$OPTARG'"';;
+       BASE_URL=$OPTARG;;
   esac
 done
 
@@ -58,6 +55,13 @@ if [ "$BASE_URL" == "" ]; then
     # Set SSL verify to False
     ./bin/ceph dashboard set-rgw-api-ssl-verify False
 
+    # Disable PG autoscaling for new pools. This is a temporary workaround.
+    # e2e tests for pools should be adapted to remove this workaround after
+    # these issues are resolved:
+    # - https://tracker.ceph.com/issues/38227
+    # - https://tracker.ceph.com/issues/42638
+    ./bin/ceph config set global osd_pool_default_pg_autoscale_mode off
+
     BASE_URL=$(./bin/ceph mgr services | jq -r .dashboard)
 fi
 
@@ -66,7 +70,7 @@ export BASE_URL
 cd $DASH_DIR/frontend
 jq .[].target=\"$BASE_URL\" proxy.conf.json.sample > proxy.conf.json
 
-. ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
+[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
 
 if [ "$DEVICE" == "chrome" ]; then
     npm run e2e:ci || stop 1

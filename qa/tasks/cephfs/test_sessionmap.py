@@ -1,4 +1,3 @@
-from StringIO import StringIO
 import time
 import json
 import logging
@@ -32,7 +31,7 @@ class TestSessionMap(CephFSTestCase):
     def _get_connection_count(self, status=None):
         perf = self.fs.rank_asok(["perf", "dump"], status=status)
         conn = 0
-        for module, dump in perf.iteritems():
+        for module, dump in perf.items():
             if "AsyncMessenger::Worker" in module:
                 conn += dump['msgr_active_connections']
         return conn

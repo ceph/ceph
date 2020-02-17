@@ -63,7 +63,7 @@ Graphviz
 You can use Graphviz_, as explained in the `Graphviz extension documentation`_.
 
 .. _Graphviz: http://graphviz.org/
-.. _`Graphviz extension documentation`: http://sphinx.pocoo.org/ext/graphviz.html
+.. _`Graphviz extension documentation`: https://www.sphinx-doc.org/en/master/usage/extensions/graphviz.html
 
 .. graphviz::
 

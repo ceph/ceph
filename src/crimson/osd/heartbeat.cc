@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "heartbeat.h"
 
 #include <boost/range/join.hpp>
@@ -13,18 +16,18 @@
 
 #include "osd/OSDMap.h"
 
-using ceph::common::local_conf;
+using crimson::common::local_conf;
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-Heartbeat::Heartbeat(const ceph::osd::ShardServices& service,
-                     ceph::mon::Client& monc,
-                     ceph::net::Messenger& front_msgr,
-                     ceph::net::Messenger& back_msgr)
+Heartbeat::Heartbeat(const crimson::osd::ShardServices& service,
+                     crimson::mon::Client& monc,
+                     crimson::net::Messenger& front_msgr,
+                     crimson::net::Messenger& back_msgr)
   : service{service},
     monc{monc},
     front_msgr{front_msgr},
@@ -42,7 +45,7 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
     addr.set_port(0);
   }
 
-  using ceph::net::SocketPolicy;
+  using crimson::net::SocketPolicy;
   front_msgr.set_policy(entity_name_t::TYPE_OSD,
                         SocketPolicy::stateless_server(0));
   back_msgr.set_policy(entity_name_t::TYPE_OSD,
@@ -56,7 +59,7 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
 }
 
 seastar::future<>
-Heartbeat::start_messenger(ceph::net::Messenger& msgr,
+Heartbeat::start_messenger(crimson::net::Messenger& msgr,
                            const entity_addrvec_t& addrs)
 {
   return msgr.try_bind(addrs,
@@ -215,7 +218,7 @@ seastar::future<> Heartbeat::remove_peer(osd_id_t peer)
     });
 }
 
-seastar::future<> Heartbeat::ms_dispatch(ceph::net::Connection* conn,
+seastar::future<> Heartbeat::ms_dispatch(crimson::net::Connection* conn,
                                          MessageRef m)
 {
   switch (m->get_type()) {
@@ -226,7 +229,7 @@ seastar::future<> Heartbeat::ms_dispatch(ceph::net::Connection* conn,
   }
 }
 
-seastar::future<> Heartbeat::ms_handle_reset(ceph::net::ConnectionRef conn)
+seastar::future<> Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn)
 {
   auto found = std::find_if(peers.begin(), peers.end(),
                             [conn](const peers_map_t::value_type& peer) {
@@ -243,7 +246,7 @@ seastar::future<> Heartbeat::ms_handle_reset(ceph::net::ConnectionRef conn)
   });
 }
 
-seastar::future<> Heartbeat::handle_osd_ping(ceph::net::Connection* conn,
+seastar::future<> Heartbeat::handle_osd_ping(crimson::net::Connection* conn,
                                              Ref<MOSDPing> m)
 {
   switch (m->op) {
@@ -258,7 +261,7 @@ seastar::future<> Heartbeat::handle_osd_ping(ceph::net::Connection* conn,
   }
 }
 
-seastar::future<> Heartbeat::handle_ping(ceph::net::Connection* conn,
+seastar::future<> Heartbeat::handle_ping(crimson::net::Connection* conn,
                                          Ref<MOSDPing> m)
 {
   auto min_message = static_cast<uint32_t>(
@@ -276,7 +279,7 @@ seastar::future<> Heartbeat::handle_ping(ceph::net::Connection* conn,
   return conn->send(reply);
 }
 
-seastar::future<> Heartbeat::handle_reply(ceph::net::Connection* conn,
+seastar::future<> Heartbeat::handle_reply(crimson::net::Connection* conn,
                                           Ref<MOSDPing> m)
 {
   const osd_id_t from = m->get_source().num();
@@ -337,8 +340,8 @@ seastar::future<> Heartbeat::send_heartbeats()
       const utime_t sent_stamp{now};
       [[maybe_unused]] auto [reply, added] =
         info.ping_history.emplace(sent_stamp, reply_t{deadline, 0});
-      std::vector<ceph::net::ConnectionRef> conns{info.con_front,
-                                                  info.con_back};
+      std::vector<crimson::net::ConnectionRef> conns{info.con_front,
+                                                     info.con_back};
       return seastar::parallel_for_each(std::move(conns),
 	 [sent_stamp, mnow, &reply=reply->second, this] (auto con) {
           if (con) {

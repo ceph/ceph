@@ -8,7 +8,7 @@
 class AuthAuthorizer;
 class AuthSessionHandler;
 
-namespace ceph::net {
+namespace crimson::net {
 
 class ProtocolV1 final : public Protocol {
  public:
@@ -85,7 +85,7 @@ class ProtocolV1 final : public Protocol {
  private:
   // connecting
   void reset_session();
-  seastar::future<stop_t> handle_connect_reply(ceph::net::msgr_tag_t tag);
+  seastar::future<stop_t> handle_connect_reply(crimson::net::msgr_tag_t tag);
   seastar::future<stop_t> repeat_connect();
   ceph::bufferlist get_auth_payload();
 
@@ -125,4 +125,4 @@ class ProtocolV1 final : public Protocol {
   seastar::future<> fault();
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

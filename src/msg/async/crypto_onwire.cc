@@ -7,6 +7,7 @@
 #include "crypto_onwire.h"
 
 #include "common/debug.h"
+#include "common/ceph_crypto.h"
 #include "include/types.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -59,7 +60,7 @@ public:
   }
 
   ~AES128GCM_OnWireTxHandler() override {
-    memset(&nonce, 0, sizeof(nonce));
+    ::ceph::crypto::zeroize_for_security(&nonce, sizeof(nonce));
   }
 
   std::uint32_t calculate_segment_size(std::uint32_t size) override
@@ -169,7 +170,7 @@ public:
   }
 
   ~AES128GCM_OnWireRxHandler() override {
-    memset(&nonce, 0, sizeof(nonce));
+    ::ceph::crypto::zeroize_for_security(&nonce, sizeof(nonce));
   }
 
   std::uint32_t get_extra_size_at_final() override {

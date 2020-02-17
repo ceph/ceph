@@ -18,35 +18,48 @@ from teuthology.orchestra.connection import split_user
 
 log = logging.getLogger(__name__)
 
-
 @contextlib.contextmanager
 def download(ctx, config):
     """
     Download the s3 tests from the git builder.
     Remove downloaded s3 file upon exit.
-    
+
     The context passed in should be identical to the context
     passed in to the main task.
     """
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
-    for (client, cconf) in config.iteritems():
-        branch = cconf.get('force-branch', None)
-        if not branch:
-            branch = cconf.get('branch', 'master')
+    for (client, client_config) in config.items():
+        s3tests_branch = client_config.get('force-branch', None)
+        if not s3tests_branch:
+            raise ValueError(
+                "Could not determine what branch to use for s3-tests. Please add 'force-branch: {s3-tests branch name}' to the .yaml config for this s3roundtrip task.")
+
+        log.info("Using branch '%s' for s3tests", s3tests_branch)
+        sha1 = client_config.get('sha1')
+        git_remote = client_config.get('git_remote', teuth_config.ceph_git_base_url)
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                '-b', branch,
-                teuth_config.ceph_git_base_url + 's3-tests.git',
+                '-b', s3tests_branch,
+                git_remote + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
+        if sha1 is not None:
+            ctx.cluster.only(client).run(
+                args=[
+                    'cd', '{tdir}/s3-tests'.format(tdir=testdir),
+                    run.Raw('&&'),
+                    'git', 'reset', '--hard', sha1,
+                    ],
+                )
     try:
         yield
     finally:
         log.info('Removing s3-tests...')
+        testdir = teuthology.get_testdir(ctx)
         for client in config:
             ctx.cluster.only(client).run(
                 args=[
@@ -56,6 +69,7 @@ def download(ctx, config):
                     ],
                 )
 
+
 def _config_user(s3tests_conf, section, user):
     """
     Configure users for this section by stashing away keys, ids, and
@@ -64,7 +78,7 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
-    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
+    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in range(20)))
     s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
 
 @contextlib.contextmanager
@@ -133,7 +147,7 @@ def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-roundtrip-tests...')
     testdir = teuthology.get_testdir(ctx)
-    for client, properties in config['clients'].iteritems():
+    for client, properties in config['clients'].items():
         s3tests_conf = config['s3tests_conf'][client]
         if properties is not None and 'rgw_server' in properties:
             host = None
@@ -184,7 +198,7 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf = teuthology.get_file(remote, '{tdir}/archive/s3roundtrip.{client}.config.yaml'.format(tdir=testdir, client=client))
         args = [

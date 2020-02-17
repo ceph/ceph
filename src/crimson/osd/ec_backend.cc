@@ -4,7 +4,7 @@
 
 ECBackend::ECBackend(shard_id_t shard,
                      ECBackend::CollectionRef coll,
-                     ceph::osd::ShardServices& shard_services,
+                     crimson::osd::ShardServices& shard_services,
                      const ec_profile_t&,
                      uint64_t)
   : PGBackend{shard, coll, &shard_services.get_store()}
@@ -12,16 +12,17 @@ ECBackend::ECBackend(shard_id_t shard,
   // todo
 }
 
-seastar::future<bufferlist> ECBackend::_read(const hobject_t& hoid,
-                                             uint64_t off,
-                                             uint64_t len,
-                                             uint32_t flags)
+ECBackend::ll_read_errorator::future<ceph::bufferlist>
+ECBackend::_read(const hobject_t& hoid,
+                 const uint64_t off,
+                 const uint64_t len,
+                 const uint32_t flags)
 {
   // todo
   return seastar::make_ready_future<bufferlist>();
 }
 
-seastar::future<ceph::osd::acked_peers_t>
+seastar::future<crimson::osd::acked_peers_t>
 ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                const hobject_t& hoid,
                                ceph::os::Transaction&& txn,
@@ -30,5 +31,5 @@ ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                eversion_t ver)
 {
   // todo
-  return seastar::make_ready_future<ceph::osd::acked_peers_t>();
+  return seastar::make_ready_future<crimson::osd::acked_peers_t>();
 }

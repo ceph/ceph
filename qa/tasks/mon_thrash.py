@@ -85,8 +85,9 @@ class MonitorThrasher(Thrasher):
           all:
             - mon/workloadgen.sh
     """
-    def __init__(self, ctx, manager, config, logger):
+    def __init__(self, ctx, manager, config, name, logger):
         super(MonitorThrasher, self).__init__()
+
         self.ctx = ctx
         self.manager = manager
         self.manager.wait_for_clean()
@@ -94,6 +95,7 @@ class MonitorThrasher(Thrasher):
         self.stopping = False
         self.logger = logger
         self.config = config
+        self.name = name
 
         if self.config is None:
             self.config = dict()
@@ -167,11 +169,10 @@ class MonitorThrasher(Thrasher):
         Thrash the monitor specified.
         :param mon: monitor to thrash
         """
-        addr = self.ctx.ceph['ceph'].mons['mon.%s' % mon]
-        self.log('thrashing mon.{id}@{addr} store'.format(id=mon, addr=addr))
-        out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force',
-                                           '--yes-i-really-mean-it',
-                                           '--i-know-what-i-am-doing')
+        self.log('thrashing mon.{id} store'.format(id=mon))
+        out = self.manager.raw_cluster_cmd(
+            'tell', 'mon.%s' % mon, 'sync_force',
+            '--yes-i-really-mean-it')
         j = json.loads(out)
         assert j['ret'] == 0, \
             'error forcing store sync on mon.{id}:\n{ret}'.format(
@@ -231,7 +232,7 @@ class MonitorThrasher(Thrasher):
             self._do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
-            self.exception = e
+            self.set_thrasher_exception(e)
             self.logger.exception("exception:")
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.
@@ -372,7 +373,7 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
     thrash_proc = MonitorThrasher(ctx,
-        manager, config,
+        manager, config, "MonitorThrasher",
         logger=log.getChild('mon_thrasher'))
     ctx.ceph[config['cluster']].thrashers.append(thrash_proc)
     try:

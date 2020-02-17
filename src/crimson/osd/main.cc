@@ -20,7 +20,7 @@
 
 #include "osd.h"
 
-using config_t = ceph::common::ConfigProxy;
+using config_t = crimson::common::ConfigProxy;
 namespace fs = seastar::compat::filesystem;
 
 void usage(const char* prog) {
@@ -76,7 +76,7 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
   return make_pair(std::move(ceph_args), std::move(app_args));
 }
 
-using ceph::common::local_conf;
+using crimson::common::local_conf;
 
 seastar::future<> make_keyring()
 {
@@ -128,11 +128,11 @@ int main(int argc, char* argv[])
                                               CEPH_ENTITY_TYPE_OSD,
                                               &cluster_name,
                                               &conf_file_list);
-  seastar::sharded<ceph::osd::OSD> osd;
-  seastar::sharded<ceph::net::SocketMessenger> cluster_msgr, client_msgr;
-  seastar::sharded<ceph::net::SocketMessenger> hb_front_msgr, hb_back_msgr;
-  using ceph::common::sharded_conf;
-  using ceph::common::sharded_perf_coll;
+  seastar::sharded<crimson::osd::OSD> osd;
+  seastar::sharded<crimson::net::SocketMessenger> cluster_msgr, client_msgr;
+  seastar::sharded<crimson::net::SocketMessenger> hb_front_msgr, hb_back_msgr;
+  using crimson::common::sharded_conf;
+  using crimson::common::sharded_perf_coll;
   try {
     return app.run_deprecated(app_args.size(), const_cast<char**>(app_args.data()), [&] {
       auto& config = app.configuration();
@@ -169,13 +169,10 @@ int main(int argc, char* argv[])
           }
         }
         osd.start_single(whoami, nonce,
-          reference_wrapper<ceph::net::Messenger>(cluster_msgr.local()),
-          reference_wrapper<ceph::net::Messenger>(client_msgr.local()),
-          reference_wrapper<ceph::net::Messenger>(hb_front_msgr.local()),
-          reference_wrapper<ceph::net::Messenger>(hb_back_msgr.local())).get();
-        seastar::engine().at_exit([&] {
-          return osd.stop();
-        });
+          reference_wrapper<crimson::net::Messenger>(cluster_msgr.local()),
+          reference_wrapper<crimson::net::Messenger>(client_msgr.local()),
+          reference_wrapper<crimson::net::Messenger>(hb_front_msgr.local()),
+          reference_wrapper<crimson::net::Messenger>(hb_back_msgr.local())).get();
         seastar::engine().at_exit([&] {
           return seastar::when_all_succeed(cluster_msgr.stop(),
                                            client_msgr.stop(),
@@ -190,14 +187,17 @@ int main(int argc, char* argv[])
         if (config.count("mkfs")) {
           osd.invoke_on(
 	    0,
-	    &ceph::osd::OSD::mkfs,
+	    &crimson::osd::OSD::mkfs,
 	    local_conf().get_val<uuid_d>("osd_uuid"),
 	    local_conf().get_val<uuid_d>("fsid")).get();
         }
+        seastar::engine().at_exit([&] {
+          return osd.stop();
+        });
         if (config.count("mkkey") || config.count("mkfs")) {
           seastar::engine().exit(0);
         } else {
-          osd.invoke_on(0, &ceph::osd::OSD::start).get();
+          osd.invoke_on(0, &crimson::osd::OSD::start).get();
         }
       });
     });

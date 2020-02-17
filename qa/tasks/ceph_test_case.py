@@ -104,7 +104,7 @@ class CephTestCase(unittest.TestCase):
         def seen_health_warning():
             health = self.ceph_cluster.mon_manager.get_mon_health()
             codes = [s for s in health['checks']]
-            summary_strings = [s[1]['summary']['message'] for s in health['checks'].iteritems()]
+            summary_strings = [s[1]['summary']['message'] for s in health['checks'].items()]
             if len(summary_strings) == 0:
                 log.debug("Not expected number of summary strings ({0})".format(summary_strings))
                 return False
@@ -145,7 +145,7 @@ class CephTestCase(unittest.TestCase):
                         elapsed, expect_val, val
                     ))
                 else:
-                    log.debug("wait_until_equal: {0} != {1}, waiting...".format(val, expect_val))
+                    log.debug("wait_until_equal: {0} != {1}, waiting (timeout={2})...".format(val, expect_val, timeout))
                 time.sleep(period)
                 elapsed += period
 
@@ -162,8 +162,6 @@ class CephTestCase(unittest.TestCase):
                 if elapsed >= timeout:
                     raise RuntimeError("Timed out after {0}s".format(elapsed))
                 else:
-                    log.debug("wait_until_true: waiting...")
+                    log.debug("wait_until_true: waiting (timeout={0})...".format(timeout))
                 time.sleep(period)
                 elapsed += period
-
-

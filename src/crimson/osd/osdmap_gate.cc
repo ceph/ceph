@@ -7,11 +7,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 void OSDMapGate::OSDMapBlocker::dump_detail(Formatter *f) const
 {

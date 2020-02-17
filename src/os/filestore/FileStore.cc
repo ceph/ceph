@@ -36,7 +36,6 @@
 
 #include "include/linux_fiemap.h"
 
-#include "common/xattr.h"
 #include "chain_xattr.h"
 
 #if defined(__APPLE__) || defined(__FreeBSD__)

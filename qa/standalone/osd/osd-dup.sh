@@ -61,7 +61,7 @@ function TEST_filestore_to_bluestore() {
 			  --op dup || return 1
     CEPH_ARGS=$O
 
-    run_osd $dir 0 || return 1
+    activate_osd $dir 0 || return 1
 
     while ! ceph osd stat | grep '3 up' ; do sleep 1 ; done
     ceph osd metadata 0 | grep bluestore || return 1

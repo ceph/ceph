@@ -3,7 +3,7 @@ from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
-                   LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
+                   LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
 import time
 import threading
@@ -316,6 +316,10 @@ class TestIoctx(object):
         self.ioctx.write_full('abc', b'd')
         eq(self.ioctx.read('abc'), b'd')
 
+    def test_writesame(self):
+        self.ioctx.writesame('ob', b'rzx', 9)
+        eq(self.ioctx.read('ob'), b'rzxrzxrzx')
+
     def test_append(self):
         self.ioctx.write('abc', b'a')
         self.ioctx.append('abc', b'b')
@@ -362,7 +366,7 @@ class TestIoctx(object):
                 ('ns1', 'ns1-c'), ('ns1', 'ns1-d')])
 
     def test_xattrs(self):
-        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f='')
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f=b'')
         self.ioctx.write('abc', b'')
         for key, value in xattrs.items():
             self.ioctx.set_xattr('abc', key, value)
@@ -373,7 +377,7 @@ class TestIoctx(object):
         eq(stored_xattrs, xattrs)
 
     def test_obj_xattrs(self):
-        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f='')
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f=b'')
         self.ioctx.write('abc', b'')
         obj = list(self.ioctx.list_objects())[0]
         for key, value in xattrs.items():
@@ -485,7 +489,6 @@ class TestIoctx(object):
             self.ioctx.set_omap(write_op, keys, values)
             comp = self.ioctx.operate_aio_write_op(write_op, "hw", cb, cb)
             comp.wait_for_complete()
-            comp.wait_for_safe()
             with lock:
                 while count[0] < 2:
                     lock.wait()
@@ -496,7 +499,6 @@ class TestIoctx(object):
             eq(ret, 0)
             comp = self.ioctx.operate_aio_read_op(read_op, "hw", cb, cb)
             comp.wait_for_complete()
-            comp.wait_for_safe()
             with lock:
                 while count[0] < 4:
                     lock.wait()
@@ -529,6 +531,18 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op, "write_ops")
             with assert_raises(ObjectNotFound):
                 self.ioctx.read('write_ops')
+
+    def test_execute_op(self):
+        with WriteOpCtx() as write_op:
+            write_op.execute("hello", "record_hello", b"ebs")
+            self.ioctx.operate_write_op(write_op, "object")
+        eq(self.ioctx.read('object'), b"Hello, ebs!")
+
+    def test_writesame_op(self):
+        with WriteOpCtx() as write_op:
+            write_op.writesame(b'rzx', 9)
+            self.ioctx.operate_write_op(write_op, 'abc')
+            eq(self.ioctx.read('abc'), b'rzxrzxrzx')
 
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
@@ -579,6 +593,27 @@ class TestIoctx(object):
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
 
+    def test_xattrs_op(self):
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        with WriteOpCtx() as write_op:
+            write_op.new(LIBRADOS_CREATE_EXCLUSIVE)
+            for key, value in xattrs.items():
+                write_op.set_xattr(key, value)
+                self.ioctx.operate_write_op(write_op, "abc")
+                eq(self.ioctx.get_xattr('abc', key), value)
+            stored_xattrs_1 = {}
+            for key, value in self.ioctx.get_xattrs('abc'):
+                stored_xattrs_1[key] = value
+            eq(stored_xattrs_1, xattrs)
+            for key in xattrs.keys():
+                write_op.rm_xattr(key)
+                self.ioctx.operate_write_op(write_op, "abc")
+            stored_xattrs_2 = {}
+            for key, value in self.ioctx.get_xattrs('abc'):
+                stored_xattrs_2[key] = value
+            eq(stored_xattrs_2, {})
+            write_op.remove()
+
     def test_locator(self):
         self.ioctx.set_locator_key("bar")
         self.ioctx.write('foo', b'contents1')
@@ -598,6 +633,24 @@ class TestIoctx(object):
         eq(objects, [])
         self.ioctx.set_locator_key("")
 
+    def test_operate_aio_write_op(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        with WriteOpCtx() as write_op:
+            write_op.write(b'rzx')
+            comp = self.ioctx.operate_aio_write_op(write_op, "object", cb, cb)
+            comp.wait_for_complete()
+            with lock:
+                while count[0] < 2:
+                    lock.wait()
+            eq(comp.get_return_value(), 0)
+            eq(self.ioctx.read('object'), b'rzx')
+
     def test_aio_write(self):
         lock = threading.Condition()
         count = [0]
@@ -608,7 +661,6 @@ class TestIoctx(object):
             return 0
         comp = self.ioctx.aio_write("foo", b"bar", 0, cb, cb)
         comp.wait_for_complete()
-        comp.wait_for_safe()
         with lock:
             while count[0] < 2:
                 lock.wait()
@@ -666,13 +718,29 @@ class TestIoctx(object):
         self.ioctx.aio_write("foo", b"barbaz", 0, cb, cb)
         comp = self.ioctx.aio_write_full("foo", b"bar", cb, cb)
         comp.wait_for_complete()
-        comp.wait_for_safe()
         with lock:
             while count[0] < 2:
                 lock.wait()
         eq(comp.get_return_value(), 0)
         contents = self.ioctx.read("foo")
         eq(contents, b"bar")
+        [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_writesame(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_writesame("abc", b"rzx", 9, 0, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(self.ioctx.read("abc"), b"rzxrzxrzx")
         [i.remove() for i in self.ioctx.list_objects()]
 
     def test_aio_stat(self):
@@ -700,6 +768,24 @@ class TestIoctx(object):
         eq(comp.get_return_value(), 0)
 
         [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_remove(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        self.ioctx.write('foo', b'wrx')
+        eq(self.ioctx.read('foo'), b'wrx')
+        comp = self.ioctx.aio_remove('foo', cb, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(list(self.ioctx.list_objects()), [])
 
     def _take_down_acting_set(self, pool, objectname):
         # find acting_set for pool:objectname and take it down; used to

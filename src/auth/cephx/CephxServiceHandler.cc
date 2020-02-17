@@ -61,7 +61,13 @@ int CephxServiceHandler::handle_request(
   int ret = 0;
 
   struct CephXRequestHeader cephx_header;
-  decode(cephx_header, indata);
+  try {
+    decode(cephx_header, indata);
+  } catch (buffer::error& e) {
+    ldout(cct, 0) << __func__ << " failed to decode CephXRequestHeader: "
+		  << e.what() << dendl;
+    return -EPERM;
+  }
 
   switch (cephx_header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -70,17 +76,24 @@ int CephxServiceHandler::handle_request(
 		     << entity_name << dendl;
 
       CephXAuthenticate req;
-      decode(req, indata);
-
-      CryptoKey secret;
-      if (!key_server->get_secret(entity_name, secret)) {
-        ldout(cct, 0) << "couldn't find entity name: " << entity_name << dendl;
+      try {
+	decode(req, indata);
+      } catch (buffer::error& e) {
+	ldout(cct, 0) << __func__ << " failed to decode CephXAuthenticate: "
+		      << e.what() << dendl;
 	ret = -EPERM;
 	break;
       }
 
+      CryptoKey secret;
+      if (!key_server->get_secret(entity_name, secret)) {
+        ldout(cct, 0) << "couldn't find entity name: " << entity_name << dendl;
+	ret = -EACCES;
+	break;
+      }
+
       if (!server_challenge) {
-	ret = -EPERM;
+	ret = -EACCES;
 	break;
       }      
 
@@ -90,7 +103,7 @@ int CephxServiceHandler::handle_request(
 					 req.client_challenge, &expected_key, error);
       if (!error.empty()) {
 	ldout(cct, 0) << " cephx_calc_client_server_challenge error: " << error << dendl;
-	ret = -EPERM;
+	ret = -EACCES;
 	break;
       }
 
@@ -99,7 +112,7 @@ int CephxServiceHandler::handle_request(
       if (req.key != expected_key) {
         ldout(cct, 0) << " unexpected key: req.key=" << hex << req.key
 		<< " expected_key=" << expected_key << dec << dendl;
-        ret = -EPERM;
+        ret = -EACCES;
 	break;
       }
 
@@ -109,7 +122,7 @@ int CephxServiceHandler::handle_request(
 
       EntityAuth eauth;
       if (! key_server->get_auth(entity_name, eauth)) {
-	ret = -EPERM;
+	ret = -EACCES;
 	break;
       }
       CephXServiceTicketInfo old_ticket_info;
@@ -229,12 +242,20 @@ int CephxServiceHandler::handle_request(
 	    cct, *key_server, indata, 0, auth_ticket_info, nullptr,
 	    nullptr,
 	    &tmp_bl)) {
-        ret = -EPERM;
+        ret = -EACCES;
 	break;
       }
 
       CephXServiceTicketRequest ticket_req;
-      decode(ticket_req, indata);
+      try {
+	decode(ticket_req, indata);
+      } catch (buffer::error& e) {
+	ldout(cct, 0) << __func__
+		      << " failed to decode CephXServiceTicketRequest: "
+		      << e.what() << dendl;
+	ret = -EPERM;
+	break;
+      }
       ldout(cct, 10) << " ticket_req.keys = " << ticket_req.keys << dendl;
 
       ret = 0;
@@ -280,7 +301,7 @@ int CephxServiceHandler::handle_request(
 		     << entity_name << dendl;
       build_cephx_response_header(cephx_header.request_type, 0, *result_bl);
       if (!key_server->get_rotating_encrypted(entity_name, *result_bl)) {
-        ret = -EPERM;
+        ret = -EACCES;
         break;
       }
     }

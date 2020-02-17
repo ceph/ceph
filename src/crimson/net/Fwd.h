@@ -26,7 +26,7 @@ using auth_proto_t = int;
 class AuthConnectionMeta;
 using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
 
-namespace ceph::net {
+namespace crimson::net {
 
 using msgr_tag_t = uint8_t;
 using stop_t = seastar::stop_iteration;
@@ -58,4 +58,4 @@ seastar::future<T*> create_sharded(Args... args) {
   });
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

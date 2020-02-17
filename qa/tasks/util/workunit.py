@@ -68,7 +68,7 @@ def get_refspec_after_overrides(config, overrides):
             overrides.pop(i, None)
     misc.deep_merge(config, overrides)
 
-    for spec, cls in refspecs.iteritems():
+    for spec, cls in refspecs.items():
         refspec = config.get(spec)
         if refspec:
             refspec = cls(refspec)

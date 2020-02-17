@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_JOURNAL_H
 #define CEPH_TEST_LIBRBD_MOCK_JOURNAL_H
 
+#include "common/RefCountedObj.h"
 #include "gmock/gmock.h"
 #include "include/rados/librados_fwd.hpp"
 #include "librbd/Journal.h"
@@ -40,6 +41,9 @@ struct MockJournal {
   MockJournal() {
     s_instance = this;
   }
+
+  void get() {}
+  void put() {}
 
   MOCK_CONST_METHOD0(is_journal_ready, bool());
   MOCK_CONST_METHOD0(is_journal_replaying, bool());

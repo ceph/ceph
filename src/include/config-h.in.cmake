@@ -75,6 +75,9 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
+/* Defined if you have liburing */
+#cmakedefine HAVE_LIBURING
+
 /* Defind if you have POSIX AIO */
 #cmakedefine HAVE_POSIXAIO
 
@@ -321,6 +324,9 @@
 /* Defined if rabbitmq-c is available for rgw amqp push endpoint */
 #cmakedefine WITH_RADOSGW_AMQP_ENDPOINT
 
+/* Defined if libedkafka is available for rgw kafka push endpoint */
+#cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
+
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 
@@ -332,5 +338,8 @@
 
 /* Define if unit tests are built. */
 #cmakedefine UNIT_TESTS_BUILT
+
+/* Define if RWL is enabled */
+#cmakedefine WITH_RBD_RWL
 
 #endif /* CONFIG_H */

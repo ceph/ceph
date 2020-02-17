@@ -56,8 +56,8 @@ using ceph::HeartbeatMap;
 
 #ifdef WITH_SEASTAR
 CephContext::CephContext()
-  : _conf{ceph::common::local_conf()},
-    _perf_counters_collection{ceph::common::local_perf_coll()},
+  : _conf{crimson::common::local_conf()},
+    _perf_counters_collection{crimson::common::local_perf_coll()},
     _crypto_random{std::make_unique<CryptoRandom>()}
 {}
 
@@ -197,6 +197,9 @@ public:
   {
     while (1) {
       std::unique_lock l(_lock);
+      if (_exit_thread) {
+        break;
+      }
 
       if (_cct->_conf->heartbeat_interval) {
         auto interval = ceph::make_timespan(_cct->_conf->heartbeat_interval);
@@ -364,6 +367,7 @@ public:
     static const char *KEYS[] = {
       "enable_experimental_unrecoverable_data_corrupting_features",
       "crush_location",
+      "container_image",  // just so we don't hear complaints about it!
       NULL
     };
     return KEYS;
@@ -566,6 +570,7 @@ int CephContext::_do_command(
 	r = -EINVAL;
       } else {
 	char buf[4096];
+	// FIPS zeroization audit 20191115: this memset is not security related.
 	memset(buf, 0, sizeof(buf));
 	char *tmp = buf;
 	r = _conf.get_val(var.c_str(), &tmp, sizeof(buf));

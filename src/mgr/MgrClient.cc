@@ -55,6 +55,7 @@ void MgrClient::init()
   ceph_assert(msgr != nullptr);
 
   timer.init();
+  initialized = true;
 }
 
 void MgrClient::shutdown()
@@ -183,7 +184,7 @@ void MgrClient::reconnect()
 
   // Don't send an open if we're just a client (i.e. doing
   // command-sending, not stats etc)
-  if (!cct->_conf->name.is_client() || service_daemon) {
+  if (msgr->get_mytype() != CEPH_ENTITY_TYPE_CLIENT || service_daemon) {
     _send_open();
   }
 
@@ -192,7 +193,7 @@ void MgrClient::reconnect()
   while (p != command_table.get_commands().end()) {
     auto tid = p->first;
     auto& op = p->second;
-    ldout(cct,10) << "resending " << tid << dendl;
+    ldout(cct,10) << "resending " << tid << (op.tell ? " (tell)":" (cli)") << dendl;
     MessageRef m;
     if (op.tell) {
       if (op.name.size() && op.name != map.active_name) {
@@ -205,8 +206,9 @@ void MgrClient::reconnect()
 	command_table.erase(tid);
 	continue;
       }
-      // note: will not work for pre-octopus mgrs
-      m = op.get_message({}, false);
+      // Set fsid argument to signal that this is really a tell message (and
+      // we are not a legacy client sending a non-tell command via MCommand).
+      m = op.get_message(monmap->fsid, false);
     } else {
       m = op.get_message(
 	{},
@@ -398,7 +400,9 @@ void MgrClient::_send_report()
 			    &last_config_bl_version);
 
   if (get_perf_report_cb) {
-    get_perf_report_cb(&report->osd_perf_metric_reports);
+    MetricPayload payload = get_perf_report_cb();
+    MetricReportMessage message(payload);
+    report->metric_report_message = message;
   }
 
   session->con->send_message2(report);
@@ -435,8 +439,11 @@ bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
     stats_threshold = m->stats_threshold;
   }
 
-  if (set_perf_queries_cb) {
-    set_perf_queries_cb(m->osd_perf_metric_queries);
+  if (!m->osd_perf_metric_queries.empty()) {
+    handle_config_payload(m->osd_perf_metric_queries);
+  } else if (m->metric_config_message) {
+    const MetricConfigMessage &message = *m->metric_config_message;
+    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
   }
 
   bool starting = (stats_period == 0) && (m->stats_period != 0);
@@ -574,7 +581,7 @@ int MgrClient::service_daemon_register(
   daemon_dirty_status = true;
 
   // late register?
-  if (cct->_conf->name.is_client() && session && session->con) {
+  if (msgr->get_mytype() == CEPH_ENTITY_TYPE_CLIENT && session && session->con) {
     _send_open();
   }
 

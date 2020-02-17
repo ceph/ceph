@@ -16,6 +16,7 @@ import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
@@ -62,19 +63,32 @@ export class RbdListComponent implements OnInit {
 
   builders = {
     'rbd/create': (metadata) =>
-      this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
-    'rbd/delete': (metadata) =>
-      this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
+      this.createRbdFromTask(metadata['pool_name'], metadata['namespace'], metadata['image_name']),
+    'rbd/delete': (metadata) => this.createRbdFromTaskImageSpec(metadata['image_spec']),
     'rbd/clone': (metadata) =>
-      this.createRbdFromTask(metadata['child_pool_name'], metadata['child_image_name']),
+      this.createRbdFromTask(
+        metadata['child_pool_name'],
+        metadata['child_namespace'],
+        metadata['child_image_name']
+      ),
     'rbd/copy': (metadata) =>
-      this.createRbdFromTask(metadata['dest_pool_name'], metadata['dest_image_name'])
+      this.createRbdFromTask(
+        metadata['dest_pool_name'],
+        metadata['dest_namespace'],
+        metadata['dest_image_name']
+      )
   };
 
-  private createRbdFromTask(pool: string, name: string): RbdModel {
+  private createRbdFromTaskImageSpec(imageSpecStr: string): RbdModel {
+    const imageSpec = ImageSpec.fromString(imageSpecStr);
+    return this.createRbdFromTask(imageSpec.poolName, imageSpec.namespace, imageSpec.imageName);
+  }
+
+  private createRbdFromTask(pool: string, namespace: string, name: string): RbdModel {
     const model = new RbdModel();
     model.id = '-1';
     model.name = name;
+    model.namespace = namespace;
     model.pool_name = pool;
     return model;
   }
@@ -94,9 +108,11 @@ export class RbdListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
       this.selection.first() &&
-      `${encodeURIComponent(this.selection.first().pool_name)}/${encodeURIComponent(
+      new ImageSpec(
+        this.selection.first().pool_name,
+        this.selection.first().namespace,
         this.selection.first().name
-      )}`;
+      ).toStringEncoded();
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -163,6 +179,11 @@ export class RbdListComponent implements OnInit {
         flexGrow: 2
       },
       {
+        name: this.i18n('Namespace'),
+        prop: 'namespace',
+        flexGrow: 2
+      },
+      {
         name: this.i18n('Size'),
         prop: 'size',
         flexGrow: 1,
@@ -205,13 +226,58 @@ export class RbdListComponent implements OnInit {
       }
     ];
 
+    const itemFilter = (entry, task) => {
+      let taskImageSpec: string;
+      switch (task.name) {
+        case 'rbd/copy':
+          taskImageSpec = new ImageSpec(
+            task.metadata['dest_pool_name'],
+            task.metadata['dest_namespace'],
+            task.metadata['dest_image_name']
+          ).toString();
+          break;
+        case 'rbd/clone':
+          taskImageSpec = new ImageSpec(
+            task.metadata['child_pool_name'],
+            task.metadata['child_namespace'],
+            task.metadata['child_image_name']
+          ).toString();
+          break;
+        case 'rbd/create':
+          taskImageSpec = new ImageSpec(
+            task.metadata['pool_name'],
+            task.metadata['namespace'],
+            task.metadata['image_name']
+          ).toString();
+          break;
+        default:
+          taskImageSpec = task.metadata['image_spec'];
+          break;
+      }
+      return (
+        taskImageSpec === new ImageSpec(entry.pool_name, entry.namespace, entry.name).toString()
+      );
+    };
+
+    const taskFilter = (task) => {
+      return [
+        'rbd/clone',
+        'rbd/copy',
+        'rbd/create',
+        'rbd/delete',
+        'rbd/edit',
+        'rbd/flatten',
+        'rbd/trash/move'
+      ].includes(task.name);
+    };
+
     this.taskListService.init(
       () => this.rbdService.list(),
       (resp) => this.prepareResponse(resp),
       (images) => (this.images = images),
       () => this.onFetchError(),
-      this.taskFilter,
-      this.itemFilter,
+      taskFilter,
+      itemFilter,
       this.builders
     );
   }
@@ -246,59 +312,26 @@ export class RbdListComponent implements OnInit {
     return images;
   }
 
-  itemFilter(entry, task) {
-    let pool_name_k: string;
-    let image_name_k: string;
-    switch (task.name) {
-      case 'rbd/copy':
-        pool_name_k = 'dest_pool_name';
-        image_name_k = 'dest_image_name';
-        break;
-      case 'rbd/clone':
-        pool_name_k = 'child_pool_name';
-        image_name_k = 'child_image_name';
-        break;
-      default:
-        pool_name_k = 'pool_name';
-        image_name_k = 'image_name';
-        break;
-    }
-    return (
-      entry.pool_name === task.metadata[pool_name_k] && entry.name === task.metadata[image_name_k]
-    );
-  }
-
-  taskFilter(task) {
-    return [
-      'rbd/clone',
-      'rbd/copy',
-      'rbd/create',
-      'rbd/delete',
-      'rbd/edit',
-      'rbd/flatten',
-      'rbd/trash/move'
-    ].includes(task.name);
-  }
-
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
 
   deleteRbdModal() {
     const poolName = this.selection.first().pool_name;
+    const namespace = this.selection.first().namespace;
     const imageName = this.selection.first().name;
+    const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'RBD',
-        itemNames: [`${poolName}/${imageName}`],
+        itemNames: [imageSpec],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('rbd/delete', {
-              pool_name: poolName,
-              image_name: imageName
+              image_spec: imageSpec.toString()
             }),
-            call: this.rbdService.delete(poolName, imageName)
+            call: this.rbdService.delete(imageSpec)
           })
       }
     });
@@ -306,21 +339,20 @@ export class RbdListComponent implements OnInit {
 
   trashRbdModal() {
     const initialState = {
-      metaType: 'RBD',
       poolName: this.selection.first().pool_name,
+      namespace: this.selection.first().namespace,
       imageName: this.selection.first().name
     };
     this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, { initialState });
   }
 
-  flattenRbd(poolName, imageName) {
+  flattenRbd(imageSpec: ImageSpec) {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('rbd/flatten', {
-          pool_name: poolName,
-          image_name: imageName
+          image_spec: imageSpec.toString()
         }),
-        call: this.rbdService.flatten(poolName, imageName)
+        call: this.rbdService.flatten(imageSpec)
       })
       .subscribe(undefined, undefined, () => {
         this.modalRef.hide();
@@ -329,19 +361,26 @@ export class RbdListComponent implements OnInit {
 
   flattenRbdModal() {
     const poolName = this.selection.first().pool_name;
+    const namespace = this.selection.first().namespace;
     const imageName = this.selection.first().name;
     const parent: RbdParentModel = this.selection.first().parent;
+    const parentImageSpec = new ImageSpec(
+      parent.pool_name,
+      parent.pool_namespace,
+      parent.image_name
+    );
+    const childImageSpec = new ImageSpec(poolName, namespace, imageName);
 
     const initialState = {
       titleText: 'RBD flatten',
       buttonText: 'Flatten',
       bodyTpl: this.flattenTpl,
       bodyData: {
-        parent: `${parent.pool_name}/${parent.image_name}@${parent.snap_name}`,
-        child: `${poolName}/${imageName}`
+        parent: `${parentImageSpec}@${parent.snap_name}`,
+        child: childImageSpec.toString()
       },
       onSubmit: () => {
-        this.flattenRbd(poolName, imageName);
+        this.flattenRbd(childImageSpec);
       }
     };
 

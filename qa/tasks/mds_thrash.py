@@ -18,7 +18,7 @@ from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
-class MDSThrasher(Greenlet, Thrasher):
+class MDSThrasher(Thrasher, Greenlet):
     """
     MDSThrasher::
 
@@ -136,7 +136,7 @@ class MDSThrasher(Greenlet, Thrasher):
             #   File "/usr/lib/python2.7/traceback.py", line 13, in _print
             #     file.write(str+terminator)
             # 2017-02-03T14:34:01.261 CRITICAL:root:IOError
-            self.exception = e
+            self.set_thrasher_exception(e)
             self.logger.exception("exception:")
             # allow successful completion so gevent doesn't see an exception...
 

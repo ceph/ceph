@@ -7,7 +7,7 @@
 #include "include/compat.h"
 #include <errno.h>
 #include <stdio.h>
-#include "common/xattr.h"
+#include "os_xattr.h"
 #include "include/ceph_assert.h"
 #include "include/buffer_fwd.h"
 

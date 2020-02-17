@@ -37,6 +37,21 @@ function TEST_mute() {
 
     ceph -s
     ceph health | grep HEALTH_OK || return 1
+    # test warning on setting pool size=1
+    ceph osd pool set foo size 1
+    ceph -s
+    ceph health | grep HEALTH_WARN || return 1
+    ceph health detail | grep POOL_NO_REDUNDANCY || return 1
+    ceph health mute POOL_NO_REDUNDANCY
+    ceph -s
+    ceph health | grep HEALTH_OK | grep POOL_NO_REDUNDANCY || return 1
+    ceph health unmute POOL_NO_REDUNDANCY
+    ceph -s
+    ceph health | grep HEALTH_WARN || return 1
+    # restore pool size to default
+    ceph osd pool set foo size 3
+    ceph -s
+    ceph health | grep HEALTH_OK || return 1
     ceph osd set noup
     ceph -s
     ceph health detail | grep OSDMAP_FLAGS || return 1

@@ -831,8 +831,7 @@ void PGMapDigest::dump_pool_stats_full(
     f->close_section();
   else {
     ceph_assert(ss != nullptr);
-    *ss << "POOLS:\n";
-    tbl.set_indent(4);
+    *ss << "--- POOLS ---\n";
     *ss << tbl;
   }
 }
@@ -892,8 +891,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
 	<< percentify(osd_sum.statfs.get_used_raw_ratio()*100.0)
 	<< TextTable::endrow;
 
-    *ss << "RAW STORAGE:\n";
-    tbl.set_indent(4);
+    *ss << "--- RAW STORAGE ---\n";
     *ss << tbl;
   }
 }
@@ -1177,14 +1175,16 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 
     auto pool_statfs_iter =
       pool_statfs.find(std::make_pair(update_pool, update_osd));
-    pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
-    if (pool_statfs_iter == pool_statfs.end()) {
-      pool_statfs.emplace(std::make_pair(update_pool, update_osd), statfs_inc);
-    } else {
-      pool_sum_ref.sub(pool_statfs_iter->second);
-      pool_statfs_iter->second = statfs_inc;
+    if (pg_pool_sum.count(update_pool)) { 
+      pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
+      if (pool_statfs_iter == pool_statfs.end()) {
+        pool_statfs.emplace(std::make_pair(update_pool, update_osd), statfs_inc);
+      } else {
+        pool_sum_ref.sub(pool_statfs_iter->second);
+        pool_statfs_iter->second = statfs_inc;
+      }
+      pool_sum_ref.add(statfs_inc);
     }
-    pool_sum_ref.add(statfs_inc);
   }
 
   for (auto p = inc.get_osd_stat_updates().begin();
@@ -1595,7 +1595,7 @@ void PGMap::dump_pool_stats(ceph::Formatter *f) const
   f->close_section();
 }
 
-void PGMap::dump_osd_stats(ceph::Formatter *f) const
+void PGMap::dump_osd_stats(ceph::Formatter *f, bool with_net) const
 {
   f->open_array_section("osd_stats");
   for (auto q = osd_stat.begin();
@@ -1603,7 +1603,7 @@ void PGMap::dump_osd_stats(ceph::Formatter *f) const
        ++q) {
     f->open_object_section("osd_stat");
     f->dump_int("osd", q->first);
-    q->second.dump(f);
+    q->second.dump(f, with_net);
     f->close_section();
   }
   f->close_section();
@@ -2279,8 +2279,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
     reported << st.reported_epoch << ":" << st.reported_seq;
 
     ostringstream upstr, actingstr;
-    upstr << st.up << 'p' << st.up_primary;
-    actingstr << st.acting << 'p' << st.acting_primary;
+    upstr << pg_vector_string(st.up) << 'p' << st.up_primary;
+    actingstr << pg_vector_string(st.acting) << 'p' << st.acting_primary;
     tab << *i
         << st.stats.sum.num_objects
         << st.stats.sum.num_objects_degraded
@@ -3379,6 +3379,28 @@ void PGMap::get_health_checks(
       d.detail.swap(detail);
     }
   }
+}
+
+void PGMap::print_summary(ceph::Formatter *f, ostream *out) const
+{
+  if (f) {
+    f->open_array_section("pgs_by_pool_state");
+    for (auto& i: num_pg_by_pool_state) {
+      f->open_object_section("per_pool_pgs_by_state");
+      f->dump_int("pool_id", i.first);
+      f->open_array_section("pg_state_counts");
+      for (auto& j : i.second) {
+        f->open_object_section("pg_state_count");
+        f->dump_string("state_name", pg_state_string(j.first));
+        f->dump_int("count", j.second);
+        f->close_section();
+      }
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+  }
+  PGMapDigest::print_summary(f, out);
 }
 
 int process_pg_map_command(

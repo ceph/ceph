@@ -1,0 +1,52 @@
+<ng-container *ngIf="!loading; else isLoading">
+  <ng-container *ngIf="incompatible; else isCompatible">
+    <cd-alert-panel type="warning"
+                    i18n>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</cd-alert-panel>
+  </ng-container>
+  <ng-template #isCompatible>
+    <tabset *ngFor="let device of data | keyvalue">
+      <tab [heading]="device.value.device + ' (' + device.value.identifier + ')'">
+        <ng-container *ngIf="device.value.error; else noError">
+          <cd-alert-panel type="warning">{{ device.value.userMessage }}</cd-alert-panel>
+        </ng-container>
+        <ng-template #noError>
+          <ng-container *ngIf="device.value.smart.data.self_test.status.passed; else selfTestFailed">
+            <cd-alert-panel
+              size="slim"
+              type="info"
+              i18n-title
+              title="SMART overall-health self-assessment test result">
+              {{ device.value.smart.data.self_test.status.string }}
+            </cd-alert-panel>
+          </ng-container>
+          <ng-template #selfTestFailed>
+            <cd-alert-panel
+              size="slim"
+              type="warning"
+              i18n-title
+              title="SMART overall-health self-assessment test result">
+              {{ device.value.smart.data.self_test.status.string }}
+            </cd-alert-panel>
+          </ng-template>
+          <tabset>
+            <tab i18n-heading
+                 heading="Device Information">
+              <cd-table-key-value [renderObjects]="true"
+                                  [data]="device.value.info"></cd-table-key-value>
+            </tab>
+
+            <tab i18n-heading
+                 heading="S.M.A.R.T">
+              <cd-table [data]="device.value.smart.attributes.table"
+                        updateSelectionOnRefresh="never"
+                        [columns]="columns"></cd-table>
+            </tab>
+          </tabset>
+        </ng-template>
+      </tab>
+    </tabset>
+  </ng-template>
+</ng-container>
+<ng-template #isLoading>
+  <cd-loading-panel i18n>S.M.A.R.T data is loading.</cd-loading-panel>
+</ng-template>

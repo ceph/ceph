@@ -185,6 +185,9 @@ class TestClientRecovery(CephFSTestCase):
         # The mount goes away while the MDS is offline
         self.mount_a.kill()
 
+        # wait for it to die
+        time.sleep(5)
+
         self.fs.mds_restart()
 
         # Enter reconnect phase
@@ -444,10 +447,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.wait_until_mounted()
 
     def test_dir_fsync(self):
-	self._test_fsync(True);
+        self._test_fsync(True);
 
     def test_create_fsync(self):
-	self._test_fsync(False);
+        self._test_fsync(False);
 
     def _test_fsync(self, dirfsync):
         """
@@ -467,22 +470,22 @@ class TestClientRecovery(CephFSTestCase):
 
                 path = "{path}"
 
-                print "Starting creation..."
+                print("Starting creation...")
                 start = time.time()
 
                 os.mkdir(path)
                 dfd = os.open(path, os.O_DIRECTORY)
 
                 fd = open(os.path.join(path, "childfile"), "w")
-                print "Finished creation in {{0}}s".format(time.time() - start)
+                print("Finished creation in {{0}}s".format(time.time() - start))
 
-                print "Starting fsync..."
+                print("Starting fsync...")
                 start = time.time()
                 if {dirfsync}:
                     os.fsync(dfd)
                 else:
                     os.fsync(fd)
-                print "Finished fsync in {{0}}s".format(time.time() - start)
+                print("Finished fsync in {{0}}s".format(time.time() - start))
             """.format(path=path,dirfsync=str(dirfsync)))
         )
 
@@ -565,7 +568,7 @@ class TestClientRecovery(CephFSTestCase):
             cephfs.mount()
             client_id = cephfs.get_instance_id()
             cephfs.abort_conn()
-            print client_id
+            print(client_id)
             """)
         )
         gid = int(gid_str);
@@ -588,7 +591,7 @@ class TestClientRecovery(CephFSTestCase):
         SESSION_AUTOCLOSE = 50
         time_at_beg = time.time()
         mount_a_gid = self.mount_a.get_global_id()
-        mount_a_pid = self.mount_a.client_pid
+        _ = self.mount_a.client_pid
         self.fs.set_var('session_timeout', SESSION_TIMEOUT)
         self.fs.set_var('session_autoclose', SESSION_AUTOCLOSE)
         self.assert_session_count(2, self.fs.mds_asok(['session', 'ls']))

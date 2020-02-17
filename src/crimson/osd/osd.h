@@ -40,43 +40,46 @@ class OSDMap;
 class OSDMeta;
 class Heartbeat;
 
-namespace ceph::mon {
-  class Client;
-}
-
-namespace ceph::net {
-  class Messenger;
-}
-
 namespace ceph::os {
-  class FuturizedStore;
   class Transaction;
 }
 
-namespace ceph::osd {
+namespace crimson::mon {
+  class Client;
+}
+
+namespace crimson::net {
+  class Messenger;
+}
+
+namespace crimson::os {
+  class FuturizedStore;
+}
+
+namespace crimson::osd {
 class PG;
 
-class OSD final : public ceph::net::Dispatcher,
+class OSD final : public crimson::net::Dispatcher,
 		  private OSDMapService,
-		  private ceph::common::AuthHandler,
-		  private ceph::mgr::WithStats {
+		  private crimson::common::AuthHandler,
+		  private crimson::mgr::WithStats {
   seastar::gate gate;
   const int whoami;
   const uint32_t nonce;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   // talk with osd
-  ceph::net::Messenger& cluster_msgr;
+  crimson::net::Messenger& cluster_msgr;
   // talk with client/mon/mgr
-  ceph::net::Messenger& public_msgr;
+  crimson::net::Messenger& public_msgr;
   ChainedDispatchers dispatchers;
-  std::unique_ptr<ceph::mon::Client> monc;
-  std::unique_ptr<ceph::mgr::Client> mgrc;
+  std::unique_ptr<crimson::mon::Client> monc;
+  std::unique_ptr<crimson::mgr::Client> mgrc;
 
   SharedLRU<epoch_t, OSDMap> osdmaps;
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
   cached_map_t osdmap;
   // TODO: use a wrapper for ObjectStore
-  std::unique_ptr<ceph::os::FuturizedStore> store;
+  std::unique_ptr<crimson::os::FuturizedStore> store;
   std::unique_ptr<OSDMeta> meta_coll;
 
   OSDState state;
@@ -95,10 +98,10 @@ class OSD final : public ceph::net::Dispatcher,
   OSDSuperblock superblock;
 
   // Dispatcher methods
-  seastar::future<> ms_dispatch(ceph::net::Connection* conn, MessageRef m) final;
-  seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) final;
-  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) final;
-  seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) final;
+  seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m) final;
+  seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) final;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) final;
+  seastar::future<> ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
 
   // mgr::WithStats methods
   MessageRef get_stats() final;
@@ -107,7 +110,7 @@ class OSD final : public ceph::net::Dispatcher,
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
-  ceph::osd::ShardServices shard_services;
+  crimson::osd::ShardServices shard_services;
   std::unordered_map<spg_t, Ref<PG>> pgs;
 
   std::unique_ptr<Heartbeat> heartbeat;
@@ -115,10 +118,10 @@ class OSD final : public ceph::net::Dispatcher,
 
 public:
   OSD(int id, uint32_t nonce,
-      ceph::net::Messenger& cluster_msgr,
-      ceph::net::Messenger& client_msgr,
-      ceph::net::Messenger& hb_front_msgr,
-      ceph::net::Messenger& hb_back_msgr);
+      crimson::net::Messenger& cluster_msgr,
+      crimson::net::Messenger& client_msgr,
+      crimson::net::Messenger& hb_front_msgr,
+      crimson::net::Messenger& hb_back_msgr);
   ~OSD() final;
 
   seastar::future<> mkfs(uuid_d osd_uuid, uuid_d cluster_fsid);
@@ -156,20 +159,20 @@ private:
   void write_superblock(ceph::os::Transaction& t);
   seastar::future<> read_superblock();
 
-  bool require_mon_peer(ceph::net::Connection *conn, Ref<Message> m);
+  bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
 
   seastar::future<Ref<PG>> handle_pg_create_info(
     std::unique_ptr<PGCreateInfo> info);
 
-  seastar::future<> handle_osd_map(ceph::net::Connection* conn,
+  seastar::future<> handle_osd_map(crimson::net::Connection* conn,
                                    Ref<MOSDMap> m);
-  seastar::future<> handle_osd_op(ceph::net::Connection* conn,
+  seastar::future<> handle_osd_op(crimson::net::Connection* conn,
 				  Ref<MOSDOp> m);
-  seastar::future<> handle_rep_op(ceph::net::Connection* conn,
+  seastar::future<> handle_rep_op(crimson::net::Connection* conn,
 				  Ref<MOSDRepOp> m);
-  seastar::future<> handle_rep_op_reply(ceph::net::Connection* conn,
+  seastar::future<> handle_rep_op_reply(crimson::net::Connection* conn,
 					Ref<MOSDRepOpReply> m);
-  seastar::future<> handle_peering_op(ceph::net::Connection* conn,
+  seastar::future<> handle_peering_op(crimson::net::Connection* conn,
 				      Ref<MOSDPeeringOp> m);
 
   seastar::future<> committed_osd_maps(version_t first,

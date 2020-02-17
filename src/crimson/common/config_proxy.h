@@ -9,7 +9,7 @@
 #include "common/config_obs_mgr.h"
 #include "common/errno.h"
 
-namespace ceph::common {
+namespace crimson::common {
 
 // a facade for managing config. each shard has its own copy of ConfigProxy.
 //
@@ -151,7 +151,7 @@ public:
   seastar::future<> parse_argv(std::vector<const char*>& argv) {
     // we could pass whatever is unparsed to seastar, but seastar::app_template
     // is used for driving the seastar application, and
-    // ceph::common::ConfigProxy is not available until seastar engine is up
+    // crimson::common::ConfigProxy is not available until seastar engine is up
     // and running, so we have to feed the command line args to app_template
     // first, then pass them to ConfigProxy.
     return do_change([&argv, this](ConfigValues& values) {

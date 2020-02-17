@@ -5,7 +5,7 @@
     <ng-container *ngFor="let config of matcherConfig">
       <div class="input-group-prepend">
         <span class="input-group-text"
-              [tooltip]=config.tooltip>
+              [tooltip]="config.tooltip">
           <i [ngClass]="[config.icon]"></i>
         </span>
       </div>
