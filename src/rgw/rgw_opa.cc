@@ -7,7 +7,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-int rgw_opa_authorize(RGWOp * op,
+int rgw_opa_authorize(RGWOp *& op,
                       req_state * const s)
 {
 
@@ -47,6 +47,25 @@ int rgw_opa_authorize(RGWOp * op,
   jf.dump_string("object_name", s->object.name.c_str());
   jf.dump_object("user_info", s->user->get_info());
   jf.dump_object("bucket_info", s->bucket_info);
+  if (s->iam_policy) {
+    jf.dump_string("iam_policy", s->iam_policy.get_ptr()->text.c_str());
+  }
+  if (s->bucket_acl) {
+    jf.dump_object("bucket_acl", *s->bucket_acl.get());
+  }
+  if (s->user_acl) {
+    jf.dump_object("user_acl", *s->user_acl.get());
+  }
+  if (s->object_acl) {
+    jf.dump_object("object_acl", *s->object_acl.get());
+  }
+  if (!s->iam_user_policies.empty()) {
+    jf.open_array_section("iam_user_policies");
+    for (auto policy : s->iam_user_policies) {
+      jf.dump_string("", policy.text.c_str());
+    }
+    jf.close_section();
+  }
   jf.close_section();
   jf.close_section();
 

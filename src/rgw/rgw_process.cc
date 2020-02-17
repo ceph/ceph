@@ -140,6 +140,14 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     }
   }
 
+    /* Check if OPA is used to authorize requests */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    ret = rgw_opa_authorize(op, s);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   ldpp_dout(op, 2) << "verifying op params" << dendl;
   ret = op->verify_params();
   if (ret < 0) {

@@ -50,7 +50,6 @@
 #include "rgw_perf_counters.h"
 #include "rgw_notify.h"
 #include "rgw_notify_event_type.h"
-#include "rgw_opa.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -3700,14 +3699,6 @@ int RGWPutObj::verify_permission()
     return -EACCES;
   }
 
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
   return 0;
 }
 
@@ -4830,14 +4821,6 @@ int RGWDeleteObj::verify_permission()
     return -ERR_MFA_REQUIRED;
   }
 
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
   return 0;
 }
 
@@ -5186,14 +5169,6 @@ int RGWCopyObj::verify_permission()
   op_ret = init_dest_policy();
   if (op_ret < 0) {
     return op_ret;
-  }
-
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return ret;
-    }
   }
 
   return 0;
@@ -5920,14 +5895,6 @@ int RGWInitMultipart::verify_permission()
     return -EACCES;
   }
 
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
   return 0;
 }
 
@@ -6034,14 +6001,6 @@ int RGWCompleteMultipart::verify_permission()
 
   if (!verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
     return -EACCES;
-  }
-
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return ret;
-    }
   }
 
   return 0;
@@ -6384,14 +6343,6 @@ int RGWAbortMultipart::verify_permission()
     return -EACCES;
   }
 
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
   return 0;
 }
 
@@ -6557,14 +6508,6 @@ int RGWDeleteMultiObj::verify_permission()
   acl_allowed = verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE);
   if (!acl_allowed)
     return -EACCES;
-  
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return ret;
-    }
-  }
 
   return 0;
 }
@@ -7204,14 +7147,6 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
       return true;
     }
   }
-
-  /* Check for OPA when there is no special policy on action */
-  if (s->cct->_conf->rgw_use_opa_authz) {
-    int ret = rgw_opa_authorize(this, s);
-    if (ret < 0) {
-      return false;
-    }
-  }
     
   return verify_bucket_permission_no_policy(this, s, s->user_acl.get(),
 					    &bacl, RGW_PERM_WRITE);
@@ -7774,7 +7709,6 @@ void RGWPutBucketPolicy::execute()
 	op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							      &s->bucket_info.objv_tracker,
 							      s->yield);
-
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {

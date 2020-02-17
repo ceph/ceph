@@ -8,7 +8,7 @@
 #include "rgw_op.h"
 
 /* authorize request using OPA */
-int rgw_opa_authorize(RGWOp* op,
+int rgw_opa_authorize(RGWOp*& op,
                       req_state* s);
 
 #endif /* RGW_OPA_H */
