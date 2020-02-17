@@ -107,6 +107,10 @@ io::Extent whole_volume_extent() {
   return io::Extent({0, std::numeric_limits<uint64_t>::max()});
 }
 
+BlockExtent block_extent(const io::Extent& image_extent) {
+  return convert_to_block_extent(image_extent.first, image_extent.second);
+}
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd

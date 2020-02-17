@@ -261,6 +261,8 @@ public:
 
 io::Extent whole_volume_extent();
 
+BlockExtent block_extent(const io::Extent& image_extent);
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
