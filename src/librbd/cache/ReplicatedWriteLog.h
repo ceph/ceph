@@ -214,6 +214,8 @@ private:
   bool m_appending = false;
   bool m_dispatching_deferred_ops = false;
 
+  Contexts m_flush_complete_contexts;
+
   rwl::GenericLogOperations m_ops_to_flush; /* Write ops needing flush in local log */
   rwl::GenericLogOperations m_ops_to_append; /* Write ops needing event append in local log */
 
@@ -256,6 +258,7 @@ private:
   void wake_up();
   void process_work();
 
+  void flush_dirty_entries(Context *on_finish);
   bool can_flush_entry(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
   Context *construct_flush_entry_ctx(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
   void persist_last_flushed_sync_gen();
@@ -266,6 +269,7 @@ private:
   void init_flush_new_sync_point(rwl::DeferredContexts &later);
   void new_sync_point(rwl::DeferredContexts &later);
   rwl::C_FlushRequest<ReplicatedWriteLog<ImageCtxT>>* make_flush_req(Context *on_finish);
+  void flush_new_sync_point_if_needed(C_FlushRequestT *flush_req, rwl::DeferredContexts &later);
 
   void dispatch_deferred_writes(void);
   void alloc_and_dispatch_io_req(C_BlockIORequestT *write_req);
@@ -279,6 +283,7 @@ private:
   int append_op_log_entries(rwl::GenericLogOperations &ops);
   void complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
   void schedule_complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
+  void internal_flush(Context *on_finish);
 };
 
 } // namespace cache
