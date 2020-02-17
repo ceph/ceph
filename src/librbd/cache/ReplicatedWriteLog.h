@@ -35,6 +35,7 @@ class GenericLogEntry;
 
 typedef std::list<std::shared_ptr<WriteLogEntry>> WriteLogEntries;
 typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
+typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
 
 /**** Write log entries end ****/
 
@@ -135,6 +136,7 @@ private:
   librbd::cache::rwl::ImageCacheState<ImageCtxT>* m_cache_state = nullptr;
 
   std::atomic<bool> m_initialized = {false};
+  std::atomic<bool> m_shutting_down = {false};
   PMEMobjpool *m_log_pool = nullptr;
   const char* m_rwl_pool_layout_name;
 
@@ -183,9 +185,14 @@ private:
   std::atomic<int> m_async_append_ops = {0};
   std::atomic<int> m_async_complete_ops = {0};
   std::atomic<int> m_async_null_flush_finish = {0};
+  std::atomic<int> m_async_process_work = {0};
 
   /* Acquire locks in order declared here */
 
+  /* Hold a read lock on m_entry_reader_lock to add readers to log entry
+   * bufs. Hold a write lock to prevent readers from being added (e.g. when
+   * removing log entrys from the map). No lock required to remove readers. */
+  mutable RWLock m_entry_reader_lock;
   /* Hold m_deferred_dispatch_lock while consuming from m_deferred_ios. */
   mutable ceph::mutex m_deferred_dispatch_lock;
   /* Hold m_log_append_lock while appending or retiring log entries. */
@@ -201,6 +208,9 @@ private:
   bool m_barrier_in_progress = false;
   BlockGuardCell *m_barrier_cell = nullptr;
 
+  bool m_wake_up_requested = false;
+  bool m_wake_up_scheduled = false;
+  bool m_wake_up_enabled = true;
   bool m_appending = false;
   bool m_dispatching_deferred_ops = false;
 
@@ -215,6 +225,10 @@ private:
 
   std::shared_ptr<rwl::SyncPoint> m_current_sync_point = nullptr;
   bool m_persist_on_flush = false; /* If false, persist each write before completion */
+
+  int m_flush_ops_in_flight = 0;
+  int m_flush_bytes_in_flight = 0;
+  uint64_t m_lowest_flushing_sync_gen = 0;
 
   /* Writes that have left the block guard, but are waiting for resources */
   C_BlockIORequests m_deferred_ios;
@@ -240,9 +254,14 @@ private:
   void rwl_init(Context *on_finish, rwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
   void wake_up();
+  void process_work();
 
+  bool can_flush_entry(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
+  Context *construct_flush_entry_ctx(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
   void persist_last_flushed_sync_gen();
   bool handle_flushed_sync_point(std::shared_ptr<rwl::SyncPointLogEntry> log_entry);
+  void sync_point_writer_flushed(std::shared_ptr<rwl::SyncPointLogEntry> log_entry);
+  void process_writeback_dirty_entries();
 
   void init_flush_new_sync_point(rwl::DeferredContexts &later);
   void new_sync_point(rwl::DeferredContexts &later);
