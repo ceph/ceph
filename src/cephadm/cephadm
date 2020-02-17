@@ -2584,6 +2584,30 @@ def command_check_host():
 
     logger.info('Host looks OK')
 
+##################################
+
+def command_prepare_host():
+    pkg = create_packager()
+    logger.info('Verifying podman|docker is present...')
+    if not container_path:
+        pkg.install_podman()
+
+    logger.info('Verifying lvm2 is present...')
+    if not find_executable('lvcreate'):
+        pkg.install(['lvm2'])
+
+    logger.info('Verifying time synchronization is in place...')
+    if not check_time_sync():
+        pkg.install(['chrony'])
+
+    if args.expect_hostname and args.expect_hostname != get_hostname():
+        logger.warning('Adjusting hostname from %s -> %s...' % (get_hostname(), args.expect_hostname))
+        call_throws(['hostname', args.expect_hostname])
+        with open('/etc/hostname', 'w') as f:
+            f.write(args.expect_hostname + '\n')
+
+    logger.info('Repeating the final host check...')
+    return command_check_host()
 
 ##################################
 
@@ -2727,6 +2751,24 @@ class Apt(Packager):
             logging.info('Removing repo at %s...' % self.repo_path())
             os.unlink(self.repo_path())
 
+    def install(self, ls):
+        logging.info('Installing packages %s...' % ls)
+        call_throws(['apt', 'install', '-y'] + ls)
+
+    def install_podman(self):
+        if self.distro == 'ubuntu':
+            logging.info('Setting up repo for pdoman...')
+            self.install(['software-properties-common'])
+            call_throws(['add-apt-repository', '-y', 'ppa:projectatomic/ppa'])
+            call_throws(['apt', 'update'])
+
+        logging.info('Attempting podman install...')
+        try:
+            self.install(['podman'])
+        except Error as e:
+            logging.info('Podman did not work.  Falling back to docker...')
+            self.install(['docker.io'])
+
 class YumDnf(Packager):
     DISTRO_NAMES = {
         'centos': ('centos', 'el'),
@@ -2849,6 +2891,14 @@ class YumDnf(Packager):
         if self.distro_code == 'el8':
             logger.info('Disabling supplementary copr repo ktdreyer/ceph-el8...')
             call_throws(['dnf', 'copr', 'disable', '-y', 'ktdreyer/ceph-el8'])
+
+    def install(self, ls):
+        logger.info('Installing packages %s...' % ls)
+        call_throws([self.tool, 'install', '-y'] + ls)
+
+    def install_podman(self):
+        self.install(['podman'])
+
 
 def create_packager(stable=None, branch=None, commit=None):
     distro, version, codename = get_distro()
@@ -3216,6 +3266,13 @@ def _get_parser():
         '--expect-hostname',
         help='Check that hostname matches an expected value')
 
+    parser_prepare_host = subparsers.add_parser(
+        'prepare-host', help='prepare a host for cephadm use')
+    parser_prepare_host.set_defaults(func=command_prepare_host)
+    parser_prepare_host.add_argument(
+        '--expect-hostname',
+        help='Set hostname')
+
     parser_add_repo = subparsers.add_parser(
         'add-repo', help='configure package repository')
     parser_add_repo.set_defaults(func=command_add_repo)
@@ -3290,7 +3347,7 @@ if __name__ == "__main__":
                 break
             except Exception as e:
                 logger.debug('Could not locate %s: %s' % (i, e))
-        if not container_path:
+        if not container_path and args.func != command_prepare_host:
             sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
             sys.exit(1)
 
