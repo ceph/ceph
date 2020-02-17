@@ -8017,9 +8017,9 @@ int RGWRados::gc_operate(string& oid, librados::ObjectReadOperation *op, bufferl
   return rgw_rados_operate(gc_pool_ctx, oid, op, pbl, null_yield);
 }
 
-int RGWRados::list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
+int RGWRados::list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
 {
-  return gc->list(index, marker, max, expired_only, result, truncated);
+  return gc->list(index, marker, max, expired_only, result, truncated, processing_queue);
 }
 
 int RGWRados::process_gc(bool expired_only)
