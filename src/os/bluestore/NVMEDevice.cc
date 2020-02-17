@@ -412,6 +412,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
             r = spdk_nvme_ns_cmd_writev(
                 ns, qpair, lba_off, lba_count, io_complete, t, 0,
                 data_buf_reset_sgl, data_buf_next_sge);
+            if (r == 0) current_queue_depth++;
           }
           if (r < 0) {
             derr << __func__ << " failed to do write command: " << cpp_strerror(r) << dendl;
@@ -439,6 +440,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
             r = spdk_nvme_ns_cmd_readv(
               ns, qpair, lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
+            if (r == 0) current_queue_depth++;
           }
           if (r < 0) {
             derr << __func__ << " failed to read: " << cpp_strerror(r) << dendl;
@@ -459,6 +461,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
             std::lock_guard guard(lock);
 
             r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
+            if (r == 0) current_queue_depth++;
           }
           if (r < 0) {
             derr << __func__ << " failed to flush: " << cpp_strerror(r) << dendl;
@@ -473,7 +476,6 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
           break;
         }
       }
-      current_queue_depth++;
     }
     cur = ceph::coarse_real_clock::now();
     auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
