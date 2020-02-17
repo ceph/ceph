@@ -30,7 +30,6 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    bool is_msgr2)
   : messenger(messenger)
 {
-  ceph_assert(&messenger.container().local() == &messenger);
   if (is_msgr2) {
     protocol = std::make_unique<ProtocolV2>(dispatcher, *this, messenger);
   } else {
@@ -53,14 +52,14 @@ SocketConnection::get_messenger() const {
 
 bool SocketConnection::is_connected() const
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::engine().cpu_id() == shard_id());
   return protocol->is_connected();
 }
 
 #ifdef UNIT_TESTS_BUILT
 bool SocketConnection::is_closed() const
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::engine().cpu_id() == shard_id());
   return protocol->is_closed();
 }
 
@@ -72,23 +71,19 @@ bool SocketConnection::peer_wins() const
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
-  // Cannot send msg from another core now, its ref counter can be contaminated!
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
-  return seastar::smp::submit_to(shard_id(), [this, msg=std::move(msg)] {
-    return protocol->send(std::move(msg));
-  });
+  assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->send(std::move(msg));
 }
 
 seastar::future<> SocketConnection::keepalive()
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-    return protocol->keepalive();
-  });
+  assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->keepalive();
 }
 
 seastar::future<> SocketConnection::close()
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::engine().cpu_id() == shard_id());
   return protocol->close();
 }
 
@@ -119,7 +114,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
 }
 
 void
-SocketConnection::start_accept(SocketFRef&& sock,
+SocketConnection::start_accept(SocketRef&& sock,
                                const entity_addr_t& _peer_addr)
 {
   protocol->start_accept(std::move(sock), _peer_addr);

@@ -110,9 +110,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   // will wait for all connections closed
   virtual seastar::future<> close() = 0;
 
-  /// which shard id the connection lives
-  virtual seastar::shard_id shard_id() const = 0;
-
   virtual void print(ostream& out) const = 0;
 
   void set_last_keepalive(clock_t::time_point when) {

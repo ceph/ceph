@@ -320,11 +320,11 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   (void) seastar::with_gate(pending_dispatch, [this] {
       return Socket::connect(conn.peer_addr)
-        .then([this](SocketFRef sock) {
+        .then([this](SocketRef sock) {
           socket = std::move(sock);
           if (state == state_t::closing) {
             return socket->close().then([] {
-              throw std::system_error(make_error_code(error::connection_aborted));
+              throw std::system_error(make_error_code(error::protocol_aborted));
             });
           }
           return seastar::now();
@@ -600,7 +600,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
     });
 }
 
-void ProtocolV1::start_accept(SocketFRef&& sock,
+void ProtocolV1::start_accept(SocketRef&& sock,
                               const entity_addr_t& _peer_addr)
 {
   ceph_assert(state == state_t::none);
@@ -878,7 +878,7 @@ seastar::future<> ProtocolV1::handle_tags()
             return handle_keepalive2_ack();
           case CEPH_MSGR_TAG_CLOSE:
             logger().info("{} got tag close", conn);
-            throw std::system_error(make_error_code(error::connection_aborted));
+            throw std::system_error(make_error_code(error::protocol_aborted));
           default:
             logger().error("{} got unknown msgr tag {}",
                            conn, static_cast<int>(buf[0]));
@@ -899,8 +899,8 @@ void ProtocolV1::execute_open()
       return handle_tags()
         .handle_exception_type([this] (const std::system_error& e) {
           logger().warn("{} open fault: {}", conn, e);
-          if (e.code() == error::connection_aborted ||
-              e.code() == error::connection_reset) {
+          if (e.code() == error::protocol_aborted ||
+              e.code() == std::errc::connection_reset) {
             return dispatcher.ms_handle_reset(
                 seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
               .then([this] {
