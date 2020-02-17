@@ -1616,6 +1616,8 @@ def command_bootstrap():
                 raise Error('%s already exists; delete or pass '
                               '--allow-overwrite to overwrite' % f)
 
+    command_prepare_host()
+
     # initial vars
     fsid = args.fsid or make_fsid()
     hostname = get_hostname()
@@ -2575,7 +2577,7 @@ def command_check_host():
     if not check_time_sync():
         raise Error('No time synchronization is active')
 
-    if args.expect_hostname:
+    if 'expect_hostname' in args and args.expect_hostname:
         if get_hostname() != args.expect_hostname:
             raise Error('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), args.expect_hostname))
@@ -2600,7 +2602,7 @@ def command_prepare_host():
     if not check_time_sync():
         pkg.install(['chrony'])
 
-    if args.expect_hostname and args.expect_hostname != get_hostname():
+    if 'expect_hostname' in args and args.expect_hostname and args.expect_hostname != get_hostname():
         logger.warning('Adjusting hostname from %s -> %s...' % (get_hostname(), args.expect_hostname))
         call_throws(['hostname', args.expect_hostname])
         with open('/etc/hostname', 'w') as f:
