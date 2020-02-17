@@ -21,7 +21,7 @@ class ProtocolV1 final : public Protocol {
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_type_t& peer_type) override;
 
-  void start_accept(SocketFRef&& socket,
+  void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr) override;
 
   void trigger_close() override;

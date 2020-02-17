@@ -64,6 +64,8 @@ class SocketConnection : public Connection {
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
 
+  seastar::shard_id shard_id() const;
+
  public:
   SocketConnection(SocketMessenger& messenger,
                    Dispatcher& dispatcher,
@@ -88,8 +90,6 @@ class SocketConnection : public Connection {
 
   seastar::future<> close() override;
 
-  seastar::shard_id shard_id() const override;
-
   void print(ostream& out) const override;
 
   /// start a handshake from the client's perspective,
@@ -98,7 +98,7 @@ class SocketConnection : public Connection {
                      const entity_type_t& peer_type);
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
-  void start_accept(SocketFRef&& socket,
+  void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr);
 
   bool is_server_side() const {

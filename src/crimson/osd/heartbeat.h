@@ -27,14 +27,14 @@ public:
 
   Heartbeat(const crimson::osd::ShardServices& service,
 	    crimson::mon::Client& monc,
-	    crimson::net::Messenger& front_msgr,
-	    crimson::net::Messenger& back_msgr);
+	    crimson::net::MessengerRef front_msgr,
+	    crimson::net::MessengerRef back_msgr);
 
   seastar::future<> start(entity_addrvec_t front,
 			  entity_addrvec_t back);
   seastar::future<> stop();
 
-  seastar::future<> add_peer(osd_id_t peer, epoch_t epoch);
+  void add_peer(osd_id_t peer, epoch_t epoch);
   seastar::future<> update_peers(int whoami);
   seastar::future<> remove_peer(osd_id_t peer);
 
@@ -67,15 +67,15 @@ private:
   /// @return peers not needed in this epoch
   seastar::future<osds_t> remove_down_peers();
   /// add enough reporters for fast failure detection
-  seastar::future<> add_reporter_peers(int whoami);
+  void add_reporter_peers(int whoami);
 
   seastar::future<> start_messenger(crimson::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);
 private:
   const crimson::osd::ShardServices& service;
   crimson::mon::Client& monc;
-  crimson::net::Messenger& front_msgr;
-  crimson::net::Messenger& back_msgr;
+  crimson::net::MessengerRef front_msgr;
+  crimson::net::MessengerRef back_msgr;
 
   seastar::timer<seastar::lowres_clock> timer;
   // use real_clock so it can be converted to utime_t
