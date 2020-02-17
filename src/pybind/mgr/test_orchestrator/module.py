@@ -117,8 +117,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _init_data(self, data=None):
         self._inventory = [orchestrator.InventoryNode.from_json(inventory_node)
                            for inventory_node in data.get('inventory', [])]
-        self._services = [orchestrator.ServiceDescription.from_json(service)
-                          for service in data.get('services', [])]
+        self._daemons = [orchestrator.DaemonDescription.from_json(service)
+                          for service in data.get('daemons', [])]
 
     @deferred_read
     def get_inventory(self, node_filter=None, refresh=False):
@@ -154,32 +154,32 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         raise Exception('c-v failed')
 
     @deferred_read
-    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
+    def list_daemons(self, daemon_type=None, daemon_id=None, node_name=None, refresh=False):
         """
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.
         """
-        if service_type:
-            support_services = ("mds", "osd", "mon", "rgw", "mgr", "iscsi")
-            assert service_type in support_services, service_type + " unsupported"
+        if daemon_type:
+            daemon_types = ("mds", "osd", "mon", "rgw", "mgr", "iscsi")
+            assert daemon_type in daemon_types, daemon_type + " unsupported"
 
-        if self._services:
+        if self._daemons:
             if node_name:
-                return list(filter(lambda svc: svc.nodename == node_name, self._services))
-            return self._services
+                return list(filter(lambda svc: svc.nodename == node_name, self._daemons))
+            return self._daemons
 
         out = map(str, check_output(['ps', 'aux']).splitlines())
-        types = (service_type, ) if service_type else ("mds", "osd", "mon", "rgw", "mgr")
+        types = (daemon_type, ) if daemon_type else ("mds", "osd", "mon", "rgw", "mgr")
         assert isinstance(types, tuple)
         processes = [p for p in out if any([('ceph-' + t in p) for t in types])]
 
         result = []
         for p in processes:
-            sd = orchestrator.ServiceDescription()
+            sd = orchestrator.DaemonDescription()
             sd.nodename = 'localhost'
             res = re.search('ceph-[^ ]+', p)
             assert res
-            sd.service_instance = res.group()
+            sd.daemon_id = res.group()
             result.append(sd)
 
         return result
