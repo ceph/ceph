@@ -499,12 +499,36 @@ int radosgw_Main(int argc, const char **argv)
 
   list<RGWFrontend *> fes;
 
+  string frontend_defs_str = g_conf().get_val<string>("rgw_frontend_defaults");
+
+  list<string> frontends_def;
+  get_str_list(frontend_defs_str, ",", frontends_def);
+
+  map<string, std::unique_ptr<RGWFrontendConfig> > fe_def_map;
+  for (auto& f : frontends_def) {
+    RGWFrontendConfig *config = new RGWFrontendConfig(f);
+    int r = config->init();
+    if (r < 0) {
+      delete config;
+      cerr << "ERROR: failed to init default config: " << f << std::endl;
+      return EINVAL;
+    }
+
+    fe_def_map[config->get_framework()].reset(config);
+  }
+
   int fe_count = 0;
 
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
        fiter != fe_map.end(); ++fiter, ++fe_count) {
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
+
+    auto def_iter = fe_def_map.find(framework);
+    if (def_iter != fe_def_map.end()) {
+      config->set_default_config(*def_iter->second);
+    }
+
     RGWFrontend *fe = NULL;
 
     if (framework == "civetweb" || framework == "mongoose") {
