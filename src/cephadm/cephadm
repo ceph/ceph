@@ -2548,6 +2548,18 @@ def command_rm_daemon():
          verbose_on_failure=False)
     call(['systemctl', 'disable', unit_name],
          verbose_on_failure=False)
+    if daemon_type == 'osd':
+        CephContainer(
+            image=args.image,
+            entrypoint='/usr/sbin/ceph-volume',
+            args=[
+                'lvm', 'zap', '--osd-id',
+                str(daemon_id)
+                # not sure if --destroy is useful here
+            ],
+            container_args=['--privileged'],
+            volume_mounts=get_container_mounts(args.fsid, daemon_type, daemon_id)
+        ).run()
     data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
     call_throws(['rm', '-rf', data_dir])
 
