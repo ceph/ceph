@@ -535,27 +535,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.inventory = dict()
         self.log.debug('Loaded inventory %s' % self.inventory)
 
-        # The values are cached by instance.
-        # cache is invalidated by
-        # 1. timeout
-        # 2. refresh parameter
-        self.inventory_cache = orchestrator.OutdatablePersistentDict(
-            self, self._STORE_HOST_PREFIX + '.devices')
-
         self.cache = HostCache(self)
         self.cache.load()
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
-            if h not in self.inventory_cache:
-                self.log.debug('adding inventory item for %s' % h)
-                self.inventory_cache[h] = orchestrator.OutdatableData()
             if h not in self.cache.daemons:
                 self.log.debug('adding service item for %s' % h)
                 self.cache.prime_empty_host(h)
-        for h in self.inventory_cache:
-            if h not in self.inventory:
-                del self.inventory_cache[h]
         for h in self.cache.get_hosts():
             if h not in self.inventory:
                 self.cache.rm_host(h)
@@ -1092,7 +1079,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         if isinstance(hosts, six.string_types):
             hosts = [hosts]
-        keys = self.inventory_cache.keys()
+        keys = self.inventory.keys()
         unregistered_hosts = set(hosts) - keys
         if unregistered_hosts:
             logger.warning('keys = {}'.format(keys))
@@ -1317,8 +1304,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.log.exception(ex)
             raise
 
-    def _get_hosts(self, wanted=None):
-        return self.inventory_cache.items_filtered(wanted)
+    def _get_hosts(self):
+        return [a for a in self.inventory.keys()]
 
     @async_completion
     def add_host(self, spec):
@@ -1342,7 +1329,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'labels': spec.labels,
         }
         self._save_inventory()
-        self.inventory_cache[spec.hostname] = orchestrator.OutdatableData()
         self.cache.prime_empty_host(spec.hostname)
         self.event.set()  # refresh stray health check
         return "Added host '{}'".format(spec.hostname)
@@ -1357,7 +1343,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         del self.inventory[host]
         self._save_inventory()
-        del self.inventory_cache[host]
         self.cache.rm_host(host)
         self._reset_con(host)
         self.event.set()  # refresh stray health check
@@ -2281,7 +2266,7 @@ scrape_configs:
     def _get_container_image_id(self, image_name):
         # pick a random host...
         host = None
-        for host_name in self.inventory_cache:
+        for host_name, hi in self.inventory.items():
             host = host_name
             break
         if not host:
