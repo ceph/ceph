@@ -1621,6 +1621,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                                      inventory.Devices(dls)))
         return trivial_result(result)
 
+    def zap_device(self, host, path):
+        out, err, code = self._run_cephadm(
+            host, 'osd', 'ceph-volume',
+            ['--', 'lvm', 'zap', '--destroy', path],
+            error_ok=True)
+        self.cache.invalidate_host_devices(host)
+        if code:
+            raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
+        return trivial_result('\n'.join(out + err))
+
     def blink_device_light(self, ident_fault, on, locs):
         @async_map_completion
         def blink(host, dev, path):

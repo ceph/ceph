@@ -988,6 +988,11 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def zap_device(self, host, path):
+        # type: (str, str) -> Completion
+        """Zap/Erase a device (DESTROYS DATA)"""
+        raise NotImplementedError()
+
     def add_mon(self, spec):
         # type: (ServiceSpec) -> Completion
         """Create mon daemon(s)"""
