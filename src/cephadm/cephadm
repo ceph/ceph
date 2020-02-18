@@ -764,6 +764,31 @@ def make_var_run(fsid, uid, gid):
     call_throws(['install', '-d', '-m0770', '-o', str(uid), '-g', str(gid),
                  '/var/run/ceph/%s' % fsid])
 
+def copy_tree(src, dst, uid=None, gid=None):
+    # type: (List[str], str, int, int) -> None
+    """
+    Copy a directory tree from src to dst
+    """
+    if not uid or not gid:
+        (uid, gid) = extract_uid_gid()
+
+    for src_dir in src:
+        dst_dir = dst
+        if os.path.isdir(dst):
+            dst_dir = os.path.join(dst, os.path.basename(src_dir))
+
+        logger.debug('copy directory \'%s\' -> \'%s\'' % (src_dir, dst_dir))
+        shutil.rmtree(dst_dir, ignore_errors=True)
+        shutil.copytree(src_dir, dst_dir) # dirs_exist_ok needs python 3.8
+
+        for dirpath, dirnames, filenames in os.walk(dst_dir):
+            logger.debug('chown %s:%s \'%s\'' % (uid, gid, dirpath))
+            os.chown(dirpath, uid, gid)
+            for filename in filenames:
+                logger.debug('chown %s:%s \'%s\'' % (uid, gid, filename))
+                os.chown(os.path.join(dirpath, filename), uid, gid)
+
+
 def copy_files(src, dst, uid=None, gid=None):
     # type: (List[str], str, int, int) -> None
     """
@@ -1169,7 +1194,21 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         name = ''
 
     if daemon_type in Monitoring.components:
+        uid, gid = extract_uid_gid_monitoring(daemon_type)
+        m = Monitoring.components[daemon_type]  # type: ignore
+        metadata = m.get('image', dict())  # type: ignore
+        monitoring_args = [
+            '--user',
+            str(uid),
+            # FIXME: disable cpu/memory limits for the time being (not supported
+            # by ubuntu 18.04 kernel!)
+            #'--cpus',
+            #metadata.get('cpus', '2'),
+            #'--memory',
+            #metadata.get('memory', '4GB')
+        ]
         ceph_args = []
+        container_args.extend(monitoring_args)
     elif daemon_type == 'crash':
         ceph_args = ['-n', name]
     else:
@@ -2004,6 +2043,20 @@ def command_bootstrap():
 
 ##################################
 
+def extract_uid_gid_monitoring(daemon_type):
+    # type: (str) -> Tuple[int, int]
+
+    if daemon_type == 'prometheus':
+        uid, gid = extract_uid_gid(file_path='/etc/prometheus')
+    elif daemon_type == 'node-exporter':
+        uid, gid = 65534, 65534
+    elif daemon_type == 'grafana':
+        uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
+    else:
+        raise Error("{} not implemented yet".format(daemon_type))
+    return uid, gid
+
+
 def command_deploy():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -2054,31 +2107,9 @@ def command_deploy():
                 raise Error("{} deployment requires config-json which must "
                             "contain arg for {}".format(daemon_type.capitalize(), ', '.join(required_args)))
 
-        if daemon_type == 'prometheus':
-            uid, gid = extract_uid_gid(file_path='/etc/prometheus')
-        elif daemon_type == 'node-exporter':
-            uid, gid = 65534, 65534
-        elif daemon_type == 'grafana':
-            uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
-        elif daemon_type == 'alertmanager':
-            uid, gid = extract_uid_gid(file_path='/alertmanager')
-        else:
-            raise Error("{} not implemented yet".format(daemon_type))
 
-        # Monitoring metadata is nested dicts, so asking mypy to ignore
-        metadata = Monitoring.components[daemon_type]
-        monitoring_args = [
-            '--user',
-            str(uid),
-            # FIXME: disable cpu/memory limits for the time being (not supported
-            # by ubuntu 18.04 kernel!)
-            #'--cpus',
-            #metadata.get('cpus', '2'),
-            #'--memory',
-            #metadata.get('memory', '4GB')
-        ]
-
-        c = get_container(args.fsid, daemon_type, daemon_id, container_args=monitoring_args)
+        uid, gid = extract_uid_gid_monitoring(daemon_type)
+        c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=args.reconfig)
     else:
@@ -2370,6 +2401,12 @@ def command_adopt():
         call_throws([container_path, 'pull', args.image])
 
     (daemon_type, daemon_id) = args.name.split('.', 1)
+
+    if daemon_type == 'prometheus':
+        (uid, gid) = extract_uid_gid_monitoring(daemon_type)
+        command_adopt_prometheus(daemon_id, uid, gid)
+        return
+
     (uid, gid) = extract_uid_gid()
     if args.style == 'legacy':
         fsid = get_legacy_daemon_fsid(args.cluster,
@@ -2498,6 +2535,54 @@ def command_adopt():
 
     else:
         raise Error('adoption of style %s not implemented' % args.style)
+
+def command_adopt_prometheus(daemon_id, uid, gid):
+    # type: (str, int, int) -> None
+
+    daemon_type = 'prometheus'
+    if args.style != 'legacy':
+        raise Error('adoption of style %s not implemented' % args.style)
+
+    fsid = get_legacy_daemon_fsid(args.cluster,
+                                  daemon_type,
+                                  daemon_id,
+                                  legacy_dir=args.legacy_dir)
+    if not fsid:
+        raise Error('could not detect legacy fsid; set fsid in ceph.conf')
+
+    l = FileLock(fsid)
+    l.acquire()
+
+    unit_name = 'prometheus'
+    (enabled, state) = check_unit(unit_name)
+
+    if state == 'running':
+        logger.info('Stopping old systemd unit %s...' % unit_name)
+        call_throws(['systemctl', 'stop', unit_name])
+    if enabled:
+        logger.info('Disabling old systemd unit %s...' % unit_name)
+        call_throws(['systemctl', 'disable', unit_name])
+
+    data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
+                                     uid=uid, gid=gid)
+
+    # config
+    config_src = '/etc/prometheus/prometheus.yml'
+    config_src = os.path.abspath(args.legacy_dir + config_src)
+    config_dst = os.path.join(data_dir_dst, 'etc/prometheus')
+    copy_files([config_src], config_dst, uid=uid, gid=gid)
+
+    # data
+    data_src = '/var/lib/prometheus/metrics/'
+    data_src = os.path.abspath(args.legacy_dir + data_src)
+    data_dst = os.path.join(data_dir_dst, 'data')
+    copy_tree([data_src], data_dst, uid=uid, gid=gid)
+
+    make_var_run(fsid, uid, gid)
+    c = get_container(fsid, daemon_type, daemon_id)
+    deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid)
+    update_firewalld(daemon_type)
+
 
 ##################################
 
@@ -3050,6 +3135,9 @@ def _get_parser():
         '--legacy-dir',
         default='/',
         help='base directory for legacy daemon data')
+    parser_adopt.add_argument(
+        '--config-json',
+        help='Additional configuration information in JSON format')
     parser_adopt.add_argument(
         '--skip-firewalld',
         action='store_true',
