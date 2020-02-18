@@ -7,7 +7,7 @@ import yaml
 from teuthology.task import Task
 from tempfile import NamedTemporaryFile
 from teuthology.config import config as teuth_config
-from teuthology.misc import get_scratch_devices
+from teuthology.misc import get_scratch_devices, get_file
 from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology import misc
@@ -308,7 +308,22 @@ class CephAnsible(Task):
             roles = self.ctx.cluster.remotes[remote]
             dev_needed = len([role for role in roles
                               if role.startswith('osd')])
-            host_vars['devices'] = get_scratch_devices(remote)[0:dev_needed]
+            if teuth_config.get('ceph_ansible') and \
+                    self.ctx.machine_type in teuth_config['ceph_ansible']['has_lvm_scratch_disks']:
+                devices = get_file(remote, "/scratch_devs").split()
+                vols = []
+
+                for dev in devices:
+                   if 'vg_nvme' in dev:
+                       splitpath = dev.split('/')
+                       vol = dict()
+                       vol['data_vg'] = splitpath[2]
+                       vol['data'] = splitpath[3]
+                       vols.append(vol)
+                extra_vars['lvm_volumes'] = vols
+                self.config.update({'vars': extra_vars})
+            else:
+                host_vars['devices'] = get_scratch_devices(remote)[0:dev_needed]
         if 'monitor_interface' not in extra_vars:
             host_vars['monitor_interface'] = remote.interface
         if 'radosgw_interface' not in extra_vars:
