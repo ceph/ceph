@@ -634,13 +634,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
   m->get_connection()->send_message2(reply);
 }
 
-const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
-{
-  static const std::vector<MDSCommand> commands = {
-  };
-  return commands;
-};
-
 void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 {
   version_t epoch = m->get_epoch();
