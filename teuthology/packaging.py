@@ -973,12 +973,40 @@ class ShamanProject(GitbuilderProject):
         return resp.text
 
     def _install_rpm_repo(self):
+        dist_release = self.dist_release
         repo = self._get_repo()
-        sudo_write_file(
-            self.remote,
-            '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
-            repo,
-        )
+        if dist_release in ['opensuse', 'sle']:
+            #
+            # Shaman does not currently return opensuse repos in a format that zypper
+            # understands -- see https://tracker.ceph.com/issues/44183 for details.
+            #
+            # So, do some text manipulation to convert the yum-style repo to
+            # zypper-style.
+            #
+            # This text manipulation/conversion code should continue to work even
+            # after Shaman is fixed.
+            #
+            munged_repo = ''
+            repo_lines = repo.splitlines()
+            for repo_line in repo_lines:
+                if repo_line.startswith('baseurl='):
+                    if repo_line.endswith('$basearch'):
+                        repo_line = repo_line[:-len('$basearch')]
+                if repo_line == '':
+                    break
+                munged_repo += str(repo_line) + '\n'
+            log.info("Writing zypper repo: {}".format(munged_repo))
+            sudo_write_file(
+                self.remote,
+                '/etc/zypp/repos.d/{proj}.repo'.format(proj=self.project),
+                munged_repo,
+            )
+        else:
+            sudo_write_file(
+                self.remote,
+                '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
+                repo,
+            )
 
     def _install_deb_repo(self):
         repo = self._get_repo()
