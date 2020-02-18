@@ -1198,7 +1198,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   OSDMap::dump_erasure_code_profiles(new_erasure_code_profiles, f);
   f->open_array_section("old_erasure_code_profiles");
   for (const auto &erasure_code_profile : old_erasure_code_profiles) {
-    f->dump_string("old", erasure_code_profile.c_str());
+    f->dump_string("old", erasure_code_profile);
   }
   f->close_section();
 
@@ -3390,7 +3390,7 @@ void OSDMap::dump_erasure_code_profiles(
   for (const auto &profile : profiles) {
     f->open_object_section(profile.first.c_str());
     for (const auto &profm : profile.second) {
-      f->dump_string(profm.first.c_str(), profm.second.c_str());
+      f->dump_string(profm.first.c_str(), profm.second);
     }
     f->close_section();
   }
