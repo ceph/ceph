@@ -371,6 +371,7 @@ void AdminSocket::do_accept()
   if (rval < 0) {
     ostringstream ss;
     ss << "ERROR: " << cpp_strerror(rval) << "\n";
+    ss << err.str() << "\n";
     bufferlist o;
     o.append(ss.str());
     o.claim_append(out);
