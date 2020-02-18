@@ -254,7 +254,7 @@ class AsioFrontend {
   int get_config_key_val(string name,
                          const string& type,
                          bufferlist *pbl);
-  int ssl_set_private_key(const string& name);
+  int ssl_set_private_key(const string& name, bool is_ssl_cert);
   int ssl_set_certificate_chain(const string& name);
   int init_ssl();
 #endif
@@ -530,7 +530,7 @@ int AsioFrontend::get_config_key_val(string name,
   return 0;
 }
 
-int AsioFrontend::ssl_set_private_key(const string& name)
+int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificate)
 {
   boost::system::error_code ec;
 
@@ -549,8 +549,13 @@ int AsioFrontend::ssl_set_private_key(const string& name)
   }
 
   if (ec) {
-    lderr(ctx()) << "failed to add ssl_private_key=" << name
-      << ": " << ec.message() << dendl;
+    if (!is_ssl_certificate) {
+      lderr(ctx()) << "failed to add ssl_private_key=" << name
+        << ": " << ec.message() << dendl;
+    } else {
+      lderr(ctx()) << "failed to use ssl_certificate=" << name
+        << " as a private key: " << ec.message() << dendl;
+    }
     return -ec.value();
   }
 
@@ -612,7 +617,7 @@ int AsioFrontend::init_ssl()
       key_is_cert = true;
     }
 
-    int r = ssl_set_private_key(*key);
+    int r = ssl_set_private_key(*key, key_is_cert);
     bool have_private_key = (r >= 0);
     if (r < 0) {
       if (!key_is_cert) {
