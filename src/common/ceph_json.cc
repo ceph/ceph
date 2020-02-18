@@ -887,21 +887,24 @@ void JSONFormattable::encode_json(const char *name, Formatter *f) const
   }
 }
 
-bool JSONFormattable::handle_value(const char *name, std::string_view s, bool quoted) {
+bool JSONFormattable::handle_value(std::string_view name, std::string_view s, bool quoted) {
   JSONFormattable *new_val;
   if (cur_enc->is_array()) {
     cur_enc->arr.push_back(JSONFormattable());
     new_val = &cur_enc->arr.back();
   } else {
     cur_enc->set_type(JSONFormattable::FMT_OBJ);
-    new_val  = &cur_enc->obj[name];
+    new_val  = &cur_enc->obj[string{name}];
   }
   new_val->set_type(JSONFormattable::FMT_VALUE);
   new_val->value.set(s, quoted);
 
   return false;
 }
-bool JSONFormattable::handle_open_section(const char *name, const char *ns, bool section_is_array) {
+
+bool JSONFormattable::handle_open_section(std::string_view name,
+                                          const char *ns,
+                                          bool section_is_array) {
   if (cur_enc->is_array()) {
     cur_enc->arr.push_back(JSONFormattable());
     cur_enc = &cur_enc->arr.back();
@@ -909,7 +912,7 @@ bool JSONFormattable::handle_open_section(const char *name, const char *ns, bool
       /* only open a new section if already nested,
        * otherwise root is the container
        */
-      cur_enc = &cur_enc->obj[name];
+    cur_enc = &cur_enc->obj[string{name}];
   }
   enc_stack.push_back(cur_enc);
 
