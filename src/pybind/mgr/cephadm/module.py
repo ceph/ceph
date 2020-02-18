@@ -1619,34 +1619,22 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         TODO:
           - add filtering by label
         """
-        if node_filter:
-            hosts = node_filter.nodes
-            self._require_hosts(hosts)
-            hosts = self._get_hosts(hosts)
-        else:
-            # this implies the returned hosts are registered
-            hosts = self._get_hosts()
-
-        @async_map_completion
-        def _get_inventory(host, host_info):
-            # type: (str, orchestrator.OutdatableData) -> orchestrator.InventoryNode
-
-            if host_info.outdated(self.device_cache_timeout) or refresh:
-                self.log.info("refresh stale inventory for '{}'".format(host))
-                out, err, code = self._run_cephadm(
-                    host, 'osd',
-                    'ceph-volume',
-                    ['--', 'inventory', '--format=json'])
-                data = json.loads(''.join(out))
-                host_info = orchestrator.OutdatableData(data)
-                self.inventory_cache[host] = host_info
+        if refresh:
+            # ugly sync path, FIXME someday perhaps?
+            if node_filter:
+                for host in node_filter.nodes:
+                    self._refresh_host_devices(host)
             else:
-                self.log.debug("reading cached inventory for '{}'".format(host))
+                for host, hi in self.inventory.items():
+                    self._refresh_host_devices(host)
 
-            devices = inventory.Devices.from_json(host_info.data)
-            return orchestrator.InventoryNode(host, devices)
-
-        return _get_inventory(hosts)
+        result = []
+        for host, dls in self.cache.devices.items():
+            if node_filter and host not in node_filter.nodes:
+                continue
+            result.append(orchestrator.InventoryNode(host,
+                                                     inventory.Devices(dls)))
+        return trivial_result(result)
 
     def blink_device_light(self, ident_fault, on, locs):
         @async_map_completion
