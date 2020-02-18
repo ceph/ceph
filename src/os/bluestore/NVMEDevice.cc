@@ -964,8 +964,6 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   bufferptr p = buffer::create_small_page_aligned(len);
   char *buf = p.c_str();
 
-  ceph_assert(ioc->nvme_task_first == nullptr);
-  ceph_assert(ioc->nvme_task_last == nullptr);
   make_read_tasks(this, off, ioc, buf, len, &t, off, len);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   aio_submit(ioc);
