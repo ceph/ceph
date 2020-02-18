@@ -1772,6 +1772,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     'osd', osd_id, host,
                     osd_uuid_map=osd_uuid_map)
 
+        self.cache.invalidate_host_devices(host)
         return "Created osd(s) on host '{}'".format(host)
 
     def _create_daemon(self, daemon_type, daemon_id, host,
