@@ -45,6 +45,27 @@ int RGWFrontendConfig::parse_config(const string& config,
   return 0;
 }
 
+void RGWFrontendConfig::set_default_config(RGWFrontendConfig& def_conf)
+{
+  const auto& def_conf_map = def_conf.get_config_map();
+
+  for (auto& entry : def_conf_map) {
+    if (config_map.find(entry.first) == config_map.end()) {
+      config_map.emplace(entry.first, entry.second);
+    }
+  }
+}
+
+std::optional<string> RGWFrontendConfig::get_val(const std::string& key)
+{
+ auto iter = config_map.find(key);
+ if (iter == config_map.end()) {
+   return std::nullopt;
+ }
+
+ return iter->second;
+}
+
 bool RGWFrontendConfig::get_val(const string& key, const string& def_val,
 				string *out)
 {
