@@ -22,7 +22,7 @@ from teuthology.config import config as teuth_config
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
 
-CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
+CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
 log = logging.getLogger(__name__)
 
