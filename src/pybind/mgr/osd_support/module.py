@@ -33,6 +33,7 @@ class OSDSupport(MgrModule):
     osd_ids: Set[int] = set()
     emptying_osds: Set[int] = set()
     check_osds: Set[int] = set()
+    empty: Set[int] = set()
 
     def __init__(self, *args, **kwargs):
         super(OSDSupport, self).__init__(*args, **kwargs)
@@ -79,7 +80,7 @@ class OSDSupport(MgrModule):
                 if osd_id not in self.emptying_osds:
                     self.osd_ids.add(osd_id)
             self.log.info(f'Found OSD(s) <{self.osd_ids}> in the queue.')
-            out = 'Started draining OSDs. Query progress with <ceph drain status>'
+            out = 'Started draining OSDs. Query progress with <ceph osd drain status>'
 
         elif cmd_prefix == 'osd drain status':
             # re-initialize it with an empty set on invocation (long running processes)
@@ -87,12 +88,13 @@ class OSDSupport(MgrModule):
             # assemble a set of emptying osds and to_be_emptied osds
             self.check_osds.update(self.emptying_osds)
             self.check_osds.update(self.osd_ids)
+            self.check_osds.update(self.empty)
 
             report = list()
             for osd_id in self.check_osds:
                 pgs = self.get_pg_count(osd_id)
                 report.append(dict(osd_id=osd_id, pgs=pgs))
-            out = f"{report}"
+            out = f"{json.dumps(report)}"
 
         elif cmd_prefix == 'osd drain stop':
             if not osd_ids:
@@ -130,7 +132,6 @@ class OSDSupport(MgrModule):
         """
         self.log.info("Starting mgr/osd_support")
         while self.run:
-            # Do some useful background work here.
 
             self.log.debug(f"Scheduled for draining: <{self.osd_ids}>")
             self.log.debug(f"Currently being drained: <{self.emptying_osds}>")
@@ -153,11 +154,30 @@ class OSDSupport(MgrModule):
             # remove osds that are marked as empty
             self.emptying_osds = self.emptying_osds.difference(empty_osds)
 
+            # move empty osds in the done queue until they disappear from ceph's view
+            # other modules need to know when OSDs are empty
+            for osd in empty_osds:
+                self.log.debug(f"Adding {osd} to list of empty OSDs")
+                self.empty.add(osd)
+
+            # remove from queue if no longer part of ceph cluster
+            self.cleanup()
+
             # fixed sleep interval of 10 seconds
             sleep_interval = 10
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             self.event.wait(sleep_interval)
             self.event.clear()
+
+    def cleanup(self):
+        """
+        Remove OSDs that are no longer in the ceph cluster from the
+        'done' list.
+        :return:
+        """
+        for osd in self.osds_not_in_cluster(list(self.empty)):
+            self.log.info(f"OSD: {osd} is not found in the cluster anymore. Removing")
+            self.empty.remove(osd)
 
     def shutdown(self):
         """
@@ -216,10 +236,8 @@ class OSDSupport(MgrModule):
         osd_nodes = osd_df.get('nodes', [])
         for osd_node in osd_nodes:
             if osd_node.get('id', None) == int(osd_id):
-                return osd_node.get('pgs')
-        errmsg = f"Could not find <pgs> field for osd_id: {osd_id} in osd_df data"
-        self.log.error(errmsg)
-        raise RuntimeError(errmsg)
+                return osd_node.get('pgs', -1)
+        return -1
 
     def get_osd_weight(self, osd_id: int) -> float:
         osd_df = self.osd_df()
