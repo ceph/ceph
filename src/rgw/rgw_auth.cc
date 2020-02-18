@@ -546,10 +546,10 @@ bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
       if (id.get_id() == user_info.user_id.id) {
         return true;
       }
-      for (auto subuser : user_info.subusers) {
+      if (subuser != NO_SUBUSER) {
         std::string user = user_info.user_id.id;
         user.append(":");
-        user.append(subuser.second.name);
+        user.append(subuser);
         if (user == id.get_id()) {
           return true;
         }
