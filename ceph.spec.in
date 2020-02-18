@@ -152,7 +152,12 @@ BuildRequires:	fuse-devel
 # enough.
 BuildRequires:	devtoolset-8-gcc-c++ >= 8.3.1-3.1
 %else
+%if 0%{with seastar} && 0%{?sle_version} == 150200
+# gcc-c++ is version 7 which does not work with "-DWITH_SEASTAR=ON"
+BuildRequires:	gcc9-c++
+%else
 BuildRequires:	gcc-c++
+%endif
 %endif
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
