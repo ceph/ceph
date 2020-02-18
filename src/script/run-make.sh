@@ -88,7 +88,11 @@ function prepare() {
     fi
 
     if test -f ./install-deps.sh ; then
-	    export WITH_SEASTAR=1
+            if [ "$WITHOUT_SEASTAR" ] ; then
+                true
+            else
+	        export WITH_SEASTAR=1
+            fi
 	    $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
