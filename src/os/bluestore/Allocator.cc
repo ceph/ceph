@@ -24,21 +24,27 @@ public:
     }
     if (admin_socket) {
       int r = admin_socket->register_command(
-	("bluestore allocator dump " + name).c_str(),
+	"bluestore allocator dump name=allocator,req=false,type=CephString",
 	this,
-	"dump allocator free regions");
+	"dump allocator free regions",
+	"allocator",
+	name);
       if (r != 0)
         alloc = nullptr; //some collision, disable
       if (alloc) {
         r = admin_socket->register_command(
-	  ("bluestore allocator score " + name).c_str(),
+	  "bluestore allocator score name=allocator,req=false,type=CephString",
 	  this,
-	  "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+	  "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)",
+	  "allocator",
+	  name);
         ceph_assert(r == 0);
         r = admin_socket->register_command(
-          ("bluestore allocator fragmentation " + name).c_str(),
+          "bluestore allocator fragmentation name=allocator,req=false,type=CephString",
           this,
-          "give allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+          "give allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)",
+	  "allocator",
+	  name);
         ceph_assert(r == 0);
       }
     }
@@ -57,7 +63,7 @@ public:
 	   std::ostream& ss,
 	   bufferlist& out) override {
     int r = 0;
-    if (command == "bluestore allocator dump " + name) {
+    if (command == "bluestore allocator dump") {
       f->open_array_section("free_regions");
       auto iterated_allocation = [&](size_t off, size_t len) {
         ceph_assert(len > 0);
@@ -72,11 +78,11 @@ public:
       };
       alloc->dump(iterated_allocation);
       f->close_section();
-    } else if (command == "bluestore allocator score " + name) {
+    } else if (command == "bluestore allocator score") {
       f->open_object_section("fragmentation_score");
       f->dump_float("fragmentation_rating", alloc->get_fragmentation_score());
       f->close_section();
-    } else if (command == "bluestore allocator fragmentation " + name) {
+    } else if (command == "bluestore allocator fragmentation") {
       f->open_object_section("fragmentation");
       f->dump_float("fragmentation_rating", alloc->get_fragmentation());
       f->close_section();
