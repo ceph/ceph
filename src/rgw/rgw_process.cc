@@ -129,22 +129,22 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
-  ret = op->verify_permission();
-  if (ret < 0) {
-    if (s->system_request) {
-      dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
-      dout(2) << "overriding permissions due to admin operation" << dendl;
-    } else {
-      return ret;
-    }
-  }
-
-    /* Check if OPA is used to authorize requests */
+  /* Check if OPA is used to authorize requests */
   if (s->cct->_conf->rgw_use_opa_authz) {
-    ret = rgw_opa_authorize(op, s);
+        ret = rgw_opa_authorize(op, s);
     if (ret < 0) {
       return ret;
+    }
+  } else {
+    ret = op->verify_permission();
+    if (ret < 0) {
+      if (s->system_request) {
+        dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+        dout(2) << "overriding permissions due to admin operation" << dendl;
+      } else {
+        return ret;
+      }
     }
   }
 
