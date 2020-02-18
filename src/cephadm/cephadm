@@ -1871,6 +1871,12 @@ def command_bootstrap():
         logger.info('Setting orchestrator backend to cephadm...')
         cli(['orch', 'set', 'backend', 'cephadm'])
 
+        def is_cephadm_available():
+            timeout=args.timeout if args.timeout else 30 # seconds
+            out = cli(['cephadm', 'get-user'], timeout=timeout)
+            return out
+        is_available('cephadm', is_cephadm_available)()
+
         logger.info('Generating ssh key...')
         cli(['cephadm', 'generate-key'])
         ssh_pub = cli(['cephadm', 'get-pub-key'])
