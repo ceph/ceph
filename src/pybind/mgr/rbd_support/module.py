@@ -115,7 +115,7 @@ class Module(MgrModule):
         }
     ]
     MODULE_OPTIONS = [
-        {'name': 'mirror_snapshot_schedule'},
+        {'name': MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME},
     ]
 
     mirror_snapshot_schedule = None
