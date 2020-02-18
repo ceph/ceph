@@ -779,7 +779,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def _check_hosts(self):
         self.log.debug('_check_hosts')
         bad_hosts = []
-        for host, v in self.inventory.items():
+        hosts = self.inventory.keys()
+        for host in hosts:
+            if host not in self.inventory:
+                continue
             self.log.debug(' checking %s' % host)
             try:
                 out, err, code = self._run_cephadm(
