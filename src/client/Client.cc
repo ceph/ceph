@@ -8908,9 +8908,28 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 {
   Inode *in = f->inode.get();
   int r;
+  bool whence_check = false;
   loff_t pos = -1;
 
-  if (whence == SEEK_END || whence == SEEK_DATA || whence == SEEK_HOLE) {
+  switch (whence) {
+  case SEEK_END:
+    whence_check = true;
+  break;
+
+#ifdef SEEK_DATA
+  case SEEK_DATA:
+    whence_check = true;
+  break;
+#endif
+
+#ifdef SEEK_HOLE
+  case SEEK_HOLE:
+    whence_check = true;
+  break;
+#endif
+  }
+
+  if (whence_check) {
     r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
     if (r < 0) {
       return r;
@@ -8930,6 +8949,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     pos = in->size + offset;
     break;
 
+#ifdef SEEK_DATA
   case SEEK_DATA:
     if (offset < 0 || static_cast<uint64_t>(offset) >= in->size) {
       r = -ENXIO;
@@ -8937,7 +8957,9 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     }
     pos = offset;
     break;
+#endif
 
+#ifdef SEEK_HOLE
   case SEEK_HOLE:
     if (offset < 0 || static_cast<uint64_t>(offset) >= in->size) {
       r = -ENXIO;
@@ -8946,6 +8968,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
       pos = in->size;
     }
     break;
+#endif
 
   default:
     ldout(cct, 1) << __func__ << ": invalid whence value " << whence << dendl;
