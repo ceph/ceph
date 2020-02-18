@@ -35,7 +35,7 @@ class TestOrchestratorCli(MgrTestCase):
     def setUp(self):
         super(TestOrchestratorCli, self).setUp()
 
-        self._load_module("orchestrator_cli")
+        self._load_module("orchestrator")
         self._load_module("test_orchestrator")
         self._orch_cmd("set", "backend", "test_orchestrator")
 
