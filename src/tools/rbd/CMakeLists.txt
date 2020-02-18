@@ -47,6 +47,7 @@ set(rbd_srcs
   action/Snap.cc
   action/Sparsify.cc
   action/Status.cc
+  action/TrashPurgeSchedule.cc
   action/Trash.cc
   action/Watch.cc)
 
