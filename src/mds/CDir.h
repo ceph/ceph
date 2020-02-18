@@ -719,11 +719,6 @@ protected:
 
   elist<CInode*> pop_lru_subdirs;
 
-  // and to provide density
-  int num_dentries_nested = 0;
-  int num_dentries_auth_subtree = 0;
-  int num_dentries_auth_subtree_nested = 0;
-
   std::unique_ptr<bloom_filter> bloom; // XXX not part of mempool::mds_co
   /* If you set up the bloom filter, you must keep it accurate!
    * It's deleted when you mark_complete() and is deliberately not serialized.*/
