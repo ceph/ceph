@@ -228,7 +228,7 @@ def delete_volume(mgr, volname):
     """
     # Tear down MDS daemons
     try:
-        completion = mgr.remove_mds(volname)
+        completion = mgr.remove_service('mds', volname)
         mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
     except (ImportError, orchestrator.OrchestratorError):
