@@ -22,6 +22,10 @@
 #include <boost/asio/ssl.hpp>
 
 #include "services/svc_config_key.h"
+#include "services/svc_zone.h"
+
+#include "rgw_zone.h"
+
 #endif
 
 #include "rgw_dmclock_async_scheduler.h"
@@ -512,6 +516,83 @@ int AsioFrontend::init()
 
 static string config_val_prefix = "config://";
 
+namespace {
+
+class ExpandMetaVar {
+  map<string, string> meta_map;
+
+public:
+  ExpandMetaVar(RGWSI_Zone *zone_svc) {
+    meta_map["realm"] = zone_svc->get_realm().get_name();
+    meta_map["realm_id"] = zone_svc->get_realm().get_id();
+    meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
+    meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
+    meta_map["zone"] = zone_svc->zone_name();
+    meta_map["zone_id"] = zone_svc->zone_id().id;
+  }
+
+  string process_str(const string& in);
+};
+
+string ExpandMetaVar::process_str(const string& in)
+{
+  if (meta_map.empty()) {
+    return in;
+  }
+
+  auto pos = in.find('$');
+  if (pos == std::string::npos) {
+    return in;
+  }
+
+  string out;
+  decltype(pos) last_pos = 0;
+
+  while (pos != std::string::npos) {
+    if (pos > last_pos) {
+      out += in.substr(last_pos, pos - last_pos);
+    }
+
+    string var;
+    const char *valid_chars = "abcdefghijklmnopqrstuvwxyz_";
+
+    size_t endpos = 0;
+    if (in[pos+1] == '{') {
+      // ...${foo_bar}...
+      endpos = in.find_first_not_of(valid_chars, pos + 2);
+      if (endpos != std::string::npos &&
+	  in[endpos] == '}') {
+	var = in.substr(pos + 2, endpos - pos - 2);
+	endpos++;
+      }
+    } else {
+      // ...$foo...
+      endpos = in.find_first_not_of(valid_chars, pos + 1);
+      if (endpos != std::string::npos)
+	var = in.substr(pos + 1, endpos - pos - 1);
+      else
+	var = in.substr(pos + 1);
+    }
+    string var_source = in.substr(pos, endpos - pos);
+    last_pos = endpos;
+
+    auto iter = meta_map.find(var);
+    if (iter != meta_map.end()) {
+      out += iter->second;
+    } else {
+      out += var_source;
+    }
+    pos = in.find('$', last_pos);
+  }
+  if (last_pos != std::string::npos) {
+    out += in.substr(last_pos);
+  }
+
+  return out;
+}
+
+} /* anonymous namespace */
+
 int AsioFrontend::get_config_key_val(string name,
                                      const string& type,
                                      bufferlist *pbl)
@@ -616,6 +697,11 @@ int AsioFrontend::init_ssl()
       key = cert;
       key_is_cert = true;
     }
+
+    ExpandMetaVar emv(env.store->svc()->zone);
+
+    cert = emv.process_str(*cert);
+    key = emv.process_str(*key);
 
     int r = ssl_set_private_key(*key, key_is_cert);
     bool have_private_key = (r >= 0);
