@@ -13,6 +13,7 @@ from .common import NotAuthorizedError
 from .mirror_snapshot_schedule import MirrorSnapshotScheduleHandler
 from .perf import PerfHandler
 from .task import TaskHandler
+from .trash_purge_schedule import TrashPurgeScheduleHandler
 
 
 class Module(MgrModule):
@@ -112,21 +113,52 @@ class Module(MgrModule):
                    "name=task_id,type=CephString,req=false ",
             "desc": "List pending or running asynchronous tasks",
             "perm": "r"
+        },
+        {
+            "cmd": "rbd trash purge schedule add "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Add rbd trash purge schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd trash purge schedule remove "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString,req=false "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Remove rbd trash purge schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd trash purge schedule list "
+                   "name=level_spec,type=CephString,req=false ",
+            "desc": "List rbd trash purge schedule",
+            "perm": "r"
+        },
+        {
+            "cmd": "rbd trash purge schedule status "
+                   "name=level_spec,type=CephString,req=false ",
+            "desc": "Show rbd trash purge schedule status",
+            "perm": "r"
         }
     ]
     MODULE_OPTIONS = [
         {'name': MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME},
+        {'name': TrashPurgeScheduleHandler.MODULE_OPTION_NAME},
     ]
 
     mirror_snapshot_schedule = None
     perf = None
     task = None
+    trash_purge_schedule = None
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.mirror_snapshot_schedule = MirrorSnapshotScheduleHandler(self)
         self.perf = PerfHandler(self)
         self.task = TaskHandler(self)
+        self.trash_purge_schedule = TrashPurgeScheduleHandler(self)
 
     def handle_command(self, inbuf, cmd):
         # ensure we have latest pools available
@@ -142,6 +174,9 @@ class Module(MgrModule):
                     return self.perf.handle_command(inbuf, prefix[9:], cmd)
                 elif prefix.startswith('rbd task '):
                     return self.task.handle_command(inbuf, prefix[9:], cmd)
+                elif prefix.startswith('rbd trash purge schedule '):
+                    return self.trash_purge_schedule.handle_command(
+                        inbuf, prefix[25:], cmd)
 
             except NotAuthorizedError:
                 raise
