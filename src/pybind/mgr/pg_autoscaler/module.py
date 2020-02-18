@@ -449,7 +449,7 @@ class PgAutoscaler(MgrModule):
         too_much_target_bytes = []
         for root_id, total in iteritems(total_bytes):
             total_target = total_target_bytes[root_id]
-            if total_target > 0 and total > root_map[root_id].capacity:
+            if total_target > 0 and total > root_map[root_id].capacity and root_map[root_id].capacity:
                 too_much_target_bytes.append(
                     'Pools %s overcommit available storage by %.03fx due to '
                     'target_size_bytes %s on pools %s' % (
@@ -459,7 +459,7 @@ class PgAutoscaler(MgrModule):
                         target_bytes_pools[root_id]
                     )
                 )
-            elif total_target > root_map[root_id].capacity:
+            elif total_target > root_map[root_id].capacity and root_map[root_id].capacity:
                 too_much_target_bytes.append(
                     'Pools %s overcommit available storage by %.03fx due to '
                     'collective target_size_bytes of %s' % (
