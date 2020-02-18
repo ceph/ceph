@@ -669,6 +669,7 @@ def enable_disable_kdb(ctx, config):
             except run.CommandFailedError:
                 log.warn('Kernel does not support kdb')
 
+
 def wait_for_reboot(ctx, need_install, timeout, distro=False):
     """
     Loop reconnecting and checking kernel versions until
@@ -704,6 +705,25 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
         time.sleep(1)
 
 
+def get_version_of_running_kernel(remote):
+    """
+    Get the current running kernel version in a format that can be compared
+    with the output of "rpm -q kernel..."
+    """
+    dist_release = remote.os.name
+    uname_r = remote.sh("uname -r").strip()
+    current = None
+    if dist_release in ['opensuse', 'sle']:
+        # "uname -r" returns              4.12.14-lp151.28.36-default
+        # "rpm -q kernel-default" returns 4.12.14-lp151.28.36.1.x86_64
+        # In order to be able to meaningfully check whether the former
+        # is "in" the latter, we have to chop off the "-default".
+        current = re.sub(r"-default$", "", uname_r)
+    else:
+        current = uname_r
+    return current
+
+
 def need_to_install_distro(remote):
     """
     Installing kernels on rpm won't setup grub/boot into them.  This installs
@@ -715,9 +735,7 @@ def need_to_install_distro(remote):
     """
     dist_release = remote.os.name
     package_type = remote.os.package_type
-    output, err_mess = StringIO(), StringIO()
-    remote.run(args=['uname', '-r'], stdout=output)
-    current = output.getvalue().strip()
+    current = get_version_of_running_kernel(remote)
     log.info("Running kernel on {node}: {version}".format(
         node=remote.shortname, version=current))
     installed_version = None
@@ -735,11 +753,13 @@ def need_to_install_distro(remote):
                 install_stdout, flags=re.MULTILINE)
             if 'Nothing to do' in install_stdout:
                 installed_version = match.groups()[0] if match else ''
+                err_mess = StringIO()
                 err_mess.truncate(0)
                 remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum',
                                  'reinstall', 'kernel', run.Raw('||'), 'true'],
                            stderr=err_mess)
                 reinstall_stderr = err_mess.getvalue()
+                err_mess.close()
                 if 'Skipping the running kernel' in reinstall_stderr:
                     running_version = re.search(
                         "Skipping the running kernel: (.*)",
@@ -751,16 +771,13 @@ def need_to_install_distro(remote):
                 else:
                     remote.run(args=['sudo', 'yum', 'reinstall', '-y', 'kernel',
                                      run.Raw('||'), 'true'])
-        # reset stringIO output.
-        output.truncate(0)
         newest = get_latest_image_version_rpm(remote)
 
     if package_type == 'deb':
         newest = get_latest_image_version_deb(remote, dist_release)
 
-    output.close()
-    err_mess.close()
     if current in newest or current.replace('-', '_') in newest:
+        log.info('Newest distro kernel installed and running')
         return False
     log.info(
         'Not newest distro kernel. Current: {cur} Expected: {new}'.format(
@@ -1037,6 +1054,7 @@ def get_latest_image_version_rpm(remote):
     """
     dist_release = remote.os.name
     kernel_pkg_name = None
+    version = None
     if dist_release in ['opensuse', 'sle']: 
         kernel_pkg_name = "kernel-default"
     else:
@@ -1055,6 +1073,8 @@ def get_latest_image_version_rpm(remote):
     for kernel in proc.stdout.getvalue().split():
         if kernel.startswith('kernel'):
             if 'ceph' not in kernel:
+                if dist_release in ['opensuse', 'sle']:
+                    kernel = kernel.split()[0]
                 version = kernel.split(str(kernel_pkg_name) + '-')[1]
     log.debug("get_latest_image_version_rpm: %s", version)
     return version
