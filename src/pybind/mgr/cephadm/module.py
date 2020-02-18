@@ -30,7 +30,8 @@ from ceph.deployment.drive_selection import selector
 from mgr_module import MgrModule
 import mgr_util
 import orchestrator
-from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError, HostSpec
+from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError, HostSpec, \
+    CLICommandMeta
 
 from . import remotes
 
@@ -284,6 +285,7 @@ def with_daemons(daemon_type=None,
         return wrapper
     return decorator
 
+@six.add_metaclass(CLICommandMeta)
 class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     _STORE_HOST_PREFIX = "host"

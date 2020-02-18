@@ -34,7 +34,7 @@ the dashboard, to work with various different backends.
             volumes [label="mgr/volumes"]
             rook [label="mgr/rook"]
             dashboard [label="mgr/dashboard"]
-            orchestrator_cli [label="mgr/orchestrator_cli"]
+            orchestrator_cli [label="mgr/orchestrator"]
             orchestrator [label="Orchestrator Interface"]
             cephadm [label="mgr/cephadm"]
 
@@ -179,7 +179,7 @@ In detail, orchestrators need to explicitly deal with different kinds of errors:
 
 4. Input validation errors
 
-   The ``orchestrator_cli`` module and other calling modules are supposed to
+   The ``orchestrator`` module and other calling modules are supposed to
    provide meaningful error messages.
 
    See :class:`OrchestratorValidationError`.

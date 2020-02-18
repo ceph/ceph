@@ -11,7 +11,7 @@ import pickle
 import sys
 import time
 from collections import namedtuple
-from functools import wraps
+from functools import wraps, partial
 import uuid
 import string
 import random
@@ -29,7 +29,7 @@ from mgr_util import format_bytes
 try:
     from ceph.deployment.drive_group import DriveGroupSpec
     from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
-        Type, Sequence
+        Type, Sequence, Dict
 except ImportError:
     pass
 
@@ -46,70 +46,70 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
             res += '=' + self.name
         return res
 
+    @classmethod
+    def parse(cls, host, require_network=True):
+        # type: (str, bool) -> HostPlacementSpec
+        """
+        Split host into host, network, and (optional) daemon name parts.  The network
+        part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
+        e.g.,
+          "myhost"
+          "myhost=name"
+          "myhost:1.2.3.4"
+          "myhost:1.2.3.4=name"
+          "myhost:1.2.3.0/24"
+          "myhost:1.2.3.0/24=name"
+          "myhost:[v2:1.2.3.4:3000]=name"
+          "myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
+        """
+        # Matches from start to : or = or until end of string
+        host_re = r'^(.*?)(:|=|$)'
+        # Matches from : to = or until end of string
+        ip_re = r':(.*?)(=|$)'
+        # Matches from = to end of string
+        name_re = r'=(.*?)$'
 
-def parse_host_placement_specs(host, require_network=True):
-    # type: (str, Optional[bool]) -> HostPlacementSpec
-    """
-    Split host into host, network, and (optional) daemon name parts.  The network
-    part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
-    e.g.,
-      "myhost"
-      "myhost=name"
-      "myhost:1.2.3.4"
-      "myhost:1.2.3.4=name"
-      "myhost:1.2.3.0/24"
-      "myhost:1.2.3.0/24=name"
-      "myhost:[v2:1.2.3.4:3000]=name"
-      "myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
-    """
-    # Matches from start to : or = or until end of string
-    host_re = r'^(.*?)(:|=|$)'
-    # Matches from : to = or until end of string
-    ip_re = r':(.*?)(=|$)'
-    # Matches from = to end of string
-    name_re = r'=(.*?)$'
+        # assign defaults
+        host_spec = cls('', '', '')
 
-    # assign defaults
-    host_spec = HostPlacementSpec('', '', '')
+        match_host = re.search(host_re, host)
+        if match_host:
+            host_spec = host_spec._replace(hostname=match_host.group(1))
 
-    match_host = re.search(host_re, host)
-    if match_host:
-        host_spec = host_spec._replace(hostname=match_host.group(1))
+        name_match = re.search(name_re, host)
+        if name_match:
+            host_spec = host_spec._replace(name=name_match.group(1))
 
-    name_match = re.search(name_re, host)
-    if name_match:
-        host_spec = host_spec._replace(name=name_match.group(1))
+        ip_match = re.search(ip_re, host)
+        if ip_match:
+            host_spec = host_spec._replace(network=ip_match.group(1))
 
-    ip_match = re.search(ip_re, host)
-    if ip_match:
-        host_spec = host_spec._replace(network=ip_match.group(1))
+        if not require_network:
+            return host_spec
 
-    if not require_network:
+        from ipaddress import ip_network, ip_address
+        networks = list()  # type: List[str]
+        network = host_spec.network
+        # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
+        if ',' in network:
+            networks = [x for x in network.split(',')]
+        else:
+            networks.append(network)
+        for network in networks:
+            # only if we have versioned network configs
+            if network.startswith('v') or network.startswith('[v'):
+                network = network.split(':')[1]
+            try:
+                # if subnets are defined, also verify the validity
+                if '/' in network:
+                    ip_network(six.text_type(network))
+                else:
+                    ip_address(six.text_type(network))
+            except ValueError as e:
+                # logging?
+                raise e
+
         return host_spec
-
-    from ipaddress import ip_network, ip_address
-    networks = list()  # type: List[str]
-    network = host_spec.network
-    # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
-    if ',' in network:
-        networks = [x for x in network.split(',')]
-    else:
-        networks.append(network)
-    for network in networks:
-        # only if we have versioned network configs
-        if network.startswith('v') or network.startswith('[v'):
-            network = network.split(':')[1]
-        try:
-            # if subnets are defined, also verify the validity
-            if '/' in network:
-                ip_network(six.text_type(network))
-            else:
-                ip_address(six.text_type(network))
-        except ValueError as e:
-            # logging?
-            raise e
-
-    return host_spec
 
 
 class OrchestratorError(Exception):
@@ -148,7 +148,13 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
             msg = 'This Orchestrator does not support `{}`'.format(prefix)
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
-    return CLICommand(prefix, cmd_args, desc, perm)(wrapper)
+    # misuse partial to copy `wrapper`
+    wrapper_copy = partial(wrapper)
+    wrapper_copy._prefix = prefix  # type: ignore
+    wrapper_copy._cli_command = CLICommand(prefix, cmd_args, desc, perm)  # type: ignore
+    wrapper_copy._cli_command.func = wrapper_copy  # type: ignore
+
+    return wrapper_copy
 
 
 def _cli_command(perm):
@@ -159,6 +165,32 @@ def _cli_command(perm):
 
 _cli_read_command = _cli_command('r')
 _cli_write_command = _cli_command('rw')
+
+
+class CLICommandMeta(type):
+    """
+    This is a workaround for the use of a global variable CLICommand.COMMANDS which
+    prevents modules from importing any other module.
+
+    We make use of CLICommand, except for the use of the global variable.
+    """
+    def __init__(cls, name, bases, dct):
+        super(CLICommandMeta, cls).__init__(name, bases, dct)
+        dispatch = {}  # type: Dict[str, CLICommand]
+        for v in dct.values():
+            try:
+                dispatch[v._prefix] = v._cli_command
+            except AttributeError:
+                pass
+
+        def handle_command(self, inbuf, cmd):
+            if cmd['prefix'] not in dispatch:
+                return self.handle_command(inbuf, cmd)
+
+            return dispatch[cmd['prefix']].call(self, cmd, inbuf)
+
+        cls.COMMANDS = [cmd.dump_cmd() for cmd in dispatch.values()]
+        cls.handle_command = handle_command
 
 
 def _no_result():
@@ -1089,7 +1121,7 @@ class PlacementSpec(object):
             if all([isinstance(host, HostPlacementSpec) for host in hosts]):
                 self.hosts = hosts
             else:
-                self.hosts = [parse_host_placement_specs(x, require_network=False) for x in hosts if x]
+                self.hosts = [HostPlacementSpec.parse(x, require_network=False) for x in hosts if x]
 
 
         self.count = count  # type: Optional[int]
@@ -1593,14 +1625,14 @@ class OrchestratorClientMixin(Orchestrator):
 
         :raises RuntimeError: If the remote method failed.
         :raises OrchestratorError: orchestrator failed to perform
-        :raises ImportError: no `orchestrator_cli` module or backend not found.
+        :raises ImportError: no `orchestrator` module or backend not found.
         """
         mgr = self.__get_mgr()
 
         try:
             o = mgr._select_orchestrator()
         except AttributeError:
-            o = mgr.remote('orchestrator_cli', '_select_orchestrator')
+            o = mgr.remote('orchestrator', '_select_orchestrator')
 
         if o is None:
             raise NoOrchestrator()
@@ -1619,7 +1651,7 @@ class OrchestratorClientMixin(Orchestrator):
         :param completions: List of Completions
         :raises NoOrchestrator:
         :raises RuntimeError: something went wrong while calling the process method.
-        :raises ImportError: no `orchestrator_cli` module or backend not found.
+        :raises ImportError: no `orchestrator` module or backend not found.
         """
         while any(not c.has_result for c in completions):
             self.process(completions)
