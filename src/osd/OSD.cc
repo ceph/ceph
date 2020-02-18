@@ -1891,7 +1891,7 @@ void OSDService::clear_sent_ready_to_merge()
   sent_ready_to_merge_source.clear();
 }
 
-void OSDService::prune_sent_ready_to_merge(OSDMapRef& osdmap)
+void OSDService::prune_sent_ready_to_merge(const OSDMapRef& osdmap)
 {
   std::lock_guard l(merge_lock);
   auto i = sent_ready_to_merge_source.begin();
@@ -2422,7 +2422,7 @@ void OSD::asok_command(
     }
     spg_t pcand;
     PGRef pg;
-    if (osdmap->get_primary_shard(pgid, &pcand) &&
+    if (get_osdmap()->get_primary_shard(pgid, &pcand) &&
 	(pg = _lookup_lock_pg(pcand))) {
       if (pg->is_primary()) {
 	cmdmap_t new_cmdmap = cmdmap;
@@ -3276,6 +3276,7 @@ float OSD::get_osd_snap_trim_sleep()
 
 int OSD::init()
 {
+  OSDMapRef osdmap;
   CompatSet initial, diff;
   std::lock_guard lock(osd_lock);
   if (is_stopping())
@@ -3394,13 +3395,14 @@ int OSD::init()
   startup_time = ceph::mono_clock::now();
 
   // load up "current" osdmap
-  assert_warn(!osdmap);
-  if (osdmap) {
+  assert_warn(!get_osdmap());
+  if (get_osdmap()) {
     derr << "OSD::init: unable to read current osdmap" << dendl;
     r = -EINVAL;
     goto out;
   }
   osdmap = get_map(superblock.current_epoch);
+  set_osdmap(osdmap);
 
   // make sure we don't have legacy pgs deleting
   {
@@ -4152,9 +4154,9 @@ int OSD::shutdown()
   }
 
   // note unmount epoch
-  dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
+  dout(10) << "noting clean unmount in epoch " << get_osdmap_epoch() << dendl;
   superblock.mounted = service.get_boot_epoch();
-  superblock.clean_thru = osdmap->get_epoch();
+  superblock.clean_thru = get_osdmap_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
   int r = store->queue_transaction(service.meta_ch, std::move(t));
@@ -4218,7 +4220,7 @@ int OSD::shutdown()
   osd_lock.unlock();
   {
     std::unique_lock l{map_lock};
-    osdmap = OSDMapRef();
+    set_osdmap(OSDMapRef());
   }
   for (auto s : shards) {
     std::lock_guard l(s->osdmap_lock);
@@ -4694,7 +4696,7 @@ void OSD::load_pgs()
     if (map_epoch > 0) {
       OSDMapRef pgosdmap = service.try_get_map(map_epoch);
       if (!pgosdmap) {
-	if (!osdmap->have_pg_pool(pgid.pool())) {
+	if (!get_osdmap()->have_pg_pool(pgid.pool())) {
 	  derr << __func__ << ": could not find map for epoch " << map_epoch
 	       << " on pg " << pgid << ", but the pool is not present in the "
 	       << "current map, so this is probably a result of bug 10617.  "
@@ -4710,7 +4712,7 @@ void OSD::load_pgs()
       }
       pg = _make_pg(pgosdmap, pgid);
     } else {
-      pg = _make_pg(osdmap, pgid);
+      pg = _make_pg(get_osdmap(), pgid);
     }
     if (!pg) {
       recursive_remove_collection(cct, store, pgid, *it);
@@ -4908,7 +4910,7 @@ void OSD::resume_creating_pg()
     while (spare_pgs > 0 && pg != pending_creates_from_osd.cend()) {
       dout(20) << __func__ << " pg " << pg->first << dendl;
       vector<int> acting;
-      osdmap->pg_to_up_acting_osds(pg->first.pgid, nullptr, nullptr, &acting, nullptr);
+      get_osdmap()->pg_to_up_acting_osds(pg->first.pgid, nullptr, nullptr, &acting, nullptr);
       service.queue_want_pg_temp(pg->first.pgid, twiddle(acting), true);
       pg = pending_creates_from_osd.erase(pg);
       do_sub_pg_creates = true;
@@ -4926,7 +4928,7 @@ void OSD::resume_creating_pg()
       do_renew_subs = true;
     }
   }
-  version_t start = osdmap->get_epoch() + 1;
+  version_t start = get_osdmap_epoch() + 1;
   if (have_pending_creates) {
     // don't miss any new osdmap deleting PGs
     if (monc->sub_want("osdmap", start, 0)) {
@@ -4968,7 +4970,7 @@ void OSD::build_initial_pg_history(
     pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
   ostringstream debug;
-  for (epoch_t e = created + 1; e <= osdmap->get_epoch(); ++e) {
+  for (epoch_t e = created + 1; e <= get_osdmap_epoch(); ++e) {
     OSDMapRef osdmap = service.get_map(e);
     int new_up_primary, new_acting_primary;
     vector<int> new_up, new_acting;
@@ -5034,7 +5036,7 @@ void OSD::_add_heartbeat_peer(int p)
 
   map<int,HeartbeatInfo>::iterator i = heartbeat_peers.find(p);
   if (i == heartbeat_peers.end()) {
-    pair<ConnectionRef,ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
+    pair<ConnectionRef,ConnectionRef> cons = service.get_con_osd_hb(p, get_osdmap_epoch());
     if (!cons.first)
       return;
     assert(cons.second);
@@ -5064,7 +5066,7 @@ void OSD::_add_heartbeat_peer(int p)
   } else {
     hi = &i->second;
   }
-  hi->epoch = osdmap->get_epoch();
+  hi->epoch = get_osdmap_epoch();
 }
 
 void OSD::_remove_heartbeat_peer(int n)
@@ -5124,7 +5126,7 @@ void OSD::maybe_update_heartbeat_peers()
     _get_pgs(&pgs);
     for (auto& pg : pgs) {
       pg->with_heartbeat_peers([&](int peer) {
-	  if (osdmap->is_up(peer)) {
+	  if (get_osdmap()->is_up(peer)) {
 	    _add_heartbeat_peer(peer);
 	  }
 	});
@@ -5133,10 +5135,10 @@ void OSD::maybe_update_heartbeat_peers()
 
   // include next and previous up osds to ensure we have a fully-connected set
   set<int> want, extras;
-  const int next = osdmap->get_next_up_osd_after(whoami);
+  const int next = get_osdmap()->get_next_up_osd_after(whoami);
   if (next >= 0)
     want.insert(next);
-  int prev = osdmap->get_previous_up_osd_before(whoami);
+  int prev = get_osdmap()->get_previous_up_osd_before(whoami);
   if (prev >= 0 && prev != next)
     want.insert(prev);
 
@@ -5145,7 +5147,7 @@ void OSD::maybe_update_heartbeat_peers()
   auto min_down = cct->_conf.get_val<uint64_t>("mon_osd_min_down_reporters");
   auto subtree = cct->_conf.get_val<string>("mon_osd_reporter_subtree_level");
   auto limit = std::max(min_down, (uint64_t)cct->_conf->osd_heartbeat_min_peers);
-  osdmap->get_random_up_osds_by_subtree(
+  get_osdmap()->get_random_up_osds_by_subtree(
     whoami, subtree, limit, want, &want);
 
   for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
@@ -5157,13 +5159,13 @@ void OSD::maybe_update_heartbeat_peers()
   // remove down peers; enumerate extras
   map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
   while (p != heartbeat_peers.end()) {
-    if (!osdmap->is_up(p->first)) {
+    if (!get_osdmap()->is_up(p->first)) {
       int o = p->first;
       ++p;
       _remove_heartbeat_peer(o);
       continue;
     }
-    if (p->second.epoch < osdmap->get_epoch()) {
+    if (p->second.epoch < get_osdmap_epoch()) {
       extras.insert(p->first);
     }
     ++p;
@@ -5178,7 +5180,7 @@ void OSD::maybe_update_heartbeat_peers()
       extras.insert(n);
       _add_heartbeat_peer(n);
     }
-    n = osdmap->get_next_up_osd_after(n);
+    n = get_osdmap()->get_next_up_osd_after(n);
     if (n == next)
       break;  // came full circle; stop
   }
@@ -5197,7 +5199,7 @@ void OSD::maybe_update_heartbeat_peers()
   // clean up stale failure pending
   for (auto it = failure_pending.begin(); it != failure_pending.end();) {
     if (heartbeat_peers.count(it->first) == 0) {
-      send_still_alive(osdmap->get_epoch(), it->first, it->second.second);
+      send_still_alive(get_osdmap_epoch(), it->first, it->second.second);
       failure_pending.erase(it++);
     } else {
       it++;
@@ -5740,7 +5742,7 @@ void OSD::heartbeat()
     if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval && is_active()) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
-      osdmap_subscribe(osdmap->get_epoch() + 1, false);
+      osdmap_subscribe(get_osdmap_epoch() + 1, false);
     }
   }
 
@@ -5815,7 +5817,7 @@ void OSD::tick()
     if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval) {
       last_mon_heartbeat = now;
       dout(1) << __func__ << " checking mon for new map" << dendl;
-      osdmap_subscribe(osdmap->get_epoch() + 1, false);
+      osdmap_subscribe(get_osdmap_epoch() + 1, false);
     }
   }
 
@@ -6282,7 +6284,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   }
 
   const auto& monmap = monc->monmap;
-
+  const auto osdmap = get_osdmap();
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->get_epoch() == 0) {
     derr << "waiting for initial osdmap" << dendl;
@@ -6324,7 +6326,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 		     << dendl;
 	    l.unlock();
 	    for (auto shard : shards) {
-	      shard->wait_min_pg_epoch(osdmap->get_epoch());
+	      shard->wait_min_pg_epoch(get_osdmap_epoch());
 	    }
 	    l.lock();
 	  }
@@ -6396,7 +6398,7 @@ void OSD::send_full_update()
   set<string> s;
   OSDMap::calc_state_set(state, s);
   dout(10) << __func__ << " want state " << s << dendl;
-  monc->send_mon_message(new MOSDFull(osdmap->get_epoch(), state));
+  monc->send_mon_message(new MOSDFull(get_osdmap_epoch(), state));
 }
 
 void OSD::start_waiting_for_healthy()
@@ -6406,7 +6408,7 @@ void OSD::start_waiting_for_healthy()
   last_heartbeat_resample = utime_t();
 
   // subscribe to osdmap updates, in case our peers really are known to be dead
-  osdmap_subscribe(osdmap->get_epoch() + 1, false);
+  osdmap_subscribe(get_osdmap_epoch() + 1, false);
 }
 
 bool OSD::_is_healthy()
@@ -6586,7 +6588,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
 void OSD::queue_want_up_thru(epoch_t want)
 {
   std::shared_lock map_locker{map_lock};
-  epoch_t cur = osdmap->get_up_thru(whoami);
+  epoch_t cur = get_osdmap()->get_up_thru(whoami);
   std::lock_guard report_locker(mon_report_lock);
   if (want > up_thru_wanted) {
     dout(10) << "queue_want_up_thru now " << want << " (was " << up_thru_wanted << ")"
@@ -6604,6 +6606,7 @@ void OSD::queue_want_up_thru(epoch_t want)
 void OSD::send_alive()
 {
   ceph_assert(ceph_mutex_is_locked(mon_report_lock));
+  const auto osdmap = get_osdmap();
   if (!osdmap->exists(whoami))
     return;
   epoch_t up_thru = osdmap->get_up_thru(whoami);
@@ -6687,6 +6690,7 @@ void OSD::send_failures()
   ceph_assert(ceph_mutex_is_locked(mon_report_lock));
   std::lock_guard l(heartbeat_lock);
   utime_t now = ceph_clock_now();
+  const auto osdmap = get_osdmap();
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
     if (!failure_pending.count(osd)) {
@@ -6719,7 +6723,7 @@ void OSD::cancel_pending_failures()
   while (it != failure_pending.end()) {
     dout(10) << __func__ << " canceling in-flight failure report for osd."
              << it->first << dendl;
-    send_still_alive(osdmap->get_epoch(), it->first, it->second.second);
+    send_still_alive(get_osdmap_epoch(), it->first, it->second.second);
     failure_pending.erase(it++);
   }
 }
@@ -6736,7 +6740,7 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
     MOSDBeacon* beacon = nullptr;
     {
       std::lock_guard l{min_last_epoch_clean_lock};
-      beacon = new MOSDBeacon(osdmap->get_epoch(),
+      beacon = new MOSDBeacon(get_osdmap_epoch(),
 			      min_last_epoch_clean,
 			      superblock.last_purged_snaps_scrub);
       beacon->pgs = min_last_epoch_clean_pgs;
@@ -7204,7 +7208,7 @@ void OSD::_dispatch(Message *m)
       if (m->trace)
         op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
       // no map?  starting up?
-      if (!osdmap) {
+      if (!get_osdmap()) {
         dout(7) << "no OSDMap, not booted" << dendl;
 	logger->inc(l_osd_waiting_for_map);
         waiting_for_osdmap.push_back(op);
@@ -7240,7 +7244,7 @@ void OSD::handle_scrub(MOSDScrub *m)
     vector<spg_t> v;
     for (auto pgid : m->scrub_pgs) {
       spg_t pcand;
-      if (osdmap->get_primary_shard(pgid, &pcand) &&
+      if (get_osdmap()->get_primary_shard(pgid, &pcand) &&
 	  std::find(spgs.begin(), spgs.end(), pcand) != spgs.end()) {
 	v.push_back(pcand);
       }
@@ -7540,11 +7544,11 @@ MPGStats* OSD::collect_pg_stats()
   osd_stat_t cur_stat = service.get_osd_stat();
   cur_stat.os_perf_stat = store->get_cur_stats();
 
-  auto m = new MPGStats(monc->get_fsid(), osdmap->get_epoch());
+  auto m = new MPGStats(monc->get_fsid(), get_osdmap_epoch());
   m->osd_stat = cur_stat;
 
   std::lock_guard lec{min_last_epoch_clean_lock};
-  min_last_epoch_clean = osdmap->get_epoch();
+  min_last_epoch_clean = get_osdmap_epoch();
   min_last_epoch_clean_pgs.clear();
 
   std::set<int64_t> pool_set;
@@ -7639,7 +7643,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
 {
   // ask?
   if (waiting_for_osdmap.empty()) {
-    osdmap_subscribe(osdmap->get_epoch() + 1, false);
+    osdmap_subscribe(get_osdmap_epoch() + 1, false);
   }
 
   logger->inc(l_osd_waiting_for_map);
@@ -7655,7 +7659,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
 void OSD::note_down_osd(int peer)
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
-  cluster_messenger->mark_down_addrs(osdmap->get_cluster_addrs(peer));
+  cluster_messenger->mark_down_addrs(get_osdmap()->get_cluster_addrs(peer));
 
   std::lock_guard l{heartbeat_lock};
   failure_queue.erase(peer);
@@ -7756,10 +7760,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 	osd_min = min;
       }
     }
+    epoch_t osdmap_epoch = get_osdmap_epoch();
     if (osd_min > 0 &&
-	osdmap->get_epoch() > max_lag &&
-	osdmap->get_epoch() - max_lag > osd_min) {
-      epoch_t need = osdmap->get_epoch() - max_lag;
+	osdmap_epoch > max_lag &&
+	osdmap_epoch - max_lag > osd_min) {
+      epoch_t need = osdmap_epoch - max_lag;
       dout(10) << __func__ << " waiting for pgs to catch up (need " << need
 	       << " max_lag " << max_lag << ")" << dendl;
       for (auto shard : shards) {
@@ -7908,7 +7913,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       inc.decode(p);
 
       if (o->apply_incremental(inc) < 0) {
-	derr << "ERROR: bad fsid?  i have " << osdmap->get_fsid() << " and inc has " << inc.fsid << dendl;
+	derr << "ERROR: bad fsid?  i have " << get_osdmap()->get_fsid() << " and inc has " << inc.fsid << dendl;
 	ceph_abort_msg("bad fsid");
       }
 
@@ -8069,6 +8074,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   bool do_shutdown = false;
   bool do_restart = false;
   bool network_error = false;
+  OSDMapRef osdmap;
 
   // advance through the new maps
   for (epoch_t cur = first; cur <= last; cur++) {
@@ -8086,6 +8092,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     // kill connections to newly down osds
     bool waited_for_reservations = false;
     set<int> old;
+    osdmap = get_osdmap();
     osdmap->get_all_osds(old);
     for (set<int>::iterator p = old.begin(); p != old.end(); ++p) {
       if (*p != whoami &&
@@ -8117,7 +8124,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       }
     }
 
-    osdmap = newmap;
+    osdmap = std::move(newmap);
+    set_osdmap(osdmap);
     epoch_t up_epoch;
     epoch_t boot_epoch;
     service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
@@ -8314,6 +8322,7 @@ void OSD::check_osdmap_features()
   // current memory location, and setting or clearing bits in integer
   // fields, and we are the only writer, this is not a problem.
 
+  const auto osdmap = get_osdmap();
   {
     Messenger::Policy p = client_messenger->get_default_policy();
     uint64_t mask;
@@ -8632,6 +8641,7 @@ bool OSD::advance_pg(
 void OSD::consume_map()
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
+  auto osdmap = get_osdmap();
   dout(7) << "consume_map version " << osdmap->get_epoch() << dendl;
 
   /** make sure the cluster is speaking in SORTBITWISE, because we don't
@@ -8749,6 +8759,7 @@ void OSD::consume_map()
 void OSD::activate_map()
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
+  auto osdmap = get_osdmap();
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
@@ -8821,7 +8832,7 @@ bool OSD::require_self_aliveness(const Message *m, epoch_t epoch)
   return true;
 }
 
-bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
+bool OSD::require_same_peer_instance(const Message *m, const OSDMapRef& map,
 				     bool is_fast_dispatch)
 {
   int from = m->get_source().num();
@@ -8859,6 +8870,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch,
 				    bool is_fast_dispatch)
 {
   const Message *m = op->get_req();
+  const auto osdmap = get_osdmap();
   dout(15) << "require_same_or_newer_map " << epoch
 	   << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
@@ -8968,6 +8980,7 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   op->mark_started();
 
+  const auto osdmap = get_osdmap();
   map<pg_t,utime_t>::const_iterator ci = m->ctimes.begin();
   for (map<pg_t,pg_create_t>::const_iterator p = m->mkpg.begin();
        p != m->mkpg.end();
@@ -10042,7 +10055,7 @@ epoch_t OSDShard::get_max_waiting_epoch()
 }
 
 void OSDShard::consume_map(
-  OSDMapRef& new_osdmap,
+  const OSDMapRef& new_osdmap,
   unsigned *pushes_to_free)
 {
   std::lock_guard l(shard_lock);
