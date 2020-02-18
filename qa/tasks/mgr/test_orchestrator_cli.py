@@ -18,7 +18,7 @@ class TestOrchestratorCli(MgrTestCase):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd(module, *args)
 
     def _orch_cmd(self, *args):
-        return self._cmd("orchestrator", *args)
+        return self._cmd("orch", *args)
 
     def _progress_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", *args)
@@ -27,7 +27,7 @@ class TestOrchestratorCli(MgrTestCase):
         """
         raw_cluster_cmd doesn't support kwargs.
         """
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("orchestrator", *args, **kwargs)
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("orch", *args, **kwargs)
 
     def _test_orchestrator_cmd_result(self, *args, **kwargs):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("test_orchestrator", *args, **kwargs)
@@ -35,7 +35,7 @@ class TestOrchestratorCli(MgrTestCase):
     def setUp(self):
         super(TestOrchestratorCli, self).setUp()
 
-        self._load_module("orchestrator_cli")
+        self._load_module("orchestrator")
         self._load_module("test_orchestrator")
         self._orch_cmd("set", "backend", "test_orchestrator")
 
@@ -61,12 +61,12 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertIn("localhost", ret)
         self.assertIsInstance(json.loads(ret), list)
 
-    def test_service_ls(self):
-        ret = self._orch_cmd("service", "ls")
+    def test_ps(self):
+        ret = self._orch_cmd("ps")
         self.assertIn("ceph-mgr", ret)
 
-    def test_service_ls_json(self):
-        ret = self._orch_cmd("service", "ls", "--format", "json")
+    def test_ps_json(self):
+        ret = self._orch_cmd("ps", "--format", "json")
         self.assertIsInstance(json.loads(ret), list)
         self.assertIn("ceph-mgr", ret)
 
@@ -77,9 +77,9 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("service", "start", "mds", "cephfs")
 
     def test_service_instance_action(self):
-        self._orch_cmd("service-instance", "restart", "mds", "a")
-        self._orch_cmd("service-instance", "stop", "mds", "a")
-        self._orch_cmd("service-instance", "start", "mds", "a")
+        self._orch_cmd("daemon", "restart", "mds", "a")
+        self._orch_cmd("daemon", "stop", "mds", "a")
+        self._orch_cmd("daemon", "start", "mds", "a")
 
     def test_osd_create(self):
         self._orch_cmd("osd", "create", "*:device")
@@ -240,12 +240,12 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertEqual(len(inventory_result), 1)
         self.assertEqual(inventory_result[0]['name'], 'host0')
 
-        out = self._orch_cmd('service', 'ls', '--format=json')
+        out = self._orch_cmd('ps', '--format=json')
         services = data['services']
         services_result = json.loads(out)
         self.assertEqual(len(services), len(services_result))
 
-        out = self._orch_cmd('service', 'ls', 'host0', '--format=json')
+        out = self._orch_cmd('ps', 'host0', '--format=json')
         services_result = json.loads(out)
         self.assertEqual(len(services_result), 1)
         self.assertEqual(services_result[0]['nodename'], 'host0')

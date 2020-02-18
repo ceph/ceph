@@ -1945,6 +1945,16 @@ function test_mon_osd_pool()
   ceph osd crush rule rm foo
   ceph osd erasure-code-profile rm foo
 
+  # autoscale mode
+  ceph osd pool create modeon --autoscale-mode=on
+  ceph osd dump | grep modeon | grep 'autoscale_mode on'
+  ceph osd pool create modewarn --autoscale-mode=warn
+  ceph osd dump | grep modewarn | grep 'autoscale_mode warn'
+  ceph osd pool create modeoff --autoscale-mode=off
+  ceph osd dump | grep modeoff | grep 'autoscale_mode off'
+  ceph osd pool delete modeon modeon --yes-i-really-really-mean-it
+  ceph osd pool delete modewarn modewarn --yes-i-really-really-mean-it
+  ceph osd pool delete modeoff modeoff --yes-i-really-really-mean-it
 }
 
 function test_mon_osd_pool_quota()
@@ -2176,6 +2186,7 @@ function test_mon_osd_pool_set()
   check_response 'not change the size'
   set -e
   ceph osd pool get pool_erasure erasure_code_profile
+  ceph osd pool rm pool_erasure pool_erasure --yes-i-really-really-mean-it
 
   for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
@@ -2663,7 +2674,9 @@ function test_mon_pool_application()
 
 function test_mon_tell_help_command()
 {
-  ceph tell mon.a help
+  ceph tell mon.a help | grep sync_force
+  ceph tell mon.a -h | grep sync_force
+  ceph tell mon.a config -h | grep 'config diff get'
 
   # wrong target
   expect_false ceph tell mon.zzz help

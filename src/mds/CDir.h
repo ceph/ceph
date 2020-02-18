@@ -60,6 +60,7 @@ public:
 
   class scrub_info_t {
   public:
+    MEMPOOL_CLASS_HELPERS();
     struct scrub_stamps {
       version_t version;
       utime_t time;
@@ -672,7 +673,7 @@ protected:
   version_t projected_version = 0;
   mempool::mds_co::list<fnode_t> projected_fnode;
 
-  std::unique_ptr<scrub_info_t> scrub_infop; // FIXME not in mempool
+  std::unique_ptr<scrub_info_t> scrub_infop;
 
   // contents of this directory
   dentry_key_map items;       // non-null AND null
@@ -717,11 +718,6 @@ protected:
   load_spread_t pop_spread;
 
   elist<CInode*> pop_lru_subdirs;
-
-  // and to provide density
-  int num_dentries_nested = 0;
-  int num_dentries_auth_subtree = 0;
-  int num_dentries_auth_subtree_nested = 0;
 
   std::unique_ptr<bloom_filter> bloom; // XXX not part of mempool::mds_co
   /* If you set up the bloom filter, you must keep it accurate!

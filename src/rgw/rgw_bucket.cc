@@ -57,6 +57,10 @@
 
 #define BUCKET_TAG_TIMEOUT 30
 
+// default number of entries to list with each bucket listing call
+// (use marker to bridge between calls)
+static constexpr size_t listing_max_entries = 1000;
+
 
 /*
  * The tenant_name is always returned on purpose. May be empty, of course.
@@ -1015,18 +1019,27 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
+  uint16_t expansion_factor = 1;
   while (is_truncated) {
     RGWRados::ent_map_t result;
     result.reserve(listing_max_entries);
 
     int r = store->getRados()->cls_bucket_list_ordered(
       bucket_info, RGW_NO_SHARD, marker, prefix, empty_delimiter,
-      listing_max_entries, true, result, &is_truncated, &cls_filtered,
-      &marker, y, rgw_bucket_object_check_filter);
+      listing_max_entries, true, expansion_factor,
+      result, &is_truncated, &cls_filtered, &marker,
+      y, rgw_bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
+    }
+
+    if (result.size() < listing_max_entries / 8) {
+      ++expansion_factor;
+    } else if (result.size() > listing_max_entries * 7 / 8 &&
+	       expansion_factor > 1) {
+      --expansion_factor;
     }
 
     dump_bucket_index(result, formatter);
@@ -1673,7 +1686,7 @@ void get_stale_instances(rgw::sal::RGWRadosStore *store, const std::string& buck
                           << cpp_strerror(-r) << dendl;
       continue;
     }
-    if (binfo.reshard_status == CLS_RGW_RESHARD_DONE)
+    if (binfo.reshard_status == cls_rgw_reshard_status::DONE)
       stale_instances.emplace_back(std::move(binfo));
     else {
       other_instances.emplace_back(std::move(binfo));
@@ -1700,7 +1713,7 @@ void get_stale_instances(rgw::sal::RGWRadosStore *store, const std::string& buck
   }
 
   // Don't process further in this round if bucket is resharding
-  if (cur_bucket_info.reshard_status == CLS_RGW_RESHARD_IN_PROGRESS)
+  if (cur_bucket_info.reshard_status == cls_rgw_reshard_status::IN_PROGRESS)
     return;
 
   other_instances.erase(std::remove_if(other_instances.begin(), other_instances.end(),
@@ -2398,7 +2411,7 @@ RGWDataChangesLog::~RGWDataChangesLog() {
 }
 
 void *RGWDataChangesLog::ChangesRenewThread::entry() {
-  do {
+  for (;;) {
     dout(2) << "RGWDataChangesLog::ChangesRenewThread: start" << dendl;
     int r = log->renew_entries();
     if (r < 0) {
@@ -2411,7 +2424,7 @@ void *RGWDataChangesLog::ChangesRenewThread::entry() {
     int interval = cct->_conf->rgw_data_log_window * 3 / 4;
     std::unique_lock locker{lock};
     cond.wait_for(locker, std::chrono::seconds(interval));
-  } while (!log->going_down());
+  }
 
   return NULL;
 }

@@ -103,7 +103,7 @@ export class ServicesComponent implements OnChanges, OnInit {
       }
 
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator_cli/`;
+      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator/`;
 
       setTimeout(() => {
         subs.unsubscribe();

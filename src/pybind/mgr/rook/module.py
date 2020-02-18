@@ -304,7 +304,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def add_mds(self, spec):
-        # type: (orchestrator.StatelessServiceSpec) -> RookCompletion
+        # type: (orchestrator.ServiceSpec) -> RookCompletion
         return self._service_add_decorate('MDS', spec,
                                        self.rook_cluster.add_filesystem)
 
@@ -325,23 +325,23 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def remove_mds(self, name):
-        return self._service_rm_decorate(
-            'MDS', name, lambda: self.rook_cluster.rm_service('cephfilesystems', name)
-        )
+    def remove_service(self, service_type, service_name):
+        if service_type == 'mds':
+            return self._service_rm_decorate(
+                'MDS', service_name, lambda: self.rook_cluster.rm_service(
+                    'cephfilesystems', service_name)
+            )
+        elif service_type == 'rgw':
+            return self._service_rm_decorate(
+                'RGW', service_name, lambda: self.rook_cluster.rm_service('cephobjectstores', service_name)
+            )
+        elif service_type == 'nfs':
+            return self._service_rm_decorate(
+                'NFS', service_name, lambda: self.rook_cluster.rm_service('cephnfses', service_name)
+            )
 
-    def remove_rgw(self, zone):
-        return self._service_rm_decorate(
-            'RGW', zone, lambda: self.rook_cluster.rm_service('cephobjectstores', zone)
-        )
-
-    def remove_nfs(self, name):
-        return self._service_rm_decorate(
-            'NFS', name, lambda: self.rook_cluster.rm_service('cephnfses', name)
-        )
-
-    def update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> RookCompletion
+    def apply_mon(self, spec):
+        # type: (orchestrator.ServiceSpec) -> RookCompletion
         if spec.placement.hosts or spec.placement.label:
             raise RuntimeError("Host list or label is not supported by rook.")
 
@@ -351,8 +351,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def update_mds(self, spec):
-        # type: (orchestrator.StatelessServiceSpec) -> RookCompletion
+    def apply_mds(self, spec):
+        # type: (orchestrator.ServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
             lambda: self.rook_cluster.update_mds_count(spec.name, num),
@@ -360,7 +360,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def update_nfs(self, spec):
+    def apply_nfs(self, spec):
         # type: (orchestrator.NFSServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
@@ -380,15 +380,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         a single DriveGroup for now.
         You can work around it by invoking:
 
-        $: ceph orchestrator osd create -i <dg.file>
+        $: ceph orch osd create -i <dg.file>
 
         multiple times. The drivegroup file must only contain one spec at a time.
         """
         drive_group = drive_groups[0]
 
         targets = []  # type: List[str]
-        if drive_group.data_devices:
-            targets += drive_group.data_devices.paths
+        if drive_group.data_devices and drive_group.data_devices.paths:
+            targets += [d.path for d in drive_group.data_devices.paths]
         if drive_group.data_directories:
             targets += drive_group.data_directories
 
@@ -409,7 +409,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return orchestrator.Completion.with_progress(
                 message="Creating OSD on {0}:{1}".format(
-                        drive_group.hosts(drive_group.host_pattern),
+                        drive_group.hosts(all_hosts),
                         targets),
                 mgr=self,
                 on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),

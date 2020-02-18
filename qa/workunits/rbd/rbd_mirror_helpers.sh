@@ -24,7 +24,7 @@
 # The cleanup can be done as a separate step, running the script with
 # `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
 #
-# Note, as other workunits tests, rbd_mirror.sh expects to find ceph binaries
+# Note, as other workunits tests, rbd_mirror_journal.sh expects to find ceph binaries
 # in PATH.
 #
 # Thus a typical troubleshooting session:
@@ -35,7 +35,7 @@
 #   cd $CEPH_SRC_PATH
 #   PATH=$CEPH_SRC_PATH:$PATH
 #   RBD_MIRROR_NOCLEANUP=1 RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd/rbd_mirror.sh
+#     ../qa/workunits/rbd/rbd_mirror_journal.sh
 #
 # After the test failure cd to TEMPDIR and check the current state:
 #
@@ -53,17 +53,17 @@
 #
 #   cd $CEPH_SRC_PATH
 #   export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
-#   ../qa/workunits/rbd/rbd_mirror.sh status
-#   ../qa/workunits/rbd/rbd_mirror.sh stop_mirror cluster1
-#   ../qa/workunits/rbd/rbd_mirror.sh start_mirror cluster2
-#   ../qa/workunits/rbd/rbd_mirror.sh flush cluster2
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh status
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh stop_mirror cluster1
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh start_mirror cluster2
+#   ../qa/workunits/rbd/rbd_mirror_journal.sh flush cluster2
 #   ...
 #
 # Eventually, run the cleanup:
 #
 #   cd $CEPH_SRC_PATH
 #   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd/rbd_mirror.sh cleanup
+#     ../qa/workunits/rbd/rbd_mirror_journal.sh cleanup
 #
 
 if type xmlstarlet > /dev/null 2>&1; then
@@ -195,12 +195,12 @@ create_users()
 
     CEPH_ARGS='' ceph --cluster "${cluster}" \
         auth get-or-create client.${CEPH_ID} \
-        mon 'profile rbd' osd 'profile rbd' >> \
+        mon 'profile rbd' osd 'profile rbd' mgr 'profile rbd' >> \
         ${CEPH_ROOT}/run/${cluster}/keyring
     for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
         CEPH_ARGS='' ceph --cluster "${cluster}" \
             auth get-or-create client.${MIRROR_USER_ID_PREFIX}${instance} \
-            mon 'profile rbd-mirror' osd 'profile rbd' >> \
+            mon 'profile rbd-mirror' osd 'profile rbd' mgr 'profile rbd' >> \
             ${CEPH_ROOT}/run/${cluster}/keyring
     done
 }
@@ -248,7 +248,8 @@ setup_pools()
       PEER_CLUSTER_SUFFIX=-DNE
     fi
 
-    rbd --cluster ${cluster} mirror pool enable --site-name ${cluster}${PEER_CLUSTER_SUFFIX} ${POOL} pool
+    CEPH_ARGS='' rbd --cluster ${cluster} mirror pool enable \
+        --site-name ${cluster}${PEER_CLUSTER_SUFFIX} ${POOL} pool
     rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL} image
 
     rbd --cluster ${cluster} namespace create ${POOL}/${NS1}
@@ -263,21 +264,21 @@ setup_pools()
         rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
       else
         mon_map_file=${TEMPDIR}/${remote_cluster}.monmap
-        ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
+        CEPH_ARGS='' ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
         mon_addr=$(monmaptool --print ${mon_map_file} | grep -E 'mon\.' |
           head -n 1 | sed -E 's/^[0-9]+: ([^ ]+).+$/\1/' | sed -E 's/\/[0-9]+//g')
 
         admin_key_file=${TEMPDIR}/${remote_cluster}.client.${CEPH_ID}.key
         CEPH_ARGS='' ceph --cluster ${remote_cluster} auth get-key client.${CEPH_ID} > ${admin_key_file}
 
-        rbd --cluster ${cluster} mirror pool peer add ${POOL} \
+        CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer add ${POOL} \
             client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX} \
             --remote-mon-host "${mon_addr}" --remote-key-file ${admin_key_file}
 
         uuid=$(rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} \
             client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX})
-        rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
-        rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
+        CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
+        CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
       fi
     fi
 }
@@ -468,9 +469,9 @@ status()
     for cluster in ${CLUSTER1} ${CLUSTER2}
     do
 	echo "${cluster} status"
-	ceph --cluster ${cluster} -s
-	ceph --cluster ${cluster} service dump
-	ceph --cluster ${cluster} service status
+	CEPH_ARGS='' ceph --cluster ${cluster} -s
+	CEPH_ARGS='' ceph --cluster ${cluster} service dump
+	CEPH_ARGS='' ceph --cluster ${cluster} service status
 	echo
 
 	for image_pool in ${POOL} ${PARENT_POOL}
@@ -486,7 +487,7 @@ status()
 	        echo
 
 	        echo "${cluster} ${image_pool}${image_ns} mirror pool status"
-	        rbd --cluster ${cluster} -p ${image_pool}${image_ns} mirror pool status --verbose
+	        CEPH_ARGS='' rbd --cluster ${cluster} -p ${image_pool}${image_ns} mirror pool status --verbose
 	        echo
 
 	        for image in `rbd --cluster ${cluster} -p ${image_pool}${image_ns} ls 2>/dev/null`
@@ -698,7 +699,7 @@ test_status_in_pool_dir()
     local service_pattern="$6"
 
     local status_log=${TEMPDIR}/$(mkfname ${cluster}-${pool}-${image}.mirror_status)
-    rbd --cluster ${cluster} mirror image status ${pool}/${image} |
+    CEPH_ARGS='' rbd --cluster ${cluster} mirror image status ${pool}/${image} |
 	tee ${status_log} >&2
     grep "^  state: .*${state_pattern}" ${status_log} || return 1
     grep "^  description: .*${description_pattern}" ${status_log} || return 1
@@ -1132,8 +1133,9 @@ enable_mirror()
     local cluster=$1
     local pool=$2
     local image=$3
+    local mode=${4:-journal}
 
-    rbd --cluster=${cluster} mirror image enable ${pool}/${image}
+    rbd --cluster=${cluster} mirror image enable ${pool}/${image} ${mode}
 }
 
 test_image_present()

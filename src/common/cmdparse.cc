@@ -47,8 +47,7 @@ std::string cmddesc_get_prefix(const std::string_view &cmddesc)
 using arg_desc_t = std::map<std::string_view, std::string_view>;
 
 // Snarf up all the key=val,key=val pairs, put 'em in a dict.
-template<class String>
-arg_desc_t cmddesc_get_args(const String& cmddesc)
+arg_desc_t cmddesc_get_args(const string_view cmddesc)
 {
   arg_desc_t arg_desc;
   for_each_substr(cmddesc, ",", [&](auto kv) {
@@ -140,7 +139,7 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
     // accumulate descriptor keywords in desckv
     auto desckv = cmddesc_get_args(word);
     // name the individual desc object based on the name key
-    f->open_object_section(string(desckv["name"]).c_str());
+    f->open_object_section(desckv["name"]);
 
     // Compatibility for pre-nautilus clients that don't know about CephBool
     std::string val;
@@ -161,7 +160,7 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
 
     // dump all the keys including name into the array
     for (auto [key, value] : desckv) {
-      f->dump_string(string(key).c_str(), string(value));
+      f->dump_string(key, value);
     }
     f->close_section(); // attribute object for individual desc
   }
@@ -174,11 +173,11 @@ dump_cmd_and_help_to_json(Formatter *jf,
 			  const string& cmdsig,
 			  const string& helptext)
 {
-      jf->open_object_section(secname.c_str());
+      jf->open_object_section(secname);
       jf->open_array_section("sig");
       dump_cmd_to_json(jf, features, cmdsig);
       jf->close_section(); // sig array
-      jf->dump_string("help", helptext.c_str());
+      jf->dump_string("help", helptext);
       jf->close_section(); // cmd
 }
 
@@ -192,13 +191,13 @@ dump_cmddesc_to_json(Formatter *jf,
 		     const string& perm,
 		     uint64_t flags)
 {
-      jf->open_object_section(secname.c_str());
+      jf->open_object_section(secname);
       jf->open_array_section("sig");
       dump_cmd_to_json(jf, features, cmdsig);
       jf->close_section(); // sig array
-      jf->dump_string("help", helptext.c_str());
-      jf->dump_string("module", module.c_str());
-      jf->dump_string("perm", perm.c_str());
+      jf->dump_string("help", helptext);
+      jf->dump_string("module", module);
+      jf->dump_string("perm", perm);
       jf->dump_int("flags", flags);
       jf->close_section(); // cmd
 }
@@ -219,28 +218,28 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 
     void operator()(const std::string &operand) const
     {
-      f->dump_string(key.c_str(), operand);
+      f->dump_string(key, operand);
     }
 
     void operator()(const bool &operand) const
     {
-      f->dump_bool(key.c_str(), operand);
+      f->dump_bool(key, operand);
     }
 
     void operator()(const int64_t &operand) const
     {
-      f->dump_int(key.c_str(), operand);
+      f->dump_int(key, operand);
     }
 
     void operator()(const double &operand) const
     {
-      f->dump_float(key.c_str(), operand);
+      f->dump_float(key, operand);
     }
 
     void operator()(const std::vector<std::string> &operand) const
     {
-      f->open_array_section(key.c_str());
-      for (const auto i : operand) {
+      f->open_array_section(key);
+      for (const auto& i : operand) {
         f->dump_string("item", i);
       }
       f->close_section();
@@ -248,7 +247,7 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 
     void operator()(const std::vector<int64_t> &operand) const
     {
-      f->open_array_section(key.c_str());
+      f->open_array_section(key);
       for (const auto i : operand) {
         f->dump_int("item", i);
       }
@@ -257,7 +256,7 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 
     void operator()(const std::vector<double> &operand) const
     {
-      f->open_array_section(key.c_str());
+      f->open_array_section(key);
       for (const auto i : operand) {
         f->dump_float("item", i);
       }
@@ -281,15 +280,14 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
  * false, ss is valid */
 
 bool
-cmdmap_from_json(vector<string> cmd, cmdmap_t *mapp, stringstream &ss)
+cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
 {
   json_spirit::mValue v;
 
   string fullcmd;
   // First, join all cmd strings
-  for (vector<string>::iterator it = cmd.begin();
-       it != cmd.end(); ++it)
-    fullcmd += *it;
+  for (auto& c : cmd)
+    fullcmd += c;
 
   try {
     if (!json_spirit::read(fullcmd, v))

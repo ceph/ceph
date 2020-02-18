@@ -106,9 +106,10 @@ struct CreateRequest<MockTestImageCtx> {
                                const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
+                               bool skip_mirror_enable,
+                               cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               bool skip_mirror_enable,
                                ContextWQ *op_work_queue,
                                Context *on_finish) {
     ceph_assert(s_instance != nullptr);
@@ -160,7 +161,7 @@ struct EnableRequest<MockTestImageCtx> {
   static EnableRequest* s_instance;
   static EnableRequest* create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
-                               mirror_image_mode_t mode,
+                               cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
                                MockContextWQ *op_work_queue,
                                Context *on_finish) {
@@ -398,9 +399,10 @@ TEST_F(TestMockImageCloneRequest, SuccessV1) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -447,9 +449,10 @@ TEST_F(TestMockImageCloneRequest, SuccessV2) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -496,9 +499,10 @@ TEST_F(TestMockImageCloneRequest, SuccessAuto) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -514,9 +518,10 @@ TEST_F(TestMockImageCloneRequest, OpenParentError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -540,9 +545,10 @@ TEST_F(TestMockImageCloneRequest, CreateError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -571,9 +577,10 @@ TEST_F(TestMockImageCloneRequest, OpenError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -607,9 +614,10 @@ TEST_F(TestMockImageCloneRequest, AttachParentError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -646,9 +654,10 @@ TEST_F(TestMockImageCloneRequest, AttachChildError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -687,9 +696,10 @@ TEST_F(TestMockImageCloneRequest, MetadataListError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -729,9 +739,10 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -773,9 +784,10 @@ TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -820,9 +832,10 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -862,9 +875,10 @@ TEST_F(TestMockImageCloneRequest, CloseError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -893,9 +907,10 @@ TEST_F(TestMockImageCloneRequest, RemoveError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -924,9 +939,10 @@ TEST_F(TestMockImageCloneRequest, CloseParentError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
                                   m_ioctx, "clone name", "clone id", clone_opts,
-                                  "", "", image_ctx->op_work_queue, &ctx);
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+                                  image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }

@@ -2369,7 +2369,8 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
   peer_global_seq = client_ident.global_seq();
 
   if (connection->policy.server &&
-      connection->policy.lossy) {
+      connection->policy.lossy &&
+      connection->policy.register_lossy_clients) {
     // incoming lossy client, no need to register this connection
   } else {
     // Looks good so far, let's check if there is already an existing connection

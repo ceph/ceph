@@ -257,8 +257,8 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
       ceph_assert(false);
     }
   }).handle_exception_type([this] (const std::system_error& e) {
-    if (e.code() != error::broken_pipe &&
-        e.code() != error::connection_reset &&
+    if (e.code() != std::errc::broken_pipe &&
+        e.code() != std::errc::connection_reset &&
         e.code() != error::negotiation_failure) {
       logger().error("{} write_event(): unexpected error at {} -- {}",
                      conn, get_state_name(write_state), e);

@@ -9,6 +9,7 @@
 #include "common/Timer.h"
 #include "common/safe_io.h"
 #include "common/TracepointProvider.h"
+#include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
@@ -254,6 +255,27 @@ int radosgw_Main(int argc, const char **argv)
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 flags, "rgw_data", false);
+
+  int numa_node = g_conf().get_val<int64_t>("rgw_numa_node");
+  size_t numa_cpu_set_size = 0;
+  cpu_set_t numa_cpu_set;
+
+  if (numa_node >= 0) {
+    int r = get_numa_node_cpu_set(numa_node, &numa_cpu_set_size, &numa_cpu_set);
+    if (r < 0) {
+      dout(1) << __func__ << " unable to determine rgw numa node " << numa_node
+              << " CPUs" << dendl;
+      numa_node = -1;
+    } else {
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
+      if (r < 0) {
+        derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
+        << dendl;
+      }
+    }
+  } else {
+    dout(1) << __func__ << " not setting numa affinity" << dendl;
+  }
 
   // maintain existing region root pool for new multisite objects
   if (!g_conf()->rgw_region_root_pool.empty()) {

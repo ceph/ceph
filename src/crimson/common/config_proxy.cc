@@ -41,5 +41,9 @@ seastar::future<> ConfigProxy::start()
   });
 }
 
+void ConfigProxy::show_config(ceph::Formatter* f) const {
+  get_config().show_config(*values, f);
+}
+
 ConfigProxy::ShardedConfig ConfigProxy::sharded_conf;
 }

@@ -56,9 +56,9 @@ public:
   }
 
   // Obscure, don't care.
-  void open_array_section_in_ns(const char *name, const char *ns) override
+  void open_array_section_in_ns(std::string_view name, const char *ns) override
   {ceph_abort();}
-  void open_object_section_in_ns(const char *name, const char *ns) override
+  void open_object_section_in_ns(std::string_view name, const char *ns) override
   {ceph_abort();}
 
   void reset() override
@@ -77,8 +77,8 @@ public:
   void output_footer() override {};
   void enable_line_break() override {};
 
-  void open_array_section(const char *name) override;
-  void open_object_section(const char *name) override;
+  void open_array_section(std::string_view name) override;
+  void open_object_section(std::string_view name) override;
   void close_section() override
   {
     ceph_assert(cursor != root);
@@ -86,13 +86,13 @@ public:
     cursor = stack.top();
     stack.pop();
   }
-  void dump_bool(const char *name, bool b) override;
-  void dump_unsigned(const char *name, uint64_t u) override;
-  void dump_int(const char *name, int64_t u) override;
-  void dump_float(const char *name, double d) override;
-  void dump_string(const char *name, std::string_view s) override;
-  std::ostream& dump_stream(const char *name) override;
-  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
+  void dump_bool(std::string_view name, bool b) override;
+  void dump_unsigned(std::string_view name, uint64_t u) override;
+  void dump_int(std::string_view name, int64_t u) override;
+  void dump_float(std::string_view name, double d) override;
+  void dump_string(std::string_view name, std::string_view s) override;
+  std::ostream& dump_stream(std::string_view name) override;
+  void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
 
   void flush(std::ostream& os) override
   {
@@ -128,7 +128,7 @@ private:
   PyObject *cursor;
   std::stack<PyObject *> stack;
 
-  void dump_pyobject(const char *name, PyObject *p);
+  void dump_pyobject(std::string_view name, PyObject *p);
 
   class PendingStream {
     public:

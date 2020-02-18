@@ -12,6 +12,11 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  octopus:
+    releases:
+      - version: 15.1.0
+        released: 2020-01-29
+    target_eol: 2021-06-01
   nautilus:
     releases:
       - version: 14.2.7

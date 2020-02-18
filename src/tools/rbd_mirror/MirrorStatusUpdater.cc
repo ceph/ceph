@@ -30,11 +30,13 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 MirrorStatusUpdater<I>::MirrorStatusUpdater(
-    librados::IoCtx& io_ctx, Threads<I> *threads, const std::string& fsid)
-  : m_io_ctx(io_ctx), m_threads(threads), m_fsid(fsid),
+    librados::IoCtx& io_ctx, Threads<I> *threads,
+    const std::string& local_mirror_uuid)
+  : m_io_ctx(io_ctx), m_threads(threads),
+    m_local_mirror_uuid(local_mirror_uuid),
     m_lock(ceph::make_mutex("rbd::mirror::MirrorStatusUpdater " +
                               stringify(m_io_ctx.get_id()))) {
-  dout(10) << "fsid=" << fsid << ", "
+  dout(10) << "local_mirror_uuid=" << local_mirror_uuid << ", "
            << "pool_id=" << m_io_ctx.get_id() << dendl;
 }
 
@@ -315,7 +317,7 @@ void MirrorStatusUpdater<I>::update_task(int r) {
         continue;
       }
 
-      status_it->second.fsid = m_fsid;
+      status_it->second.mirror_uuid = m_local_mirror_uuid;
       librbd::cls_client::mirror_image_status_set(&op, global_image_id,
                                                   status_it->second);
       ++op_count;

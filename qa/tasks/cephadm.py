@@ -22,12 +22,12 @@ from teuthology.config import config as teuth_config
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
 
-CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
+CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
 log = logging.getLogger(__name__)
 
 
-def _shell(ctx, cluster_name, remote, args, **kwargs):
+def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
     testdir = teuthology.get_testdir(ctx)
     return remote.run(
         args=[
@@ -38,6 +38,7 @@ def _shell(ctx, cluster_name, remote, args, **kwargs):
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
             '-k', '{}/{}.keyring'.format(testdir, cluster_name),
             '--fsid', ctx.ceph[cluster_name].fsid,
+            ] + extra_cephadm_args + [
             '--',
             ] + args,
         **kwargs
@@ -414,11 +415,11 @@ def ceph_bootstrap(ctx, config):
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orchestrator', 'host', 'add',
+                'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
             r = _shell(ctx, cluster_name, remote,
-                       ['ceph', 'orchestrator', 'host', 'ls', '--format=json'],
+                       ['ceph', 'orch', 'host', 'ls', '--format=json'],
                        stdout=StringIO())
             hosts = [node['host'] for node in json.loads(r.stdout.getvalue())]
             assert remote.shortname in hosts
@@ -464,7 +465,7 @@ def ceph_mons(ctx, config):
                 log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orchestrator', 'mon', 'update',
+                    'ceph', 'orch', 'apply', 'mon',
                     str(num_mons),
                     remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
                 ])
@@ -499,12 +500,12 @@ def ceph_mons(ctx, config):
                         if teuthology.is_type('mon', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mon)
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orchestrator', 'service-instance', 'reconfig',
-                    'mon', id_,
+                    'ceph', 'orch', 'daemon', 'reconfig',
+                    'mon.' + id_,
                 ])
         _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
-            'ceph', 'orchestrator', 'service-instance', 'reconfig',
-            'mgr', ctx.ceph[cluster_name].first_mgr,
+            'ceph', 'orch', 'daemon', 'reconfig',
+            'mgr.' + ctx.ceph[cluster_name].first_mgr,
         ])
 
         yield
@@ -534,7 +535,7 @@ def ceph_mgrs(ctx, config):
                 daemons[mgr] = (remote, id_)
         if nodes:
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orchestrator', 'mgr', 'update',
+                'ceph', 'orch', 'apply', 'mgr',
                 str(len(nodes) + 1)] + nodes
             )
         for mgr, i in daemons.items():
@@ -587,7 +588,7 @@ def ceph_osds(ctx, config):
             _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orchestrator', 'osd', 'create',
+                'ceph', 'orch', 'osd', 'create',
                 remote.shortname + ':' + short_dev
             ])
             ctx.daemons.register_daemon(
@@ -623,7 +624,7 @@ def ceph_mdss(ctx, config):
             daemons[role] = (remote, id_)
     if nodes:
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'orchestrator', 'mds', 'update',
+            'ceph', 'orch', 'apply', 'mds',
             'all',
             str(len(nodes))] + nodes
         )
@@ -631,6 +632,81 @@ def ceph_mdss(ctx, config):
         remote, id_ = i
         ctx.daemons.register_daemon(
             remote, 'mds', id_,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild(role),
+            wait=False,
+            started=True,
+        )
+
+    yield
+
+@contextlib.contextmanager
+def ceph_prometheus(ctx, config):
+    """
+    Deploy prometheus
+    """
+    cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
+
+    nodes = []
+    daemons = {}
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('prometheus', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            nodes.append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    if nodes:
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'apply', 'prometheus',
+            str(len(nodes))] + nodes
+        )
+    for role, i in daemons.items():
+        remote, id_ = i
+        ctx.daemons.register_daemon(
+            remote, 'prometheus', id_,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild(role),
+            wait=False,
+            started=True,
+        )
+
+    yield
+
+@contextlib.contextmanager
+def ceph_rgw(ctx, config):
+    """
+    Deploy rgw
+    """
+    cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
+
+    nodes = {}
+    daemons = {}
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('rgw', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            realmzone = '.'.join(id_.split('.')[0:2])
+            if realmzone not in nodes:
+                nodes[realmzone] = []
+            nodes[realmzone].append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    for realmzone, nodes in nodes.items():
+        (realm, zone) = realmzone.split('.', 1)
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'apply', 'rgw',
+            realm, zone,
+            str(len(nodes))] + nodes
+        )
+    for role, i in daemons.items():
+        remote, id_ = i
+        ctx.daemons.register_daemon(
+            remote, 'rgw', id_,
             cluster=cluster_name,
             fsid=fsid,
             logger=log.getChild(role),
@@ -732,6 +808,12 @@ def shell(ctx, config):
     """
     cluster_name = config.get('cluster', 'ceph')
 
+    env = []
+    if 'env' in config:
+        for k in config['env']:
+            env.extend(['-e', k + '=' + ctx.config.get(k, '')])
+        del config['env']
+
     if 'all' in config and len(config) == 1:
         a = config['all']
         roles = teuthology.all_roles(ctx.cluster)
@@ -741,7 +823,9 @@ def shell(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
         for c in ls:
-            _shell(ctx, cluster_name, remote, c.split(' '))
+            _shell(ctx, cluster_name, remote,
+                   ['bash', '-c', c],
+                   extra_cephadm_args=env)
 
 @contextlib.contextmanager
 def tweaked_option(ctx, config):
@@ -954,6 +1038,8 @@ def task(ctx, config):
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
+            lambda: ceph_rgw(ctx=ctx, config=config),
+            lambda: ceph_prometheus(ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):

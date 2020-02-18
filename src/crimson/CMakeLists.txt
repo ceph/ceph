@@ -1,9 +1,19 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
+set(crimson_cflag_definitions "WITH_SEASTAR=1")
+# disable concepts to address https://github.com/boostorg/asio/issues/312
+if((CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10) OR
+   (CMAKE_CXX_COMPILER_ID STREQUAL Clang))
+ list(APPEND crimson_cflag_definitions
+   "BOOST_ASIO_DISABLE_CONCEPTS")
+endif()
 set_target_properties(crimson::cflags PROPERTIES
-  INTERFACE_COMPILE_DEFINITIONS "WITH_SEASTAR=1"
+  INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
+  INTERFACE_COMPILE_OPTIONS "-Wno-non-virtual-dtor"
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
+  admin/admin_socket.cc
+  admin/osd_admin.cc
   common/buffer_io.cc
   common/config_proxy.cc
   common/perf_counters_collection.cc
@@ -14,7 +24,6 @@ set(crimson_common_srcs
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
-  ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
@@ -95,7 +104,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${crimson_common_srcs}
-  $<TARGET_OBJECTS:crimson-auth>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crimson-crush>)
 
@@ -115,14 +123,26 @@ endif()
 target_link_libraries(crimson-common
   PUBLIC
     json_spirit
+    crimson::cflags
   PRIVATE
     crc32
-    crimson::cflags
     ${crimson_common_deps}
     OpenSSL::Crypto)
 
 set(crimson_auth_srcs
-  auth/KeyRing.cc)
+  auth/KeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthClientHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthMethodList.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthRegistry.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthSessionHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/KeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/RotatingKeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxAuthorizeHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxClientHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxProtocol.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxSessionHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/none/AuthNoneAuthorizeHandler.cc)
 set(crimson_mgr_srcs
   mgr/client.cc)
 set(crimson_mon_srcs
@@ -150,6 +170,8 @@ add_library(crimson STATIC
 target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")
 target_link_libraries(crimson
+  PRIVATE
+    Threads::Threads
   PUBLIC
     crimson-common
     crimson::cflags)

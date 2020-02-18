@@ -1,6 +1,6 @@
 function(build_pmem)
   include(ExternalProject)
-  set(PMDK_SRC "${CMAKE_BINARY_DIR}/src/nvml/src")
+  set(PMDK_SRC "${CMAKE_BINARY_DIR}/src/pmdk/src")
   set(PMDK_INCLUDE "${PMDK_SRC}/include")
 
   # Use debug PMDK libs in debug lib/rbd builds
@@ -11,10 +11,10 @@ function(build_pmem)
   endif()
   set(PMDK_LIB "${PMDK_SRC}/${PMDK_LIB_DIR}")
 
-  ExternalProject_Add(nvml_ext
-      GIT_REPOSITORY "https://github.com/ceph/nvml.git"
-      GIT_TAG "dd622819dd4ee97d3920f913c70be"
-      SOURCE_DIR ${CMAKE_BINARY_DIR}/src/nvml
+  ExternalProject_Add(pmdk_ext
+      GIT_REPOSITORY "https://github.com/ceph/pmdk.git"
+      GIT_TAG "1.7"
+      SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
       CONFIGURE_COMMAND ""
       # Explicitly built w/o NDCTL, otherwise if ndtcl is present on the
       # build system tests statically linking to librbd (which uses
@@ -27,7 +27,7 @@ function(build_pmem)
 
     # libpmem
     add_library(pmem::pmem STATIC IMPORTED)
-    add_dependencies(pmem::pmem nvml_ext)
+    add_dependencies(pmem::pmem pmdk_ext)
     file(MAKE_DIRECTORY ${PMDK_INCLUDE})
     set_target_properties(pmem::pmem PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES ${PMDK_INCLUDE}
@@ -36,7 +36,7 @@ function(build_pmem)
 
     # libpmemobj
     add_library(pmem::pmemobj STATIC IMPORTED)
-    add_dependencies(pmem::pmemobj nvml_ext)
+    add_dependencies(pmem::pmemobj pmdk_ext)
     set_target_properties(pmem::pmemobj PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES ${PMDK_INCLUDE}
       IMPORTED_LOCATION "${PMDK_LIB}/libpmemobj.a"

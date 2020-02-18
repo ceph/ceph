@@ -22,7 +22,7 @@ class ProtocolV2 final : public Protocol {
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_type_t& peer_type) override;
 
-  void start_accept(SocketFRef&& socket,
+  void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr) override;
 
   void trigger_close() override;
@@ -182,7 +182,7 @@ class ProtocolV2 final : public Protocol {
   // REPLACING (server)
   void trigger_replacing(bool reconnect,
                          bool do_reset,
-                         SocketFRef&& new_socket,
+                         SocketRef&& new_socket,
                          AuthConnectionMetaRef&& new_auth_meta,
                          ceph::crypto::onwire::rxtx_t new_rxtx,
                          uint64_t new_peer_global_seq,

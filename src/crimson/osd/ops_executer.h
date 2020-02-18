@@ -4,7 +4,6 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <type_traits>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -46,6 +45,11 @@ class OpsExecuter {
     crimson::ct_error::input_output_error>;
   using read_errorator = PGBackend::read_errorator;
   using get_attr_errorator = PGBackend::get_attr_errorator;
+  using watch_errorator = crimson::errorator<
+    crimson::ct_error::enoent,
+    crimson::ct_error::invarg,
+    crimson::ct_error::not_connected,
+    crimson::ct_error::timed_out>;
 
 public:
   // because OpsExecuter is pretty heavy-weight object we want to ensure
@@ -58,6 +62,7 @@ public:
     call_errorator,
     read_errorator,
     get_attr_errorator,
+    watch_errorator,
     PGBackend::stat_errorator>;
 
 private:
@@ -66,7 +71,8 @@ private:
   // the later on `submit_changes()` – after successfully processing main
   // stages of all involved operations. When any stage fails, none of all
   // scheduled effect-exposing stages will be executed.
-  // when operation requires this division, `with_effect()` should be used.
+  // when operation requires this division, some variant of `with_effect()`
+  // should be used.
   struct effect_t {
     virtual osd_op_errorator::future<> execute() = 0;
     virtual ~effect_t() = default;
@@ -87,9 +93,38 @@ private:
   seastar::chunked_fifo<std::unique_ptr<effect_t>> op_effects;
 
   template <class Context, class MainFunc, class EffectFunc>
-  auto with_effect(Context&& ctx, MainFunc&& main_func, EffectFunc&& effect_func);
+  auto with_effect_on_obc(
+    Context&& ctx,
+    MainFunc&& main_func,
+    EffectFunc&& effect_func);
 
   call_errorator::future<> do_op_call(class OSDOp& osd_op);
+  watch_errorator::future<> do_op_watch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_watch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_reconnect(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_unwatch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_ping(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_notify(
+    class OSDOp& osd_op,
+    const class ObjectState& os);
+  watch_errorator::future<> do_op_notify_ack(
+    class OSDOp& osd_op,
+    const class ObjectState& os);
 
   hobject_t &get_target() const {
     return obc->obs.oi.soid;
@@ -148,29 +183,35 @@ public:
 };
 
 template <class Context, class MainFunc, class EffectFunc>
-auto OpsExecuter::with_effect(
+auto OpsExecuter::with_effect_on_obc(
   Context&& ctx,
   MainFunc&& main_func,
   EffectFunc&& effect_func)
 {
   using context_t = std::decay_t<Context>;
   // the language offers implicit conversion to pointer-to-function for
-  // lambda only when it's closureless
-  static_assert(std::is_convertible_v<EffectFunc,
-                                      seastar::future<> (*)(context_t&&)>,
+  // lambda only when it's closureless. We enforce this restriction due
+  // the fact that `submit_changes()` std::moves many executer's parts.
+  using allowed_effect_func_t =
+    seastar::future<> (*)(context_t&&, ObjectContextRef);
+  static_assert(std::is_convertible_v<EffectFunc, allowed_effect_func_t>,
                 "with_effect function is not allowed to capture");
   struct task_t final : effect_t {
     context_t ctx;
     EffectFunc effect_func;
+    ObjectContextRef obc;
 
-    task_t(Context&& ctx, EffectFunc&& effect_func)
-       : ctx(std::move(ctx)), effect_func(std::move(effect_func)) {}
+    task_t(Context&& ctx, EffectFunc&& effect_func, ObjectContextRef obc)
+       : ctx(std::move(ctx)),
+         effect_func(std::move(effect_func)),
+         obc(std::move(obc)) {
+    }
     osd_op_errorator::future<> execute() final {
-      return std::move(effect_func)(std::move(ctx));
+      return std::move(effect_func)(std::move(ctx), std::move(obc));
     }
   };
   auto task =
-    std::make_unique<task_t>(std::move(ctx), std::move(effect_func));
+    std::make_unique<task_t>(std::move(ctx), std::move(effect_func), obc);
   auto& ctx_ref = task->ctx;
   op_effects.emplace_back(std::move(task));
   return std::forward<MainFunc>(main_func)(ctx_ref);

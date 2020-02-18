@@ -20,7 +20,7 @@ TEST_TARS=$(find ${CORPUS_DIR} -type f -iname *.tgz)
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
-OSD_TO_CREATE=6
+OSD_TO_CREATE=2
 OSD_VG_NAME=${SCRIPT_NAME%.*}
 OSD_LV_NAME=${SCRIPT_NAME%.*}
 
@@ -109,6 +109,7 @@ systemctl status docker && ( $CEPHADM --docker version | grep 'ceph version' )
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
+$CEPHADM shell --fsid $FSID -e FOO=BAR -- printenv | grep FOO=BAR
 
 ## bootstrap
 ORIG_CONFIG=`mktemp -p $TMPDIR`
@@ -154,6 +155,9 @@ $CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").fsid' \
     | grep $FSID
 $CEPHADM ls | jq '.[]' | jq 'select(.name == "mgr.x").fsid' \
     | grep $FSID
+
+# make sure the version is returned correctly
+$CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").version' | grep -q \\.
 
 ## deploy
 # add mon.b
@@ -203,34 +207,65 @@ $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
     $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
-            ceph orchestrator osd create \
+            ceph orch osd create \
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
 
 # add node-exporter
 $CEPHADM --image 'prom/node-exporter:latest' \
-    deploy --name node-exporter.a --fsid $FSID
-sleep 90
-out=$(curl 'http://localhost:9100')
-echo $out | grep -q 'Node Exporter'
+	 deploy --name node-exporter.a --fsid $FSID
+TRIES=0
+while true; do
+    if curl 'http://localhost:9100' | grep -q 'Node Exporter'; then
+	break
+    fi
+    TRIES=$(($TRIES + 1))
+    if [ "$TRIES" -eq 5 ]; then
+	echo "node exporter did not come up"
+	exit 1
+    fi
+    sleep 5
+done
+echo "node exporter ok"
 
 # add prometheus
 cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
         $CEPHADM --image 'prom/prometheus:latest' \
             deploy --name prometheus.a --fsid $FSID \
                    --config-json -
-sleep 90
-out=$(curl 'localhost:9095/api/v1/query?query=up')
-echo $out | jq -e '.["status"] == "success"'
+TRIES=0
+while true; do
+    if curl 'localhost:9095/api/v1/query?query=up' | \
+	    jq -e '.["status"] == "success"'; then
+	break
+    fi
+    TRIES=$(($TRIES + 1))
+    if [ "$TRIES" -eq 5 ]; then
+	echo "prom did not come up"
+	exit 1
+    fi
+    sleep 5
+done
+echo "prom ok"
 
 # add grafana
 cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
         $CEPHADM --image 'pcuzner/ceph-grafana-el8:latest' \
             deploy --name grafana.a --fsid $FSID \
                    --config-json -
-sleep 90
-out=$(curl --insecure option 'https://localhost:3000')
-echo $out | grep -q 'grafana'
+TRIES=0
+while true; do
+    if curl --insecure 'https://localhost:3000' | grep -q 'grafana'; then
+	break
+    fi
+    TRIES=$(($TRIES + 1))
+    if [ "$TRIES" -eq 30 ]; then
+	echo "grafana did not come up"
+	exit 1
+    fi
+    sleep 5
+done
+echo "grafana ok"
 
 ## run
 # WRITE ME
@@ -278,7 +313,8 @@ $CEPHADM enter --fsid $FSID --name mgr.x -- test -d /var/lib/ceph/mgr/ceph-x
 $CEPHADM enter --fsid $FSID --name mon.a -- pidof ceph-mon
 expect_false $CEPHADM enter --fsid $FSID --name mgr.x -- pidof ceph-mon
 $CEPHADM enter --fsid $FSID --name mgr.x -- pidof ceph-mgr
-expect_false $CEPHADM --timeout 1 enter --fsid $FSID --name mon.a -- sleep 10
+# this triggers a bug in older versions of podman, including 18.04's 1.6.2
+#expect_false $CEPHADM --timeout 1 enter --fsid $FSID --name mon.a -- sleep 10
 $CEPHADM --timeout 10 enter --fsid $FSID --name mon.a -- sleep 1
 
 ## ceph-volume

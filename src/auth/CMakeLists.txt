@@ -21,10 +21,3 @@ if(HAVE_GSSAPI)
 endif()
 
 add_library(common-auth-objs OBJECT ${auth_srcs})
-if(WITH_SEASTAR)
-  add_library(crimson-auth OBJECT ${auth_srcs})
-  target_compile_definitions(crimson-auth PRIVATE
-    "WITH_SEASTAR=1")
-  target_include_directories(crimson-auth PRIVATE
-    $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
-endif()

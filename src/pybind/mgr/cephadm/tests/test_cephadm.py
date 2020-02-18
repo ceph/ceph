@@ -1,6 +1,8 @@
 import json
-import time
 from contextlib import contextmanager
+import fnmatch
+
+import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 
@@ -9,8 +11,8 @@ try:
 except ImportError:
     pass
 
-from orchestrator import ServiceDescription, InventoryNode, \
-    StatelessServiceSpec, PlacementSpec, RGWSpec, StatefulServiceSpec
+from orchestrator import ServiceDescription, DaemonDescription, InventoryNode, \
+    ServiceSpec, PlacementSpec, RGWSpec, HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait
 
@@ -33,22 +35,25 @@ def mon_command(*args, **kwargs):
     return 0, '', ''
 
 
+def match_glob(val, pat):
+    ok = fnmatch.fnmatchcase(val, pat)
+    if not ok:
+        assert pat in val
+
 class TestCephadm(object):
 
     @contextmanager
     def _with_host(self, m, name):
-        wait(m, m.add_host(name))
+        wait(m, m.add_host(HostSpec(hostname=name)))
         yield
         wait(m, m.remove_host(name))
 
     def test_get_unique_name(self, cephadm_module):
         existing = [
-            ServiceDescription(service_instance='mon.a')
+            DaemonDescription(daemon_type='mon', daemon_id='a')
         ]
         new_mon = cephadm_module.get_unique_name('myhost', existing, 'mon')
-        assert new_mon.startswith('mon.')
-        assert new_mon != 'mon.a'
-        assert '.myhost.' in new_mon
+        match_glob(new_mon, 'mon.myhost.*')
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
@@ -61,7 +66,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.describe_service(refresh=True)
+            c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
@@ -85,16 +90,16 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    def test_service_action(self, _send_command, _get_connection, cephadm_module):
+    def test_daemon_action(self, _send_command, _get_connection, cephadm_module):
         cephadm_module.service_cache_timeout = 10
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.describe_service(refresh=True)
+            c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
-            c = cephadm_module.service_action('redeploy', 'rgw', service_id='myrgw.foobar')
+            c = cephadm_module.daemon_action('redeploy', 'rgw', 'myrgw.foobar')
             assert wait(cephadm_module, c) == ["Deployed rgw.myrgw.foobar on host 'test'"]
 
             for what in ('start', 'stop', 'restart'):
-                c = cephadm_module.service_action(what, 'rgw', service_id='myrgw.foobar')
+                c = cephadm_module.daemon_action(what, 'rgw', 'myrgw.foobar')
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
 
 
@@ -105,7 +110,7 @@ class TestCephadm(object):
     def test_mon_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.update_mons(StatefulServiceSpec(placement=ps))
+            c = cephadm_module.apply_mon(ServiceSpec(placement=ps))
             assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
@@ -115,10 +120,10 @@ class TestCephadm(object):
     def test_mgr_update(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.update_mgrs(StatefulServiceSpec(placement=ps))
+            c = cephadm_module.apply_mgr(ServiceSpec(placement=ps))
             [out] = wait(cephadm_module, c)
-            assert "Deployed mgr." in out
-            assert " on host 'test'" in out
+            match_glob(out, "Deployed mgr.* on host 'test'")
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -144,9 +149,9 @@ class TestCephadm(object):
     ))
     def test_remove_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.describe_service(refresh=True)
+            c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
-            c = cephadm_module.remove_osds(['0'])
+            c = cephadm_module.remove_daemons(['osd.0'], False)
             out = wait(cephadm_module, c)
             assert out == ["Removed osd.0 from host 'test'"]
 
@@ -157,10 +162,9 @@ class TestCephadm(object):
     def test_mds(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_mds(StatelessServiceSpec('name', placement=ps))
+            c = cephadm_module.add_mds(ServiceSpec('name', placement=ps))
             [out] = wait(cephadm_module, c)
-            assert "Deployed mds.name." in out
-            assert " on host 'test'" in out
+            match_glob(out, "Deployed mds.name.* on host 'test'")
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -172,8 +176,70 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
             [out] = wait(cephadm_module, c)
-            assert "Deployed rgw.realm.zone." in out
-            assert " on host 'test'" in out
+            match_glob(out, "Deployed rgw.realm.zone.* on host 'test'")
+
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    def test_rgw_update(self, _send_command, _get_connection, cephadm_module):
+
+        with self._with_host(cephadm_module, 'host1'):
+            with self._with_host(cephadm_module, 'host2'):
+                ps = PlacementSpec(hosts=['host1'], count=1)
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
+
+                ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
+                c = cephadm_module.apply_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone1.host2.* on host 'host2'")
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    def test_rgw_update_fail(self, _send_command, _get_connection, cephadm_module):
+
+        with self._with_host(cephadm_module, 'host1'):
+            with self._with_host(cephadm_module, 'host2'):
+                ps = PlacementSpec(hosts=['host1'], count=1)
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
+
+                ps = PlacementSpec(hosts=['host2'], count=1)
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone2', placement=ps))
+                [out] = wait(cephadm_module, c)
+                match_glob(out, "Deployed rgw.realm.zone2.host2.* on host 'host2'")
+
+                with pytest.raises(OrchestratorError):
+                    ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
+                    c = cephadm_module.apply_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                    [out] = wait(cephadm_module, c)
+
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
+        json.dumps([
+            dict(
+                name='rgw.myrgw.myhost.myid',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                version='version',
+                state='running',
+            )
+        ])
+    ))
+    def test_remove_daemon(self, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            c = cephadm_module.list_daemons(refresh=True)
+            wait(cephadm_module, c)
+            c = cephadm_module.remove_daemons(['rgw.myrgw.myhost.myid'], False)
+            out = wait(cephadm_module, c)
+            assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
@@ -187,11 +253,11 @@ class TestCephadm(object):
             )
         ])
     ))
-    def test_remove_rgw(self, cephadm_module):
+    def test_remove_service(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.describe_service(refresh=True)
+            c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
-            c = cephadm_module.remove_rgw('myrgw')
+            c = cephadm_module.remove_service('rgw', 'myrgw')
             out = wait(cephadm_module, c)
             assert out == ["Removed rgw.myrgw.foobar from host 'test'"]
 
@@ -202,9 +268,28 @@ class TestCephadm(object):
     def test_rbd_mirror(self, _send_command, _get_connection, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_rbd_mirror(StatelessServiceSpec(name='name', placement=ps))
+            c = cephadm_module.add_rbd_mirror(ServiceSpec(name='name', placement=ps))
             [out] = wait(cephadm_module, c)
-            assert "Deployed rbd-mirror." in out
+            match_glob(out, "Deployed rbd-mirror.* on host 'test'")
+
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    def test_prometheus(self, _send_command, _get_connection, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            ps = PlacementSpec(hosts=['test'], count=1)
+
+            c = cephadm_module.add_prometheus(ServiceSpec(placement=ps))
+            [out] = wait(cephadm_module, c)
+            assert "Deployed prometheus." in out
+            assert " on host 'test'" in out
+
+            ps = PlacementSpec(hosts=['test'], count=2)
+            c = cephadm_module.apply_prometheus(ServiceSpec(placement=ps))
+            [out] = wait(cephadm_module, c)
+            assert "Deployed prometheus." in out
             assert " on host 'test'" in out
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
@@ -215,4 +300,3 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
-

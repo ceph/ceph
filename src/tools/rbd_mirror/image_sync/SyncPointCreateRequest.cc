@@ -10,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/image_sync/Types.h"
+#include "tools/rbd_mirror/image_sync/Utils.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -20,12 +21,6 @@
 namespace rbd {
 namespace mirror {
 namespace image_sync {
-
-namespace {
-
-static const std::string SNAP_NAME_PREFIX(".rbd-mirror");
-
-} // anonymous namespace
 
 using librbd::util::create_context_callback;
 
@@ -61,7 +56,7 @@ void SyncPointCreateRequest<I>::send_update_sync_points() {
   uuid_gen.generate_random();
 
   auto& sync_point = m_sync_points_copy.back();
-  sync_point.snap_name = SNAP_NAME_PREFIX + "." + m_local_mirror_uuid + "." +
+  sync_point.snap_name = util::get_snapshot_name_prefix(m_local_mirror_uuid) +
                          uuid_gen.to_string();
 
   auto ctx = create_context_callback<

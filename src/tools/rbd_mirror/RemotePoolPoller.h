@@ -33,22 +33,22 @@ public:
       Threads<ImageCtxT>* threads,
       librados::IoCtx& remote_io_ctx,
       const std::string& site_name,
-      const std::string& local_fsid,
+      const std::string& local_mirror_uuid,
       remote_pool_poller::Listener& listener) {
-    return new RemotePoolPoller(threads, remote_io_ctx, site_name, local_fsid,
-                                listener);
+    return new RemotePoolPoller(threads, remote_io_ctx, site_name,
+                                local_mirror_uuid, listener);
   }
 
   RemotePoolPoller(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& remote_io_ctx,
       const std::string& site_name,
-      const std::string& local_fsid,
+      const std::string& local_mirror_uuid,
       remote_pool_poller::Listener& listener)
     : m_threads(threads),
       m_remote_io_ctx(remote_io_ctx),
       m_site_name(site_name),
-      m_local_fsid(local_fsid),
+      m_local_mirror_uuid(local_mirror_uuid),
       m_listener(listener) {
   }
   ~RemotePoolPoller();
@@ -97,7 +97,7 @@ private:
   Threads<ImageCtxT>* m_threads;
   librados::IoCtx& m_remote_io_ctx;
   std::string m_site_name;
-  std::string m_local_fsid;
+  std::string m_local_mirror_uuid;
   remote_pool_poller::Listener& m_listener;
 
   bufferlist m_out_bl;

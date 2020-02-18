@@ -942,12 +942,9 @@ seastar::future<> Client::reopen_session(int rank)
 #warning fixme
     auto peer = monmap.get_addrs(rank).front();
     logger().info("connecting to mon.{}", rank);
-    return msgr.connect(peer, CEPH_ENTITY_TYPE_MON).then(
-      [this] (auto xconn) -> seastar::future<Connection::AuthResult> {
-      // sharded-messenger compatible mode assumes all connections running
-      // in one shard.
-      ceph_assert((*xconn)->shard_id() == seastar::engine().cpu_id());
-      crimson::net::ConnectionRef conn = xconn->release();
+    return seastar::futurize_apply(
+        [peer, this] () -> seastar::future<Connection::AuthResult> {
+      auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
       auto& mc = pending_conns.emplace_back(
 	std::make_unique<Connection>(auth_registry, conn, &keyring));
       if (conn->get_peer_addr().is_msgr2()) {

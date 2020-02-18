@@ -15,6 +15,12 @@ namespace librbd {
 namespace mirror {
 namespace snapshot {
 
+enum CreatePrimaryFlags {
+  CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS = (1 << 0),
+  CREATE_PRIMARY_FLAG_DEMOTED            = (1 << 1),
+  CREATE_PRIMARY_FLAG_FORCE              = (1 << 2)
+};
+
 struct ImageStateHeader {
   uint32_t object_count = 0;
 

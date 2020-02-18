@@ -85,9 +85,10 @@ struct MirrorPeer {
              MirrorPeerDirection mirror_peer_direction,
              const std::string& site_name,
              const std::string& client_name,
-             const std::string& fsid)
+             const std::string& mirror_uuid)
     : uuid(uuid), mirror_peer_direction(mirror_peer_direction),
-      site_name(site_name), client_name(client_name), fsid(fsid) {
+      site_name(site_name), client_name(client_name),
+      mirror_uuid(mirror_uuid) {
   }
 
   std::string uuid;
@@ -95,7 +96,7 @@ struct MirrorPeer {
   MirrorPeerDirection mirror_peer_direction = MIRROR_PEER_DIRECTION_RX_TX;
   std::string site_name;
   std::string client_name;  // RX property
-  std::string fsid;
+  std::string mirror_uuid;
   utime_t last_seen;
 
   inline bool is_valid() const {
@@ -140,6 +141,7 @@ enum MirrorImageState {
   MIRROR_IMAGE_STATE_DISABLING = 0,
   MIRROR_IMAGE_STATE_ENABLED   = 1,
   MIRROR_IMAGE_STATE_DISABLED  = 2,
+  MIRROR_IMAGE_STATE_CREATING  = 3,
 };
 
 struct MirrorImage {
@@ -199,16 +201,16 @@ inline void decode(MirrorImageStatusState &state,
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 struct MirrorImageSiteStatus {
-  static const std::string LOCAL_FSID;
+  static const std::string LOCAL_MIRROR_UUID;
 
   MirrorImageSiteStatus() {}
-  MirrorImageSiteStatus(const std::string& fsid,
+  MirrorImageSiteStatus(const std::string& mirror_uuid,
                         MirrorImageStatusState state,
                         const std::string &description)
-    : fsid(fsid), state(state), description(description) {
+    : mirror_uuid(mirror_uuid), state(state), description(description) {
   }
 
-  std::string fsid = LOCAL_FSID;
+  std::string mirror_uuid = LOCAL_MIRROR_UUID;
   MirrorImageStatusState state = MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
   std::string description;
   utime_t last_update;
@@ -539,6 +541,8 @@ struct MirrorPrimarySnapshotNamespace {
   }
 };
 
+typedef std::map<uint64_t, uint64_t> SnapSeqs;
+
 struct MirrorNonPrimarySnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
     SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY;
@@ -547,6 +551,7 @@ struct MirrorNonPrimarySnapshotNamespace {
   snapid_t primary_snap_id = CEPH_NOSNAP;
   bool copied = false;
   uint64_t last_copied_object_number = 0;
+  SnapSeqs snap_seqs;
 
   MirrorNonPrimarySnapshotNamespace() {
   }

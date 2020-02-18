@@ -101,9 +101,16 @@ class OsdTest(DashboardTestCase):
         osd_dump = json.loads(self._ceph_cmd(['osd', 'dump', '-f', 'json']))
         max_id = max(map(lambda e: e['osd'], osd_dump['osds']))
 
+        def get_pg_status_equal_unknown(osd_ids):
+            self._get('/api/osd/safe_to_destroy?ids={}'.format(osd_ids))
+            if 'message' in self.jsonBody():
+                return 'pgs have unknown state' in self.jsonBody()['message']
+            return False
+
         # 1 OSD safe to destroy
         unused_osd_id = max_id + 10
-        self._get('/api/osd/safe_to_destroy?ids={}'.format(unused_osd_id))
+        self.wait_until_equal(
+            lambda: get_pg_status_equal_unknown(unused_osd_id), False, 30)
         self.assertStatus(200)
         self.assertJsonBody({
             'is_safe_to_destroy': True,
@@ -115,7 +122,8 @@ class OsdTest(DashboardTestCase):
 
         # multiple OSDs safe to destroy
         unused_osd_ids = [max_id + 11, max_id + 12]
-        self._get('/api/osd/safe_to_destroy?ids={}'.format(str(unused_osd_ids)))
+        self.wait_until_equal(
+            lambda: get_pg_status_equal_unknown(str(unused_osd_ids)), False, 30)
         self.assertStatus(200)
         self.assertJsonBody({
             'is_safe_to_destroy': True,

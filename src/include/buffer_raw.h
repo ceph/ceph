@@ -93,12 +93,6 @@ public:
       memcpy(c->data, data, len);
       return ceph::unique_leakable_ptr<raw>(c);
     }
-    virtual bool is_shareable() const {
-      // true if safe to reference/share the existing buffer copy
-      // false if it is not safe to share the buffer, e.g., due to special
-      // and/or registered memory that is scarce
-      return true;
-    }
     bool get_crc(const std::pair<size_t, size_t> &fromto,
 		 std::pair<uint32_t, uint32_t> *crc) const {
       std::lock_guard lg(crc_spinlock);

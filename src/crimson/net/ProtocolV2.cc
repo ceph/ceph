@@ -129,7 +129,7 @@ namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
 void intercept(Breakpoint bp, bp_type_t type,
-               SocketConnection& conn, SocketFRef& socket) {
+               SocketConnection& conn, SocketRef& socket) {
   if (conn.interceptor) {
     auto action = conn.interceptor->intercept(conn, Breakpoint(bp));
     socket->set_trap(type, action, &conn.interceptor->blocker);
@@ -203,7 +203,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   execute_connecting();
 }
 
-void ProtocolV2::start_accept(SocketFRef&& sock,
+void ProtocolV2::start_accept(SocketRef&& sock,
                               const entity_addr_t& _peer_addr)
 {
   ceph_assert(state == state_t::NONE);
@@ -923,7 +923,7 @@ void ProtocolV2::execute_connecting()
           }
           INTERCEPT_N_RW(custom_bp_t::SOCKET_CONNECTING);
           return Socket::connect(conn.peer_addr);
-        }).then([this](SocketFRef sock) {
+        }).then([this](SocketRef sock) {
           logger().debug("{} socket connected", conn);
           if (unlikely(state != state_t::CONNECTING)) {
             logger().debug("{} triggered {} during Socket::connect()",
@@ -1739,7 +1739,7 @@ ProtocolV2::send_server_ident()
 
 void ProtocolV2::trigger_replacing(bool reconnect,
                                    bool do_reset,
-                                   SocketFRef&& new_socket,
+                                   SocketRef&& new_socket,
                                    AuthConnectionMetaRef&& new_auth_meta,
                                    ceph::crypto::onwire::rxtx_t new_rxtx,
                                    uint64_t new_peer_global_seq,

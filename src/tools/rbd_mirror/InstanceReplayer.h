@@ -22,6 +22,7 @@ namespace mirror {
 template <typename> class ImageReplayer;
 template <typename> class InstanceWatcher;
 template <typename> class MirrorStatusUpdater;
+struct PoolMetaCache;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
@@ -32,10 +33,11 @@ public:
       librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
       Threads<ImageCtxT> *threads, ServiceDaemon<ImageCtxT> *service_daemon,
       MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     return new InstanceReplayer(local_io_ctx, local_mirror_uuid, threads,
                                 service_daemon, local_status_updater,
-                                cache_manager_handler);
+                                cache_manager_handler, pool_meta_cache);
   }
   void destroy() {
     delete this;
@@ -46,7 +48,8 @@ public:
                    Threads<ImageCtxT> *threads,
                    ServiceDaemon<ImageCtxT> *service_daemon,
                    MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-                   journal::CacheManagerHandler *cache_manager_handler);
+                   journal::CacheManagerHandler *cache_manager_handler,
+                   PoolMetaCache* pool_meta_cache);
   ~InstanceReplayer();
 
   int init();
@@ -97,6 +100,7 @@ private:
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
 
   ceph::mutex m_lock;
   AsyncOpTracker m_async_op_tracker;

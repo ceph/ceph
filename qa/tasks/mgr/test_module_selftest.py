@@ -23,6 +23,7 @@ class TestModuleSelftest(MgrTestCase):
     MGRS_REQUIRED = 1
 
     def setUp(self):
+        super(TestModuleSelftest, self).setUp()
         self.setup_mgrs()
 
     def _selftest_plugin(self, module_name):
@@ -78,8 +79,8 @@ class TestModuleSelftest(MgrTestCase):
     def test_crash(self):
         self._selftest_plugin("crash")
 
-    def test_orchestrator_cli(self):
-        self._selftest_plugin("orchestrator_cli")
+    def test_orchestrator(self):
+        self._selftest_plugin("orchestrator")
 
 
     def test_selftest_config_update(self):

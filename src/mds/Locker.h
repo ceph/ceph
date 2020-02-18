@@ -101,7 +101,7 @@ public:
   bool rdlock_try_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
-  bool wrlock_try(SimpleLock *lock, MutationRef& mut);
+  bool wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client=-1);
   bool wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut);
   void wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 
@@ -163,7 +163,7 @@ public:
 
   // -- file i/o --
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
+  Capability* issue_new_caps(CInode *in, int mode, MDRequestRef& mdr, SnapRealm *conrealm);
   int issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);

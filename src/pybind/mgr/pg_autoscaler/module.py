@@ -2,14 +2,12 @@
 Automatically scale pg_num based on how much data is stored in each pool.
 """
 
-import errno
 import json
 import mgr_util
 import threading
 import uuid
 from six import itervalues, iteritems
-from collections import defaultdict
-from prettytable import PrettyTable, PLAIN_COLUMNS
+from prettytable import PrettyTable
 from mgr_module import MgrModule
 
 """
@@ -44,16 +42,43 @@ def nearest_power_of_two(n):
 
     return x if (v - n) > (n - x) else v
 
+def effective_target_ratio(target_ratio, total_target_ratio, total_target_bytes, capacity):
+    """
+    Returns the target ratio after normalizing for ratios across pools and
+    adjusting for capacity reserved by pools that have target_size_bytes set.
+    """
+    target_ratio = float(target_ratio)
+    if total_target_ratio:
+        target_ratio = target_ratio / total_target_ratio
+
+    if total_target_bytes and capacity:
+        fraction_available = 1.0 - min(1.0, float(total_target_bytes) / capacity)
+        target_ratio *= fraction_available
+
+    return target_ratio
+
+
 class PgAdjustmentProgress(object):
     """
     Keeps the initial and target pg_num values
     """
-    def __init__(self, pg_num, pg_num_target, ev_id, increase_decrease):
-        self._ev_id = ev_id
-        self._pg_num = pg_num
-        self._pg_num_target = pg_num_target
-        self._increase_decrease = increase_decrease
-   
+    def __init__(self, pool_id, pg_num, pg_num_target):
+        self.ev_id = str(uuid.uuid4())
+        self.pool_id = pool_id
+        self.reset(pg_num, pg_num_target)
+
+    def reset(self, pg_num, pg_num_target):
+        self.pg_num = pg_num
+        self.pg_num_target = pg_num_target
+
+    def update(self, module, progress):
+        desc = 'increasing' if self.pg_num < self.pg_num_target else 'decreasing'
+        module.remote('progress', 'update', self.ev_id,
+                      ev_msg="PG autoscaler %s pool %d PGs from %d to %d" %
+                            (desc, self.pool_id, self.pg_num, self.pg_num_target),
+                      ev_progress=progress,
+                      refs=[("pool", self.pool_id)])
+
 
 class PgAutoscaler(MgrModule):
     """
@@ -120,6 +145,7 @@ class PgAutoscaler(MgrModule):
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',
                                  'RATIO', 'TARGET RATIO',
+                                 'EFFECTIVE RATIO',
                                  'BIAS',
                                  'PG_NUM',
 #                                 'IDEAL',
@@ -134,6 +160,7 @@ class PgAutoscaler(MgrModule):
             table.align['RAW CAPACITY'] = 'r'
             table.align['RATIO'] = 'r'
             table.align['TARGET RATIO'] = 'r'
+            table.align['EFFECTIVE RATIO'] = 'r'
             table.align['BIAS'] = 'r'
             table.align['PG_NUM'] = 'r'
 #            table.align['IDEAL'] = 'r'
@@ -152,6 +179,10 @@ class PgAutoscaler(MgrModule):
                     tr = '%.4f' % p['target_ratio']
                 else:
                     tr = ''
+                if p['effective_target_ratio'] > 0.0:
+                    etr = '%.4f' % p['effective_target_ratio']
+                else:
+                    etr = ''
                 table.add_row([
                     p['pool_name'],
                     mgr_util.format_bytes(p['logical_used'], 6),
@@ -160,6 +191,7 @@ class PgAutoscaler(MgrModule):
                     mgr_util.format_bytes(p['subtree_capacity'], 6),
                     '%.4f' % p['capacity_ratio'],
                     tr,
+                    etr,
                     p['bias'],
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
@@ -200,6 +232,8 @@ class PgAutoscaler(MgrModule):
                 self.capacity = None  # Total capacity of OSDs in subtree
                 self.pool_ids = []
                 self.pool_names = []
+                self.total_target_ratio = 0.0
+                self.total_target_bytes = 0 # including replication / EC overhead
 
         # identify subtrees (note that they may overlap!)
         for pool_id, pool in osdmap.get_pools().items():
@@ -220,10 +254,16 @@ class PgAutoscaler(MgrModule):
             result[root_id] = s
             s.root_ids.append(root_id)
             s.osds |= osds
-            s.pool_ids.append(int(pool_id))
+            s.pool_ids.append(pool_id)
             s.pool_names.append(pool['pool_name'])
             s.pg_current += pool['pg_num_target'] * pool['size']
-
+            target_ratio = pool['options'].get('target_size_ratio', 0.0)
+            if target_ratio:
+                s.total_target_ratio += target_ratio
+            else:
+                target_bytes = pool['options'].get('target_size_bytes', 0)
+                if target_bytes:
+                    s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool_id)
 
         # finish subtrees
         all_stats = self.get('osd_stats')
@@ -249,7 +289,6 @@ class PgAutoscaler(MgrModule):
                            s.pg_target)
 
         return result, pool_root
-
 
     def _get_pool_status(
             self,
@@ -290,7 +329,10 @@ class PgAutoscaler(MgrModule):
 
             pool_logical_used = pool_stats[pool_id]['stored']
             bias = p['options'].get('pg_autoscale_bias', 1.0)
-            target_bytes = p['options'].get('target_size_bytes', 0)
+            target_bytes = 0
+            # ratio takes precedence if both are set
+            if p['options'].get('target_size_ratio', 0.0) == 0.0:
+                target_bytes = p['options'].get('target_size_bytes', 0)
 
             # What proportion of space are we using?
             actual_raw_used = pool_logical_used * raw_used_rate
@@ -299,7 +341,16 @@ class PgAutoscaler(MgrModule):
             pool_raw_used = max(pool_logical_used, target_bytes) * raw_used_rate
             capacity_ratio = float(pool_raw_used) / capacity
 
-            target_ratio = p['options'].get('target_size_ratio', 0.0)
+            self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
+                p['options'].get('target_size_ratio', 0.0),
+                root_map[root_id].total_target_ratio,
+                root_map[root_id].total_target_bytes,
+                capacity))
+            target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
+                                                  root_map[root_id].total_target_ratio,
+                                                  root_map[root_id].total_target_bytes,
+                                                  capacity)
+
             final_ratio = max(capacity_ratio, target_ratio)
 
             # So what proportion of pg allowance should we be using?
@@ -340,7 +391,8 @@ class PgAutoscaler(MgrModule):
                 'raw_used': pool_raw_used,
                 'actual_capacity_ratio': actual_capacity_ratio,
                 'capacity_ratio': capacity_ratio,
-                'target_ratio': target_ratio,
+                'target_ratio': p['options'].get('target_size_ratio', 0.0),
+                'effective_target_ratio': target_ratio,
                 'pg_num_ideal': int(pool_pg_target),
                 'pg_num_final': final_pg_target,
                 'would_adjust': adjust,
@@ -348,37 +400,19 @@ class PgAutoscaler(MgrModule):
                 });
 
         return (ret, root_map, pool_root)
-    
+
     def _update_progress_events(self):
         osdmap = self.get_osdmap()
         pools = osdmap.get_pools()
         for pool_id in list(self._event):
             ev = self._event[pool_id]
-            if int(pool_id) not in pools:
-                # pool is gone
-                self.remote('progress', 'complete', ev._ev_id)
+            pool_data = pools.get(pool_id)
+            if pool_data is None or pool_data['pg_num'] == pool_data['pg_num_target']:
+                # pool is gone or we've reached our target
+                self.remote('progress', 'complete', ev.ev_id)
                 del self._event[pool_id]
                 continue
-            pool_data = pools[int(pool_id)]
-            pg_num = pool_data['pg_num']
-            pg_num_target = pool_data['pg_num_target']
-            initial_pg_num = ev._pg_num
-            initial_pg_num_target = ev._pg_num_target
-            progress = (pg_num - initial_pg_num) / (pg_num_target - initial_pg_num)
-            if pg_num == pg_num_target:
-                self.remote('progress', 'complete', ev._ev_id)
-                del self._event[pool_id]
-                continue
-            elif pg_num == initial_pg_num:
-                # Means no change
-                continue
-
-            else: 
-                self.remote('progress', 'update', ev._ev_id, 
-                        ev_msg="PG autoscaler %s pool %s PGs from %d to %d" % 
-                        (ev._increase_decrease, pool_id, pg_num, pg_num_target), 
-                        ev_progress=progress,
-                        refs=[("pool", int(pool_id))])
+            ev.update(self, (ev.pg_num - pool_data['pg_num']) / (ev.pg_num - ev.pg_num_target))
 
     def _maybe_adjust(self):
         self.log.info('_maybe_adjust')
@@ -392,23 +426,18 @@ class PgAutoscaler(MgrModule):
         # drop them from consideration.
         too_few = []
         too_many = []
+        bytes_and_ratio = []
         health_checks = {}
-
-        total_ratio = dict([(r, 0.0) for r in iter(root_map)])
-        total_target_ratio = dict([(r, 0.0) for r in iter(root_map)])
-        target_ratio_pools = dict([(r, []) for r in iter(root_map)])
 
         total_bytes = dict([(r, 0) for r in iter(root_map)])
         total_target_bytes = dict([(r, 0.0) for r in iter(root_map)])
         target_bytes_pools = dict([(r, []) for r in iter(root_map)])
 
         for p in ps:
-            pool_id = str(p['pool_id'])
-            total_ratio[p['crush_root_id']] += max(p['actual_capacity_ratio'],
-                                                   p['target_ratio'])
-            if p['target_ratio'] > 0:
-                total_target_ratio[p['crush_root_id']] += p['target_ratio']
-                target_ratio_pools[p['crush_root_id']].append(p['pool_name'])
+            pool_id = p['pool_id']
+            pool_opts = pools[p['pool_name']]['options']
+            if pool_opts.get('target_size_ratio', 0) > 0 and pool_opts.get('target_size_bytes', 0) > 0:
+                    bytes_and_ratio.append('Pool %s has target_size_bytes and target_size_ratio set' % p['pool_name'])
             total_bytes[p['crush_root_id']] += max(
                 p['actual_raw_used'],
                 p['target_bytes'] * p['raw_used_rate'])
@@ -436,31 +465,17 @@ class PgAutoscaler(MgrModule):
                     'var': 'pg_num',
                     'val': str(p['pg_num_final'])
                 })
-                
-                # Create new event for each pool
-                # and update existing events
-                # Call Progress Module to create progress event
-                if pool_id not in self._event:
-                    osdmap = self.get_osdmap()
-                    pools = osdmap.get_pools()
-                    pool_data = pools[int(pool_id)]
-                    pg_num = pool_data['pg_num']
-                    pg_num_target = pool_data['pg_num_target']
-                    ev_id = str(uuid.uuid4())
-                    pg_adj_obj = None
-                    if pg_num < pg_num_target:
-                        pg_adj_obj = PgAdjustmentProgress(pg_num, pg_num_target, ev_id, 'increasing')
-                        self._event[pool_id] = pg_adj_obj
 
-                    else:
-                        pg_adj_obj = PgAdjustmentProgress(pg_num, pg_num_target, ev_id, 'decreasing')
-                        self._event[pool_id] = pg_adj_obj
-
-                    self.remote('progress', 'update', ev_id, 
-                    ev_msg="PG autoscaler %s pool %s PGs from %d to %d" % 
-                    (pg_adj_obj._increase_decrease, pool_id, pg_num, pg_num_target), 
-                    ev_progress=0.0,
-                    refs=[("pool", int(pool_id))])
+                # create new event or update existing one to reflect
+                # progress from current state to the new pg_num_target
+                pool_data = pools[p['pool_name']]
+                pg_num = pool_data['pg_num']
+                new_target = p['pg_num_final']
+                if pool_id in self._event:
+                    self._event[pool_id].reset(pg_num, new_target)
+                else:
+                    self._event[pool_id] = PgAdjustmentProgress(pool_id, pg_num, new_target)
+                self._event[pool_id].update(self, 0.0)
 
                 if r[0] != 0:
                     # FIXME: this is a serious and unexpected thing,
@@ -488,34 +503,6 @@ class PgAutoscaler(MgrModule):
                 'summary': summary,
                 'count': len(too_many),
                 'detail': too_many
-            }
-
-        too_much_target_ratio = []
-        for root_id, total in iteritems(total_ratio):
-            total_target = total_target_ratio[root_id]
-            if total_target > 0 and total > 1.0:
-                too_much_target_ratio.append(
-                    'Pools %s overcommit available storage by %.03fx due to '
-                    'target_size_ratio %.03f on pools %s' % (
-                        root_map[root_id].pool_names,
-                        total,
-                        total_target,
-                        target_ratio_pools[root_id]
-                    )
-                )
-            elif total_target > 1.0:
-                too_much_target_ratio.append(
-                    'Pools %s have collective target_size_ratio %.03f > 1.0' % (
-                        root_map[root_id].pool_names,
-                        total_target
-                    )
-                )
-        if too_much_target_ratio:
-            health_checks['POOL_TARGET_SIZE_RATIO_OVERCOMMITTED'] = {
-                'severity': 'warning',
-                'summary': "%d subtrees have overcommitted pool target_size_ratio" % len(too_much_target_ratio),
-                'count': len(too_much_target_ratio),
-                'detail': too_much_target_ratio,
             }
 
         too_much_target_bytes = []
@@ -548,5 +535,12 @@ class PgAutoscaler(MgrModule):
                 'detail': too_much_target_bytes,
             }
 
+        if bytes_and_ratio:
+            health_checks['POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO'] = {
+                'severity': 'warning',
+                'summary': "%d pools have both target_size_bytes and target_size_ratio set" % len(bytes_and_ratio),
+                'count': len(bytes_and_ratio),
+                'detail': bytes_and_ratio,
+            }
 
         self.set_health_checks(health_checks)

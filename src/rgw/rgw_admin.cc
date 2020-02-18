@@ -2723,7 +2723,7 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
     return ret;
   }
 
-  if (bucket_info.reshard_status != CLS_RGW_RESHARD_NOT_RESHARDING) {
+  if (bucket_info.reshard_status != cls_rgw_reshard_status::NOT_RESHARDING) {
     // if in_progress or done then we have an old BucketInfo
     cerr << "ERROR: the bucket is currently undergoing resharding and "
       "cannot be added to the reshard list at this time" << std::endl;
@@ -6749,21 +6749,30 @@ next:
     formatter->open_object_section("result");
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
+
+    constexpr uint32_t NUM_ENTRIES = 1000;
+    uint16_t expansion_factor = 1;
     while (is_truncated) {
       RGWRados::ent_map_t result;
       int r = store->getRados()->cls_bucket_list_ordered(
 	bucket_info, RGW_NO_SHARD,
 	marker, empty_prefix, empty_delimiter,
-	1000, true,
+	NUM_ENTRIES, true, expansion_factor,
 	result, &is_truncated, &cls_filtered, &marker,
 	null_yield,
 	rgw_bucket_object_check_filter);
       if (r < 0 && r != -ENOENT) {
         cerr << "ERROR: failed operation r=" << r << std::endl;
+      } else if (r == -ENOENT) {
+        break;
       }
 
-      if (r == -ENOENT)
-        break;
+      if (result.size() < NUM_ENTRIES / 8) {
+	++expansion_factor;
+      } else if (result.size() > NUM_ENTRIES * 7 / 8 &&
+		 expansion_factor > 1) {
+	--expansion_factor;
+      }
 
       for (auto iter = result.begin(); iter != result.end(); ++iter) {
         rgw_obj_key key = iter->second.key;

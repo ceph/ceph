@@ -195,7 +195,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         a single DriveGroup for now.
         You can work around it by invoking:
 
-        $: ceph orchestrator osd create -i <dg.file>
+        $: ceph orch osd create -i <dg.file>
 
         multiple times. The drivegroup file must only contain one spec at a time.
         """
@@ -212,9 +212,14 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
 
-    @deferred_write("remove_osds")
-    def remove_osds(self, osd_ids, destroy=False):
-        assert isinstance(osd_ids, list)
+    @deferred_write("remove_daemons")
+    def remove_daemons(self, names):
+        assert isinstance(names, list)
+
+    @deferred_write("remove_service")
+    def remove_service(self, service_type, service_name):
+        assert isinstance(service_type, str)
+        assert isinstance(service_name, str)
 
     @deferred_write("blink_device_light")
     def blink_device_light(self, ident_fault, on, locations):
@@ -231,10 +236,6 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: (orchestrator.NFSServiceSpec) -> None
         assert isinstance(spec.pool, str)
 
-    @deferred_write("remove_nfs")
-    def remove_nfs(self, name):
-        pass
-
     @deferred_write("update_nfs")
     def update_nfs(self, spec):
         pass
@@ -243,18 +244,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_mds(self, spec):
         pass
 
-    @deferred_write("remove_mds")
-    def remove_mds(self, name):
-        pass
-
     @deferred_write("add_rgw")
     def add_rgw(self, spec):
         pass
-
-    @deferred_write("remove_rgw")
-    def remove_rgw(self, zone):
-        pass
-
 
     @deferred_read
     def get_hosts(self):
@@ -263,7 +255,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [orchestrator.InventoryNode('localhost', inventory.Devices([]))]
 
     @deferred_write("add_host")
-    def add_host(self, host):
+    def add_host(self, spec):
+        # type: (orchestrator.HostSpec) -> None
+        host = spec.hostname
         if host == 'raise_no_support':
             raise orchestrator.OrchestratorValidationError("MON count must be either 1, 3 or 5")
         if host == 'raise_bug':
@@ -282,14 +276,14 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("update_mgrs")
     def update_mgrs(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> None
+        # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h, str) for h in spec.placement.hosts])
 
     @deferred_write("update_mons")
     def update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> None
+        # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h[0], str) for h in spec.placement.hosts])

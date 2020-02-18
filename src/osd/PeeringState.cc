@@ -1201,6 +1201,16 @@ void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
   }
 }
 
+void PeeringState::proc_renew_lease()
+{
+  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
+    return;
+  }
+  renew_lease(pl->get_mnow());
+  send_lease();
+  schedule_renew_lease();
+}
+
 void PeeringState::recalc_readable_until()
 {
   assert(is_primary());
@@ -2390,7 +2400,7 @@ void PeeringState::activate(
 
     if (HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
       renew_lease(pl->get_mnow());
-      schedule_renew_lease();
+      // do not schedule until we are actually activated
     }
 
     // adjust purged_snaps: PG may have been inactive while snaps were pruned
@@ -5845,9 +5855,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
 boost::statechart::result PeeringState::Active::react(const RenewLease& rl)
 {
   DECLARE_LOCALS;
-  ps->renew_lease(pl->get_mnow());
-  ps->send_lease();
-  ps->schedule_renew_lease();
+  ps->proc_renew_lease();
   return discard_event();
 }
 
@@ -5879,6 +5887,16 @@ void PeeringState::Active::all_activated_and_committed()
   ceph_assert(ps->peer_activated.size() == ps->acting_recovery_backfill.size());
   ceph_assert(!ps->acting_recovery_backfill.empty());
   ceph_assert(ps->blocked_by.empty());
+
+  if (HAVE_FEATURE(ps->upacting_features, SERVER_OCTOPUS)) {
+    // this is overkill when the activation is quick, but when it is slow it
+    // is important, because the lease was renewed by the activate itself but we
+    // don't know how long ago that was, and simply scheduling now may leave
+    // a gap in lease coverage.  keep it simple and aggressively renew.
+    ps->renew_lease(pl->get_mnow());
+    ps->send_lease();
+    ps->schedule_renew_lease();
+  }
 
   // Degraded?
   ps->update_calc_stats();

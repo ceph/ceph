@@ -21,6 +21,7 @@
 # bcond syntax!
 #################################################################################
 %bcond_with make_check
+%bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
 %ifarch s390 s390x
 %bcond_with tcmalloc
@@ -71,7 +72,7 @@
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
-%if 0%{?fedora} || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
 %if %{with selinux}
@@ -201,20 +202,31 @@ BuildRequires:  librdkafka-devel
 %if 0%{with make_check}
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-bcrypt
+BuildRequires:	python%{python3_version_nodots}-nose
+%else
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
+%endif
 BuildRequires:	python%{python3_pkgversion}-requests
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-six
+BuildRequires:	python%{python3_version_nodots}-virtualenv
+%else
 BuildRequires:	python%{python3_pkgversion}-six
 BuildRequires:	python%{python3_pkgversion}-virtualenv
-%if 0%{?rhel} < 8
-BuildRequires:	python%{python3_pkgversion}-coverage
-BuildRequires:	python%{python3_pkgversion}-tox
 %endif
 %if 0%{?rhel} == 7
-BuildRequires:  pyOpenSSL%{python3_pkgversion}
+BuildRequires:	python%{python3_version_nodots}-coverage
 %else
-BuildRequires:  python%{python3_pkgversion}-pyOpenSSL
+BuildRequires:	python%{python3_pkgversion}-coverage
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-pyOpenSSL
+%else
+BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
 BuildRequires:	socat
 %endif
@@ -291,12 +303,21 @@ BuildRequires:	xmlsec1-nss
 %endif
 BuildRequires:	xmlsec1-openssl
 BuildRequires:	xmlsec1-openssl-devel
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-jwt
+BuildRequires:	python%{python3_version_nodots}-scipy
+%else
 BuildRequires:	python%{python3_pkgversion}-cherrypy
 BuildRequires:	python%{python3_pkgversion}-jwt
 BuildRequires:	python%{python3_pkgversion}-routes
 BuildRequires:	python%{python3_pkgversion}-scipy
 BuildRequires:	python%{python3_pkgversion}-werkzeug
-BuildRequires:  python%{python3_pkgversion}-pyOpenSSL
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-pyOpenSSL
+%else
+BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
+%endif
 %endif
 %if 0%{?suse_version}
 BuildRequires:	libxmlsec1-1
@@ -395,9 +416,11 @@ Base is the package that includes all the files shared amongst ceph servers
 
 %package -n cephadm
 Summary:        Utility to bootstrap Ceph clusters
-Requires:       podman
 Requires:       lvm2
 Requires:       python%{python3_pkgversion}
+%if 0%{?weak_deps}
+Recommends:     podman
+%endif
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed 
 with systemd and podman.
@@ -565,6 +588,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-kubernetes
+Requires:       python%{python3_pkgversion}-jsonpatch
 %description mgr-rook
 ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
 a Rook backend.
@@ -1186,8 +1210,16 @@ ${CMAKE} .. \
 %else
     -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
 %endif
+%if 0%{with cmake_verbose_logging}
+    -DCMAKE_VERBOSE_MAKEFILE=ON \
+%endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
     -DWITH_GRAFANA=ON
+
+%if %{with cmake_verbose_logging}
+cat ./CMakeFiles/CMakeOutput.log
+cat ./CMakeFiles/CMakeError.log
+%endif
 
 make "$CEPH_MFLAGS_JOBS"
 
@@ -1547,10 +1579,8 @@ fi
 %{_bindir}/ceph-mgr
 %dir %{_datadir}/ceph/mgr
 %{_datadir}/ceph/mgr/alerts
-%{_datadir}/ceph/mgr/ansible
 %{_datadir}/ceph/mgr/balancer
 %{_datadir}/ceph/mgr/crash
-%{_datadir}/ceph/mgr/deepsea
 %{_datadir}/ceph/mgr/devicehealth
 %{_datadir}/ceph/mgr/influx
 %{_datadir}/ceph/mgr/insights
@@ -1558,8 +1588,7 @@ fi
 %{_datadir}/ceph/mgr/localpool
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
-%{_datadir}/ceph/mgr/orchestrator_cli
-%{_datadir}/ceph/mgr/orchestrator.*
+%{_datadir}/ceph/mgr/orchestrator
 %{_datadir}/ceph/mgr/osd_perf_query
 %{_datadir}/ceph/mgr/pg_autoscaler
 %{_datadir}/ceph/mgr/progress

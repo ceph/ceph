@@ -14,7 +14,7 @@ ceph-mgr orchestrator modules
 
 In this context, *orchestrator* refers to some external service that
 provides the ability to discover devices and create Ceph services.  This
-includes external projects such as ceph-ansible, DeepSea, and Rook.
+includes external projects such as Rook.
 
 An *orchestrator module* is a ceph-mgr module (:ref:`mgr-module-dev`)
 which implements common management operations using a particular
@@ -34,11 +34,9 @@ the dashboard, to work with various different backends.
             volumes [label="mgr/volumes"]
             rook [label="mgr/rook"]
             dashboard [label="mgr/dashboard"]
-            orchestrator_cli [label="mgr/orchestrator_cli"]
+            orchestrator_cli [label="mgr/orchestrator"]
             orchestrator [label="Orchestrator Interface"]
-            ansible [label="mgr/ansible"]
-            ssh [label="mgr/ssh"]
-            deepsea [label="mgr/deepsea"]
+            cephadm [label="mgr/cephadm"]
 
             label = "ceph-mgr";
         }
@@ -47,14 +45,10 @@ the dashboard, to work with various different backends.
         dashboard -> orchestrator
         orchestrator_cli -> orchestrator
         orchestrator -> rook -> rook_io
-        orchestrator -> ansible -> ceph_ansible
-        orchestrator -> deepsea -> suse_deepsea
-        orchestrator -> ssh
+        orchestrator -> cephadm
 
 
         rook_io [label="Rook"]
-        ceph_ansible [label="ceph-ansible"]
-        suse_deepsea [label="DeepSea"]
 
         rankdir="TB";
     }
@@ -179,13 +173,13 @@ In detail, orchestrators need to explicitly deal with different kinds of errors:
 3. Missing features within implemented methods.
 
    E.g. optional parameters to a command that are not supported by the
-   backend (e.g. the hosts field in :func:`Orchestrator.update_mons` command with the rook backend).
+   backend (e.g. the hosts field in :func:`Orchestrator.apply_mons` command with the rook backend).
 
    See :class:`OrchestratorValidationError`.
 
 4. Input validation errors
 
-   The ``orchestrator_cli`` module and other calling modules are supposed to
+   The ``orchestrator`` module and other calling modules are supposed to
    provide meaningful error messages.
 
    See :class:`OrchestratorValidationError`.
@@ -221,9 +215,14 @@ Host management
 .. automethod:: Orchestrator.add_host
 .. automethod:: Orchestrator.remove_host
 .. automethod:: Orchestrator.get_hosts
+.. automethod:: Orchestrator.update_host_addr
+.. automethod:: Orchestrator.add_host_label
+.. automethod:: Orchestrator.remove_host_label
 
-Inventory and status
---------------------
+.. autoclass:: HostSpec
+
+Devices
+-------
 
 .. automethod:: Orchestrator.get_inventory
 .. autoclass:: InventoryFilter
@@ -239,20 +238,30 @@ Inventory and status
 .. py:currentmodule:: orchestrator
 
 
+Services
+--------
 
-.. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription
 
-Service Actions
----------------
+.. autoclass:: ServiceSpec
+
+.. automethod:: Orchestrator.describe_service
 
 .. automethod:: Orchestrator.service_action
+.. automethod:: Orchestrator.remove_service
+
+
+Daemons
+-------
+
+.. automethod:: Orchestrator.list_daemons
+.. automethod:: Orchestrator.remove_daemons
+.. automethod:: Orchestrator.daemon_action
 
 OSD management
 --------------
 
 .. automethod:: Orchestrator.create_osds
-.. automethod:: Orchestrator.remove_osds
 
 .. py:currentmodule:: ceph.deployment.drive_group
 
@@ -278,7 +287,7 @@ See :ref:`rados-replacing-an-osd` for the underlying process.
 Replacing OSDs is fundamentally a two-staged process, as users need to
 physically replace drives. The orchestrator therefor exposes this two-staged process.
 
-Phase one is a call to :meth:`Orchestrator.remove_osds` with ``destroy=True`` in order to mark
+Phase one is a call to :meth:`Orchestrator.remove_daemons` with ``destroy=True`` in order to mark
 the OSD as destroyed.
 
 
@@ -290,23 +299,31 @@ Phase two is a call to  :meth:`Orchestrator.create_osds` with a Drive Group with
 
 .. py:currentmodule:: orchestrator
 
+Monitors
+--------
+
+.. automethod:: Orchestrator.add_mon
+.. automethod:: Orchestrator.apply_mon
+
 Stateless Services
 ------------------
 
-.. autoclass:: StatelessServiceSpec
-
+.. automethod:: Orchestrator.add_mgr
+.. automethod:: Orchestrator.apply_mgr
 .. automethod:: Orchestrator.add_mds
-.. automethod:: Orchestrator.remove_mds
-.. automethod:: Orchestrator.update_mds
+.. automethod:: Orchestrator.apply_mds
+.. automethod:: Orchestrator.add_rbd_mirror
+.. automethod:: Orchestrator.apply_rbd_mirror
+
+.. autoclass:: RGWSpec
+
 .. automethod:: Orchestrator.add_rgw
-.. automethod:: Orchestrator.remove_rgw
-.. automethod:: Orchestrator.update_rgw
+.. automethod:: Orchestrator.apply_rgw
 
 .. autoclass:: NFSServiceSpec
 
 .. automethod:: Orchestrator.add_nfs
-.. automethod:: Orchestrator.remove_nfs
-.. automethod:: Orchestrator.update_nfs
+.. automethod:: Orchestrator.apply_nfs
 
 Upgrades
 --------

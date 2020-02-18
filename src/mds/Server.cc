@@ -231,6 +231,7 @@ Server::Server(MDSRank *m) :
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
+  delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -263,7 +264,7 @@ void Server::dispatch(const cref_t<Message> &m)
 	return;
       }
       bool queue_replay = false;
-      if (req->is_replay()) {
+      if (req->is_replay() || req->is_async()) {
 	dout(3) << "queuing replayed op" << dendl;
 	queue_replay = true;
 	if (req->head.ino &&
@@ -1168,6 +1169,9 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
     max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
     dout(20) << __func__ << " max snapshots per directory changed to "
             << max_snaps_per_dir << dendl;
+  }
+  if (changed.count("mds_client_delegate_inos_pct")) {
+    delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
   }
 }
 
@@ -4186,7 +4190,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (cur->is_file() || cur->is_dir()) {
     if (mdr->snapid == CEPH_NOSNAP) {
       // register new cap
-      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, 0, req->is_replay());
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr, nullptr);
       if (cap)
 	dout(12) << "open issued caps " << ccap_string(cap->pending())
 		 << " for " << req->get_source()
@@ -4379,7 +4383,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   in->first = dn->first;
 
   // do the open
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr, realm);
   in->authlock.set_state(LOCK_EXCL);
   in->xattrlock.set_state(LOCK_EXCL);
 
@@ -4410,10 +4414,9 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     dout(10) << "adding created_ino and delegated_inos" << dendl;
     ocresp.created_ino = in->inode.ino;
 
-    // Try to delegate some prealloc_inos to the client, if it's down to half the max
-    auto pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
-    if (pct) {
-      unsigned frac = 100 / pct;
+    if (delegate_inos_pct && !req->is_queued_for_replay()) {
+      // Try to delegate some prealloc_inos to the client, if it's down to half the max
+      unsigned frac = 100 / delegate_inos_pct;
       if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
 	mdr->session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
     }
@@ -5029,7 +5032,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   dout(10) << "do_open_truncate " << *in << dendl;
 
   SnapRealm *realm = in->find_snaprealm();
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr, realm);
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
@@ -5987,7 +5990,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (S_ISREG(newi->inode.mode)) {
     // issue a cap on the file
     int cmode = CEPH_FILE_MODE_RDWR;
-    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
     if (cap) {
       cap->set_wanted(0);
 
@@ -6087,7 +6090,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   
   // issue a cap on the directory
   int cmode = CEPH_FILE_MODE_RDWR;
-  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
   if (cap) {
     cap->set_wanted(0);
 
@@ -7508,6 +7511,8 @@ bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
   dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
   ceph_assert(in->is_auth());
 
+  if (in->filelock.is_cached())
+    return false; // there can be pending async create/unlink. don't know.
   if (in->snaprealm && in->snaprealm->srnode.snaps.size())
     return true; // in a snapshot!
 

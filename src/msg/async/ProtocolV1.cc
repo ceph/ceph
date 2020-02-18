@@ -1134,7 +1134,7 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
                  << " front=" << header.front_len << " data=" << header.data_len
                  << " off " << header.data_off << dendl;
 
-  if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.buffers().size() > 1)) {
+  if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.get_num_buffers() > 1)) {
     for (const auto &pb : bl.buffers()) {
       connection->outgoing_bl.append((char *)pb.c_str(), pb.length());
     }
@@ -2062,7 +2062,8 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   ldout(cct, 10) << __func__ << " accept setting up session_security." << dendl;
 
   if (connection->policy.server &&
-      connection->policy.lossy) {
+      connection->policy.lossy &&
+      !connection->policy.register_lossy_clients) {
     // incoming lossy client, no need to register this connection
     // new session
     ldout(cct, 10) << __func__ << " accept new session" << dendl;

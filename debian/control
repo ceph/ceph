@@ -168,8 +168,8 @@ Description: debugging symbols for ceph-base
 
 Package: cephadm
 Architecture: linux-any
-Depends: docker.io,
-         lvm2,
+Recommends: podman | docker.io
+Depends: lvm2,
 	 ${python:Depends},
 Description: cephadm utility to bootstrap ceph daemons with systemd and containers
  Ceph is a massively scalable, open-source, distributed
@@ -298,6 +298,7 @@ Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python3-six,
+         python3-jsonpatch
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},

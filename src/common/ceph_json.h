@@ -643,8 +643,8 @@ class JSONFormattable : public ceph::JSONFormatter {
   JSONFormattable *cur_enc;
 
 protected:
-  bool handle_value(const char *name, std::string_view s, bool quoted) override;
-  bool handle_open_section(const char *name, const char *ns, bool section_is_array) override;
+  bool handle_value(std::string_view name, std::string_view s, bool quoted) override;
+  bool handle_open_section(std::string_view name, const char *ns, bool section_is_array) override;
   bool handle_close_section() override;
 
 public:

@@ -40,10 +40,13 @@ NamespaceReplayer<I>::NamespaceReplayer(
     librados::IoCtx &local_io_ctx, librados::IoCtx &remote_io_ctx,
     const std::string &local_mirror_uuid,
     const std::string& local_mirror_peer_uuid,
-    const RemotePoolMeta& remote_pool_meta, Threads<I> *threads,
-    Throttler<I> *image_sync_throttler, Throttler<I> *image_deletion_throttler,
+    const RemotePoolMeta& remote_pool_meta,
+    Threads<I> *threads,
+    Throttler<I> *image_sync_throttler,
+    Throttler<I> *image_deletion_throttler,
     ServiceDaemon<I> *service_daemon,
-    journal::CacheManagerHandler *cache_manager_handler) :
+    journal::CacheManagerHandler *cache_manager_handler,
+    PoolMetaCache* pool_meta_cache) :
   m_namespace_name(name),
   m_local_mirror_uuid(local_mirror_uuid),
   m_local_mirror_peer_uuid(local_mirror_peer_uuid),
@@ -52,6 +55,7 @@ NamespaceReplayer<I>::NamespaceReplayer(
   m_image_deletion_throttler(image_deletion_throttler),
   m_service_daemon(service_daemon),
   m_cache_manager_handler(cache_manager_handler),
+  m_pool_meta_cache(pool_meta_cache),
   m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
       "rbd::mirror::NamespaceReplayer " + name, this))),
   m_local_pool_watcher_listener(this, true),
@@ -299,18 +303,8 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!m_remote_status_updater);
 
-  librados::Rados rados(m_local_io_ctx);
-  std::string local_fsid;
-  int r = rados.cluster_fsid(&local_fsid);
-  if (r < 0) {
-    derr << "failed to retrieve local fsid: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    shut_down_local_status_updater();
-    return;
-  }
-
   m_remote_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_remote_io_ctx, m_threads, local_fsid));
+    m_remote_io_ctx, m_threads, m_local_mirror_uuid));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_remote_status_updater>(this);
@@ -345,7 +339,8 @@ void NamespaceReplayer<I>::init_instance_replayer() {
 
   m_instance_replayer.reset(InstanceReplayer<I>::create(
       m_local_io_ctx, m_local_mirror_uuid, m_threads, m_service_daemon,
-      m_local_status_updater.get(), m_cache_manager_handler));
+      m_local_status_updater.get(), m_cache_manager_handler,
+      m_pool_meta_cache));
   auto ctx = create_context_callback<NamespaceReplayer<I>,
       &NamespaceReplayer<I>::handle_init_instance_replayer>(this);
 

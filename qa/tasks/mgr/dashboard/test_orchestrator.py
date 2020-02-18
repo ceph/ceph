@@ -9,6 +9,7 @@ test_data = {
     'inventory': [
         {
             'name': 'test-host0',
+            'addr': '1.2.3.4',
             'devices': [
                 {
                     'path': '/dev/sda',
@@ -17,6 +18,7 @@ test_data = {
         },
         {
             'name': 'test-host1',
+            'addr': '1.2.3.5',
             'devices': [
                 {
                     'path': '/dev/sdb',
@@ -71,7 +73,7 @@ class OrchestratorControllerTest(DashboardTestCase):
     def setUpClass(cls):
         super(OrchestratorControllerTest, cls).setUpClass()
         cls._load_module('test_orchestrator')
-        cmd = ['orchestrator', 'set', 'backend', 'test_orchestrator']
+        cmd = ['orch', 'set', 'backend', 'test_orchestrator']
         cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
 
         cmd = ['test_orchestrator', 'load_data', '-i', '-']

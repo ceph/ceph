@@ -1608,8 +1608,9 @@ TEST_F(TestClsRbd, mirror) {
   std::string uuid;
   ASSERT_EQ(-ENOENT, mirror_uuid_get(&ioctx, &uuid));
   ASSERT_EQ(-EINVAL, mirror_peer_add(&ioctx, {"uuid1", MIRROR_PEER_DIRECTION_RX,
-                                              "siteA", "client", "fsid"}));
-  ASSERT_EQ(-EINVAL, mirror_peer_ping(&ioctx, "siteA", "fsid"));
+                                              "siteA", "client",
+                                              "mirror uuid"}));
+  ASSERT_EQ(-EINVAL, mirror_peer_ping(&ioctx, "siteA", "mirror uuid"));
 
   cls::rbd::MirrorMode mirror_mode;
   ASSERT_EQ(0, mirror_mode_get(&ioctx, &mirror_mode));
@@ -1635,7 +1636,8 @@ TEST_F(TestClsRbd, mirror) {
                                               MIRROR_PEER_DIRECTION_RX, "siteA",
                                               "client", ""}));
   ASSERT_EQ(-EINVAL, mirror_peer_add(&ioctx, {"uuid1", MIRROR_PEER_DIRECTION_TX,
-                                              "siteA", "client", "fsid"}));
+                                              "siteA", "client",
+                                              "mirror uuid"}));
   ASSERT_EQ(0, mirror_peer_add(&ioctx, {"uuid1", MIRROR_PEER_DIRECTION_RX,
                                         "siteA", "client", "fsidA"}));
   ASSERT_EQ(0, mirror_peer_add(&ioctx, {"uuid2", MIRROR_PEER_DIRECTION_RX,
@@ -1688,27 +1690,27 @@ TEST_F(TestClsRbd, mirror) {
     {"uuid3", MIRROR_PEER_DIRECTION_RX, "new site", "admin", ""}};
   ASSERT_EQ(expected_peers, peers);
 
-  ASSERT_EQ(-EINVAL, mirror_peer_ping(&ioctx, "", "fsid"));
+  ASSERT_EQ(-EINVAL, mirror_peer_ping(&ioctx, "", "mirror uuid"));
   ASSERT_EQ(-EINVAL, mirror_peer_ping(&ioctx, "new site", ""));
-  ASSERT_EQ(0, mirror_peer_ping(&ioctx, "new site", "fsid"));
+  ASSERT_EQ(0, mirror_peer_ping(&ioctx, "new site", "mirror uuid"));
 
   ASSERT_EQ(0, mirror_peer_list(&ioctx, &peers));
   ASSERT_EQ(1U, peers.size());
   ASSERT_LT(utime_t{}, peers[0].last_seen);
   expected_peers = {
-    {"uuid3", MIRROR_PEER_DIRECTION_RX_TX, "new site", "admin", "fsid"}};
+    {"uuid3", MIRROR_PEER_DIRECTION_RX_TX, "new site", "admin", "mirror uuid"}};
   expected_peers[0].last_seen = peers[0].last_seen;
   ASSERT_EQ(expected_peers, peers);
   ASSERT_EQ(0, mirror_peer_remove(&ioctx, "uuid3"));
 
-  ASSERT_EQ(0, mirror_peer_ping(&ioctx, "siteA", "fsid"));
+  ASSERT_EQ(0, mirror_peer_ping(&ioctx, "siteA", "mirror uuid"));
 
   ASSERT_EQ(0, mirror_peer_list(&ioctx, &peers));
   ASSERT_EQ(1U, peers.size());
   ASSERT_FALSE(peers[0].uuid.empty());
   ASSERT_LT(utime_t{}, peers[0].last_seen);
   expected_peers = {
-    {peers[0].uuid, MIRROR_PEER_DIRECTION_TX, "siteA", "", "fsid"}};
+    {peers[0].uuid, MIRROR_PEER_DIRECTION_TX, "siteA", "", "mirror uuid"}};
   expected_peers[0].last_seen = peers[0].last_seen;
   ASSERT_EQ(expected_peers, peers);
 

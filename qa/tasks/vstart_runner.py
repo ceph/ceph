@@ -1016,12 +1016,6 @@ class LocalCephCluster(CephCluster):
     def admin_remote(self):
         return LocalRemote()
 
-    def set_config_opt(self, section, opt, val):
-        self.mon_manager.raw_cluster_cmd('config', 'set', section, opt, val)
-
-    def rm_config_opt(self, section, opt):
-        self.mon_manager.raw_cluster_cmd('config', 'rm', section, opt)
-
     def get_config(self, key, service_type=None):
         if service_type is None:
             service_type = 'mon'
@@ -1106,13 +1100,13 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
-    def __init__(self, ctx, fscid=None, name='cephfs', create=False):
+    def __init__(self, ctx, fscid=None, name='cephfs', create=False, ec_profile=None):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
 
         self.id = None
-        self.name = None
-        self.ec_profile = None
+        self.name = name
+        self.ec_profile = ec_profile
         self.metadata_pool_name = None
         self.metadata_overlay = False
         self.data_pool_name = None

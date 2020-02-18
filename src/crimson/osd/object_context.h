@@ -3,19 +3,27 @@
 
 #pragma once
 
+#include <map>
+#include <optional>
+#include <utility>
 #include <seastar/core/shared_future.hh>
-
-#include <boost/intrusive_ptr.hpp>
-#include <boost/intrusive/list.hpp>
-#include <boost/intrusive/set.hpp>
-#include <boost/smart_ptr/intrusive_ref_counter.hpp>
+#include <seastar/core/shared_ptr.hh>
 
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
-#include "crimson/common/config_proxy.h"
 #include "crimson/osd/osd_operation.h"
 
+namespace ceph {
+  class Formatter;
+}
+
+namespace crimson::common {
+  class ConfigProxy;
+}
+
 namespace crimson::osd {
+
+class Watch;
 
 template <typename OBC>
 struct obc_to_hoid {
@@ -35,6 +43,12 @@ public:
   ObjectState obs;
   std::optional<SnapSet> ss;
   bool loaded : 1;
+  // the watch / notify machinery rather stays away from the hot and
+  // frequented paths. std::map is used mostly because of developer's
+  // convenience.
+  using watch_key_t = std::pair<uint64_t, entity_name_t>;
+  std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
+
   ObjectContext(const hobject_t &hoid) : obs(hoid), loaded(false) {}
 
   const hobject_t &get_oid() const {
@@ -218,8 +232,8 @@ public:
   }
 
   const char** get_tracked_conf_keys() const final;
-  void handle_conf_change(const ConfigProxy& conf,
+  void handle_conf_change(const crimson::common::ConfigProxy& conf,
                           const std::set <std::string> &changed) final;
 };
 
-}
+} // namespace crimson::osd

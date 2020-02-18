@@ -24,13 +24,14 @@ import shutil
 import subprocess
 
 from ceph.deployment import inventory, translate
-from ceph.deployment.drive_group import DriveGroupSpecs
+from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
 
 from mgr_module import MgrModule
 import mgr_util
 import orchestrator
-from orchestrator import OrchestratorError, HostSpec, OrchestratorValidationError
+from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError, HostSpec, \
+    CLICommandMeta
 
 from . import remotes
 
@@ -82,7 +83,7 @@ except ImportError:
 
 def _name_to_entity_name(name):
     """
-    Map from service names to ceph entity names (as seen in config)
+    Map from daemon names to ceph entity names (as seen in config)
     """
     if name.startswith('rgw.') or name.startswith('rbd-mirror'):
         return 'client.' + name
@@ -261,29 +262,30 @@ def trivial_result(val):
     return AsyncCompletion(value=val, name='trivial_result')
 
 
-def with_services(service_type=None,
-                  service_name=None,
-                  service_id=None,
-                  node_name=None,
-                  refresh=False):
+def with_daemons(daemon_type=None,
+                 daemon_id=None,
+                 service_name=None,
+                 host=None,
+                 refresh=False):
     def decorator(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            def on_complete(services):
+            def on_complete(daemons):
                 if kwargs:
-                    kwargs['services'] = services
+                    kwargs['daemons'] = daemons
                     return func(self, *args, **kwargs)
                 else:
-                    args_ = args + (services,)
+                    args_ = args + (daemons,)
                     return func(self, *args_, **kwargs)
-            return self._get_services(service_type=service_type,
-                                      service_name=service_name,
-                                      service_id=service_id,
-                                      node_name=node_name,
-                                      refresh=refresh).then(on_complete)
+            return self._get_daemons(daemon_type=daemon_type,
+                                     daemon_id=daemon_id,
+                                     service_name=service_name,
+                                     host=host,
+                                     refresh=refresh).then(on_complete)
         return wrapper
     return decorator
 
+@six.add_metaclass(CLICommandMeta)
 class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     _STORE_HOST_PREFIX = "host"
@@ -305,7 +307,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'desc': 'seconds to cache device inventory',
         },
         {
-            'name': 'service_cache_timeout',
+            'name': 'daemon_cache_timeout',
             'type': 'secs',
             'default': 60,
             'desc': 'seconds to cache service (daemon) inventory',
@@ -327,14 +329,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'name': 'warn_on_stray_hosts',
             'type': 'bool',
             'default': True,
-            'desc': 'raise a health warning if services are detected on a host '
+            'desc': 'raise a health warning if daemons are detected on a host '
                     'that is not managed by cephadm',
         },
         {
-            'name': 'warn_on_stray_services',
+            'name': 'warn_on_stray_daemons',
             'type': 'bool',
             'default': True,
-            'desc': 'raise a health warning if services are detected '
+            'desc': 'raise a health warning if daemons are detected '
                     'that are not managed by cephadm',
         },
         {
@@ -357,11 +359,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if TYPE_CHECKING:
             self.ssh_config_file = None  # type: Optional[str]
             self.inventory_cache_timeout = 0
-            self.service_cache_timeout = 0
+            self.daemon_cache_timeout = 0
             self.mode = ''
             self.container_image_base = ''
             self.warn_on_stray_hosts = True
-            self.warn_on_stray_services = True
+            self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
@@ -407,23 +409,23 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.inventory_cache = orchestrator.OutdatablePersistentDict(
             self, self._STORE_HOST_PREFIX + '.devices')
 
-        self.service_cache = orchestrator.OutdatablePersistentDict(
-            self, self._STORE_HOST_PREFIX + '.services')
+        self.daemon_cache = orchestrator.OutdatablePersistentDict(
+            self, self._STORE_HOST_PREFIX + '.daemons')
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
             if h not in self.inventory_cache:
                 self.log.debug('adding inventory item for %s' % h)
                 self.inventory_cache[h] = orchestrator.OutdatableData()
-            if h not in self.service_cache:
+            if h not in self.daemon_cache:
                 self.log.debug('adding service item for %s' % h)
-                self.service_cache[h] = orchestrator.OutdatableData()
+                self.daemon_cache[h] = orchestrator.OutdatableData()
         for h in self.inventory_cache:
             if h not in self.inventory:
                 del self.inventory_cache[h]
-        for h in self.service_cache:
+        for h in self.daemon_cache:
             if h not in self.inventory:
-                del self.service_cache[h]
+                del self.daemon_cache[h]
 
     def shutdown(self):
         self.log.info('shutdown')
@@ -440,35 +442,45 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         # only wait a little bit; the service might go away for something
         tries = 4
         while tries > 0:
-            if s.service_type not in ['mon', 'osd', 'mds']:
+            if s.daemon_type not in ['mon', 'osd', 'mds']:
                 break
             ret, out, err = self.mon_command({
-                'prefix': '%s ok-to-stop' % s.service_type,
-                'ids': [s.service_instance],
+                'prefix': '%s ok-to-stop' % s.daemon_type,
+                'ids': [s.daemon_id],
             })
             if not self.upgrade_state or self.upgrade_state.get('paused'):
                 return False
             if ret:
-                self.log.info('Upgrade: not safe to stop %s.%s' %
-                              (s.service_type, s.service_instance))
+                self.log.info('Upgrade: It is NOT safe to stop %s.%s' %
+                              (s.daemon_type, s.daemon_id))
                 time.sleep(15)
                 tries -= 1
             else:
-                self.log.info('Upgrade: safe to stop %s.%s' %
-                              (s.service_type, s.service_instance))
+                self.log.info('Upgrade: It is safe to stop %s.%s' %
+                              (s.daemon_type, s.daemon_id))
                 return True
-        self.log.info('Upgrade: safe to stop %s.%s' %
-                      (s.service_type, s.service_instance))
+        self.log.info('Upgrade: It is safe to stop %s.%s' %
+                      (s.daemon_type, s.daemon_id))
         return True
 
     def _clear_upgrade_health_checks(self):
-        for k in ['UPGRADE_NO_STANDBY_MGR']:
+        for k in ['UPGRADE_NO_STANDBY_MGR',
+                  'UPGRADE_FAILED_PULL']:
             if k in self.health_checks:
                 del self.health_checks[k]
         self.set_health_checks(self.health_checks)
 
+    def _fail_upgrade(self, alert_id, alert):
+        self.log.error('Upgrade: Paused due to %s: %s' % (alert_id,
+                                                          alert['summary']))
+        self.upgrade_state['error'] = alert_id + ': ' + alert['summary']
+        self.upgrade_state['paused'] = True
+        self._save_upgrade_state()
+        self.health_checks[alert_id] = alert
+        self.set_health_checks(self.health_checks)
+
     def _do_upgrade(self, daemons):
-        # type: (List[orchestrator.ServiceDescription]) -> Optional[AsyncCompletion]
+        # type: (List[orchestrator.DaemonDescription]) -> Optional[AsyncCompletion]
         if not self.upgrade_state:
             self.log.debug('_do_upgrade no state, exiting')
             return None
@@ -478,7 +490,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if not target_id:
             # need to learn the container hash
             self.log.info('Upgrade: First pull of %s' % target_name)
-            target_id, target_version = self._get_container_image_id(target_name)
+            try:
+                target_id, target_version = self._get_container_image_id(target_name)
+            except OrchestratorError as e:
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pull target image',
+                    'count': 1,
+                    'detail': [str(e)],
+                })
+                return None
             self.upgrade_state['target_id'] = target_id
             self.upgrade_state['target_version'] = target_version
             self._save_upgrade_state()
@@ -501,17 +522,22 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
-                if d.service_type != daemon_type:
+                if d.daemon_type != daemon_type:
                     continue
+                if not d.container_image_id:
+                    self.log.debug('daemon %s.%s image_id is not known' % (
+                        daemon_type, d.daemon_id))
+                    return None
                 if d.container_image_id == target_id:
                     self.log.debug('daemon %s.%s version correct' % (
-                        daemon_type, d.service_instance))
+                        daemon_type, d.daemon_id))
                     continue
                 self.log.debug('daemon %s.%s version incorrect (%s, %s)' % (
-                    daemon_type, d.service_instance,
+                    daemon_type, d.daemon_id,
                     d.container_image_id, d.version))
 
-                if d.service_instance == self.get_mgr_id():
+                if daemon_type == 'mgr' and \
+                   d.daemon_id == self.get_mgr_id():
                     self.log.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                   self.get_mgr_id())
                     need_upgrade_self = True
@@ -520,19 +546,24 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 # make sure host has latest container image
                 out, err, code = self._run_cephadm(
                     d.nodename, None, 'inspect-image', [],
-                    image=target_name, no_fsid=True)
+                    image=target_name, no_fsid=True, error_ok=True)
                 self.log.debug('out %s code %s' % (out, code))
                 if code or json.loads(''.join(out)).get('image_id') != target_id:
                     self.log.info('Upgrade: Pulling %s on %s' % (target_name,
                                                                  d.nodename))
                     out, err, code = self._run_cephadm(
                         d.nodename, None, 'pull', [],
-                        image=target_name, no_fsid=True)
+                        image=target_name, no_fsid=True, error_ok=True)
                     if code:
-                        self.log.warning('Upgrade: failed to pull %s on %s' % (
-                            target_name, d.nodename))
-                        # FIXME
-                        continue
+                        self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                            'severity': 'warning',
+                            'summary': 'Upgrade: failed to pull target image',
+                            'count': 1,
+                            'detail': [
+                                'failed to pull %s on host %s' % (target_name,
+                                                                  d.nodename)],
+                        })
+                        return None
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
                         self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.nodename, r['image_id'], target_id))
@@ -543,16 +574,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if not self._wait_for_ok_to_stop(d):
                     return None
                 self.log.info('Upgrade: Redeploying %s.%s' %
-                              (d.service_type, d.service_instance))
+                              (d.daemon_type, d.daemon_id))
                 ret, out, err = self.mon_command({
                     'prefix': 'config set',
                     'name': 'container_image',
                     'value': target_name,
-                    'who': daemon_type + '.' + d.service_instance,
+                    'who': daemon_type + '.' + d.daemon_id,
                 })
-                return self._service_action([(
-                    d.service_type,
-                    d.service_instance,
+                return self._daemon_action([(
+                    d.daemon_type,
+                    d.daemon_id,
                     d.nodename,
                     'redeploy'
                 )])
@@ -561,14 +592,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 mgr_map = self.get('mgr_map')
                 num = len(mgr_map.get('standbys'))
                 if not num:
-                    self.log.warning(
-                        'Upgrade: No standby mgrs and I need to update the mgr, '
-                        'suspending upgrade')
-                    self.upgrade_state['error'] = 'No standby mgrs and mgr.%s ' \
-                        'needs to be upgraded' % self.get_mgr_id()
-                    self.upgrade_state['paused'] = True
-                    self._save_upgrade_state()
-                    self.health_checks['UPGRADE_NO_STANDBY_MGR'] = {
+                    self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
                         'severity': 'warning',
                         'summary': 'Upgrade: Need standby mgr daemon',
                         'count': 1,
@@ -576,8 +600,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             'The upgrade process needs to upgrade the mgr, '
                             'but it needs at least one standby to proceed.',
                         ],
-                    }
-                    self.set_health_checks(self.health_checks)
+                    })
                     return None
 
                 self.log.info('Upgrade: there are %d other already-upgraded '
@@ -657,14 +680,19 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         bad_hosts = []
         for host, v in self.inventory.items():
             self.log.debug(' checking %s' % host)
-            out, err, code = self._run_cephadm(host, 'client', 'check-host', [],
-                                               error_ok=True, no_fsid=True)
-            if code:
+            try:
+                out, err, code = self._run_cephadm(
+                    host, 'client', 'check-host', [],
+                    error_ok=True, no_fsid=True)
+                if code:
+                    self.log.debug(' host %s failed check' % host)
+                    if self.warn_on_failed_host_check:
+                        bad_hosts.append('host %s failed check: %s' % (host, err))
+                else:
+                    self.log.debug(' host %s ok' % host)
+            except Exception as e:
                 self.log.debug(' host %s failed check' % host)
-                if self.warn_on_failed_host_check:
-                    bad_hosts.append('host %s failed check: %s' % (host, err))
-            else:
-                self.log.debug(' host %s ok' % host)
+                bad_hosts.append('host %s failed check: %s' % (host, e))
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
             del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
         if bad_hosts:
@@ -676,33 +704,32 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             }
         self.set_health_checks(self.health_checks)
 
-    def _check_for_strays(self, services):
+    def _check_for_strays(self, daemons):
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
-                  'CEPHADM_STRAY_SERVICE']:
+                  'CEPHADM_STRAY_DAEMON']:
             if k in self.health_checks:
                 del self.health_checks[k]
-        if self.warn_on_stray_hosts or self.warn_on_stray_services:
+        if self.warn_on_stray_hosts or self.warn_on_stray_daemons:
             ls = self.list_servers()
             managed = []
-            for s in services:
+            for s in daemons:
                 managed.append(s.name())
-            self.log.debug('cephadm daemons %s' % managed)
             host_detail = []     # type: List[str]
-            host_num_services = 0
-            service_detail = []  # type: List[str]
+            host_num_daemons = 0
+            daemon_detail = []  # type: List[str]
             for item in ls:
                 host = item.get('hostname')
-                services = item.get('services')
+                daemons = item.get('services')  # misnomer!
                 missing_names = []
-                for s in services:
+                for s in daemons:
                     name = '%s.%s' % (s.get('type'), s.get('id'))
                     if host not in self.inventory:
                         missing_names.append(name)
-                        host_num_services += 1
+                        host_num_daemons += 1
                     if name not in managed:
-                        service_detail.append(
-                            'stray service %s on host %s not managed by cephadm' % (name, host))
+                        daemon_detail.append(
+                            'stray daemon %s on host %s not managed by cephadm' % (name, host))
                 if missing_names:
                     host_detail.append(
                         'stray host %s has %d stray daemons: %s' % (
@@ -710,21 +737,27 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if host_detail:
                 self.health_checks['CEPHADM_STRAY_HOST'] = {
                     'severity': 'warning',
-                    'summary': '%d stray host(s) with %s service(s) '
+                    'summary': '%d stray host(s) with %s daemon(s) '
                     'not managed by cephadm' % (
-                        len(host_detail), host_num_services),
+                        len(host_detail), host_num_daemons),
                     'count': len(host_detail),
                     'detail': host_detail,
                 }
-            if service_detail:
-                self.health_checks['CEPHADM_STRAY_SERVICE'] = {
+            if daemon_detail:
+                self.health_checks['CEPHADM_STRAY_DAEMON'] = {
                     'severity': 'warning',
-                    'summary': '%d stray service(s) not managed by cephadm' % (
-                        len(service_detail)),
-                    'count': len(service_detail),
-                    'detail': service_detail,
+                    'summary': '%d stray daemons(s) not managed by cephadm' % (
+                        len(daemon_detail)),
+                    'count': len(daemon_detail),
+                    'detail': daemon_detail,
                 }
         self.set_health_checks(self.health_checks)
+
+    def _serve_sleep(self):
+        sleep_interval = 600
+        self.log.debug('Sleeping for %d seconds', sleep_interval)
+        ret = self.event.wait(sleep_interval)
+        self.event.clear()
 
     def serve(self):
         # type: () -> None
@@ -732,18 +765,34 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         while self.run:
             self._check_hosts()
 
-            # refresh services
-            self.log.debug('refreshing services')
-            completion = self._get_services(maybe_refresh=True)
+            # refresh daemons
+            self.log.debug('refreshing daemons')
+            completion = self._get_daemons(maybe_refresh=True)
             self._orchestrator_wait([completion])
-            orchestrator.raise_if_exception(completion)
-            services = completion.result
-            self.log.debug('services %s' % services)
+            # FIXME: this is a band-aid to avoid crashing the mgr, but what
+            # we really need to do here is raise health alerts for individual
+            # hosts that fail and continue with the ones that do not fail.
+            if completion.exception is not None:
+                self.log.error('failed to refresh daemons: %s' % completion.exception)
+                self.health_checks['CEPHADM_REFRESH_FAILED'] = {
+                    'severity': 'warning',
+                    'summary': 'failed to probe one or more hosts',
+                    'count': 1,
+                    'detail': [str(completion.exception)],
+                }
+                self.set_health_checks(self.health_checks)
+                self._serve_sleep()
+                continue
+            if 'CEPHADM_REFRESH_FAILED' in self.health_checks:
+                del self.health_checks['CEPHADM_REFRESH_FAILED']
+                self.set_health_checks(self.health_checks)
+            daemons = completion.result
+            self.log.debug('daemons %s' % daemons)
 
-            self._check_for_strays(services)
+            self._check_for_strays(daemons)
 
-            while self.upgrade_state and not self.upgrade_state.get('paused'):
-                completion = self._do_upgrade(services)
+            if self.upgrade_state and not self.upgrade_state.get('paused'):
+                completion = self._do_upgrade(daemons)
                 if completion:
                     while not completion.has_result:
                         self.process([completion])
@@ -751,13 +800,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             time.sleep(1)
                         else:
                             break
-                    orchestrator.raise_if_exception(completion)
+                    if completion.exception is not None:
+                        self.log.error(str(completion.exception))
                 self.log.debug('did _do_upgrade')
-
-            sleep_interval = 600
-            self.log.debug('Sleeping for %d seconds', sleep_interval)
-            ret = self.event.wait(sleep_interval)
-            self.event.clear()
+            else:
+                self._serve_sleep()
         self.log.info("serve exit")
 
     def config_notify(self):
@@ -781,11 +828,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         pass
 
     def get_unique_name(self, host, existing, prefix=None, forcename=None):
+        # type: (str, List[orchestrator.DaemonDescription], Optional[str], Optional[str]) -> str
         """
         Generate a unique random service name
         """
         if forcename:
-            if len([d for d in existing if d.service_instance == forcename]):
+            if len([d for d in existing if d.daemon_id == forcename]):
                 raise RuntimeError('specified name %s already in use', forcename)
             return forcename
 
@@ -798,7 +846,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 name = ''
             name += host + '.' + ''.join(random.choice(string.ascii_lowercase)
                             for _ in range(6))
-            if len([d for d in existing if d.service_instance == name]):
+            if len([d for d in existing if d.daemon_id == name]):
                 self.log('name %s exists, trying again', name)
                 continue
             return name
@@ -994,11 +1042,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     @orchestrator._cli_read_command(
         'cephadm check-host',
-        'name=host,type=CephString',
+        'name=host,type=CephString '
+        'name=addr,type=CephString,req=false',
         'Check whether we can access and manage a remote host')
-    def _check_host(self, host):
+    def _check_host(self, host, addr=None):
         out, err, code = self._run_cephadm(host, 'client', 'check-host',
                                            ['--expect-hostname', host],
+                                           addr=addr,
                                            error_ok=True, no_fsid=True)
         if code:
             return 1, '', ('check-host failed:\n' + '\n'.join(err))
@@ -1009,7 +1059,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if item.startswith('host %s ' % host):
                     self.log.debug('kicking serve thread')
                     self.event.set()
-        return 0, '%s ok' % host, err
+        return 0, '%s (%s) ok' % (host, addr), err
 
     def _get_connection(self, host):
         """
@@ -1049,6 +1099,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return executable_path
 
     def _run_cephadm(self, host, entity, command, args,
+                     addr=None,
                      stdin=None,
                      no_fsid=False,
                      error_ok=False,
@@ -1056,7 +1107,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         Run cephadm on the remote host with the given command + args
         """
-        conn, connr = self._get_connection(host)
+        if not addr and host in self.inventory:
+            addr = self.inventory[host].get('addr', host)
+        conn, connr = self._get_connection(addr)
 
         try:
             if not image:
@@ -1127,25 +1180,31 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self.inventory_cache.items_filtered(wanted)
 
     @async_completion
-    def add_host(self, host):
+    def add_host(self, spec):
+        # type: (HostSpec) -> str
         """
         Add a host to be managed by the orchestrator.
 
         :param host: host name
         """
-        assert_valid_host(host)
-        out, err, code = self._run_cephadm(host, 'client', 'check-host',
-                                           ['--expect-hostname', host],
+        assert_valid_host(spec.hostname)
+        out, err, code = self._run_cephadm(spec.hostname, 'client', 'check-host',
+                                           ['--expect-hostname', spec.hostname],
+                                           addr=spec.addr,
                                            error_ok=True, no_fsid=True)
         if code:
-            raise OrchestratorError('New host %s failed check: %s' % (host, err))
+            raise OrchestratorError('New host %s (%s) failed check: %s' % (
+                spec.hostname, spec.addr, err))
 
-        self.inventory[host] = {}
+        self.inventory[spec.hostname] = {
+            'addr': spec.addr,
+            'labels': spec.labels,
+        }
         self._save_inventory()
-        self.inventory_cache[host] = orchestrator.OutdatableData()
-        self.service_cache[host] = orchestrator.OutdatableData()
+        self.inventory_cache[spec.hostname] = orchestrator.OutdatableData()
+        self.daemon_cache[spec.hostname] = orchestrator.OutdatableData()
         self.event.set()  # refresh stray health check
-        return "Added host '{}'".format(host)
+        return "Added host '{}'".format(spec.hostname)
 
     @async_completion
     def remove_host(self, host):
@@ -1157,10 +1216,20 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         del self.inventory[host]
         self._save_inventory()
         del self.inventory_cache[host]
-        del self.service_cache[host]
+        del self.daemon_cache[host]
         self._reset_con(host)
         self.event.set()  # refresh stray health check
         return "Removed host '{}'".format(host)
+
+    @async_completion
+    def update_host_addr(self, host, addr):
+        if host not in self.inventory:
+            raise OrchestratorError('host %s not registered' % host)
+        self.inventory[host]['addr'] = addr
+        self._save_inventory()
+        self._reset_con(host)
+        self.event.set()  # refresh stray health check
+        return "Updated host '{}' addr to '{}'".format(host, addr)
 
     @trivial_completion
     def get_hosts(self):
@@ -1173,7 +1242,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         TODO:
           - InventoryNode probably needs to be able to report labels
         """
-        return [orchestrator.InventoryNode(host_name) for host_name in self.inventory_cache]
+        r = []
+        for hostname, info in self.inventory.items():
+            self.log.debug('host %s info %s' % (hostname, info))
+            r.append(orchestrator.InventoryNode(
+                hostname,
+                addr=info.get('addr', hostname),
+                labels=info.get('labels', []),
+            ))
+        return r
 
     @async_completion
     def add_host_label(self, host, label):
@@ -1200,58 +1277,56 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return 'Removed label %s from host %s' % (label, host)
 
     @async_map_completion
-    def _refresh_host_services(self, host):
+    def _refresh_host_daemons(self, host):
         out, err, code = self._run_cephadm(
             host, 'mon', 'ls', [], no_fsid=True)
         data = json.loads(''.join(out))
         for d in data:
             d['last_refresh'] = datetime.datetime.utcnow().strftime(DATEFMT)
-        self.log.debug('Refreshed host %s services: %s' % (host, data))
-        self.service_cache[host] = orchestrator.OutdatableData(data)
+        self.log.debug('Refreshed host %s daemons: %s' % (host, data))
+        self.daemon_cache[host] = orchestrator.OutdatableData(data)
         return host, data
 
-    def _get_services(self,
-                      service_type=None,
-                      service_name=None,
-                      service_id=None,
-                      node_name=None,
-                      refresh=False,
-                      maybe_refresh=False):
+    def _get_daemons(self,
+                     daemon_type=None,
+                     daemon_id=None,
+                     service_name=None,
+                     host=None,
+                     refresh=False,
+                     maybe_refresh=False):
         hosts = []
         wait_for_args = []
-        services = {}
+        daemons = {}
         keys = None
-        if node_name is not None:
-            keys = [node_name]
-        for host, host_info in self.service_cache.items_filtered(keys):
+        if host is not None:
+            keys = [host]
+        for host, host_info in self.daemon_cache.items_filtered(keys):
             hosts.append(host)
             if refresh:
-                self.log.info("refreshing services for '{}'".format(host))
+                self.log.info("refreshing daemons for '{}'".format(host))
                 wait_for_args.append((host,))
-            elif maybe_refresh and host_info.outdated(self.service_cache_timeout):  # type: ignore
-                self.log.info("refreshing stale services for '{}'".format(host))
+            elif maybe_refresh and host_info.outdated(self.daemon_cache_timeout):  # type: ignore
+                self.log.info("refreshing stale daemons for '{}'".format(host))
                 wait_for_args.append((host,))
             elif not host_info.last_refresh:
-                services[host] = [
+                daemons[host] = [
                     {
-                        'name': '*',
-                        'service_type': '*',
-                        'service_instance': '*',
+                        'name': '*.*',
                         'style': 'cephadm:v1',
                         'fsid': self._cluster_fsid,
                     },
                 ]
             else:
-                self.log.debug('have recent services for %s: %s' % (
+                self.log.debug('have recent daemons for %s: %s' % (
                     host, host_info.data))
-                services[host] = host_info.data
+                daemons[host] = host_info.data
 
-        def _get_services_result(results):
+        def _get_daemons_result(results):
             for host, data in results:
-                services[host] = data
+                daemons[host] = data
 
             result = []
-            for host, ls in services.items():
+            for host, ls in daemons.items():
                 for d in ls:
                     if not d['style'].startswith('cephadm'):
                         self.log.debug('ignoring non-cephadm on %s: %s' % (host, d))
@@ -1260,20 +1335,20 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
                         continue
                     self.log.debug('including %s %s' % (host, d))
-                    sd = orchestrator.ServiceDescription()
+                    sd = orchestrator.DaemonDescription()
                     if 'last_refresh' in d:
                         sd.last_refresh = datetime.datetime.strptime(
                             d['last_refresh'], DATEFMT)
-                    sd.service_type = d['name'].split('.')[0]
-                    if service_type and service_type != sd.service_type:
+                    if '.' not in d['name']:
+                        self.log.debug('ignoring dot-less daemon on %s: %s' % (host, d))
                         continue
-                    if '.' in d['name']:
-                        sd.service_instance = '.'.join(d['name'].split('.')[1:])
-                    elif d['name'] != '*':
-                        sd.service_instance = host  # e.g., crash
-                    if service_id and service_id != sd.service_instance:
+                    sd.daemon_type = d['name'].split('.')[0]
+                    if daemon_type and daemon_type != sd.daemon_type:
                         continue
-                    if service_name and not sd.service_instance.startswith(service_name + '.'):
+                    sd.daemon_id = '.'.join(d['name'].split('.')[1:])
+                    if daemon_id and daemon_id != sd.daemon_id:
+                        continue
+                    if service_name and not sd.daemon_id.startswith(service_name + '.'):
                         continue
                     sd.nodename = host
                     sd.container_id = d.get('container_id')
@@ -1295,57 +1370,56 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return result
 
         if wait_for_args:
-            return self._refresh_host_services(wait_for_args).then(
-                _get_services_result)
+            return self._refresh_host_daemons(wait_for_args).then(
+                _get_daemons_result)
         else:
-            return trivial_result(_get_services_result({}))
+            return trivial_result(_get_daemons_result({}))
 
-    def describe_service(self, service_type=None, service_id=None,
-                         node_name=None, refresh=False):
-        if service_type not in ("mds", "osd", "mgr", "mon", 'rgw', "nfs", None):
-            raise orchestrator.OrchestratorValidationError(
-                service_type + " unsupported")
-        result = self._get_services(service_type,
-                                    service_id=service_id,
-                                    node_name=node_name,
-                                    refresh=refresh)
+#    def describe_service(self, service_type=None, service_id=None,
+#                         node_name=None, refresh=False):
+#        if service_type not in ("mds", "osd", "mgr", "mon", 'rgw', "nfs", None):
+#            raise orchestrator.OrchestratorValidationError(
+#                service_type + " unsupported")
+#        result = self._get_daemons(service_type,
+#                                    service_id=service_id,
+#                                    node_name=node_name,
+#                                    refresh=refresh)
+#        return result
+
+    def list_daemons(self, daemon_type=None, daemon_id=None,
+                     host=None, refresh=False):
+        result = self._get_daemons(daemon_type=daemon_type,
+                                   daemon_id=daemon_id,
+                                   host=host,
+                                   refresh=refresh)
         return result
 
-    def service_action(self, action, service_type,
-                       service_name=None,
-                       service_id=None):
-        self.log.debug('service_action action %s type %s name %s id %s' % (
-            action, service_type, service_name, service_id))
+    def service_action(self, action, service_type, service_name):
+        self.log.debug('service_action action %s type %s name %s' % (
+            action, service_type, service_name))
 
         def _proc_daemons(daemons):
-            if service_name is None and service_id is None:
-                raise ValueError('service_name or service_id required')
             args = []
             for d in daemons:
-                args.append((d.service_type, d.service_instance,
+                args.append((d.daemon_type, d.daemon_id,
                              d.nodename, action))
             if not args:
-                if service_name:
-                    n = service_name + '-*'
-                else:
-                    n = service_id
                 raise orchestrator.OrchestratorError(
-                    'Unable to find %s.%s daemon(s)' % (
-                        service_type, n))
-            return self._service_action(args)
+                    'Unable to find %s.%s.* daemon(s)' % (
+                        service_type, service_name))
+            return self._daemon_action(args)
 
-        return self._get_services(
+        return self._get_daemons(
             service_type,
-            service_name=service_name,
-            service_id=service_id).then(_proc_daemons)
+            service_name=service_name).then(_proc_daemons)
 
     @async_map_completion
-    def _service_action(self, service_type, service_id, host, action):
+    def _daemon_action(self, daemon_type, daemon_id, host, action):
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
-            return self._create_daemon(service_type, service_id, host)
+            return self._create_daemon(daemon_type, daemon_id, host)
         elif action == 'reconfig':
-            return self._create_daemon(service_type, service_id, host,
+            return self._create_daemon(daemon_type, daemon_id, host,
                                        reconfig=True)
 
         actions = {
@@ -1353,15 +1427,70 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'stop': ['stop'],
             'restart': ['reset-failed', 'restart'],
         }
-        name = '%s.%s' % (service_type, service_id)
+        name = '%s.%s' % (daemon_type, daemon_id)
         for a in actions[action]:
             out, err, code = self._run_cephadm(
                 host, name, 'unit',
                 ['--name', name, a],
                 error_ok=True)
-            self.service_cache.invalidate(host)
-            self.log.debug('_service_action code %s out %s' % (code, out))
+            self.daemon_cache.invalidate(host)
+            self.log.debug('_daemon_action code %s out %s' % (code, out))
         return "{} {} from host '{}'".format(action, name, host)
+
+    def daemon_action(self, action, daemon_type, daemon_id):
+        self.log.debug('daemon_action action %s type %s id %s' % (
+            action, daemon_type, daemon_id))
+
+        def _proc_daemons(daemons):
+            args = []
+            for d in daemons:
+                args.append((d.daemon_type, d.daemon_id,
+                             d.nodename, action))
+            if not args:
+                raise orchestrator.OrchestratorError(
+                    'Unable to find %s.%s daemon(s)' % (
+                        daemon_type, daemon_id))
+            return self._daemon_action(args)
+
+        return self._get_daemons(
+            daemon_type=daemon_type,
+            daemon_id=daemon_id).then(_proc_daemons)
+
+    def remove_daemons(self, names, force):
+        # type: (List[str], bool) -> orchestrator.Completion
+        def _filter(daemons):
+            args = []
+            for d in daemons:
+                for name in names:
+                    if d.name() == name:
+                        args.append(
+                            ('%s.%s' % (d.daemon_type, d.daemon_id),
+                             d.nodename,
+                             force)
+                        )
+            if not args:
+                raise OrchestratorError('Unable to find daemon(s) %s' % (names))
+            return self._remove_daemon(args)
+        return self._get_daemons().then(_filter)
+
+    def remove_service(self, service_type, service_name):
+        if service_name:
+            prefix = service_name + '.'
+        else:
+            prefix = ''
+        def _filter(daemons):
+            args = []
+            for d in daemons:
+                if d.daemon_type == service_type and \
+                   d.daemon_id.startswith(prefix):
+                    args.append(
+                        ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
+                    )
+            if not args:
+                raise OrchestratorError('Unable to find daemons in %s.%s* service' % (
+                    service_type, prefix))
+            return self._remove_daemon(args)
+        return self._get_daemons(daemon_type=service_type).then(_filter)
 
     def get_inventory(self, node_filter=None, refresh=False):
         """
@@ -1438,11 +1567,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self.get_inventory().then(call_create)
 
     def create_osds(self, drive_groups):
+        # type: (List[DriveGroupSpec]) -> AsyncCompletion
         return self.get_hosts().then(lambda hosts: self.call_inventory(hosts, drive_groups))
 
     def _prepare_deployment(self,
                             all_hosts,  # type: List[orchestrator.InventoryNode]
-                            drive_groups,  # type: List[DriveGroupSpecs]
+                            drive_groups,  # type: List[DriveGroupSpec]
                             inventory_list  # type: List[orchestrator.InventoryNode]
                             ):
         # type: (...) -> orchestrator.Completion
@@ -1543,18 +1673,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return "Created osd(s) on host '{}'".format(host)
 
-    @with_services('osd')
-    def remove_osds(self, osd_ids, services):
-        # type: (List[str], List[orchestrator.ServiceDescription]) -> AsyncCompletion
-        args = [(d.name(), d.nodename) for d in services if
-                d.service_instance in osd_ids]
-
-        found = list(zip(*args))[0] if args else []
-        not_found = {osd_id for osd_id in osd_ids if 'osd.%s' % osd_id not in found}
-        if not_found:
-            raise OrchestratorError('Unable to find OSD: %s' % not_found)
-        return self._remove_daemon(args)
-
     def _create_daemon(self, daemon_type, daemon_id, host,
                        keyring=None,
                        extra_args=None, extra_config=None,
@@ -1564,46 +1682,54 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             extra_args = []
         name = '%s.%s' % (daemon_type, daemon_id)
 
-        # keyring
-        if not keyring:
-            if daemon_type == 'mon':
-                ename = 'mon.'
-            else:
-                ename = '%s.%s' % (daemon_type, daemon_id)
-            ret, keyring, err = self.mon_command({
-                'prefix': 'auth get',
-                'entity': ename,
+        if daemon_type == 'prometheus':
+            j = self._generate_prometheus_config()
+            extra_args.extend(['--config-json', '-'])
+        else:
+            # keyring
+            if not keyring:
+                if daemon_type == 'mon':
+                    ename = 'mon.'
+                else:
+                    ename = '%s.%s' % (daemon_type, daemon_id)
+                ret, keyring, err = self.mon_command({
+                    'prefix': 'auth get',
+                    'entity': ename,
+                })
+
+            # generate config
+            ret, config, err = self.mon_command({
+                "prefix": "config generate-minimal-conf",
             })
+            if extra_config:
+                config += extra_config
 
-        # generate config
-        ret, config, err = self.mon_command({
-            "prefix": "config generate-minimal-conf",
-        })
-        if extra_config:
-            config += extra_config
+            if daemon_type != 'crash':
+                # crash_keyring
+                ret, crash_keyring, err = self.mon_command({
+                    'prefix': 'auth get-or-create',
+                    'entity': 'client.crash.%s' % host,
+                    'caps': ['mon', 'profile crash',
+                             'mgr', 'profile crash'],
+                })
+            else:
+                crash_keyring = None
 
-        # crash_keyring
-        ret, crash_keyring, err = self.mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'client.crash.%s' % host,
-            'caps': ['mon', 'profile crash',
-                     'mgr', 'profile crash'],
-        })
+            j = json.dumps({
+                'config': config,
+                'keyring': keyring,
+                'crash_keyring': crash_keyring,
+            })
+            extra_args.extend(['--config-and-keyrings', '-'])
 
-        j = json.dumps({
-            'config': config,
-            'keyring': keyring,
-            'crash_keyring': crash_keyring,
-        })
-
-        # osd deployments needs an --osd-uuid arg
-        if daemon_type == 'osd':
-            if not osd_uuid_map:
-                osd_uuid_map = self.get_osd_uuid_map()
-            osd_uuid = osd_uuid_map.get(daemon_id, None)
-            if not osd_uuid:
-                raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
-            extra_args.extend(['--osd-fsid', osd_uuid])
+            # osd deployments needs an --osd-uuid arg
+            if daemon_type == 'osd':
+                if not osd_uuid_map:
+                    osd_uuid_map = self.get_osd_uuid_map()
+                osd_uuid = osd_uuid_map.get(daemon_id, None)
+                if not osd_uuid:
+                    raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
+                extra_args.extend(['--osd-fsid', osd_uuid])
 
         if reconfig:
             extra_args.append('--reconfig')
@@ -1612,11 +1738,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             host, name, 'deploy',
             [
                 '--name', name,
-                '--config-and-keyrings', '-',
             ] + extra_args,
             stdin=j)
         self.log.debug('create_daemon code %s out %s' % (code, out))
-        if not code and host in self.service_cache:
+        if not code and host in self.daemon_cache:
             # prime cached service state with what we (should have)
             # just created
             sd = {
@@ -1626,34 +1751,37 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 'enabled': True,
                 'state': 'running',
             }
-            data = self.service_cache[host].data
+            data = self.daemon_cache[host].data
             if data:
-                data = [d for d in data if d['name'] != sd['name']]
+                data = [d for d in data if '%s.%s' % (daemon_type, daemon_id) != d['name']]
                 data.append(sd)
             else:
                 data = [sd]
-            self.service_cache[host] = orchestrator.OutdatableData(data)
-        self.service_cache.invalidate(host)
+            self.daemon_cache[host] = orchestrator.OutdatableData(data)
+        self.daemon_cache.invalidate(host)
         self.event.set()
         return "{} {} on host '{}'".format(
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
-    def _remove_daemon(self, name, host):
+    def _remove_daemon(self, name, host, force=False):
         """
         Remove a daemon
         """
+        self.log.debug('_remove_daemon %s on %s force=%s' % (name, host, force))
+        args = ['--name', name]
+        if force:
+            args.extend(['--force'])
         out, err, code = self._run_cephadm(
-            host, name, 'rm-daemon',
-            ['--name', name])
+            host, name, 'rm-daemon', args)
         self.log.debug('_remove_daemon code %s out %s' % (code, out))
-        if not code and host in self.service_cache:
+        if not code and host in self.daemon_cache:
             # remove item from cache
-            data = self.service_cache[host].data
+            data = self.daemon_cache[host].data
             if data:
                 data = [d for d in data if d['name'] != name]
-                self.service_cache[host] = orchestrator.OutdatableData(data)
-        self.service_cache.invalidate(host)
+                self.daemon_cache[host] = orchestrator.OutdatableData(data)
+        self.daemon_cache.invalidate(host)
         return "Removed {} from host '{}'".format(name, host)
 
     def _update_service(self, daemon_type, add_func, spec):
@@ -1664,15 +1792,49 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 args = []
                 for d in daemons[0:to_remove]:
                     args.append(
-                        ('%s.%s' % (d.service_type, d.service_instance), d.nodename)
+                        ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
                     )
                 return self._remove_daemon(args)
             elif len(daemons) < spec.count:
-                # add some
-                spec.count -= len(daemons)
                 return add_func(spec)
             return []
-        return self._get_services(daemon_type, service_name=spec.name).then(___update_service)
+        return self._get_daemons(daemon_type, service_name=spec.name).then(___update_service)
+
+    def _add_new_daemon(self,
+                        daemon_type: str,
+                        daemons: List[orchestrator.DaemonDescription],
+                        spec: orchestrator.ServiceSpec,
+                        create_func: Callable):
+        args = []
+        num_added = 0
+        assert spec.count is not None
+        prefix = f'{daemon_type}.{spec.name}'
+        our_daemons = [d for d in daemons if d.name().startswith(prefix)]
+        hosts_with_daemons = {d.nodename for d in daemons}
+        hosts_without_daemons = {p for p in spec.placement.hosts if p.hostname not in hosts_with_daemons}
+
+        for host, _, name in hosts_without_daemons:
+            if (len(our_daemons) + num_added) >= spec.count:
+                break
+            daemon_id = self.get_unique_name(host, daemons, spec.name, name)
+            self.log.debug('placing %s.%s on host %s' % (daemon_type, daemon_id, host))
+            args.append((daemon_id, host))
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.DaemonDescription(
+                nodename=host,
+                daemon_type=daemon_type,
+                daemon_id=daemon_id,
+            )
+            daemons.append(sd)
+            num_added += 1
+
+        if (len(our_daemons) + num_added) < spec.count:
+            missing = spec.count - len(our_daemons) - num_added
+            available = [p.hostname for p in hosts_without_daemons]
+            m = f'Cannot find placement for {missing} daemons. available hosts = {available}'
+            raise orchestrator.OrchestratorError(m)
+        return create_func(args)
+
 
     @async_map_completion
     def _create_mon(self, host, network, name):
@@ -1705,8 +1867,33 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                    keyring=keyring,
                                    extra_config=extra_config)
 
-    def update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
+    def add_mon(self, spec):
+        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
+
+        # current support requires a network to be specified
+        for host, network, _ in spec.placement.hosts:
+            if not network:
+                raise RuntimeError("Host '{}' is missing a network spec".format(host))
+
+        def add_mons(daemons):
+            for _, _, name in spec.placement.hosts:
+                if name and len([d for d in daemons if d.daemon_id == name]):
+                    raise RuntimeError('name %s already exists', name)
+
+            # explicit placement: enough hosts provided?
+            if len(spec.placement.hosts) < spec.count:
+                raise RuntimeError("Error: {} hosts provided, expected {}".format(
+                    len(spec.placement.hosts), spec.count))
+            self.log.info("creating {} monitors on hosts: '{}'".format(
+                spec.count, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
+            # TODO: we may want to chain the creation of the monitors so they join
+            # the quorum one at a time.
+            return self._create_mon(spec.placement.hosts)
+
+        return self._get_daemons('mon').then(add_mons)
+
+    def apply_mon(self, spec):
+        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
@@ -1718,7 +1905,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._update_mons(spec)
 
     def _update_mons(self, spec):
-        # type: (orchestrator.StatefulServiceSpec) -> orchestrator.Completion
+        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         """
         Adjust the number of cluster monitors.
         """
@@ -1741,7 +1928,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         def update_mons_with_daemons(daemons):
             for _, _, name in spec.placement.hosts:
-                if name and len([d for d in daemons if d.service_instance == name]):
+                if name and len([d for d in daemons if d.daemon_id == name]):
                     raise RuntimeError('name %s alrady exists', name)
 
             # explicit placement: enough hosts provided?
@@ -1754,35 +1941,41 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             # TODO: we may want to chain the creation of the monitors so they join
             # the quorum one at a time.
             return self._create_mon(spec.placement.hosts)
-        return self._get_services('mon').then(update_mons_with_daemons)
+        return self._get_daemons('mon').then(update_mons_with_daemons)
 
     @async_map_completion
-    def _create_mgr(self, host, name):
+    def _create_mgr(self, mgr_id, host):
         """
         Create a new manager instance on a host.
         """
-        self.log.info("create_mgr({}, mgr.{}): starting".format(host, name))
+        self.log.info("create_mgr({}, mgr.{}): starting".format(host, mgr_id))
 
         # get mgr. key
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % name,
+            'entity': 'mgr.%s' % mgr_id,
             'caps': ['mon', 'profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
 
-        return self._create_daemon('mgr', name, host, keyring=keyring)
+        return self._create_daemon('mgr', mgr_id, host, keyring=keyring)
 
-    @with_services('mgr')
-    def update_mgrs(self, spec, services):
-        # type: (orchestrator.StatefulServiceSpec, List[orchestrator.ServiceDescription]) -> orchestrator.Completion
+    @with_daemons('mgr')
+    def add_mgr(self, spec, daemons):
+        # type: (orchestrator.ServiceSpec, List[orchestrator.DaemonDescription]) -> orchestrator.Completion
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
+        return self._add_new_daemon('mgr', daemons, spec, self._create_mgr)
+
+    @with_daemons('mgr')
+    def apply_mgr(self, spec, daemons):
+        # type: (orchestrator.ServiceSpec, List[orchestrator.DaemonDescription]) -> orchestrator.Completion
         """
         Adjust the number of cluster managers.
         """
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
 
-        num_mgrs = len(services)
+        num_mgrs = len(daemons)
         if spec.count == num_mgrs:
             return orchestrator.Completion(value="The requested number of managers exist.")
 
@@ -1802,9 +1995,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for standby in mgr_map.get('standbys', []):
                 connected.append(standby.get('name', ''))
             to_remove_damons = []
-            for d in services:
-                if d.service_instance not in connected:
-                    to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance),
+            for d in daemons:
+                if d.daemon_id not in connected:
+                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id),
                                              d.nodename))
                     num_to_remove -= 1
                     if num_to_remove == 0:
@@ -1812,8 +2005,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
             # otherwise, remove *any* mgr
             if num_to_remove > 0:
-                for d in services:
-                    to_remove_damons.append(('%s.%s' % (d.service_type, d.service_instance), d.nodename))
+                for d in daemons:
+                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename))
                     num_to_remove -= 1
                     if num_to_remove == 0:
                         break
@@ -1832,11 +2025,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         len(spec.placement.hosts), num_new_mgrs))
 
             for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
+                if host_spec.name and len([d for d in daemons if d.daemon_id == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
             for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in services if d.service_instance == host_spec.name]):
+                if host_spec.name and len([d for d in daemons if d.daemon_id == host_spec.name]):
                     raise RuntimeError('name %s alrady exists', host_spec.name)
 
             self.log.info("creating {} managers on hosts: '{}'".format(
@@ -1845,45 +2038,36 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             args = []
             for host_spec in spec.placement.hosts:
                 host = host_spec.hostname
-                name = host_spec.name or self.get_unique_name(host, services)
-                args.append((host, name))
+                name = host_spec.name or self.get_unique_name(host, daemons)
+                args.append((name, host))
             c = self._create_mgr(args)
             c.add_progress('Creating MGRs', self)
             c.update_progress = True
             return c
 
     def add_mds(self, spec):
-        if not spec.placement.hosts or len(spec.placement.hosts) < spec.placement.count:
-            raise RuntimeError("must specify at least %d hosts" % spec.placement.count)
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        if not spec.placement.hosts or spec.placement.count is None or len(spec.placement.hosts) < spec.placement.count:
+            raise RuntimeError("must specify at least %s hosts" % spec.placement.count)
         # ensure mds_join_fs is set for these daemons
+        assert spec.name
         ret, out, err = self.mon_command({
             'prefix': 'config set',
             'who': 'mds.' + spec.name,
             'name': 'mds_join_fs',
             'value': spec.name,
         })
-        return self._get_services('mds').then(lambda ds: self._add_mds(ds, spec))
 
-    def _add_mds(self, daemons, spec):
-        args = []
-        num_added = 0
-        for host, _, name in spec.placement.hosts:
-            if num_added >= spec.count:
-                break
-            mds_id = self.get_unique_name(host, daemons, spec.name, name)
-            self.log.debug('placing mds.%s on host %s' % (mds_id, host))
-            args.append((mds_id, host))
-            # add to daemon list so next name(s) will also be unique
-            sd = orchestrator.ServiceDescription()
-            sd.service_instance = mds_id
-            sd.service_type = 'mds'
-            sd.nodename = host
-            daemons.append(sd)
-            num_added += 1
-        return self._create_mds(args)
+        def _add_mds(daemons):
+            # type: (List[orchestrator.DaemonDescription]) -> AsyncCompletion
+            return self._add_new_daemon('mds', daemons, spec, self._create_mds)
 
-    def update_mds(self, spec):
+        return self._get_daemons('mds').then(_add_mds)
+
+    def apply_mds(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
+
         return self._update_service('mds', self.add_mds, spec)
 
     @async_map_completion
@@ -1897,21 +2081,6 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                      'mds', 'allow'],
         })
         return self._create_daemon('mds', mds_id, host, keyring=keyring)
-
-    def remove_mds(self, name):
-        self.log.debug("Attempting to remove volume: {}".format(name))
-
-        def _remove_mds(daemons):
-            args = []
-            for d in daemons:
-                if d.service_instance == name or d.service_instance.startswith(name + '.'):
-                    args.append(
-                        ('%s.%s' % (d.service_type, d.service_instance), d.nodename)
-                    )
-            if not args:
-                raise OrchestratorError('Unable to find mds.%s[-*] daemon(s)' % name)
-            return self._remove_daemon(args)
-        return self._get_services('mds').then(_remove_mds)
 
     def add_rgw(self, spec):
         if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
@@ -1931,24 +2100,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         })
 
         def _add_rgw(daemons):
-            args = []
-            num_added = 0
-            for host, _, name in spec.placement.hosts:
-                if num_added >= spec.count:
-                    break
-                rgw_id = self.get_unique_name(host, daemons, spec.name, name)
-                self.log.debug('placing rgw.%s on host %s' % (rgw_id, host))
-                args.append((rgw_id, host))
-                # add to daemon list so next name(s) will also be unique
-                sd = orchestrator.ServiceDescription()
-                sd.service_instance = rgw_id
-                sd.service_type = 'rgw'
-                sd.nodename = host
-                daemons.append(sd)
-                num_added += 1
-            return self._create_rgw(args)
+            return self._add_new_daemon('rgw', daemons, spec, self._create_rgw)
 
-        return self._get_services('rgw').then(_add_rgw)
+        return self._get_daemons('rgw').then(_add_rgw)
 
     @async_map_completion
     def _create_rgw(self, rgw_id, host):
@@ -1961,21 +2115,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         })
         return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
-    def remove_rgw(self, name):
-
-        def _remove_rgw(daemons):
-            args = []
-            for d in daemons:
-                if d.service_instance == name or d.service_instance.startswith(name + '.'):
-                    args.append(('%s.%s' % (d.service_type, d.service_instance),
-                                d.nodename))
-            if args:
-                return self._remove_daemon(args)
-            raise RuntimeError('Unable to find rgw.%s[-*] daemon(s)' % name)
-
-        return self._get_services('rgw').then(_remove_rgw)
-
-    def update_rgw(self, spec):
+    def apply_rgw(self, spec):
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rgw').load()
         return self._update_service('rgw', self.add_rgw, spec)
 
@@ -1985,26 +2125,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.log.debug('nodes %s' % spec.placement.hosts)
 
         def _add_rbd_mirror(daemons):
-            args = []
-            num_added = 0
-            for host, _, name in spec.placement.hosts:
-                if num_added >= spec.count:
-                    break
-                daemon_id = self.get_unique_name(host, daemons, None, name)
-                self.log.debug('placing rbd-mirror.%s on host %s' % (daemon_id,
-                                                                     host))
-                args.append((daemon_id, host))
+            return self._add_new_daemon('rbd-mirror', daemons, spec, self._create_rbd_mirror)
 
-                # add to daemon list so next name(s) will also be unique
-                sd = orchestrator.ServiceDescription()
-                sd.service_instance = daemon_id
-                sd.service_type = 'rbd-mirror'
-                sd.nodename = host
-                daemons.append(sd)
-                num_added += 1
-            return self._create_rbd_mirror(args)
-
-        return self._get_services('rbd-mirror').then(_add_rbd_mirror)
+        return self._get_daemons('rbd-mirror').then(_add_rbd_mirror)
 
     @async_map_completion
     def _create_rbd_mirror(self, daemon_id, host):
@@ -2017,24 +2140,68 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._create_daemon('rbd-mirror', daemon_id, host,
                                    keyring=keyring)
 
-    def remove_rbd_mirror(self, name):
-        def _remove_rbd_mirror(daemons):
-            args = []
-            for d in daemons:
-                if not name or d.service_instance == name:
-                    args.append(
-                        ('%s.%s' % (d.service_type, d.service_instance),
-                         d.nodename)
-                    )
-            if not args and name:
-                raise RuntimeError('Unable to find rbd-mirror.%s daemon' % name)
-            return self._remove_daemon(args)
-
-        return self._get_services('rbd-mirror').then(_remove_rbd_mirror)
-
-    def update_rbd_mirror(self, spec):
+    def apply_rbd_mirror(self, spec):
         spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rbd-mirror').load()
         return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
+
+    def _generate_prometheus_config(self):
+        mgr_map = self.get('mgr_map')
+        mgr_scrape_list = []
+        # *** FIXME *** we should scrape all mgrs here ***
+        t = mgr_map.get('services', {}).get('prometheus', None)
+        if t:
+            t = t.split('/')[2]
+            mgr_scrape_list = [t]
+        j = json.dumps({
+            'prometheus.yml': """# generated by cephadm
+global:
+  scrape_interval: 5s
+  evaluation_interval: 10s
+rule_files:
+  - /etc/prometheus/alerting/*
+scrape_configs:
+  - job_name: 'ceph'
+    static_configs:
+    - targets: {mgr_scrape_list}
+""".format(
+    mgr_scrape_list=str(mgr_scrape_list)
+    )
+        })
+        return j
+
+    def add_prometheus(self, spec):
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
+        self.log.debug('nodes %s' % spec.placement.hosts)
+
+        def _add(daemons):
+            args = []
+            num_added = 0
+            for host, _, name in spec.placement.hosts:
+                if num_added >= spec.count:
+                    break
+                daemon_id = self.get_unique_name(host, daemons, None, name)
+                self.log.debug('placing prometheus.%s on host %s' % (daemon_id,
+                                                                     host))
+                args.append((daemon_id, host))
+
+                # add to daemon list so next name(s) will also be unique
+                sd = orchestrator.ServiceDescription()
+                sd.service_instance = daemon_id
+                sd.service_type = 'prometheus'
+                sd.nodename = host
+                daemons.append(sd)
+                num_added += 1
+            return self._create_prometheus(args)
+
+        return self._get_daemons('prometheus').then(_add)
+
+    @async_map_completion
+    def _create_prometheus(self, daemon_id, host):
+        return self._create_daemon('prometheus', daemon_id, host)
+
+    def apply_prometheus(self, spec):
+        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
+        return self._update_service('prometheus', self.add_prometheus, spec)
 
     def _get_container_image_id(self, image_name):
         # pick a random host...
@@ -2048,7 +2215,11 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         out, err, code = self._run_cephadm(
             host, None, 'pull', [],
             image=image_name,
-            no_fsid=True)
+            no_fsid=True,
+            error_ok=True)
+        if code:
+            raise OrchestratorError('Failed to pull %s on %s: %s' % (
+                image_name, host, '\n'.join(out)))
         j = json.loads('\n'.join(out))
         image_id = j.get('image_id')
         ceph_version = j.get('ceph_version')
@@ -2063,10 +2234,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             target_name = image
         else:
             raise OrchestratorError('must specify either image or version')
-        return self._get_services().then(
+        return self._get_daemons().then(
             lambda daemons: self._upgrade_check(target_name, daemons))
 
-    def _upgrade_check(self, target_name, services):
+    def _upgrade_check(self, target_name, daemons):
         # get service state
         target_id, target_version = self._get_container_image_id(target_name)
         self.log.debug('Target image %s id %s version %s' % (
@@ -2078,7 +2249,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'needs_update': dict(),
             'up_to_date': list(),
         }
-        for s in services:
+        for s in daemons:
             if target_id == s.container_image_id:
                 r['up_to_date'].append(s.name())
             else:
@@ -2168,7 +2339,7 @@ class BaseScheduler(object):
 
     * requires a placement_spec
 
-    `place(host_pool)` needs to return a List[HostSpec, ..]
+    `place(host_pool)` needs to return a List[HostPlacementSpec, ..]
     """
 
     def __init__(self, placement_spec):
@@ -2176,7 +2347,7 @@ class BaseScheduler(object):
         self.placement_spec = placement_spec
 
     def place(self, host_pool, count=None):
-        # type: (List, Optional[int]) -> List[HostSpec]
+        # type: (List, Optional[int]) -> List[HostPlacementSpec]
         raise NotImplementedError
 
 
@@ -2190,10 +2361,10 @@ class SimpleScheduler(BaseScheduler):
         super(SimpleScheduler, self).__init__(placement_spec)
 
     def place(self, host_pool, count=None):
-        # type: (List, Optional[int]) -> List[HostSpec]
+        # type: (List, Optional[int]) -> List[HostPlacementSpec]
         if not host_pool:
             raise Exception('List of host candidates is empty')
-        host_pool = [HostSpec(x, '', '') for x in host_pool]
+        host_pool = [HostPlacementSpec(x, '', '') for x in host_pool]
         # shuffle for pseudo random selection
         random.shuffle(host_pool)
         return host_pool[:count]
@@ -2211,19 +2382,19 @@ class NodeAssignment(object):
     """
 
     def __init__(self,
-                 spec=None,  # type: Optional[orchestrator.StatefulServiceSpec]
+                 spec=None,  # type: Optional[orchestrator.ServiceSpec]
                  scheduler=None,  # type: Optional[BaseScheduler]
                  get_hosts_func=None,  # type: Optional[Callable]
                  service_type=None,  # type: Optional[str]
                  ):
         assert spec and get_hosts_func and service_type
-        self.spec = spec  # type: orchestrator.StatefulServiceSpec
+        self.spec = spec  # type: orchestrator.ServiceSpec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
-        self.service_type = service_type
+        self.daemon_type = service_type
 
     def load(self):
-        # type: () -> orchestrator.StatefulServiceSpec
+        # type: () -> orchestrator.ServiceSpec
         """
         Load nodes into the spec.placement.nodes container.
         """
@@ -2241,7 +2412,7 @@ class NodeAssignment(object):
         # NOTE: This currently queries for all hosts without label restriction
         if self.spec.placement.label:
             logger.info("Found labels. Assinging nodes that match the label")
-            candidates = [HostSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
+            candidates = [HostPlacementSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
             logger.info('Assigning nodes to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
 
@@ -2254,7 +2425,7 @@ class NodeAssignment(object):
         # host pool (assuming `count` is set)
         if not self.spec.placement.label and not self.spec.placement.hosts and self.spec.placement.count:
             logger.info("Found num spec. Looking for labeled nodes.")
-            # TODO: actually query for labels (self.service_type)
+            # TODO: actually query for labels (self.daemon_type)
             candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()],
                                               count=self.spec.placement.count)
             # Not enough nodes to deploy on
@@ -2270,7 +2441,7 @@ class NodeAssignment(object):
             candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()], count=self.spec.placement.count)
             # Not enough nodes to deploy on
             if len(candidates) != self.spec.placement.count:
-                raise OrchestratorValidationError("Cannot place {} services on {} hosts.".
+                raise OrchestratorValidationError("Cannot place {} daemons on {} hosts.".
                                                   format(self.spec.placement.count, len(candidates)))
 
             logger.info('Assigning nodes to spec: {}'.format(candidates))
