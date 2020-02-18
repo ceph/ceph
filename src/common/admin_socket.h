@@ -29,6 +29,7 @@ class AdminSocket;
 class CephContext;
 class MCommand;
 class MMonCommand;
+class InstancesHook;
 
 using namespace std::literals;
 
@@ -135,6 +136,12 @@ public:
 		       AdminSocketHook *hook,
 		       std::string_view help);
 
+  int register_command(std::string_view cmddesc,
+			AdminSocketHook *hook,
+			std::string_view help,
+			std::string_view instance_variable,
+			std::string_view instance_value);
+
   /*
    * unregister all commands belong to hook.
    */
@@ -162,7 +169,13 @@ public:
   void queue_tell_command(cref_t<MMonCommand> m); // for compat
 
 private:
+  int add_instance(InstancesHook* ih,
+		   std::string_view variable,
+		   std::string_view value,
+		   AdminSocketHook* hook);
 
+  int rm_instance(InstancesHook* ih,
+		  const AdminSocketHook* hook);
   void shutdown();
   void wakeup();
 

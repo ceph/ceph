@@ -94,6 +94,26 @@ static void add_cleanup_file(std::string file) {
   }
 }
 
+class InstancesHook: public AdminSocketHook
+{
+public:
+  InstancesHook() {}
+
+  virtual int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out);
+
+  virtual ~InstancesHook() {}
+
+private:
+  std::string variable;
+  std::map<std::string, AdminSocketHook*, std::less<> > subhooks;
+  friend class AdminSocket;
+};
+
 AdminSocket::AdminSocket(CephContext *cct)
   : m_cct(cct)
 {}
@@ -576,6 +596,7 @@ int AdminSocket::register_command(std::string_view cmddesc,
 void AdminSocket::unregister_commands(const AdminSocketHook *hook)
 {
   std::unique_lock l(lock);
+  in_hook_cond.wait(l, [this]() { return !in_hook; });
   auto i = hooks.begin();
   while (i != hooks.end()) {
     if (i->second.hook == hook) {
@@ -584,12 +605,61 @@ void AdminSocket::unregister_commands(const AdminSocketHook *hook)
       // If we are currently processing a command, wait for it to
       // complete in case it referenced the hook that we are
       // unregistering.
-      in_hook_cond.wait(l, [this]() { return !in_hook; });
       hooks.erase(i++);
+      continue;
     } else {
-      i++;
+      InstancesHook* ih = dynamic_cast<InstancesHook*>(i->second.hook);
+      if (ih != nullptr) {
+	
+	rm_instance(ih, hook);
+	if (ih->subhooks.size() == 0) {
+	  delete ih;
+	  hooks.erase(i++);
+	  continue;
+	}
+      }
+    }
+    i++;
+  }
+}
+
+int AdminSocket::register_command(std::string_view cmddesc,
+				   AdminSocketHook *hook,
+				   std::string_view help,
+				   std::string_view instance_variable,
+				   std::string_view instance_value) {
+  int ret = 0;
+  std::unique_lock l(lock);
+  string prefix = cmddesc_get_prefix(cmddesc);
+  InstancesHook* ih = nullptr;
+  auto i = hooks.find(prefix);
+
+  if (i == hooks.cend() || i->second.desc != cmddesc) {
+    ih = new InstancesHook();
+    hooks.emplace_hint(i,
+		       std::piecewise_construct,
+		       std::forward_as_tuple(prefix),
+		       std::forward_as_tuple(ih, cmddesc, help));
+  } else {
+    ih = dynamic_cast<InstancesHook*>(i->second.hook);
+    if (ih == nullptr) {
+       ldout(m_cct, 5) << "register_instance " << prefix
+		      << " cmddesc " << cmddesc << " hook " << hook
+		      << " already registered as non-instance" << dendl;
+      ret = -EEXIST;
     }
   }
+  if (ret == 0) {
+    ret = add_instance(ih, instance_variable, instance_value, hook);
+    if (ret != 0) {
+      ldout(m_cct, 5) << "register_instance " << prefix
+		      << " cmddesc " << cmddesc << " instance variable " << instance_variable
+		      << " instance value " << instance_value << " hook " << hook
+		      << " EEXIST" << dendl;
+      ret = -EEXIST;
+    }
+  }
+  return ret;
 }
 
 class VersionHook : public AdminSocketHook {
@@ -661,6 +731,76 @@ public:
     return 0;
   }
 };
+
+int InstancesHook::call(
+  std::string_view command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  std::ostream& errss,
+  ceph::buffer::list& out)
+{
+  std::string val;
+  auto i = cmdmap.find(variable);
+  if (i == cmdmap.end()) {
+    errss << "No '" << variable << "' option." << std::endl;
+    errss << "Valid values are:";
+    for (auto& j : subhooks) {
+      errss << " " << j.first;
+    }
+    errss << std::endl;
+    return -EINVAL;
+  }
+  try {
+    val = boost::get<std::string>(i->second);
+  } catch (boost::bad_get&) {
+    errss << "'" << variable << "' option is not a string." << std::endl;
+    return -EINVAL;
+  }
+  auto j = subhooks.find(val);
+  if (j == subhooks.end()) {
+    errss << "'" << variable << "' has invalid value." << std::endl;
+    errss << "Valid values are:";
+    for (auto& j : subhooks) {
+      errss << " " << j.first;
+    }
+    errss << std::endl;
+    return -EINVAL;
+  }
+  return j->second->call(command, cmdmap, f, errss, out);
+}
+
+int AdminSocket::add_instance(InstancesHook* ih,
+			      std::string_view variable,
+			      std::string_view value,
+			      AdminSocketHook* hook)
+{
+  int ret = 0;
+  ceph_assert(!variable.empty());
+  ceph_assert(ih->subhooks.size() == 0 || variable == ih->variable);
+  ih->variable = variable;
+  auto i = ih->subhooks.find(value);
+  if (i == ih->subhooks.end()) {
+    ih->subhooks.emplace(value, hook);
+  } else {
+    ret = -EEXIST;
+  }
+  return ret;
+}
+
+int AdminSocket::rm_instance(InstancesHook* ih,
+			     const AdminSocketHook* hook)
+{
+  auto i = ih->subhooks.begin();
+  while (i != ih->subhooks.end()) {
+    if (i->second == hook) {
+      ih->subhooks.erase(i++);
+      continue;
+    } else {
+      i++;
+    }
+  }
+  return 0;
+}
 
 bool AdminSocket::init(const std::string& path)
 {
