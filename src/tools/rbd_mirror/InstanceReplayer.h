@@ -52,6 +52,8 @@ public:
                    PoolMetaCache* pool_meta_cache);
   ~InstanceReplayer();
 
+  bool is_blacklisted() const;
+
   int init();
   void shut_down();
 
@@ -102,13 +104,14 @@ private:
   journal::CacheManagerHandler *m_cache_manager_handler;
   PoolMetaCache* m_pool_meta_cache;
 
-  ceph::mutex m_lock;
+  mutable ceph::mutex m_lock;
   AsyncOpTracker m_async_op_tracker;
   std::map<std::string, ImageReplayer<ImageCtxT> *> m_image_replayers;
   Peers m_peers;
   Context *m_image_state_check_task = nullptr;
   Context *m_on_shut_down = nullptr;
   bool m_manual_stop = false;
+  bool m_blacklisted = false;
 
   void wait_for_ops();
   void handle_wait_for_ops(int r);

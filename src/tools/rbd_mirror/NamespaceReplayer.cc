@@ -72,7 +72,8 @@ NamespaceReplayer<I>::NamespaceReplayer(
 template <typename I>
 bool NamespaceReplayer<I>::is_blacklisted() const {
   std::lock_guard locker{m_lock};
-  return (m_local_pool_watcher &&
+  return m_instance_replayer->is_blacklisted() ||
+         (m_local_pool_watcher &&
           m_local_pool_watcher->is_blacklisted()) ||
          (m_remote_pool_watcher &&
           m_remote_pool_watcher->is_blacklisted());
