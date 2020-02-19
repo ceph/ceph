@@ -213,7 +213,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
-            for node in completion.result:
+            for node in sorted(completion.result, key=lambda h: h.name):
                 table.add_row((node.name, node.addr, ' '.join(node.labels)))
             output = table.get_string()
         return HandleCommandResult(stdout=output)
