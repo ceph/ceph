@@ -35,6 +35,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
@@ -243,7 +244,11 @@ class _Promise(object):
     @_exception.setter
     def _exception(self, e):
         self._exception_ = e
-        self._serialized_exception_ = pickle.dumps(e) if e is not None else None
+        try:
+            self._serialized_exception_ = pickle.dumps(e) if e is not None else None
+        except Exception:
+            logger.exception("failed to pickle {}".format(e))
+            # We can't properly raise anything here. Just hope for the best.
 
     @property
     def _serialized_exception(self):
@@ -385,7 +390,7 @@ class _Promise(object):
         assert self._state in (self.INITIALIZED, self.RUNNING)
         logger.exception('_Promise failed')
         self._exception = e
-        self._value = 'exception'
+        self._value = f'_exception: {e}'
         if self._next_promise:
             self._next_promise.fail(e)
         self._state = self.FINISHED
@@ -885,8 +890,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
-        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion
+    def describe_service(self, service_type=None, service_name=None, refresh=False):
+        # type: (Optional[str], Optional[str], bool) -> Completion
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -919,8 +924,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_service(self, service_type, service_name=None):
-        # type: (str, Optional[str]) -> Completion
+    def remove_service(self, service_name):
+        # type: (str) -> Completion
         """
         Remove a service (a collection of daemons).
 
@@ -928,8 +933,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_action(self, action, service_type, service_name):
-        # type: (str, str, str) -> Completion
+    def service_action(self, action, service_name):
+        # type: (str, str) -> Completion
         """
         Perform an action (start/stop/reload) on a service (i.e., all daemons
         providing the logical service).
@@ -981,6 +986,11 @@ class Orchestrator(object):
         :param on: ``True`` = on.
         :param locations: See :class:`orchestrator.DeviceLightLoc`
         """
+        raise NotImplementedError()
+
+    def zap_device(self, host, path):
+        # type: (str, str) -> Completion
+        """Zap/Erase a device (DESTROYS DATA)"""
         raise NotImplementedError()
 
     def add_mon(self, spec):
@@ -1051,6 +1061,16 @@ class Orchestrator(object):
     def apply_prometheus(self, spec):
         # type: (ServiceSpec) -> Completion
         """Update prometheus cluster"""
+        raise NotImplementedError()
+
+    def add_node_exporter(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Create a new Node-Exporter service"""
+        raise NotImplementedError()
+
+    def apply_node_exporter(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update existing a Node-Exporter daemon(s)"""
         raise NotImplementedError()
 
     def upgrade_check(self, image, version):
@@ -1178,7 +1198,8 @@ class DaemonDescription(object):
                  container_image_name=None,
                  version=None,
                  status=None,
-                 status_desc=None):
+                 status_desc=None,
+                 last_refresh=None):
         # Node is at the same granularity as InventoryNode
         self.nodename = nodename
 
@@ -1208,10 +1229,24 @@ class DaemonDescription(object):
         self.status_desc = status_desc
 
         # datetime when this info was last refreshed
-        self.last_refresh = None   # type: Optional[datetime.datetime]
+        self.last_refresh = last_refresh  # type: Optional[datetime.datetime]
 
     def name(self):
         return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def matches_service(self, service_name):
+        # type: (Optional[str]) -> bool
+        if service_name:
+            return self.name().startswith(service_name + '.')
+        return False
+
+    def service_name(self):
+        if self.daemon_type == 'rgw':
+            v = self.daemon_id.split('.')
+            return 'rgw.%s' % ('.'.join(v[0:2]))
+        if self.daemon_type in ['mds', 'nfs']:
+            return 'mds.%s' % (self.daemon_id.split('.')[0])
+        return self.daemon_type
 
     def __repr__(self):
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
@@ -1229,11 +1264,17 @@ class DaemonDescription(object):
             'status': self.status,
             'status_desc': self.status_desc,
         }
+        if self.last_refresh:
+            out['last_refresh'] = self.last_refresh.strftime(DATEFMT)
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
+        if 'last_refresh' in data:
+            data['last_refresh'] = datetime.datetime.strptime(
+                data['last_refresh'],
+                DATEFMT)
         return cls(**data)
 
 class ServiceDescription(object):
@@ -1249,44 +1290,24 @@ class ServiceDescription(object):
     has decided the service should run.
     """
 
-    def __init__(self, nodename=None,
-                 container_id=None, container_image_id=None,
+    def __init__(self,
+                 container_image_id=None,
                  container_image_name=None,
-                 service=None, service_instance=None,
-                 service_type=None, version=None, rados_config_location=None,
-                 service_url=None, status=None, status_desc=None):
-        # Node is at the same granularity as InventoryNode
-        self.nodename = nodename  # type: Optional[str]
-
+                 service_name=None,
+                 rados_config_location=None,
+                 service_url=None,
+                 last_refresh=None,
+                 size=0,
+                 running=0):
         # Not everyone runs in containers, but enough people do to
-        # justify having the container_id (runtime id) and container_image
+        # justify having the container_image_id (image hash) and container_image
         # (image name)
-        self.container_id = container_id                  # runtime id
         self.container_image_id = container_image_id      # image hash
         self.container_image_name = container_image_name  # image friendly name
 
-        # Some services can be deployed in groups. For example, mds's can
-        # have an active and standby daemons, and nfs-ganesha can run daemons
-        # in parallel. This tag refers to a group of daemons as a whole.
-        #
-        # For instance, a cluster of mds' all service the same fs, and they
-        # will all have the same service value (which may be the
-        # Filesystem name in the FSMap).
-        #
-        # Single-instance services should leave this set to None
-        self.service = service
-
-        # The orchestrator will have picked some names for daemons,
-        # typically either based on hostnames or on pod names.
-        # This is the <foo> in mds.<foo>, the ID that will appear
-        # in the FSMap/ServiceMap.
-        self.service_instance = service_instance
-
-        # The type of service (osd, mon, mgr, etc.)
-        self.service_type = service_type
-
-        # Service version that was deployed
-        self.version = version
+        # The service_name is either a bare type (e.g., 'mgr') or
+        # type.id combination (e.g., 'mds.fsname' or 'rgw.realm.zone').
+        self.service_name = service_name
 
         # Location of the service configuration when stored in rados
         # object. Format: "rados://<pool>/[<namespace/>]<object>"
@@ -1296,42 +1317,44 @@ class ServiceDescription(object):
         # the URL.
         self.service_url = service_url
 
-        # Service status: -1 error, 0 stopped, 1 running
-        self.status = status
+        # Number of daemons
+        self.size = size
 
-        # Service status description when status == -1.
-        self.status_desc = status_desc
+        # Number of daemons up
+        self.running = running
 
         # datetime when this info was last refreshed
-        self.last_refresh = None   # type: Optional[datetime.datetime]
+        self.last_refresh = last_refresh   # type: Optional[datetime.datetime]
 
-    def name(self):
-        if self.service_instance:
-            return '%s.%s' % (self.service_type, self.service_instance)
-        return self.service_type
+    def service_type(self):
+        if self.service_name:
+            return self.service_name.split('.')[0]
+        return None
 
     def __repr__(self):
-        return "<ServiceDescription>({n_name}:{s_type})".format(n_name=self.nodename,
-                                                                s_type=self.name())
+        return "<ServiceDescription>({name})".format(name=self.service_name)
 
     def to_json(self):
         out = {
-            'nodename': self.nodename,
-            'container_id': self.container_id,
-            'service': self.service,
-            'service_instance': self.service_instance,
-            'service_type': self.service_type,
-            'version': self.version,
+            'container_image_id': self.container_image_id,
+            'container_image_name': self.container_image_name,
+            'service_name': self.service_name,
             'rados_config_location': self.rados_config_location,
             'service_url': self.service_url,
-            'status': self.status,
-            'status_desc': self.status_desc,
+            'size': self.size,
+            'running': self.running,
         }
+        if self.last_refresh:
+            out['last_refresh'] = self.last_refresh.strftime(DATEFMT)
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
+        if 'last_refresh' in data:
+            data['last_refresh'] = datetime.datetime.strptime(
+                data['last_refresh'],
+                DATEFMT)
         return cls(**data)
 
 
@@ -1362,9 +1385,28 @@ class ServiceSpec(object):
         else:
             self.count = 1
 
-    def validate_add(self):
-        if not self.name:
-            raise OrchestratorValidationError('Cannot add Service: Name required')
+
+def servicespec_validate_add(self: ServiceSpec):
+    # This must not be a method of ServiceSpec, otherwise you'll hunt
+    # sub-interpreter affinity bugs.
+    if not self.name:
+        raise OrchestratorValidationError('Cannot add Service: Name required')
+
+
+def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
+    # This must not be a method of ServiceSpec, otherwise you'll hunt
+    # sub-interpreter affinity bugs.
+    if not self.placement.hosts:
+        raise OrchestratorValidationError('Service specification: no hosts provided')
+
+    for host, network, _ in self.placement.hosts:
+        if not network:
+            m = "Host '{host}' is missing a network spec\nE.g. {host}:1.2.3.0/24".format(
+                host=host)
+            logger.error(
+                f'validate_hosts_have_network_spec: id(OrchestratorValidationError)={id(OrchestratorValidationError)}')
+            raise OrchestratorValidationError(m)
+
 
 
 class NFSServiceSpec(ServiceSpec):
@@ -1378,8 +1420,8 @@ class NFSServiceSpec(ServiceSpec):
         self.namespace = namespace
 
     def validate_add(self):
-        super(NFSServiceSpec, self).validate_add()
-
+        servicespec_validate_add(self)
+        
         if not self.pool:
             raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
 

@@ -4,7 +4,7 @@ try:
 except ImportError:
     from unittest import mock
 
-from orchestrator import InventoryNode, ServiceDescription
+from orchestrator import InventoryNode
 
 from . import ControllerTestCase
 from .. import mgr
@@ -122,57 +122,6 @@ class OrchestratorControllerTest(ControllerTestCase):
         # list without orchestrator service
         fake_client.available.return_value = False
         self._get(self.URL_INVENTORY)
-        self.assertStatus(503)
-
-    def _set_services(self, mock_instance, services):
-        # pylint: disable=unused-argument
-        def _list_services(service_type=None, service_id=None, node_name=None):
-            service_descs = []
-            for service in services:
-                if node_name is None or service['nodename'] == node_name:
-                    desc = ServiceDescription(nodename=service['nodename'],
-                                              service_type=service['service_type'],
-                                              service_instance=service['service_instance'])
-                    service_descs.append(desc)
-            return service_descs
-        mock_instance.services.list.side_effect = _list_services
-
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
-    def test_service_list(self, instance):
-        services = []
-        for i in range(3):
-            for service_type in ['mon', 'mgr', 'osd']:
-                services.append(
-                    {
-                        'nodename': 'host-{}'.format(i),
-                        'service_type': service_type,
-                        'service_instance': 'x'
-                    }
-                )
-
-        fake_client = mock.Mock()
-        fake_client.available.return_value = True
-        self._set_services(fake_client, services)
-        instance.return_value = fake_client
-
-        # list
-        self._get(self.URL_SERVICE)
-        self.assertStatus(200)
-        self.assertJsonBody(services)
-
-        # list with existent service
-        self._get('{}?hostname=host-0'.format(self.URL_SERVICE))
-        self.assertStatus(200)
-        self.assertJsonBody([svc for svc in services if svc['nodename'] == 'host-0'])
-
-        # list with non-existent service
-        self._get('{}?hostname=host-10'.format(self.URL_SERVICE))
-        self.assertStatus(200)
-        self.assertJsonBody([])
-
-        # list without orchestrator service
-        fake_client.available.return_value = False
-        self._get(self.URL_SERVICE)
         self.assertStatus(503)
 
     @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')

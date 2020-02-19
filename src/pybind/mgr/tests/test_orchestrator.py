@@ -6,8 +6,9 @@ from tests import mock
 import pytest
 
 from ceph.deployment import inventory
-from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference
-from orchestrator import InventoryNode, ServiceDescription
+from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference, \
+    servicespec_validate_add
+from orchestrator import InventoryNode, ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorValidationError
 from orchestrator import HostPlacementSpec
 
@@ -81,13 +82,13 @@ def test_inventory():
             InventoryNode.from_json(data)
 
 
-def test_service_description():
+def test_daemon_description():
     json_data = {
         'nodename': 'test',
-        'service_type': 'mon',
-        'service_instance': 'a'
+        'daemon_type': 'mon',
+        'daemon_id': 'a'
     }
-    _test_resource(json_data, ServiceDescription, {'abc': False})
+    _test_resource(json_data, DaemonDescription, {'abc': False})
 
 
 def test_raise():
@@ -110,7 +111,7 @@ def test_rgwspec():
     """
     example = json.loads(test_rgwspec.__doc__.strip())
     spec = RGWSpec.from_json(example)
-    assert spec.validate_add() is None
+    assert servicespec_validate_add(spec) is None
 
 
 def test_promise():

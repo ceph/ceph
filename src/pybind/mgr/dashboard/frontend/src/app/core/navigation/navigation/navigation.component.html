@@ -1,7 +1,8 @@
 <cd-pwd-expiration-notification></cd-pwd-expiration-notification>
+<cd-notifications-sidebar></cd-notifications-sidebar>
+
 <div class="cd-navbar-top">
-  <nav class="navbar fixed-top navbar-expand-md navbar-dark cd-navbar-brand"
-       [ngClass]="{'isPwdDisplayed': isPwdDisplayed}">
+  <nav class="navbar fixed-top navbar-expand-md navbar-dark cd-navbar-brand">
     <button class="btn btn-link py-0"
             (click)="showMenuSidebar = !showMenuSidebar">
       <i class="fa fa-bars fa-2x"
@@ -36,7 +37,7 @@
 <div class="wrapper">
   <!-- Content -->
   <nav id="sidebar"
-       [ngClass]="{'active': !showMenuSidebar, 'isPwdDisplayed': isPwdDisplayed}">
+       [ngClass]="{'active': !showMenuSidebar}">
     <ngx-simplebar [options]="simplebar">
       <ul class="list-unstyled components cd-navbar-primary">
         <ng-container *ngTemplateOutlet="cd_menu"> </ng-container>
@@ -46,7 +47,7 @@
 
   <!-- Page Content -->
   <div id="content"
-       [ngClass]="{'active': !showMenuSidebar, 'isPwdDisplayed': isPwdDisplayed}">
+       [ngClass]="{'active': !showMenuSidebar}">
     <ng-content></ng-content>
   </div>
 </div>

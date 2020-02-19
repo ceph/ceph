@@ -9,6 +9,7 @@ from ._interface import \
     Orchestrator, OrchestratorClientMixin, \
     OrchestratorValidationError, OrchestratorError, NoOrchestrator, \
     ServiceSpec, NFSServiceSpec, RGWSpec, HostPlacementSpec, \
+    servicespec_validate_add, servicespec_validate_hosts_have_network_spec, \
     ServiceDescription, InventoryFilter, PlacementSpec,  HostSpec, \
     DaemonDescription, \
     InventoryNode, DeviceLightLoc, \

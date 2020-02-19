@@ -6,6 +6,10 @@
   padding: 0;
 }
 
+.container-fluid {
+  overflow: auto;
+}
+
 ::ng-deep #toast-container {
   margin-top: 2vw;
 

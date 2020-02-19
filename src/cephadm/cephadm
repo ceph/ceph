@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-DEFAULT_IMAGE='ceph/daemon-base:latest-master-devel'  # FIXME when octopus is ready!!!
+DEFAULT_IMAGE='docker.io/ceph/daemon-base:latest-master-devel'  # FIXME when octopus is ready!!!
 DATA_DIR='/var/lib/ceph'
 LOG_DIR='/var/log/ceph'
 LOCK_DIR='/run/cephadm'
@@ -57,7 +57,6 @@ except ImportError:
     pass
 import uuid
 
-from distutils.spawn import find_executable
 from functools import wraps
 from glob import glob
 from threading import Thread
@@ -98,9 +97,10 @@ class Monitoring(object):
     """Define the configs for the monitoring containers"""
 
     port_map = {
-        "prometheus": 9095,  # Avoid default 9090, due to conflict with cockpit UI
-        "node-exporter": 9100,
-        "grafana": 3000,
+        "prometheus": [9095],  # Avoid default 9090, due to conflict with cockpit UI
+        "node-exporter": [9100],
+        "grafana": [3000],
+        "alertmanager": [9093, 9094],
     }
 
     components = {
@@ -111,9 +111,9 @@ class Monitoring(object):
             "args": [
                 "--config.file=/etc/prometheus/prometheus.yml",
                 "--storage.tsdb.path=/prometheus",
-                "--web.listen-address=:{}".format(port_map['prometheus']),
+                "--web.listen-address=:{}".format(port_map['prometheus'][0]),
             ],
-            "config-json": [
+            "config-json-files": [
                 "prometheus.yml",
             ],
         },
@@ -130,14 +130,26 @@ class Monitoring(object):
             "cpus": "2",
             "memory": "4GB",
             "args": [],
-            "config-json": [
+            "config-json-files": [
                 "grafana.ini",
                 "provisioning/datasources/ceph-dashboard.yml",
                 "certs/cert_file",
                 "certs/cert_key",
             ],
-        }
-    }  # type: Dict[str, dict]
+        },
+        "alertmanager": {
+            "image": "prom/alertmanager",
+            "cpus": "2",
+            "memory": "2GB",
+            "args": [],
+            "config-json-files": [
+                "alertmanager.yml",
+            ],
+            "config-json-args": [
+                "peers",
+            ],
+        },
+    }  # type: ignore
 
 def attempt_bind(s, address, port):
     # type (str) -> None
@@ -796,6 +808,42 @@ def move_files(src, dst, uid=None, gid=None):
             logger.debug('chown %s:%s \'%s\'' % (uid, gid, dst_file))
             os.chown(dst_file, uid, gid)
 
+## copied from distutils ##
+def find_executable(executable, path=None):
+    """Tries to find 'executable' in the directories listed in 'path'.
+    A string listing directories separated by 'os.pathsep'; defaults to
+    os.environ['PATH'].  Returns the complete filename or None if not found.
+    """
+    _, ext = os.path.splitext(executable)
+    if (sys.platform == 'win32') and (ext != '.exe'):
+        executable = executable + '.exe'
+
+    if os.path.isfile(executable):
+        return executable
+
+    if path is None:
+        path = os.environ.get('PATH', None)
+        if path is None:
+            try:
+                path = os.confstr("CS_PATH")
+            except (AttributeError, ValueError):
+                # os.confstr() or CS_PATH is not available
+                path = os.defpath
+        # bpo-35755: Don't use os.defpath if the PATH environment variable is
+        # set to an empty string
+
+    # PATH='' doesn't match, whereas PATH=':' looks in the current directory
+    if not path:
+        return None
+
+    paths = path.split(os.pathsep)
+    for p in paths:
+        f = os.path.join(p, executable)
+        if os.path.isfile(f):
+            # the file exists, we have a shot at spawn working
+            return f
+    return None
+
 def find_program(filename):
     # type: (str) -> str
     name = find_executable(filename)
@@ -895,6 +943,11 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
     elif daemon_type in Monitoring.components:
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
+        if daemon_type == 'alertmanager':
+            config = get_parm(args.config_json)
+            peers = config.get('peers', list())  # type: ignore
+            for peer in peers:
+                r += ["--cluster.peer={}".format(peer)]
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
@@ -916,13 +969,8 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
-
-        received_config = get_parm(args.config_json)
-        required_config = Monitoring.components[daemon_type].get('config-json', list())
-        if required_config:
-            if not received_config or not all(c in received_config.keys() for c in required_config):
-                raise Error("{} deployment requires config-json which must "
-                            "contain settings for {}".format(daemon_type.capitalize(), ', '.join(required_config)))
+        config = get_parm(args.config_json) # type: ignore
+        required_files = Monitoring.components[daemon_type].get('config-json-files', list())
 
         # Set up directories specific to the monitoring component
         config_dir = ''
@@ -939,13 +987,19 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'alertmanager':
+            data_dir_root = get_data_dir(fsid, daemon_type, daemon_id)
+            config_dir = 'etc/alertmanager'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
+
 
         # populate the config directory for the component from the config-json
-        for fname in required_config:
-            if isinstance(received_config[fname], list):
-                content = '\n'.join(received_config[fname])
+        for fname in required_files:
+            if isinstance(config['files'][fname], list):  # type: ignore
+                content = '\n'.join(config['files'][fname])  # type: ignore
             else:
-                content = received_config[fname]
+                content = config['files'][fname]  # type: ignore
 
             with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
                 os.fchown(f.fileno(), uid, gid)
@@ -1087,6 +1141,8 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
             mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
+        elif daemon_type == 'alertmanager':
+            mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/alertmanager:Z'
 
     return mounts
 
@@ -1296,7 +1352,7 @@ def update_firewalld(daemon_type):
         fw_ports.append(8443)  # dashboard
         fw_ports.append(9283)  # mgr/prometheus exporter
     elif daemon_type in Monitoring.port_map.keys():
-        fw_ports.append(Monitoring.port_map[daemon_type])  # prometheus etc
+        fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
 
     for svc in fw_services:
         out, err, ret = call([cmd, '--permanent', '--query-service', svc])
@@ -1594,6 +1650,8 @@ def command_bootstrap():
             if os.path.exists(f):
                 raise Error('%s already exists; delete or pass '
                               '--allow-overwrite to overwrite' % f)
+
+    command_prepare_host()
 
     # initial vars
     fsid = args.fsid or make_fsid()
@@ -1977,14 +2035,24 @@ def command_deploy():
         monitoring_args = []  # type: List[str]
 
         # Default Checks
-        daemon_port = Monitoring.port_map[daemon_type]
-        if port_in_use(daemon_port):
-            raise Error("TCP Port '{}' required for {} is already in use".format(daemon_port, daemon_type))
+        daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
+        if any([port_in_use(port) for port in daemon_ports]):
+            raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
         elif args.image == DEFAULT_IMAGE:
             raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
-        if daemon_type in ['prometheus', 'grafana'] and not args.config_json:
-                raise Error("config-json parameter is needed when deploying {} service".format(daemon_type))
+        # make sure provided config-json is sufficient
+        config = get_parm(args.config_json) # type: ignore
+        required_files = Monitoring.components[daemon_type].get('config-json-files', list())
+        required_args = Monitoring.components[daemon_type].get('config-json-args', list())
+        if required_files:
+            if not config or not all(c in config.get('files', {}).keys() for c in required_files):  # type: ignore
+                raise Error("{} deployment requires config-json which must "
+                            "contain file content for {}".format(daemon_type.capitalize(), ', '.join(required_files)))
+        if required_args:
+            if not config or not all(c in config.keys() for c in required_args):  # type: ignore
+                raise Error("{} deployment requires config-json which must "
+                            "contain arg for {}".format(daemon_type.capitalize(), ', '.join(required_args)))
 
         if daemon_type == 'prometheus':
             uid, gid = extract_uid_gid(file_path='/etc/prometheus')
@@ -1992,6 +2060,8 @@ def command_deploy():
             uid, gid = 65534, 65534
         elif daemon_type == 'grafana':
             uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
+        elif daemon_type == 'alertmanager':
+            uid, gid = extract_uid_gid(file_path='/alertmanager')
         else:
             raise Error("{} not implemented yet".format(daemon_type))
 
@@ -2339,6 +2409,15 @@ def command_adopt():
             call_throws(['systemctl', 'disable', unit_name])
 
         # data
+        os_type = None
+        if os.path.exists(os.path.join(data_dir_src, 'type')):
+            with open(os.path.join(data_dir_src, 'type')) as f:
+                os_type = f.read().strip()
+        else:
+            raise Error('"type" file missing for OSD data dir')
+        logger.info('objectstore_type is %s' % os_type)
+        if os_type == 'filestore':
+            raise Error('FileStore is not supported by cephadm')
         logger.info('Moving data...')
         data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
                                      uid=uid, gid=gid)
@@ -2502,7 +2581,9 @@ def command_rm_cluster():
 
 def check_time_sync():
     units = [
-        'chronyd.service', 'systemd-timesyncd.service',
+        'chrony.service',  # 18.04 (at least)
+        'chronyd.service', # el
+        'systemd-timesyncd.service',
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
     ]
@@ -2531,7 +2612,7 @@ def command_check_host():
     if not check_time_sync():
         raise Error('No time synchronization is active')
 
-    if args.expect_hostname:
+    if 'expect_hostname' in args and args.expect_hostname:
         if get_hostname() != args.expect_hostname:
             raise Error('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), args.expect_hostname))
@@ -2540,6 +2621,30 @@ def command_check_host():
 
     logger.info('Host looks OK')
 
+##################################
+
+def command_prepare_host():
+    pkg = create_packager()
+    logger.info('Verifying podman|docker is present...')
+    if not container_path:
+        pkg.install_podman()
+
+    logger.info('Verifying lvm2 is present...')
+    if not find_executable('lvcreate'):
+        pkg.install(['lvm2'])
+
+    logger.info('Verifying time synchronization is in place...')
+    if not check_time_sync():
+        pkg.install(['chrony'])
+
+    if 'expect_hostname' in args and args.expect_hostname and args.expect_hostname != get_hostname():
+        logger.warning('Adjusting hostname from %s -> %s...' % (get_hostname(), args.expect_hostname))
+        call_throws(['hostname', args.expect_hostname])
+        with open('/etc/hostname', 'w') as f:
+            f.write(args.expect_hostname + '\n')
+
+    logger.info('Repeating the final host check...')
+    return command_check_host()
 
 ##################################
 
@@ -2683,6 +2788,24 @@ class Apt(Packager):
             logging.info('Removing repo at %s...' % self.repo_path())
             os.unlink(self.repo_path())
 
+    def install(self, ls):
+        logging.info('Installing packages %s...' % ls)
+        call_throws(['apt', 'install', '-y'] + ls)
+
+    def install_podman(self):
+        if self.distro == 'ubuntu':
+            logging.info('Setting up repo for pdoman...')
+            self.install(['software-properties-common'])
+            call_throws(['add-apt-repository', '-y', 'ppa:projectatomic/ppa'])
+            call_throws(['apt', 'update'])
+
+        logging.info('Attempting podman install...')
+        try:
+            self.install(['podman'])
+        except Error as e:
+            logging.info('Podman did not work.  Falling back to docker...')
+            self.install(['docker.io'])
+
 class YumDnf(Packager):
     DISTRO_NAMES = {
         'centos': ('centos', 'el'),
@@ -2805,6 +2928,14 @@ class YumDnf(Packager):
         if self.distro_code == 'el8':
             logger.info('Disabling supplementary copr repo ktdreyer/ceph-el8...')
             call_throws(['dnf', 'copr', 'disable', '-y', 'ktdreyer/ceph-el8'])
+
+    def install(self, ls):
+        logger.info('Installing packages %s...' % ls)
+        call_throws([self.tool, 'install', '-y'] + ls)
+
+    def install_podman(self):
+        self.install(['podman'])
+
 
 def create_packager(stable=None, branch=None, commit=None):
     distro, version, codename = get_distro()
@@ -3172,6 +3303,13 @@ def _get_parser():
         '--expect-hostname',
         help='Check that hostname matches an expected value')
 
+    parser_prepare_host = subparsers.add_parser(
+        'prepare-host', help='prepare a host for cephadm use')
+    parser_prepare_host.set_defaults(func=command_prepare_host)
+    parser_prepare_host.add_argument(
+        '--expect-hostname',
+        help='Set hostname')
+
     parser_add_repo = subparsers.add_parser(
         'add-repo', help='configure package repository')
     parser_add_repo.set_defaults(func=command_add_repo)
@@ -3246,7 +3384,7 @@ if __name__ == "__main__":
                 break
             except Exception as e:
                 logger.debug('Could not locate %s: %s' % (i, e))
-        if not container_path:
+        if not container_path and args.func != command_prepare_host:
             sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
             sys.exit(1)
 

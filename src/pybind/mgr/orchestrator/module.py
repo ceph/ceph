@@ -213,7 +213,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
-            for node in completion.result:
+            for node in sorted(completion.result, key=lambda h: h.name):
                 table.add_row((node.name, node.addr, ' '.join(node.labels)))
             output = table.get_string()
         return HandleCommandResult(stdout=output)
@@ -292,10 +292,76 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             out.append(table.get_string())
             return HandleCommandResult(stdout='\n'.join(out))
 
+    @_cli_write_command(
+        'orch device zap',
+        'name=host,type=CephString '
+        'name=path,type=CephString '
+        'name=force,type=CephBool,req=false',
+        'Zap (erase!) a device so it can be re-used')
+    def _zap_device(self, host, path, force=False):
+        if not force:
+            raise OrchestratorError('must pass --force to PERMANENTLY ERASE DEVICE DATA')
+        completion = self.zap_device(host, path)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_read_command(
+        'orch ls',
+        "name=service_type,type=CephString,req=false "
+        "name=service_name,type=CephString,req=false "
+        "name=format,type=CephChoices,strings=json|plain,req=false "
+        "name=refresh,type=CephBool,req=false",
+        'List services known to orchestrator')
+    def _list_services(self, host=None, service_type=None, service_name=None, format='plain', refresh=False):
+        completion = self.describe_service(service_type,
+                                           service_name,
+                                           refresh=refresh)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        services = completion.result
+
+        def ukn(s):
+            return '<unknown>' if s is None else s
+
+        # Sort the list for display
+        services.sort(key=lambda s: (ukn(s.service_name)))
+
+        if len(services) == 0:
+            return HandleCommandResult(stdout="No services reported")
+        elif format == 'json':
+            data = [s.to_json() for s in services]
+            return HandleCommandResult(stdout=json.dumps(data))
+        else:
+            now = datetime.datetime.utcnow()
+            table = PrettyTable(
+                ['NAME', 'RUNNING', 'REFRESHED', 'IMAGE NAME', 'IMAGE ID'],
+                border=False)
+            table.align['NAME'] = 'l'
+            table.align['RUNNING'] = 'r'
+            table.align['REFRESHED'] = 'l'
+            table.align['IMAGE NAME'] = 'l'
+            table.align['IMAGE ID'] = 'l'
+            table.left_padding_width = 0
+            table.right_padding_width = 1
+            for s in sorted(services, key=lambda s: s.service_name):
+                if s.last_refresh:
+                    age = to_pretty_timedelta(now - s.last_refresh) + ' ago'
+                else:
+                    age = '-'
+                table.add_row((
+                    s.service_name,
+                    '%d/%d' % (s.running, s.size),
+                    age,
+                    ukn(s.container_image_name),
+                    ukn(s.container_image_id)[0:12]))
+
+            return HandleCommandResult(stdout=table.get_string())
+
     @_cli_read_command(
         'orch ps',
         "name=host,type=CephString,req=false "
-        "name=daemon_type,type=CephChoices,strings=mon|mgr|osd|mds|iscsi|nfs|rgw|rbd-mirror,req=false "
+        "name=daemon_type,type=CephString,req=false "
         "name=daemon_id,type=CephString,req=false "
         "name=format,type=CephChoices,strings=json|plain,req=false "
         "name=refresh,type=CephBool,req=false",
@@ -521,17 +587,27 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
+        'orch daemon add node-exporter',
+        'name=num,type=CephInt,req=false '
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
+        'Add node-exporter daemon(s)')
+    def _daemon_add_node_exporter(self, num=None, label=None, hosts=[]):
+        # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
+        spec = ServiceSpec(
+            placement=PlacementSpec(label=label, hosts=hosts, count=num),
+        )
+        completion = self.add_node_exporter(spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
         'orch',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
-        "name=svc_name,type=CephString",
+        "name=service_name,type=CephString",
         'Start, stop, restart, redeploy, or reconfig an entire service (i.e. all daemons)')
-    def _service_action(self, action, svc_name):
-        if '.' in svc_name:
-            (service_type, service_id) = svc_name.split('.', 1)
-        else:
-            service_type = svc_name;
-            service_id = None
-        completion = self.service_action(action, service_type, service_id)
+    def _service_action(self, action, service_name):
+        completion = self.service_action(action, service_name)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -566,17 +642,12 @@ Usage:
 
     @_cli_write_command(
         'orch rm',
-        "name=name,type=CephString",
+        "name=service_name,type=CephString",
         'Remove a service')
-    def _service_rm(self, name):
-        if '.' in name:
-            (service_type, service_name) = name.split('.')
-        else:
-            service_type = name;
-            service_name = None
-        if name in ['mon', 'mgr']:
+    def _service_rm(self, service_name):
+        if service_name in ['mon', 'mgr']:
             raise OrchestratorError('The mon and mgr services cannot be removed')
-        completion = self.remove_service(service_type, service_name)
+        completion = self.remove_service(service_name)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -700,6 +771,21 @@ Usage:
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.apply_prometheus(spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch apply node-exporter',
+        'name=num,type=CephInt,req=false '
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
+        'Update node_exporter service')
+    def _apply_node_exporter(self, num=None, label=None, hosts=[]):
+        # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
+        spec = ServiceSpec(
+            placement=PlacementSpec(label=label, hosts=hosts, count=num),
+        )
+        completion = self.apply_node_exporter(spec)
         self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 
