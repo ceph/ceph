@@ -50,6 +50,12 @@ InstanceReplayer<I>::~InstanceReplayer() {
 }
 
 template <typename I>
+bool InstanceReplayer<I>::is_blacklisted() const {
+  Mutex::Locker locker(m_lock);
+  return m_blacklisted;
+}
+
+template <typename I>
 int InstanceReplayer<I>::init() {
   C_SaferCond init_ctx;
   init(&init_ctx);
@@ -301,6 +307,7 @@ void InstanceReplayer<I>::start_image_replayer(
     return;
   } else if (image_replayer->is_blacklisted()) {
     derr << "blacklisted detected during image replay" << dendl;
+    m_blacklisted = true;
     return;
   } else if (image_replayer->is_finished()) {
     // TODO temporary until policy integrated
