@@ -3,7 +3,7 @@
 SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 
 fsid='00000000-0000-0000-0000-0000deadbeef'
-image='ceph/daemon-base:latest-master-devel'
+image='docker.io/ceph/daemon-base:latest-master-devel'
 [ -z "$ip" ] && ip=127.0.0.1
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
