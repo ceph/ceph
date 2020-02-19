@@ -205,12 +205,13 @@ BuildRequires:	libuuid-devel
 %if 0%{?rhel} == 7
 BuildRequires:	python%{python3_version_nodots}-bcrypt
 BuildRequires:	python%{python3_version_nodots}-nose
+BuildRequires:	python%{python3_version_nodots}-requests
 %else
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
-%endif
 BuildRequires:	python%{python3_pkgversion}-requests
+%endif
 %if 0%{?rhel} == 7
 BuildRequires:	python%{python3_version_nodots}-six
 BuildRequires:	python%{python3_version_nodots}-virtualenv
@@ -486,11 +487,19 @@ Summary:        Ceph Manager Daemon
 Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?rhel} == 7
+Requires:       python%{python3_version_nodots}-bcrypt
+Requires:       python%{python3_version_nodots}-pyOpenSSL
+Requires:       python%{python3_version_nodots}-requests
+Requires:       python%{python3_version_nodots}-six
+%else
 Requires:       python%{python3_pkgversion}-bcrypt
 Requires:       python%{python3_pkgversion}-pecan
+Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-six
-%if 0%{?fedora} || 0%{?rhel}
+%endif
+%if 0%{?fedora} || 0%{?rhel} >= 8
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-werkzeug
 %if 0%{?rhel} == 7
@@ -513,7 +522,6 @@ Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{python3_pkgversion}-influxdb
 %endif
-Requires:       python%{python3_pkgversion}-pyOpenSSL
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
 module derived from Calamari) and expose CLI hooks.  ceph-mgr gathers
