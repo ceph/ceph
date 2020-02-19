@@ -24,7 +24,7 @@ def get_next_clone_entry(volume_client, volname, running_jobs):
     log.debug("fetching clone entry for volume '{0}'".format(volname))
 
     try:
-        with open_volume(volume_client, volname) as fs_handle:
+        with open_volume_lockless(volume_client, volname) as fs_handle:
             try:
                 with open_clone_index(fs_handle, volume_client.volspec) as clone_index:
                     job = clone_index.get_oldest_clone_entry(running_jobs)
