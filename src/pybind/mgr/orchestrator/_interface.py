@@ -35,6 +35,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
@@ -919,8 +920,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_service(self, service_type, service_name=None):
-        # type: (str, Optional[str]) -> Completion
+    def remove_service(self, service_name):
+        # type: (str) -> Completion
         """
         Remove a service (a collection of daemons).
 
@@ -928,8 +929,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_action(self, action, service_type, service_name):
-        # type: (str, str, str) -> Completion
+    def service_action(self, action, service_name):
+        # type: (str, str) -> Completion
         """
         Perform an action (start/stop/reload) on a service (i.e., all daemons
         providing the logical service).
@@ -1178,7 +1179,8 @@ class DaemonDescription(object):
                  container_image_name=None,
                  version=None,
                  status=None,
-                 status_desc=None):
+                 status_desc=None,
+                 last_refresh=None):
         # Node is at the same granularity as InventoryNode
         self.nodename = nodename
 
@@ -1208,10 +1210,16 @@ class DaemonDescription(object):
         self.status_desc = status_desc
 
         # datetime when this info was last refreshed
-        self.last_refresh = None   # type: Optional[datetime.datetime]
+        self.last_refresh = last_refresh  # type: Optional[datetime.datetime]
 
     def name(self):
         return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def matches_service(self, service_name):
+        # type: (Optional[str]) -> bool
+        if service_name:
+            return self.name().startswith(service_name + '.')
+        return False
 
     def __repr__(self):
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
@@ -1229,11 +1237,17 @@ class DaemonDescription(object):
             'status': self.status,
             'status_desc': self.status_desc,
         }
+        if self.last_refresh:
+            out['last_refresh'] = self.last_refresh.strftime(DATEFMT)
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
+        if 'last_refresh' in data:
+            data['last_refresh'] = datetime.datetime.strptime(
+                data['last_refresh'],
+                DATEFMT)
         return cls(**data)
 
 class ServiceDescription(object):

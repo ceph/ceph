@@ -523,15 +523,10 @@ Usage:
     @_cli_write_command(
         'orch',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
-        "name=svc_name,type=CephString",
+        "name=service_name,type=CephString",
         'Start, stop, restart, redeploy, or reconfig an entire service (i.e. all daemons)')
-    def _service_action(self, action, svc_name):
-        if '.' in svc_name:
-            (service_type, service_id) = svc_name.split('.', 1)
-        else:
-            service_type = svc_name;
-            service_id = None
-        completion = self.service_action(action, service_type, service_id)
+    def _service_action(self, action, service_name):
+        completion = self.service_action(action, service_name)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -566,17 +561,12 @@ Usage:
 
     @_cli_write_command(
         'orch rm',
-        "name=name,type=CephString",
+        "name=service_name,type=CephString",
         'Remove a service')
-    def _service_rm(self, name):
-        if '.' in name:
-            (service_type, service_name) = name.split('.')
-        else:
-            service_type = name;
-            service_name = None
-        if name in ['mon', 'mgr']:
+    def _service_rm(self, service_name):
+        if service_name in ['mon', 'mgr']:
             raise OrchestratorError('The mon and mgr services cannot be removed')
-        completion = self.remove_service(service_type, service_name)
+        completion = self.remove_service(service_name)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

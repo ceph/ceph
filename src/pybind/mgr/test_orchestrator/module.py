@@ -217,8 +217,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert isinstance(names, list)
 
     @deferred_write("remove_service")
-    def remove_service(self, service_type, service_name):
-        assert isinstance(service_type, str)
+    def remove_service(self, service_name):
         assert isinstance(service_name, str)
 
     @deferred_write("blink_device_light")
@@ -228,7 +227,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return ''
 
     @deferred_write("service_action")
-    def service_action(self, action, service_type, service_name=None, service_id=None):
+    def service_action(self, action, service_name):
         pass
 
     @deferred_write("Adding NFS service")
