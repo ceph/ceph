@@ -12,6 +12,7 @@ usr/share/ceph/mgr/mgr_module.*
 usr/share/ceph/mgr/mgr_util.*
 usr/share/ceph/mgr/orchestrator
 usr/share/ceph/mgr/osd_perf_query
+usr/share/ceph/mgr/osd_support
 usr/share/ceph/mgr/pg_autoscaler
 usr/share/ceph/mgr/progress
 usr/share/ceph/mgr/prometheus
