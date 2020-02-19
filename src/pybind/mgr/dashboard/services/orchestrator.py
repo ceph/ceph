@@ -77,7 +77,7 @@ class ServiceManager(ResourceManager):
 
     @wait_api_result
     def list(self, service_type=None, service_id=None, node_name=None):
-        return self.api.describe_service(service_type, service_id, node_name)
+        return self.api.list_daemons(service_type, service_id, node_name)
 
     def reload(self, service_type, service_ids):
         if not isinstance(service_ids, list):
