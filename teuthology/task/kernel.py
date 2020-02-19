@@ -680,6 +680,10 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
     :param timeout: number of second before we timeout.
     """
     import time
+    # do not try to reconnect immediately after triggering the reboot,
+    # because the reboot sequence might not have started yet (!) --
+    # see https://tracker.ceph.com/issues/44187
+    time.sleep(30)
     starttime = time.time()
     while need_install:
         teuthology.reconnect(ctx, timeout)
