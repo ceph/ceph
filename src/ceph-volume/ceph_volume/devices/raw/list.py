@@ -41,7 +41,7 @@ class List(object):
             # bluestore?
             out, err, ret = process.call([
                 'ceph-bluestore-tool', 'show-label',
-                '--dev', dev])
+                '--dev', dev], verbose_on_failure=False)
             if ret:
                 logger.debug('No label on %s' % dev)
                 continue
