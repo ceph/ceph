@@ -115,10 +115,6 @@ void CreatePrimaryRequest<I>::create_snapshot() {
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
     m_mirror_peer_uuids, "", CEPH_NOSNAP};
-
-  // TODO delay until after image state written
-  ns.complete = true;
-
   auto ctx = create_context_callback<
     CreatePrimaryRequest<I>,
     &CreatePrimaryRequest<I>::handle_create_snapshot>(this);
