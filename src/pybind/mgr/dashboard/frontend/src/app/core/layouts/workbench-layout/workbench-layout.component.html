@@ -1,26 +1,9 @@
-<!-- Container for sidebar(s) + page content -->
-<ng-sidebar-container>
-  <!-- A sidebar -->
-  <ng-sidebar #sidebar
-              [(opened)]="sidebarOpened"
-              [animate]="sidebarAnimate"
-              position="end"
-              mode="over"
-              autoFocus="false"
-              closeOnClickOutside="true">
-    <cd-notifications-sidebar></cd-notifications-sidebar>
-  </ng-sidebar>
-
-  <!-- Page content -->
-  <div ng-sidebar-content>
-    <block-ui>
-      <cd-navigation>
-        <div class="container-fluid"
-             [ngClass]="{'dashboard':isDashboardPage()} ">
-          <cd-breadcrumbs></cd-breadcrumbs>
-          <router-outlet></router-outlet>
-        </div>
-      </cd-navigation>
-    </block-ui>
-  </div>
-</ng-sidebar-container>
+<block-ui>
+  <cd-navigation>
+    <div class="container-fluid h-100"
+         [ngClass]="{'dashboard':isDashboardPage()} ">
+      <cd-breadcrumbs></cd-breadcrumbs>
+      <router-outlet></router-outlet>
+    </div>
+  </cd-navigation>
+</block-ui>
