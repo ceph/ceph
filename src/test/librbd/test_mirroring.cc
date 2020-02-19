@@ -1331,6 +1331,8 @@ TEST_F(TestMirroring, SnapshotImageState)
 {
   REQUIRE_FORMAT_V2();
 
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+
   uint64_t features;
   ASSERT_TRUE(get_features(&features));
   int order = 20;
@@ -1340,6 +1342,11 @@ TEST_F(TestMirroring, SnapshotImageState)
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
   ASSERT_EQ(0, image.snap_create("snap"));
+  ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  std::vector<librbd::snap_info_t> snaps;
+  ASSERT_EQ(0, image.snap_list(snaps));
+  ASSERT_EQ(2U, snaps.size());
+  auto snap_id = snaps[1].id;
 
   auto ictx = new librbd::ImageCtx(image_name, "", nullptr, m_ioctx, false);
   ASSERT_EQ(0, ictx->state->open(0));
@@ -1352,7 +1359,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::SetImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1361,7 +1368,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::GetImageStateRequest<>::create(
-      ictx, 123, &image_state, &cond);
+      ictx, snap_id, &image_state, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1376,7 +1383,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::RemoveImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1392,7 +1399,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::SetImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1400,7 +1407,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::GetImageStateRequest<>::create(
-      ictx, 123, &image_state, &cond);
+      ictx, snap_id, &image_state, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1417,7 +1424,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::RemoveImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
