@@ -38,6 +38,7 @@ from . import remotes
 try:
     import remoto
     import remoto.process
+    import execnet.gateway_bootstrap
 except ImportError as e:
     remoto = None
     remoto_import_error = str(e)
@@ -1265,6 +1266,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         code, '\n'.join(err)))
             return out, err, code
 
+        except execnet.gateway_bootstrap.HostNotFound as e:
+            raise OrchestratorError('New host %s (%s) failed to connect: `ssh %s`' % (
+                host, addr, str(e))) from e
         except Exception as ex:
             self.log.exception(ex)
             raise
