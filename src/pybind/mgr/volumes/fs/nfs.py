@@ -192,6 +192,17 @@ class NFSConfig(object):
         self.mgr = mgr
         self.ganeshaconf = ''
 
+    def update_user_caps(self):
+        if NFSConfig.exp_num > 0:
+            ret, out, err = self.mgr.mon_command({
+                'prefix': 'auth caps',
+                'entity': "client.%s" % (self.cluster_id),
+                'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s, allow rw tag cephfs data=a' % (self.pool_name, self.pool_ns), 'mds', 'allow rw path=/'],
+                })
+
+            if ret!= 0:
+                return ret, out, err
+
     def create_common_config(self, nodeid):
         result = "NFS_CORE_PARAM {\n Enable_NLM = false;\n Enable_RQUOTA = false;\n Protocols = 4;\n}\n\n"
         result += "CACHEINODE {\n Dir_Chunk = 0;\n NParts = 1;\n Cache_Size = 1;\n}\n\n"
@@ -231,6 +242,7 @@ class NFSConfig(object):
 
         log.info("Export ID is {}".format(ex_id))
         NFSConfig.exp_num += 1
+        self.update_user_caps()
         return 0, "", ""
 
     def delete_export(self, ganesha_conf, ex_id):
@@ -275,14 +287,28 @@ class NFSConfig(object):
             log.info("{}".format(out))
             self.ganeshaconf = GaneshaConf(self.cluster_id, self.pool_name, self.pool_ns, self.mgr)
 
+            command = {'prefix': 'osd pool application enable', 'pool': self.pool_name, 'app': 'nfs'}
+            r, out, err = self.mgr.mon_command(command)
+
+            if r != 0:
+                return r, out, err
+            log.info("pool enable done r: {}".format(out))
+
         ret, out, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
             'entity': client,
             'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s' % (self.pool_name, self.pool_ns)],
+            'format': 'json',
             })
 
         if ret!= 0:
             return ret, out, err
+
+        json_res = json.loads(out)
+        log.info("The user created is {} and key is {} ".format(json_res[0]['entity'], json_res[0]['key']))
+
+        keyring = self.mgr.rados.conf_get("keyring")
+        log.info("The keyring location is {}".format(keyring))
 
         log.info("Calling up common config")
         self.create_common_config("a")

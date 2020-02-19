@@ -1081,9 +1081,10 @@ start_ganesha() {
         prun rm -rf $ganesha_dir
         prun mkdir -p $ganesha_dir
         prun ceph_adm fs nfs cluster create tester
-	prun ceph_adm osd pool application enable nfs-ganesha nfs
+	keyring=$(ceph_adm auth print-key client.ganesha-tester)
+	prun $SUDO "$CEPH_BIN/ceph-authtool" --name=client.ganesha-tester --add-key=$keyring keyring
 
-        echo "%url rados://nfs-ganesha/tester/$name" > "$ganesha_dir/ganesha.conf"
+        echo "%url rados://nfs-ganesha/tester/a" > "$ganesha_dir/ganesha.conf"
 	wconf <<EOF
 [ganesha.$name]
         host = $HOSTNAME
