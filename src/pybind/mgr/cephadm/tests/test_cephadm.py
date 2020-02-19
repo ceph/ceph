@@ -123,6 +123,11 @@ class TestCephadm(object):
             c = cephadm_module.apply_mon(ServiceSpec(placement=ps))
             assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
+            with pytest.raises(OrchestratorError, match="is missing a network spec"):
+                ps = PlacementSpec(hosts=['test'], count=1)
+                c = cephadm_module.apply_mon(ServiceSpec(placement=ps))
+                wait(cephadm_module, c)
+
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)

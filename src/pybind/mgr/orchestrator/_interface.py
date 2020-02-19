@@ -244,7 +244,11 @@ class _Promise(object):
     @_exception.setter
     def _exception(self, e):
         self._exception_ = e
-        self._serialized_exception_ = pickle.dumps(e) if e is not None else None
+        try:
+            self._serialized_exception_ = pickle.dumps(e) if e is not None else None
+        except Exception:
+            logger.exception("failed to pickle {}".format(e))
+            # We can't properly raise anything here. Just hope for the best.
 
     @property
     def _serialized_exception(self):
@@ -386,7 +390,7 @@ class _Promise(object):
         assert self._state in (self.INITIALIZED, self.RUNNING)
         logger.exception('_Promise failed')
         self._exception = e
-        self._value = 'exception'
+        self._value = f'_exception: {e}'
         if self._next_promise:
             self._next_promise.fail(e)
         self._state = self.FINISHED
@@ -1376,9 +1380,28 @@ class ServiceSpec(object):
         else:
             self.count = 1
 
-    def validate_add(self):
-        if not self.name:
-            raise OrchestratorValidationError('Cannot add Service: Name required')
+
+def servicespec_validate_add(self: ServiceSpec):
+    # This must not be a method of ServiceSpec, otherwise you'll hunt
+    # sub-interpreter affinity bugs.
+    if not self.name:
+        raise OrchestratorValidationError('Cannot add Service: Name required')
+
+
+def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
+    # This must not be a method of ServiceSpec, otherwise you'll hunt
+    # sub-interpreter affinity bugs.
+    if not self.placement.hosts:
+        raise OrchestratorValidationError('Service specification: no hosts provided')
+
+    for host, network, _ in self.placement.hosts:
+        if not network:
+            m = "Host '{host}' is missing a network spec\nE.g. {host}:1.2.3.0/24".format(
+                host=host)
+            logger.error(
+                f'validate_hosts_have_network_spec: id(OrchestratorValidationError)={id(OrchestratorValidationError)}')
+            raise OrchestratorValidationError(m)
+
 
 
 class NFSServiceSpec(ServiceSpec):
@@ -1392,8 +1415,8 @@ class NFSServiceSpec(ServiceSpec):
         self.namespace = namespace
 
     def validate_add(self):
-        super(NFSServiceSpec, self).validate_add()
-
+        servicespec_validate_add(self)
+        
         if not self.pool:
             raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
 
