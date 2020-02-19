@@ -1161,6 +1161,27 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     self.event.set()
         return 0, '%s (%s) ok' % (host, addr), err
 
+    @orchestrator._cli_read_command(
+        'cephadm prepare-host',
+        'name=host,type=CephString '
+        'name=addr,type=CephString,req=false',
+        'Prepare a remote host for use with cephadm')
+    def _prepare_host(self, host, addr=None):
+        out, err, code = self._run_cephadm(host, 'client', 'prepare-host',
+                                           ['--expect-hostname', host],
+                                           addr=addr,
+                                           error_ok=True, no_fsid=True)
+        if code:
+            return 1, '', ('prepare-host failed:\n' + '\n'.join(err))
+        # if we have an outstanding health alert for this host, give the
+        # serve thread a kick
+        if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
+            for item in self.health_checks['CEPHADM_HOST_CHECK_FAILED']['detail']:
+                if item.startswith('host %s ' % host):
+                    self.log.debug('kicking serve thread')
+                    self.event.set()
+        return 0, '%s (%s) ok' % (host, addr), err
+
     def _get_connection(self, host):
         """
         Setup a connection for running commands on remote host.

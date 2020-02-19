@@ -7,9 +7,9 @@ FSID='00000000-0000-0000-0000-0000deadbeef'
 FSID_LEGACY='00000000-0000-0000-0000-ffffdeadbeef'
 
 # images that are used
-IMAGE_MASTER=${IMAGE_MASTER:-'ceph/daemon-base:latest-master-devel'}
-IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'ceph/daemon-base:latest-nautilus'}
-IMAGE_MIMIC=${IMAGE_MIMIC:-'ceph/daemon-base:latest-mimic'}
+IMAGE_MASTER=${IMAGE_MASTER:-'docker.io/ceph/daemon-base:latest-master-devel'}
+IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
+IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
 
 CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
 TMPDIR=$(mktemp -d)
