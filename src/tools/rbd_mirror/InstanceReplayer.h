@@ -43,6 +43,8 @@ public:
 		   int64_t local_pool_id);
   ~InstanceReplayer();
 
+  bool is_blacklisted() const;
+
   int init();
   void shut_down();
 
@@ -87,13 +89,14 @@ private:
   std::string m_local_mirror_uuid;
   int64_t m_local_pool_id;
 
-  Mutex m_lock;
+  mutable Mutex m_lock;
   AsyncOpTracker m_async_op_tracker;
   std::map<std::string, ImageReplayer<ImageCtxT> *> m_image_replayers;
   Peers m_peers;
   Context *m_image_state_check_task = nullptr;
   Context *m_on_shut_down = nullptr;
   bool m_manual_stop = false;
+  bool m_blacklisted = false;
 
   void wait_for_ops();
   void handle_wait_for_ops(int r);
