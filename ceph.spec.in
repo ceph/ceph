@@ -487,37 +487,16 @@ Summary:        Ceph Manager Daemon
 Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?rhel} == 7
-Requires:       python%{python3_version_nodots}-bcrypt
-Requires:       python%{python3_version_nodots}-pyOpenSSL
-Requires:       python%{python3_version_nodots}-requests
 Requires:       python%{python3_version_nodots}-six
 %else
-Requires:       python%{python3_pkgversion}-bcrypt
-Requires:       python%{python3_pkgversion}-pecan
-Requires:       python%{python3_pkgversion}-pyOpenSSL
-Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-six
-%endif
-%if 0%{?fedora} || 0%{?rhel} >= 8
-Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-werkzeug
-%if 0%{?rhel} == 7
-Requires:       python%{python3_version_nodots}-PyYAML
-%else
-Requires:       python%{python3_pkgversion}-pyyaml
-%endif
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-Werkzeug
-Requires:       python%{python3_pkgversion}-PyYAML
 %endif
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
-Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{python3_pkgversion}-influxdb
@@ -593,6 +572,40 @@ Requires:       python2-protobuf
 %description mgr-diskprediction-cloud
 ceph-mgr-diskprediction-cloud is a ceph-mgr plugin that tries to predict
 disk failures using services in the Google cloud.
+
+%package mgr-modules-core
+Summary:        Ceph Manager modules which are always enabled
+BuildArch:      noarch
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+%if 0%{?rhel} == 7
+Requires:       python%{python3_version_nodots}-bcrypt
+Requires:       python%{python3_version_nodots}-pyOpenSSL
+Requires:       python%{python3_version_nodots}-requests
+Requires:       python%{python3_version_nodots}-PyYAML
+%else
+Requires:       python%{python3_pkgversion}-bcrypt
+Requires:       python%{python3_pkgversion}-pecan
+Requires:       python%{python3_pkgversion}-pyOpenSSL
+Requires:       python%{python3_pkgversion}-requests
+%endif
+%if 0%{?fedora} || 0%{?rhel} >= 8
+Requires:       python%{python3_pkgversion}-cherrypy
+Requires:       python%{python3_pkgversion}-pyyaml
+Requires:       python%{python3_pkgversion}-werkzeug
+%endif
+%if 0%{?suse_version}
+Requires:       python%{python3_pkgversion}-CherryPy
+Requires:       python%{python3_pkgversion}-PyYAML
+Requires:       python%{python3_pkgversion}-Werkzeug
+%endif
+%if 0%{?weak_deps}
+Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
+%endif
+%description mgr-modules-core
+ceph-mgr-modules-core provides a set of modules which are always
+enabled by ceph-mgr.
 
 %package mgr-rook
 BuildArch:      noarch
@@ -1586,31 +1599,8 @@ fi
 %files mgr
 %{_bindir}/ceph-mgr
 %dir %{_datadir}/ceph/mgr
-%{_datadir}/ceph/mgr/alerts
-%{_datadir}/ceph/mgr/balancer
-%{_datadir}/ceph/mgr/crash
-%{_datadir}/ceph/mgr/devicehealth
-%{_datadir}/ceph/mgr/influx
-%{_datadir}/ceph/mgr/insights
-%{_datadir}/ceph/mgr/iostat
-%{_datadir}/ceph/mgr/localpool
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
-%{_datadir}/ceph/mgr/orchestrator
-%{_datadir}/ceph/mgr/osd_perf_query
-%{_datadir}/ceph/mgr/osd_support
-%{_datadir}/ceph/mgr/pg_autoscaler
-%{_datadir}/ceph/mgr/progress
-%{_datadir}/ceph/mgr/prometheus
-%{_datadir}/ceph/mgr/rbd_support
-%{_datadir}/ceph/mgr/restful
-%{_datadir}/ceph/mgr/selftest
-%{_datadir}/ceph/mgr/status
-%{_datadir}/ceph/mgr/telegraf
-%{_datadir}/ceph/mgr/telemetry
-%{_datadir}/ceph/mgr/test_orchestrator
-%{_datadir}/ceph/mgr/volumes
-%{_datadir}/ceph/mgr/zabbix
 %if 0%{?rhel} == 7
 %{_datadir}/ceph/mgr/__pycache__
 %endif
@@ -1697,6 +1687,32 @@ fi
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
+
+%files mgr-modules-core
+%dir %{_datadir}/ceph/mgr
+%{_datadir}/ceph/mgr/alerts
+%{_datadir}/ceph/mgr/balancer
+%{_datadir}/ceph/mgr/crash
+%{_datadir}/ceph/mgr/devicehealth
+%{_datadir}/ceph/mgr/influx
+%{_datadir}/ceph/mgr/insights
+%{_datadir}/ceph/mgr/iostat
+%{_datadir}/ceph/mgr/localpool
+%{_datadir}/ceph/mgr/orchestrator
+%{_datadir}/ceph/mgr/osd_perf_query
+%{_datadir}/ceph/mgr/osd_support
+%{_datadir}/ceph/mgr/pg_autoscaler
+%{_datadir}/ceph/mgr/progress
+%{_datadir}/ceph/mgr/prometheus
+%{_datadir}/ceph/mgr/rbd_support
+%{_datadir}/ceph/mgr/restful
+%{_datadir}/ceph/mgr/selftest
+%{_datadir}/ceph/mgr/status
+%{_datadir}/ceph/mgr/telegraf
+%{_datadir}/ceph/mgr/telemetry
+%{_datadir}/ceph/mgr/test_orchestrator
+%{_datadir}/ceph/mgr/volumes
+%{_datadir}/ceph/mgr/zabbix
 
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
