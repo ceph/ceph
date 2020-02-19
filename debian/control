@@ -212,6 +212,7 @@ Description: debugging symbols for ceph-mds
 Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
+         ceph-mgr-modules-core (= ${binary:Version}),
          python3-bcrypt,
          python3-cherrypy3,
          python3-jwt,
@@ -225,7 +226,6 @@ Depends: ceph-base (= ${binary:Version}),
 Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
             ceph-mgr-diskprediction-cloud,
-            ceph-mgr-rook,
             ceph-mgr-k8sevents,
             ceph-mgr-cephadm
 Suggests: python3-influxdb
@@ -293,6 +293,20 @@ Description: diskprediction-cloud plugin for ceph-mgr
  .
  This package contains the diskprediction_cloud plugin for the ceph-mgr
  daemon, which helps predict disk failures.
+
+Package: ceph-mgr-modules-core
+Architecture: all
+Depends: ${misc:Depends},
+         ${python:Depends},
+         ${shlibs:Depends},
+Recommends: ceph-mgr-rook
+Description: ceph manager modules which are always enabled
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains a set of core ceph-mgr modules which are always
+ enabled.
 
 Package: ceph-mgr-rook
 Architecture: all
