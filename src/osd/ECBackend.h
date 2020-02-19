@@ -103,7 +103,7 @@ public:
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,
     const eversion_t &min_last_complete_ondisk,
-    const vector<pg_log_entry_t> &log_entries,
+    vector<pg_log_entry_t>&& log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     Context *on_all_commit,
     ceph_tid_t tid,

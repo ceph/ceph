@@ -1769,7 +1769,7 @@ public:
    * Updates local log to reflect new write from primary.
    */
   void append_log(
-    const vector<pg_log_entry_t>& logv,
+    vector<pg_log_entry_t>&& logv,
     eversion_t trim_to,
     eversion_t roll_forward_to,
     eversion_t min_last_complete_ondisk,
