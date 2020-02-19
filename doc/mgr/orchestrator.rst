@@ -316,7 +316,7 @@ This is an overview of the current implementation status of the orchestrators.
  ps                                  ⚪      ✔
  rbd-mirror add                      ⚪      ✔
  rgw add                             ✔      ✔
- service ls                          ✔      ⚪
+ ps                                  ✔      ✔
 =================================== ====== =========
 
 where
