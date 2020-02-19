@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  HostBinding,
   NgZone,
   OnDestroy,
   OnInit
@@ -11,6 +12,7 @@ import { Mutex } from 'async-mutex';
 import * as _ from 'lodash';
 import * as moment from 'moment';
 import { LocalStorage } from 'ngx-store';
+import { Subscription } from 'rxjs';
 
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -30,16 +32,26 @@ import { PrometheusNotificationService } from '../../services/prometheus-notific
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NotificationsSidebarComponent implements OnInit, OnDestroy {
+  @HostBinding('class.active') isSidebarOpened = false;
+
   notifications: CdNotification[];
   private interval: number;
+  private timeout: number;
 
   executingTasks: ExecutingTask[] = [];
+
+  private sidebarSubscription: Subscription;
+  private notificationDataSubscription: Subscription;
 
   icons = Icons;
 
   // Tasks
   @LocalStorage() last_task = '';
   mutex = new Mutex();
+
+  simplebar = {
+    autoHide: false
+  };
 
   constructor(
     public notificationService: NotificationService,
@@ -56,6 +68,13 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     window.clearInterval(this.interval);
+    window.clearTimeout(this.timeout);
+    if (this.sidebarSubscription) {
+      this.sidebarSubscription.unsubscribe();
+    }
+    if (this.notificationDataSubscription) {
+      this.notificationDataSubscription.unsubscribe();
+    }
   }
 
   ngOnInit() {
@@ -71,9 +90,24 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
       });
     }
 
-    this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
-      this.notifications = _.orderBy(notifications, ['timestamp'], ['desc']);
-      this.cdRef.detectChanges();
+    this.notificationDataSubscription = this.notificationService.data$.subscribe(
+      (notifications: CdNotification[]) => {
+        this.notifications = _.orderBy(notifications, ['timestamp'], ['desc']);
+        this.cdRef.detectChanges();
+      }
+    );
+
+    this.sidebarSubscription = this.notificationService.sidebarSubject.subscribe((forceClose) => {
+      if (forceClose) {
+        this.isSidebarOpened = false;
+      } else {
+        this.isSidebarOpened = !this.isSidebarOpened;
+      }
+
+      window.clearTimeout(this.timeout);
+      this.timeout = window.setTimeout(() => {
+        this.cdRef.detectChanges();
+      }, 0);
     });
 
     this.summaryService.subscribe((data: any) => {
@@ -127,7 +161,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   closeSidebar() {
-    this.notificationService.toggleSidebar(true);
+    this.isSidebarOpened = false;
   }
 
   trackByFn(index: number) {
