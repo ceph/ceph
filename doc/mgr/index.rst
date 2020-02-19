@@ -40,6 +40,7 @@ sensible.
     Telegraf module <telegraf>
     Telemetry module <telemetry>
     Iostat module <iostat>
+    OSD Support module <osd_support>
     Crash module <crash>
     Insights module <insights>
     Orchestrator module <orchestrator>
