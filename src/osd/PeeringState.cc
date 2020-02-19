@@ -3781,7 +3781,7 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
 
 
 void PeeringState::append_log(
-  const vector<pg_log_entry_t>& logv,
+  vector<pg_log_entry_t>&& logv,
   eversion_t trim_to,
   eversion_t roll_forward_to,
   eversion_t mlcod,
