@@ -418,17 +418,22 @@ void Replayer<I>::scan_remote_mirror_snapshots() {
              << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
              << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
              << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
-
-    if (m_local_snap_id_end != CEPH_NOSNAP &&
-        !m_local_mirror_snap_ns.complete) {
-      // attempt to resume image-sync
-      dout(10) << "local image contains in-progress mirror snapshot"
-               << dendl;
-      copy_image();
+    if (m_remote_mirror_snap_ns.complete) {
+      if (m_local_snap_id_end != CEPH_NOSNAP &&
+          !m_local_mirror_snap_ns.complete) {
+        // attempt to resume image-sync
+        dout(10) << "local image contains in-progress mirror snapshot"
+                 << dendl;
+        copy_image();
+      } else {
+        copy_snapshots();
+      }
+      return;
     } else {
-      copy_snapshots();
+      // might have raced with the creation of a remote mirror snapshot
+      // so we will need to refresh and rescan once it completes
+      dout(15) << "remote mirror snapshot not complete" << dendl;
     }
-    return;
   }
 
   std::unique_lock locker{m_lock};

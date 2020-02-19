@@ -597,17 +597,17 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U},
+       "", 0U, true, 0, {}},
      0, {}, 0, 0, {}}},
     {2U, librbd::SnapInfo{"snap2", cls::rbd::UserSnapshotNamespace{},
      0, {}, 0, 0, {}}},
     {3U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {""},
-       "", 0U},
+       "", 0U, true, 0, {}},
      0, {}, 0, 0, {}}},
     {4U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U},
+       "", 0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   MockThreads mock_threads(m_threads);
@@ -737,7 +737,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSync) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U},
+       "", 0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
   mock_local_image_ctx.snap_info = {
     {11U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
@@ -809,7 +809,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-       {"remote mirror peer uuid"}, "", 0U},
+       {"remote mirror peer uuid"}, "", 0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1091,7 +1091,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopySnapshotsError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U},
+       0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1145,7 +1145,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, GetImageStateError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U},
+       0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1201,7 +1201,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CreateNonPrimarySnapshotError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U},
+       0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1261,7 +1261,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopyImageError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U},
+       0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1324,7 +1324,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U},
+       0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1389,11 +1389,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U},
+       0U, true, 0, {}},
      0, {}, 0, 0, {}}},
     {2U, librbd::SnapInfo{"snap2", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U},
+       "", 0U, true, 0, {}},
      0, {}, 0, 0, {}}}};
   mock_local_image_ctx.snap_info = {
     {11U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
