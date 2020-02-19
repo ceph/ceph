@@ -2372,6 +2372,15 @@ def command_adopt():
             call_throws(['systemctl', 'disable', unit_name])
 
         # data
+        os_type = None
+        if os.path.exists(os.path.join(data_dir_src, 'type')):
+            with open(os.path.join(data_dir_src, 'type')) as f:
+                os_type = f.read().strip()
+        else:
+            raise Error('"type" file missing for OSD data dir')
+        logger.info('objectstore_type is %s' % os_type)
+        if os_type == 'filestore':
+            raise Error('FileStore is not supported by cephadm')
         logger.info('Moving data...')
         data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
                                      uid=uid, gid=gid)
