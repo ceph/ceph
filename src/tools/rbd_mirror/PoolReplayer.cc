@@ -551,7 +551,9 @@ void PoolReplayer<I>::run()
     }
 
     Mutex::Locker locker(m_lock);
-    if ((m_local_pool_watcher && m_local_pool_watcher->is_blacklisted()) ||
+    if (m_leader_watcher->is_blacklisted() ||
+        m_instance_replayer->is_blacklisted() ||
+        (m_local_pool_watcher && m_local_pool_watcher->is_blacklisted()) ||
 	(m_remote_pool_watcher && m_remote_pool_watcher->is_blacklisted())) {
       m_blacklisted = true;
       m_stopping = true;
