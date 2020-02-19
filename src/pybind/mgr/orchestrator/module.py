@@ -292,6 +292,20 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             out.append(table.get_string())
             return HandleCommandResult(stdout='\n'.join(out))
 
+    @_cli_write_command(
+        'orch device zap',
+        'name=host,type=CephString '
+        'name=path,type=CephString '
+        'name=force,type=CephBool,req=false',
+        'Zap (erase!) a device so it can be re-used')
+    def _zap_device(self, host, path, force=False):
+        if not force:
+            raise OrchestratorError('must pass --force to PERMANENTLY ERASE DEVICE DATA')
+        completion = self.zap_device(host, path)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_read_command(
         'orch ls',
         "name=service_type,type=CephString,req=false "
