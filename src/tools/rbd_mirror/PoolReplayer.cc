@@ -590,7 +590,8 @@ void PoolReplayer<I>::run() {
 
     std::unique_lock locker{m_lock};
 
-    if (m_default_namespace_replayer->is_blacklisted()) {
+    if (m_leader_watcher->is_blacklisted() ||
+        m_default_namespace_replayer->is_blacklisted()) {
       m_blacklisted = true;
       m_stopping = true;
     }
