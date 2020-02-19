@@ -68,18 +68,22 @@ std::ostream &operator<<(std::ostream &out, const TextTable &t)
 {
   for (unsigned int i = 0; i < t.col.size(); i++) {
     TextTable::TextTableColumn col = t.col[i];
+    if (i) {
+      out << t.column_separation;
+    }
     out << string(t.indent, ' ')
-        << pad(col.heading, col.width, col.hd_align)
-	<< t.column_separation;
+        << pad(col.heading, col.width, col.hd_align);
   }
   out << endl;
 
   for (unsigned int i = 0; i < t.row.size(); i++) {
     for (unsigned int j = 0; j < t.row[i].size(); j++) {
       TextTable::TextTableColumn col = t.col[j];
+      if (j) {
+	out << t.column_separation;
+      }
       out << string(t.indent, ' ')
-	  << pad(t.row[i][j], col.width, col.col_align)
-	  << t.column_separation;
+	  << pad(t.row[i][j], col.width, col.col_align);
     }
     out << endl;
   }
