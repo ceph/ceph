@@ -59,13 +59,12 @@ void usage()
   cout << "   --upmap-deviation <max-deviation>" << std::endl;
   cout << "                           max deviation from target [default: 5]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
-  cout << "   --upmap-save            write modified OSDMap with upmap changes" << std::endl;
   cout << "   --upmap-active          Act like an active balancer, keep applying changes until balanced" << std::endl;
   cout << "   --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported" << std::endl;
   cout << "   --tree                  displays a tree of the map" << std::endl;
   cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
   cout << "   --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)" << std::endl;
-  cout << "   --crush-adjust-save     saves adjust-crush-weight to CRUSHmap" << std::endl;
+  cout << "   --save                  write modified osdmap with upmap or crush-adjust changes" << std::endl;
   exit(1);
 }
 
@@ -134,7 +133,6 @@ int main(int argc, const char **argv)
   bool clobber = false;
   bool modified = false;
   std::string export_crush, import_crush, test_map_pg, test_map_object, adjust_crush_weight;
-  bool crush_adjust_save = false;
   bool test_crush = false;
   int range_first = -1;
   int range_last = -1;
@@ -150,7 +148,6 @@ int main(int argc, const char **argv)
   bool test_random = false;
   bool upmap_cleanup = false;
   bool upmap = false;
-  bool upmap_save = false;
   bool health = false;
   std::string upmap_file = "-";
   int upmap_max = 10;
@@ -159,6 +156,7 @@ int main(int argc, const char **argv)
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
+  bool save = false;
 
   std::string val;
   std::ostringstream err;
@@ -181,8 +179,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--osd-pgp-bits", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-cleanup", (char*)NULL)) {
       upmap_cleanup = true;
-    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-save", (char*)NULL)) {
-      upmap_save = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap", (char*)NULL)) {
       upmap_cleanup = true;
       upmap = true;
@@ -262,8 +258,8 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--adjust-crush-weight", (char*)NULL)) {
       adjust_crush_weight = val;
-    } else if (ceph_argparse_flag(args, i, "--crush-adjust-save", (char*)NULL)) {
-      crush_adjust_save = true;
+    } else if (ceph_argparse_flag(args, i, "--save", (char*)NULL)) {
+      save = true;
     } else {
       ++i;
     }
@@ -398,7 +394,7 @@ int main(int argc, const char **argv)
     osdmap.crush->adjust_item_weightf(g_ceph_context, osd_id, new_weight);
     std::cout << "Adjusted osd." << osd_id << " CRUSH weight to " << new_weight
 	      << std::endl;
-    if (crush_adjust_save) {
+    if (save) {
       OSDMap::Incremental inc;
       inc.fsid = osdmap.get_fsid();
       inc.epoch = osdmap.get_epoch() + 1;
@@ -508,10 +504,10 @@ int main(int argc, const char **argv)
         cout << "Time elapsed " << elapsed_time << " secs" << std::endl;
       if (total_did > 0) {
         print_inc_upmaps(pending_inc, upmap_fd);
-        if (upmap_save || upmap_active) {
+        if (save || upmap_active) {
 	  int r = osdmap.apply_incremental(pending_inc);
 	  ceph_assert(r == 0);
-	  if (upmap_save)
+	  if (save)
 	    modified = true;
         }
       } else {
