@@ -331,3 +331,43 @@ class CephFSTestCase(CephTestCase):
                 out_json = self.fs.rank_tell(["scrub", "status"])
                 if out_json['status'] == "no active scrubs running":
                     break;
+
+    def _wait_distributed_subtrees(self, status, rank, count):
+        timeout = 30
+        pause = 2
+        for i in range(timeout//pause):
+            subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
+            subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+            subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == 1, subtrees))
+            if (len(subtrees) == count):
+                return subtrees
+            time.sleep(pause)
+        raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank))
+
+    def get_auth_subtrees(self, status, rank):
+        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
+        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+        subtrees = filter(lambda s: s['auth_first'] == rank, subtrees)
+
+        return list(subtrees)
+
+    def get_ephemerally_pinned_auth_subtrees(self, status, rank):
+        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
+        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+        subtrees = filter(lambda s: (s['distributed_ephemeral_pin'] == 1 or s['random_ephemeral_pin'] == 1) and (s['auth_first'] == rank), subtrees)
+
+        return list(subtrees)
+
+    def get_distributed_auth_subtrees(self, status, rank):
+        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
+        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+        subtrees = filter(lambda s: (s['distributed_ephemeral_pin'] == 1) and (s['auth_first'] == rank), subtrees)
+
+        return list(subtrees)
+
+    def get_random_auth_subtrees(self, status, rank):
+        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
+        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+        subtrees = filter(lambda s: (s['random_ephemeral_pin'] == 1) and (s['auth_first'] == rank), subtrees)
+
+        return list(subtrees)
