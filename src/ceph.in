@@ -594,7 +594,7 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
             sleep(parsed_args.period)
         except KeyboardInterrupt:
             print('Interrupted')
-            return ret, '', ''
+            return errno.EINTR, '', ''
     if ret == errno.ETIMEDOUT:
         ret = -ret
         if not outs:
@@ -1267,8 +1267,13 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    retval = main()
-    # shutdown explicitly; Rados() does not
-    if cluster_handle:
-        run_in_thread(cluster_handle.shutdown)
-    sys.exit(retval)
+    try:
+        retval = main()
+    except KeyboardInterrupt:
+        print('Interrupted')
+        retval = errno.EINTR
+    finally:
+        # shutdown explicitly; Rados() does not
+        if cluster_handle:
+            run_in_thread(cluster_handle.shutdown)
+        sys.exit(retval)
