@@ -24,10 +24,10 @@ function assert_locked() {
 
     local actual
     actual="$(rados -p rbd --format=json lock info rbd_header.$IMAGE_ID rbd_lock |
-        python -m json.tool)"
+        python3 -m json.tool --sort-keys)"
 
     local expected
-    expected="$(cat <<EOF | python -m json.tool
+    expected="$(cat <<EOF | python3 -m json.tool --sort-keys
 {
     "lockers": [
         {
@@ -59,7 +59,7 @@ IMAGE_NAME="exclusive-option-test"
 rbd create --size 1 --image-feature '' $IMAGE_NAME
 
 IMAGE_ID="$(rbd info --format=json $IMAGE_NAME |
-    python -c "import sys, json; print json.load(sys.stdin)['block_name_prefix'].split('.')[1]")"
+	python3 -c "import sys, json; print(json.load(sys.stdin)['block_name_prefix'].split('.')[1])")"
 
 DEV=$(sudo rbd map $IMAGE_NAME)
 assert_unlocked
