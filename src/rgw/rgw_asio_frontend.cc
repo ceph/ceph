@@ -690,6 +690,17 @@ int AsioFrontend::init_ssl()
     return -EINVAL;
   }
 
+  auto ports = config.equal_range("ssl_port");
+  auto endpoints = config.equal_range("ssl_endpoint");
+
+  /*
+   * don't try to config certificate if frontend isn't configured for ssl
+   */
+  if (ports.first == ports.second &&
+      endpoints.first == endpoints.second) {
+    return 0;
+  }
+
   bool key_is_cert = false;
 
   if (cert) {
@@ -719,7 +730,6 @@ int AsioFrontend::init_ssl()
   }
 
   // parse ssl endpoints
-  auto ports = config.equal_range("ssl_port");
   for (auto i = ports.first; i != ports.second; ++i) {
     if (!have_cert) {
       lderr(ctx()) << "no ssl_certificate configured for ssl_port" << dendl;
@@ -739,7 +749,6 @@ int AsioFrontend::init_ssl()
     listeners.back().use_ssl = true;
   }
 
-  auto endpoints = config.equal_range("ssl_endpoint");
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
     if (!have_cert) {
       lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
