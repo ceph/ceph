@@ -100,12 +100,6 @@ def download_cephadm(ctx, config, ref):
                     'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
                     run.Raw('>'),
                     ctx.cephadm,
-                    run.Raw('&&'),
-                    'test', '-s',
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'chmod', '+x',
-                    ctx.cephadm,
                 ],
             )
         else:
@@ -119,14 +113,19 @@ def download_cephadm(ctx, config, ref):
                     'tar', '-xO', 'src/cephadm/cephadm',
                     run.Raw('>'),
                     ctx.cephadm,
-                    run.Raw('&&'),
-                    'test', '-s',
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'chmod', '+x',
-                    ctx.cephadm,
                 ],
             )
+        # sanity-check the resulting file and set executable bit
+        cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+        ctx.cluster.run(
+            args=[
+                'test', '-s', ctx.cephadm,
+                run.Raw('&&'),
+                'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+                run.Raw('&&'),
+                'chmod', '+x', ctx.cephadm,
+            ],
+        )
 
     try:
         yield
