@@ -310,6 +310,8 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
 
   if (f) {
     f->close_section();
+    f->close_section();
+    f->flush(*ss);
   }
 }
 
