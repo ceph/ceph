@@ -2243,13 +2243,24 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def _generate_prometheus_config(self):
         # scrape mgrs
-        # *** FIXME *** we should scrape all mgrs here ***
-        mgr_map = self.get('mgr_map')
         mgr_scrape_list = []
+        mgr_map = self.get('mgr_map')
         t = mgr_map.get('services', {}).get('prometheus', None)
         if t:
             t = t.split('/')[2]
-            mgr_scrape_list = [t]
+            mgr_scrape_list.append(t)
+            port = '9283'
+            if ':' in t:
+                port = t.split(':')[1]
+            # get standbys too.  assume that they are all on the same port
+            # as the active.
+            for dd in self.cache.get_daemons_by_type('mgr'):
+                if dd.daemon_id == self.get_mgr_id():
+                    continue
+                hi = self.inventory.get(dd.nodename, None)
+                if hi:
+                    addr = hi.get('addr', dd.nodename)
+                mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
 
         # scrape node exporters
         node_configs = ''
