@@ -1259,6 +1259,8 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
     if reconfig and daemon_type not in Ceph.daemons:
         # ceph daemons do not need a restart; others (presumably) do to pick
         # up the new config
+        call_throws(['systemctl', 'reset-failed',
+                     get_unit_name(fsid, daemon_type, daemon_id)])
         call_throws(['systemctl', 'restart',
                      get_unit_name(fsid, daemon_type, daemon_id)])
 
