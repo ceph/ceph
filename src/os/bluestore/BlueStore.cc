@@ -4662,6 +4662,9 @@ void BlueStore::_init_logger()
 		    "Large aligned writes into fresh blobs (bytes)", NULL, 0, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_big_blobs, "bluestore_write_big_blobs",
 		    "Large aligned writes into fresh blobs (blobs)");
+  b.add_u64_counter(l_bluestore_write_big_deferred,
+		    "bluestore_write_big_deferred",
+		    "Big overwrites using deferred");
   b.add_u64_counter(l_bluestore_write_small, "bluestore_write_small",
 		    "Small writes into existing or sparse small blobs");
   b.add_u64_counter(l_bluestore_write_small_bytes, "bluestore_write_small_bytes",
@@ -12950,11 +12953,10 @@ void BlueStore::_do_write_small(
       ++ep;
     }
   }
-  auto prev_ep = ep;
-  if (prev_ep != begin) {
+  auto prev_ep = end;
+  if (ep != begin) {
+    prev_ep = ep;
     --prev_ep;
-  } else {
-    prev_ep = end; // to avoid this extent check as it's a duplicate
   }
 
   boost::container::flat_set<const bluestore_blob_t*> inspected_blobs;
@@ -13107,7 +13109,7 @@ void BlueStore::_do_write_small(
 	    bl.claim_append(tail_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
-	  logger->inc(l_bluestore_write_small_pre_read);
+          logger->inc(l_bluestore_write_small_pre_read);
 
 	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
@@ -13282,8 +13284,8 @@ void BlueStore::_do_write_big(
 	   << dendl;
   logger->inc(l_bluestore_write_big);
   logger->inc(l_bluestore_write_big_bytes, length);
-  o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
+  uint64_t prefer_deferred_size_snapshot = prefer_deferred_size.load();
   while (length > 0) {
     bool new_blob = false;
     uint32_t l = std::min(max_bsize, length);
@@ -13292,16 +13294,109 @@ void BlueStore::_do_write_big(
 
     //attempting to reuse existing blob
     if (!wctx->compress) {
-      // look for an existing mutable blob we can reuse
-      auto begin = o->extent_map.extent_map.begin();
-      auto end = o->extent_map.extent_map.end();
+      // look for an existing mutable blob we can write into
       auto ep = o->extent_map.seek_lextent(offset);
-      auto prev_ep = ep;
-      if (prev_ep != begin) {
-        --prev_ep;
-      } else {
-        prev_ep = end; // to avoid this extent check as it's a duplicate
+      auto end = o->extent_map.extent_map.end();
+      // First try if we can apply deferred write
+      if (prefer_deferred_size_snapshot && ep != end &&
+            offset >= ep->blob_start() &&
+            ep->blob->get_blob().is_mutable()) {
+        auto b0 = ep->blob;
+        auto b_off = offset - ep->blob_start();
+        uint64_t chunk_size = b0->get_blob().get_chunk_size(block_size);
+        auto l_aligned = l;
+
+        // read some data to fill out the chunk?
+        uint64_t head_read = p2phase<uint64_t>(b_off, chunk_size);
+        uint64_t tail_read = p2nphase<uint64_t>(b_off + l, chunk_size);
+        if ((head_read || tail_read) &&
+          (b0->get_blob().get_ondisk_length() >=
+            b_off + l + tail_read)) {
+          b_off = head_read;
+          l_aligned += head_read + tail_read;
+        } else {
+          head_read = tail_read = 0;
+        }
+
+        if (l_aligned <= prefer_deferred_size_snapshot &&
+            b_off % chunk_size == 0 &&
+            l_aligned % chunk_size == 0 &&
+            b0->get_blob().is_allocated(b_off, l_aligned)) {
+          dout(20) << __func__ << " " << *b0
+            << " deferring big " << std::hex
+            << " (0x" << b_off << "~" << l_aligned << ")"
+            << std::dec << " write via deferred"
+            << dendl;
+
+          bluestore_deferred_op_t *op = _get_deferred_op(txc);
+          op->op = bluestore_deferred_op_t::OP_WRITE;
+          int r = b0->get_blob().map(
+            b_off, l_aligned,
+            [&](uint64_t offset, uint64_t length) {
+              op->extents.emplace_back(bluestore_pextent_t(offset, length));
+              return 0;
+            });
+          ceph_assert(r == 0);
+
+          dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
+            << " and tail 0x" << tail_read << std::dec << dendl;
+          if (head_read) {
+            int r = _do_read(c.get(), o, offset - head_read, head_read,
+              op->data, 0);
+            ceph_assert(r >= 0 && r <= (int)head_read);
+            size_t zlen = head_read - r;
+            if (zlen) {
+              op->data.append_zero(zlen);
+              logger->inc(l_bluestore_write_pad_bytes, zlen);
+            }
+            logger->inc(l_bluestore_write_penalty_read_ops);
+          }
+          blp.copy(l, op->data);
+
+          if (tail_read) {
+            bufferlist tail_bl;
+            int r = _do_read(c.get(), o, offset + l, tail_read,
+              tail_bl, 0);
+            ceph_assert(r >= 0 && r <= (int)tail_read);
+            size_t zlen = tail_read - r;
+            if (zlen) {
+              tail_bl.append_zero(zlen);
+              logger->inc(l_bluestore_write_pad_bytes, zlen);
+            }
+            op->data.claim_append(tail_bl);
+            logger->inc(l_bluestore_write_penalty_read_ops);
+          }
+
+          _buffer_cache_write(txc, b0, b_off, op->data,
+            wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+
+          if (b0->get_blob().csum_type) {
+            b0->dirty_blob().calc_csum(b_off, op->data);
+          }
+          Extent *le = o->extent_map.set_lextent(c, offset,
+            offset - ep->blob_start(), l, b0, &wctx->old_extents);
+          txc->statfs_delta.stored() += le->length;
+
+          offset += l;
+          length -= l;
+          logger->inc(l_bluestore_write_big_blobs);
+          logger->inc(l_bluestore_write_big_deferred);
+
+          continue;
+        }
       }
+      o->extent_map.punch_hole(c, offset, l, &wctx->old_extents);
+
+      // seek again as punch_hole could invalidate ep
+      ep = o->extent_map.seek_lextent(offset);
+      auto begin = o->extent_map.extent_map.begin();
+      auto prev_ep = end;
+      if (ep != begin) {
+        prev_ep = ep;
+        --prev_ep;
+      }
+      dout(20) << __func__ << " no deferred" << dendl;
+
       auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
       // search suitable extent in both forward and reverse direction in
       // [offset - target_max_blob_size, offset + target_max_blob_size] range
@@ -13310,12 +13405,16 @@ void BlueStore::_do_write_big(
       do {
 	any_change = false;
 	if (ep != end && ep->logical_offset < offset + max_bsize) {
-	  if (offset >= ep->blob_start() &&
+          dout(20) << __func__ << " considering " << *ep << dendl;
+          dout(20) << __func__ << " considering " << *(ep->blob)
+            << " bstart 0x" << std::hex << ep->blob_start() << std::dec << dendl;
+
+          if (offset >= ep->blob_start() &&
               ep->blob->can_reuse_blob(min_alloc_size, max_bsize,
 	                               offset - ep->blob_start(),
 	                               &l)) {
 	    b = ep->blob;
-	    b_off = offset - ep->blob_start();
+            b_off = offset - ep->blob_start();
             prev_ep = end; // to avoid check below
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
 		     << " (0x" << b_off << "~" << l << ")" << std::dec << dendl;
@@ -13326,7 +13425,10 @@ void BlueStore::_do_write_big(
 	}
 
 	if (prev_ep != end && prev_ep->logical_offset >= min_off) {
-	  if (prev_ep->blob->can_reuse_blob(min_alloc_size, max_bsize,
+          dout(20) << __func__ << " considering rev " << *prev_ep << dendl;
+          dout(20) << __func__ << " considering reverse " << *(prev_ep->blob)
+            << " bstart 0x" << std::hex << prev_ep->blob_start() << std::dec << dendl;
+          if (prev_ep->blob->can_reuse_blob(min_alloc_size, max_bsize,
                                     	    offset - prev_ep->blob_start(),
                                     	    &l)) {
 	    b = prev_ep->blob;
@@ -13341,13 +13443,15 @@ void BlueStore::_do_write_big(
 	  }
 	}
       } while (b == nullptr && any_change);
-    }
+    } else {
+      o->extent_map.punch_hole(c, offset, l, &wctx->old_extents);
+    } // if (!wctx->compress)
+
     if (b == nullptr) {
       b = c->new_blob();
       b_off = 0;
       new_blob = true;
     }
-
     bufferlist t;
     blp.copy(l, t);
     wctx->write(offset, b, l, b_off, t, b_off, l, false, new_blob);
@@ -13947,8 +14051,12 @@ int BlueStore::_do_write(
 	   << " 0x" << std::hex << offset << "~" << length
 	   << " - have 0x" << o->onode.size
 	   << " (" << std::dec << o->onode.size << ")"
-	   << " bytes"
-	   << " fadvise_flags 0x" << std::hex << fadvise_flags << std::dec
+	   << " bytes" << std::hex
+	   << " fadvise_flags 0x" << fadvise_flags
+	   << " alloc_hint 0x" << o->onode.alloc_hint_flags
+           << " expected_object_size " << o->onode.expected_object_size
+           << " expected_write_size " << o->onode.expected_write_size
+           << std::dec
 	   << dendl;
   _dump_onode<30>(cct, *o);
 
