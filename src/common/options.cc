@@ -3648,7 +3648,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_delete_range_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1024)
+    .set_default(1048576)
     .set_description("The number of keys required to invoke DeleteRange when deleting muliple keys."),
 
     Option("rocksdb_bloom_bits_per_key", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
