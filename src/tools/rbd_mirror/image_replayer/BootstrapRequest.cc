@@ -418,6 +418,11 @@ void BootstrapRequest<I>::handle_image_sync(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::close_remote_image() {
+  if ((*m_state_builder)->replay_requires_remote_image()) {
+    finish(m_ret_val);
+    return;
+  }
+
   dout(15) << dendl;
 
   update_progress("CLOSE_REMOTE_IMAGE");

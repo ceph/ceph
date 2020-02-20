@@ -121,6 +121,18 @@ public:
     } else {
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
                                                    RBD_MIRROR_MODE_IMAGE));
+
+      uuid_d uuid_gen;
+      uuid_gen.generate_random();
+      std::string remote_peer_uuid = uuid_gen.to_string();
+
+      EXPECT_EQ(0, librbd::cls_client::mirror_peer_add(
+        &m_remote_ioctx, {remote_peer_uuid,
+                          cls::rbd::MIRROR_PEER_DIRECTION_RX_TX,
+                          "siteA", "client", m_local_mirror_uuid}));
+
+      m_pool_meta_cache.set_remote_pool_meta(
+        m_remote_ioctx.get_id(), {m_remote_mirror_uuid, remote_peer_uuid});
     }
 
     m_image_name = get_temp_image_name();
@@ -196,8 +208,14 @@ public:
     m_replayer->start(&cond);
     ASSERT_EQ(0, cond.wait());
 
+    std::string oid;
+    if (MIRROR_IMAGE_MODE == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+      oid = ::journal::Journaler::header_oid(m_remote_image_id);
+    } else {
+      oid = librbd::util::header_name(m_remote_image_id);
+    }
+
     ASSERT_EQ(0U, m_watch_handle);
-    std::string oid = ::journal::Journaler::header_oid(m_remote_image_id);
     create_watch_ctx(oid);
     ASSERT_EQ(0, m_remote_ioctx.watch2(oid, &m_watch_handle, m_watch_ctx));
   }
@@ -339,20 +357,99 @@ public:
     return true;
   }
 
-  void wait_for_replay_complete()
-  {
+  int get_last_mirror_snapshot(librados::IoCtx& io_ctx,
+                               const std::string& image_id,
+                               uint64_t* mirror_snap_id,
+                               cls::rbd::MirrorSnapshotNamespace* mirror_ns) {
+    auto header_oid = librbd::util::header_name(image_id);
+    ::SnapContext snapc;
+    int r = librbd::cls_client::get_snapcontext(&io_ctx, header_oid, &snapc);
+    if (r < 0) {
+      return r;
+    }
+
+    // stored in reverse order
+    for (auto snap_id : snapc.snaps) {
+      cls::rbd::SnapshotInfo snap_info;
+      r = librbd::cls_client::snapshot_get(&io_ctx, header_oid, snap_id,
+                                           &snap_info);
+      if (r < 0) {
+        return r;
+      }
+
+      auto ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+        &snap_info.snapshot_namespace);
+      if (ns != nullptr) {
+        *mirror_snap_id = snap_id;
+        *mirror_ns = *ns;
+        return 0;
+      }
+    }
+
+    return -ENOENT;
+  }
+
+  void wait_for_journal_synced() {
     cls::journal::ObjectPosition master_position;
     cls::journal::ObjectPosition mirror_position;
-
     for (int i = 0; i < 100; i++) {
       get_commit_positions(&master_position, &mirror_position);
       if (master_position == mirror_position) {
-	break;
+        break;
       }
       wait_for_watcher_notify(1);
     }
 
     ASSERT_EQ(master_position, mirror_position);
+  }
+
+  void wait_for_snapshot_synced() {
+    uint64_t remote_snap_id = CEPH_NOSNAP;
+    cls::rbd::MirrorSnapshotNamespace remote_mirror_ns;
+    ASSERT_EQ(0, get_last_mirror_snapshot(m_remote_ioctx, m_remote_image_id,
+                                          &remote_snap_id, &remote_mirror_ns));
+
+    std::string local_image_id;
+    ASSERT_EQ(0, librbd::cls_client::mirror_image_get_image_id(
+                   &m_local_ioctx, m_global_image_id, &local_image_id));
+
+    uint64_t local_snap_id = CEPH_NOSNAP;
+    cls::rbd::MirrorSnapshotNamespace local_mirror_ns;
+    for (int i = 0; i < 100; i++) {
+      int r = get_last_mirror_snapshot(m_local_ioctx, local_image_id,
+                                       &local_snap_id, &local_mirror_ns);
+      if (r == 0 &&
+          ((remote_mirror_ns.state ==
+              cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY &&
+            local_mirror_ns.state ==
+              cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY) ||
+           (remote_mirror_ns.state ==
+              cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED &&
+            local_mirror_ns.state ==
+              cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED)) &&
+          local_mirror_ns.primary_mirror_uuid == m_remote_mirror_uuid &&
+          local_mirror_ns.primary_snap_id == remote_snap_id &&
+          local_mirror_ns.complete) {
+        return;
+      }
+
+      wait_for_watcher_notify(1);
+    }
+
+    ADD_FAILURE() << "failed to locate matching snapshot: "
+                  << "remote_snap_id=" << remote_snap_id << ", "
+                  << "remote_snap_ns=" << remote_mirror_ns << ", "
+                  << "local_snap_id=" << local_snap_id << ", "
+                  << "local_snap_ns=" << local_mirror_ns;
+  }
+
+  void wait_for_replay_complete()
+  {
+    if (MIRROR_IMAGE_MODE == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+      wait_for_journal_synced();
+    } else {
+      wait_for_snapshot_synced();
+    }
   }
 
   void wait_for_stopped() {
@@ -411,9 +508,15 @@ public:
     ASSERT_EQ(0, c->wait_for_complete());
     c->put();
 
-    C_SaferCond journal_flush_ctx;
-    ictx->journal->flush_commit_position(&journal_flush_ctx);
-    ASSERT_EQ(0, journal_flush_ctx.wait());
+    if (MIRROR_IMAGE_MODE == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+      C_SaferCond journal_flush_ctx;
+      ictx->journal->flush_commit_position(&journal_flush_ctx);
+      ASSERT_EQ(0, journal_flush_ctx.wait());
+    } else {
+      uint64_t snap_id = CEPH_NOSNAP;
+      ASSERT_EQ(0, librbd::api::Mirror<>::image_snapshot_create(
+                     ictx, &snap_id));
+    }
 
     printf("flushed\n");
   }
@@ -437,8 +540,8 @@ public:
   std::string m_remote_image_id;
   std::string m_global_image_id;
   ImageReplayer<> *m_replayer = nullptr;
-  C_WatchCtx *m_watch_ctx;
-  uint64_t m_watch_handle;
+  C_WatchCtx *m_watch_ctx = nullptr;
+  uint64_t m_watch_handle = 0;
   char m_test_data[TEST_IO_SIZE + 1];
   std::string m_journal_commit_age;
 };
@@ -453,7 +556,9 @@ public:
 };
 
 typedef ::testing::Types<TestImageReplayerParams<
-                           cls::rbd::MIRROR_IMAGE_MODE_JOURNAL>>
+                           cls::rbd::MIRROR_IMAGE_MODE_JOURNAL>,
+                         TestImageReplayerParams<
+                           cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT>>
     TestImageReplayerTypes;
 
 TYPED_TEST_CASE(TestImageReplayer, TestImageReplayerTypes);
@@ -510,19 +615,25 @@ TYPED_TEST(TestImageReplayer, BootstrapErrorMirrorDisabled)
 TYPED_TEST(TestImageReplayer, BootstrapMirrorDisabling)
 {
   // set remote image mirroring state to DISABLING
-  ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(this->m_remote_ioctx,
-                                               RBD_MIRROR_MODE_IMAGE));
-  librbd::ImageCtx *ictx;
-  this->open_remote_image(&ictx);
-  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
-              ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
+  if (gtest_TypeParam_::MIRROR_IMAGE_MODE ==
+        cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(this->m_remote_ioctx,
+                                                 RBD_MIRROR_MODE_IMAGE));
+    librbd::ImageCtx *ictx;
+    this->open_remote_image(&ictx);
+     ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(
+                   ictx, RBD_MIRROR_IMAGE_MODE_JOURNAL, false));
+    this->close_image(ictx);
+  }
+
   cls::rbd::MirrorImage mirror_image;
   ASSERT_EQ(0, librbd::cls_client::mirror_image_get(&this->m_remote_ioctx,
-                                                    ictx->id, &mirror_image));
+                                                    this->m_remote_image_id,
+                                                    &mirror_image));
   mirror_image.state = cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_DISABLING;
   ASSERT_EQ(0, librbd::cls_client::mirror_image_set(&this->m_remote_ioctx,
-                                                    ictx->id, mirror_image));
-  this->close_image(ictx);
+                                                    this->m_remote_image_id,
+                                                    mirror_image));
 
   this->create_replayer();
   C_SaferCond cond;
@@ -704,8 +815,9 @@ TEST_F(TestImageReplayerJournal, NextTag)
   this->stop();
 }
 
-TYPED_TEST(TestImageReplayer, Resync)
+TEST_F(TestImageReplayerJournal, Resync)
 {
+  // TODO add support to snapshot-based mirroring
   this->bootstrap();
 
   librbd::ImageCtx *ictx;
@@ -753,8 +865,9 @@ TYPED_TEST(TestImageReplayer, Resync)
   this->stop();
 }
 
-TYPED_TEST(TestImageReplayer, Resync_While_Stop)
+TEST_F(TestImageReplayerJournal, Resync_While_Stop)
 {
+  // TODO add support to snapshot-based mirroring
 
   this->bootstrap();
 
@@ -813,8 +926,9 @@ TYPED_TEST(TestImageReplayer, Resync_While_Stop)
   this->stop();
 }
 
-TYPED_TEST(TestImageReplayer, Resync_StartInterrupted)
+TEST_F(TestImageReplayerJournal, Resync_StartInterrupted)
 {
+  // TODO add support to snapshot-based mirroring
 
   this->bootstrap();
 
@@ -923,7 +1037,7 @@ TEST_F(TestImageReplayerJournal, MultipleReplayFailures_SingleEpoch) {
   this->close_image(ictx);
 }
 
-TYPED_TEST(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
+TEST_F(TestImageReplayerJournal, MultipleReplayFailures_MultiEpoch) {
   this->bootstrap();
 
   // inject a snapshot that cannot be unprotected
@@ -1067,8 +1181,9 @@ TEST_F(TestImageReplayerJournal, Disconnect)
   this->stop();
 }
 
-TYPED_TEST(TestImageReplayer, UpdateFeatures)
+TEST_F(TestImageReplayerJournal, UpdateFeatures)
 {
+  // TODO add support to snapshot-based mirroring
   const uint64_t FEATURES_TO_UPDATE =
     RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF;
 
@@ -1159,8 +1274,9 @@ TYPED_TEST(TestImageReplayer, UpdateFeatures)
   this->stop();
 }
 
-TYPED_TEST(TestImageReplayer, MetadataSetRemove)
+TEST_F(TestImageReplayerJournal, MetadataSetRemove)
 {
+  // TODO add support to snapshot-based mirroring
   const std::string KEY = "test_key";
   const std::string VALUE = "test_value";
 
@@ -1204,8 +1320,9 @@ TYPED_TEST(TestImageReplayer, MetadataSetRemove)
   this->stop();
 }
 
-TYPED_TEST(TestImageReplayer, MirroringDelay)
+TEST_F(TestImageReplayerJournal, MirroringDelay)
 {
+  // TODO add support to snapshot-based mirroring
   const double DELAY = 10; // set less than wait_for_replay_complete timeout
 
   librbd::ImageCtx *ictx;

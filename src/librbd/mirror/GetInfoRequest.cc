@@ -250,32 +250,27 @@ void GetInfoRequest<I>::calc_promotion_state(
   *m_primary_mirror_uuid = "";
 
   for (auto it = snap_info.rbegin(); it != snap_info.rend(); it++) {
-    auto primary = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
       &it->second.snap_namespace);
-    if (primary != nullptr) {
-      if (primary->demoted) {
-        *m_promotion_state = PROMOTION_STATE_ORPHAN;
-      } else {
+    if (mirror_ns != nullptr) {
+      switch (mirror_ns->state) {
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY:
         *m_promotion_state = PROMOTION_STATE_PRIMARY;
-      }
-      break;
-    }
-    auto non_primary =
-      boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
-        &it->second.snap_namespace);
-    if (non_primary != nullptr) {
-      if (non_primary->primary_mirror_uuid.empty()) {
-        *m_promotion_state = PROMOTION_STATE_ORPHAN;
-      } else {
+        break;
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY:
         *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
-        *m_primary_mirror_uuid = non_primary->primary_mirror_uuid;
+        break;
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED:
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
+        *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        break;
       }
       break;
     }
   }
 
   ldout(m_cct, 10) << "promotion_state=" << *m_promotion_state << ", "
-                   << "primary_mirror_uuid=" << *m_promotion_state << dendl;
+                   << "primary_mirror_uuid=" << *m_primary_mirror_uuid << dendl;
 }
 
 } // namespace mirror

@@ -48,11 +48,14 @@ private:
    *    |                     *  or last)     |
    *    |                     *               |
    *    |\---------------> UNLINK_PEER --> NOTIFY_UPDATE
-   *    |   (peer not last)
-   *    |
+   *    |   (not last peer or
+   *    |    no newer mirror
+   *    |    snap exists)
    *    |
    *    |\---------------> REMOVE_SNAPSHOT
-   *    |   (peer last)       |
+   *    |   (last peer and    |
+   *    |    newer mirror     |
+   *    |    snap exists)     |
    *    |                     |
    *    |(peer not found)     |
    *    v                     |

@@ -91,7 +91,7 @@ public:
                            auto it = mock_image_ctx.snap_info.find(snap_id);
                            EXPECT_NE(it, mock_image_ctx.snap_info.end());
                            auto info =
-                             boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+                             boost::get<cls::rbd::MirrorSnapshotNamespace>(
                                &it->second.snap_namespace);
                            EXPECT_NE(nullptr, info);
                            EXPECT_NE(0, info->mirror_peer_uuids.erase(
@@ -132,7 +132,9 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, Success) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{false, {"peer1_uuid", "peer2_uuid"}};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer1_uuid", "peer2_uuid"},
+    "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
@@ -159,8 +161,11 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, RemoveSnapshot) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{false, {"peer_uuid"}};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer_uuid"},
+    "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
+  snap_create(mock_image_ctx, ns, "mirror_snap2");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
 
@@ -205,7 +210,9 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, PeerDNE) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{false, {"peer_uuid"}};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer_uuid"},
+    "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
@@ -271,8 +278,9 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, UnlinkError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{false,
-                                              {"peer1_uuid", "peer2_uuid"}};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer1_uuid", "peer2_uuid"},
+    "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
@@ -296,8 +304,9 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, NotifyError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{false,
-                                              {"peer1_uuid", "peer2_uuid"}};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer1_uuid", "peer2_uuid"},
+    "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
@@ -322,8 +331,11 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, RemoveSnapshotError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{false, {"peer_uuid"}};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"peer_uuid"},
+    "", CEPH_NOSNAP};
   auto snap_id = snap_create(mock_image_ctx, ns, "mirror_snap");
+  snap_create(mock_image_ctx, ns, "mirror_snap2");
 
   expect_get_snap_info(mock_image_ctx, snap_id);
 

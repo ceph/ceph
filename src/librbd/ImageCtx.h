@@ -69,6 +69,17 @@ namespace librbd {
   }
 
   struct ImageCtx {
+    typedef std::pair<cls::rbd::SnapshotNamespace, std::string> SnapKey;
+    struct SnapKeyComparator {
+      inline bool operator()(const SnapKey& lhs, const SnapKey& rhs) const {
+        // only compare by namespace type and name
+        if (lhs.first.which() != rhs.first.which()) {
+          return lhs.first.which() < rhs.first.which();
+        }
+        return lhs.second < rhs.second;
+      }
+    };
+
     static const string METADATA_CONF_PREFIX;
 
     CephContext *cct;
@@ -81,7 +92,7 @@ namespace librbd {
     std::vector<librados::snap_t> snaps; // this mirrors snapc.snaps, but is in
                                         // a format librados can understand
     std::map<librados::snap_t, SnapInfo> snap_info;
-    std::map<std::pair<cls::rbd::SnapshotNamespace, std::string>, librados::snap_t> snap_ids;
+    std::map<SnapKey, librados::snap_t, SnapKeyComparator> snap_ids;
     uint64_t open_snap_id = CEPH_NOSNAP;
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
