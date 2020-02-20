@@ -37,13 +37,18 @@ using ceph::Formatter;
 
 void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
-  uint8_t v = 4;
+  uint8_t v = 5;
+  uint8_t min_v = 1;
+  if (!crush_loc.empty()) {
+    min_v = 5;
+  }
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 2;
   }
-  ENCODE_START(v, 1, bl);
+  ENCODE_START(v, min_v, bl);
   encode(name, bl);
   if (v < 3) {
+    ceph_assert(min_v == 1);
     auto a = public_addrs.legacy_addr();
     if (a != entity_addr_t()) {
       encode(a, bl, features);
@@ -59,12 +64,13 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   }
   encode(priority, bl);
   encode(weight, bl);
+  encode(crush_loc, bl);
   ENCODE_FINISH(bl);
 }
 
 void mon_info_t::decode(ceph::buffer::list::const_iterator& p)
 {
-  DECODE_START(4, p);
+  DECODE_START(5, p);
   decode(name, p);
   decode(public_addrs, p);
   if (struct_v >= 2) {
@@ -72,6 +78,9 @@ void mon_info_t::decode(ceph::buffer::list::const_iterator& p)
   }
   if (struct_v >= 4) {
     decode(weight, p);
+  }
+  if (struct_v >= 5) {
+    decode(crush_loc, p);
   }
   DECODE_FINISH(p);
 }
@@ -81,7 +90,8 @@ void mon_info_t::print(ostream& out) const
   out << "mon." << name
       << " addrs " << public_addrs
       << " priority " << priority
-      << " weight " << weight;
+      << " weight " << weight
+      << " crush location " << crush_loc;
 }
 
 namespace {
