@@ -9,6 +9,7 @@ import contextlib
 import logging
 import os
 import json
+import re
 import uuid
 
 from ceph_manager import CephManager
@@ -92,7 +93,7 @@ def download_cephadm(ctx, config, ref):
         if git_url.startswith('https://github.com/'):
             # git archive doesn't like https:// URLs, which we use with github.
             rest = git_url.split('https://github.com/', 1)[1]
-            rest.replace('.git/', '/')  # no .git suffix
+            rest = re.sub(r'\.git/?$', '', rest).strip() # no .git suffix
             ctx.cluster.run(
                 args=[
                     'curl', '--silent',
@@ -100,10 +101,7 @@ def download_cephadm(ctx, config, ref):
                     run.Raw('>'),
                     ctx.cephadm,
                     run.Raw('&&'),
-                    'test', '-s',
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'chmod', '+x',
+                    'ls', '-l',
                     ctx.cephadm,
                 ],
             )
@@ -118,14 +116,19 @@ def download_cephadm(ctx, config, ref):
                     'tar', '-xO', 'src/cephadm/cephadm',
                     run.Raw('>'),
                     ctx.cephadm,
-                    run.Raw('&&'),
-                    'test', '-s',
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'chmod', '+x',
-                    ctx.cephadm,
                 ],
             )
+        # sanity-check the resulting file and set executable bit
+        cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+        ctx.cluster.run(
+            args=[
+                'test', '-s', ctx.cephadm,
+                run.Raw('&&'),
+                'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+                run.Raw('&&'),
+                'chmod', '+x', ctx.cephadm,
+            ],
+        )
 
     try:
         yield
