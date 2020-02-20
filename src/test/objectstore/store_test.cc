@@ -6753,23 +6753,16 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     ASSERT_TRUE(bl_eq(expected, bl));
   }
 
-  // overwrite at 4K, 12K alignment
+  // overwrite at the end, 4K alignment
   {
     ObjectStore::Transaction t;
     bufferlist bl;
 
-    bl.append(std::string(block_size, 'e'));
-    t.write(cid, hoid2, block_size , bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    bl.append(std::string(block_size, 'g'));
+    t.write(cid, hoid, block_size, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 4u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 2u);
-
-  // makes sure deferred has been submitted
-  // and do all the checks again
-  sleep(g_conf().get_val<double>("bluestore_max_defer_interval") + 2);
-
   ASSERT_EQ(logger->get(l_bluestore_write_big), 4u);
   ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 2u);
 
@@ -6784,7 +6777,42 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size, block_size, bl);
     ASSERT_EQ(r, (int)block_size);
-    expected.append(string(block_size, 'c'));
+    expected.append(string(block_size, 'g'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+
+  // overwrite at 4K, 12K alignment
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'e'));
+    t.write(cid, hoid2, block_size , bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 5u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
+
+  // makes sure deferred has been submitted
+  // and do all the checks again
+  sleep(g_conf().get_val<double>("bluestore_max_defer_interval") + 2);
+
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 5u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, block_size, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'g'));
     ASSERT_TRUE(bl_eq(expected, bl));
   }
   {
@@ -6836,8 +6864,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 5u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 2u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 6u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
 
   {
     ObjectStore::Transaction t;
@@ -6879,8 +6907,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 6u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 7u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
   {
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
@@ -6905,6 +6933,35 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
   }
   ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
   ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
+
+  // check whether full overwrite bypass deferred
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size * 2, 'h'));
+
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 8u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, block_size * 2, bl);
+    ASSERT_EQ(r, (int)block_size * 2);
+    expected.append(string(block_size * 2, 'h'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
+  }
 
   {
     ObjectStore::Transaction t;
