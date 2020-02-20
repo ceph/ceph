@@ -60,6 +60,14 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
     return r;
   }
 
+  bool accept_blocked_request(
+      librbd::exclusive_lock::OperationRequestType request_type) override {
+    if (request_type ==
+        librbd::exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE) {
+      return true;
+    }
+    return false;
+  }
 };
 
 struct MirrorJournalPolicy : public librbd::journal::Policy {

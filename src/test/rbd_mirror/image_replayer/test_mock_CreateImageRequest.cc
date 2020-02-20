@@ -293,6 +293,13 @@ public:
         }));
   }
 
+  void expect_test_op_features(librbd::MockTestImageCtx& mock_image_ctx,
+                               bool enabled) {
+    EXPECT_CALL(mock_image_ctx,
+                test_op_features(RBD_OPERATION_FEATURE_CLONE_CHILD))
+      .WillOnce(Return(enabled));
+  }
+
   void expect_clone_image(MockCloneRequest &mock_clone_request,
 			  librbd::MockTestImageCtx &mock_parent_imctx,
                           int r) {
@@ -389,6 +396,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, Clone) {
   expect_open_image(mock_open_image_request, m_local_io_ctx,
                     "local parent id", mock_local_parent_image_ctx, 0);
   expect_snap_set(mock_local_parent_image_ctx, "snap", 0);
+  expect_test_op_features(mock_remote_clone_image_ctx, false);
   expect_clone_image(mock_clone_request, mock_local_parent_image_ctx, 0);
   expect_close_image(mock_close_image_request, mock_local_parent_image_ctx, 0);
   expect_close_image(mock_close_image_request, mock_remote_parent_image_ctx, 0);
@@ -601,6 +609,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneError) {
   expect_open_image(mock_open_image_request, m_local_io_ctx,
                     "local parent id", mock_local_parent_image_ctx, 0);
   expect_snap_set(mock_local_parent_image_ctx, "snap", 0);
+  expect_test_op_features(mock_remote_clone_image_ctx, false);
   expect_clone_image(mock_clone_request, mock_local_parent_image_ctx, -EINVAL);
   expect_close_image(mock_close_image_request, mock_local_parent_image_ctx, 0);
   expect_close_image(mock_close_image_request, mock_remote_parent_image_ctx, 0);
@@ -646,6 +655,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneLocalParentCloseError) {
   expect_open_image(mock_open_image_request, m_local_io_ctx,
                     "local parent id", mock_local_parent_image_ctx, 0);
   expect_snap_set(mock_local_parent_image_ctx, "snap", 0);
+  expect_test_op_features(mock_remote_clone_image_ctx, false);
   expect_clone_image(mock_clone_request, mock_local_parent_image_ctx, 0);
   expect_close_image(mock_close_image_request, mock_local_parent_image_ctx, -EINVAL);
   expect_close_image(mock_close_image_request, mock_remote_parent_image_ctx, 0);
@@ -691,6 +701,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneRemoteParentCloseError) {
   expect_open_image(mock_open_image_request, m_local_io_ctx,
                     "local parent id", mock_local_parent_image_ctx, 0);
   expect_snap_set(mock_local_parent_image_ctx, "snap", 0);
+  expect_test_op_features(mock_remote_clone_image_ctx, false);
   expect_clone_image(mock_clone_request, mock_local_parent_image_ctx, 0);
   expect_close_image(mock_close_image_request, mock_local_parent_image_ctx, 0);
   expect_close_image(mock_close_image_request, mock_remote_parent_image_ctx, -EINVAL);

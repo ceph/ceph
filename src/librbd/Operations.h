@@ -6,6 +6,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/int_types.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/operation/ObjectMapIterate.h"
 #include <atomic>
 #include <string>
@@ -100,13 +101,15 @@ public:
   int metadata_remove(const std::string &key);
   void execute_metadata_remove(const std::string &key, Context *on_finish);
 
-  int prepare_image_update(bool request_lock);
+  int prepare_image_update(exclusive_lock::OperationRequestType request_type,
+                           bool request_lock);
 
 private:
   ImageCtxT &m_image_ctx;
   std::atomic<int> m_async_request_seq;
 
-  int invoke_async_request(const std::string& request_type,
+  int invoke_async_request(const std::string& name,
+                           exclusive_lock::OperationRequestType request_type,
                            bool permit_snapshot,
                            const boost::function<void(Context*)>& local,
                            const boost::function<void(Context*)>& remote);

@@ -37,18 +37,22 @@ ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
 }
 
 template <typename I>
-bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
+bool ExclusiveLock<I>::accept_request(OperationRequestType request_type,
+                                      int *ret_val) const {
   Mutex::Locker locker(ML<I>::m_lock);
 
-  bool accept_requests = (!ML<I>::is_state_shutdown() &&
-                          ML<I>::is_state_locked() &&
-                          m_request_blocked_count == 0);
+  bool accept_request =
+    (!ML<I>::is_state_shutdown() && ML<I>::is_state_locked() &&
+     (m_request_blocked_count == 0 ||
+      m_image_ctx.get_exclusive_lock_policy()->accept_blocked_request(
+        request_type)));
   if (ret_val != nullptr) {
-    *ret_val = m_request_blocked_ret_val;
+    *ret_val = accept_request ? 0 : m_request_blocked_ret_val;
   }
 
-  ldout(m_image_ctx.cct, 20) << "=" << accept_requests << dendl;
-  return accept_requests;
+  ldout(m_image_ctx.cct, 20) << "=" << accept_request << " (request_type="
+                             << request_type << ")" << dendl;
+  return accept_request;
 }
 
 template <typename I>
@@ -74,7 +78,7 @@ void ExclusiveLock<I>::block_requests(int r) {
     m_request_blocked_ret_val = r;
   }
 
-  ldout(m_image_ctx.cct, 20) << dendl;
+  ldout(m_image_ctx.cct, 20) << "r=" << r << dendl;
 }
 
 template <typename I>

@@ -83,23 +83,25 @@ void CloneRequest<I>::validate_options() {
     m_use_p_features = false;
   }
 
-  std::string default_clone_format = m_cct->_conf->get_val<std::string>(
-    "rbd_default_clone_format");
-  if (default_clone_format == "1") {
-    m_clone_format = 1;
-  } else if (default_clone_format == "auto") {
-    librados::Rados rados(m_ioctx);
-    int8_t min_compat_client;
-    int8_t require_min_compat_client;
-    int r = rados.get_min_compatible_client(&min_compat_client,
-                                            &require_min_compat_client);
-    if (r < 0) {
-      complete(r);
-      return;
-    }
-    if (std::max(min_compat_client, require_min_compat_client) <
-          CEPH_RELEASE_MIMIC) {
+  if (m_opts.get(RBD_IMAGE_OPTION_CLONE_FORMAT, &m_clone_format) < 0) {
+    std::string default_clone_format = m_cct->_conf->get_val<std::string>(
+      "rbd_default_clone_format");
+    if (default_clone_format == "1") {
       m_clone_format = 1;
+    } else if (default_clone_format == "auto") {
+      librados::Rados rados(m_ioctx);
+      int8_t min_compat_client;
+      int8_t require_min_compat_client;
+      int r = rados.get_min_compatible_client(&min_compat_client,
+                                              &require_min_compat_client);
+      if (r < 0) {
+        complete(r);
+        return;
+      }
+      if (std::max(min_compat_client, require_min_compat_client) <
+            CEPH_RELEASE_MIMIC) {
+        m_clone_format = 1;
+      }
     }
   }
 

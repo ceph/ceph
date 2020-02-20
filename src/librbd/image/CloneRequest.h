@@ -104,7 +104,7 @@ private:
   Context *m_on_finish;
 
   CephContext *m_cct;
-  uint32_t m_clone_format = 2;
+  uint64_t m_clone_format = 2;
   bool m_use_p_features;
   uint64_t m_p_features;
   uint64_t m_features;

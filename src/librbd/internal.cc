@@ -394,6 +394,7 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
     {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
     {RBD_IMAGE_OPTION_DATA_POOL, STR},
     {RBD_IMAGE_OPTION_FLATTEN, UINT64},
+    {RBD_IMAGE_OPTION_CLONE_FORMAT, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -422,6 +423,8 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
       return "data_pool";
     case RBD_IMAGE_OPTION_FLATTEN:
       return "flatten";
+    case RBD_IMAGE_OPTION_CLONE_FORMAT:
+      return "clone_format";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -927,9 +930,14 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
     }
 
     CephContext *cct = (CephContext *)io_ctx.cct();
-    uint64_t flatten;
-    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+    uint64_t option;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &option) == 0) {
       lderr(cct) << "create does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+    if (opts.get(RBD_IMAGE_OPTION_CLONE_FORMAT, &option) == 0) {
+      lderr(cct) << "create does not support 'clone_format' image option"
+                 << dendl;
       return -EINVAL;
     }
 
@@ -1481,7 +1489,8 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
     if (ictx->exclusive_lock != nullptr) {
       ictx->exclusive_lock->block_requests(0);
 
-      r = ictx->operations->prepare_image_update(false);
+      r = ictx->operations->prepare_image_update(
+        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, false);
       if (r < 0) {
         lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
         ictx->owner_lock.put_read();
@@ -1838,9 +1847,14 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
-    uint64_t flatten;
-    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+    uint64_t option;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &option) == 0) {
       lderr(cct) << "copy does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+    if (opts.get(RBD_IMAGE_OPTION_CLONE_FORMAT, &option) == 0) {
+      lderr(cct) << "copy does not support 'clone_format' image option"
+                 << dendl;
       return -EINVAL;
     }
 

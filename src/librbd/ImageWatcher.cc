@@ -632,7 +632,8 @@ bool ImageWatcher<I>::handle_payload(const RequestLockPayload &payload,
   if (m_image_ctx.exclusive_lock != nullptr &&
       m_image_ctx.exclusive_lock->is_lock_owner()) {
     int r = 0;
-    bool accept_request = m_image_ctx.exclusive_lock->accept_requests(&r);
+    bool accept_request = m_image_ctx.exclusive_lock->accept_request(
+      exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r);
 
     if (accept_request) {
       assert(r == 0);
@@ -688,7 +689,8 @@ bool ImageWatcher<I>::handle_payload(const FlattenPayload &payload,
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       bool new_request;
       Context *ctx;
       ProgressContext *prog_ctx;
@@ -714,7 +716,8 @@ bool ImageWatcher<I>::handle_payload(const ResizePayload &payload,
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       bool new_request;
       Context *ctx;
       ProgressContext *prog_ctx;
@@ -742,7 +745,8 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
 			         << payload.snap_name << dendl;
 
@@ -764,7 +768,8 @@ bool ImageWatcher<I>::handle_payload(const SnapRenamePayload &payload,
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote snap_rename request: "
 			         << payload.snap_id << " to "
 			         << payload.snap_name << dendl;
@@ -785,8 +790,13 @@ bool ImageWatcher<I>::handle_payload(const SnapRemovePayload &payload,
 			             C_NotifyAck *ack_ctx) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
+    auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
+    if (cls::rbd::get_snap_namespace_type(payload.snap_namespace) ==
+        cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+      request_type = exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE;
+    }
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
 			         << payload.snap_name << dendl;
 
@@ -807,7 +817,8 @@ bool ImageWatcher<I>::handle_payload(const SnapProtectPayload& payload,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
                                  << payload.snap_name << dendl;
 
@@ -828,7 +839,8 @@ bool ImageWatcher<I>::handle_payload(const SnapUnprotectPayload& payload,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
                                  << payload.snap_name << dendl;
 
@@ -849,7 +861,8 @@ bool ImageWatcher<I>::handle_payload(const RebuildObjectMapPayload& payload,
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       bool new_request;
       Context *ctx;
       ProgressContext *prog_ctx;
@@ -876,7 +889,8 @@ bool ImageWatcher<I>::handle_payload(const RenamePayload& payload,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
                                  << payload.image_name << dendl;
 
@@ -896,7 +910,8 @@ bool ImageWatcher<I>::handle_payload(const UpdateFeaturesPayload& payload,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote update_features request: "
                                  << payload.features << " "
                                  << (payload.enabled ? "enabled" : "disabled")
@@ -918,7 +933,8 @@ bool ImageWatcher<I>::handle_payload(const UnknownPayload &payload,
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_requests(&r) || r < 0) {
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r) || r < 0) {
       encode(ResponseMessage(-EOPNOTSUPP), ack_ctx->out);
     }
   }
