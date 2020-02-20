@@ -210,11 +210,13 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
     },
     [] (auto&& ctx, ObjectContextRef obc) {
       if (auto nh = obc->watchers.extract(ctx.key); !nh.empty()) {
-        logger().info("op_effect: disconnect watcher {}", ctx.key);
-        return nh.mapped()->remove(ctx.send_disconnect);
+        return seastar::do_with(std::move(nh.mapped()),
+                         [ctx](auto&& watcher) {
+          logger().info("op_effect: disconnect watcher {}", ctx.key);
+          return watcher->remove(ctx.send_disconnect);
+        });
       } else {
-        logger().info("op_effect: disconnect failed to find watcher {}",
-                      ctx.key);
+        logger().info("op_effect: disconnect failed to find watcher {}", ctx.key);
         return seastar::now();
       }
     });
