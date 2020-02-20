@@ -13328,61 +13328,76 @@ void BlueStore::_do_write_big(
             << std::dec << " write via deferred"
             << dendl;
 
-          bluestore_deferred_op_t *op = _get_deferred_op(txc);
-          op->op = bluestore_deferred_op_t::OP_WRITE;
+          PExtentVector extents;
           int r = b0->get_blob().map(
             b_off, l_aligned,
-            [&](uint64_t offset, uint64_t length) {
-              op->extents.emplace_back(bluestore_pextent_t(offset, length));
-              return 0;
+            [&](const bluestore_pextent_t& pext,
+                uint64_t offset,
+                uint64_t length) {
+              // apply deferred if overwrite breaks blob continuity only.
+              // if it totally overlaps some pextent - fallback to regular write
+              if (pext.offset < offset ||
+                pext.end() > offset + length) {
+                extents.emplace_back(bluestore_pextent_t(offset, length));
+                return 0;
+              }
+              return -1;
             });
-          ceph_assert(r == 0);
+          if (r < 0) {
+            dout(20) << __func__
+              << " deferring big fell back"
+              << dendl;
+          } else {
+            bluestore_deferred_op_t *op = _get_deferred_op(txc);
+            op->op = bluestore_deferred_op_t::OP_WRITE;
+            op->extents.swap(extents);
 
-          dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
-            << " and tail 0x" << tail_read << std::dec << dendl;
-          if (head_read) {
-            int r = _do_read(c.get(), o, offset - head_read, head_read,
-              op->data, 0);
-            ceph_assert(r >= 0 && r <= (int)head_read);
-            size_t zlen = head_read - r;
-            if (zlen) {
-              op->data.append_zero(zlen);
-              logger->inc(l_bluestore_write_pad_bytes, zlen);
+            dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
+              << " and tail 0x" << tail_read << std::dec << dendl;
+            if (head_read) {
+              int r = _do_read(c.get(), o, offset - head_read, head_read,
+                op->data, 0);
+              ceph_assert(r >= 0 && r <= (int)head_read);
+              size_t zlen = head_read - r;
+              if (zlen) {
+                op->data.append_zero(zlen);
+                logger->inc(l_bluestore_write_pad_bytes, zlen);
+              }
+              logger->inc(l_bluestore_write_penalty_read_ops);
             }
-            logger->inc(l_bluestore_write_penalty_read_ops);
-          }
-          blp.copy(l, op->data);
+            blp.copy(l, op->data);
 
-          if (tail_read) {
-            bufferlist tail_bl;
-            int r = _do_read(c.get(), o, offset + l, tail_read,
-              tail_bl, 0);
-            ceph_assert(r >= 0 && r <= (int)tail_read);
-            size_t zlen = tail_read - r;
-            if (zlen) {
-              tail_bl.append_zero(zlen);
-              logger->inc(l_bluestore_write_pad_bytes, zlen);
+            if (tail_read) {
+              bufferlist tail_bl;
+              int r = _do_read(c.get(), o, offset + l, tail_read,
+                tail_bl, 0);
+              ceph_assert(r >= 0 && r <= (int)tail_read);
+              size_t zlen = tail_read - r;
+              if (zlen) {
+                tail_bl.append_zero(zlen);
+                logger->inc(l_bluestore_write_pad_bytes, zlen);
+              }
+              op->data.claim_append(tail_bl);
+              logger->inc(l_bluestore_write_penalty_read_ops);
             }
-            op->data.claim_append(tail_bl);
-            logger->inc(l_bluestore_write_penalty_read_ops);
+
+            _buffer_cache_write(txc, b0, b_off, op->data,
+              wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+
+            if (b0->get_blob().csum_type) {
+              b0->dirty_blob().calc_csum(b_off, op->data);
+            }
+            Extent *le = o->extent_map.set_lextent(c, offset,
+              offset - ep->blob_start(), l, b0, &wctx->old_extents);
+            txc->statfs_delta.stored() += le->length;
+
+            offset += l;
+            length -= l;
+            logger->inc(l_bluestore_write_big_blobs);
+            logger->inc(l_bluestore_write_big_deferred);
+
+            continue;
           }
-
-          _buffer_cache_write(txc, b0, b_off, op->data,
-            wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-
-          if (b0->get_blob().csum_type) {
-            b0->dirty_blob().calc_csum(b_off, op->data);
-          }
-          Extent *le = o->extent_map.set_lextent(c, offset,
-            offset - ep->blob_start(), l, b0, &wctx->old_extents);
-          txc->statfs_delta.stored() += le->length;
-
-          offset += l;
-          length -= l;
-          logger->inc(l_bluestore_write_big_blobs);
-          logger->inc(l_bluestore_write_big_deferred);
-
-          continue;
         }
       }
       o->extent_map.punch_hole(c, offset, l, &wctx->old_extents);
