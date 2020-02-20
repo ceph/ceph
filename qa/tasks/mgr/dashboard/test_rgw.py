@@ -25,6 +25,7 @@ class RgwTestCase(DashboardTestCase):
             '--system', '--access-key', 'admin', '--secret', 'admin'
         ])
         # Update the dashboard configuration.
+        cls._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'admin'])
         cls._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
         cls._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
         # Create a test user?
@@ -50,6 +51,8 @@ class RgwTestCase(DashboardTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        # Delete administrator account.
+        cls._radosgw_admin_cmd(['user', 'rm', '--uid', 'admin'])
         if cls.create_test_user:
             cls._radosgw_admin_cmd(['user', 'rm', '--uid=teuth-test-user'])
         super(RgwTestCase, cls).tearDownClass()
@@ -304,7 +307,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(len(data), 0)
 
 
-class RgwDaemonTest(DashboardTestCase):
+class RgwDaemonTest(RgwTestCase):
 
     AUTH_ROLES = ['rgw-manager']
 
@@ -338,14 +341,6 @@ class RgwDaemonTest(DashboardTestCase):
         self.assertTrue(data['rgw_metadata'])
 
     def test_status(self):
-        self._radosgw_admin_cmd([
-            'user', 'create', '--uid=admin', '--display-name=admin',
-            '--system', '--access-key=admin', '--secret=admin'
-        ])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
-
         data = self._get('/api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
