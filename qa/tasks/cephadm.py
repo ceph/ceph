@@ -100,6 +100,9 @@ def download_cephadm(ctx, config, ref):
                     'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
                     run.Raw('>'),
                     ctx.cephadm,
+                    run.Raw('&&'),
+                    'ls', '-l',
+                    ctx.cephadm,
                 ],
             )
         else:
