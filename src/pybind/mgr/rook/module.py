@@ -22,12 +22,12 @@ try:
     from kubernetes.client.models.v1_container_image import V1ContainerImage
     def names(self, names):
         self._names = names
-    V1ContainerImage.names = V1ContainerImage.names.setter(names)
+    V1ContainerImage.names = V1ContainerImage.names.setter(names)  # type: ignore
 
 except ImportError:
     kubernetes_imported = False
-    client = None
-    config = None
+    client = None  # type: ignore
+    config = None  # type: ignore
 
 from mgr_module import MgrModule
 import orchestrator
@@ -176,8 +176,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             cluster_name = "rook-ceph"
 
             # So that I can do port forwarding from my workstation - jcsp
-            from kubernetes.client import configuration
+            configuration = client.Configuration()
             configuration.verify_ssl = False
+            client.Configuration.set_default(configuration)
 
         self._k8s_CoreV1_api = client.CoreV1Api()
         self._k8s_BatchV1_api = client.BatchV1Api()
