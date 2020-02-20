@@ -1,5 +1,5 @@
 $(function() {
-  var releases_url = "https://docs.ceph.com/docs/master/releases.json";
+  var releases_url = DOCUMENTATION_OPTIONS.URL_ROOT + '/releases.json';
 
   function show_edit(branch, data) {
     if (branch) {
@@ -33,8 +33,10 @@ $(function() {
     if (show_edit(branch, data)) {
       // patch the edit-on-github URL for correct branch
       var url = $("#edit-on-github").attr("href");
-      url = url.replace("master", branch);
-      $("#edit-on-github").attr("href", url);
+      if (url)  {
+        url = url.replace("master", branch);
+        $("#edit-on-github").attr("href", url);
+      }
       $("#docubetter").show();
     }
   });
