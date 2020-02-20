@@ -78,6 +78,7 @@ else:
     from urllib2 import urlopen, HTTPError
 
 container_path = ''
+cached_stdin = None
 
 class Error(Exception):
     pass
@@ -1012,11 +1013,16 @@ def get_parm(option):
     if not option:
         return dict()
 
+    global cached_stdin
     if option == '-':
-        try:
-            j = injected_stdin  # type: ignore
-        except NameError:
-            j = sys.stdin.read()
+        if cached_stdin is not None:
+            j = cached_stdin
+        else:
+            try:
+                j = injected_stdin  # type: ignore
+            except NameError:
+                j = sys.stdin.read()
+                cached_stdin = j
     else:
         # inline json string
         if option[0] == '{' and option[-1] == '}':
