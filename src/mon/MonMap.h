@@ -59,6 +59,11 @@ struct mon_info_t {
   uint16_t priority{0};
   uint16_t weight{0};
 
+  /**
+   * The location of the monitor, in CRUSH hierarchy terms
+   */
+  std::map<std::string,std::string> crush_loc;
+
   // <REMOVE ME>
   mon_info_t(const std::string& n, const entity_addr_t& p_addr, uint16_t p)
     : name(n), public_addrs(p_addr), priority(p)
