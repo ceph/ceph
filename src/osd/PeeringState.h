@@ -1838,6 +1838,7 @@ public:
   /// Update info/stats to reflect backfill progress
   void update_backfill_progress(
     const hobject_t &updated_backfill,
+    const map<hobject_t, eversion_t> &mark_missing,
     const pg_stat_t &updated_stats,
     bool preserve_local_num_bytes,
     ObjectStore::Transaction &t);

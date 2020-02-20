@@ -1116,9 +1116,13 @@ protected:
    *   - are on the peer or are in backfills_in_flight
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
+   *
+   * objects in backfill_failed is usually because ec primary reconstruct object 
+   * failed, so if we go on do backfill , we need update the backtarget
    */
   set<hobject_t> backfills_in_flight;
   map<hobject_t, pg_stat_t> pending_backfill_updates;
+  map<hobject_t, eversion_t> backfills_failed;
 
   void dump_recovery_info(Formatter *f) const override {
     f->open_array_section("waiting_on_backfill");
@@ -1152,6 +1156,14 @@ protected:
 	f->dump_stream("object") << *i;
       }
       f->close_section();
+    }
+    {
+      f->open_array_section("backfills_failed");
+      for (map<hobject_t, eversion_t>::const_iterator i = backfills_failed.begin();
+           i != backfills_failed.end();
+           ++i) {
+        f->dump_stream("object") << i->first;
+      }
     }
     {
       f->open_array_section("recovering");

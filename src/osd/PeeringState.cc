@@ -3908,6 +3908,7 @@ void PeeringState::recover_got(
 
 void PeeringState::update_backfill_progress(
   const hobject_t &updated_backfill,
+  const map<hobject_t, eversion_t> &mark_missing,
   const pg_stat_t &updated_stats,
   bool preserve_local_num_bytes,
   ObjectStore::Transaction &t) {
@@ -3923,6 +3924,12 @@ void PeeringState::update_backfill_progress(
 	       << " replaces local " << info.stats.stats.sum.num_bytes << dendl;
     info.stats = updated_stats;
   }
+
+  for(map<hobject_t, eversion_t>::const_iterator i = mark_missing.begin();
+      i != mark_missing.end();
+      ++i) {
+    pg_log.missing_add(i->first, i->second, eversion_t()); 
+  } 
 
   dirty_info = true;
   write_if_dirty(t);
