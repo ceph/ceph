@@ -480,6 +480,11 @@ COMMAND("mon rm disallowed_leader " \
 	"name=name,type=CephString", \
 	"allow the named mon to be a leader again", \
 	"mon", "rw")
+COMMAND("mon set_location " \
+	"name=name,type=CephString "
+	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]",
+	"specify location <args> for the monitor <name>, using CRUSH bucket names", \
+	"mon", "rw")
 
 /*
  * OSD commands

@@ -14,6 +14,7 @@
 
 #include "MonmapMonitor.h"
 #include "Monitor.h"
+#include "OSDMonitor.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonJoin.h"
 
@@ -946,6 +947,33 @@ n     *
       goto reply;
     }
     pending_map.disallowed_leaders.erase(name);
+    err = 0;
+    propose = true;
+  } else if (prefix == "mon set_location") {
+    string name;
+    if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+
+    CrushWrapper crush;
+    mon->osdmon()->_get_pending_crush(crush); // TODO check this is safe without is_readable checks
+    string args;
+    vector<string> argvec;
+    map<string, string> loc;
+    cmd_getval(cmdmap, "args", argvec);
+    CrushWrapper::parse_loc_map(argvec, &loc);
+
+    dout(0) << "mon set_location for " << name << " to " << loc << dendl;
+
+    // TODO: validate location in crush map
+    // TODO: validate location against any existing stretch config
+    pending_map.mon_info[name].crush_loc = loc;
     err = 0;
     propose = true;
   } else {
