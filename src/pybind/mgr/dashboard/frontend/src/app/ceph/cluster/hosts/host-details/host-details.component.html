@@ -9,12 +9,10 @@
     <cd-inventory [hostname]="selectedHostname"></cd-inventory>
   </tab>
   <tab i18n-heading
-       heading="Services"
+       heading="Daemons"
        *ngIf="permissions.hosts.read">
-    <cd-services
-      [hostname]="selectedHostname"
-      [hiddenColumns]="['nodename']">
-    </cd-services>
+    <cd-service-daemon-list [hostname]="selectedHostname">
+    </cd-service-daemon-list>
   </tab>
   <tab i18n-heading
        heading="Performance Details"

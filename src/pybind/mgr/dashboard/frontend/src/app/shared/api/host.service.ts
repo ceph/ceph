@@ -4,6 +4,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
+import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
@@ -37,5 +38,9 @@ export class HostService {
 
   getSmartData(hostname: string) {
     return this.http.get<SmartDataResponseV1>(`${this.baseURL}/${hostname}/smart`);
+  }
+
+  getDaemons(hostname: string): Observable<Daemon[]> {
+    return this.http.get<Daemon[]>(`${this.baseURL}/${hostname}/daemons`);
   }
 }

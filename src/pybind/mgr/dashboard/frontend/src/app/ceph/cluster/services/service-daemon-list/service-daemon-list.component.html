@@ -1,0 +1,6 @@
+<cd-table [data]="daemons"
+          [columns]="columns"
+          columnMode="flex"
+          autoReload="0"
+          (fetchData)="getDaemons($event)">
+</cd-table>
