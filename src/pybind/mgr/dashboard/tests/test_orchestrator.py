@@ -12,13 +12,11 @@ from ..controllers.orchestrator import get_device_osd_map
 from ..controllers.orchestrator import Orchestrator
 from ..controllers.orchestrator import OrchestratorInventory
 from ..controllers.orchestrator import OrchestratorOsd
-from ..controllers.orchestrator import OrchestratorService
 
 
 class OrchestratorControllerTest(ControllerTestCase):
     URL_STATUS = '/api/orchestrator/status'
     URL_INVENTORY = '/api/orchestrator/inventory'
-    URL_SERVICE = '/api/orchestrator/service'
     URL_OSD = '/api/orchestrator/osd'
 
     @classmethod
@@ -26,11 +24,9 @@ class OrchestratorControllerTest(ControllerTestCase):
         # pylint: disable=protected-access
         Orchestrator._cp_config['tools.authenticate.on'] = False
         OrchestratorInventory._cp_config['tools.authenticate.on'] = False
-        OrchestratorService._cp_config['tools.authenticate.on'] = False
         OrchestratorOsd._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Orchestrator,
                                OrchestratorInventory,
-                               OrchestratorService,
                                OrchestratorOsd])
 
     @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')

@@ -46,19 +46,6 @@ describe('OrchestratorService', () => {
     expect(req.request.method).toBe('GET');
   });
 
-  it('should call serviceList', () => {
-    service.serviceList().subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/service`);
-    expect(req.request.method).toBe('GET');
-  });
-
-  it('should call serviceList with a host', () => {
-    const host = 'host0';
-    service.serviceList(host).subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/service?hostname=${host}`);
-    expect(req.request.method).toBe('GET');
-  });
-
   it('should call osdCreate', () => {
     const data = {
       drive_group: {

@@ -1,13 +1,17 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
+import { CephServiceService } from '../../../shared/api/ceph-service.service';
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { Permissions } from '../../../shared/models/permissions';
+import { CephService } from '../../../shared/models/service.interface';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
-import { Service } from './services.model';
 
 @Component({
   selector: 'cd-services',
@@ -23,71 +27,58 @@ export class ServicesComponent implements OnChanges, OnInit {
   // Do not display these columns
   @Input() hiddenColumns: string[] = [];
 
+  permissions: Permissions;
+
   checkingOrchestrator = true;
   orchestratorExist = false;
   docsUrl: string;
 
   columns: Array<CdTableColumn> = [];
-  services: Array<Service> = [];
+  services: Array<CephService> = [];
   isLoadingServices = false;
+  selection = new CdTableSelection();
 
   constructor(
+    private authStorageService: AuthStorageService,
     private cephReleaseNamePipe: CephReleaseNamePipe,
     private i18n: I18n,
     private orchService: OrchestratorService,
+    private cephServiceService: CephServiceService,
     private summaryService: SummaryService
-  ) {}
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit() {
     const columns = [
       {
-        name: this.i18n('Hostname'),
-        prop: 'hostname',
-        flexGrow: 2
-      },
-      {
-        name: this.i18n('Service type'),
-        prop: 'service_type',
-        flexGrow: 1
-      },
-      {
         name: this.i18n('Service'),
-        prop: 'service',
+        prop: 'service_name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Service instance'),
-        prop: 'service_instance',
-        flexGrow: 1
-      },
-      {
-        name: this.i18n('Container id'),
-        prop: 'container_id',
+        name: this.i18n('Container image name'),
+        prop: 'container_image_name',
         flexGrow: 3
       },
       {
-        name: this.i18n('Version'),
-        prop: 'version',
+        name: this.i18n('Container image ID'),
+        prop: 'container_image_id',
+        flexGrow: 3
+      },
+      {
+        name: this.i18n('Running'),
+        prop: 'running',
         flexGrow: 1
       },
       {
-        name: this.i18n('Rados config location'),
-        prop: 'rados_config_location',
+        name: this.i18n('Size'),
+        prop: 'size',
         flexGrow: 1
       },
       {
-        name: this.i18n('Service URL'),
-        prop: 'service_url',
-        flexGrow: 2
-      },
-      {
-        name: this.i18n('Status'),
-        prop: 'status',
-        flexGrow: 1
-      },
-      {
-        name: this.i18n('Status Description'),
-        prop: 'status_desc',
+        name: this.i18n('Last Refreshed'),
+        prop: 'last_refresh',
         flexGrow: 1
       }
     ];
@@ -123,18 +114,17 @@ export class ServicesComponent implements OnChanges, OnInit {
     }
   }
 
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
   getServices(context: CdTableFetchDataContext) {
     if (this.isLoadingServices) {
       return;
     }
     this.isLoadingServices = true;
-    this.orchService.serviceList(this.hostname).subscribe(
-      (data: Service[]) => {
-        const services: Service[] = [];
-        data.forEach((service: Service) => {
-          service.uid = `${service.hostname}-${service.service_type}-${service.service}-${service.service_instance}`;
-          services.push(service);
-        });
+    this.cephServiceService.list().subscribe(
+      (services: CephService[]) => {
         this.services = services;
         this.isLoadingServices = false;
       },

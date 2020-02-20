@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-
 import logging
 
+from typing import List, Optional
+
 from orchestrator import InventoryFilter, DeviceLightLoc, Completion
+from orchestrator import ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from .. import mgr
 from ..tools import wraps
@@ -74,8 +76,18 @@ class InventoryManager(ResourceManager):
 
 class ServiceManager(ResourceManager):
     @wait_api_result
-    def list(self, service_type=None, service_id=None, host_name=None):
-        return self.api.list_daemons(service_type, service_id, host_name)
+    def list(self, service_name: Optional[str] = None) -> List[ServiceDescription]:
+        return self.api.describe_service(None, service_name)
+
+    @wait_api_result
+    def get(self, service_name: str) -> ServiceDescription:
+        return self.api.describe_service(None, service_name)
+
+    @wait_api_result
+    def list_daemons(self,
+                     service_name: Optional[str] = None,
+                     hostname: Optional[str] = None) -> List[DaemonDescription]:
+        return self.api.list_daemons(service_name, host=hostname)
 
     def reload(self, service_type, service_ids):
         if not isinstance(service_ids, list):
