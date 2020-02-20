@@ -683,10 +683,49 @@ public:
     }
   }
 
+  // map_f_invoke templates intended to mask parameters which are not expected
+  // by the provided callback
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    uint64_t,
+    uint64_t>>::type* = nullptr>
+  int map_f_invoke(uint64_t lo,
+    const bluestore_pextent_t& p,
+    uint64_t o,
+    uint64_t l, F&& f) const{
+    return f(o, l);
+  }
+
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    uint64_t,
+    uint64_t,
+    uint64_t>>::type * = nullptr>
+  int map_f_invoke(uint64_t lo,
+    const bluestore_pextent_t& p,
+    uint64_t o,
+    uint64_t l, F&& f) const {
+    return f(lo, o, l);
+  }
+
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    const bluestore_pextent_t&,
+    uint64_t,
+    uint64_t>>::type * = nullptr>
+    int map_f_invoke(uint64_t lo,
+      const bluestore_pextent_t& p,
+      uint64_t o,
+      uint64_t l, F&& f) const {
+    return f(p, o, l);
+  }
+
   template<class F>
   int map(uint64_t x_off, uint64_t x_len, F&& f) const {
-    static_assert(std::is_invocable_r_v<int, F, uint64_t, uint64_t>);
-
+    auto x_off0 = x_off;
     auto p = extents.begin();
     ceph_assert(p != extents.end());
     while (x_off >= p->length) {
@@ -694,18 +733,19 @@ public:
       ++p;
       ceph_assert(p != extents.end());
     }
-    while (x_len > 0) {
-      ceph_assert(p != extents.end());
+    while (x_len > 0 && p != extents.end()) {
       uint64_t l = std::min(p->length - x_off, x_len);
-      int r = f(p->offset + x_off, l);
+      int r = map_f_invoke(x_off0, *p, p->offset + x_off, l, f);
       if (r < 0)
         return r;
       x_off = 0;
       x_len -= l;
+      x_off0 += l;
       ++p;
     }
     return 0;
   }
+
   template<class F>
   void map_bl(uint64_t x_off,
 	      ceph::buffer::list& bl,
