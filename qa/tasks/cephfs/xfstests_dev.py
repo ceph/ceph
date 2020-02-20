@@ -109,7 +109,7 @@ class XFSTestsDev(CephFSTestCase):
             xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
             deps_old_distros = ['xfsprogs-qa-devel']
 
-            if distro == 'centos' and version > 7:
+            if distro != 'fedora' and version > 7:
                     deps.remove('btrfs-progs-devel')
 
             args = ['sudo', 'yum', 'install', '-y'] + deps + deps_old_distros
