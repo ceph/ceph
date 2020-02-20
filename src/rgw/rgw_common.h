@@ -587,9 +587,6 @@ struct RGWSubUser {
   uint32_t perm_mask;
 
   RGWSubUser() : perm_mask(0) {}
-  RGWSubUser(string name) : name(name) {
-    RGWSubUser();
-  }
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     encode(name, bl);

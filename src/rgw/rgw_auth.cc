@@ -528,7 +528,10 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   user_info.user_id = new_acct_user;
   user_info.display_name = info.acct_name;
   if (info.subuser != AuthInfo::NO_SUBUSER) {
-    user_info.subusers.insert({info.subuser, RGWSubUser(info.subuser)});
+    RGWSubUser subuser;
+    subuser.name = info.subuser;
+    subuser.perm_mask = info.perm_mask;
+    user_info.subusers.insert({info.subuser, subuser});
   }
 
   user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
