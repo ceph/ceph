@@ -2469,7 +2469,7 @@ class NodeAssignment(object):
     def __init__(self,
                  spec=None,  # type: Optional[orchestrator.ServiceSpec]
                  scheduler=None,  # type: Optional[BaseScheduler]
-                 get_hosts_func=None,  # type: Optional[Callable]
+                 get_hosts_func=None,  # type: Optional[Callable[[],List[str]]]
                  service_type=None,  # type: Optional[str]
                  ):
         assert spec and get_hosts_func and service_type
@@ -2497,7 +2497,7 @@ class NodeAssignment(object):
         # NOTE: This currently queries for all hosts without label restriction
         if self.spec.placement.label:
             logger.info("Found labels. Assigning nodes that match the label")
-            candidates = [HostPlacementSpec(x[0], '', '') for x in self.get_hosts_func()]  # TODO: query for labels
+            candidates = [HostPlacementSpec(x, '', '') for x in self.get_hosts_func()]  # TODO: query for labels
             logger.info('Assigning nodes to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
 
