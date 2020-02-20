@@ -204,6 +204,7 @@ private:
   ProgressContext* m_progress_ctx = nullptr;
 
   bool m_remote_image_updated = false;
+  bool m_updating_sync_point = false;
 
   void refresh_local_image();
   void handle_refresh_local_image(int r);
@@ -228,7 +229,8 @@ private:
 
   void copy_image();
   void handle_copy_image(int r);
-  void handle_copy_image_progress(uint64_t offset, uint64_t total);
+  void handle_copy_image_progress(uint64_t object_number,
+                                  uint64_t object_count);
 
   void apply_image_state();
   void handle_apply_image_state(int r);
