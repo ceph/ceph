@@ -150,7 +150,7 @@ class RgwBucket(RgwRESTController):
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
-        # type (str) => str
+        # type (str) -> str
         """
         >>> RgwBucket.strip_tenant_from_bucket_name('tenant/bucket-name')
         'bucket-name'
@@ -161,7 +161,7 @@ class RgwBucket(RgwRESTController):
 
     @staticmethod
     def get_s3_bucket_name(bucket_name, tenant=None):
-        # type (str, str) => str
+        # type (str, str) -> str
         """
         >>> RgwBucket.get_s3_bucket_name('bucket-name', 'tenant')
         'tenant:bucket-name'
