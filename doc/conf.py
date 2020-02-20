@@ -33,6 +33,7 @@ else:
 
 pygments_style = 'sphinx'
 
+html_file_suffix = ''
 html_theme = 'ceph'
 html_theme_path = ['_themes']
 html_title = "Ceph Documentation"
