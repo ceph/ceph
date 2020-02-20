@@ -96,10 +96,11 @@ class XFSTestsDev(CephFSTestCase):
         distro, version = get_system_type(self.mount_a.client_remote,
                                           distro=True, version=True)
         distro = distro.lower()
-        version = int(version.split('.')[0]) # only keep major release number
+        major_ver_num = int(version.split('.')[0]) # only keep major release
+                                                   # number
 
-        distro = get_system_type(self.mount_a.client_remote,
-                                 distro=True).lower()
+        # we keep fedora here so that right deps are installed when this test
+        # is run locally by a dev.
         if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora',
                       'centos'):
             deps = """acl attr automake bc dbench dump e2fsprogs fio \
@@ -109,7 +110,7 @@ class XFSTestsDev(CephFSTestCase):
             xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
             deps_old_distros = ['xfsprogs-qa-devel']
 
-            if distro != 'fedora' and version > 7:
+            if distro != 'fedora' and major_ver_num > 7:
                     deps.remove('btrfs-progs-devel')
 
             args = ['sudo', 'yum', 'install', '-y'] + deps + deps_old_distros
@@ -119,7 +120,7 @@ class XFSTestsDev(CephFSTestCase):
             libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
             uuid-runtime python sqlite3""".split()
 
-            if version >= 19:
+            if major_ver_num >= 19:
                 deps[deps.index('python')] ='python2'
             args = ['sudo', 'apt-get', 'install', '-y'] + deps
         else:
