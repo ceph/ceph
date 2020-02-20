@@ -212,8 +212,8 @@ private:
   void refresh_remote_image();
   void handle_refresh_remote_image(int r);
 
-  void scan_local_mirror_snapshots();
-  void scan_remote_mirror_snapshots();
+  void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void copy_snapshots();
   void handle_copy_snapshots(int r);
@@ -256,6 +256,8 @@ private:
   void handle_remote_image_update_notify();
 
   void handle_replay_complete(int r, const std::string& description);
+  void handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
+                              int r, const std::string& description);
   void notify_status_updated();
 
   bool is_replay_interrupted();
