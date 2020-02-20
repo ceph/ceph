@@ -972,8 +972,86 @@ n     *
     dout(0) << "mon set_location for " << name << " to " << loc << dendl;
 
     // TODO: validate location in crush map
+    if (!loc.size()) {
+      ss << "We could not parse your input location to anything real; " << args
+	 << " turned into an empty list!";
+      err = -EINVAL;
+      goto reply;
+    }
     // TODO: validate location against any existing stretch config
     pending_map.mon_info[name].crush_loc = loc;
+    err = 0;
+    propose = true;
+  } else if (prefix == "mon enable_stretch_mode") {
+    if (!mon->osdmon()->is_writeable()) {
+      dout(1) << __func__
+	      << ":  waiting for osdmon writeable for stretch mode" << dendl;
+      mon->osdmon()->wait_for_writeable(op, new Monitor::C_RetryMessage(mon, op));
+      return false;
+    }
+    {
+      struct Plugger {
+	Paxos *p;
+	Plugger(Paxos *p) : p(p) { p->plug(); }
+	~Plugger() { p->unplug(); }
+      } plugger(paxos); // TODO: I think I need to do this with the concurrent OSDMap/MonMap changes?
+      // TODO: check that we aren't already in stretch mode
+      string tiebreaker_mon;
+      if (!cmd_getval(cmdmap, "tiebreaker_mon", tiebreaker_mon)) {
+	ss << "must specify a tiebreaker monitor";
+	err = -EINVAL;
+	goto reply;
+      }
+      string new_crush_rule;
+      if (!cmd_getval(cmdmap, "new_crush_rule", new_crush_rule)) {
+	ss << "must specify a new crush rule that spreads out copies over multiple sites";
+	err = -EINVAL;
+	goto reply;
+      }
+      string dividing_bucket;
+      if (!cmd_getval(cmdmap, "dividing_bucket", dividing_bucket)) {
+	ss << "must specify a dividing bucket";
+	err = -EINVAL;
+	goto reply;
+      }
+      vector<string> poolnames;
+      if (!cmd_getval(cmdmap, "pools", poolnames)) {
+	ss << "must specify at least one pool to apply stretch mode to!";
+	err = -EINVAL;
+	goto reply;
+      }
+      set<pg_pool_t*> pools;
+      bool okay = false;
+      int errcode = 0;
+      //okay, initial arguments make sense, check pools and cluster state
+      mon->osdmon()->try_enable_stretch_mode_pools(ss, &okay, &errcode,
+						   poolnames, &pools, new_crush_rule);
+      if (!okay) {
+	err = errcode;
+	goto reply;
+      }
+      try_enable_stretch_mode(ss, &okay, &errcode, false,
+			      tiebreaker_mon, dividing_bucket);
+      if (!okay) {
+	err = errcode;
+	goto reply;
+      }
+      mon->osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, false,
+					     dividing_bucket, 2, pools, new_crush_rule);
+      if (!okay) {
+	err = errcode;
+	goto reply;
+      }
+      // everything looks good, actually commit the changes!
+      try_enable_stretch_mode(ss, &okay, &errcode, true,
+			      tiebreaker_mon, dividing_bucket);
+      mon->osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, true,
+					     dividing_bucket,
+					     2, // right now we only support 2 sites
+					     pools, new_crush_rule);
+      ceph_assert(okay == true);
+    }
+    request_proposal(mon->osdmon());
     err = 0;
     propose = true;
   } else {
@@ -986,6 +1064,42 @@ reply:
   mon->reply_command(op, err, rs, get_last_committed());
   // we are returning to the user; do not propose.
   return propose;
+}
+
+void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
+					    int *errcode, bool commit,
+					    const string& tiebreaker_mon,
+					    const string& dividing_bucket)
+{
+  *okay = false;
+  if (pending_map.strategy != MonMap::CONNECTIVITY) {
+    ss << "Monitors must use the connectivity strategy to enable stretch mode";
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
+  if (!pending_map.contains(tiebreaker_mon)) {
+    ss << "mon " << tiebreaker_mon << "does not seem to exist";
+    *errcode = -ENOENT;
+    ceph_assert(!commit);
+    return;
+  }
+  for (const auto&mii : mon->monmap->mon_info) {
+    const auto&mi = mii.second;
+    if (mi.crush_loc.find(dividing_bucket) == mi.crush_loc.end()) {
+      ss << "Could not find location entry for " << dividing_bucket
+	 << " on monitor " << mi.name;
+      *errcode = -EINVAL;
+      ceph_assert(!commit);
+      return;
+    }
+  }
+  // TODO: make sure all monitors have locations that match the given split point
+  // TODO: and that there are only 2 such locations (besides tiebreaker)
+  // TODO: and that tiebreaker has a different one
+  pending_map.disallowed_leaders.insert(tiebreaker_mon);
+  pending_map.stretch_mode_enabled = true;
+  *okay = true;
 }
 
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)

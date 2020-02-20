@@ -77,6 +77,23 @@ class MonmapMonitor : public PaxosService {
 private:
   void check_subs();
   ceph::buffer::list monmap_bl;
+  /**
+   * Check validity of inputs and monitor state to
+   * engage stretch mode. Designed to be used with
+   * OSDMonitor::try_enable_stretch_mode() where we call both twice,
+   * first with commit=false to validate.
+   * @param ss: a stringstream to write errors into
+   * @param okay: Filled to true if okay, false if validation fails
+   * @param errcode: filled with -errno if there's a problem
+   * @param commit: true if we should commit the change, false if just testing
+   * @param tiebreaker_mon: the name of the monitor to declare tiebreaker
+   * @param dividing_bucket: the bucket type (eg 'dc') that divides the cluster
+   */
+  void try_enable_stretch_mode(stringstream& ss, bool *okay,
+			       int *errcode, bool commit,
+			       const string& tiebreaker_mon,
+			       const string& dividing_bucket);
+
 };
 
 
