@@ -14104,3 +14104,126 @@ void OSDMonitor::convert_pool_priorities(void)
     pending_inc.new_pools[pool_id] = pool;
   }
 }
+
+void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
+					       int *errcode,
+					       const vector<string>& poolnames,
+					       set<pg_pool_t*>* pools,
+					       const string& new_crush_rule)
+{
+  *okay = false;
+  int new_crush_rule_result = osdmap.crush->get_rule_id(new_crush_rule);
+  if (new_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << new_crush_rule_result;
+    *errcode = new_crush_rule_result;
+    return;
+  }
+  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  for (auto poolname : poolnames) {
+    int64_t poolid = osdmap.lookup_pg_pool_name(poolname.c_str());
+    if (poolid < 0) {
+      ss << "unrecognized pool '" << poolname << "'";
+      *errcode = -ENOENT;
+      return;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(poolid);
+    if (!p->is_replicated()) {
+      ss << "stretched pools must be replicated; '" << poolname << "' is erasure-coded";
+      *errcode = -EINVAL;
+      return;
+    }
+    uint8_t default_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+    if ((p->get_size() != default_size ||
+	 (p->get_min_size() != g_conf().get_osd_pool_default_min_size(default_size))) &&
+	(p->get_crush_rule() != new_rule)) {
+      ss << "we currently require stretch mode pools start out with the"
+	" default size/min_size, which '" << poolname << "' does not";
+      *errcode = -EINVAL;
+      return;
+    }
+    pg_pool_t *pp = nullptr;
+    if (pending_inc.new_pools.count(poolid))
+      pp = &pending_inc.new_pools[poolid];
+    if (!pp) {
+      pp = &pending_inc.new_pools[poolid];
+      *pp = *p;
+    }
+    pools->insert(pp);
+  }
+  *okay = true;
+  return;
+}
+
+void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
+					 int *errcode, bool commit,
+					 const string& dividing_bucket,
+					 uint32_t bucket_count,
+					 const set<pg_pool_t*>& pools,
+					 const string& new_crush_rule)
+{
+  *okay = false;
+  CrushWrapper crush;
+  _get_pending_crush(crush);
+  int dividing_id;
+  int retval = crush.get_validated_type_id(dividing_bucket, &dividing_id);
+  if (retval == -1) {
+    ss << dividing_bucket << " is not a valid crush bucket type";
+    *errcode = -ENOENT;
+    ceph_assert(!commit || dividing_id != -1);
+    return;
+  }
+  vector<int> subtrees;
+  crush.get_subtree_of_type(dividing_id, &subtrees);
+  if (subtrees.size() != 2) {
+    ss << "there are " << subtrees.size() << dividing_bucket
+       << "'s in the cluster but stretch mode currently only works with 2!";
+    *errcode = -EINVAL;
+    ceph_assert(!commit || subtrees.size() == 2);
+    return;
+  }
+
+  int new_crush_rule_result = crush.get_rule_id(new_crush_rule);
+  if (new_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << new_crush_rule;
+    *errcode = new_crush_rule_result;
+    ceph_assert(!commit || new_crush_rule_result);
+    return;
+  }
+  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+
+  int weight1 = crush.get_item_weight(subtrees[0]);
+  int weight2 = crush.get_item_weight(subtrees[1]);
+  if (weight1 != weight2) {
+    // TODO: I'm really not sure this is a good idea?
+    ss << "the 2 " << dividing_bucket
+       << "instances in the cluster have differing weights "
+       << weight1 << " and " << weight2
+       <<" but stretch mode currently requires they be the same!";
+    *errcode = -EINVAL;
+    ceph_assert(!commit || (weight1 == weight2));
+    return;
+  }
+  if (bucket_count != 2) {
+    ss << "currently we only support 2-site stretch clusters!";
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
+  // TODO: check CRUSH rules for pools so that we are appropriately divided
+  if (commit) {
+    for (auto pool : pools) {
+      pool->crush_rule = new_rule;
+      pool->peering_crush_bucket_count = bucket_count;
+      pool->peering_crush_bucket_barrier = dividing_id;
+      pool->peering_crush_mandatory_member = 0;
+      pool->size = 4; // TODO: make configurable
+      pool->min_size = 2; // TODO: make configurable
+    }
+    pending_inc.change_stretch_mode = true;
+    pending_inc.stretch_mode_enabled = true;
+    pending_inc.new_stretch_bucket_count = bucket_count;
+    pending_inc.new_degraded_stretch_mode = 0;
+  }
+  *okay = true;
+  return;
+}

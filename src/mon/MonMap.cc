@@ -196,7 +196,8 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(8, 6, blist);
+  uint8_t new_compat_v = 0;
+  ENCODE_START(9, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -210,13 +211,17 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   uint8_t t = strategy;
   encode(t, blist);
   encode(disallowed_leaders, blist);
-  ENCODE_FINISH(blist);
+  encode(stretch_mode_enabled, blist);
+  if (stretch_mode_enabled) {
+    new_compat_v = 9;
+  }
+  ENCODE_FINISH_NEW_COMPAT(blist, new_compat_v);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(8, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(9, 3, 3, p);
   ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -264,6 +269,9 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     decode(t, p);
     strategy = static_cast<election_strategy>(t);
     decode(disallowed_leaders, p);
+  }
+  if (struct_v >= 9) {
+    decode(stretch_mode_enabled, p);
   }
   calc_addr_mons();
   DECODE_FINISH(p);

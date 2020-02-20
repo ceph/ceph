@@ -160,6 +160,7 @@ class MonMap {
   };
   election_strategy strategy = CLASSIC;
   std::set<std::string> disallowed_leaders; // can't be leader under CONNECTIVITY/DISALLOW
+  bool stretch_mode_enabled = false;
 
 public:
   void calc_legacy_ranks();
