@@ -56,11 +56,11 @@ setup_coverage() {
     # In CI environment we cannot install coverage in system, so we install it in a dedicated venv
     # so only coverage is available when adding this path.
     cd $TEMP_DIR
-    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} coverage-venv
+    virtualenv --python=/usr/bin/python3 coverage-venv
     source coverage-venv/bin/activate
     cd $CURR_DIR
     pip install coverage==4.5.2
-    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['platlib'])")
     deactivate
 }
 
