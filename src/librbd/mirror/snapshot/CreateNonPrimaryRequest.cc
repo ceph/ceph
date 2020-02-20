@@ -118,8 +118,12 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  cls::rbd::MirrorNonPrimarySnapshotNamespace ns{m_primary_mirror_uuid,
-                                                 m_primary_snap_id};
+  cls::rbd::MirrorSnapshotNamespace ns{
+    (m_demoted ? cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED :
+                 cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY), {},
+    m_primary_mirror_uuid, m_primary_snap_id};
+  ns.snap_seqs = m_snap_seqs;
+
   auto ctx = create_context_callback<
     CreateNonPrimaryRequest<I>,
     &CreateNonPrimaryRequest<I>::handle_create_snapshot>(this);
@@ -146,9 +150,8 @@ void CreateNonPrimaryRequest<I>::write_image_state() {
   uint64_t snap_id;
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
-    cls::rbd::MirrorNonPrimarySnapshotNamespace ns{m_primary_mirror_uuid,
-                                                   m_primary_snap_id};
-    snap_id = m_image_ctx->get_snap_id(ns, m_snap_name);
+    snap_id = m_image_ctx->get_snap_id(
+      cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
   }
 
   if (m_snap_id != nullptr) {

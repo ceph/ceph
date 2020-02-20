@@ -127,8 +127,7 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
 
     for (auto &[snap_id, snap_info] : m_image_ctx->snap_info) {
       auto type = cls::rbd::get_snap_namespace_type(snap_info.snap_namespace);
-      if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY ||
-          type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY) {
+      if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
         continue;
       }
       m_image_state.snapshots[snap_id] = {snap_id, snap_info.snap_namespace,
@@ -161,6 +160,39 @@ void SetImageStateRequest<I>::handle_write_image_state(int r) {
 
   if (r < 0) {
     lderr(cct) << "failed to write image state: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+  update_primary_snapshot();
+}
+
+template <typename I>
+void SetImageStateRequest<I>::update_primary_snapshot() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  librados::ObjectWriteOperation op;
+  librbd::cls_client::mirror_image_snapshot_set_copy_progress(
+    &op, m_snap_id, true, 0);
+
+  auto aio_comp = create_rados_callback<
+    SetImageStateRequest<I>,
+    &SetImageStateRequest<I>::handle_update_primary_snapshot>(this);
+  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, aio_comp,
+                                          &op);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void SetImageStateRequest<I>::handle_update_primary_snapshot(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to update primary snapshot: " << cpp_strerror(r)
                << dendl;
     finish(r);
     return;

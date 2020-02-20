@@ -89,8 +89,10 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
   Context* on_finish = nullptr;
   static CreateNonPrimaryRequest* s_instance;
   static CreateNonPrimaryRequest *create(MockTestImageCtx *image_ctx,
+                                         bool demoted,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
+                                         SnapSeqs snap_seqs,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
@@ -302,7 +304,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
 
-  SnapInfo snap_info = {"snap", cls::rbd::MirrorPrimarySnapshotNamespace{}, 0,
+  SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
   expect_rollback(mock_image_ctx, 123, &snap_info, 0);
   MockCreatePrimaryRequest mock_create_primary_request;

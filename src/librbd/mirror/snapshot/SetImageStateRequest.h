@@ -49,6 +49,9 @@ private:
    * WRITE_IMAGE_STATE
    *    |
    *    v
+   * UPDATE_PRIMARY_SNAPSHOT
+   *    |
+   *    v
    * <finish>
    *
    * @endverbatim
@@ -72,6 +75,9 @@ private:
 
   void write_image_state();
   void handle_write_image_state(int r);
+
+  void update_primary_snapshot();
+  void handle_update_primary_snapshot(int r);
 
   void finish(int r);
 };

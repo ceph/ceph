@@ -2477,11 +2477,11 @@ int mirror_image_snapshot_unlink_peer(librados::IoCtx *ioctx,
 }
 
 void mirror_image_snapshot_set_copy_progress(librados::ObjectWriteOperation *op,
-                                             snapid_t snap_id, bool copied,
+                                             snapid_t snap_id, bool complete,
                                              uint64_t copy_progress) {
   bufferlist bl;
   encode(snap_id, bl);
-  encode(copied, bl);
+  encode(complete, bl);
   encode(copy_progress, bl);
 
   op->exec("rbd", "mirror_image_snapshot_set_copy_progress", bl);
@@ -2489,10 +2489,11 @@ void mirror_image_snapshot_set_copy_progress(librados::ObjectWriteOperation *op,
 
 int mirror_image_snapshot_set_copy_progress(librados::IoCtx *ioctx,
                                             const std::string &oid,
-                                            snapid_t snap_id, bool copied,
+                                            snapid_t snap_id, bool complete,
                                             uint64_t copy_progress) {
   librados::ObjectWriteOperation op;
-  mirror_image_snapshot_set_copy_progress(&op, snap_id, copied, copy_progress);
+  mirror_image_snapshot_set_copy_progress(&op, snap_id, complete,
+                                          copy_progress);
   return ioctx->operate(oid, &op);
 }
 

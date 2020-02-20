@@ -36,6 +36,12 @@ template <typename I>
 void StateBuilder<I>::close(Context* on_finish) {
   dout(10) << dendl;
 
+  // close the remote image after closing the local
+  // image in case the remote cluster is unreachable and
+  // we cannot close it.
+  on_finish = new LambdaContext([this, on_finish](int) {
+      this->close_remote_image(on_finish);
+    });
   this->close_local_image(on_finish);
 }
 
@@ -94,9 +100,10 @@ template <typename I>
 image_replayer::Replayer* StateBuilder<I>::create_replayer(
    Threads<I>* threads,
     const std::string& local_mirror_uuid,
+    PoolMetaCache* pool_meta_cache,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(
-    threads, local_mirror_uuid, this, replayer_listener);
+    threads, local_mirror_uuid, pool_meta_cache, this, replayer_listener);
 }
 
 } // namespace snapshot

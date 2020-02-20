@@ -529,11 +529,11 @@ int mirror_image_snapshot_unlink_peer(librados::IoCtx *ioctx,
                                       snapid_t snap_id,
                                       const std::string &mirror_peer_uuid);
 void mirror_image_snapshot_set_copy_progress(librados::ObjectWriteOperation *op,
-                                             snapid_t snap_id, bool copied,
+                                             snapid_t snap_id, bool complete,
                                              uint64_t copy_progress);
 int mirror_image_snapshot_set_copy_progress(librados::IoCtx *ioctx,
                                             const std::string &oid,
-                                            snapid_t snap_id, bool copied,
+                                            snapid_t snap_id, bool complete,
                                             uint64_t copy_progress);
 
 // Groups functions

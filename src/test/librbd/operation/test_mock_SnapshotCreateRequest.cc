@@ -381,7 +381,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, SetImageState) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::MirrorPrimarySnapshotNamespace(),
+    mock_image_ctx, &cond_ctx, cls::rbd::MirrorSnapshotNamespace(),
       "snap1", 0, false);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
