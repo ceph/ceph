@@ -118,6 +118,7 @@ enum {
   l_bluestore_write_big,
   l_bluestore_write_big_bytes,
   l_bluestore_write_big_blobs,
+  l_bluestore_write_big_deferred,
   l_bluestore_write_small,
   l_bluestore_write_small_bytes,
   l_bluestore_write_small_unused,

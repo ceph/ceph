@@ -597,21 +597,20 @@ public:
     ceph_assert(p != extents.end());
     while (b_off >= p->length) {
       b_off -= p->length;
-      ++p;
-      ceph_assert(p != extents.end());
+      if (++p == extents.end())
+        return false;
     }
     b_len += b_off;
     while (b_len) {
-      ceph_assert(p != extents.end());
       if (require_allocated != p->is_valid()) {
         return false;
       }
-
       if (p->length >= b_len) {
         return true;
       }
       b_len -= p->length;
-      ++p;
+      if (++p == extents.end())
+        return false;
     }
     ceph_abort_msg("we should not get here");
     return false;
