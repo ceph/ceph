@@ -65,7 +65,9 @@ you may write data with one API and retrieve it with the other.
    Sync Modules <sync-modules>
    Bucket Notifications <notifications>
    Data Layout in RADOS <layout>
+   STS <STS>
    STS Lite <STSLite>
+   Keycloak <keycloak>
    Role <role>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
