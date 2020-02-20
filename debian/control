@@ -251,12 +251,12 @@ Depends: ceph-mgr (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Description: dashboard plugin for ceph-mgr
+Description: dashboard module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package provides a ceph-mgr plugin, providing a web-based
+ This package provides a ceph-mgr module, providing a web-based
  application to monitor and manage many aspects of a Ceph cluster and
  related components.
  .
@@ -272,12 +272,12 @@ Depends: ceph-mgr (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Description: diskprediction-local plugin for ceph-mgr
+Description: diskprediction-local module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains the diskprediction_local plugin for the ceph-mgr
+ This package contains the diskprediction_local module for the ceph-mgr
  daemon, which helps predict disk failures.
 
 Package: ceph-mgr-diskprediction-cloud
@@ -286,12 +286,12 @@ Depends: ceph-mgr (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Description: diskprediction-cloud plugin for ceph-mgr
+Description: diskprediction-cloud module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains the diskprediction_cloud plugin for the ceph-mgr
+ This package contains the diskprediction_cloud module for the ceph-mgr
  daemon, which helps predict disk failures.
 
 Package: ceph-mgr-rook
@@ -302,12 +302,12 @@ Depends: ceph-mgr (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Description: rook plugin for ceph-mgr
+Description: rook module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains the rook plugin for ceph-mgr's orchestration
+ This package contains the rook module for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to install and configure ceph using
  Rook.
 
@@ -317,12 +317,12 @@ Depends: ceph-mgr (= ${binary:Version}),
          python3-kubernetes,
          ${misc:Depends},
          ${python:Depends},
-Description: kubernetes events plugin for ceph-mgr
+Description: kubernetes events module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains the k8sevents plugin, to allow ceph-mgr to send
+ This package contains the k8sevents module, to allow ceph-mgr to send
  ceph related events to the kubernetes events API, and track all events
  that occur within the rook-ceph namespace.
 
@@ -334,12 +334,12 @@ Depends: ceph-mgr (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          openssh-client
-Description: cephadm orchestrator plugin for ceph-mgr
+Description: cephadm orchestrator module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains the CEPHADM plugin for ceph-mgr's orchestration
+ This package contains the CEPHADM module for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to perform orchestration functions
  over a standard SSH connection.
 
