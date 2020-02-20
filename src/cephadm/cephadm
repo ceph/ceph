@@ -1651,8 +1651,6 @@ def command_bootstrap():
                 raise Error('%s already exists; delete or pass '
                               '--allow-overwrite to overwrite' % f)
 
-    command_prepare_host()
-
     # initial vars
     fsid = args.fsid or make_fsid()
     hostname = get_hostname()
