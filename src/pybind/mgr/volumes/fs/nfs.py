@@ -197,7 +197,7 @@ class NFSConfig(object):
             ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth caps',
                 'entity': "client.%s" % (self.cluster_id),
-                'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s, allow rw tag cephfs data=a' % (self.pool_name, self.pool_ns), 'mds', 'allow rw path=/'],
+                'caps' : ['mon', 'allow *', 'osd', 'allow * pool=%s namespace=%s, allow rw tag cephfs data=a' % (self.pool_name, self.pool_ns), 'mds', 'allow * path=/'],
                 })
 
             if ret!= 0:
@@ -292,12 +292,11 @@ class NFSConfig(object):
 
             if r != 0:
                 return r, out, err
-            log.info("pool enable done r: {}".format(out))
 
         ret, out, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
             'entity': client,
-            'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s' % (self.pool_name, self.pool_ns)],
+            'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s, allow rw tag cephfs data=a' % (self.pool_name, self.pool_ns), 'mds', 'allow rw path=/'],
             'format': 'json',
             })
 
