@@ -41,6 +41,7 @@ class RGWSI_Zone : public RGWServiceInstance
   rgw_zone_id cur_zone_id;
   uint32_t zone_short_id{0};
   bool writeable_zone{false};
+  bool exports_data{false};
 
   std::shared_ptr<RGWBucketSyncPolicyHandler> sync_policy_handler;
   std::map<rgw_zone_id, std::shared_ptr<RGWBucketSyncPolicyHandler> > sync_policy_handlers;
@@ -94,7 +95,8 @@ public:
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
   bool get_redirect_zone_endpoint(string *endpoint);
-  bool sync_module_supports_writes() const;
+  bool sync_module_supports_writes() const { return writeable_zone; }
+  bool sync_module_exports_data() const { return exports_data; }
 
   RGWRESTConn *get_master_conn() {
     return rest_master_conn;

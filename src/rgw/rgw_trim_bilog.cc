@@ -364,8 +364,8 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
     auto m = status->begin();
     for (auto& shard : *peer) {
       auto& marker = *m++;
-      // only consider incremental sync markers
-      if (shard.state != rgw_bucket_shard_sync_info::StateIncrementalSync) {
+      // if no sync has started, we can safely trim everything
+      if (shard.state == rgw_bucket_shard_sync_info::StateInit) {
         continue;
       }
       // always take the first marker, or any later marker that's smaller
