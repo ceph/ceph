@@ -14,6 +14,7 @@ import { ApiModule } from './api.module';
 })
 export class CephfsService {
   baseURL = 'api/cephfs';
+  baseUiURL = 'ui-api/cephfs';
 
   constructor(private http: HttpClient) {}
 
@@ -22,7 +23,7 @@ export class CephfsService {
   }
 
   lsDir(id: number, path?: string): Observable<CephfsDir[]> {
-    let apiPath = `${this.baseURL}/${id}/ls_dir?depth=2`;
+    let apiPath = `${this.baseUiURL}/${id}/ls_dir?depth=2`;
     if (path) {
       apiPath += `&path=${encodeURIComponent(path)}`;
     }

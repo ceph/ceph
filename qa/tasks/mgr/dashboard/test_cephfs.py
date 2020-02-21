@@ -31,11 +31,23 @@ class CephfsTest(DashboardTestCase):
                    params={'path': path})
         self.assertStatus(expectedStatus)
 
+    def get_root_directory(self, expectedStatus=200):
+        data = self._get("/api/cephfs/{}/get_root_directory".format(self.get_fs_id()))
+        self.assertStatus(expectedStatus)
+        self.assertIsInstance(data, dict)
+        return data
+
     def ls_dir(self, path, expectedLength, depth = None):
+        return self._ls_dir(path, expectedLength, depth, "api")
+
+    def ui_ls_dir(self, path, expectedLength, depth = None):
+        return self._ls_dir(path, expectedLength, depth, "ui-api")
+
+    def _ls_dir(self, path, expectedLength, depth, baseApiPath):
         params = {'path': path}
         if depth is not None:
             params['depth'] = depth
-        data = self._get("/api/cephfs/{}/ls_dir".format(self.get_fs_id()),
+        data = self._get("/{}/cephfs/{}/ls_dir".format(baseApiPath, self.get_fs_id()),
                          params=params)
         self.assertStatus(200)
         self.assertIsInstance(data, list)
@@ -247,3 +259,16 @@ class CephfsTest(DashboardTestCase):
             self.setQuotas(0, 0)
             self.assertQuotas(0, 0)
 
+    def test_listing_of_root_dir(self):
+        self.ls_dir('/', 0)  # Should not list root
+        ui_root = self.ui_ls_dir('/', 1)[0]  # Should list root by default
+        root = self.get_root_directory()
+        self.assertEqual(ui_root, root)
+
+    def test_listing_of_ui_api_ls_on_deeper_levels(self):
+        # The UI-API and API ls_dir methods should behave the same way on deeper levels
+        self.mk_dirs('/pictures')
+        api_ls = self.ls_dir('/pictures', 0)
+        ui_api_ls = self.ui_ls_dir('/pictures', 0)
+        self.assertEqual(api_ls, ui_api_ls)
+        self.rm_dir('/pictures')
