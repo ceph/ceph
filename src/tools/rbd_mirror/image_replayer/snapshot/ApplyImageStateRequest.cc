@@ -553,7 +553,7 @@ void ApplyImageStateRequest<I>::handle_rename_snapshot(int r) {
 
 template <typename I>
 void ApplyImageStateRequest<I>::set_snapshot_limit() {
-  dout(15) << dendl;
+  dout(15) << "snap_limit=" << m_image_state.snap_limit << dendl;
 
   // no need to even check the current limit -- just set it
   std::shared_lock owner_locker{m_local_image_ctx->owner_lock};
