@@ -197,7 +197,7 @@ def gen_pool_names(volname):
     """
     return "cephfs.{}.meta".format(volname), "cephfs.{}.data".format(volname)
 
-def create_volume(mgr, volname):
+def create_volume(mgr, volname, placement):
     """
     create volume  (pool, filesystem and mds)
     """
@@ -220,7 +220,7 @@ def create_volume(mgr, volname):
         remove_pool(metadata_pool)
         return r, outb, outs
     # create mds
-    return create_mds(mgr, volname)
+    return create_mds(mgr, volname, placement)
 
 def delete_volume(mgr, volname):
     """

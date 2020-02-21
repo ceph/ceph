@@ -43,7 +43,7 @@ FS Volumes
 
 Create a volume using::
 
-    $ ceph fs volume create <vol_name>
+    $ ceph fs volume create <vol_name> [<placement>]
 
 This creates a CephFS file system and its data and metadata pools. It also tries
 to create MDSes for the filesystem using the enabled ceph-mgr orchestrator
