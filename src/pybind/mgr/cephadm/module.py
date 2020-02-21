@@ -115,6 +115,8 @@ class HostCache():
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
+        self.daemon_refresh_queue = [] # type: List[str]
+        self.device_refresh_queue = [] # type: List[str]
 
     def load(self):
         # type: () -> None
@@ -128,6 +130,8 @@ class HostCache():
                 j = json.loads(v)
                 # we do ignore the persisted last_*_update to trigger a new
                 # scrape on mgr restart
+                self.daemon_refresh_queue.append(host)
+                self.device_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.devices[host] = []
                 for name, d in j.get('daemons', {}).items():
@@ -159,15 +163,19 @@ class HostCache():
         """
         self.daemons[host] = {}
         self.devices[host] = []
+        self.daemon_refresh_queue.append(host)
+        self.device_refresh_queue.append(host)
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
+        self.daemon_refresh_queue.append(host)
         if host in self.last_daemon_update:
             del self.last_daemon_update[host]
         self.mgr.event.set()
 
     def invalidate_host_devices(self, host):
         # type: (str) -> None
+        self.device_refresh_queue.append(host)
         if host in self.last_device_update:
             del self.last_device_update[host]
         self.mgr.event.set()
@@ -234,6 +242,9 @@ class HostCache():
 
     def host_needs_daemon_refresh(self, host):
         # type: (str) -> bool
+        if host in self.daemon_refresh_queue:
+            self.daemon_refresh_queue.remove(host)
+            return True
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
             seconds=self.mgr.daemon_cache_timeout)
         if host not in self.last_daemon_update or self.last_daemon_update[host] < cutoff:
@@ -242,6 +253,9 @@ class HostCache():
 
     def host_needs_device_refresh(self, host):
         # type: (str) -> bool
+        if host in self.device_refresh_queue:
+            self.device_refresh_queue.remove(host)
+            return True
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
             seconds=self.mgr.device_cache_timeout)
         if host not in self.last_device_update or self.last_device_update[host] < cutoff:
