@@ -563,7 +563,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         tries = 4
         while tries > 0:
             if s.daemon_type not in ['mon', 'osd', 'mds']:
-                break
+                self.log.info('Upgrade: It is presumed safe to stop %s.%s' %
+                              (s.daemon_type, s.daemon_id))
+                return True
             ret, out, err = self.mon_command({
                 'prefix': '%s ok-to-stop' % s.daemon_type,
                 'ids': [s.daemon_id],
