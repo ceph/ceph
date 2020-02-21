@@ -4,21 +4,24 @@
 cephadm orchestrator
 ====================
 
-The cephadm orchestrator is an orchestrator module that does not rely on a separate
-system such as Rook or Ansible, but rather manages hosts in a cluster by
-establishing an SSH connection and issuing explicit management commands.
+The cephadm orchestrator is an orchestrator module that does not rely
+on a separate system such as Rook or Ansible, but rather manages nodes
+in a cluster by establishing an SSH connection and issuing explicit
+management commands.
 
 Orchestrator modules only provide services to other modules, which in turn
 provide user interfaces.  To try out the cephadm module, you might like
 to use the :ref:`Orchestrator CLI <orchestrator-cli-module>` module.
 
 Requirements
-------------
+============
 
-- The Python `remoto` library version 0.35 or newer
+- Python 3
+- Podman or Docker
+- LVM2
 
 Configuration
--------------
+=============
 
 The cephadm orchestrator can be configured to use an SSH configuration file. This is
 useful for specifying private keys and other SSH connection options.
@@ -41,10 +44,10 @@ To clear this value use the command:
     # ceph cephadm clear-ssh-config
 
 Health checks
--------------
+=============
 
 CEPHADM_STRAY_HOST
-^^^^^^^^^^^^^^^^^^
+------------------
 
 One or more hosts have running Ceph daemons but are not registered as
 hosts managed by *cephadm*.  This means that those services cannot
@@ -67,7 +70,7 @@ You can also disable this warning entirely with::
   ceph config set mgr mgr/cephadm/warn_on_stray_hosts false
 
 CEPHADM_STRAY_DAEMON
-^^^^^^^^^^^^^^^^^^^^
+--------------------
 
 One or more Ceph daemons are running but not are not managed by
 *cephadm*, perhaps because they were deploy using a different tool, or
@@ -82,7 +85,7 @@ You can also disable this warning entirely with::
   ceph config set mgr mgr/cephadm/warn_on_stray_daemons false
 
 CEPHADM_HOST_CHECK_FAILED
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 One or more hosts have failed the basic cephadm host check, which verifies
 that (1) the host is reachable and cephadm can be executed there, and (2)
