@@ -55,7 +55,7 @@ deployed, the version of Ceph, the distribution of the hosts and other
 parameters which help the project to gain a better understanding of
 the way Ceph is used.
 
-Data is sent over HTTPS to *telemetry.ceph.com*.
+Data is sent secured to *https://telemetry.ceph.com*.
 
 Sample report
 -------------

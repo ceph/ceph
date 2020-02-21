@@ -717,6 +717,7 @@ class RESTController(BaseController):
     * bulk_delete()
     * get(key)
     * set(data, key)
+    * singleton_set(data)
     * delete(key)
 
     Test with curl:
@@ -749,7 +750,8 @@ class RESTController(BaseController):
         ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204}),
         ('get', {'method': 'GET', 'resource': True, 'status': 200}),
         ('delete', {'method': 'DELETE', 'resource': True, 'status': 204}),
-        ('set', {'method': 'PUT', 'resource': True, 'status': 200})
+        ('set', {'method': 'PUT', 'resource': True, 'status': 200}),
+        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200})
     ])
 
     @classmethod
