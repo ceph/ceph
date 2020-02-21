@@ -1265,6 +1265,8 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
     if reconfig and daemon_type not in Ceph.daemons:
         # ceph daemons do not need a restart; others (presumably) do to pick
         # up the new config
+        call_throws(['systemctl', 'reset-failed',
+                     get_unit_name(fsid, daemon_type, daemon_id)])
         call_throws(['systemctl', 'restart',
                      get_unit_name(fsid, daemon_type, daemon_id)])
 
@@ -2041,11 +2043,12 @@ def command_deploy():
         monitoring_args = []  # type: List[str]
 
         # Default Checks
-        daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
-        if any([port_in_use(port) for port in daemon_ports]):
-            raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
-        elif args.image == DEFAULT_IMAGE:
-            raise Error("--image parameter must be supplied for {}".format(daemon_type))
+        if not args.reconfig:
+            daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
+            if any([port_in_use(port) for port in daemon_ports]):
+                raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
+            elif args.image == DEFAULT_IMAGE:
+                raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
         # make sure provided config-json is sufficient
         config = get_parm(args.config_json) # type: ignore
