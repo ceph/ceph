@@ -54,7 +54,8 @@ To create a new cluster, you need to know:
 
 To bootstrap the cluster run the following command::
 
-  [node 1] $ sudo ./cephadm bootstrap --mon-ip *<mon-ip>*
+  [node 1] $ sudo ./cephadm bootstrap --mon-ip *<mon-ip>*  # or
+  [node 1] $ sudo cephadm bootstrap --mon-ip *<mon-ip>*
 
 This command does a few things:
 
@@ -73,7 +74,8 @@ Interacting with the cluster
 To interact with your cluster, start up a container that has all of 
 the Ceph packages installed::
 
-  [any node] $ sudo ./cephadm shell --config ceph.conf --keyring ceph.client.admin.keyring
+  [any node] $ sudo ./cephadm shell --config ceph.conf --keyring ceph.client.admin.keyring  # or
+  [any node] $ sudo cephadm shell --config ceph.conf --keyring ceph.client.admin.keyring
 
 The ``--config`` and ``--keyring`` arguments will bind those local
 files to the default locations in ``/etc/ceph`` inside the container
