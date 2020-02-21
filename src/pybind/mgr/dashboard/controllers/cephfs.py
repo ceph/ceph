@@ -325,34 +325,64 @@ class CephFS(RESTController):
         return CephFS_(fs_name)
 
     @RESTController.Resource('GET')
+    def get_root_directory(self, fs_id):
+        """
+        The root directory that can't be fetched using ls_dir (api).
+        :param fs_id: The filesystem identifier.
+        :return: The root directory
+        :rtype: dict
+        """
+        try:
+            return self._get_root_directory(self._cephfs_instance(fs_id))
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+            return None
+
+    def _get_root_directory(self, cfs):
+        """
+        The root directory that can't be fetched using ls_dir (api).
+        It's used in ls_dir (ui-api) and in get_root_directory (api).
+        :param cfs: CephFS service instance
+        :type cfs: CephFS
+        :return: The root directory
+        :rtype: dict
+        """
+        return cfs.get_directory(os.sep.encode())
+
+    @RESTController.Resource('GET')
     def ls_dir(self, fs_id, path=None, depth=1):
         """
         List directories of specified path.
         :param fs_id: The filesystem identifier.
         :param path: The path where to start listing the directory content.
           Defaults to '/' if not set.
+        :type path: str | bytes
+        :param depth: The number of steps to go down the directory tree.
+        :type depth: int | str
         :return: The names of the directories below the specified path.
         :rtype: list
+        """
+        path = self._set_ls_dir_path(path)
+        try:
+            cfs = self._cephfs_instance(fs_id)
+            paths = cfs.ls_dir(path, depth)
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+            paths = []
+        return paths
+
+    def _set_ls_dir_path(self, path):
+        """
+        Transforms input path parameter of ls_dir methods (api and ui-api).
+        :param path: The path where to start listing the directory content.
+          Defaults to '/' if not set.
+        :type path: str | bytes
+        :return: Normalized path or root path
+        :return: str
         """
         if path is None:
             path = os.sep
         else:
             path = os.path.normpath(path)
-        try:
-            cfs = self._cephfs_instance(fs_id)
-            paths = cfs.ls_dir(path, int(depth))
-            # Convert (bytes => string), prettify paths (strip slashes)
-            # and append additional information.
-            paths = [{
-                'name': os.path.basename(p.decode()),
-                'path': p.decode(),
-                'parent': os.path.dirname(p.decode()),
-                'snapshots': cfs.ls_snapshots(p.decode()),
-                'quotas': cfs.get_quotas(p.decode())
-            } for p in paths if p != path.encode()]
-        except (cephfs.PermissionError, cephfs.ObjectNotFound):
-            paths = []
-        return paths
+        return path
 
     @RESTController.Resource('POST')
     def mk_dirs(self, fs_id, path):
@@ -462,3 +492,29 @@ class CephFsUi(CephFS):
         data['clients'] = self._clients(fs_id)
 
         return data
+
+    @RESTController.Resource('GET')
+    def ls_dir(self, fs_id, path=None, depth=1):
+        """
+        The difference to the API version is that the root directory will be send when listing
+        the root directory.
+        To only do one request this endpoint was created.
+        :param fs_id: The filesystem identifier.
+        :type fs_id: int | str
+        :param path: The path where to start listing the directory content.
+          Defaults to '/' if not set.
+        :type path: str | bytes
+        :param depth: The number of steps to go down the directory tree.
+        :type depth: int | str
+        :return: The names of the directories below the specified path.
+        :rtype: list
+        """
+        path = self._set_ls_dir_path(path)
+        try:
+            cfs = self._cephfs_instance(fs_id)
+            paths = cfs.ls_dir(path, depth)
+            if path == os.sep:
+                paths = [self._get_root_directory(cfs)] + paths
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+            paths = []
+        return paths

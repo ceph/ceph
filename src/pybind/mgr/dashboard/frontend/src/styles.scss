@@ -1,6 +1,9 @@
 /* You can add global styles to this file, and also import other style files */
 @import 'defaults';
 
+// Angular2-Tree Component
+@import '~angular-tree-component/dist/angular-tree-component.css';
+
 // Fork-Awesome
 $fa-font-path: '~fork-awesome/fonts';
 $font-family-icon: 'ForkAwesome';

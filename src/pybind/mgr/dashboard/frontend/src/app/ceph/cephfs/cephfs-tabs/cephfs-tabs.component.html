@@ -16,8 +16,10 @@
     </cd-cephfs-clients>
   </tab>
   <tab i18n-heading
+       (selectTab)="directoriesSelected = true"
        heading="Directories">
-    <cd-cephfs-directories [id]="id">
+    <cd-cephfs-directories *ngIf="directoriesSelected"
+                           [id]="id">
     </cd-cephfs-directories>
   </tab>
   <tab i18n-heading

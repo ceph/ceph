@@ -39,6 +39,9 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
     name: ''
   };
 
+  // Directories
+  directoriesSelected = false;
+
   private data: any;
   private reloadSubscriber: Subscription;
 
