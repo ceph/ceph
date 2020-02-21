@@ -1246,7 +1246,7 @@ class PlacementSpec(object):
             strings.remove('all:true')
 
         hosts = [x for x in strings if x != '*' and 'label:' not in x]
-        labels = [x for x in strings if 'label:' in x]
+        labels = [x[6:] for x in strings if 'label:' in x]
         if len(labels) > 1:
             raise OrchestratorValidationError('more than one label provided: {}'.format(labels))
 
