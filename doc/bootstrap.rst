@@ -148,6 +148,28 @@ deploy one or more new manager daemons,::
 Deploying MDSs
 ==============
 
-In order to use the CephFS file system, one or more MDS daemons is needed.
+One or more MDS daemons is required to use the CephFS file system.
+These are created automatically if the newer ``ceph fs volume``
+interface is used to create a new file system.  For more information,
+see :ref:`fs-volumes-and-subvolumes`.
 
-TBD
+To deploy metadata servers,::
+
+  # ceph orch apply mds *<fs-name>* *<num-daemons>* [*<host1>* ...]
+
+Deploying RGWs
+==============
+
+Cephadm deploys radosgw as a collection of daemons that manage a
+particular *realm* and *zone*.  (For more information about realms and
+zones, see :ref:`multisite`.)  To deploy a set of radosgw daemons for
+a particular realm and zone,::
+
+  # ceph orch apply rgw *<realm-name>* *<zone-name>* *<num-daemons>* [*<host1>* ...]
+
+Note that with cephadm, radosgw daemons are configured via the monitor
+configuration database instead of via a `ceph.conf` or the command line.  If
+that confiruation isn't already in place (usually in the
+``client.rgw.<realmname>.<zonename>`` section), then the radosgw
+daemons will start up with default settings (e.g., binding to port
+80).
