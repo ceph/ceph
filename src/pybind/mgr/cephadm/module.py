@@ -579,9 +579,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 self.log.info('Upgrade: It is safe to stop %s.%s' %
                               (s.daemon_type, s.daemon_id))
                 return True
-        self.log.info('Upgrade: It is safe to stop %s.%s' %
-                      (s.daemon_type, s.daemon_id))
-        return True
+        return False
 
     def _clear_upgrade_health_checks(self):
         for k in ['UPGRADE_NO_STANDBY_MGR',
