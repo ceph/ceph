@@ -89,7 +89,7 @@ class Ganesha(object):
                 instance.service = "_default_"
             if instance.service not in result:
                 result[instance.service] = {}
-            result[instance.service][instance.nodename] = {
+            result[instance.service][instance.hostname] = {
                 'status': instance.status,
                 'desc': instance.status_desc,
             }

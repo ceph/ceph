@@ -1,6 +1,6 @@
 import { InventoryDevice } from './inventory-devices/inventory-device.model';
 
-export class InventoryNode {
+export class InventoryHost {
   name: string;
   devices: InventoryDevice[];
 }

@@ -109,17 +109,17 @@ class OrchestratorInventory(RESTController):
     def list(self, hostname=None):
         orch = OrchClient.instance()
         hosts = [hostname] if hostname else None
-        inventory_nodes = [node.to_json() for node in orch.inventory.list(hosts)]
+        inventory_hosts = [host.to_json() for host in orch.inventory.list(hosts)]
         device_osd_map = get_device_osd_map()
-        for inventory_node in inventory_nodes:
-            node_osds = device_osd_map.get(inventory_node['name'])
-            for device in inventory_node['devices']:
-                if node_osds:
+        for inventory_host in inventory_hosts:
+            host_osds = device_osd_map.get(inventory_host['name'])
+            for device in inventory_host['devices']:
+                if host_osds:
                     dev_name = os.path.basename(device['path'])
-                    device['osd_ids'] = sorted(node_osds.get(dev_name, []))
+                    device['osd_ids'] = sorted(host_osds.get(dev_name, []))
                 else:
                     device['osd_ids'] = []
-        return inventory_nodes
+        return inventory_hosts
 
 
 @ApiController('/orchestrator/service', Scope.HOSTS)

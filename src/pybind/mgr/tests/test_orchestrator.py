@@ -8,7 +8,7 @@ import pytest
 from ceph.deployment import inventory
 from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference, \
     servicespec_validate_add
-from orchestrator import InventoryNode, ServiceDescription, DaemonDescription
+from orchestrator import InventoryHost, ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorValidationError
 from orchestrator import HostPlacementSpec
 
@@ -72,19 +72,19 @@ def test_inventory():
             }
         ]
     }
-    _test_resource(json_data, InventoryNode, {'abc': False})
+    _test_resource(json_data, InventoryHost, {'abc': False})
     for devices in json_data['devices']:
         _test_resource(devices, inventory.Device)
 
     json_data = [{}, {'name': 'host0', 'addr': '1.2.3.4'}, {'devices': []}]
     for data in json_data:
         with pytest.raises(OrchestratorValidationError):
-            InventoryNode.from_json(data)
+            InventoryHost.from_json(data)
 
 
 def test_daemon_description():
     json_data = {
-        'nodename': 'test',
+        'hostname': 'test',
         'daemon_type': 'mon',
         'daemon_id': 'a'
     }
