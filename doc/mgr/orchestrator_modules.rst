@@ -72,9 +72,9 @@ Stateless service
 
 Label
   arbitrary string tags that may be applied by administrators
-  to nodes.  Typically administrators use labels to indicate
-  which nodes should run which kinds of service.  Labels are
-  advisory (from human input) and do not guarantee that nodes
+  to hosts.  Typically administrators use labels to indicate
+  which hosts should run which kinds of service.  Labels are
+  advisory (from human input) and do not guarantee that hosts
   have particular physical capabilities.
 
 Drive group
@@ -83,20 +83,20 @@ Drive group
   journals/dbs for a group of HDDs).
 
 Placement
-  choice of which node is used to run a service.
+  choice of which host is used to run a service.
 
 Key Concepts
 ------------
 
 The underlying orchestrator remains the source of truth for information
 about whether a service is running, what is running where, which
-nodes are available, etc.  Orchestrator modules should avoid taking
+hosts are available, etc.  Orchestrator modules should avoid taking
 any internal copies of this information, and read it directly from
 the orchestrator backend as much as possible.
 
-Bootstrapping nodes and adding them to the underlying orchestration
+Bootstrapping hosts and adding them to the underlying orchestration
 system is outside the scope of Ceph's orchestrator interface.  Ceph
-can only work on nodes when the orchestrator is already aware of them.
+can only work on hosts when the orchestrator is already aware of them.
 
 Calls to orchestrator modules are all asynchronous, and return *completion*
 objects (see below) rather than returning values immediately.
@@ -207,7 +207,7 @@ Excluded functionality
   the Ceph cluster's services only.
 - Multipathed storage is not handled (multipathing is unnecessary for
   Ceph clusters).  Each drive is assumed to be visible only on
-  a single node.
+  a single host.
 
 Host management
 ---------------
