@@ -2,7 +2,7 @@
 """
 watch_notify_same_primary task
 """
-from cStringIO import StringIO
+from io import BytesIO
 import contextlib
 import logging
 
@@ -68,8 +68,8 @@ def task(ctx, config):
                 "watch",
                 obj(n)],
             stdin=run.PIPE,
-            stdout=StringIO(),
-            stderr=StringIO(),
+            stdout=BytesIO(),
+            stderr=BytesIO(),
             wait=False)
         return proc
 
@@ -81,14 +81,8 @@ def task(ctx, config):
     for i in range(num):
         with safe_while() as proceed:
             while proceed():
-                proc = remote.run(
-                    args = [
-                        "rados",
-                        "-p", pool,
-                        "listwatchers",
-                        obj(i)],
-                    stdout=StringIO())
-                lines = proc.stdout.getvalue()
+                lines = remote.sh(
+                    ["rados", "-p", pool, "listwatchers", obj(i)])
                 num_watchers = lines.count('watcher=')
                 log.info('i see %d watchers for %s', num_watchers, obj(i))
                 if num_watchers >= 1:
