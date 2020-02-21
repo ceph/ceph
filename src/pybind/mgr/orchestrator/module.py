@@ -162,12 +162,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @_cli_write_command(
         'orch host add',
-        'name=host,type=CephString,req=true '
+        'name=hostname,type=CephString,req=true '
         'name=addr,type=CephString,req=false '
         'name=labels,type=CephString,n=N,req=false',
         'Add a host')
-    def _add_host(self, host:str, addr: Optional[str]=None, labels: Optional[List[str]]=None):
-        s = HostSpec(hostname=host, addr=addr, labels=labels)
+    def _add_host(self, hostname:str, addr: Optional[str]=None, labels: Optional[List[str]]=None):
+        s = HostSpec(hostname=hostname, addr=addr, labels=labels)
         completion = self.add_host(s)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -175,21 +175,21 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @_cli_write_command(
         'orch host rm',
-        "name=host,type=CephString,req=true",
+        "name=hostname,type=CephString,req=true",
         'Remove a host')
-    def _remove_host(self, host):
-        completion = self.remove_host(host)
+    def _remove_host(self, hostname):
+        completion = self.remove_host(hostname)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
         'orch host set-addr',
-        'name=host,type=CephString '
+        'name=hostname,type=CephString '
         'name=addr,type=CephString',
         'Update a host address')
-    def _update_set_addr(self, host, addr):
-        completion = self.update_host_addr(host, addr)
+    def _update_set_addr(self, hostname, addr):
+        completion = self.update_host_addr(hostname, addr)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -220,33 +220,33 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @_cli_write_command(
         'orch host label add',
-        'name=host,type=CephString '
+        'name=hostname,type=CephString '
         'name=label,type=CephString',
         'Add a host label')
-    def _host_label_add(self, host, label):
-        completion = self.add_host_label(host, label)
+    def _host_label_add(self, hostname, label):
+        completion = self.add_host_label(hostname, label)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
         'orch host label rm',
-        'name=host,type=CephString '
+        'name=hostname,type=CephString '
         'name=label,type=CephString',
         'Add a host label')
-    def _host_label_rm(self, host, label):
-        completion = self.remove_host_label(host, label)
+    def _host_label_rm(self, hostname, label):
+        completion = self.remove_host_label(hostname, label)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_read_command(
         'orch device ls',
-        "name=host,type=CephString,n=N,req=false "
+        "name=hostname,type=CephString,n=N,req=false "
         "name=format,type=CephChoices,strings=json|plain,req=false "
         "name=refresh,type=CephBool,req=false",
         'List devices on a host')
-    def _list_devices(self, host=None, format='plain', refresh=False):
+    def _list_devices(self, hostname=None, format='plain', refresh=False):
         # type: (Optional[List[str]], str, bool) -> HandleCommandResult
         """
         Provide information about storage devices present in cluster hosts
@@ -255,7 +255,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         date hardware inventory is fine as long as hardware ultimately appears
         in the output of this command.
         """
-        nf = InventoryFilter(hosts=host) if host else None
+        nf = InventoryFilter(hosts=hostname) if hostname else None
 
         completion = self.get_inventory(host_filter=nf, refresh=refresh)
 
@@ -294,14 +294,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @_cli_write_command(
         'orch device zap',
-        'name=host,type=CephString '
+        'name=hostname,type=CephString '
         'name=path,type=CephString '
         'name=force,type=CephBool,req=false',
         'Zap (erase!) a device so it can be re-used')
-    def _zap_device(self, host, path, force=False):
+    def _zap_device(self, hostname, path, force=False):
         if not force:
             raise OrchestratorError('must pass --force to PERMANENTLY ERASE DEVICE DATA')
-        completion = self.zap_device(host, path)
+        completion = self.zap_device(hostname, path)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -360,16 +360,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @_cli_read_command(
         'orch ps',
-        "name=host,type=CephString,req=false "
+        "name=hostname,type=CephString,req=false "
         "name=daemon_type,type=CephString,req=false "
         "name=daemon_id,type=CephString,req=false "
         "name=format,type=CephChoices,strings=json|plain,req=false "
         "name=refresh,type=CephBool,req=false",
         'List daemons known to orchestrator')
-    def _list_daemons(self, host=None, daemon_type=None, daemon_id=None, format='plain', refresh=False):
+    def _list_daemons(self, hostname=None, daemon_type=None, daemon_id=None, format='plain', refresh=False):
         completion = self.list_daemons(daemon_type,
                                        daemon_id=daemon_id,
-                                       host=host,
+                                       host=hostname,
                                        refresh=refresh)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
