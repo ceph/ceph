@@ -1069,9 +1069,9 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
     return nullptr;
   }
-
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->register_client(self->this_module->get_name(), addrs);
-
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 
@@ -1082,9 +1082,9 @@ ceph_unregister_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
     return nullptr;
   }
-
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->unregister_client(self->this_module->get_name(), addrs);
-
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 
