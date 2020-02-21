@@ -112,11 +112,9 @@ if(WITH_BLUESTORE)
   set_target_properties(unittest_fastbmap_allocator PROPERTIES COMPILE_FLAGS
   "${UNITTEST_CXX_FLAGS}")
 
-  add_executable(unittest_alloc_aging
-    Allocator_aging_fragmentation.cc
-    $<TARGET_OBJECTS:unit-main>
-    )
-  target_link_libraries(unittest_alloc_aging os global)
+  add_executable(unittest_alloc_aging EXCLUDE_FROM_ALL
+    Allocator_aging_fragmentation.cc)
+  target_link_libraries(unittest_alloc_aging os global GTest::Main)
 
   # unittest_bluefs
   add_executable(unittest_bluefs
