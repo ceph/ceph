@@ -1173,8 +1173,8 @@ class PlacementSpec(object):
     """
     For APIs that need to specify a host subset
     """
-    def __init__(self, label=None, hosts=None, count=None):
-        # type: (Optional[str], Optional[List], Optional[int]) -> None
+    def __init__(self, label=None, hosts=None, count=None, all_hosts=False):
+        # type: (Optional[str], Optional[List], Optional[int], bool) -> None
         self.label = label
         self.hosts = []  # type: List[HostPlacementSpec]
         if hosts:
@@ -1185,6 +1185,7 @@ class PlacementSpec(object):
 
 
         self.count = count  # type: Optional[int]
+        self.all_hosts = all_hosts  # type: bool
 
     def set_hosts(self, hosts):
         # To backpopulate the .hosts attribute when using labels or count
@@ -1236,12 +1237,23 @@ class PlacementSpec(object):
             except ValueError:
                 pass
 
-        hosts = [x for x in strings if 'label:' not in x]
+        all_hosts = False
+        if '*' in strings:
+            all_hosts = True
+            strings.remove('*')
+        if 'all:true' in strings:
+            all_hosts = True
+            strings.remove('all:true')
+
+        hosts = [x for x in strings if x != '*' and 'label:' not in x]
         labels = [x for x in strings if 'label:' in x]
         if len(labels) > 1:
             raise OrchestratorValidationError('more than one label provided: {}'.format(labels))
 
-        ps = PlacementSpec(count=count, hosts=hosts, label=labels[0] if labels else None)
+        ps = PlacementSpec(count=count,
+                           hosts=hosts,
+                           label=labels[0] if labels else None,
+                           all_hosts=all_hosts)
         ps.validate()
         return ps
 
