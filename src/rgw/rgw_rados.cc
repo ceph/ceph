@@ -4655,6 +4655,9 @@ int RGWRados::init_complete()
   data_notifier = new RGWDataNotifier(this);
   data_notifier->start();
 
+  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
+  binfo_cache->init(this);
+
   lc = new RGWLC();
   lc->initialize(cct, this);
 
@@ -4671,9 +4674,6 @@ int RGWRados::init_complete()
       << get_max_bucket_shards() << dendl;
   }
   ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
-
-  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
-  binfo_cache->init(this);
 
   bool need_tombstone_cache = !zone_data_notify_to_map.empty(); /* have zones syncing from us */
 
