@@ -6,7 +6,6 @@ Reference:https://wiki.linuxfoundation.org/networking/netem.
 
 import logging
 import contextlib
-from cStringIO import StringIO
 from paramiko import SSHException
 import socket
 import time
@@ -59,8 +58,8 @@ def static_delay(remote, host, interface, delay):
 
     ip = socket.gethostbyname(host.hostname)
 
-    r = remote.run(args=show_tc(interface), stdout=StringIO())
-    if r.stdout.getvalue().strip().find('refcnt') == -1:
+    tc = remote.sh(show_tc(interface))
+    if tc.strip().find('refcnt') == -1:
         # call set_priority() func to create priority queue
         # if not already created(indicated by -1)
         log.info('Create priority queue')
@@ -94,8 +93,8 @@ def variable_delay(remote, host, interface, delay_range=[]):
     delay1 = delay_range[0]
     delay2 = delay_range[1]
 
-    r = remote.run(args=show_tc(interface), stdout=StringIO())
-    if r.stdout.getvalue().strip().find('refcnt') == -1:
+    tc = remote.sh(show_tc(interface))
+    if tc.strip().find('refcnt') == -1:
         # call set_priority() func to create priority queue
         # if not already created(indicated by -1)
         remote.run(args=set_priority(interface))
@@ -121,8 +120,8 @@ def delete_dev(remote, interface):
     """ Delete the qdisc if present"""
 
     log.info('Delete tc')
-    r = remote.run(args=show_tc(interface), stdout=StringIO())
-    if r.stdout.getvalue().strip().find('refcnt') != -1:
+    tc = remote.sh(show_tc(interface))
+    if tc.strip().find('refcnt') != -1:
         remote.run(args=del_tc(interface))
 
 
@@ -144,8 +143,8 @@ class Toggle:
 
         _, _, set_ip = cmd_prefix(self.interface)
 
-        r = self.remote.run(args=show_tc(self.interface), stdout=StringIO())
-        if r.stdout.getvalue().strip().find('refcnt') == -1:
+        tc = self.remote.sh(show_tc(self.interface))
+        if tc.strip().find('refcnt') == -1:
             self.remote.run(args=set_priority(self.interface))
             # packet drop to specific ip
             log.info('Drop all packets to %s' % self.host)
