@@ -33,7 +33,7 @@ class UserTest(DashboardTestCase):
 
     @classmethod
     def _create_user(cls, username=None, password=None, name=None, email=None, roles=None,
-                     enabled=True, pwd_expiration_date=None):
+                     enabled=True, pwd_expiration_date=None, pwd_update_required=False):
         data = {}
         if username:
             data['username'] = username
@@ -47,6 +47,7 @@ class UserTest(DashboardTestCase):
             data['roles'] = roles
         if pwd_expiration_date:
             data['pwdExpirationDate'] = pwd_expiration_date
+        data['pwdUpdateRequired'] = pwd_update_required
         data['enabled'] = enabled
         cls._post("/api/user", data)
 
@@ -75,7 +76,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         })
 
         self._put('/api/user/user1', {
@@ -92,7 +94,8 @@ class UserTest(DashboardTestCase):
             'roles': ['block-manager'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         })
 
         self._delete('/api/user/user1')
@@ -122,7 +125,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': False,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         })
 
         self._delete('/api/user/klara')
@@ -141,7 +145,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         }])
 
     def test_create_user_already_exists(self):
@@ -344,7 +349,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': future_date
+            'pwdExpirationDate': future_date,
+            'pwdUpdateRequired': False
         })
         self._delete('/api/user/user1')
 
@@ -411,6 +417,49 @@ class UserTest(DashboardTestCase):
 
         self._delete('/api/user/user1')
         self._ceph_cmd(['dashboard', 'set-user-pwd-expiration-span', '0'])
+
+    def test_pwd_update_required(self):
+        self._create_user(username='user1',
+                          password='mypassword10#',
+                          name='My Name',
+                          email='my@email.com',
+                          roles=['administrator'],
+                          pwd_update_required=True)
+        self.assertStatus(201)
+
+        user_1 = self._get('/api/user/user1')
+        self.assertStatus(200)
+        self.assertEqual(user_1['pwdUpdateRequired'], True)
+
+        self.login('user1', 'mypassword10#')
+        self.assertStatus(201)
+
+        self._get('/api/osd')
+        self.assertStatus(403)
+        self._reset_login_to_admin('user1')
+
+    def test_pwd_update_required_change_pwd(self):
+        self._create_user(username='user1',
+                          password='mypassword10#',
+                          name='My Name',
+                          email='my@email.com',
+                          roles=['administrator'],
+                          pwd_update_required=True)
+        self.assertStatus(201)
+
+        self.login('user1', 'mypassword10#')
+        self._post('/api/user/user1/change_password', {
+            'old_password': 'mypassword10#',
+            'new_password': 'newpassword01#'
+        })
+
+        self.login('user1', 'newpassword01#')
+        user_1 = self._get('/api/user/user1')
+        self.assertStatus(200)
+        self.assertEqual(user_1['pwdUpdateRequired'], False)
+        self._get('/api/osd')
+        self.assertStatus(200)
+        self._reset_login_to_admin('user1')
 
     def test_validate_password_weak(self):
         self._post('/api/user/validate_password', {

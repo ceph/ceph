@@ -6,4 +6,5 @@ export class UserFormModel {
   email: string;
   roles: Array<string>;
   enabled: boolean;
+  pwdUpdateRequired: boolean;
 }
