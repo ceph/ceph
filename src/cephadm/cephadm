@@ -52,7 +52,7 @@ import tempfile
 import time
 import errno
 try:
-    from typing import Dict, List, Tuple, Optional, Union, Any
+    from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn
 except ImportError:
     pass
 import uuid
@@ -521,6 +521,7 @@ def call_timeout(command, timeout):
             % (timeout, ' '.join(command)))
 
     def raise_timeout(command, timeout):
+        # type: (List[str], int) -> NoReturn
         msg = 'Command \'%s\' timed out after %s seconds' % (command, timeout)
         logger.debug(msg)
         raise TimeoutExpired(msg)
@@ -555,13 +556,12 @@ def call_timeout(command, timeout):
 ##################################
 
 def is_available(what, func):
-    # type: (str, func, Optional[int]) -> func
+    # type: (str, Any) -> Any
     """
     Wait for a service to become available
 
     :param what: the name of the service
     :param func: the callable object that determines availability
-    :param retry: max number of retry invocations of func
     """
     retry = args.retry
     @wraps(func)
@@ -2301,7 +2301,7 @@ def list_daemons(detail=True, legacy_dir=None):
                         i['host_version'] = host_version
                     ls.append(i)
             elif is_fsid(i):
-                fsid = i
+                fsid = str(i)  # convince mypy that fsid is a str here
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '.' in j:
                         name = j
