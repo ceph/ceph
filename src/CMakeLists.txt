@@ -29,14 +29,21 @@ if(LINUX)
   add_definitions("-D_GNU_SOURCE")
 endif()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing -fsigned-char")
+
+if(NOT MSVC)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wtype-limits -Wignored-qualifiers")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Winit-self -Wno-unknown-pragmas")
+
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-qualifiers")
+endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-qualifiers")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
+
 CHECK_CXX_COMPILER_FLAG("-Wpessimizing-move" COMPILER_SUPPORTS_PESSIMIZING_MOVE)
 if(COMPILER_SUPPORTS_PESSIMIZING_MOVE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpessimizing-move")
@@ -46,7 +53,12 @@ if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-move")
 endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
+  if(MINGW)
+    # The MINGW headers are missing some "const" qualifiers.
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fpermissive")
+  else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
+  endif()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-new-ttp-matching")
   # cmake does not add '-pie' for executables even if
@@ -122,10 +134,14 @@ if(HAVE_INTEL)
     set(object_format "elf64")
   endif()
   set(CMAKE_ASM_FLAGS "-f ${object_format}")
-  include(CheckYasm)
-  check_yasm_support(${object_format}
-    HAVE_GOOD_YASM_ELF64
-    HAVE_BETTER_YASM_ELF64)
+  if(NOT WIN32)
+    # The native tools might be located even when cross compiling, which
+    # might not work in this case (especially when targeting Windows).
+    include(CheckYasm)
+    check_yasm_support(${object_format}
+      HAVE_GOOD_YASM_ELF64
+      HAVE_BETTER_YASM_ELF64)
+  endif()
 endif()
 
 
@@ -391,6 +407,10 @@ if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()
 
+if(WIN32)
+  list(APPEND ceph_common_deps ws2_32 mswsock)
+endif()
+
 if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
   if(WITH_SYSTEM_PMDK)
     if(WITH_BLUESTORE_PMEM)
@@ -428,11 +448,18 @@ if(NOT APPLE AND NOT FREEBSD)
     PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
 endif()
 
-install(
-  TARGETS ceph-common
-  LIBRARY
-  DESTINATION ${CEPH_INSTALL_PKGLIBDIR}
-  NAMELINK_SKIP)
+if(MINGW)
+  install(
+    TARGETS ceph-common
+    RUNTIME
+    DESTINATION ${CEPH_INSTALL_PKGLIBDIR})
+else()
+  install(
+    TARGETS ceph-common
+    LIBRARY
+    DESTINATION ${CEPH_INSTALL_PKGLIBDIR}
+    NAMELINK_SKIP)
+endif()
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
