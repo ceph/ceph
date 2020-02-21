@@ -1192,6 +1192,18 @@ class PlacementSpec(object):
         # in the orchestrator backend.
         self.hosts = hosts
 
+    def __repr__(self):
+        kv = []
+        if self.count:
+            kv.append('count=%d' % self.count)
+        if self.label:
+            kv.append('label=%s' % self.label)
+        if self.hosts:
+            kv.append('hosts=%s' % self.hosts)
+        if self.all_hosts:
+            kv.append('all=true')
+        return "PlacementSpec(%s)" % (' '.join(kv))
+
     @classmethod
     def from_dict(cls, data):
         _cls = cls(**data)
