@@ -4,7 +4,9 @@
 #ifndef CEPH_LIBRBD_MIRROR_SNAPSHOT_UTILS_H
 #define CEPH_LIBRBD_MIRROR_SNAPSHOT_UTILS_H
 
+#include "include/int_types.h"
 #include "include/stringify.h"
+#include <string>
 
 namespace librbd {
 
@@ -13,6 +15,8 @@ struct ImageCtx;
 namespace mirror {
 namespace snapshot {
 namespace util {
+
+std::string get_image_meta_key(const std::string& mirror_uuid);
 
 template <typename ImageCtxT = librbd::ImageCtx>
 bool can_create_primary_snapshot(ImageCtxT *image_ctx, bool demoted, bool force,
