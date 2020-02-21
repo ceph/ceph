@@ -19,7 +19,7 @@ prefer a WebUI over using the command line.
 
 The new :term:`Ceph Dashboard` module is a replacement of the previous one and
 adds a built-in web based monitoring and administration application to the Ceph
-Manager. The architecture and functionality of this new plugin is derived from
+Manager. The architecture and functionality of this new module is derived from
 and inspired by the `openATTIC Ceph management and monitoring tool
 <https://openattic.org/>`_. The development is actively driven by the team
 behind openATTIC at `SUSE <https://www.suse.com/>`_, with a lot of support from

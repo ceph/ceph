@@ -533,13 +533,13 @@ Requires:       pyOpenSSL
 Requires:       python%{python3_pkgversion}-pyOpenSSL
 %endif
 %description mgr-dashboard
-ceph-mgr-dashboard is a manager plugin, providing a web-based application
+ceph-mgr-dashboard is a manager module, providing a web-based application
 to monitor and manage many aspects of a Ceph cluster and related components.
 See the Dashboard documentation at http://docs.ceph.com/ for details and a
 detailed feature overview.
 
 %package mgr-diskprediction-local
-Summary:        Ceph Manager plugin for predicting disk failures
+Summary:        Ceph Manager module for predicting disk failures
 BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -552,11 +552,11 @@ Requires:       numpy
 Requires:       scipy
 %endif
 %description mgr-diskprediction-local
-ceph-mgr-diskprediction-local is a ceph-mgr plugin that tries to predict
+ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
 disk failures using local algorithms and machine-learning databases.
 
 %package mgr-diskprediction-cloud
-Summary:        Ceph Manager plugin for cloud-based disk failure prediction
+Summary:        Ceph Manager module for cloud-based disk failure prediction
 BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -570,7 +570,7 @@ Requires:       python2-grpcio
 Requires:       python2-protobuf
 %endif
 %description mgr-diskprediction-cloud
-ceph-mgr-diskprediction-cloud is a ceph-mgr plugin that tries to predict
+ceph-mgr-diskprediction-cloud is a ceph-mgr module that tries to predict
 disk failures using services in the Google cloud.
 
 %package mgr-modules-core
@@ -609,7 +609,7 @@ enabled by ceph-mgr.
 
 %package mgr-rook
 BuildArch:      noarch
-Summary:        Ceph Manager plugin for Rook-based orchestration
+Summary:        Ceph Manager module for Rook-based orchestration
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -617,23 +617,23 @@ Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-kubernetes
 Requires:       python%{python3_pkgversion}-jsonpatch
 %description mgr-rook
-ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
+ceph-mgr-rook is a ceph-mgr module for orchestration functions using
 a Rook backend.
 
 %package mgr-k8sevents
 BuildArch:      noarch
-Summary:        Ceph Manager plugin to orchestrate ceph-events to kubernetes' events API
+Summary:        Ceph Manager module to orchestrate ceph-events to kubernetes' events API
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-kubernetes
 %description mgr-k8sevents
-ceph-mgr-k8sevents is a ceph-mgr plugin that sends every ceph-events
+ceph-mgr-k8sevents is a ceph-mgr module that sends every ceph-events
 to kubernetes' events API
 
 %package mgr-cephadm
-Summary:        Ceph Manager plugin for cephadm-based orchestration
+Summary:        Ceph Manager module for cephadm-based orchestration
 BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
