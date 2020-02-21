@@ -2576,7 +2576,7 @@ class HostAssignment(object):
         if not self.spec.placement.label and not self.spec.placement.hosts and self.spec.placement.count:
             logger.info("Found num spec. Looking for labeled hosts.")
             # TODO: actually query for labels (self.daemon_type)
-            candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()],
+            candidates = self.scheduler.place([x for x in self.get_hosts_func()],
                                               count=self.spec.placement.count)
             # Not enough hosts to deploy on
             if len(candidates) != self.spec.placement.count:
@@ -2588,7 +2588,7 @@ class HostAssignment(object):
                 self.spec.placement.set_hosts(candidates)
                 return None
 
-            candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()], count=self.spec.placement.count)
+            candidates = self.scheduler.place([x for x in self.get_hosts_func()], count=self.spec.placement.count)
             # Not enough hosts to deploy on
             if len(candidates) != self.spec.placement.count:
                 raise OrchestratorValidationError("Cannot place {} daemons on {} hosts.".
