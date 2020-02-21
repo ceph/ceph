@@ -116,7 +116,6 @@ if(WITH_BLUESTORE)
     Allocator_aging_fragmentation.cc
     $<TARGET_OBJECTS:unit-main>
     )
-  add_ceph_unittest(unittest_alloc_aging)
   target_link_libraries(unittest_alloc_aging os global)
 
   # unittest_bluefs
