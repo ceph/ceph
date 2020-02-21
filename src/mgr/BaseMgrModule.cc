@@ -1055,10 +1055,13 @@ ceph_is_authorized(BaseMgrModule *self, PyObject *args)
     arguments[arg_key] = arg_value;
   }
 
-  if (self->this_module->is_authorized(arguments)) {
+  PyThreadState *tstate = PyEval_SaveThread();
+  bool r = self->this_module->is_authorized(arguments);
+  PyEval_RestoreThread(tstate);
+
+  if (r) {
     Py_RETURN_TRUE;
   }
-
   Py_RETURN_FALSE;
 }
 
@@ -1069,9 +1072,9 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
     return nullptr;
   }
-
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->register_client(self->this_module->get_name(), addrs);
-
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 
@@ -1082,9 +1085,9 @@ ceph_unregister_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
     return nullptr;
   }
-
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->unregister_client(self->this_module->get_name(), addrs);
-
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 
