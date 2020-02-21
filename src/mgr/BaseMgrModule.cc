@@ -1055,10 +1055,13 @@ ceph_is_authorized(BaseMgrModule *self, PyObject *args)
     arguments[arg_key] = arg_value;
   }
 
-  if (self->this_module->is_authorized(arguments)) {
+  PyThreadState *tstate = PyEval_SaveThread();
+  bool r = self->this_module->is_authorized(arguments);
+  PyEval_RestoreThread(tstate);
+
+  if (r) {
     Py_RETURN_TRUE;
   }
-
   Py_RETURN_FALSE;
 }
 
