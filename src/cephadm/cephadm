@@ -862,19 +862,24 @@ def get_unit_name(fsid, daemon_type, daemon_id=None):
         return 'ceph-%s@%s' % (fsid, daemon_type)
 
 def check_unit(unit_name):
-    # type: (str) -> Tuple[bool, str]
+    # type: (str) -> Tuple[bool, str, bool]
     # NOTE: we ignore the exit code here because systemctl outputs
     # various exit codes based on the state of the service, but the
     # string result is more explicit (and sufficient).
     enabled = False
+    installed = False
     try:
         out, err, code = call(['systemctl', 'is-enabled', unit_name],
                               verbose_on_failure=False)
         if code == 0:
             enabled = True
+            installed = True
+        elif "disabled" in out:
+            installed = True
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
         enabled = False
+        installed = False
 
     state = 'unknown'
     try:
@@ -892,7 +897,7 @@ def check_unit(unit_name):
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
         state = 'unknown'
-    return (enabled, state)
+    return (enabled, state, installed)
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
     # type: (str, str) -> Optional[str]
@@ -1343,7 +1348,7 @@ def update_firewalld(daemon_type):
     if not cmd:
         logger.debug('firewalld does not appear to be present')
         return
-    (enabled, state) = check_unit('firewalld.service')
+    (enabled, state, _) = check_unit('firewalld.service')
     if not enabled:
         logger.debug('firewalld.service is not enabled')
         return
@@ -2284,7 +2289,7 @@ def list_daemons(detail=True, legacy_dir=None):
                         'fsid': fsid if fsid is not None else 'unknown',
                     }
                     if detail:
-                        (i['enabled'], i['state']) = check_unit(
+                        (i['enabled'], i['state'], _) = check_unit(
                             'ceph-%s@%s' % (daemon_type, daemon_id))
                         if not host_version:
                             try:
@@ -2313,7 +2318,7 @@ def list_daemons(detail=True, legacy_dir=None):
                     }
                     if detail:
                         # get container id
-                        (i['enabled'], i['state']) = check_unit(unit_name)
+                        (i['enabled'], i['state'], _) = check_unit(unit_name)
                         container_id = None
                         image_name = None
                         image_id = None
@@ -2415,7 +2420,7 @@ def command_adopt():
         # cluster we are adopting based on the /etc/{defaults,sysconfig}/ceph
         # CLUSTER field.
         unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
-        (enabled, state) = check_unit(unit_name)
+        (enabled, state, _) = check_unit(unit_name)
 
         if state == 'running':
             logger.info('Stopping old systemd unit %s...' % unit_name)
@@ -2586,19 +2591,24 @@ def command_rm_cluster():
 
 ##################################
 
-def check_time_sync():
+def check_time_sync(enabler=None):
+    # type: (Optional[Packager]) -> bool
     units = [
         'chrony.service',  # 18.04 (at least)
-        'chronyd.service', # el
+        'chronyd.service', # el / opensuse
         'systemd-timesyncd.service',
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
     ]
     for u in units:
-        (enabled, state) = check_unit(u)
+        (enabled, state, installed) = check_unit(u)
         if enabled and state == 'running':
             logger.info('Time sync unit %s is enabled and running' % u)
             return True
+        if enabler is not None:
+            if not enabled and installed:
+                logger.info('Enabling time sync unit %s' % u)
+                enabler.enable_service(u)
     logger.warning('No time sync service is running; checked for %s' % units)
     return False
 
@@ -2649,6 +2659,9 @@ def command_prepare_host():
         if not pkg:
             pkg = create_packager()
         pkg.install(['chrony'])
+        # check again, and this time try to enable
+        # the service
+        check_time_sync(enabler=pkg)
 
     if 'expect_hostname' in args and args.expect_hostname and args.expect_hostname != get_hostname():
         logger.warning('Adjusting hostname from %s -> %s...' % (get_hostname(), args.expect_hostname))
@@ -2751,6 +2764,13 @@ class Packager(object):
             return 'https://download.ceph.com/keys/release.asc', 'release'
         else:
             return 'https://download.ceph.com/keys/autobuild.asc', 'autobuild'
+
+    def enable_service(self, service):
+        """
+        Start and enable the service (typically using systemd).
+        """
+        call_throws(['systemctl', 'enable', '--now', service])
+
 
 class Apt(Packager):
     DISTRO_NAMES = {
@@ -3034,10 +3054,6 @@ class Zypper(Packager):
     def install(self, ls):
         logger.info('Installing packages %s...' % ls)
         call_throws([self.tool, 'in', '-y'] + ls)
-
-        if 'chrony' in ls:
-            # ensure chrony service is enabled/started
-            call_throws(['systemctl', 'enable', '--now', 'chronyd'])
 
     def install_podman(self):
         self.install(['podman'])
