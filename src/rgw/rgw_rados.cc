@@ -591,15 +591,17 @@ public:
                                        trim_interval));
     stacks.push_back(meta);
 
-    auto data = new RGWCoroutinesStack(store->ctx(), &crs);
-    data->call(create_data_log_trim_cr(store, &http,
-                                       cct->_conf->rgw_data_log_num_shards,
-                                       trim_interval));
-    stacks.push_back(data);
+    if (store->svc()->zone->sync_module_exports_data()) {
+      auto data = new RGWCoroutinesStack(store->ctx(), &crs);
+      data->call(create_data_log_trim_cr(store, &http,
+                                         cct->_conf->rgw_data_log_num_shards,
+                                         trim_interval));
+      stacks.push_back(data);
 
-    auto bucket = new RGWCoroutinesStack(store->ctx(), &crs);
-    bucket->call(bucket_trim->create_bucket_trim_cr(&http));
-    stacks.push_back(bucket);
+      auto bucket = new RGWCoroutinesStack(store->ctx(), &crs);
+      bucket->call(bucket_trim->create_bucket_trim_cr(&http));
+      stacks.push_back(bucket);
+    }
 
     crs.run(stacks);
     return 0;

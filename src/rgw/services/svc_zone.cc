@@ -194,13 +194,15 @@ int RGWSI_Zone::do_start()
     return ret;
   }
 
+  auto sync_modules = sync_modules_svc->get_manager();
   RGWSyncModuleRef sm;
-  if (!sync_modules_svc->get_manager()->get_module(zone_public_config->tier_type, &sm)) {
+  if (!sync_modules->get_module(zone_public_config->tier_type, &sm)) {
     lderr(cct) << "ERROR: tier type not found: " << zone_public_config->tier_type << dendl;
     return -EINVAL;
   }
 
   writeable_zone = sm->supports_writes();
+  exports_data = sm->supports_data_export();
 
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
@@ -232,7 +234,7 @@ int RGWSI_Zone::do_start()
     bool zone_is_target = target_zones.find(z.id) != target_zones.end();
 
     if (zone_is_source || zone_is_target) {
-      if (zone_is_source) {
+      if (zone_is_source && sync_modules->supports_data_export(z.tier_type)) {
         data_sync_source_zones.push_back(&z);
       }
       if (zone_is_target) {
@@ -880,11 +882,6 @@ bool RGWSI_Zone::has_zonegroup_api(const std::string& api) const
 bool RGWSI_Zone::zone_is_writeable()
 {
   return writeable_zone && !get_zone().is_read_only();
-}
-
-bool RGWSI_Zone::sync_module_supports_writes() const
-{
-  return writeable_zone;
 }
 
 uint32_t RGWSI_Zone::get_zone_short_id() const
