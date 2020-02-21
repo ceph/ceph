@@ -556,7 +556,7 @@ def call_timeout(command, timeout):
 ##################################
 
 def is_available(what, func):
-    # type: (str, Callable[..., bool]) -> Callable[..., None]
+    # type: (str, Callable[[], bool]) -> None
     """
     Wait for a service to become available
 
@@ -564,23 +564,21 @@ def is_available(what, func):
     :param func: the callable object that determines availability
     """
     retry = args.retry
-    @wraps(func)
-    def func_wrapper(*args, **kwargs):
-        logger.info('Waiting for %s...' % (what))
-        num = 1
-        while True:
-            if func(*args, **kwargs):
-                break
-            elif num > retry:
-                raise Error('%s not available after %s tries'
-                        % (what, retry))
+    logger.info('Waiting for %s...' % (what))
+    num = 1
+    while True:
+        if func():
+            break
+        elif num > retry:
+            raise Error('%s not available after %s tries'
+                    % (what, retry))
 
-            logger.info('%s not available, waiting (%s/%s)...'
-                    % (what, num, retry))
+        logger.info('%s not available, waiting (%s/%s)...'
+                % (what, num, retry))
 
-            num += 1
-            time.sleep(1)
-    return func_wrapper
+        num += 1
+        time.sleep(1)
+
 
 def read_config(fn):
     # type: (Optional[str]) -> ConfigParser
@@ -1876,7 +1874,7 @@ def command_bootstrap():
                              desc=c.entrypoint,
                              timeout=timeout)
         return ret == 0
-    is_available('mon', is_mon_available)()
+    is_available('mon', is_mon_available)
 
     # assimilate and minimize config
     if not args.no_minimize_config:
@@ -1934,7 +1932,7 @@ def command_bootstrap():
         out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
         j = json.loads(out)
         return j.get('mgrmap', {}).get('available', False)
-    is_available('mgr', is_mgr_available)()
+    is_available('mgr', is_mgr_available)
 
     # ssh
     if not args.skip_ssh:
@@ -1984,7 +1982,7 @@ def command_bootstrap():
             timeout=args.timeout if args.timeout else 30 # seconds
             out = cli(['-h'], timeout=timeout)
             return 'dashboard' in out
-        is_available('Dashboard', is_dashboard_available)()
+        is_available('Dashboard', is_dashboard_available)
 
         logger.info('Generating a dashboard self-signed certificate...')
         cli(['dashboard', 'create-self-signed-cert'])
