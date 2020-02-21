@@ -70,6 +70,8 @@ void SetImageStateRequest<I>::handle_get_snap_limit(int r) {
     return;
   }
 
+  ldout(cct, 20) << "snap_limit=" << m_image_state.snap_limit << dendl;
+
   get_metadata();
 }
 
