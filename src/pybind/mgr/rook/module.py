@@ -244,8 +244,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_read
     def get_hosts(self):
-        # type: () -> List[orchestrator.InventoryNode]
-        return [orchestrator.InventoryNode(n, inventory.Devices([])) for n in self.rook_cluster.get_node_names()]
+        # type: () -> List[orchestrator.HostSpec]
+        return [orchestrator.HostSpec(n) for n in self.rook_cluster.get_node_names()]
 
     @deferred_read
     def list_daemons(self, daemon_type=None, daemon_id=None, node_name=None, refresh=False):
@@ -386,7 +386,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             targets += drive_group.data_directories
 
         def execute(all_hosts_):
-            all_hosts = orchestrator.InventoryNode.get_host_names(all_hosts_)
+            # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
+            all_hosts = [h.hostname for h in all_hosts_]
 
             assert len(drive_group.hosts(all_hosts)) == 1
 

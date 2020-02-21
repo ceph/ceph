@@ -65,10 +65,22 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.HostCache.save_host")
     @mock.patch("cephadm.module.HostCache.rm_host")
     def test_host(self, _get_connection, _save_host, _rm_host, cephadm_module):
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with self._with_host(cephadm_module, 'test'):
-            assert wait(cephadm_module, cephadm_module.get_hosts()) == [InventoryNode('test')]
-        c = cephadm_module.get_hosts()
-        assert wait(cephadm_module, c) == []
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
+
+            # Be careful with backward compatibility when changing things here:
+            assert json.loads(cephadm_module._store['inventory']) == \
+                   {"test": {"hostname": "test", "addr": "test", "labels": [], "status": ""}}
+
+            with self._with_host(cephadm_module, 'second'):
+                assert wait(cephadm_module, cephadm_module.get_hosts()) == [
+                    HostSpec('test', 'test'),
+                    HostSpec('second', 'second')
+                ]
+
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.module.HostCache.save_host")

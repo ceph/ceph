@@ -202,7 +202,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         drive_group = drive_groups[0]
 
         def run(all_hosts):
-            drive_group.validate(orchestrator.InventoryNode.get_host_names(all_hosts))
+            # type: (List[orchestrator.HostSpec]) -> None
+            drive_group.validate([h.hostname for h in all_hosts])
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
                 message='create_osds',
@@ -250,8 +251,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_read
     def get_hosts(self):
         if self._inventory:
-            return self._inventory
-        return [orchestrator.InventoryNode('localhost', inventory.Devices([]))]
+            return [orchestrator.HostSpec(i.name, i.addr, i.labels) for i in self._inventory]
+        return [orchestrator.HostSpec('localhost')]
 
     @deferred_write("add_host")
     def add_host(self, spec):
