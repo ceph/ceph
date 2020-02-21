@@ -2630,17 +2630,23 @@ def command_check_host():
 ##################################
 
 def command_prepare_host():
-    pkg = create_packager()
     logger.info('Verifying podman|docker is present...')
+    pkg = None
     if not container_path:
+        if not pkg:
+            pkg = create_packager()
         pkg.install_podman()
 
     logger.info('Verifying lvm2 is present...')
     if not find_executable('lvcreate'):
+        if not pkg:
+            pkg = create_packager()
         pkg.install(['lvm2'])
 
     logger.info('Verifying time synchronization is in place...')
     if not check_time_sync():
+        if not pkg:
+            pkg = create_packager()
         pkg.install(['chrony'])
 
     if 'expect_hostname' in args and args.expect_hostname and args.expect_hostname != get_hostname():
