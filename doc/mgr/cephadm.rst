@@ -5,7 +5,7 @@ cephadm orchestrator
 ====================
 
 The cephadm orchestrator is an orchestrator module that does not rely on a separate
-system such as Rook or Ansible, but rather manages nodes in a cluster by
+system such as Rook or Ansible, but rather manages hosts in a cluster by
 establishing an SSH connection and issuing explicit management commands.
 
 Orchestrator modules only provide services to other modules, which in turn

@@ -115,8 +115,8 @@ OSD Management
 List Devices
 ^^^^^^^^^^^^
 
-Print a list of discovered devices, grouped by node and optionally
-filtered to a particular node:
+Print a list of discovered devices, grouped by host and optionally
+filtered to a particular host:
 
 ::
 
@@ -211,13 +211,13 @@ Monitor and manager management
 Creates or removes MONs or MGRs from the cluster. Orchestrator may return an
 error if it doesn't know how to do this transition.
 
-Update the number of monitor nodes::
+Update the number of monitor hosts::
 
     ceph orch apply mon <num> [host, host:network...]
 
 Each host can optionally specify a network for the monitor to listen on.
 
-Update the number of manager nodes::
+Update the number of manager hosts::
 
     ceph orch apply mgr <num> [host...]
 
