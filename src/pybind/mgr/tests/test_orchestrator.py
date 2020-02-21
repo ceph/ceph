@@ -10,7 +10,7 @@ from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressRefere
     servicespec_validate_add
 from orchestrator import InventoryHost, ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorValidationError
-from orchestrator import HostPlacementSpec
+from orchestrator import HostPlacementSpec, PlacementSpec
 
 
 @pytest.mark.parametrize("test_input,expected, require_network",
@@ -29,6 +29,21 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
     ret = HostPlacementSpec.parse(test_input, require_network=require_network)
     assert ret == expected
     assert str(ret) == test_input
+
+@pytest.mark.parametrize(
+    "test_input,expected",
+    [
+        ('', "PlacementSpec()"),
+        ("3", "PlacementSpec(count=3)"),
+        ("host1 host2", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
+        ('2 host1 host2', "PlacementSpec(count=2 hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
+        ('label:foo', "PlacementSpec(label=foo)"),
+        ('3 label:foo', "PlacementSpec(count=3 label=foo)"),
+        ('*', 'PlacementSpec(all=true)'),
+    ])
+def test_parse_placement_specs(test_input, expected):
+    ret = PlacementSpec.from_strings(test_input.split())
+    assert str(ret) == expected
 
 @pytest.mark.parametrize("test_input",
                          # wrong subnet
