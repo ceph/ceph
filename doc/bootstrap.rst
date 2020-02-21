@@ -48,11 +48,11 @@ Bootstrap a new cluster
 To create a new cluster, you need to know:
 
 * Which *IP address* to use for the cluster's first monitor.  This is
-  normally just the IP for the first cluster node.  If there are
+  normally just the IP of the first cluster node.  If there are
   multiple networks and interfaces, be sure to choose one that will be
   accessible by any hosts accessing the Ceph cluster.
 
-To bootstrap the cluster run the following command::
+To bootstrap the cluster run the following command on the first node::
 
   [node 1] $ sudo ./cephadm bootstrap --mon-ip *<mon-ip>*  # or
   [node 1] $ sudo cephadm bootstrap --mon-ip *<mon-ip>*
