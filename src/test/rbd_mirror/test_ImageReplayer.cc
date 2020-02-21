@@ -413,6 +413,8 @@ public:
     ASSERT_EQ(0, get_last_mirror_snapshot(m_remote_ioctx, m_remote_image_id,
                                           &remote_snap_id, &remote_mirror_ns));
 
+    std::cout << "remote_snap_id=" << remote_snap_id << std::endl;
+
     std::string local_image_id;
     ASSERT_EQ(0, librbd::cls_client::mirror_image_get_image_id(
                    &m_local_ioctx, m_global_image_id, &local_image_id));
@@ -434,6 +436,9 @@ public:
           local_mirror_ns.primary_mirror_uuid == m_remote_mirror_uuid &&
           local_mirror_ns.primary_snap_id == remote_snap_id &&
           local_mirror_ns.complete) {
+
+        std::cout << "local_snap_id=" << local_snap_id << ", "
+                  << "local_snap_ns=" << local_mirror_ns << std::endl;
         return;
       }
 
