@@ -93,6 +93,22 @@ class LevelSpec:
         self.namespace = namespace
         self.image_id = image_id
 
+    def __eq__(self, level_spec):
+        return self.id == level_spec.id
+
+    def is_child_of(self, level_spec):
+        if level_spec.is_global():
+            return not self.is_global()
+        if level_spec.pool_id != self.pool_id:
+            return False
+        if level_spec.namespace is None:
+            return self.namespace is not None
+        if level_spec.namespace != self.namespace:
+            return False
+        if level_spec.image_id is None:
+            return self.image_id is not None
+        return False
+
     def is_global(self):
         return self.pool_id is None
 
@@ -659,27 +675,34 @@ class MirrorSnapshotScheduleHandler:
 
     def list(self, level_spec_name):
         self.log.debug("list: level_spec={}".format(level_spec_name))
+
+        if not level_spec_name:
+            level_spec_name = ""
+
         try:
             level_spec = LevelSpec.from_name(self, level_spec_name)
         except ValueError as e:
             return -errno.EINVAL, '', "Invalid level spec {}: {}".format(
                 level_spec_name, e)
-        with self.lock:
-            schedule = self.schedules.get(level_spec.id)
-            if schedule is None:
-                return -errno.ENOENT, '', "No schedule for {}".format(
-                    level_spec_name)
-            return 0, schedule.to_json(), ""
 
-    def dump(self):
-        self.log.debug("dump")
         result = {}
         with self.lock:
+            parent = LevelSpec.from_id(self, "")
+            if not level_spec.is_global():
+                for level_spec_id in self.schedules:
+                    ls = LevelSpec.from_id(self, level_spec_id)
+                    if ls == level_spec:
+                        parent = ls
+                        break
+                    if level_spec.is_child_of(ls) and ls.is_child_of(parent):
+                        parent = ls
             for level_spec_id, schedule in self.schedules.items():
-                result[level_spec_id] = {
-                    'name' : schedule.name,
-                    'schedule' : schedule.to_list(),
-                }
+                ls = LevelSpec.from_id(self, level_spec_id)
+                if ls == parent or ls.is_child_of(parent):
+                    result[level_spec_id] = {
+                        'name' : schedule.name,
+                        'schedule' : schedule.to_list(),
+                    }
         return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
     def status(self, level_spec_name):
@@ -694,15 +717,19 @@ class MirrorSnapshotScheduleHandler:
             return -errno.EINVAL, '', "Invalid level spec {}: {}".format(
                 level_spec_name, e)
 
-        result = ""
+        scheduled_images = []
         with self.lock:
             for schedule_time in sorted(self.queue):
                 for pool_id, namespace, image_id in self.queue[schedule_time]:
                     if not level_spec.matches(pool_id, namespace, image_id):
                         continue
                     image_name = self.images[pool_id][namespace][image_id]
-                    result += "{} {}\n".format(schedule_time, image_name)
-        return 0, result, ""
+                    scheduled_images.append({
+                        'schedule_time' : schedule_time,
+                        'image' : image_name
+                    })
+        return 0, json.dumps({'scheduled_images' : scheduled_images},
+                             indent=4, sort_keys=True), ""
 
     def handle_command(self, inbuf, prefix, cmd):
         if prefix == 'add':
@@ -712,9 +739,7 @@ class MirrorSnapshotScheduleHandler:
             return self.remove_schedule(cmd['level_spec'], cmd.get('interval'),
                                         cmd.get('start_time'))
         elif prefix == 'list':
-            return self.list(cmd['level_spec'])
-        elif prefix == 'dump':
-            return self.dump()
+            return self.list(cmd.get('level_spec', None))
         elif prefix == 'status':
             return self.status(cmd.get('level_spec', None))
 
