@@ -22,6 +22,7 @@ import multiprocessing.pool
 import re
 import shutil
 import subprocess
+import uuid
 
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -597,6 +598,15 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.health_checks[alert_id] = alert
         self.set_health_checks(self.health_checks)
 
+    def _update_upgrade_progress(self, progress):
+        self.log.debug('upgrade progress %f' % progress)
+        if 'progress_id' not in self.upgrade_state:
+            self.upgrade_state['progress_id'] = str(uuid.uuid4())
+            self._save_upgrade_state()
+        self.remote('progress', 'update', self.upgrade_state['progress_id'],
+                    ev_msg='Upgrade to %s' % self.upgrade_state['target_name'],
+                    ev_progress=progress)
+
     def _do_upgrade(self):
         # type: () -> Optional[AsyncCompletion]
         if not self.upgrade_state:
@@ -637,7 +647,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 image_settings[opt['section']] = opt['value']
 
         daemons = self.cache.get_daemons()
-
+        done = 0
         for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds']:
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
@@ -651,6 +661,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if d.container_image_id == target_id:
                     self.log.debug('daemon %s.%s version correct' % (
                         daemon_type, d.daemon_id))
+                    done += 1
                     continue
                 self.log.debug('daemon %s.%s version incorrect (%s, %s)' % (
                     daemon_type, d.daemon_id,
@@ -691,6 +702,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                         self._save_upgrade_state()
                         return None
 
+                self._update_upgrade_progress(done / len(daemons))
+
                 if not self._wait_for_ok_to_stop(d):
                     return None
                 self.log.info('Upgrade: Redeploying %s.%s' %
@@ -725,6 +738,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
                 self.log.info('Upgrade: there are %d other already-upgraded '
                               'standby mgrs, failing over' % num)
+
+                self._update_upgrade_progress(done / len(daemons))
 
                 # fail over
                 ret, out, err = self.mon_command({
@@ -791,6 +806,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             })
 
         self.log.info('Upgrade: Complete!')
+        if 'progress_id' in self.upgrade_state:
+            self.remote('progress', 'complete',
+                        self.upgrade_state['progress_id'])
         self.upgrade_state = None
         self._save_upgrade_state()
         return None
@@ -2418,7 +2436,9 @@ scrape_configs:
                                   self.upgrade_state.get('target_name'))
         self.upgrade_state = {
             'target_name': target_name,
+            'progress_id': str(uuid.uuid4()),
         }
+        self._update_upgrade_progress(0.0)
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.event.set()
@@ -2451,6 +2471,9 @@ scrape_configs:
         if not self.upgrade_state:
             return trivial_result('No upgrade in progress')
         target_name = self.upgrade_state.get('target_name')
+        if 'progress_id' in self.upgrade_state:
+            self.remote('progress', 'complete',
+                        self.upgrade_state['progress_id'])
         self.upgrade_state = None
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
