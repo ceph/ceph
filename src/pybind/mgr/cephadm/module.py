@@ -678,14 +678,14 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
                 # make sure host has latest container image
                 out, err, code = self._run_cephadm(
-                    d.nodename, None, 'inspect-image', [],
+                    d.hostname, None, 'inspect-image', [],
                     image=target_name, no_fsid=True, error_ok=True)
                 self.log.debug('out %s code %s' % (out, code))
                 if code or json.loads(''.join(out)).get('image_id') != target_id:
                     self.log.info('Upgrade: Pulling %s on %s' % (target_name,
-                                                                 d.nodename))
+                                                                 d.hostname))
                     out, err, code = self._run_cephadm(
-                        d.nodename, None, 'pull', [],
+                        d.hostname, None, 'pull', [],
                         image=target_name, no_fsid=True, error_ok=True)
                     if code:
                         self._fail_upgrade('UPGRADE_FAILED_PULL', {
@@ -694,12 +694,12 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                             'count': 1,
                             'detail': [
                                 'failed to pull %s on host %s' % (target_name,
-                                                                  d.nodename)],
+                                                                  d.hostname)],
                         })
                         return None
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
-                        self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.nodename, r['image_id'], target_id))
+                        self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.hostname, r['image_id'], target_id))
                         self.upgrade_state['image_id'] = r['image_id']
                         self._save_upgrade_state()
                         return None
@@ -719,7 +719,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 return self._daemon_action([(
                     d.daemon_type,
                     d.daemon_id,
-                    d.nodename,
+                    d.hostname,
                     'redeploy'
                 )])
 
@@ -1472,7 +1472,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             sd.last_refresh = datetime.datetime.utcnow()
             sd.daemon_type = d['name'].split('.')[0]
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
-            sd.nodename = host
+            sd.hostname = host
             sd.container_id = d.get('container_id')
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
@@ -1568,7 +1568,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for name, d in dm.items():
                 if d.matches_service(service_name):
                     args.append((d.daemon_type, d.daemon_id,
-                                 d.nodename, action))
+                                 d.hostname, action))
         if not args:
             raise orchestrator.OrchestratorError(
                 'Unable to find %s.%s.* daemon(s)' % (service_name))
@@ -1607,7 +1607,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for name, d in dm.items():
                 if d.daemon_type == daemon_type and d.daemon_id == daemon_id:
                     args.append((d.daemon_type, d.daemon_id,
-                                 d.nodename, action))
+                                 d.hostname, action))
         if not args:
             raise orchestrator.OrchestratorError(
                 'Unable to find %s.%s daemon(s)' % (
@@ -1631,26 +1631,26 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for name, d in dm.items():
                 if d.matches_service(service_name):
                     args.append(
-                        ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
+                        ('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname)
                     )
         if not args:
             raise OrchestratorError('Unable to find daemons in %s service' % (
                 service_name))
         return self._remove_daemon(args)
 
-    def get_inventory(self, node_filter=None, refresh=False):
+    def get_inventory(self, host_filter=None, refresh=False):
         """
-        Return the storage inventory of nodes matching the given filter.
+        Return the storage inventory of hosts matching the given filter.
 
-        :param node_filter: node filter
+        :param host_filter: host filter
 
         TODO:
           - add filtering by label
         """
         if refresh:
             # ugly sync path, FIXME someday perhaps?
-            if node_filter:
-                for host in node_filter.nodes:
+            if host_filter:
+                for host in host_filter.hosts:
                     self._refresh_host_devices(host)
             else:
                 for host, hi in self.inventory.items():
@@ -1658,9 +1658,9 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         result = []
         for host, dls in self.cache.devices.items():
-            if node_filter and host not in node_filter.nodes:
+            if host_filter and host not in host_filter.hosts:
                 continue
-            result.append(orchestrator.InventoryNode(host,
+            result.append(orchestrator.InventoryHost(host,
                                                      inventory.Devices(dls)))
         return trivial_result(result)
 
@@ -1717,7 +1717,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def _prepare_deployment(self,
                             all_hosts,  # type: List[orchestrator.HostSpec]
                             drive_groups,  # type: List[DriveGroupSpec]
-                            inventory_list  # type: List[orchestrator.InventoryNode]
+                            inventory_list  # type: List[orchestrator.InventoryHost]
                             ):
         # type: (...) -> orchestrator.Completion
 
@@ -1725,8 +1725,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.log.info("Processing DriveGroup {}".format(drive_group))
             # 1) use fn_filter to determine matching_hosts
             matching_hosts = drive_group.hosts([x.hostname for x in all_hosts])
-            # 2) Map the inventory to the InventoryNode object
-            # FIXME: lazy-load the inventory from a InventoryNode object;
+            # 2) Map the inventory to the InventoryHost object
+            # FIXME: lazy-load the inventory from a InventoryHost object;
             #        this would save one call to the inventory(at least externally)
 
             def _find_inv_for_host(hostname, inventory_list):
@@ -1894,7 +1894,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             sd = orchestrator.DaemonDescription()
             sd.daemon_type = daemon_type
             sd.daemon_id = daemon_id
-            sd.nodename = host
+            sd.hostname = host
             sd.status = 1
             sd.status_desc = 'starting'
             self.cache.add_daemon(host, sd)
@@ -1928,7 +1928,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             args = []
             for d in daemons[0:to_remove]:
                 args.append(
-                    ('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename)
+                    ('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname)
                 )
             return self._remove_daemon(args)
         elif len(daemons) < spec.count:
@@ -1945,7 +1945,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         assert spec.count is not None
         prefix = f'{daemon_type}.{spec.name}'
         our_daemons = [d for d in daemons if d.name().startswith(prefix)]
-        hosts_with_daemons = {d.nodename for d in daemons}
+        hosts_with_daemons = {d.hostname for d in daemons}
         hosts_without_daemons = {p for p in spec.placement.hosts if p.hostname not in hosts_with_daemons}
 
         for host, _, name in hosts_without_daemons:
@@ -1957,7 +1957,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             args.append((daemon_id, host))
             # add to daemon list so next name(s) will also be unique
             sd = orchestrator.DaemonDescription(
-                nodename=host,
+                hostname=host,
                 daemon_type=daemon_type,
                 daemon_id=daemon_id,
             )
@@ -2035,7 +2035,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             # Improve Error message. Point to parse_host_spec examples
             raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
 
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mon').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mon').load()
         return self._update_mons(spec)
 
     def _update_mons(self, spec):
@@ -2094,7 +2094,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def add_mgr(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
         return self._add_new_daemon('mgr', spec, self._create_mgr)
 
     def apply_mgr(self, spec):
@@ -2102,7 +2102,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         Adjust the number of cluster managers.
         """
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
 
         daemons = self.cache.get_daemons_by_type('mgr')
         num_mgrs = len(daemons)
@@ -2128,7 +2128,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for d in daemons:
                 if d.daemon_id not in connected:
                     to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id),
-                                             d.nodename))
+                                             d.hostname))
                     num_to_remove -= 1
                     if num_to_remove == 0:
                         break
@@ -2136,7 +2136,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             # otherwise, remove *any* mgr
             if num_to_remove > 0:
                 for d in daemons:
-                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id), d.nodename))
+                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname))
                     num_to_remove -= 1
                     if num_to_remove == 0:
                         break
@@ -2193,7 +2193,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def apply_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
+        spec =HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
 
         return self._update_service('mds', self.add_mds, spec)
 
@@ -2240,13 +2240,13 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
     def apply_rgw(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rgw').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rgw').load()
         return self._update_service('rgw', self.add_rgw, spec)
 
     def add_rbd_mirror(self, spec):
         if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
-        self.log.debug('nodes %s' % spec.placement.hosts)
+        self.log.debug('hosts %s' % spec.placement.hosts)
 
         return self._add_new_daemon('rbd-mirror', spec, self._create_rbd_mirror)
 
@@ -2262,7 +2262,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                    keyring=keyring)
 
     def apply_rbd_mirror(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rbd-mirror').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rbd-mirror').load()
         return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
 
     def _generate_prometheus_config(self):
@@ -2281,17 +2281,17 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             for dd in self.cache.get_daemons_by_type('mgr'):
                 if dd.daemon_id == self.get_mgr_id():
                     continue
-                hi = self.inventory.get(dd.nodename, None)
+                hi = self.inventory.get(dd.hostname, None)
                 if hi:
-                    addr = hi.get('addr', dd.nodename)
+                    addr = hi.get('addr', dd.hostname)
                 mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
 
         # scrape node exporters
         node_configs = ''
         for dd in self.cache.get_daemons_by_type('node-exporter'):
-            hi = self.inventory.get(dd.nodename, None)
+            hi = self.inventory.get(dd.hostname, None)
             if hi:
-                addr = hi.get('addr', dd.nodename)
+                addr = hi.get('addr', dd.hostname)
                 if not node_configs:
                     node_configs = """
   - job_name: 'node'
@@ -2301,7 +2301,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
       labels:
         instance: '{}'
 """.format([addr.split(':')[0] + ':9100'],
-           dd.nodename)
+           dd.hostname)
         j = json.dumps({
             'files': {
                 'prometheus.yml': """# generated by cephadm
@@ -2326,7 +2326,7 @@ scrape_configs:
         return j
 
     def add_prometheus(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
         return self._add_new_daemon('prometheus', spec, self._create_prometheus)
 
     @async_map_completion
@@ -2334,7 +2334,7 @@ scrape_configs:
         return self._create_daemon('prometheus', daemon_id, host)
 
     def apply_prometheus(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
         return self._update_service('prometheus', self.add_prometheus, spec)
 
     def add_node_exporter(self, spec):
@@ -2345,7 +2345,7 @@ scrape_configs:
         return self._add_new_daemon('node-exporter', spec, self._create_node_exporter)
 
     def apply_node_exporter(self, spec):
-        spec = NodeAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='node-exporter').load()
+        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='node-exporter').load()
         return self._update_service('node-exporter', self.add_node_exporter, spec)
 
     @async_map_completion
@@ -2520,11 +2520,11 @@ class SimpleScheduler(BaseScheduler):
         return host_pool[:count]
 
 
-class NodeAssignment(object):
+class HostAssignment(object):
     """
-    A class to detect if nodes are being passed imperative or declarative
-    If the spec is populated via the `nodes/hosts` field it will not load
-    any nodes into the list.
+    A class to detect if hosts are being passed imperative or declarative
+    If the spec is populated via the `hosts/hosts` field it will not load
+    any hosts into the list.
     If the spec isn't populated, i.e. when only num or label is present (declarative)
     it will use the provided `get_host_func` to load it from the inventory.
 
@@ -2546,54 +2546,54 @@ class NodeAssignment(object):
     def load(self):
         # type: () -> orchestrator.ServiceSpec
         """
-        Load nodes into the spec.placement.nodes container.
+        Load hosts into the spec.placement.hosts container.
         """
-        self.load_labeled_nodes()
-        self.assign_nodes()
+        self.load_labeled_hosts()
+        self.assign_hosts()
         return self.spec
 
-    def load_labeled_nodes(self):
+    def load_labeled_hosts(self):
         # type: () -> None
         """
-        Assign nodes based on their label
+        Assign hosts based on their label
         """
-        # Querying for labeled nodes doesn't work currently.
+        # Querying for labeled hosts doesn't work currently.
         # Leaving this open for the next iteration
         # NOTE: This currently queries for all hosts without label restriction
         if self.spec.placement.label:
-            logger.info("Found labels. Assigning nodes that match the label")
+            logger.info("Found labels. Assigning hosts that match the label")
             candidates = [HostPlacementSpec(x, '', '') for x in self.get_hosts_func()]  # TODO: query for labels
-            logger.info('Assigning nodes to spec: {}'.format(candidates))
+            logger.info('Assigning hosts to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
 
-    def assign_nodes(self):
+    def assign_hosts(self):
         # type: () -> None
         """
-        Use the assigned scheduler to load nodes into the spec.placement.nodes container
+        Use the assigned scheduler to load hosts into the spec.placement.hosts container
         """
         # If no imperative or declarative host assignments, use the scheduler to pick from the
         # host pool (assuming `count` is set)
         if not self.spec.placement.label and not self.spec.placement.hosts and self.spec.placement.count:
-            logger.info("Found num spec. Looking for labeled nodes.")
+            logger.info("Found num spec. Looking for labeled hosts.")
             # TODO: actually query for labels (self.daemon_type)
             candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()],
                                               count=self.spec.placement.count)
-            # Not enough nodes to deploy on
+            # Not enough hosts to deploy on
             if len(candidates) != self.spec.placement.count:
-                logger.warning("Did not find enough labeled nodes to \
-                               scale to <{}> services. Falling back to unlabeled nodes.".
+                logger.warning("Did not find enough labeled hosts to \
+                               scale to <{}> services. Falling back to unlabeled hosts.".
                                format(self.spec.placement.count))
             else:
-                logger.info('Assigning nodes to spec: {}'.format(candidates))
+                logger.info('Assigning hosts to spec: {}'.format(candidates))
                 self.spec.placement.set_hosts(candidates)
                 return None
 
             candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()], count=self.spec.placement.count)
-            # Not enough nodes to deploy on
+            # Not enough hosts to deploy on
             if len(candidates) != self.spec.placement.count:
                 raise OrchestratorValidationError("Cannot place {} daemons on {} hosts.".
                                                   format(self.spec.placement.count, len(candidates)))
 
-            logger.info('Assigning nodes to spec: {}'.format(candidates))
+            logger.info('Assigning hosts to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
             return None

@@ -12,6 +12,6 @@ from ._interface import \
     servicespec_validate_add, servicespec_validate_hosts_have_network_spec, \
     ServiceDescription, InventoryFilter, PlacementSpec,  HostSpec, \
     DaemonDescription, \
-    InventoryNode, DeviceLightLoc, \
+    InventoryHost, DeviceLightLoc, \
     OutdatableData, OutdatablePersistentDict, \
     UpgradeStatusSpec

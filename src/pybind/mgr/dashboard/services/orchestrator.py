@@ -69,15 +69,15 @@ class InventoryManager(ResourceManager):
 
     @wait_api_result
     def list(self, hosts=None, refresh=False):
-        node_filter = InventoryFilter(nodes=hosts) if hosts else None
-        return self.api.get_inventory(node_filter=node_filter, refresh=refresh)
+        host_filter = InventoryFilter(hosts=hosts) if hosts else None
+        return self.api.get_inventory(host_filter=host_filter, refresh=refresh)
 
 
 class ServiceManager(ResourceManager):
 
     @wait_api_result
-    def list(self, service_type=None, service_id=None, node_name=None):
-        return self.api.list_daemons(service_type, service_id, node_name)
+    def list(self, service_type=None, service_id=None, host_name=None):
+        return self.api.list_daemons(service_type, service_id, host_name)
 
     def reload(self, service_type, service_ids):
         if not isinstance(service_ids, list):

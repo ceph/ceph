@@ -82,7 +82,7 @@ class IscsiGatewaysConfig(object):
         try:
             instances = OrchClient.instance().services.list("iscsi")
             for instance in instances:
-                config['gateways'][instance.nodename] = {
+                config['gateways'][instance.hostname] = {
                     'service_url': instance.service_url
                 }
         except (RuntimeError, OrchestratorError, ImportError):

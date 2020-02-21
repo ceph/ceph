@@ -11,7 +11,7 @@ try:
 except ImportError:
     pass
 
-from orchestrator import ServiceDescription, DaemonDescription, InventoryNode, \
+from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     ServiceSpec, PlacementSpec, RGWSpec, HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait
@@ -96,7 +96,7 @@ class TestCephadm(object):
     def test_device_ls(self, _save_host, _rm_host, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.get_inventory()
-            assert wait(cephadm_module, c) == [InventoryNode('test')]
+            assert wait(cephadm_module, c) == [InventoryHost('test')]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([

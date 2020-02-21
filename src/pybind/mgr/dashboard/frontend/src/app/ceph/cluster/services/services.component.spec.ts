@@ -16,25 +16,25 @@ describe('ServicesComponent', () => {
 
   const services = [
     {
-      nodename: 'host0',
+      hostname: 'host0',
       service: '',
       service_instance: 'x',
       service_type: 'mon'
     },
     {
-      nodename: 'host0',
+      hostname: 'host0',
       service: '',
       service_instance: '0',
       service_type: 'osd'
     },
     {
-      nodename: 'host1',
+      hostname: 'host1',
       service: '',
       service_instance: 'y',
       service_type: 'mon'
     },
     {
-      nodename: 'host1',
+      hostname: 'host1',
       service: '',
       service_instance: '1',
       service_type: 'osd'
@@ -42,7 +42,7 @@ describe('ServicesComponent', () => {
   ];
 
   const getServiceList = (hostname: String) => {
-    return hostname ? services.filter((service) => service.nodename === hostname) : services;
+    return hostname ? services.filter((service) => service.hostname === hostname) : services;
   };
 
   configureTestBed({
@@ -78,7 +78,7 @@ describe('ServicesComponent', () => {
     reqHostname = 'host0';
     component.getServices(new CdTableFetchDataContext(() => {}));
     expect(component.services.length).toBe(2);
-    expect(component.services[0].nodename).toBe(reqHostname);
-    expect(component.services[1].nodename).toBe(reqHostname);
+    expect(component.services[0].hostname).toBe(reqHostname);
+    expect(component.services[1].hostname).toBe(reqHostname);
   });
 });
