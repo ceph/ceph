@@ -186,6 +186,7 @@ struct LeaderWatcher<librbd::MockTestImageCtx> {
     return s_instance;
   }
 
+  MOCK_METHOD0(is_blacklisted, bool());
   MOCK_METHOD0(is_leader, bool());
   MOCK_METHOD0(release_leader, void());
 
@@ -409,6 +410,12 @@ public:
                 }));
   }
 
+  void expect_leader_watcher_is_blacklisted(
+      MockLeaderWatcher &mock_leader_watcher, bool blacklisted) {
+    EXPECT_CALL(mock_leader_watcher, is_blacklisted())
+      .WillRepeatedly(Return(blacklisted));
+  }
+
   void expect_namespace_replayer_is_blacklisted(
       MockNamespaceReplayer &mock_namespace_replayer,
       bool blacklisted) {
@@ -543,6 +550,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
 
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   InSequence seq;
 
@@ -605,6 +613,7 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   InSequence seq;
 
@@ -692,6 +701,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   auto& mock_cluster = get_mock_cluster();
   auto mock_local_rados_client = mock_cluster.do_create_rados_client(
@@ -809,6 +819,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   auto& mock_cluster = get_mock_cluster();
   auto mock_local_rados_client = mock_cluster.do_create_rados_client(
