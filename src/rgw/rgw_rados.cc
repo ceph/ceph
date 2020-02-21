@@ -13910,7 +13910,8 @@ int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_
   return 0;
 }
 
-int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketInfo& bucket_info)
+int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj,
+					 const RGWBucketInfo& bucket_info)
 {
   vector<rgw_bucket_dir_header> headers;
   int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, headers);
@@ -13925,10 +13926,13 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketI
 
   for (const auto& hiter : headers) {
     for (const auto& iter : hiter.stats) {
-      const struct rgw_bucket_category_stats& header_stats = iter.second;
-      entry.size += header_stats.total_size;
-      entry.size_rounded += header_stats.total_size_rounded;
-      entry.count += header_stats.num_entries;
+      if (uint8_t(RGW_OBJ_CATEGORY_MAIN) == iter.first ||
+	  uint8_t(RGW_OBJ_CATEGORY_MULTIMETA) == iter.first) {
+	const struct rgw_bucket_category_stats& header_stats = iter.second;
+	entry.size += header_stats.total_size;
+	entry.size_rounded += header_stats.total_size_rounded;
+	entry.count += header_stats.num_entries;
+      }
     }
   }
 
