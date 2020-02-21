@@ -600,12 +600,7 @@ function interactive_setup_routine {
     [ "$github_token" ] && echo "(default: ${default_val})"
     github_token="$(get_user_input "$default_val")"
     if [ "$github_token" ] ; then
-        if [ "$setup_ok" ] ; then
-            true
-        else
-            info "You must provide a valid GitHub personal access token"
-            abort_due_to_setup_problem
-        fi
+        true
     else
         error "You must provide a valid GitHub personal access token"
         abort_due_to_setup_problem
