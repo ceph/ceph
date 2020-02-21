@@ -511,7 +511,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             raise RuntimeError("unable to read cephadm at '%s': %s" % (
                 path, str(e)))
 
-        self._worker_pool = multiprocessing.pool.ThreadPool(1)
+        self._worker_pool = multiprocessing.pool.ThreadPool(10)
 
         self._reconfig_ssh()
 
