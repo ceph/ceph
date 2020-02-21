@@ -57,7 +57,15 @@ Major Changes from Nautilus
 
 - *CephFS* distributed file system:
   
-  * ?
+  * Inline data support in CephFS has been deprecated and will likely be
+    removed in a future release.
+  * MDS daemons can now be assigned to manage a particular file system via the
+    new ``mds_join_fs`` option.
+  * MDS now aggressively asks idle clients to trim caps which improves stability
+    when file system load changes.
+  * The mgr volumes plugin has received numerous improvements to support CephFS
+    via CSI, including snapshots and cloning.
+  * cephfs-shell has had numerous incremental improvements and bug fixes.
 
 
 Upgrading from Mimic or Nautilus
