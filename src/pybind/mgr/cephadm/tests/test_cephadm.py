@@ -266,8 +266,8 @@ class TestCephadm(object):
                 assert len(r) == 2
 
                 with pytest.raises(OrchestratorError):
-                    ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
-                    c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                    ps = PlacementSpec(hosts=['host1', 'host2'], count=3)
+                    c = cephadm_module.apply_rgw(RGWSpec('realm', 'zone1', placement=ps))
                     [out] = wait(cephadm_module, c)
 
 
