@@ -52,7 +52,7 @@ import tempfile
 import time
 import errno
 try:
-    from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn
+    from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable
 except ImportError:
     pass
 import uuid
@@ -556,7 +556,7 @@ def call_timeout(command, timeout):
 ##################################
 
 def is_available(what, func):
-    # type: (str, Any) -> Any
+    # type: (str, Callable[..., bool]) -> Callable[..., None]
     """
     Wait for a service to become available
 
@@ -1870,6 +1870,7 @@ def command_bootstrap():
 
     # wait for the service to become available
     def is_mon_available():
+        # type: () -> bool
         timeout=args.timeout if args.timeout else 30 # seconds
         out, err, ret = call(c.run_cmd(),
                              desc=c.entrypoint,
@@ -1928,6 +1929,7 @@ def command_bootstrap():
     # wait for the service to become available
     logger.info('Waiting for mgr to start...')
     def is_mgr_available():
+        # type: () -> bool
         timeout=args.timeout if args.timeout else 30 # seconds
         out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
         j = json.loads(out)
@@ -1978,6 +1980,7 @@ def command_bootstrap():
         # wait for the service to become available
         logger.info('Waiting for the dashboard to start...')
         def is_dashboard_available():
+            # type: () -> bool
             timeout=args.timeout if args.timeout else 30 # seconds
             out = cli(['-h'], timeout=timeout)
             return 'dashboard' in out
