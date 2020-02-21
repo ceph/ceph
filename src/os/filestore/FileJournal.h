@@ -417,7 +417,7 @@ private:
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
-    throttle(cct->_conf->filestore_caller_concurrency),
+    throttle(cct, cct->_conf->filestore_caller_concurrency),
     write_stop(true),
     aio_stop(true),
     write_thread(this),
