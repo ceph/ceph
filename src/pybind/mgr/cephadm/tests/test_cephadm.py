@@ -55,8 +55,10 @@ class TestCephadm(object):
         existing = [
             DaemonDescription(daemon_type='mon', daemon_id='a')
         ]
-        new_mon = cephadm_module.get_unique_name('myhost', existing, 'mon')
-        match_glob(new_mon, 'mon.myhost.*')
+        new_mon = cephadm_module.get_unique_name('mon', 'myhost', existing)
+        match_glob(new_mon, 'myhost')
+        new_mgr = cephadm_module.get_unique_name('mgr', 'myhost', existing)
+        match_glob(new_mgr, 'myhost.*')
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
