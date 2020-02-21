@@ -11,7 +11,7 @@ import pickle
 import sys
 import time
 from collections import namedtuple
-from functools import wraps, partial
+from functools import wraps, partialmethod
 import uuid
 import string
 import random
@@ -150,7 +150,7 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
     # misuse partial to copy `wrapper`
-    wrapper_copy = partial(wrapper)
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)
     wrapper_copy._prefix = prefix  # type: ignore
     wrapper_copy._cli_command = CLICommand(prefix, cmd_args, desc, perm)  # type: ignore
     wrapper_copy._cli_command.func = wrapper_copy  # type: ignore
