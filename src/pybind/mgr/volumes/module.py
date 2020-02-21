@@ -243,7 +243,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
-        placement = cmd.get('placement', None)
+        placement = cmd.get('placement', '')
         return self.vc.create_fs_volume(vol_id, placement)
 
     def _cmd_fs_volume_rm(self, inbuf, cmd):
