@@ -24,16 +24,19 @@ import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { LoginPasswordFormComponent } from './core/auth/login-password-form/login-password-form.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
 import { UserPasswordFormComponent } from './core/auth/user-password-form/user-password-form.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.component';
+import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
+import { ChangePasswordGuardService } from './shared/services/change-password-guard.service';
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
@@ -74,8 +77,8 @@ const routes: Routes = [
   {
     path: '',
     component: WorkbenchLayoutComponent,
-    canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService],
+    canActivate: [AuthGuardService, ChangePasswordGuardService],
+    canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
       { path: 'dashboard', component: DashboardComponent },
       // Cluster
@@ -282,13 +285,24 @@ const routes: Routes = [
   },
   {
     path: '',
+    component: LoginLayoutComponent,
+    children: [
+      { path: 'login', component: LoginComponent },
+      {
+        path: 'login-change-password',
+        component: LoginPasswordFormComponent,
+        canActivate: [NoSsoGuardService]
+      },
+      { path: 'logout', children: [] }
+    ]
+  },
+  {
+    path: '',
     component: BlankLayoutComponent,
     children: [
       // Single Sign-On (SSO)
       { path: 'sso/404', component: SsoNotFoundComponent },
       // System
-      { path: 'login', component: LoginComponent },
-      { path: 'logout', children: [] },
       { path: '403', component: ForbiddenComponent },
       { path: '404', component: NotFoundComponent },
       { path: '**', redirectTo: '/404' }

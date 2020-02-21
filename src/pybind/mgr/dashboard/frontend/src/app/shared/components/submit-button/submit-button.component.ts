@@ -30,12 +30,19 @@ import * as _ from 'lodash';
 export class SubmitButtonComponent implements OnInit {
   @Input()
   form: FormGroup | NgForm;
+
   @Input()
   type = 'submit';
-  @Output()
-  submitAction = new EventEmitter();
+
   @Input()
   disabled = false;
+
+  // A CSS class string to apply to the button's main element.
+  @Input()
+  btnClass: string;
+
+  @Output()
+  submitAction = new EventEmitter();
 
   loading = false;
   icons = Icons;

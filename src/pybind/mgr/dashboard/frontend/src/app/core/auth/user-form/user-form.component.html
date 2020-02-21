@@ -102,6 +102,7 @@
                   i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
+
         <!-- Password expiration date -->
         <div class="form-group row"
              *ngIf="!authStorageService.isSSO()">
@@ -211,6 +212,23 @@
               <label class="custom-control-label"
                      for="enabled"
                      i18n>Enabled</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Force change password -->
+        <div class="form-group row"
+             *ngIf="!isCurrentUser() && !authStorageService.isSSO()">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="pwdUpdateRequired"
+                     name="pwdUpdateRequired"
+                     formControlName="pwdUpdateRequired">
+              <label class="custom-control-label"
+                     for="pwdUpdateRequired"
+                     i18n>User must change password at next logon</label>
             </div>
           </div>
         </div>

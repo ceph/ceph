@@ -1,0 +1,31 @@
+@import 'defaults';
+
+::ng-deep .login {
+  color: $color-login-row-text;
+  background-color: $color-login-row-bg;
+
+  header {
+    position: absolute;
+    width: 100vw;
+
+    .navbar {
+      padding: 1rem 2rem;
+
+      .dropdown-menu {
+        margin-top: 0.2rem;
+
+        li a {
+          &:hover {
+            background-color: $color-brand-teal;
+          }
+        }
+      }
+    }
+  }
+
+  section {
+    display: inline-flex;
+    width: 100vw;
+    min-height: 100vh;
+  }
+}

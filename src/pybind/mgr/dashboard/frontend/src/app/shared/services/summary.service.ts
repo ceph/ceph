@@ -36,7 +36,7 @@ export class SummaryService {
   }
 
   refresh() {
-    if (this.router.url !== '/login') {
+    if (!_.includes(['/login', '/login-change-password'], this.router.url)) {
       this.http.get('api/summary').subscribe((data) => {
         this.summaryDataSource.next(data);
       });

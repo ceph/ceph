@@ -7,20 +7,22 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { AuthService } from '../../../shared/api/auth.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { UserPasswordFormComponent } from './user-password-form.component';
+import { LoginPasswordFormComponent } from './login-password-form.component';
 
-describe('UserPasswordFormComponent', () => {
-  let component: UserPasswordFormComponent;
-  let fixture: ComponentFixture<UserPasswordFormComponent>;
+describe('LoginPasswordFormComponent', () => {
+  let component: LoginPasswordFormComponent;
+  let fixture: ComponentFixture<LoginPasswordFormComponent>;
   let form: CdFormGroup;
   let formHelper: FormHelper;
   let httpTesting: HttpTestingController;
   let router: Router;
   let authStorageService: AuthStorageService;
+  let authService: AuthService;
 
   configureTestBed(
     {
@@ -32,21 +34,22 @@ describe('UserPasswordFormComponent', () => {
         ToastrModule.forRoot(),
         SharedModule
       ],
-      declarations: [UserPasswordFormComponent],
+      declarations: [LoginPasswordFormComponent],
       providers: i18nProviders
     },
     true
   );
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(UserPasswordFormComponent);
+    fixture = TestBed.createComponent(LoginPasswordFormComponent);
     component = fixture.componentInstance;
-    form = component.userForm;
     httpTesting = TestBed.get(HttpTestingController);
     router = TestBed.get(Router);
     authStorageService = TestBed.get(AuthStorageService);
+    authService = TestBed.get(AuthService);
     spyOn(router, 'navigate');
     fixture.detectChanges();
+    form = component.userForm;
     formHelper = new FormHelper(form);
   });
 
@@ -54,34 +57,25 @@ describe('UserPasswordFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should validate old password required', () => {
-    formHelper.expectErrorChange('oldpassword', '', 'required');
-    formHelper.expectValidChange('oldpassword', 'foo');
-  });
-
-  it('should validate password match', () => {
-    formHelper.setValue('newpassword', 'aaa');
-    formHelper.expectErrorChange('confirmnewpassword', 'bbb', 'match');
-    formHelper.expectValidChange('confirmnewpassword', 'aaa');
-  });
-
   it('should submit', () => {
     spyOn(component, 'onPasswordChange').and.callThrough();
-    spyOn(authStorageService, 'getUsername').and.returnValue('xyz');
+    spyOn(authService, 'logout');
+    spyOn(authStorageService, 'getUsername').and.returnValue('test1');
     formHelper.setMultipleValues({
       oldpassword: 'foo',
       newpassword: 'bar'
     });
     formHelper.setValue('confirmnewpassword', 'bar', true);
     component.onSubmit();
-    const request = httpTesting.expectOne('api/user/xyz/change_password');
-    expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({
-      old_password: 'foo',
-      new_password: 'bar'
-    });
+    const request = httpTesting.expectOne('api/user/test1/change_password');
     request.flush({});
     expect(component.onPasswordChange).toHaveBeenCalled();
-    expect(router.navigate).toHaveBeenCalledWith(['/logout']);
+    expect(authService.logout).toHaveBeenCalled();
+  });
+
+  it('should cancel', () => {
+    spyOn(authService, 'logout');
+    component.onCancel();
+    expect(authService.logout).toHaveBeenCalled();
   });
 });
