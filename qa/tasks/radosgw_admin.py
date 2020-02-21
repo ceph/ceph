@@ -17,8 +17,9 @@ import datetime
 import Queue
 
 import sys
+import six
 
-from cStringIO import StringIO
+from io import BytesIO
 
 import boto.exception
 import boto.s3.connection
@@ -1038,7 +1039,7 @@ def task(ctx, config):
     out['placement_pools'].append(rule)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'set'],
-        stdin=StringIO(json.dumps(out)),
+        stdin=BytesIO(six.ensure_binary(json.dumps(out))),
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
