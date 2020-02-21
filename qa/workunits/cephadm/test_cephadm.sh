@@ -4,19 +4,14 @@ SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 FSID='00000000-0000-0000-0000-0000deadbeef'
-FSID_LEGACY='00000000-0000-0000-0000-ffffdeadbeef'
 
 # images that are used
 IMAGE_MASTER=${IMAGE_MASTER:-'docker.io/ceph/daemon-base:latest-master-devel'}
 IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
 
-CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
-git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
-CORPUS_DIR=${TMPDIR}/archive
-TEST_TARS=$(find ${CORPUS_DIR} -type f -iname *.tgz)
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -79,7 +74,6 @@ CEPHADM="$SUDO $CEPHADM_BIN $CEPHADM_ARGS"
 
 # clean up previous run(s)?
 $CEPHADM rm-cluster --fsid $FSID --force
-$CEPHADM rm-cluster --fsid $FSID_LEGACY --force
 $SUDO vgchange -an $OSD_VG_NAME || true
 loopdev=$($SUDO losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
 if ! [ "$loopdev" = "" ]; then
@@ -269,27 +263,6 @@ echo "grafana ok"
 
 ## run
 # WRITE ME
-
-## adopt
-for tarball in $TEST_TARS; do
-    TMP_TAR_DIR=`mktemp -d -p $TMPDIR`
-    $SUDO tar xzvf $tarball -C $TMP_TAR_DIR
-    NAMES=$($CEPHADM ls --legacy-dir $TMP_TAR_DIR | jq -r '.[].name')
-    for name in $NAMES; do
-        $CEPHADM adopt \
-                --style legacy \
-                --legacy-dir $TMP_TAR_DIR \
-                --name $name
-        # validate after adopt
-        out=$($CEPHADM ls | jq '.[]' \
-                              | jq 'select(.name == "'$name'")')
-        echo $out | jq -r '.style' | grep 'cephadm'
-        echo $out | jq -r '.fsid' | grep $FSID_LEGACY
-    done
-    # clean-up before next iter
-    $CEPHADM rm-cluster --fsid $FSID_LEGACY --force
-    $SUDO rm -rf $TMP_TAR_DIR
-done
 
 ## unit
 $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
