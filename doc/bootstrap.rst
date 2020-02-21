@@ -89,7 +89,8 @@ administrator key in a global location::
 
    [any node] $ sudo apt install -y ceph-common   # or,
    [any node] $ sudo dnf install -y ceph-common   # or,
-   [any node] $ sudo yum install -y ceph-common
+   [any node] $ sudo yum install -y ceph-common   # or,
+   [any node] $ sudo zypper in -y ceph-common
 
    [any node] $ sudo install -m 0644 ceph.conf /etc/ceph/ceph.conf
    [any node] $ sudo install -m 0600 ceph.keyring /etc/ceph/ceph.keyring
