@@ -134,6 +134,9 @@ class Module(MgrModule):
         self.task = TaskHandler(self)
 
     def handle_command(self, inbuf, cmd):
+        # ensure we have latest pools available
+        self.rados.wait_for_latest_osdmap()
+
         prefix = cmd['prefix']
         try:
             try:
