@@ -17,6 +17,8 @@ overrides:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     conf:
       global:
         osd max object name len: 460

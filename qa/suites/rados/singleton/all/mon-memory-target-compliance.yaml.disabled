@@ -42,6 +42,8 @@ tasks:
     branch: wip-sseshasa2-testing-2019-07-30-1825 # change as appropriate
 - ceph:
     create_rbd_pool: false
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     log-whitelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
