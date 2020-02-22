@@ -166,6 +166,7 @@ IP=127.0.0.1
 cat <<EOF > $ORIG_CONFIG
 [global]
 	log to file = true
+        osd crush chooseleaf type = 0
 EOF
 $CEPHADM bootstrap \
       --mon-id a \
