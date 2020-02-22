@@ -557,7 +557,9 @@ public:
                           librbd::MockTestImageCtx& mock_remote_image_ctx,
                           MockReplayerListener& mock_replayer_listener,
                           librbd::UpdateWatchCtx** update_watch_ctx) {
-    expect_register_update_watcher(mock_remote_image_ctx, update_watch_ctx, 123,
+    expect_register_update_watcher(mock_local_image_ctx, update_watch_ctx, 123,
+                                   0);
+    expect_register_update_watcher(mock_remote_image_ctx, update_watch_ctx, 234,
                                    0);
     expect_is_refresh_required(mock_local_image_ctx, false);
     expect_is_refresh_required(mock_remote_image_ctx, false);
@@ -574,8 +576,10 @@ public:
 
   int shut_down_entry_replayer(MockReplayer& mock_replayer,
                                MockThreads& mock_threads,
+                               librbd::MockTestImageCtx& mock_local_image_ctx,
                                librbd::MockTestImageCtx& mock_remote_image_ctx) {
-    expect_unregister_update_watcher(mock_remote_image_ctx, 123, 0);
+    expect_unregister_update_watcher(mock_remote_image_ctx, 234, 0);
+    expect_unregister_update_watcher(mock_local_image_ctx, 123, 0);
 
     C_SaferCond shutdown_ctx;
     mock_replayer.shut_down(&shutdown_ctx);
@@ -621,6 +625,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InitShutDown) {
                                    mock_replayer_listener,
                                    &update_watch_ctx));
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -666,7 +671,9 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
 
   // init
-  expect_register_update_watcher(mock_remote_image_ctx, &update_watch_ctx, 123,
+  expect_register_update_watcher(mock_local_image_ctx, &update_watch_ctx, 123,
+                                 0);
+  expect_register_update_watcher(mock_remote_image_ctx, &update_watch_ctx, 234,
                                  0);
 
   // sync snap1
@@ -741,6 +748,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
 
   // shut down
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -817,6 +825,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSync) {
   ASSERT_EQ(0, wait_for_notification(2));
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -895,6 +904,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
   ASSERT_FALSE(mock_replayer.is_replaying());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -945,10 +955,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, LocalImagePromoted) {
   ASSERT_FALSE(mock_replayer.is_replaying());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
-TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterUpdateWatcherError) {
+TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterLocalUpdateWatcherError) {
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
   librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
 
@@ -969,7 +980,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterUpdateWatcherError) {
 
   // init
   librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
-  expect_register_update_watcher(mock_remote_image_ctx, &update_watch_ctx, 123,
+  expect_register_update_watcher(mock_local_image_ctx, &update_watch_ctx, 123,
                                  -EINVAL);
 
   // fire init
@@ -978,7 +989,41 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterUpdateWatcherError) {
   ASSERT_EQ(-EINVAL, init_ctx.wait());
 }
 
-TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterUpdateWatcherError) {
+TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterRemoteUpdateWatcherError) {
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
+  librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+
+  InSequence seq;
+
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_image_ctx);
+  MockReplayerListener mock_replayer_listener;
+  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
+                             &m_pool_meta_cache, &mock_state_builder,
+                             &mock_replayer_listener};
+  m_pool_meta_cache.set_remote_pool_meta(
+    m_remote_io_ctx.get_id(),
+    {"remote mirror uuid", "remote mirror peer uuid"});
+
+  // init
+  librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
+  expect_register_update_watcher(mock_local_image_ctx, &update_watch_ctx, 123,
+                                 0);
+  expect_register_update_watcher(mock_remote_image_ctx, &update_watch_ctx, 234,
+                                 -EINVAL);
+
+  expect_unregister_update_watcher(mock_local_image_ctx, 123, 0);
+
+  // fire init
+  C_SaferCond init_ctx;
+  mock_replayer.init(&init_ctx);
+  ASSERT_EQ(-EINVAL, init_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterRemoteUpdateWatcherError) {
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
   librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
 
@@ -1008,7 +1053,46 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterUpdateWatcherError) {
 
 
   // shut down
-  expect_unregister_update_watcher(mock_remote_image_ctx, 123, -EINVAL);
+  expect_unregister_update_watcher(mock_remote_image_ctx, 234, -EINVAL);
+  expect_unregister_update_watcher(mock_local_image_ctx, 123, 0);
+
+  C_SaferCond shutdown_ctx;
+  mock_replayer.shut_down(&shutdown_ctx);
+  ASSERT_EQ(-EINVAL, shutdown_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterLocalUpdateWatcherError) {
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
+  librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+
+  MockReplayerListener mock_replayer_listener;
+  expect_notification(mock_threads, mock_replayer_listener);
+
+  InSequence seq;
+
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_image_ctx);
+  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
+                             &m_pool_meta_cache, &mock_state_builder,
+                             &mock_replayer_listener};
+  m_pool_meta_cache.set_remote_pool_meta(
+    m_remote_io_ctx.get_id(),
+    {"remote mirror uuid", "remote mirror peer uuid"});
+
+  librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
+  ASSERT_EQ(0, init_entry_replayer(mock_replayer, mock_threads,
+                                   mock_local_image_ctx,
+                                   mock_remote_image_ctx,
+                                   mock_replayer_listener,
+                                   &update_watch_ctx));
+
+
+  // shut down
+  expect_unregister_update_watcher(mock_remote_image_ctx, 234, 0);
+  expect_unregister_update_watcher(mock_local_image_ctx, 123, -EINVAL);
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
@@ -1056,6 +1140,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RefreshLocalImageError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -1101,6 +1186,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RefreshRemoteImageError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -1155,6 +1241,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopySnapshotsError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -1211,6 +1298,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, GetImageStateError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -1271,6 +1359,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CreateNonPrimarySnapshotError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -1334,6 +1423,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopyImageError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -1401,6 +1491,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 
@@ -1481,6 +1572,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
                                         mock_remote_image_ctx));
 }
 

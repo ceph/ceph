@@ -95,7 +95,10 @@ private:
    * <init>
    *    |
    *    v
-   * REGISTER_UPDATE_WATCHER
+   * REGISTER_LOCAL_UPDATE_WATCHER
+   *    |
+   *    v
+   * REGISTER_REMOTE_UPDATE_WATCHER
    *    |
    *    v (skip if not needed)
    * REFRESH_LOCAL_IMAGE <------------------------------\
@@ -149,7 +152,10 @@ private:
    * <shut down>
    *    |
    *    v
-   * UNREGISTER_UPDATE_WATCHER
+   * UNREGISTER_REMOTE_UPDATE_WATCHER
+   *    |
+   *    v
+   * UNREGISTER_LOCAL_UPDATE_WATCHER
    *    |
    *    v
    * WAIT_FOR_IN_FLIGHT_OPS
@@ -187,7 +193,9 @@ private:
   std::string m_error_description;
 
   C_UpdateWatchCtx* m_update_watch_ctx;
-  uint64_t m_update_watcher_handle = 0;
+  uint64_t m_local_update_watcher_handle = 0;
+  uint64_t m_remote_update_watcher_handle = 0;
+  bool m_image_updated = false;
 
   AsyncOpTracker m_in_flight_op_tracker;
 
@@ -245,16 +253,22 @@ private:
   void unlink_peer();
   void handle_unlink_peer(int r);
 
-  void register_update_watcher();
-  void handle_register_update_watcher(int r);
+  void register_local_update_watcher();
+  void handle_register_local_update_watcher(int r);
 
-  void unregister_update_watcher();
-  void handle_unregister_update_watcher(int r);
+  void register_remote_update_watcher();
+  void handle_register_remote_update_watcher(int r);
+
+  void unregister_remote_update_watcher();
+  void handle_unregister_remote_update_watcher(int r);
+
+  void unregister_local_update_watcher();
+  void handle_unregister_local_update_watcher(int r);
 
   void wait_for_in_flight_ops();
   void handle_wait_for_in_flight_ops(int r);
 
-  void handle_remote_image_update_notify();
+  void handle_image_update_notify();
 
   void handle_replay_complete(int r, const std::string& description);
   void handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
