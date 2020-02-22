@@ -558,16 +558,8 @@ ceph_cluster_log(BaseMgrModule *self, PyObject *args)
   int prio = 0;
   char *channel = nullptr;
   char *message = nullptr;
-  std::vector<std::string> channels = { "audit", "cluster" };
 
   if (!PyArg_ParseTuple(args, "sis:ceph_cluster_log", &channel, &prio, &message)) {
-    return nullptr;
-  }
-
-  if (std::find(channels.begin(), channels.end(), std::string(channel)) == channels.end()) {
-    std::string msg("Unknown channel: ");
-    msg.append(channel);
-    PyErr_SetString(PyExc_ValueError, msg.c_str());
     return nullptr;
   }
 
