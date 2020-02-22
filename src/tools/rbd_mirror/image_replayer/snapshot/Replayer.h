@@ -73,9 +73,8 @@ public:
   }
 
   bool is_resync_requested() const override {
-    std::unique_lock locker(m_lock);
-    // TODO
-    return false;
+    std::unique_lock locker{m_lock};
+    return m_resync_requested;
   }
 
   int get_error_code() const override {
@@ -100,8 +99,11 @@ private:
    *    v
    * REGISTER_REMOTE_UPDATE_WATCHER
    *    |
-   *    v (skip if not needed)
-   * REFRESH_LOCAL_IMAGE <------------------------------\
+   *    v
+   * LOAD_LOCAL_IMAGE_META <----------------------------\
+   *    |                                               |
+   *    v (skip if not needed)                          |
+   * REFRESH_LOCAL_IMAGE                                |
    *    |                                               |
    *    v (skip if not needed)                          |
    * REFRESH_REMOTE_IMAGE                               |
@@ -189,6 +191,7 @@ private:
 
   Context* m_on_init_shutdown = nullptr;
 
+  bool m_resync_requested = false;
   int m_error_code = 0;
   std::string m_error_description;
 
@@ -214,6 +217,9 @@ private:
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
+
+  void load_local_image_meta();
+  void handle_load_local_image_meta(int r);
 
   void refresh_local_image();
   void handle_refresh_local_image(int r);

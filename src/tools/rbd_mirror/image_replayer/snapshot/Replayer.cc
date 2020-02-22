@@ -15,6 +15,7 @@
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
+#include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -272,6 +273,37 @@ bool Replayer<I>::get_replay_status(std::string* description,
   locker.unlock();
   on_finish->complete(-EEXIST);
   return true;
+}
+
+template <typename I>
+void Replayer<I>::load_local_image_meta() {
+  dout(10) << dendl;
+
+  ceph_assert(m_state_builder->local_image_meta != nullptr);
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_load_local_image_meta>(this);
+  m_state_builder->local_image_meta->load(ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_load_local_image_meta(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to load local image-meta: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "failed to load local image-meta");
+    return;
+  }
+
+  if (r >= 0 && m_state_builder->local_image_meta->resync_requested) {
+    m_resync_requested = true;
+
+    dout(10) << "local image resync requested" << dendl;
+    handle_replay_complete(0, "resync requested");
+    return;
+  }
+
+  refresh_local_image();
 }
 
 template <typename I>
@@ -551,7 +583,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
 
     dout(10) << "restarting snapshot scan due to remote update notification"
              << dendl;
-    refresh_local_image();
+    load_local_image_meta();
     return;
   }
 
@@ -866,7 +898,7 @@ void Replayer<I>::unlink_peer() {
       notify_status_updated();
     }
 
-    refresh_local_image();
+    load_local_image_meta();
     return;
   }
 
@@ -898,7 +930,7 @@ void Replayer<I>::handle_unlink_peer(int r) {
     notify_status_updated();
   }
 
-  refresh_local_image();
+  load_local_image_meta();
 }
 
 template <typename I>
@@ -975,7 +1007,7 @@ void Replayer<I>::handle_register_remote_update_watcher(int r) {
     notify_status_updated();
   }
 
-  refresh_local_image();
+  load_local_image_meta();
 }
 
 template <typename I>
@@ -1067,7 +1099,7 @@ void Replayer<I>::handle_image_update_notify() {
     locker.unlock();
 
     dout(15) << "restarting idle replayer" << dendl;
-    refresh_local_image();
+    load_local_image_meta();
   }
 }
 
