@@ -1031,8 +1031,7 @@ Option::value_t md_config_t::get_val_generic(
   const ConfigValues& values,
   const std::string_view key) const
 {
-  string k(ConfFile::normalize_key_name(key));
-  return _get_val(values, k);
+  return _get_val(values, key);
 }
 
 Option::value_t md_config_t::_get_val(
@@ -1274,8 +1273,6 @@ int md_config_t::_get_val_cstr(
     snprintf(*buf, len, "%s", val.c_str());
     return (l > len) ? -ENAMETOOLONG : 0;
   }
-
-  string k(ConfFile::normalize_key_name(key));
 
   // couldn't find a configuration option with key 'k'
   return -ENOENT;
