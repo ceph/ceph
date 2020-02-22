@@ -22,6 +22,8 @@ override:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     log-whitelist:
     - but it is still running
     - missing primary copy of

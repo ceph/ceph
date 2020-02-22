@@ -16,6 +16,8 @@ tasks:
         - librados-devel
         - libradospp-devel
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
 - workunit:
     clients:
       all:

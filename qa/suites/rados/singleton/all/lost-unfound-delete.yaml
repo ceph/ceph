@@ -13,6 +13,8 @@ openstack:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     log-whitelist:
       - objects unfound and apparently lost
       - overall HEALTH_
