@@ -163,9 +163,12 @@ endif()
 if(WITH_RBD_RWL)
   set(librbd_internal_srcs
     ${librbd_internal_srcs}
-    cache/rwl/Types.cc
-    cache/rwl/LogEntry.cc
     cache/rwl/ImageCacheState.cc
+    cache/rwl/LogEntry.cc
+    cache/rwl/LogOperation.cc
+    cache/rwl/Request.cc
+    cache/rwl/SyncPoint.cc
+    cache/rwl/Types.cc
     cache/ReplicatedWriteLog.cc)
 endif()
 

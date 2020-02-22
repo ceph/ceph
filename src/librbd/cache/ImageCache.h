@@ -23,6 +23,7 @@ struct ImageCache {
 protected:
   ImageCache() {}
 public:
+  typedef io::Extent Extent;
   typedef io::Extents Extents;
 
   virtual ~ImageCache() {}
