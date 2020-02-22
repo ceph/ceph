@@ -26,6 +26,7 @@
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
+#include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -647,24 +648,63 @@ int Mirror<I>::image_resync(I *ictx) {
     return r;
   }
 
-  C_SaferCond tag_owner_ctx;
-  bool is_tag_owner;
-  Journal<I>::is_tag_owner(ictx, &is_tag_owner, &tag_owner_ctx);
-  r = tag_owner_ctx.wait();
+  cls::rbd::MirrorImage mirror_image;
+  mirror::PromotionState promotion_state;
+  std::string primary_mirror_uuid;
+  C_SaferCond get_info_ctx;
+  auto req = mirror::GetInfoRequest<I>::create(*ictx, &mirror_image,
+                                               &promotion_state,
+                                               &primary_mirror_uuid,
+                                               &get_info_ctx);
+  req->send();
+
+  r = get_info_ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-               << dendl;
     return r;
-  } else if (is_tag_owner) {
+  }
+
+  if (promotion_state == mirror::PROMOTION_STATE_PRIMARY) {
     lderr(cct) << "image is primary, cannot resync to itself" << dendl;
     return -EINVAL;
   }
 
-  // flag the journal indicating that we want to rebuild the local image
-  r = Journal<I>::request_resync(ictx);
-  if (r < 0) {
-    lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
-    return r;
+  if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    // flag the journal indicating that we want to rebuild the local image
+    r = Journal<I>::request_resync(ictx);
+    if (r < 0) {
+      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    std::string mirror_uuid;
+    r = uuid_get(ictx->md_ctx, &mirror_uuid);
+    if (r < 0) {
+      return r;
+    }
+
+    mirror::snapshot::ImageMeta image_meta(ictx, mirror_uuid);
+
+    C_SaferCond load_meta_ctx;
+    image_meta.load(&load_meta_ctx);
+    r = load_meta_ctx.wait();
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to load mirror image-meta: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    image_meta.resync_requested = true;
+
+    C_SaferCond save_meta_ctx;
+    image_meta.save(&save_meta_ctx);
+    r = save_meta_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else {
+    lderr(cct) << "unknown mirror mode" << dendl;
+    return -EINVAL;
   }
 
   return 0;
