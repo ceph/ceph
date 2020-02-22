@@ -1493,10 +1493,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return None
 
     def _refresh_host_devices(self, host):
-        out, err, code = self._run_cephadm(
-            host, 'osd',
-            'ceph-volume',
-            ['--', 'inventory', '--format=json'])
+        try:
+            out, err, code = self._run_cephadm(
+                host, 'osd',
+                'ceph-volume',
+                ['--', 'inventory', '--format=json'])
+            if code:
+                return 'host %s ceph-volume inventory returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s ceph-volume inventory failed: %s' % (host, e)
         data = json.loads(''.join(out))
         self.log.debug('Refreshed host %s devices: %s' % (host, data))
         devices = inventory.Devices.from_json(data)
