@@ -1447,6 +1447,13 @@ def run_daemon(ctx, config, type_):
                 role = cluster_name + '.' + type_
                 ctx.daemons.get_daemon(type_, id_, cluster_name).restart()
 
+    # kludge: run any pre-manager commands
+    if type_ == 'mon':
+        for cmd in config.get('pre-mgr-commands', []):
+            firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
+            (remote,) = ctx.cluster.only(firstmon).remotes.keys()
+            remote.run(args=cmd.split(' '))
+
     try:
         yield
     finally:
