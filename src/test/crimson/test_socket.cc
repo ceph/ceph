@@ -373,7 +373,13 @@ future<> test_read_write() {
 future<> test_unexpected_down() {
   logger.info("test_unexpected_down()...");
   return SocketFactory::dispatch_sockets(
-    [] (auto cs) { return Connection::dispatch_rw_bounded(cs, 128, true); },
+    [] (auto cs) { 
+      return Connection::dispatch_rw_bounded(cs, 128, true
+        ).handle_exception_type([] (const std::system_error& e) {
+        logger.debug("test_unexpected_down(): client get error {}", e);
+        ceph_assert(e.code() == error::read_eof);
+      });
+    },
     [] (auto ss) { return Connection::dispatch_rw_unbounded(ss); }
   ).then([] {
     logger.info("test_unexpected_down() ok\n");
