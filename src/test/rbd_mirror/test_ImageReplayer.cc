@@ -122,9 +122,14 @@ public:
       features |= RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
                                                    RBD_MIRROR_MODE_POOL));
+      EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_local_ioctx,
+                                                   RBD_MIRROR_MODE_POOL));
     } else {
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
                                                    RBD_MIRROR_MODE_IMAGE));
+      EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_local_ioctx,
+                                                   RBD_MIRROR_MODE_IMAGE));
+
 
       uuid_d uuid_gen;
       uuid_gen.generate_random();
@@ -138,6 +143,11 @@ public:
       m_pool_meta_cache.set_remote_pool_meta(
         m_remote_ioctx.get_id(), {m_remote_mirror_uuid, remote_peer_uuid});
     }
+
+    EXPECT_EQ(0, librbd::api::Mirror<>::uuid_get(m_remote_ioctx,
+                                                 &m_remote_mirror_uuid));
+    EXPECT_EQ(0, librbd::api::Mirror<>::uuid_get(m_local_ioctx,
+                                                 &m_local_mirror_uuid));
 
     m_image_name = get_temp_image_name();
     int order = 0;
@@ -212,6 +222,10 @@ public:
     m_replayer->start(&cond);
     ASSERT_EQ(0, cond.wait());
 
+    create_watch_ctx();
+  }
+
+  void create_watch_ctx() {
     std::string oid;
     if (MIRROR_IMAGE_MODE == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
       oid = ::journal::Journaler::header_oid(m_remote_image_id);
@@ -220,12 +234,9 @@ public:
     }
 
     ASSERT_EQ(0U, m_watch_handle);
-    create_watch_ctx(oid);
-    ASSERT_EQ(0, m_remote_ioctx.watch2(oid, &m_watch_handle, m_watch_ctx));
-  }
-
-  void create_watch_ctx(const std::string& oid) {
+    ASSERT_TRUE(m_watch_ctx == nullptr);
     m_watch_ctx = new C_WatchCtx(this, oid);
+    ASSERT_EQ(0, m_remote_ioctx.watch2(oid, &m_watch_handle, m_watch_ctx));
   }
 
   void unwatch() {
@@ -824,9 +835,8 @@ TEST_F(TestImageReplayerJournal, NextTag)
   this->stop();
 }
 
-TEST_F(TestImageReplayerJournal, Resync)
+TYPED_TEST(TestImageReplayer, Resync)
 {
-  // TODO add support to snapshot-based mirroring
   this->bootstrap();
 
   librbd::ImageCtx *ictx;
@@ -852,7 +862,7 @@ TEST_F(TestImageReplayerJournal, Resync)
   this->close_image(ictx);
 
   this->open_local_image(&ictx);
-  librbd::Journal<>::request_resync(ictx);
+  EXPECT_EQ(0, librbd::api::Mirror<>::image_resync(ictx));
   this->close_image(ictx);
 
   this->wait_for_stopped();
@@ -874,10 +884,8 @@ TEST_F(TestImageReplayerJournal, Resync)
   this->stop();
 }
 
-TEST_F(TestImageReplayerJournal, Resync_While_Stop)
+TYPED_TEST(TestImageReplayer, Resync_While_Stop)
 {
-  // TODO add support to snapshot-based mirroring
-
   this->bootstrap();
 
   this->start();
@@ -908,7 +916,7 @@ TEST_F(TestImageReplayerJournal, Resync_While_Stop)
   ASSERT_EQ(0, cond.wait());
 
   this->open_local_image(&ictx);
-  librbd::Journal<>::request_resync(ictx);
+  EXPECT_EQ(0, librbd::api::Mirror<>::image_resync(ictx));
   this->close_image(ictx);
 
   C_SaferCond cond2;
@@ -935,15 +943,13 @@ TEST_F(TestImageReplayerJournal, Resync_While_Stop)
   this->stop();
 }
 
-TEST_F(TestImageReplayerJournal, Resync_StartInterrupted)
+TYPED_TEST(TestImageReplayer, Resync_StartInterrupted)
 {
-  // TODO add support to snapshot-based mirroring
-
   this->bootstrap();
 
   librbd::ImageCtx *ictx;
   this->open_local_image(&ictx);
-  librbd::Journal<>::request_resync(ictx);
+  EXPECT_EQ(0, librbd::api::Mirror<>::image_resync(ictx));
   this->close_image(ictx);
 
   C_SaferCond cond;
@@ -956,11 +962,7 @@ TEST_F(TestImageReplayerJournal, Resync_StartInterrupted)
   this->m_replayer->start(&cond2);
   ASSERT_EQ(0, cond2.wait());
 
-  ASSERT_EQ(0U, this->m_watch_handle);
-  std::string oid = ::journal::Journaler::header_oid(this->m_remote_image_id);
-  this->create_watch_ctx(oid);
-  ASSERT_EQ(0, this->m_remote_ioctx.watch2(oid, &this->m_watch_handle,
-                                           this->m_watch_ctx));
+  this->create_watch_ctx();
 
   ASSERT_TRUE(this->m_replayer->is_replaying());
 
