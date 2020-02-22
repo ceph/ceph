@@ -1979,8 +1979,19 @@ def command_bootstrap():
             return 'dashboard' in out
         is_available('Dashboard', is_dashboard_available)()
 
-        logger.info('Generating a dashboard self-signed certificate...')
-        cli(['dashboard', 'create-self-signed-cert'])
+
+
+        # dashboard crt and key
+        if args.dashboard_key and args.dashboard_crt:
+            logger.info('Using provided dashboard certificate...')
+            mounts = {}
+            mounts[pathify(args.dashboard_crt)] = '/tmp/dashboard.crt:z'
+            mounts[pathify(args.dashboard_key)] = '/tmp/dashboard.key:z'
+            cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
+            cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
+        else:
+            logger.info('Generating a dashboard self-signed certificate...')
+            cli(['dashboard', 'create-self-signed-cert'])
 
         logger.info('Creating initial admin user...')
         password = args.initial_dashboard_password or generate_password()
@@ -3240,6 +3251,14 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--initial-dashboard-password',
         help='Initial password for the initial dashboard user')
+
+    parser_bootstrap.add_argument(
+        '--dashboard-key',
+        help='Dashboard key')
+    parser_bootstrap.add_argument(
+        '--dashboard-crt',
+        help='Dashboard certificate')
+
     parser_bootstrap.add_argument(
         '--skip-dashboard',
         action='store_true',
