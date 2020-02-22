@@ -41,6 +41,10 @@ inline ImageCtx *get_image_ctx(MockImageCtx *image_ctx) {
 // template definitions
 #include "librbd/cache/ImageWriteback.cc"
 #include "librbd/cache/rwl/ImageCacheState.cc"
+#include "librbd/cache/rwl/SyncPoint.cc"
+#include "librbd/cache/rwl/Request.cc"
+#include "librbd/cache/rwl/Types.cc"
+#include "librbd/cache/rwl/LogOperation.cc"
 
 template class librbd::cache::ImageWriteback<librbd::MockImageCtx>;
 template class librbd::cache::rwl::ImageCacheState<librbd::MockImageCtx>;
@@ -65,8 +69,8 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
   void validate_cache_state(librbd::ImageCtx *image_ctx,
                             MockImageCacheStateRWL &state,
                             bool present, bool empty, bool clean,
-			    string host="", string path="",
-			    uint64_t size=0) {
+                            string host="", string path="",
+                            uint64_t size=0) {
     ConfigProxy &config = image_ctx->config;
     ASSERT_EQ(present, state.present);
     ASSERT_EQ(empty, state.empty);
@@ -96,8 +100,8 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
   void expect_context_complete(MockContextRWL& mock_context, int r) {
     EXPECT_CALL(mock_context, complete(r))
       .WillRepeatedly(Invoke([&mock_context](int r) {
-                  mock_context.do_complete(r);
-                }));
+                        mock_context.do_complete(r);
+                      }));
   }
 
   void expect_metadata_set(MockImageCtx& mock_image_ctx) {
@@ -190,6 +194,35 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_shutdown) {
   expect_context_complete(finish_ctx2, 0);
   rwl.shut_down(&finish_ctx2);
   ASSERT_EQ(0, finish_ctx2.wait());
+}
+
+TEST_F(TestMockCacheReplicatedWriteLog, aio_write) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+
+  MockContextRWL finish_ctx1;
+  expect_op_work_queue(mock_image_ctx);
+  expect_metadata_set(mock_image_ctx);
+  expect_context_complete(finish_ctx1, 0);
+  rwl.init(&finish_ctx1);
+  ASSERT_EQ(0, finish_ctx1.wait());
+
+  MockContextRWL finish_ctx2;
+  expect_context_complete(finish_ctx2, 0);
+  Extents image_extents{{0, 4096}};
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  int fadvise_flags = 0;
+  rwl.aio_write(std::move(image_extents), std::move(bl), fadvise_flags, &finish_ctx2);
+  ASSERT_EQ(0, finish_ctx2.wait());
+
+  MockContextRWL finish_ctx3;
+  expect_context_complete(finish_ctx3, 0);
+  rwl.shut_down(&finish_ctx3);
+  ASSERT_EQ(0, finish_ctx3.wait());
 }
 
 } // namespace cache

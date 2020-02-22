@@ -4,7 +4,7 @@
 #include <iostream>
 #include "LogEntry.h"
 
-#define dout_subsys ceph_subsys_rbd
+#define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::rwl::LogEntry: " << this << " " \
                            <<  __func__ << ": "
@@ -15,37 +15,135 @@ namespace cache {
 
 namespace rwl {
 
-bool GenericLogEntry::is_sync_point() {
-  return ram_entry.is_sync_point();
-}
-
-bool GenericLogEntry::is_discard() {
-  return ram_entry.is_discard();
-}
-
-bool GenericLogEntry::is_writesame() {
-  return ram_entry.is_writesame();
-}
-
-bool GenericLogEntry::is_write() {
-  return ram_entry.is_write();
-}
-
-bool GenericLogEntry::is_writer() {
-  return ram_entry.is_writer();
-}
-
-std::ostream &format(std::ostream &os, const GenericLogEntry &entry) {
-  os << "ram_entry=[" << entry.ram_entry << "], "
-     << "pmem_entry=" << (void*)entry.pmem_entry << ", "
-     << "log_entry_index=" << entry.log_entry_index << ", "
-     << "completed=" << entry.completed;
+std::ostream& GenericLogEntry::format(std::ostream &os) const {
+  os << "ram_entry=[" << ram_entry << "], "
+     << "pmem_entry=" << (void*)pmem_entry << ", "
+     << "log_entry_index=" << log_entry_index << ", "
+     << "completed=" << completed;
   return os;
 }
 
 std::ostream &operator<<(std::ostream &os,
                          const GenericLogEntry &entry) {
-  return entry.format(os, entry);
+  return entry.format(os);
+}
+
+std::ostream& SyncPointLogEntry::format(std::ostream &os) const {
+  os << "(Sync Point) ";
+  GenericLogEntry::format(os);
+  os << ", "
+     << "writes=" << writes << ", "
+     << "bytes=" << bytes << ", "
+     << "writes_completed=" << writes_completed << ", "
+     << "writes_flushed=" << writes_flushed << ", "
+     << "prior_sync_point_flushed=" << prior_sync_point_flushed << ", "
+     << "next_sync_point_entry=" << next_sync_point_entry;
+  return os;
+};
+
+std::ostream &operator<<(std::ostream &os,
+                         const SyncPointLogEntry &entry) {
+  return entry.format(os);
+}
+
+std::ostream& GenericWriteLogEntry::format(std::ostream &os) const {
+  GenericLogEntry::format(os);
+  os << ", "
+     << "sync_point_entry=[";
+  if (sync_point_entry) {
+    os << *sync_point_entry;
+  } else {
+    os << "nullptr";
+  }
+  os << "], "
+     << "referring_map_entries=" << referring_map_entries << ", "
+     << "flushing=" << flushing << ", "
+     << "flushed=" << flushed;
+  return os;
+};
+
+std::ostream &operator<<(std::ostream &os,
+                         const GenericWriteLogEntry &entry) {
+  return entry.format(os);
+}
+
+void WriteLogEntry::init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
+                         uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush) {
+  ram_entry.has_data = 1;
+  ram_entry.write_data = allocation->buffer_oid;
+  ceph_assert(!TOID_IS_NULL(ram_entry.write_data));
+  pmem_buffer = D_RW(ram_entry.write_data);
+  ram_entry.sync_gen_number = current_sync_gen;
+  if (persist_on_flush) {
+    /* Persist on flush. Sequence #0 is never used. */
+    ram_entry.write_sequence_number = 0;
+  } else {
+     /* Persist on write */
+     ram_entry.write_sequence_number = last_op_sequence_num;
+     ram_entry.sequenced = 1;
+  }
+  ram_entry.sync_point = 0;
+  ram_entry.discard = 0;
+}
+
+void WriteLogEntry::init_pmem_bp() {
+  ceph_assert(!pmem_bp.have_raw());
+  pmem_bp = buffer::ptr(buffer::create_static(this->write_bytes(), (char*)pmem_buffer));
+}
+
+void WriteLogEntry::init_pmem_bl() {
+  pmem_bl.clear();
+  init_pmem_bp();
+  ceph_assert(pmem_bp.have_raw());
+  int before_bl = pmem_bp.raw_nref();
+  this->init_bl(pmem_bp, pmem_bl);
+  int after_bl = pmem_bp.raw_nref();
+  bl_refs = after_bl - before_bl;
+}
+
+unsigned int WriteLogEntry::reader_count() {
+  if (pmem_bp.have_raw()) {
+    return (pmem_bp.raw_nref() - bl_refs - 1);
+  } else {
+    return 0;
+  }
+}
+
+/* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */
+buffer::list& WriteLogEntry::get_pmem_bl() {
+  if (0 == bl_refs) {
+    std::lock_guard locker(m_entry_bl_lock);
+    if (0 == bl_refs) {
+      init_pmem_bl();
+    }
+    ceph_assert(0 != bl_refs);
+  }
+  return pmem_bl;
+};
+
+/* Constructs a new bl containing copies of pmem_bp */
+void WriteLogEntry::copy_pmem_bl(bufferlist *out_bl) {
+  this->get_pmem_bl();
+  /* pmem_bp is now initialized */
+  buffer::ptr cloned_bp(pmem_bp.clone());
+  out_bl->clear();
+  this->init_bl(cloned_bp, *out_bl);
+}
+
+std::ostream& WriteLogEntry::format(std::ostream &os) const {
+  os << "(Write) ";
+  GenericWriteLogEntry::format(os);
+  os << ", "
+     << "pmem_buffer=" << (void*)pmem_buffer << ", ";
+  os << "pmem_bp=" << pmem_bp << ", ";
+  os << "pmem_bl=" << pmem_bl << ", ";
+  os << "bl_refs=" << bl_refs;
+  return os;
+};
+
+std::ostream &operator<<(std::ostream &os,
+                         const WriteLogEntry &entry) {
+  return entry.format(os);
 }
 
 } // namespace rwl
