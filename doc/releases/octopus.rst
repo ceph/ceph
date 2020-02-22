@@ -31,10 +31,13 @@ Major Changes from Nautilus
     without any user intervention.  The default values for new pools
     and RGW/CephFS metadata pools have also been adjusted to perform
     well for most users.
-  * BlueStore has received serveral improvements and performance
+  * BlueStore has received several improvements and performance
     updates, including improved accounting for "omap" (key/value)
     object data by pool, improved cache memory management, and a
-    reduced allocation unit size for SSD devices.
+    reduced allocation unit size for SSD devices.  (Note that by
+    default, the first time each OSD starts after upgrading to octopus
+    it will trigger a conversion that may take from a few minutes to a
+    few hours, depending on the amount of stored "omap" data.)
   * Snapshot trimming metadata is now managed in a more efficient and
     scalable fashion.
 
@@ -127,6 +130,13 @@ Instructions
    ceph-osd daemons on all OSD hosts::
 
      # systemctl restart ceph-osd.target
+
+   Note that the first time each OSD starts, it will do a format
+   conversion to improve the accounting for "omap" data.  This may
+   take a few minutes to as much as a few hours (for an HDD with lots
+   of omap data).  You can disable this automatic conversion with::
+
+     # ceph config set osd bluestore_fsck_quick_fix_on_mount false
 
    You can monitor the progress of the OSD upgrades with the
    ``ceph versions`` or ``ceph osd versions`` commands::
