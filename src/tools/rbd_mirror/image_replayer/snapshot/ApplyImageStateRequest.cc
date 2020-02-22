@@ -9,7 +9,9 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/image/GetMetadataRequest.h"
+#include "librbd/mirror/snapshot/Utils.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/Utils.h"
+#include <boost/algorithm/string/predicate.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -167,8 +169,12 @@ void ApplyImageStateRequest<I>::handle_get_image_meta(int r) {
 
 template <typename I>
 void ApplyImageStateRequest<I>::update_image_meta() {
+  auto key_filter = librbd::mirror::snapshot::util::get_image_meta_key("");
   std::set<std::string> keys_to_remove;
   for (const auto& [key, value] : m_metadata) {
+    if (boost::starts_with(key, key_filter)) {
+      continue;
+    }
     if (m_image_state.metadata.count(key) == 0) {
       dout(15) << "removing image-meta key '" << key << "'" << dendl;
       keys_to_remove.insert(key);
@@ -177,6 +183,10 @@ void ApplyImageStateRequest<I>::update_image_meta() {
 
   std::map<std::string, bufferlist> metadata_to_update;
   for (const auto& [key, value] : m_image_state.metadata) {
+    if (boost::starts_with(key, key_filter)) {
+      continue;
+    }
+
     auto it = m_metadata.find(key);
     if (it == m_metadata.end() || !it->second.contents_equal(value)) {
       dout(15) << "updating image-meta key '" << key << "'" << dendl;
