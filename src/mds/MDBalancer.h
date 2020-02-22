@@ -58,6 +58,9 @@ public:
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
+  bool is_fragment_pending(dirfrag_t df) {
+    return split_pending.count(df) || merge_pending.count(df);
+  }
 
   /**
    * Based on size and configuration, decide whether to issue a queue_split

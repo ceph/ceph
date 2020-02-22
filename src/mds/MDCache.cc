@@ -691,6 +691,51 @@ void MDCache::open_root()
   populate_mydir();
 }
 
+void MDCache::advance_stray() {
+  // check whether the directory has been fragmented
+  if (stray_fragmenting_index >= 0) {
+    auto&& dfs = strays[stray_fragmenting_index]->get_dirfrags();
+    bool any_fragmenting = false;
+    for (const auto& dir : dfs) {
+      if (dir->state_test(CDir::STATE_FRAGMENTING) ||
+	  mds->balancer->is_fragment_pending(dir->dirfrag())) {
+	any_fragmenting = true;
+	break;
+      }
+    }
+    if (!any_fragmenting)
+      stray_fragmenting_index = -1;
+  }
+
+  for (int i = 1; i < NUM_STRAY; i++){
+    stray_index = (stray_index + i) % NUM_STRAY;
+    if (stray_index != stray_fragmenting_index)
+      break;
+  }
+
+  if (stray_fragmenting_index == -1 && is_open()) {
+    // Fragment later stray dir in advance. We don't choose past
+    // stray dir because in-flight requests may still use it.
+    stray_fragmenting_index = (stray_index + 3) % NUM_STRAY;
+    auto&& dfs = strays[stray_fragmenting_index]->get_dirfrags();
+    bool any_fragmenting = false;
+    for (const auto& dir : dfs) {
+      if (dir->should_split()) {
+	mds->balancer->queue_split(dir, true);
+	any_fragmenting = true;
+      } else if (dir->should_merge()) {
+	mds->balancer->queue_merge(dir);
+	any_fragmenting = true;
+      }
+    }
+    if (!any_fragmenting)
+      stray_fragmenting_index = -1;
+  }
+
+  dout(10) << "advance_stray to index " << stray_index
+	   << " fragmenting index " << stray_fragmenting_index << dendl;
+}
+
 void MDCache::populate_mydir()
 {
   ceph_assert(myin);

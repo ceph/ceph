@@ -213,9 +213,7 @@ class MDCache {
     return cache_size() > cache_memory_limit*cache_health_threshold;
   }
 
-  void advance_stray() {
-    stray_index = (stray_index+1)%NUM_STRAY;
-  }
+  void advance_stray();
 
   /**
    * Call this when you know that a CDentry is ready to be passed
@@ -1112,6 +1110,7 @@ class MDCache {
   bool readonly = false;
 
   int stray_index = 0;
+  int stray_fragmenting_index = -1;
 
   set<CInode*> base_inodes;
 
