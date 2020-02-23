@@ -36,8 +36,10 @@
 #include "librbd/api/Image.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
+#include "librbd/image/GetMetadataRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -1263,29 +1265,16 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 		 << dest_size << dendl;
       return -EINVAL;
     }
-    int r;
-    const uint32_t MAX_KEYS = 64;
-    map<string, bufferlist> pairs;
-    std::string last_key = "";
-    bool more_results = true;
 
-    while (more_results) {
-      r = cls_client::metadata_list(&src->md_ctx, src->header_oid, last_key, 0, &pairs);
-      if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-        lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-        return r;
-      } else if (r == 0 && !pairs.empty()) {
-        r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
-        if (r < 0) {
-          lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
-          return r;
-        }
+    C_SaferCond ctx;
+    auto req = deep_copy::MetadataCopyRequest<>::create(
+      src, dest, &ctx);
+    req->send();
 
-        last_key = pairs.rbegin()->first;
-      }
-
-      more_results = (pairs.size() == MAX_KEYS);
-      pairs.clear();
+    int r = ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to copy metadata: " << cpp_strerror(r) << dendl;
+      return r;
     }
 
     ZTracer::Trace trace;
@@ -1648,7 +1637,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
+    C_SaferCond ctx;
+    auto req = image::GetMetadataRequest<>::create(
+      ictx->md_ctx, ictx->header_oid, "", start, max, pairs, &ctx);
+    req->send();
+
+    return ctx.wait();
   }
 
   int list_watchers(ImageCtx *ictx,

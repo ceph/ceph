@@ -103,15 +103,14 @@ private:
    *    v (skip if not needed)                          |
    * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
-   *    |                                               |
    *    | (interrupted sync)                            |
-   *    |\--------------------------------------------\ |
+   *    |\--------------> GET_LOCAL_IMAGE_STATE ------\ |
    *    |                                             | |
    *    | (new snapshot)                              | |
    *    |\--------------> COPY_SNAPSHOTS              | |
    *    |                     |                       | |
    *    |                     v                       | |
-   *    |                 GET_IMAGE_STATE             | |
+   *    |                 GET_REMOTE_IMAGE_STATE      | |
    *    |                     |                       | |
    *    |                     v                       | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
@@ -120,6 +119,9 @@ private:
    *    |                     |                         |
    *    |                     v                         |
    *    |                 COPY_IMAGE                    |
+   *    |                     |                         |
+   *    |                     v                         |
+   *    |                 APPLY_IMAGE_STATE             |
    *    |                     |                         |
    *    |                     v                         |
    *    |                 UPDATE_NON_PRIMARY_SNAPSHOT   |
@@ -215,8 +217,11 @@ private:
   void copy_snapshots();
   void handle_copy_snapshots(int r);
 
-  void get_image_state();
-  void handle_get_image_state(int r);
+  void get_remote_image_state();
+  void handle_get_remote_image_state(int r);
+
+  void get_local_image_state();
+  void handle_get_local_image_state(int r);
 
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
@@ -224,6 +229,9 @@ private:
   void copy_image();
   void handle_copy_image(int r);
   void handle_copy_image_progress(uint64_t offset, uint64_t total);
+
+  void apply_image_state();
+  void handle_apply_image_state(int r);
 
   void update_non_primary_snapshot(bool complete);
   void handle_update_non_primary_snapshot(bool complete, int r);

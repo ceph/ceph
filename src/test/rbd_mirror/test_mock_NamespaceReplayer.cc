@@ -172,6 +172,8 @@ InstanceWatcher<librbd::MockTestImageCtx>* InstanceWatcher<librbd::MockTestImage
 
 template <>
 struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
+  std::string local_mirror_uuid;
+
   static std::map<std::string, MirrorStatusUpdater*> s_instance;
 
   static MirrorStatusUpdater *create(librados::IoCtx &io_ctx,
@@ -181,8 +183,12 @@ struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
     return s_instance[local_mirror_uuid];
   }
 
-  MirrorStatusUpdater(const std::string_view& local_mirror_uuid) {
+  MirrorStatusUpdater(const std::string_view& local_mirror_uuid)
+    : local_mirror_uuid(local_mirror_uuid) {
     s_instance[std::string{local_mirror_uuid}] = this;
+  }
+  ~MirrorStatusUpdater() {
+    s_instance.erase(local_mirror_uuid);
   }
 
   MOCK_METHOD1(init, void(Context *));
@@ -194,6 +200,8 @@ std::map<std::string, MirrorStatusUpdater<librbd::MockTestImageCtx> *>
 
 template<>
 struct PoolWatcher<librbd::MockTestImageCtx> {
+  int64_t pool_id = -1;
+
   static std::map<int64_t, PoolWatcher *> s_instances;
 
   static PoolWatcher *create(Threads<librbd::MockTestImageCtx> *threads,
@@ -212,9 +220,12 @@ struct PoolWatcher<librbd::MockTestImageCtx> {
   MOCK_METHOD1(init, void(Context*));
   MOCK_METHOD1(shut_down, void(Context*));
 
-  PoolWatcher(int64_t pool_id) {
+  PoolWatcher(int64_t pool_id) : pool_id(pool_id) {
     ceph_assert(!s_instances.count(pool_id));
     s_instances[pool_id] = this;
+  }
+  ~PoolWatcher() {
+    s_instances.erase(pool_id);
   }
 };
 
@@ -524,7 +535,7 @@ TEST_F(TestMockNamespaceReplayer, Init) {
   ASSERT_EQ(0, on_shut_down.wait());
 }
 
-TEST_F(TestMockNamespaceReplayer, AcuqireLeader) {
+TEST_F(TestMockNamespaceReplayer, AcquireLeader) {
   InSequence seq;
 
   // init

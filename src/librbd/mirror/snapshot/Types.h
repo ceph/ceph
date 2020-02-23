@@ -36,28 +36,24 @@ struct ImageStateHeader {
 WRITE_CLASS_ENCODER(ImageStateHeader);
 
 struct SnapState {
-  uint64_t id = CEPH_NOSNAP;
   cls::rbd::SnapshotNamespace snap_namespace;
   std::string name;
   uint8_t protection_status = 0;
 
   SnapState() {
   }
-  SnapState(uint64_t id, const cls::rbd::SnapshotNamespace &snap_namespace,
+  SnapState(const cls::rbd::SnapshotNamespace &snap_namespace,
             const std::string &name, uint8_t protection_status)
-    : id(id), snap_namespace(snap_namespace), name(name),
+    : snap_namespace(snap_namespace), name(name),
       protection_status(protection_status) {
   }
 
   bool operator==(const SnapState& rhs) const {
-    return id == rhs.id && snap_namespace == rhs.snap_namespace &&
+    return snap_namespace == rhs.snap_namespace &&
            name == rhs.name && protection_status == rhs.protection_status;
   }
 
   bool operator<(const SnapState& rhs) const {
-    if (id != rhs.id) {
-      return id < rhs.id;
-    }
     if (snap_namespace != rhs.snap_namespace) {
       return snap_namespace < rhs.snap_namespace;
     }

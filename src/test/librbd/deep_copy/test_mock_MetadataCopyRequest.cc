@@ -6,6 +6,7 @@
 #include "include/stringify.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
+#include "librbd/image/GetMetadataRequest.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/test_support.h"
@@ -21,6 +22,38 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 };
 
 } // anonymous namespace
+
+namespace image {
+
+template <>
+struct GetMetadataRequest<MockTestImageCtx> {
+  std::map<std::string, bufferlist>* pairs = nullptr;
+  Context* on_finish = nullptr;
+
+  static GetMetadataRequest* s_instance;
+  static GetMetadataRequest* create(librados::IoCtx&,
+                                    const std::string& oid,
+                                    const std::string& filter,
+                                    const std::string& last_key,
+                                    uint32_t max_results,
+                                    std::map<std::string, bufferlist>* pairs,
+                                    Context* on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->pairs = pairs;
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  GetMetadataRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+GetMetadataRequest<MockTestImageCtx>* GetMetadataRequest<MockTestImageCtx>::s_instance = nullptr;
+
+} // namspace image
 } // namespace librbd
 
 // template definitions
@@ -32,6 +65,7 @@ namespace deep_copy {
 using ::testing::_;
 using ::testing::DoAll;
 using ::testing::InSequence;
+using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
@@ -39,6 +73,7 @@ using ::testing::WithArg;
 class TestMockDeepCopyMetadataCopyRequest : public TestMockFixture {
 public:
   typedef MetadataCopyRequest<librbd::MockTestImageCtx> MockMetadataCopyRequest;
+  typedef image::GetMetadataRequest<MockTestImageCtx> MockGetMetadataRequest;
   typedef std::map<std::string, bufferlist> Metadata;
 
   librbd::ImageCtx *m_src_image_ctx;
@@ -60,16 +95,13 @@ public:
                                                &m_thread_pool, &m_work_queue);
   }
 
-  void expect_metadata_list(librbd::MockTestImageCtx &mock_image_ctx,
-                            const Metadata& metadata, int r) {
-    bufferlist out_bl;
-    encode(metadata, out_bl);
-
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("metadata_list"), _, _, _))
-                  .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(out_bl)),
-                                  Return(r)));
+  void expect_get_metadata(MockGetMetadataRequest& mock_request,
+                           const Metadata& metadata, int r) {
+    EXPECT_CALL(mock_request, send())
+      .WillOnce(Invoke([this, &mock_request, metadata, r]() {
+        *mock_request.pairs = metadata;
+        m_work_queue->queue(mock_request.on_finish, r);
+      }));
   }
 
   void expect_metadata_set(librbd::MockTestImageCtx &mock_image_ctx,
@@ -104,9 +136,10 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, Success) {
   }
 
   InSequence seq;
-  expect_metadata_list(mock_src_image_ctx, key_values_1, 0);
+  MockGetMetadataRequest mock_request;
+  expect_get_metadata(mock_request, key_values_1, 0);
   expect_metadata_set(mock_dst_image_ctx, key_values_1, 0);
-  expect_metadata_list(mock_src_image_ctx, key_values_2, 0);
+  expect_get_metadata(mock_request, key_values_2, 0);
   expect_metadata_set(mock_dst_image_ctx, key_values_2, 0);
 
   C_SaferCond ctx;
@@ -125,7 +158,8 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, Empty) {
   Metadata key_values;
 
   InSequence seq;
-  expect_metadata_list(mock_src_image_ctx, key_values, 0);
+  MockGetMetadataRequest mock_request;
+  expect_get_metadata(mock_request, key_values, 0);
 
   C_SaferCond ctx;
   auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
@@ -143,7 +177,8 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, MetadataListError) {
   Metadata key_values;
 
   InSequence seq;
-  expect_metadata_list(mock_src_image_ctx, key_values, -EINVAL);
+  MockGetMetadataRequest mock_request;
+  expect_get_metadata(mock_request, key_values, -EINVAL);
 
   C_SaferCond ctx;
   auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
@@ -164,7 +199,8 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, MetadataSetError) {
   key_values.emplace("key", bl);
 
   InSequence seq;
-  expect_metadata_list(mock_src_image_ctx, key_values, 0);
+  MockGetMetadataRequest mock_request;
+  expect_get_metadata(mock_request, key_values, 0);
   expect_metadata_set(mock_dst_image_ctx, key_values, -EINVAL);
 
   C_SaferCond ctx;
