@@ -997,7 +997,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 name += '.' + ''.join(random.choice(string.ascii_lowercase)
                                       for _ in range(6))
             if len([d for d in existing if d.daemon_id == name]):
-                self.log('name %s exists, trying again', name)
+                self.log.warning('name %s exists, trying again', name)
                 continue
             return name
 
