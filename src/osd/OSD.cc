@@ -7600,9 +7600,14 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     TrackedOpRef oldest_op;
     auto count_slow_ops = [&](TrackedOp& op) {
       if (op.get_initiated() < too_old) {
-	lgeneric_subdout(cct,osd,20) << "slow op " << op.get_desc()
-	                             << " initiated "
-	                             << op.get_initiated() << dendl;
+        stringstream ss;
+        ss << "slow request " << op.get_desc()
+           << " initiated "
+           << op.get_initiated()
+           << " currently "
+           << op.state_string();
+        lgeneric_subdout(cct,osd,20) << ss.str() << dendl;
+        clog->warn() << ss.str();
 	slow++;
 	if (!oldest_op || op.get_initiated() < oldest_op->get_initiated()) {
 	  oldest_op = &op;
