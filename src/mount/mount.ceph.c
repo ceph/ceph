@@ -268,6 +268,13 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			/* ignore */
 		} else if (strcmp(data, "nofail") == 0) {
 			/* ignore */
+		} else if (strcmp(data, "fs") == 0) {
+			if (!value || !*value) {
+				fprintf(stderr, "mount option fs requires a value.\n");
+				return -EINVAL;
+			}
+			data = "mds_namespace";
+			skip = false;
 		} else if (strcmp(data, "secretfile") == 0) {
 			int ret;
 

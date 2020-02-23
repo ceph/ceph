@@ -92,9 +92,9 @@ To mount a subtree of the CephFS root, append the path to the device string::
     mount -t ceph :/subvolume/dir1/dir2 /mnt/mycephfs -o name=fs
 
 If you have more than one file system on your Ceph cluster, you can mount the
-non-default FS on your local FS as follows::
+non-default FS as follows::
 
-    mount -t ceph :/ /mnt/mycephfs2 -o name=fs,mds_namespace=mycephfs2
+    mount -t ceph :/ /mnt/mycephfs2 -o name=fs,fs=mycephfs2
 
 Unmounting CephFS
 =================
