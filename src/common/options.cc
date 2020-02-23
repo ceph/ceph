@@ -7652,6 +7652,16 @@ std::vector<Option> get_mds_options() {
     .set_default(true)
     .set_description("require MDS name is unique in the cluster"),
 
+    Option("mds_min_session_timeout_soft_limit", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(30)
+    .set_min(0)
+    .set_description("the lowest you can set the session timeout without really meaning it"),
+
+    Option("mds_min_session_timeout_hard_limit", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(3)
+    .set_min(0)
+    .set_description("the lowest you can set the session timeout"),
+
     Option("mds_session_blacklist_on_timeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("blacklist clients whose sessions have become stale"),

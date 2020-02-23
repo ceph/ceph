@@ -3311,9 +3311,13 @@ int MDSRank::config_client(int64_t session_id, bool remove,
       session->info.client_metadata.erase(it);
     } else {
       char *end;
-      strtoul(value.c_str(), &end, 0);
+      uint64_t new_timeout = strtoul(value.c_str(), &end, 0);
       if (*end) {
 	ss << "Invalid config for timeout: " << value;
+	return -EINVAL;
+      }
+      if (new_timeout < mdsmap->get_session_timeout()) {
+	ss << "Timeouts can only be configured to be HIGHER than the global default";
 	return -EINVAL;
       }
       session->info.client_metadata[option] = value;

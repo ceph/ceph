@@ -566,9 +566,21 @@ public:
        ss << var << " requires an integer value";
        return -EINVAL;
       }
-      if (n < 30) {
-       ss << var << " must be at least 30s";
-       return -ERANGE;
+      int64_t soft_limit = g_conf().get_val<int64_t>
+	("mds_min_session_timeout_soft_limit");
+      int64_t hard_limit = g_conf().get_val<int64_t>
+	("mds_min_session_timeout_hard_limit");
+      if (n < soft_limit) {
+	bool confirm = false;
+        cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+	if (!confirm) {
+	  ss << var << " must be at least " << soft_limit;
+	  return -ERANGE;
+	}
+	if (n < hard_limit) {
+	  ss << var << " even if you mean it, must be at least " << hard_limit;
+	  return -ERANGE;
+	}
       }
       fsmap.modify_filesystem(
           fs->fscid,
