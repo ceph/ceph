@@ -7,6 +7,7 @@ set(rbd_srcs
   IndentStream.cc
   MirrorDaemonServiceInfo.cc
   OptionPrinter.cc
+  Schedule.cc
   Shell.cc
   Utils.cc
   action/Bench.cc
