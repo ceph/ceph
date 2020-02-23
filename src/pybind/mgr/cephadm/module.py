@@ -982,7 +982,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
-                raise RuntimeError('specified name %s already in use', forcename)
+                raise orchestrator.OrchestratorValidationError('name %s already in use', forcename)
             return forcename
 
         if '.' in host:
@@ -997,6 +997,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 name += '.' + ''.join(random.choice(string.ascii_lowercase)
                                       for _ in range(6))
             if len([d for d in existing if d.daemon_id == name]):
+                if not suffix:
+                    raise orchestrator.OrchestratorValidationError('name %s already in use', name)
                 self.log.warning('name %s exists, trying again', name)
                 continue
             return name
