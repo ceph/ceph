@@ -4,14 +4,7 @@ SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CEPHADM_SRC_DIR=${SCRIPT_DIR}/../../../src/cephadm
 
-CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
-TMPDIR=$(mktemp -d)
-git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
-CORPUS_DIR=${TMPDIR}/archive
-trap "$SUDO rm -rf $TMPDIR" EXIT
-
 [ -z "$SUDO" ] && SUDO=sudo
-
 if [ -z "$CEPHADM" ]; then
     CEPHADM=${CEPHADM_SRC_DIR}/cephadm
 fi
@@ -53,7 +46,17 @@ if [ -z "$PYTHON_KLUDGE" ]; then
     exit 0
 fi
 
+# combine into a single var
+CEPHADM_BIN="$CEPHADM"
+CEPHADM="$SUDO $CEPHADM_BIN"
+
 ## adopt
+CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
+TMPDIR=$(mktemp -d)
+git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
+CORPUS_DIR=${TMPDIR}/archive
+trap "$SUDO rm -rf $TMPDIR" EXIT
+
 for subdir in `ls ${CORPUS_DIR}`; do
     for tarfile in `ls ${CORPUS_DIR}/${subdir} | grep .tgz`; do
 	tarball=${CORPUS_DIR}/${subdir}/${tarfile}
