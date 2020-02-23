@@ -2137,83 +2137,8 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._add_daemon('mgr', spec, self._create_mgr)
 
     def apply_mgr(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        """
-        Adjust the number of cluster managers.
-        """
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
-
-        daemons = self.cache.get_daemons_by_type('mgr')
-        num_mgrs = len(daemons)
-        if spec.count == num_mgrs:
-            return orchestrator.Completion(value="The requested number of managers exist.")
-
-        self.log.debug("Trying to update managers on: {}".format(spec.placement.hosts))
-        # check that all the hosts are registered
-        [self._require_hosts(host.hostname) for host in spec.placement.hosts]
-
-        if spec.count < num_mgrs:
-            num_to_remove = num_mgrs - spec.count
-
-            # first try to remove unconnected mgr daemons that the
-            # cluster doesn't see
-            connected = []
-            mgr_map = self.get("mgr_map")
-            if mgr_map.get("active_name", {}):
-                connected.append(mgr_map.get('active_name', ''))
-            for standby in mgr_map.get('standbys', []):
-                connected.append(standby.get('name', ''))
-            to_remove_damons = []
-            for d in daemons:
-                if d.daemon_id not in connected:
-                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id),
-                                             d.hostname))
-                    num_to_remove -= 1
-                    if num_to_remove == 0:
-                        break
-
-            # otherwise, remove *any* mgr
-            if num_to_remove > 0:
-                for d in daemons:
-                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname))
-                    num_to_remove -= 1
-                    if num_to_remove == 0:
-                        break
-            c = self._remove_daemon(to_remove_damons)
-            c.add_progress('Removing MGRs', self)
-            c.update_progress = True
-            return c
-
-        else:
-            # we assume explicit placement by which there are the same number of
-            # hosts specified as the size of increase in number of daemons.
-            num_new_mgrs = spec.count - num_mgrs
-            if len(spec.placement.hosts) < num_new_mgrs:
-                raise RuntimeError(
-                    "Error: {} hosts provided, expected {}".format(
-                        len(spec.placement.hosts), num_new_mgrs))
-
-            for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.daemon_id == host_spec.name]):
-                    raise RuntimeError('name %s alrady exists', host_spec.name)
-
-            for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.daemon_id == host_spec.name]):
-                    raise RuntimeError('name %s alrady exists', host_spec.name)
-
-            self.log.info("creating {} managers on hosts: '{}'".format(
-                num_new_mgrs, ",".join([_spec.hostname for _spec in spec.placement.hosts])))
-
-            args = []
-            for host_spec in spec.placement.hosts:
-                host = host_spec.hostname
-                name = host_spec.name or self.get_unique_name('mgr', host,
-                                                              daemons)
-                args.append((name, host))
-            c = self._create_mgr(args)
-            c.add_progress('Creating MGRs', self)
-            c.update_progress = True
-            return c
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('mgr', spec, self._create_mgr)
 
     def add_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
