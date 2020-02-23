@@ -1995,13 +1995,16 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if config_func:
             config_func(spec)
 
-        args = []
-        for host, _, name in spec.placement.hosts:
+        args = [] # type: ignore
+        for host, network, name in spec.placement.hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              spec.name, name)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
-            args.append((daemon_id, host))
+            if daemon_type == 'mon':
+                args.append((daemon_id, host, network))  # type: ignore
+            else:
+                args.append((daemon_id, host))  # type: ignore
 
             # add to daemon list so next name(s) will also be unique
             sd = orchestrator.DaemonDescription(
@@ -2013,12 +2016,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return create_func(args)
 
     @async_map_completion
-    def _create_mon(self, host, network, name):
+    def _create_mon(self, name, host, network):
         """
         Create a new monitor on the given host.
         """
-        name = name or host
-
         self.log.info("create_mon({}:{}): starting mon.{}".format(
             host, network, name))
 
@@ -2043,46 +2044,20 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                                    keyring=keyring,
                                    extra_config=extra_config)
 
-    @async_completion
     def add_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-
         # current support requires a network to be specified
         orchestrator.servicespec_validate_hosts_have_network_spec(spec)
+        return self._add_daemon('mon', spec, self._create_mon)
 
-        daemons = self.cache.get_daemons_by_type('mon')
-        for _, _, name in spec.placement.hosts:
-            if name and len([d for d in daemons if d.daemon_id == name]):
-                raise RuntimeError('name %s already exists', name)
-
-        # explicit placement: enough hosts provided?
-        if len(spec.placement.hosts) < spec.count:
-            raise RuntimeError("Error: {} hosts provided, expected {}".format(
-                len(spec.placement.hosts), spec.count))
-        self.log.info("creating {} monitors on hosts: '{}'".format(
-            spec.count, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
-        # TODO: we may want to chain the creation of the monitors so they join
-        # the quorum one at a time.
-        return self._create_mon(spec.placement.hosts)
-
-    @async_completion
     def apply_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        """
-        Adjust the number of cluster managers.
-        """
         if not spec.placement.hosts and not spec.placement.label:
             # Improve Error message. Point to parse_host_spec examples
             raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
 
         spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mon').load()
-        return self._update_mons(spec)
 
-    def _update_mons(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        """
-        Adjust the number of cluster monitors.
-        """
         # current support limited to adding monitors.
         mon_map = self.get("mon_map")
         num_mons = len(mon_map["mons"])
@@ -2112,7 +2087,10 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             num_new_mons, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
         # TODO: we may want to chain the creation of the monitors so they join
         # the quorum one at a time.
-        return self._create_mon(spec.placement.hosts)
+        args = []
+        for host, network, name in spec.placement.hosts:
+            args.append((name or host, network, host))
+        return self._create_mon(args)
 
     @async_map_completion
     def _create_mgr(self, mgr_id, host):
