@@ -211,22 +211,22 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self.all_progress_references.clear()
 
     @deferred_read
-    def get_inventory(self, node_filter=None, refresh=False):
-        node_list = None
-        if node_filter and node_filter.nodes:
-            # Explicit node list
-            node_list = node_filter.nodes
-        elif node_filter and node_filter.labels:
-            # TODO: query k8s API to resolve to node list, and pass
+    def get_inventory(self, host_filter=None, refresh=False):
+        host_list = None
+        if host_filter and host_filter.hosts:
+            # Explicit host list
+            host_list = host_filter.hosts
+        elif host_filter and host_filter.labels:
+            # TODO: query k8s API to resolve to host list, and pass
             # it into RookCluster.get_discovered_devices
             raise NotImplementedError()
 
-        devs = self.rook_cluster.get_discovered_devices(node_list)
+        devs = self.rook_cluster.get_discovered_devices(host_list)
 
         result = []
-        for node_name, node_devs in devs.items():
+        for host_name, host_devs in devs.items():
             devs = []
-            for d in node_devs:
+            for d in host_devs:
                 dev = inventory.Device(
                     path='/dev/' + d['name'],
                     sys_api=dict(
@@ -238,7 +238,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 )
                 devs.append(dev)
 
-            result.append(orchestrator.InventoryNode(node_name, inventory.Devices(devs)))
+            result.append(orchestrator.InventoryHost(host_name, inventory.Devices(devs)))
 
         return result
 
@@ -248,14 +248,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [orchestrator.HostSpec(n) for n in self.rook_cluster.get_node_names()]
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, node_name=None, refresh=False):
+    def list_daemons(self, daemon_type=None, daemon_id=None, host_name=None, refresh=False):
 
-        pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, node_name)
+        pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host_name)
 
         result = []
         for p in pods:
             sd = orchestrator.DaemonDescription()
-            sd.nodename = p['nodename']
+            sd.hostname = p['hostname']
             sd.container_id = p['name']
             sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
             status = {

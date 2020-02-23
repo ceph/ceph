@@ -115,22 +115,22 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._shutdown.wait(5)
 
     def _init_data(self, data=None):
-        self._inventory = [orchestrator.InventoryNode.from_json(inventory_node)
-                           for inventory_node in data.get('inventory', [])]
+        self._inventory = [orchestrator.InventoryHost.from_json(inventory_host)
+                           for inventory_host in data.get('inventory', [])]
         self._daemons = [orchestrator.DaemonDescription.from_json(service)
                           for service in data.get('daemons', [])]
 
     @deferred_read
-    def get_inventory(self, node_filter=None, refresh=False):
+    def get_inventory(self, host_filter=None, refresh=False):
         """
         There is no guarantee which devices are returned by get_inventory.
         """
-        if node_filter and node_filter.nodes is not None:
-            assert isinstance(node_filter.nodes, list)
+        if host_filter and host_filter.hosts is not None:
+            assert isinstance(host_filter.hosts, list)
 
         if self._inventory:
-            if node_filter:
-                return list(filter(lambda node: node.name in node_filter.nodes,
+            if host_filter:
+                return list(filter(lambda host: host.name in host_filter.hosts,
                                    self._inventory))
             return self._inventory
 
@@ -149,12 +149,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         for out in c_v_out.splitlines():
             self.log.error(out)
             devs = inventory.Devices.from_json(json.loads(out))
-            return [orchestrator.InventoryNode('localhost', devs)]
+            return [orchestrator.InventoryHost('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, node_name=None, refresh=False):
+    def list_daemons(self, daemon_type=None, daemon_id=None, host_name=None, refresh=False):
         """
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.
@@ -164,8 +164,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             assert daemon_type in daemon_types, daemon_type + " unsupported"
 
         if self._daemons:
-            if node_name:
-                return list(filter(lambda svc: svc.nodename == node_name, self._daemons))
+            if host_name:
+                return list(filter(lambda svc: svc.hostname == host_name, self._daemons))
             return self._daemons
 
         out = map(str, check_output(['ps', 'aux']).splitlines())
@@ -176,7 +176,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         result = []
         for p in processes:
             sd = orchestrator.DaemonDescription()
-            sd.nodename = 'localhost'
+            sd.hostname = 'localhost'
             res = re.search('ceph-[^ ]+', p)
             assert res
             sd.daemon_id = res.group()

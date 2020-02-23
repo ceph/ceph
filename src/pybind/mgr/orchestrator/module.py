@@ -23,7 +23,7 @@ from mgr_module import MgrModule, HandleCommandResult
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, ServiceSpec, PlacementSpec, OrchestratorValidationError, NFSServiceSpec, \
-    RGWSpec, InventoryFilter, InventoryNode, HostPlacementSpec, HostSpec, CLICommandMeta
+    RGWSpec, InventoryFilter, InventoryHost, HostPlacementSpec, HostSpec, CLICommandMeta
 
 
 @six.add_metaclass(CLICommandMeta)
@@ -203,8 +203,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         if format == 'json':
-            hosts = [node.to_json()
-                     for node in completion.result]
+            hosts = [host.to_json()
+                     for host in completion.result]
             output = json.dumps(hosts, sort_keys=True)
         else:
             table = PrettyTable(
@@ -213,8 +213,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
-            for node in sorted(completion.result, key=lambda h: h.hostname):
-                table.add_row((node.hostname, node.addr, ' '.join(node.labels), node.status))
+            for host in sorted(completion.result, key=lambda h: h.hostname):
+                table.add_row((host.hostname, host.addr, ' '.join(host.labels), host.status))
             output = table.get_string()
         return HandleCommandResult(stdout=output)
 
@@ -245,7 +245,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         "name=host,type=CephString,n=N,req=false "
         "name=format,type=CephChoices,strings=json|plain,req=false "
         "name=refresh,type=CephBool,req=false",
-        'List devices on a node')
+        'List devices on a host')
     def _list_devices(self, host=None, format='plain', refresh=False):
         # type: (Optional[List[str]], str, bool) -> HandleCommandResult
         """
@@ -255,9 +255,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         date hardware inventory is fine as long as hardware ultimately appears
         in the output of this command.
         """
-        nf = InventoryFilter(nodes=host) if host else None
+        nf = InventoryFilter(hosts=host) if host else None
 
-        completion = self.get_inventory(node_filter=nf, refresh=refresh)
+        completion = self.get_inventory(host_filter=nf, refresh=refresh)
 
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -276,7 +276,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 1
-            for host_ in completion.result: # type: InventoryNode
+            for host_ in completion.result: # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
                     table.add_row(
                         (
@@ -378,7 +378,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         def ukn(s):
             return '<unknown>' if s is None else s
         # Sort the list for display
-        daemons.sort(key=lambda s: (ukn(s.daemon_type), ukn(s.nodename), ukn(s.daemon_id)))
+        daemons.sort(key=lambda s: (ukn(s.daemon_type), ukn(s.hostname), ukn(s.daemon_id)))
 
         if len(daemons) == 0:
             return HandleCommandResult(stdout="No daemons reported")
@@ -408,7 +408,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     age = '-'
                 table.add_row((
                     s.name(),
-                    ukn(s.nodename),
+                    ukn(s.hostname),
                     status,
                     age,
                     ukn(s.version),
@@ -442,14 +442,14 @@ Usage:
 
         elif svc_arg:
             try:
-                node_name, block_device = svc_arg.split(":")
+                host_name, block_device = svc_arg.split(":")
                 block_devices = block_device.split(',')
             except (TypeError, KeyError, ValueError):
                 msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
             devs = DeviceSelection(paths=block_devices)
-            drive_groups = [DriveGroupSpec(node_name, data_devices=devs)]
+            drive_groups = [DriveGroupSpec(host_name, data_devices=devs)]
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 

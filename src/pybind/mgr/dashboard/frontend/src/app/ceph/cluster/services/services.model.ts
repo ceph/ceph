@@ -1,7 +1,7 @@
 export class Service {
   uid: string;
 
-  nodename: string;
+  hostname: string;
   container_id: string;
   service: string;
   service_instance: string;

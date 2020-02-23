@@ -42,7 +42,7 @@ export class ServicesComponent implements OnChanges, OnInit {
     const columns = [
       {
         name: this.i18n('Hostname'),
-        prop: 'nodename',
+        prop: 'hostname',
         flexGrow: 2
       },
       {
@@ -132,7 +132,7 @@ export class ServicesComponent implements OnChanges, OnInit {
       (data: Service[]) => {
         const services: Service[] = [];
         data.forEach((service: Service) => {
-          service.uid = `${service.nodename}-${service.service_type}-${service.service}-${service.service_instance}`;
+          service.uid = `${service.hostname}-${service.service_type}-${service.service}-${service.service_instance}`;
           services.push(service);
         });
         this.services = services;

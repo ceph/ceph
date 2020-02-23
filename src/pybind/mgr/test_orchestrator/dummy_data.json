@@ -147,7 +147,7 @@
   ],
   "daemons": [
     {
-      "nodename": "host0",
+      "hostname": "host0",
       "daemon_type": "osd",
       "daemon_id": "1"
     }
