@@ -128,10 +128,14 @@ class HostCache():
                 self.mgr.set_store(k, None)
             try:
                 j = json.loads(v)
-                # we do ignore the persisted last_*_update to trigger a new
-                # scrape on mgr restart
+                if 'last_device_update' in j:
+                    self.last_device_update[host] = datetime.datetime.strptime(
+                        j['last_device_update'], DATEFMT)
+                else:
+                    self.device_refresh_queue.append(host)
+                # for services, we ignore the persisted last_*_update
+                # and always trigger a new scrape on mgr restart.
                 self.daemon_refresh_queue.append(host)
-                self.device_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.devices[host] = []
                 for name, d in j.get('daemons', {}).items():
