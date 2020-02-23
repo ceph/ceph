@@ -32,6 +32,7 @@ tasks:
     - \(OSD_
     - \(OBJECT_
     - \(TOO_FEW_PGS\)
+    - slow request
 - thrashosds:
     op_delay: 30
     clean_interval: 120
