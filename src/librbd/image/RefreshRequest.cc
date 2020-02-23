@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"
 
 #include "librbd/image/RefreshRequest.h"
@@ -16,6 +15,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/Utils.h"
+#include "librbd/image/GetMetadataRequest.h"
 #include "librbd/image/RefreshParentRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -495,19 +495,15 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_get_metadata() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "start_key=" << m_last_metadata_key << dendl;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, MAX_METADATA_ITEMS);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v2_get_metadata>(this);
-  m_out_bl.clear();
-  m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
-                                  &m_out_bl);
-  comp->release();
+  auto ctx = create_context_callback<
+    RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_metadata>(this);
+  auto req = GetMetadataRequest<I>::create(
+    m_image_ctx.md_ctx, m_image_ctx.header_oid,
+    ImageCtx::METADATA_CONF_PREFIX, ImageCtx::METADATA_CONF_PREFIX, 0U,
+    &m_metadata, ctx);
+  req->send();
 }
 
 template <typename I>
@@ -515,29 +511,12 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  std::map<std::string, bufferlist> metadata;
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
   if (*result < 0) {
     lderr(cct) << "failed to retrieve metadata: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
   }
 
-  if (!metadata.empty()) {
-    m_metadata.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = metadata.rbegin()->first;
-    if (boost::starts_with(m_last_metadata_key,
-                           ImageCtx::METADATA_CONF_PREFIX)) {
-      send_v2_get_metadata();
-      return nullptr;
-    }
-  }
-
-  m_last_metadata_key.clear();
   send_v2_get_pool_metadata();
   return nullptr;
 }
@@ -545,18 +524,14 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_get_pool_metadata() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "start_key=" << m_last_metadata_key << dendl;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, MAX_METADATA_ITEMS);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v2_get_pool_metadata>(this);
-  m_out_bl.clear();
-  m_pool_metadata_io_ctx.aio_operate(RBD_INFO, comp, &op, &m_out_bl);
-  comp->release();
+  auto ctx = create_context_callback<
+    RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_pool_metadata>(this);
+  auto req = GetMetadataRequest<I>::create(
+    m_pool_metadata_io_ctx, RBD_INFO, ImageCtx::METADATA_CONF_PREFIX,
+    ImageCtx::METADATA_CONF_PREFIX, 0U, &m_metadata, ctx);
+  req->send();
 }
 
 template <typename I>
@@ -564,28 +539,10 @@ Context *RefreshRequest<I>::handle_v2_get_pool_metadata(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  std::map<std::string, bufferlist> metadata;
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
-  if (*result == -EOPNOTSUPP || *result == -ENOENT) {
-    ldout(cct, 10) << "pool metadata not supported by OSD" << dendl;
-  } else if (*result < 0) {
+  if (*result < 0) {
     lderr(cct) << "failed to retrieve pool metadata: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
-  }
-
-  if (!metadata.empty()) {
-    m_metadata.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = metadata.rbegin()->first;
-    if (boost::starts_with(m_last_metadata_key,
-                           ImageCtx::METADATA_CONF_PREFIX)) {
-      send_v2_get_pool_metadata();
-      return nullptr;
-    }
   }
 
   bool thread_safe = m_image_ctx.image_watcher->is_unregistered();

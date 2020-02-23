@@ -116,13 +116,13 @@ void CreateNonPrimaryRequest<I>::handle_get_mirror_image(int r) {
 template <typename I>
 void CreateNonPrimaryRequest<I>::create_snapshot() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
 
   cls::rbd::MirrorSnapshotNamespace ns{
     (m_demoted ? cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED :
                  cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY), {},
     m_primary_mirror_uuid, m_primary_snap_id};
   ns.snap_seqs = m_snap_seqs;
+  ldout(cct, 20) << "ns=" << ns << dendl;
 
   auto ctx = create_context_callback<
     CreateNonPrimaryRequest<I>,

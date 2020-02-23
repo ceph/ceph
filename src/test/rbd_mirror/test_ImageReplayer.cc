@@ -31,6 +31,7 @@
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -112,6 +113,9 @@ public:
 					       m_remote_ioctx));
     m_remote_ioctx.application_enable("rbd", true);
 
+    // make snap id debugging easier when local/remote have different mappings
+    uint64_t snap_id;
+    EXPECT_EQ(0, m_remote_ioctx.selfmanaged_snap_create(&snap_id));
 
     uint64_t features = librbd::util::get_rbd_default_features(g_ceph_context);
     if (MIRROR_IMAGE_MODE == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
@@ -409,6 +413,8 @@ public:
     ASSERT_EQ(0, get_last_mirror_snapshot(m_remote_ioctx, m_remote_image_id,
                                           &remote_snap_id, &remote_mirror_ns));
 
+    std::cout << "remote_snap_id=" << remote_snap_id << std::endl;
+
     std::string local_image_id;
     ASSERT_EQ(0, librbd::cls_client::mirror_image_get_image_id(
                    &m_local_ioctx, m_global_image_id, &local_image_id));
@@ -430,6 +436,9 @@ public:
           local_mirror_ns.primary_mirror_uuid == m_remote_mirror_uuid &&
           local_mirror_ns.primary_snap_id == remote_snap_id &&
           local_mirror_ns.complete) {
+
+        std::cout << "local_snap_id=" << local_snap_id << ", "
+                  << "local_snap_ns=" << local_mirror_ns << std::endl;
         return;
       }
 
@@ -1373,6 +1382,263 @@ TEST_F(TestImageReplayerJournal, MirroringDelay)
   delay = ceph_clock_now() - start_time;
   ASSERT_GE(delay, DELAY);
 
+  this->stop();
+}
+
+TYPED_TEST(TestImageReplayer, ImageRename) {
+  this->create_replayer();
+  this->start();
+
+  librbd::ImageCtx* remote_image_ctx = nullptr;
+  this->open_remote_image(&remote_image_ctx);
+  auto image_name = this->get_temp_image_name();
+  ASSERT_EQ(0, remote_image_ctx->operations->rename(image_name.c_str()));
+  this->flush(remote_image_ctx);
+
+  this->wait_for_replay_complete();
+
+  librbd::ImageCtx* local_image_ctx = nullptr;
+  this->open_image(this->m_local_ioctx, image_name, true, &local_image_ctx);
+  ASSERT_EQ(image_name, local_image_ctx->name);
+
+  this->close_image(local_image_ctx);
+  this->close_image(remote_image_ctx);
+  this->stop();
+}
+
+TYPED_TEST(TestImageReplayer, UpdateFeatures) {
+  librbd::ImageCtx* remote_image_ctx = nullptr;
+  this->open_remote_image(&remote_image_ctx);
+
+  ASSERT_EQ(0, remote_image_ctx->operations->update_features(
+                 (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF), false));
+  this->flush(remote_image_ctx);
+
+  this->create_replayer();
+  this->start();
+  this->wait_for_replay_complete();
+
+  librbd::ImageCtx* local_image_ctx = nullptr;
+  this->open_local_image(&local_image_ctx);
+  ASSERT_EQ(0U, local_image_ctx->features & (
+                  RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF));
+
+  // enable object-map/fast-diff
+  ASSERT_EQ(0, remote_image_ctx->operations->update_features(
+                 (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF), true));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(0, local_image_ctx->state->refresh());
+  ASSERT_EQ(RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF,
+            local_image_ctx->features & (
+              RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF));
+
+  // disable deep-flatten
+  ASSERT_EQ(0, remote_image_ctx->operations->update_features(
+                 RBD_FEATURE_DEEP_FLATTEN, false));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(0, local_image_ctx->state->refresh());
+  ASSERT_EQ(0, local_image_ctx->features & RBD_FEATURE_DEEP_FLATTEN);
+
+  this->close_image(local_image_ctx);
+  this->close_image(remote_image_ctx);
+  this->stop();
+}
+
+TYPED_TEST(TestImageReplayer, SnapshotUnprotect) {
+  librbd::ImageCtx* remote_image_ctx = nullptr;
+  this->open_remote_image(&remote_image_ctx);
+
+  // create a protected snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_protect(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  this->flush(remote_image_ctx);
+
+  this->create_replayer();
+  this->start();
+  this->wait_for_replay_complete();
+
+  librbd::ImageCtx* local_image_ctx = nullptr;
+  this->open_local_image(&local_image_ctx);
+  auto local_snap_id_it = local_image_ctx->snap_ids.find({
+    {cls::rbd::UserSnapshotNamespace{}}, "snap1"});
+  ASSERT_NE(local_image_ctx->snap_ids.end(), local_snap_id_it);
+  auto local_snap_id = local_snap_id_it->second;
+  auto local_snap_info_it = local_image_ctx->snap_info.find(local_snap_id);
+  ASSERT_NE(local_image_ctx->snap_info.end(), local_snap_info_it);
+  ASSERT_EQ(RBD_PROTECTION_STATUS_PROTECTED,
+            local_snap_info_it->second.protection_status);
+
+  // unprotect the snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_unprotect(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(0, local_image_ctx->state->refresh());
+  local_snap_info_it = local_image_ctx->snap_info.find(local_snap_id);
+  ASSERT_NE(local_image_ctx->snap_info.end(), local_snap_info_it);
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED,
+            local_snap_info_it->second.protection_status);
+
+  this->close_image(local_image_ctx);
+  this->close_image(remote_image_ctx);
+  this->stop();
+}
+
+TYPED_TEST(TestImageReplayer, SnapshotProtect) {
+  librbd::ImageCtx* remote_image_ctx = nullptr;
+  this->open_remote_image(&remote_image_ctx);
+
+  // create an unprotected snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  this->flush(remote_image_ctx);
+
+  this->create_replayer();
+  this->start();
+  this->wait_for_replay_complete();
+
+  librbd::ImageCtx* local_image_ctx = nullptr;
+  this->open_local_image(&local_image_ctx);
+  auto local_snap_id_it = local_image_ctx->snap_ids.find({
+    {cls::rbd::UserSnapshotNamespace{}}, "snap1"});
+  ASSERT_NE(local_image_ctx->snap_ids.end(), local_snap_id_it);
+  auto local_snap_id = local_snap_id_it->second;
+  auto local_snap_info_it = local_image_ctx->snap_info.find(local_snap_id);
+  ASSERT_NE(local_image_ctx->snap_info.end(), local_snap_info_it);
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED,
+            local_snap_info_it->second.protection_status);
+
+  // protect the snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_protect(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(0, local_image_ctx->state->refresh());
+  local_snap_info_it = local_image_ctx->snap_info.find(local_snap_id);
+  ASSERT_NE(local_image_ctx->snap_info.end(), local_snap_info_it);
+  ASSERT_EQ(RBD_PROTECTION_STATUS_PROTECTED,
+            local_snap_info_it->second.protection_status);
+
+  this->close_image(local_image_ctx);
+  this->close_image(remote_image_ctx);
+  this->stop();
+}
+
+TYPED_TEST(TestImageReplayer, SnapshotRemove) {
+  librbd::ImageCtx* remote_image_ctx = nullptr;
+  this->open_remote_image(&remote_image_ctx);
+
+  // create a user snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  this->flush(remote_image_ctx);
+
+  this->create_replayer();
+  this->start();
+  this->wait_for_replay_complete();
+
+  librbd::ImageCtx* local_image_ctx = nullptr;
+  this->open_local_image(&local_image_ctx);
+  auto local_snap_id_it = local_image_ctx->snap_ids.find({
+    {cls::rbd::UserSnapshotNamespace{}}, "snap1"});
+  ASSERT_NE(local_image_ctx->snap_ids.end(), local_snap_id_it);
+
+  // remove the snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_remove(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(0, local_image_ctx->state->refresh());
+  local_snap_id_it = local_image_ctx->snap_ids.find({
+    {cls::rbd::UserSnapshotNamespace{}}, "snap1"});
+  ASSERT_EQ(local_image_ctx->snap_ids.end(), local_snap_id_it);
+
+  this->close_image(local_image_ctx);
+  this->close_image(remote_image_ctx);
+  this->stop();
+}
+
+TYPED_TEST(TestImageReplayer, SnapshotRename) {
+  librbd::ImageCtx* remote_image_ctx = nullptr;
+  this->open_remote_image(&remote_image_ctx);
+
+  // create a user snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
+                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+  this->flush(remote_image_ctx);
+
+  this->create_replayer();
+  this->start();
+  this->wait_for_replay_complete();
+
+  librbd::ImageCtx* local_image_ctx = nullptr;
+  this->open_local_image(&local_image_ctx);
+  auto local_snap_id_it = local_image_ctx->snap_ids.find({
+    {cls::rbd::UserSnapshotNamespace{}}, "snap1"});
+  ASSERT_NE(local_image_ctx->snap_ids.end(), local_snap_id_it);
+  auto local_snap_id = local_snap_id_it->second;
+  auto local_snap_info_it = local_image_ctx->snap_info.find(local_snap_id);
+  ASSERT_NE(local_image_ctx->snap_info.end(), local_snap_info_it);
+  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED,
+            local_snap_info_it->second.protection_status);
+
+  // rename the snapshot
+  ASSERT_EQ(0, remote_image_ctx->operations->snap_rename(
+                 "snap1", "snap1-renamed"));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(0, local_image_ctx->state->refresh());
+  local_snap_info_it = local_image_ctx->snap_info.find(local_snap_id);
+  ASSERT_NE(local_image_ctx->snap_info.end(), local_snap_info_it);
+  ASSERT_EQ("snap1-renamed", local_snap_info_it->second.name);
+
+  this->close_image(local_image_ctx);
+  this->close_image(remote_image_ctx);
+  this->stop();
+}
+
+TYPED_TEST(TestImageReplayer, SnapshotLimit) {
+  librbd::ImageCtx* remote_image_ctx = nullptr;
+  this->open_remote_image(&remote_image_ctx);
+
+  this->create_replayer();
+  this->start();
+  this->wait_for_replay_complete();
+
+  // update the snap limit
+  ASSERT_EQ(0, librbd::api::Snapshot<>::set_limit(remote_image_ctx, 123U));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  librbd::ImageCtx* local_image_ctx = nullptr;
+  this->open_local_image(&local_image_ctx);
+  uint64_t local_snap_limit;
+  ASSERT_EQ(0, librbd::api::Snapshot<>::get_limit(local_image_ctx,
+                                                  &local_snap_limit));
+  ASSERT_EQ(123U, local_snap_limit);
+
+  // update the limit again
+  ASSERT_EQ(0, librbd::api::Snapshot<>::set_limit(
+    remote_image_ctx, std::numeric_limits<uint64_t>::max()));
+  this->flush(remote_image_ctx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(0, librbd::api::Snapshot<>::get_limit(local_image_ctx,
+                                                  &local_snap_limit));
+  ASSERT_EQ(std::numeric_limits<uint64_t>::max(), local_snap_limit);
+
+  this->close_image(local_image_ctx);
+  this->close_image(remote_image_ctx);
   this->stop();
 }
 

@@ -2,12 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/api/Config.h"
-#include "cls/rbd/cls_rbd_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/api/PoolMetadata.h"
+#include "librbd/image/GetMetadataRequest.h"
+#include <algorithm>
 #include <boost/algorithm/string/predicate.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -167,38 +169,29 @@ int Config<I>::list(I *image_ctx, std::vector<config_option_t> *options) {
     return r;
   }
 
-  std::string last_key = ImageCtx::METADATA_CONF_PREFIX;
-  bool more_results = true;
+  std::map<std::string, bufferlist> pairs;
+  C_SaferCond ctx;
+  auto req = image::GetMetadataRequest<I>::create(
+    image_ctx->md_ctx, image_ctx->header_oid, ImageCtx::METADATA_CONF_PREFIX,
+    ImageCtx::METADATA_CONF_PREFIX, 0U, &pairs, &ctx);
+  req->send();
 
-  while (more_results) {
-    std::map<std::string, bufferlist> pairs;
+  r = ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed reading image metadata: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
 
-    r = cls_client::metadata_list(&image_ctx->md_ctx, image_ctx->header_oid,
-                                  last_key, MAX_KEYS, &pairs);
-    if (r < 0) {
-      lderr(cct) << "failed reading image metadata: " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    }
-
-    if (pairs.empty()) {
+  for (auto kv : pairs) {
+    std::string key;
+    if (!util::is_metadata_config_override(kv.first, &key)) {
       break;
     }
-
-    more_results = (pairs.size() == MAX_KEYS);
-    last_key = pairs.rbegin()->first;
-
-    for (auto kv : pairs) {
-      std::string key;
-      if (!util::is_metadata_config_override(kv.first, &key)) {
-        more_results = false;
-        break;
-      }
-      auto it = opts.find(key);
-      if (it != opts.end()) {
-        it->second = {{kv.second.c_str(), kv.second.length()},
-                      RBD_CONFIG_SOURCE_IMAGE};
-      }
+    auto it = opts.find(key);
+    if (it != opts.end()) {
+      it->second = {{kv.second.c_str(), kv.second.length()},
+                    RBD_CONFIG_SOURCE_IMAGE};
     }
   }
 

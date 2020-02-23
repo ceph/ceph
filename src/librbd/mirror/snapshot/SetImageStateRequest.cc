@@ -70,6 +70,8 @@ void SetImageStateRequest<I>::handle_get_snap_limit(int r) {
     return;
   }
 
+  ldout(cct, 20) << "snap_limit=" << m_image_state.snap_limit << dendl;
+
   get_metadata();
 }
 
@@ -123,14 +125,17 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
 
     m_image_state.name = m_image_ctx->name;
-    m_image_state.features = m_image_ctx->features;
+    m_image_state.features =
+      m_image_ctx->features & ~RBD_FEATURES_IMPLICIT_ENABLE;
 
     for (auto &[snap_id, snap_info] : m_image_ctx->snap_info) {
       auto type = cls::rbd::get_snap_namespace_type(snap_info.snap_namespace);
-      if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
+      if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_USER) {
+        // only replicate user snapshots -- trash snapshots will be
+        // replicated by an implicit delete if required
         continue;
       }
-      m_image_state.snapshots[snap_id] = {snap_id, snap_info.snap_namespace,
+      m_image_state.snapshots[snap_id] = {snap_info.snap_namespace,
                                           snap_info.name,
                                           snap_info.protection_status};
     }
