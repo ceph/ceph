@@ -180,6 +180,8 @@ class HostCache():
         }
         if host in self.last_daemon_update:
             j['last_daemon_update'] = self.last_daemon_update[host].strftime(DATEFMT) # type: ignore
+        if host in self.last_device_update:
+            j['last_device_update'] = self.last_device_update[host].strftime(DATEFMT) # type: ignore
         for name, dd in self.daemons[host].items():
             j['daemons'][name] = dd.to_json()  # type: ignore
         for d in self.devices[host]:
