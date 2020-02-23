@@ -4,7 +4,7 @@ try:
 except ImportError:
     from unittest import mock
 
-from orchestrator import InventoryNode
+from orchestrator import InventoryHost
 
 from . import ControllerTestCase
 from .. import mgr
@@ -48,11 +48,11 @@ class OrchestratorControllerTest(ControllerTestCase):
     def _set_inventory(self, mock_instance, inventory):
         # pylint: disable=unused-argument
         def _list_inventory(hosts=None, refresh=False):
-            nodes = []
-            for node in inventory:
-                if hosts is None or node['name'] in hosts:
-                    nodes.append(InventoryNode.from_json(node))
-            return nodes
+            inv_hosts = []
+            for inv_host in inventory:
+                if hosts is None or inv_host['name'] in hosts:
+                    inv_hosts.append(InventoryHost.from_json(inv_host))
+            return inv_hosts
         mock_instance.inventory.list.side_effect = _list_inventory
 
     @mock.patch('dashboard.controllers.orchestrator.get_device_osd_map')
@@ -174,8 +174,8 @@ class TestOrchestrator(unittest.TestCase):
         mgr.get.assert_called_with('osd_metadata')
         # sort OSD IDs to make assertDictEqual work
         for devices in device_osd_map.values():
-            for node in devices.keys():
-                devices[node] = sorted(devices[node])
+            for host in devices.keys():
+                devices[host] = sorted(devices[host])
         self.assertDictEqual(device_osd_map, {
             'node0': {
                 'nvme0n1': [0, 1],

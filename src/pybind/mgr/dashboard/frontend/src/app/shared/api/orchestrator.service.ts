@@ -6,7 +6,7 @@ import { Observable, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
 import { InventoryDevice } from '../../ceph/cluster/inventory/inventory-devices/inventory-device.model';
-import { InventoryNode } from '../../ceph/cluster/inventory/inventory-node.model';
+import { InventoryHost } from '../../ceph/cluster/inventory/inventory-host.model';
 import { ApiModule } from './api.module';
 
 @Injectable({
@@ -29,17 +29,17 @@ export class OrchestratorService {
     });
   }
 
-  inventoryList(hostname?: string): Observable<InventoryNode[]> {
+  inventoryList(hostname?: string): Observable<InventoryHost[]> {
     const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get<InventoryNode[]>(`${this.url}/inventory`, options);
+    return this.http.get<InventoryHost[]>(`${this.url}/inventory`, options);
   }
 
   inventoryDeviceList(hostname?: string): Observable<InventoryDevice[]> {
     return this.inventoryList(hostname).pipe(
-      mergeMap((nodes: InventoryNode[]) => {
-        const devices = _.flatMap(nodes, (node) => {
-          return node.devices.map((device) => {
-            device.hostname = node.name;
+      mergeMap((hosts: InventoryHost[]) => {
+        const devices = _.flatMap(hosts, (host) => {
+          return host.devices.map((device) => {
+            device.hostname = host.name;
             device.uid = device.device_id ? device.device_id : `${device.hostname}-${device.path}`;
             return device;
           });
