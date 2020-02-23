@@ -9,9 +9,22 @@ import pwd
 import time
 
 from teuthology.orchestra import run
-from constants import cephqe_scripts
 
 log = logging.getLogger(__name__)
+
+
+cephqe_scripts = {
+    "DIR": {"v1":
+                {"script": "rgw/v1/tests/s3/",
+                 "config": "rgw/v1/tests/s3/yamls"},
+            "v2":
+                {"script": "rgw/v2/tests/s3_swift/",
+                 "config": "rgw/v2/tests/s3_swift/configs"}
+            },
+    "MASTER_BRANCH": "master",
+    "REPO_NAME": "ceph-qe-scripts",
+    "WIP_BRANCH": None
+}
 
 
 class rgw_ios:

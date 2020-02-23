@@ -3,6 +3,7 @@ import logging
 
 from tasks.mixed_system_tests import system
 from tasks.mixed_system_tests import ios
+from time import sleep
 
 log = logging.getLogger(__name__)
 
@@ -60,10 +61,14 @@ def restart_tests(ctx, config):
     daemons = config.get('daemons')
     try:
         for daemon in daemons:
+            stats = system.get_daemon_info(daemon, ctx)
+            assert stats.get("active_count") > 0,\
+                "{} Not found in cluster".format(daemon)
             assert system.ceph_daemon_system_test(ctx, daemon)
             log.info("{} completed".format(daemon))
+            sleep(60)
         yield
     except Exception as err:
         assert False, err
     finally:
-        log.info("Daemon(s) Service system tests completed")
+        log.info("Completed")

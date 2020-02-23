@@ -7,7 +7,7 @@ tasks:
         config:
             user_count: 5
             bucket_count: 5
-            objects_count: 20
+            objects_count: 10
             objects_size_range:
                 min: 100
                 max: 200
@@ -89,6 +89,6 @@ tasks:
             io-engine: rbd
             test-clone-io: 1
             rw: randrw
-            runtime: 600
+            runtime: 900
     - mixed_system_test.restart_tests:
-        daemons: ["mgr", "mon", "osd"]
+        daemons: ["mgr", "mon", "mds", "osd"]
