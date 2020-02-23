@@ -3254,7 +3254,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
-  bufferlist extra_data_bl;
+  bufferlist extra_data_bl, full_obj;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   uint64_t data_len{0};
@@ -3262,6 +3262,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
   std::function<int(map<string, bufferlist>&)> attrs_handler;
+  string calculated_etag;
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -3364,6 +3365,8 @@ public:
 
     const uint64_t lofs = data_len;
     data_len += size;
+    if (cct->_conf->rgw_copy_verify_object)
+      full_obj.append(bl);
 
     return filter->process(std::move(bl), lofs);
   }
@@ -3383,6 +3386,18 @@ public:
 
   uint64_t get_data_len() {
     return data_len;
+  }
+
+  string get_calculated_etag() {
+    MD5 hash;
+    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+
+    hash.Update((const unsigned char *)full_obj.c_str(), data_len);
+    hash.Final(m);
+    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    calculated_etag = calc_md5;
+    return calculated_etag;
   }
 };
 
@@ -3946,6 +3961,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (ret < 0) {
       goto set_err_state;
     }
+
+    if (cct->_conf->rgw_copy_verify_object) {
+      if (cb.get_calculated_etag().compare(etag)) {
+        ret = -EIO;
+        ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
+          << etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+        goto set_err_state;
+     }
+   }
+
     if (copy_if_newer && canceled) {
       ldout(cct, 20) << "raced with another write of obj: " << dest_obj << dendl;
       obj_ctx.invalidate(dest_obj); /* object was overwritten */
