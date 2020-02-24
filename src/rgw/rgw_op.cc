@@ -2643,6 +2643,11 @@ void RGWGetBucketVersioning::pre_exec()
 
 void RGWGetBucketVersioning::execute()
 {
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   versioned = s->bucket_info.versioned();
   versioning_enabled = s->bucket_info.versioning_enabled();
   mfa_enabled = s->bucket_info.mfa_enabled();
@@ -2663,6 +2668,11 @@ void RGWSetBucketVersioning::execute()
   op_ret = get_params();
   if (op_ret < 0)
     return;
+
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
 
   if (s->bucket_info.obj_lock_enabled() && versioning_status != VersioningEnabled) {
     op_ret = -ERR_INVALID_BUCKET_STATE;
