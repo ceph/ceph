@@ -468,8 +468,7 @@ def ceph_mons(ctx, config):
                 log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
                 _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'apply', 'mon',
-                    str(num_mons),
+                    'ceph', 'orch', 'daemon', 'add', 'mon',
                     remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
                 ])
                 ctx.daemons.register_daemon(
