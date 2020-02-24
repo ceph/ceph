@@ -83,6 +83,14 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/builder.c
+  ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
+  ${PROJECT_SOURCE_DIR}/src/crush/crush.c
+  ${PROJECT_SOURCE_DIR}/src/crush/hash.c
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushWrapper.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushCompiler.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
@@ -104,8 +112,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${crimson_common_srcs}
-  $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:crimson-crush>)
+  $<TARGET_OBJECTS:common_mountcephfs_objs>)
 
 target_compile_definitions(crimson-common PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
