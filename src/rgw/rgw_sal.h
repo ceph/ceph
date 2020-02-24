@@ -319,16 +319,16 @@ class RGWStoreManager {
 public:
   RGWStoreManager() {}
   static rgw::sal::RGWRadosStore *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads,
-			       bool run_sync_thread, bool run_reshard_thread, bool use_cache = true) {
+			       bool run_sync_thread, bool run_reshard_thread, bool use_metacache = true, bool use_datacache = false) {
     rgw::sal::RGWRadosStore *store = init_storage_provider(cct, use_gc_thread, use_lc_thread,
-	quota_threads, run_sync_thread, run_reshard_thread, use_cache);
+	quota_threads, run_sync_thread, run_reshard_thread, use_metacache, use_datacache);
     return store;
   }
   static rgw::sal::RGWRadosStore *get_raw_storage(CephContext *cct) {
     rgw::sal::RGWRadosStore *rados = init_raw_storage_provider(cct);
     return rados;
   }
-  static rgw::sal::RGWRadosStore *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache);
+  static rgw::sal::RGWRadosStore *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache, bool use_data_cache = false);
   static rgw::sal::RGWRadosStore *init_raw_storage_provider(CephContext *cct);
   static void close_storage(rgw::sal::RGWRadosStore *store);
 

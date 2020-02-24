@@ -91,9 +91,9 @@ private:
   std::list<string> outstanding_write_list;
   int index;
   RWLock lock;
-  Mutex  cache_lock;
-  Mutex  req_lock;
-  Mutex  eviction_lock;
+  ceph::mutex cache_lock;
+  ceph::mutex req_lock;
+  ceph::mutex eviction_lock;
   CephContext *cct;
   enum _io_type { 
     SYNC_IO = 1,

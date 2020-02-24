@@ -345,6 +345,8 @@ struct objexp_hint_entry {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<objexp_hint_entry*>& o);
 };
+WRITE_CLASS_ENCODER(objexp_hint_entry)
+
 class RGWMetaSyncStatusManager;
 class RGWDataSyncStatusManager;
 class RGWCoroutinesManagerRegistry;
@@ -396,171 +398,7 @@ template <class K, class V>
 class lru_map;
 using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
 
-struct get_obj_io {
-  off_t len;
-  bufferlist bl;
-};
-
-
-struct get_obj_aio_data {
-  struct get_obj_data *op_data;
-  off_t ofs;
-  off_t len;
-};
-
 class RGWIndexCompletionManager;
-
-class librados::CacheRequest {
-  public:
-    Mutex lock;
-    int sequence;
-    bufferlist *pbl;
-    struct get_obj_data *op_data;
-    std::string oid;
-    off_t ofs;
-    off_t len;
-    librados::AioCompletion *lc;
-    std::string key;
-    off_t read_ofs;
-    Context *onack;
-    CephContext *cct;
-    CacheRequest(CephContext *_cct) : lock("CacheRequest"), sequence(0), pbl(NULL), op_data(NULL), ofs(0), lc(NULL), read_ofs(0), cct(_cct) {};
-    virtual ~CacheRequest(){};
-    virtual void release()=0;
-    virtual void cancel_io()=0;
-    virtual int status()=0;
-    virtual void finish()=0;
-};
-
-struct librados::L1CacheRequest : public librados::CacheRequest{
-  int stat;
-  struct aiocb *paiocb;
-  L1CacheRequest(CephContext *_cct) :  CacheRequest(_cct), stat(-1), paiocb(NULL) {}
-  ~L1CacheRequest(){}
-  void release (){
-    lock.Lock();
-    free((void *)paiocb->aio_buf);
-    paiocb->aio_buf = NULL;
-    ::close(paiocb->aio_fildes);
-    free(paiocb);
-    lock.Unlock();
-    delete this;
-					    }
-
-  void cancel_io(){
-    lock.Lock();
-    stat = ECANCELED;
-    lock.Unlock();
-  }
-
-  int status(){
-    lock.Lock();
-    if (stat != EINPROGRESS) {
-      lock.Unlock();
-      if (stat == ECANCELED){
-	release();
-	return ECANCELED;
-      }
-    }
-    stat = aio_error(paiocb);
-    lock.Unlock();
-    return stat;
-  }
-
-  void finish(){
-    pbl->append((char*)paiocb->aio_buf, paiocb->aio_nbytes);
-    onack->complete(0);
-    release();
-  }
-};
-
-struct librados::L2CacheRequest : public librados::CacheRequest {
-  size_t read;
-  int stat;
-  void *tp;
-  string dest;
-  L2CacheRequest(CephContext *_cct) : CacheRequest(_cct), read(0), stat(-1) {}
-  ~L2CacheRequest(){}
-  void release (){
-    lock.Lock();
-    lock.Unlock();
-  }
-
-  void cancel_io(){
-    lock.Lock();
-    stat = ECANCELED;
-    lock.Unlock();
-  }
-
-  void finish(){
-    onack->complete(0);
-    release();
-  }
-
-  int status(){
-    return 0;
-  }
-};
-
-
-
-template <class T>
-class RGWChainedCacheImpl : public RGWChainedCache {
-  ceph::timespan expiry;
-  RWLock lock;
-
-  std::unordered_map<std::string, std::pair<T, ceph::coarse_mono_time>> entries;
-
-public:
-  RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
-
-  void init(RGWRados *store) {
-    store->register_chained_cache(this);
-    expiry = std::chrono::seconds(store->ctx()->_conf.get_val<uint64_t>(
-				    "rgw_cache_expiry_interval"));
-  }
-
-  boost::optional<T> find(const string& key) {
-    RWLock::RLocker rl(lock);
-    auto iter = entries.find(key);
-    if (iter == entries.end()) {
-      return boost::none;
-    }
-    if (expiry.count() &&
-	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
-      return boost::none;
-    }
-
-    return iter->second.first;
-  }
-
-  bool put(RGWRados *store, const string& key, T *entry,
-	   std::initializer_list<rgw_cache_entry_info *> cache_info_entries) {
-    Entry chain_entry(this, key, entry);
-
-    /* we need the store cache to call us under its lock to maintain lock ordering */
-    return store->chain_cache_entry(cache_info_entries, &chain_entry);
-  }
-
-  void chain_cb(const string& key, void *data) override {
-    T *entry = static_cast<T *>(data);
-    RWLock::WLocker wl(lock);
-    entries[key].first = *entry;
-    if (expiry.count() > 0) {
-      entries[key].second = ceph::coarse_mono_clock::now();
-    }
-  }
-
-  void invalidate(const string& key) override {
-    RWLock::WLocker wl(lock);
-    entries.erase(key);
-  }
-
-  void invalidate_all() override {
-    RWLock::WLocker wl(lock);
-    entries.clear();
-  }
-}; /* RGWChainedCacheImpl */
 
 class RGWRados
 {
@@ -1872,25 +1710,4 @@ struct get_obj_data : public RefCountedObject {
   int submit_l1_io_read(bufferlist *bl, int len, string oid);
 };
 */
-
-class RGWStoreManager {
-public:
-  RGWStoreManager() {}
-  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads,
-			       bool run_sync_thread, bool run_reshard_thread, bool use_metacache = true, bool use_datacache=false) {
-    RGWRados *store = init_storage_provider(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread,
-					    run_reshard_thread, use_metacache, use_datacache);
-    return store;
-  }
-  static RGWRados *get_raw_storage(CephContext *cct) {
-    RGWRados *store = init_raw_storage_provider(cct);
-    return store;
-  }
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache, bool use_data_cache = false);
-  static RGWRados *init_raw_storage_provider(CephContext *cct);
-  static void close_storage(RGWRados *store);
-
-};
-
-
 #endif

@@ -295,7 +295,7 @@ int RGWRadosStore::get_bucket(RGWUser& u, const rgw_bucket& b, RGWBucket** bucke
 
 } // namespace rgw::sal
 
-rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
+rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metacache, bool use_datacache)
 {
   // FIXME: #CACHEREBASE: continue - pass down "use_datacache"
 
@@ -305,7 +305,7 @@ rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct
   store->setRados(rados);
   rados->set_store(store);
 
-  if ((*rados).set_use_cache(use_cache)
+  if ((*rados).set_use_cache(use_metacache)
               .set_run_gc_thread(use_gc_thread)
               .set_run_lc_thread(use_lc_thread)
               .set_run_quota_threads(quota_threads)

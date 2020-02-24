@@ -5,11 +5,22 @@ add_library(librados_impl STATIC
   librados_util.cc
   librados_tp.cc)
 
+if(WITH_BOOST_CONTEXT)
+    target_include_directories(librados_impl PRIVATE
+      $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+  
 # C/C++ API
 add_library(librados ${CEPH_SHARED}
   librados_c.cc
   librados_cxx.cc
   $<TARGET_OBJECTS:common_buffer_obj>)
+
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(librados PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
 if(ENABLE_SHARED)
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados

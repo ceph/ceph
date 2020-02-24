@@ -6228,8 +6228,6 @@ struct get_obj_data {
     // wait for all completions to drain and ignore the results
     aio->drain();
   }
-  return tokens;
-}
 
   int drain() {
     auto c = aio->wait();

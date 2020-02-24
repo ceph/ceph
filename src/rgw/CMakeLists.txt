@@ -227,6 +227,11 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   find_package(RDKafka 0.9.2 REQUIRED)
 endif()
 
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(rgw_a PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
 target_link_libraries(rgw_a
   PRIVATE
   librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
