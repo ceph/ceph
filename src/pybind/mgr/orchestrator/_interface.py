@@ -1012,6 +1012,16 @@ class Orchestrator(object):
         """Update MDS cluster"""
         raise NotImplementedError()
 
+    def add_rgw(self, spec):
+        # type: (RGWSpec) -> Completion
+        """Create RGW daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_rgw(self, spec):
+        # type: (RGWSpec) -> Completion
+        """Update RGW cluster"""
+        raise NotImplementedError()
+
     def add_rbd_mirror(self, spec):
         # type: (ServiceSpec) -> Completion
         """Create rbd-mirror daemon(s)"""
@@ -1030,16 +1040,6 @@ class Orchestrator(object):
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> Completion
         """Update NFS cluster"""
-        raise NotImplementedError()
-
-    def add_rgw(self, spec):
-        # type: (RGWSpec) -> Completion
-        """Create RGW daemon(s)"""
-        raise NotImplementedError()
-
-    def apply_rgw(self, spec):
-        # type: (RGWSpec) -> Completion
-        """Update RGW cluster"""
         raise NotImplementedError()
 
     def add_prometheus(self, spec):
