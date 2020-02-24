@@ -421,7 +421,7 @@ def trivial_result(val):
 
 
 @six.add_metaclass(CLICommandMeta)
-class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
+class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     _STORE_HOST_PREFIX = "host"
 
