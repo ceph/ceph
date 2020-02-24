@@ -32,7 +32,7 @@ else:
     os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
                                         os.environ['PATH'])
 
-    from tests import mock
+    from tests import mock  # type: ignore
 
     mgr = mock.Mock()
     mgr.get_frontend_path.side_effect = lambda: os.path.abspath("./frontend/dist")

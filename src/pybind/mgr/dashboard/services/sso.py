@@ -15,9 +15,9 @@ from six.moves.urllib import parse
 from .. import mgr
 from ..tools import prepare_url_prefix
 
+
 if six.PY2:
     FileNotFoundError = IOError  # pylint: disable=redefined-builtin
-
 
 logger = logging.getLogger('sso')
 
@@ -91,8 +91,9 @@ class SsoDB(object):
             db.check_and_update_db()
             return db
 
-        db = json.loads(json_db)
-        return cls(db['version'], db.get('protocol'), Saml2.from_dict(db.get('saml2')))
+        dict_db = json.loads(json_db)  # type: dict
+        return cls(dict_db['version'], dict_db.get('protocol'),
+                   Saml2.from_dict(dict_db.get('saml2')))
 
 
 def load_sso_db():

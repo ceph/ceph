@@ -8,7 +8,6 @@ from orchestrator import OrchestratorClientMixin, raise_if_exception, Orchestrat
 from .. import mgr
 from ..tools import wraps
 
-
 logger = logging.getLogger('orchestrator')
 
 
@@ -16,7 +15,7 @@ logger = logging.getLogger('orchestrator')
 class OrchestratorAPI(OrchestratorClientMixin):
     def __init__(self):
         super(OrchestratorAPI, self).__init__()
-        self.set_mgr(mgr)
+        self.set_mgr(mgr)  # type: ignore
 
     def status(self):
         try:
@@ -24,8 +23,9 @@ class OrchestratorAPI(OrchestratorClientMixin):
             logger.info("is orchestrator available: %s, %s", status, desc)
             return dict(available=status, description=desc)
         except (RuntimeError, OrchestratorError, ImportError):
-            return dict(available=False,
-                        description='Orchestrator is unavailable for unknown reason')
+            return dict(
+                available=False,
+                description='Orchestrator is unavailable for unknown reason')
 
     def orchestrator_wait(self, completions):
         return self._orchestrator_wait(completions)
@@ -38,6 +38,7 @@ def wait_api_result(method):
         self.api.orchestrator_wait([completion])
         raise_if_exception(completion)
         return completion.result
+
     return inner
 
 
@@ -47,7 +48,6 @@ class ResourceManager(object):
 
 
 class HostManger(ResourceManager):
-
     @wait_api_result
     def list(self):
         return self.api.get_hosts()
@@ -66,7 +66,6 @@ class HostManger(ResourceManager):
 
 
 class InventoryManager(ResourceManager):
-
     @wait_api_result
     def list(self, hosts=None, refresh=False):
         host_filter = InventoryFilter(hosts=hosts) if hosts else None
@@ -74,7 +73,6 @@ class InventoryManager(ResourceManager):
 
 
 class ServiceManager(ResourceManager):
-
     @wait_api_result
     def list(self, service_type=None, service_id=None, host_name=None):
         return self.api.list_daemons(service_type, service_id, host_name)
@@ -83,16 +81,17 @@ class ServiceManager(ResourceManager):
         if not isinstance(service_ids, list):
             service_ids = [service_ids]
 
-        completion_list = [self.api.service_action('reload', service_type,
-                                                   service_name, service_id)
-                           for service_name, service_id in service_ids]
+        completion_list = [
+            self.api.service_action('reload', service_type, service_name,
+                                    service_id)
+            for service_name, service_id in service_ids
+        ]
         self.api.orchestrator_wait(completion_list)
         for c in completion_list:
             raise_if_exception(c)
 
 
 class OsdManager(ResourceManager):
-
     @wait_api_result
     def create(self, drive_group):
         return self.api.create_osds([drive_group])
@@ -125,4 +124,5 @@ class OrchClient(object):
     @wait_api_result
     def blink_device_light(self, hostname, device, ident_fault, on):
         # type: (str, str, str, bool) -> Completion
-        return self.api.blink_device_light(ident_fault, on, [DeviceLightLoc(hostname, device)])
+        return self.api.blink_device_light(
+            ident_fault, on, [DeviceLightLoc(hostname, device, device)])

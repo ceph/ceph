@@ -22,7 +22,7 @@ logger = logging.getLogger('iscsi_client')
 
 class IscsiClient(RestClient):
     _CLIENT_NAME = 'iscsi'
-    _instances = {}
+    _instances = {}  # type: dict
 
     service_url = None
     gateway_name = None

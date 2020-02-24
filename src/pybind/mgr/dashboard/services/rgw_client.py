@@ -14,7 +14,7 @@ from ..tools import build_url, dict_contains_path, json_str_to_object, partial_d
 from .. import mgr
 
 try:
-    from typing import Any, Dict, List  # pylint: disable=unused-import
+    from typing import Dict, List, Optional  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -179,7 +179,7 @@ def _parse_frontend_config(config):
                         return port, ssl
                 if option_name in ['endpoint', 'ssl_endpoint']:
                     match = re.search(r'([\d.]+|\[.+\])(:(\d+))?',
-                                      match.group(2))
+                                      match.group(2))  # type: ignore
                     if match:
                         port = int(match.group(3)) if \
                             match.group(2) is not None else 443 if \
@@ -187,7 +187,7 @@ def _parse_frontend_config(config):
                             80
                         ssl = option_name == 'ssl_endpoint'
                         return port, ssl
-        if match.group(1) == 'civetweb':
+        if match.group(1) == 'civetweb':  # type: ignore
             match = re.search(r'port=(.*:)?(\d+)(s)?', config)
             if match:
                 port = int(match.group(2))
@@ -202,7 +202,7 @@ class RgwClient(RestClient):
     _host = None
     _port = None
     _ssl = None
-    _user_instances = {}
+    _user_instances = {}  # type: Dict[str, RgwClient]
     _rgw_settings_snapshot = None
 
     @staticmethod
@@ -238,10 +238,10 @@ class RgwClient(RestClient):
         # Append the instance to the internal map.
         RgwClient._user_instances[RgwClient._SYSTEM_USERID] = instance
 
-    def _get_daemon_zone_info(self):  # type: () -> Dict[str, Any]
+    def _get_daemon_zone_info(self):  # type: () -> dict
         return json_str_to_object(self.proxy('GET', 'config?type=zone', None, None))
 
-    def _get_daemon_zonegroup_map(self):  # type: () -> List[Dict[str, Any]]
+    def _get_daemon_zonegroup_map(self):  # type: () -> List[dict]
         zonegroups = json_str_to_object(
             self.proxy('GET', 'config?type=zonegroup-map', None, None)
         )
@@ -264,6 +264,7 @@ class RgwClient(RestClient):
 
     @staticmethod
     def instance(userid):
+        # type: (Optional[str]) -> RgwClient
         # Discard all cached instances if any rgw setting has changed
         if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
             RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
@@ -284,11 +285,11 @@ class RgwClient(RestClient):
                         userid))
 
             # Create an instance and append it to the internal map.
-            RgwClient._user_instances[userid] = RgwClient(userid,
+            RgwClient._user_instances[userid] = RgwClient(userid,  # type: ignore
                                                           keys['access_key'],
                                                           keys['secret_key'])
 
-        return RgwClient._user_instances[userid]
+        return RgwClient._user_instances[userid]  # type: ignore
 
     @staticmethod
     def admin_instance():
@@ -328,7 +329,7 @@ class RgwClient(RestClient):
         super(RgwClient, self).__init__(host, port, 'RGW', ssl, s3auth, ssl_verify=ssl_verify)
 
         # If user ID is not set, then try to get it via the RGW Admin Ops API.
-        self.userid = userid if userid else self._get_user_id(self.admin_path)
+        self.userid = userid if userid else self._get_user_id(self.admin_path)  # type: str
 
         logger.info("Created new connection for user: %s", self.userid)
 
@@ -457,7 +458,7 @@ class RgwClient(RestClient):
 
         return request(data=data)
 
-    def get_placement_targets(self):  # type: () -> Dict[str, Any]
+    def get_placement_targets(self):  # type: () -> dict
         zone = self._get_daemon_zone_info()
         # A zone without realm id can only belong to default zonegroup.
         zonegroup_name = 'default'
