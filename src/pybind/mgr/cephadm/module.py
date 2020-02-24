@@ -2176,6 +2176,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 deps.append(dd.name())
         return sorted(deps)
 
+    def _get_config_and_keyring(self, daemon_type, daemon_id,
+                                keyring=None,
+                                extra_config=None):
+        # type: (str, str, Optional[str], Optional[str]) -> Dict[str, Any]
+        # keyring
+        if not keyring:
+            if daemon_type == 'mon':
+                ename = 'mon.'
+            else:
+                ename = name_to_config_section(daemon_type + '.' + daemon_id)
+            ret, keyring, err = self.mon_command({
+                'prefix': 'auth get',
+                'entity': ename,
+            })
+
+        # generate config
+        ret, config, err = self.mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+        if extra_config:
+            config += extra_config
+
+        return {
+            'config': config,
+            'keyring': keyring,
+        }
+
     def _create_daemon(self, daemon_type, daemon_id, host,
                        keyring=None,
                        extra_args=None, extra_config=None,
@@ -2198,28 +2225,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             cephadm_config, deps = self._generate_alertmanager_config()
             extra_args.extend(['--config-json', '-'])
         else:
-            # keyring
-            if not keyring:
-                if daemon_type == 'mon':
-                    ename = 'mon.'
-                else:
-                    ename = name_to_config_section(daemon_type + '.' + daemon_id)
-                ret, keyring, err = self.mon_command({
-                    'prefix': 'auth get',
-                    'entity': ename,
-                })
-
-            # generate config
-            ret, config, err = self.mon_command({
-                "prefix": "config generate-minimal-conf",
-            })
-            if extra_config:
-                config += extra_config
-
-            cephadm_config = {
-                'config': config,
-                'keyring': keyring,
-            }
+            cephadm_config = self._get_config_and_keyring(
+                    daemon_type, daemon_id,
+                    keyring=keyring,
+                    extra_config=extra_config)
             extra_args.extend(['--config-json', '-'])
 
             # osd deployments needs an --osd-uuid arg
