@@ -788,7 +788,7 @@ private:
     case BACKFILLFULL: return "backfillfull";
     case FULL: return "full";
     case FAILSAFE: return "failsafe";
-    default: return "???";
+    default: return "invalid";
     }
   }
   s_names get_full_state(string type) const {
