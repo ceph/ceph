@@ -213,15 +213,6 @@ class HostCache():
                 r.append(dd)
         return r
 
-    def get_daemons_by_type(self, daemon_type):
-        # type: (str) -> List[orchestrator.DaemonDescription]
-        result = []   # type: List[orchestrator.DaemonDescription]
-        for host, dm in self.daemons.items():
-            for name, d in dm.items():
-                if name.startswith(daemon_type + '.'):
-                    result.append(d)
-        return result
-
     def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
         result = []   # type: List[orchestrator.DaemonDescription]
@@ -2172,7 +2163,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 port = t.split(':')[1]
             # get standbys too.  assume that they are all on the same port
             # as the active.
-            for dd in self.cache.get_daemons_by_type('mgr'):
+            for dd in self.cache.get_daemons_by_service('mgr'):
                 if dd.daemon_id == self.get_mgr_id():
                     continue
                 hi = self.inventory.get(dd.hostname, None)
@@ -2182,7 +2173,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         # scrape node exporters
         node_configs = ''
-        for dd in self.cache.get_daemons_by_type('node-exporter'):
+        for dd in self.cache.get_daemons_by_service('node-exporter'):
             hi = self.inventory.get(dd.hostname, None)
             if hi:
                 addr = hi.get('addr', dd.hostname)
