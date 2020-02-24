@@ -23,4 +23,5 @@ tasks:
       - \(PG_
       - \(OBJECT_
       - \(SLOW_OPS\)
+      - slow request
 - rep_lost_unfound_delete:
