@@ -700,7 +700,7 @@ class CephadmOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
                         self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.hostname, r['image_id'], target_id))
-                        self.upgrade_state['image_id'] = r['image_id']
+                        self.upgrade_state['target_id'] = r['image_id']
                         self._save_upgrade_state()
                         return None
 
