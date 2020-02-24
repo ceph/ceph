@@ -566,6 +566,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
     }
     cur_manifest = &(*astate->manifest);
     manifest.set_prefix(cur_manifest->get_prefix());
+    astate->keep_tail = true;
   }
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
 
