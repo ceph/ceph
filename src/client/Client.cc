@@ -5825,7 +5825,10 @@ int Client::subscribe_mdsmap(const std::string &fs_name)
 
   std::string resolved_fs_name;
   if (fs_name.empty()) {
-    resolved_fs_name = cct->_conf.get_val<std::string>("client_mds_namespace");
+    resolved_fs_name = cct->_conf.get_val<std::string>("client_fs");
+    if (resolved_fs_name.empty())
+	    // Try the backwards compatibility fs name option
+	    resolved_fs_name = cct->_conf.get_val<std::string>("client_mds_namespace");
   } else {
     resolved_fs_name = fs_name;
   }

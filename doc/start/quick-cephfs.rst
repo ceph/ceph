@@ -184,9 +184,9 @@ To mount a particular directory within CephFS you can use ``-r``::
     sudo ceph-fuse -r {path-to-be-mounted} /mnt/mycephfs
 
 If you have multiple file systems on your cluster you would need to pass
-``--client_mds_namespace {fs-name}`` to the ``ceph-fuse`` command::
+``--client_fs {fs-name}`` to the ``ceph-fuse`` command::
 
-	sudo ceph-fuse /mnt/mycephfs2 --client_mds_namespace mycephfs2
+	sudo ceph-fuse /mnt/mycephfs2 --client_fs mycephfs2
 
 Refer `ceph-fuse man page`_ and `Mount CephFS using FUSE`_ to read more about
 this.
