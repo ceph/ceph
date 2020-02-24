@@ -40,6 +40,7 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
     CLICommandMeta
 
 from . import remotes
+from .nfs import NFSGanesha
 from .osd import RemoveUtil, OSDRemoval
 
 
@@ -2207,24 +2208,34 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                        keyring=None,
                        extra_args=None, extra_config=None,
                        reconfig=False,
-                       osd_uuid_map=None):
+                       osd_uuid_map=None,
+                       cephadm_config=None):
         if not extra_args:
             extra_args = []
         name = '%s.%s' % (daemon_type, daemon_id)
 
         start_time = datetime.datetime.utcnow()
         deps = []  # type: List[str]
-        cephadm_config = {}  # type: Dict[str, Any]
+        if not cephadm_config:
+            cephadm_config = {}
         if daemon_type == 'prometheus':
             cephadm_config, deps = self._generate_prometheus_config()
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'grafana':
             cephadm_config, deps = self._generate_grafana_config()
             extra_args.extend(['--config-json', '-'])
+        elif daemon_type == 'nfs':
+            cephadm_config.update(
+                    self._get_config_and_keyring(
+                        daemon_type, daemon_id,
+                        keyring=keyring,
+                        extra_config=extra_config))
+            extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'alertmanager':
             cephadm_config, deps = self._generate_alertmanager_config()
             extra_args.extend(['--config-json', '-'])
         else:
+            # Ceph.daemons (mon, mgr, mds, osd, etc)
             cephadm_config = self._get_config_and_keyring(
                     daemon_type, daemon_id,
                     keyring=keyring,
@@ -2529,6 +2540,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 daemon_type, daemon_id, host))
             if daemon_type == 'mon':
                 args.append((daemon_id, host, network))  # type: ignore
+            elif daemon_type == 'nfs':
+                args.append((daemon_id, host, spec)) # type: ignore
             else:
                 args.append((daemon_id, host))  # type: ignore
 
@@ -2742,6 +2755,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     @trivial_completion
     def apply_rbd_mirror(self, spec):
         return self._apply(spec)
+
+    def add_nfs(self, spec):
+        return self._add_daemon('nfs', spec, self._create_nfs)
+
+    def _create_nfs(self, daemon_id, host, spec):
+        nfs = NFSGanesha(self, daemon_id, spec.pool, namespace=spec.namespace)
+        keyring = nfs.create_keyring()
+        cephadm_config = nfs.get_cephadm_config()
+        return self._create_daemon('nfs', daemon_id, host,
+                                   keyring=keyring,
+                                   cephadm_config=cephadm_config)
 
     def _generate_prometheus_config(self):
         # type: () -> Tuple[Dict[str, Any], List[str]]
