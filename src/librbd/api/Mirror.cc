@@ -28,6 +28,7 @@
 #include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
+#include "librbd/mirror/snapshot/Utils.h"
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/scope_exit.hpp>
@@ -474,89 +475,107 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
   if (r < 0) {
     lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
     return r;
-  } else {
-    bool rollback = false;
-    BOOST_SCOPE_EXIT_ALL(ictx, &mirror_image_internal, &rollback) {
-      if (rollback) {
-        CephContext *cct = ictx->cct;
-        mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
-        int r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
-                                             mirror_image_internal);
-        if (r < 0) {
-          lderr(cct) << "failed to re-enable image mirroring: "
-                     << cpp_strerror(r) << dendl;
-        }
-      }
-    };
+  }
 
-    {
-      std::shared_lock l{ictx->image_lock};
-      map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
-      for (auto &info : snap_info) {
-        cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
-                                              ictx->md_ctx.get_namespace(),
-                                              ictx->id, info.first};
-        std::vector<librbd::linked_image_spec_t> child_images;
-        r = Image<I>::list_children(ictx, parent_spec, &child_images);
+  bool rollback = false;
+  BOOST_SCOPE_EXIT_ALL(ictx, &mirror_image_internal, &rollback) {
+    if (rollback) {
+      CephContext *cct = ictx->cct;
+      mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+      int r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
+                                           mirror_image_internal);
+      if (r < 0) {
+        lderr(cct) << "failed to re-enable image mirroring: "
+                   << cpp_strerror(r) << dendl;
+      }
+    }
+  };
+
+  std::unique_lock image_locker{ictx->image_lock};
+  map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
+  for (auto &info : snap_info) {
+    cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                          ictx->md_ctx.get_namespace(),
+                                          ictx->id, info.first};
+    std::vector<librbd::linked_image_spec_t> child_images;
+    r = Image<I>::list_children(ictx, parent_spec, &child_images);
+    if (r < 0) {
+      rollback = true;
+      return r;
+    }
+
+    if (child_images.empty()) {
+      continue;
+    }
+
+    librados::IoCtx child_io_ctx;
+    int64_t child_pool_id = -1;
+    for (auto &child_image : child_images){
+      std::string pool = child_image.pool_name;
+      if (child_pool_id == -1 ||
+          child_pool_id != child_image.pool_id ||
+          child_io_ctx.get_namespace() != child_image.pool_namespace) {
+        r = util::create_ioctx(ictx->md_ctx, "child image",
+                               child_image.pool_id,
+                               child_image.pool_namespace,
+                               &child_io_ctx);
         if (r < 0) {
           rollback = true;
           return r;
         }
 
-        if (child_images.empty()) {
-          continue;
-        }
+        child_pool_id = child_image.pool_id;
+      }
 
-        librados::IoCtx child_io_ctx;
-        int64_t child_pool_id = -1;
-        for (auto &child_image : child_images){
-          std::string pool = child_image.pool_name;
-          if (child_pool_id == -1 ||
-              child_pool_id != child_image.pool_id ||
-              child_io_ctx.get_namespace() != child_image.pool_namespace) {
-            r = util::create_ioctx(ictx->md_ctx, "child image",
-                                   child_image.pool_id,
-                                   child_image.pool_namespace,
-                                   &child_io_ctx);
-            if (r < 0) {
-              rollback = true;
-              return r;
-            }
-
-            child_pool_id = child_image.pool_id;
-          }
-
-          cls::rbd::MirrorImage mirror_image_internal;
-          r = cls_client::mirror_image_get(&child_io_ctx, child_image.image_id,
-                                           &mirror_image_internal);
-          if (r != -ENOENT) {
-            rollback = true;
-            lderr(cct) << "mirroring is enabled on one or more children "
-                       << dendl;
-            return -EBUSY;
-          }
-        }
+      cls::rbd::MirrorImage child_mirror_image_internal;
+      r = cls_client::mirror_image_get(&child_io_ctx, child_image.image_id,
+                                       &child_mirror_image_internal);
+      if (r != -ENOENT) {
+        rollback = true;
+        lderr(cct) << "mirroring is enabled on one or more children "
+                   << dendl;
+        return -EBUSY;
       }
     }
+  }
+  image_locker.unlock();
 
-    C_SaferCond ctx;
-    auto req = mirror::DisableRequest<ImageCtx>::create(ictx, force, true,
-                                                        &ctx);
-    req->send();
-
-    r = ctx.wait();
+  if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    // remove any snapshot-based mirroring image-meta from image
+    std::string mirror_uuid;
+    r = uuid_get(ictx->md_ctx, &mirror_uuid);
     if (r < 0) {
-      lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
       rollback = true;
       return r;
     }
 
-    if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
-      r = ictx->operations->update_features(RBD_FEATURE_JOURNALING, false);
-      if (r < 0) {
-        lderr(cct) << "cannot disable journaling: " << cpp_strerror(r) << dendl;
-        // not fatal
-      }
+    r = ictx->operations->metadata_remove(
+      mirror::snapshot::util::get_image_meta_key(mirror_uuid));
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "cannot remove snapshot image-meta key: " << cpp_strerror(r)
+                 << dendl;
+      rollback = true;
+      return r;
+    }
+  }
+
+  C_SaferCond ctx;
+  auto req = mirror::DisableRequest<ImageCtx>::create(ictx, force, true,
+                                                      &ctx);
+  req->send();
+
+  r = ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    rollback = true;
+    return r;
+  }
+
+  if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    r = ictx->operations->update_features(RBD_FEATURE_JOURNALING, false);
+    if (r < 0) {
+      lderr(cct) << "cannot disable journaling: " << cpp_strerror(r) << dendl;
+      // not fatal
     }
   }
 
