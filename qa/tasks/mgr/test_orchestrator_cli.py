@@ -148,7 +148,7 @@ class TestOrchestratorCli(MgrTestCase):
         out = self._orch_cmd("host", "ls", "--format=json")
         hosts = json.loads(out)
         self.assertEqual(len(hosts), 1)
-        self.assertEqual(hosts[0]["host"], "localhost")
+        self.assertEqual(hosts[0]["hostname"], "localhost")
 
     def test_host_add(self):
         self._orch_cmd("host", "add", "hostname")
