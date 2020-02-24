@@ -700,12 +700,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
                         self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.hostname, r['image_id'], target_id))
-                        self.upgrade_state['image_id'] = r['image_id']
+                        self.upgrade_state['target_id'] = r['image_id']
                         self._save_upgrade_state()
                         return None
 
                 self._update_upgrade_progress(done / len(daemons))
 
+                if d.status <= 0:
+                    if d.container_image_name == target_name:
+                        self.log.debug('daemon %s is stopped but has correct image name' % (d.name()))
+                        continue
                 if not self._wait_for_ok_to_stop(d):
                     return None
                 self.log.info('Upgrade: Redeploying %s.%s' %
