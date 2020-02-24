@@ -155,7 +155,7 @@ class TestVolumes(CephFSTestCase):
         # XXX: construct the trash dir path (note that there is no mgr
         # [sub]volume interface for this).
         trashdir = os.path.join("./", "volumes", "_deleting")
-        self.mount_a.wait_for_dir_empty(trashdir)
+        self.mount_a.wait_for_dir_empty(trashdir, timeout=timeout)
 
     def setUp(self):
         super(TestVolumes, self).setUp()
