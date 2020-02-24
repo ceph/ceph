@@ -1008,6 +1008,66 @@ test_trash_purge_schedule() {
     ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
+test_mirror_snapshot_schedule() {
+    echo "testing mirror snapshot schedule..."
+    remove_images
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd namespace create rbd2/ns1
+
+    rbd mirror pool enable rbd2 image
+    rbd mirror pool enable rbd2/ns1 image
+    rbd mirror pool peer add rbd2 cluster1
+
+    expect_fail rbd mirror snapshot schedule ls
+    test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
+
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/test1
+
+    test "$(rbd mirror image status rbd2/ns1/test1 |
+        grep -c mirror.primary)" = '0'
+
+    rbd mirror image enable rbd2/ns1/test1 snapshot
+
+    test "$(rbd mirror image status rbd2/ns1/test1 |
+        grep -c mirror.primary)" = '1'
+
+    rbd mirror snapshot schedule add --image rbd2/ns1/test1 1m
+    test "$(rbd mirror snapshot schedule ls --image rbd2/ns1/test1)" = 'every 1m'
+
+    for i in `seq 12`; do
+        test "$(rbd mirror image status rbd2/ns1/test1 |
+            grep -c mirror.primary)" -gt '1' && break
+        sleep 10
+    done
+
+    test "$(rbd mirror image status rbd2/ns1/test1 |
+        grep -c mirror.primary)" -gt '1'
+
+    rbd mirror snapshot schedule ls -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
+
+    rbd mirror snapshot schedule status
+    test "$(rbd mirror snapshot schedule status --format xml |
+        $XMLSTARLET sel -t -v '//scheduled_images/image/image')" = 'rbd2/ns1/test1'
+
+    rbd mirror snapshot schedule add 1h 00:15
+    test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+
+    rbd rm rbd2/ns1/test1
+
+    for i in `seq 12`; do
+        rbd mirror snapshot schedule status | grep 'rbd2/ns1/test1' || break
+        sleep 10
+    done
+
+    rbd mirror snapshot schedule remove
+    test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
+
+    remove_images
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -1029,5 +1089,6 @@ test_clone_v2
 test_thick_provision
 test_namespace
 test_trash_purge_schedule
+test_mirror_snapshot_schedule
 
 echo OK
