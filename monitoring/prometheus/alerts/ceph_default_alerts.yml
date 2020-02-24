@@ -131,25 +131,25 @@ groups:
   - name: pgs
     rules:
       - alert: pgs inactive
-        expr: ceph_pg_total - ceph_pg_active > 0
+        expr: ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_total - ceph_pg_active) > 0
         for: 5m
         labels:
           severity: critical
           type: ceph_default
         annotations:
           description: >
-            {{ $value }} PGs have been inactive for more than 5 minutes.
+            {{ $value }} PGs have been inactive for more than 5 minutes in pool {{ $labels.name }}.
             Inactive placement groups aren't able to serve read/write
             requests.
       - alert: pgs unclean
-        expr: ceph_pg_total - ceph_pg_clean > 0
+        expr: ceph_pool_metadata * on(pool_id,instance) group_left() (ceph_pg_total - ceph_pg_clean) > 0
         for: 15m
         labels:
           severity: warning
           type: ceph_default
         annotations:
           description: >
-            {{ $value }} PGs haven't been clean for more than 15 minutes.
+            {{ $value }} PGs haven't been clean for more than 15 minutes in pool {{ $labels.name }}.
             Unclean PGs haven't been able to completely recover from a
             previous failure.
   - name: nodes

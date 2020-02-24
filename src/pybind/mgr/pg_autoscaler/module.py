@@ -25,7 +25,7 @@ Some terminology is made up for the purposes of this module:
 
 INTERVAL = 5
 
-PG_NUM_MIN = 16  # unless specified on a per-pool basis
+PG_NUM_MIN = 32  # unless specified on a per-pool basis
 
 def nearest_power_of_two(n):
     v = int(n)
@@ -292,7 +292,7 @@ class PgAutoscaler(MgrModule):
             final_ratio = max(capacity_ratio, target_ratio)
 
             # So what proportion of pg allowance should we be using?
-            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / raw_used_rate * bias
+            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / p['size'] * bias
 
             final_pg_target = max(p['options'].get('pg_num_min', PG_NUM_MIN),
                                   nearest_power_of_two(pool_pg_target))

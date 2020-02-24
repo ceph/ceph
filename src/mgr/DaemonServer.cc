@@ -419,21 +419,33 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 				   m->get_connection()->get_peer_type(),
 				   m->daemon_name);
 
-  dout(4) << "from " << m->get_connection() << "  " << key << dendl;
+  auto con = m->get_connection();
+  dout(4) << "from " << key << " " << con << dendl;
 
-  _send_configure(m->get_connection());
+  _send_configure(con);
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
     dout(20) << "updating existing DaemonState for " << key << dendl;
     daemon = daemon_state.get(key);
   }
-  if (m->service_daemon && !daemon) {
-    dout(4) << "constructing new DaemonState for " << key << dendl;
-    daemon = std::make_shared<DaemonState>(daemon_state.types);
-    daemon->key = key;
-    daemon->service_daemon = true;
-    daemon_state.insert(daemon);
+  if (!daemon) {
+    if (m->service_daemon) {
+      dout(4) << "constructing new DaemonState for " << key << dendl;
+      daemon = std::make_shared<DaemonState>(daemon_state.types);
+      daemon->key = key;
+      daemon->service_daemon = true;
+      daemon_state.insert(daemon);
+    } else {
+      /* A normal Ceph daemon has connected but we are or should be waiting on
+       * metadata for it. Close the session so that it tries to reconnect.
+       */
+      dout(2) << "ignoring open from " << key << " " << con->get_peer_addr()
+              << "; not ready for session (expect reconnect)" << dendl;
+      con->mark_down();
+      m->put();
+      return true;
+    }
   }
   if (daemon) {
     if (m->service_daemon) {
@@ -475,13 +487,13 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 	     << " bytes" << dendl;
   }
 
-  if (m->get_connection()->get_peer_type() != entity_name_t::TYPE_CLIENT &&
+  if (con->get_peer_type() != entity_name_t::TYPE_CLIENT &&
       m->service_name.empty())
   {
     // Store in set of the daemon/service connections, i.e. those
     // connections that require an update in the event of stats
     // configuration changes.
-    daemon_connections.insert(m->get_connection());
+    daemon_connections.insert(con);
   }
 
   m->put();
@@ -1550,7 +1562,9 @@ bool DaemonServer::_handle_command(
 		found = true;
 		continue;
 	      }
-	      pg_acting.insert(anm.osd);
+	      if (anm.osd != CRUSH_ITEM_NONE) {
+		pg_acting.insert(anm.osd);
+	      }
 	    }
 	  } else {
 	    for (auto& a : q.second.acting) {
@@ -1558,7 +1572,9 @@ bool DaemonServer::_handle_command(
 		found = true;
 		continue;
 	      }
-	      pg_acting.insert(a);
+	      if (a != CRUSH_ITEM_NONE) {
+		pg_acting.insert(a);
+	      }
 	    }
 	  }
 	  if (!found) {

@@ -170,6 +170,11 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
+            "cmd": "telemetry show-device",
+            "desc": "Show last device report or device report to be sent",
+            "perm": "r"
+        },
+        {
             "cmd": "telemetry on name=license,type=CephString,req=false",
             "desc": "Enable telemetry reports from this cluster",
             "perm": "rw",
@@ -231,7 +236,11 @@ class Module(MgrModule):
             metadata[key] = defaultdict(int)
 
         for osd in osd_map['osds']:
-            for k, v in self.get_metadata('osd', str(osd['osd'])).items():
+            res = self.get_metadata('osd', str(osd['osd'])).items()
+            if res is None:
+                self.log.debug('Could not get metadata for osd.%s' % str(osd['osd']))
+                continue
+            for k, v in res:
                 if k not in keys:
                     continue
 
@@ -248,7 +257,11 @@ class Module(MgrModule):
             metadata[key] = defaultdict(int)
 
         for mon in mon_map['mons']:
-            for k, v in self.get_metadata('mon', mon['name']).items():
+            res = self.get_metadata('mon', mon['name']).items()
+            if res is None:
+                self.log.debug('Could not get metadata for mon.%s' % (mon['name']))
+                continue
+            for k, v in res:
                 if k not in keys:
                     continue
 
@@ -334,7 +347,8 @@ class Module(MgrModule):
                 continue
             c = json.loads(crashinfo)
             del c['utsname_hostname']
-            (etype, eid) = c.get('entity_name', '').split('.')
+            # entity_name might have more than one '.', beware
+            (etype, eid) = c.get('entity_name', '').split('.', 1)
             m = hashlib.sha1()
             m.update(self.salt.encode('utf-8'))
             m.update(eid.encode('utf-8'))
@@ -386,18 +400,17 @@ class Module(MgrModule):
                 rep['host_id'] = anon_host
 
             # anonymize device id
-            (vendor, model, serial) = devid.split('_')
             anon_devid = self.get_store('devid-id/%s' % devid)
             if not anon_devid:
-                anon_devid = '%s_%s_%s' % (vendor, model, uuid.uuid1())
+                anon_devid = devid[:devid.rfind('_')] + '_' + uuid.uuid1()
                 self.set_store('devid-id/%s' % devid, anon_devid)
             self.log.info('devid %s / %s, host %s / %s' % (devid, anon_devid,
                                                            host, anon_host))
 
             # anonymize the smartctl report itself
-            for k in ['serial_number']:
-                if k in m:
-                    m.pop(k)
+            serial = devid.rsplit('_', 1)[1]
+            m_str = json.dumps(m)
+            m = json.loads(m_str.replace(serial, 'deleted'))
 
             if anon_host not in res:
                 res[anon_host] = {}
@@ -515,7 +528,7 @@ class Module(MgrModule):
             for osd in osd_map['osds']:
                 if osd['up'] and not cluster_network:
                     front_ip = osd['public_addrs']['addrvec'][0]['addr'].split(':')[0]
-                    back_ip = osd['public_addrs']['addrvec'][0]['addr'].split(':')[0]
+                    back_ip = osd['cluster_addrs']['addrvec'][0]['addr'].split(':')[0]
                     if front_ip != back_ip:
                         cluster_network = True
             report['osd'] = {
@@ -609,7 +622,7 @@ class Module(MgrModule):
 
             report['usage'] = {
                 'pools': len(df['pools']),
-                'pg_num:': num_pg,
+                'pg_num': num_pg,
                 'total_used_bytes': df['stats']['total_used_bytes'],
                 'total_bytes': df['stats']['total_bytes'],
                 'total_avail_bytes': df['stats']['total_avail_bytes']
@@ -753,7 +766,12 @@ class Module(MgrModule):
             report = self.compile_report(
                 channels=command.get('channels', None)
             )
-            return 0, json.dumps(report, indent=4), ''
+            report = json.dumps(report, indent=4)
+            if self.channel_device:
+               report += '\n \nDevice report is generated separately. To see it run \'ceph telemetry show-device\'.'
+            return 0, report, ''
+        elif command['prefix'] == 'telemetry show-device':
+            return 0, json.dumps(self.gather_device_report(), indent=4, sort_keys=True), ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

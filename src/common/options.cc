@@ -422,7 +422,6 @@ std::vector<Option> get_global_options() {
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")
-    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_tag("network")
@@ -2560,7 +2559,7 @@ std::vector<Option> get_global_options() {
     .add_service("mon"),
 
     Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(16)
+    .set_default(32)
     .set_description("number of PGs for new pools")
     .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),

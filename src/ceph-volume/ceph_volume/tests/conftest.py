@@ -166,12 +166,14 @@ def stub_vgs(monkeypatch, volume_groups):
     return apply
 
 
+# TODO: allow init-ing pvolumes to list we want
 @pytest.fixture
 def pvolumes(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
     pvolumes = lvm_api.PVolumes()
     pvolumes._purge()
     return pvolumes
+
 @pytest.fixture
 def pvolumes_empty(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
@@ -291,6 +293,8 @@ def device_info(monkeypatch, patch_bluestore_label):
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
         else:
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_device_lvs",
+                                lambda path: [lv])
         monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: lv)
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)

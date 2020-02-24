@@ -3163,7 +3163,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
 							  const string& marker_version_id, int ret)
 {
   if (!key.empty()) {
-    if (op_ret == 0 && !quiet) {
+    if (ret == 0 && !quiet) {
       s->formatter->open_object_section("Deleted");
       s->formatter->dump_string("Key", key.name);
       if (!key.instance.empty()) {
@@ -3174,13 +3174,13 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
 	s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
       }
       s->formatter->close_section();
-    } else if (op_ret < 0) {
+    } else if (ret < 0) {
       struct rgw_http_error r;
       int err_no;
 
       s->formatter->open_object_section("Error");
 
-      err_no = -op_ret;
+      err_no = -ret;
       rgw_get_errno_s3(&r, err_no);
 
       s->formatter->dump_string("Key", key.name);

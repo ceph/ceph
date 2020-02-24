@@ -34,7 +34,6 @@ roles:
   - osd.5
   - osd.6
   - osd.7
-  - mon.c
 - - osd.8
   - osd.9
   - osd.10

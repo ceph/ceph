@@ -21,6 +21,7 @@ if sys.version_info[0] < 3:
 else:
     str_type = str
 
+cdef int AT_SYMLINK_NOFOLLOW = 0x100
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -1132,7 +1133,7 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in setxattr")
 
 
-    def stat(self, path):
+    def stat(self, path, follow_symlink=True):
         """
         Get a file's extended statistics and attributes.
         
@@ -1145,9 +1146,15 @@ cdef class LibCephFS(object):
             char* _path = path
             statx stx
 
-        with nogil:
-            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
-            ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu, 0)
+        if follow_symlink:
+            with nogil:
+                # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
+                ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu, 0)
+        else:
+            with nogil:
+                ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu,
+                                 AT_SYMLINK_NOFOLLOW)
+
         if ret < 0:
             raise make_ex(ret, "error in stat: {}".format(path.decode('utf-8')))
         return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
@@ -1159,6 +1166,16 @@ cdef class LibCephFS(object):
                           st_atime=datetime.fromtimestamp(stx.stx_atime.tv_sec),
                           st_mtime=datetime.fromtimestamp(stx.stx_mtime.tv_sec),
                           st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
+
+    def lstat(self, path):
+        """
+        Get a file's extended statistics and attributes. When file's a
+        symbolic link, return the informaion of the link itself rather
+        than that of the file it points too.
+
+        :param path: the file or directory to get the statistics of.
+        """
+        return self.stat(path, follow_symlink=False)
 
     def fstat(self, fd):
         """

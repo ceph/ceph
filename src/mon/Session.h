@@ -134,7 +134,8 @@ struct MonSessionMap {
     }
     s->sub_map.clear();
     s->item.remove_myself();
-    if (s->name.is_osd()) {
+    if (s->name.is_osd() &&
+	s->name.num() >= 0) {
       for (multimap<int,MonSession*>::iterator p = by_osd.find(s->name.num());
 	   p->first == s->name.num();
 	   ++p)
@@ -163,7 +164,8 @@ struct MonSessionMap {
   void add_session(MonSession *s) {
     sessions.push_back(&s->item);
     s->get();
-    if (s->name.is_osd()) {
+    if (s->name.is_osd() &&
+	s->name.num() >= 0) {
       by_osd.insert(pair<int,MonSession*>(s->name.num(), s));
     }
     if (s->con_features) {
