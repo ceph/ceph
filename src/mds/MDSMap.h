@@ -525,7 +525,10 @@ public:
       return mds_info_entry->second.inc;
     return -1;
   }
-  void encode(bufferlist& bl, uint64_t features) const;
+  void encode(bufferlist& bl, uint64_t features, int64_t client_id) const;
+  void encode(bufferlist& bl, uint64_t features) const {
+    encode(bl, features, -1);
+  }
   void decode(bufferlist::const_iterator& p);
   void decode(const bufferlist& bl) {
     auto p = bl.cbegin();
@@ -542,6 +545,7 @@ public:
   static bool state_transition_valid(DaemonState prev, DaemonState next);
 
   CompatSet compat;
+  std::map<client_t, __u32> custom_timeouts;
 protected:
   // base map
   epoch_t epoch = 0;
@@ -595,7 +599,6 @@ protected:
   bool inline_data_enabled = false;
 
   uint64_t cached_up_features = 0;
-
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)

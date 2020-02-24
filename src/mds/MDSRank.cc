@@ -3339,6 +3339,13 @@ bool MDSRank::custom_timeout_exists(Session *s)
 void MDSRank::custom_timeout_request(Session *s, int64_t new_timeout)
 {
   sessionmap.custom_timeout_list.push_back(&s->item_custom_timeout_list);
+  stringstream ss;
+  ss << "{\"prefix\":\"fs set_session_timeout\", \"fs_name\":\""
+     << mdsmap->get_fs_name() << "\", \"session\":\"" << s->info.inst.name.num()
+     << "\", \"val\":\"" << new_timeout << "\"";
+  vector<string> command = {ss.str()};
+  bufferlist bl;
+  monc->start_mon_command(command, bl, nullptr, nullptr, nullptr);
 }
 
 bool MDSRank::evict_client(int64_t session_id,
@@ -3467,7 +3474,8 @@ void MDSRank::bcast_mds_map()
   set<Session*> clients;
   sessionmap.get_client_session_set(clients);
   for (const auto &session : clients) {
-    auto m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
+    auto m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap,
+				   session->info.inst.name.num());
     session->get_connection()->send_message2(std::move(m));
   }
   last_client_mdsmap_bcast = mdsmap->get_epoch();

@@ -600,7 +600,7 @@ std::string MDSMap::mds_info_t::human_name() const
   return out.str();
 }
 
-void MDSMap::encode(bufferlist& bl, uint64_t features) const
+void MDSMap::encode(bufferlist& bl, uint64_t features, int64_t client_id) const
 {
   std::map<mds_rank_t,int32_t> inc;  // Legacy field, fake it so that
                                      // old-mon peers have something sane
@@ -680,7 +680,12 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(flags, bl);
   encode(last_failure, bl);
   encode(root, bl);
-  encode(session_timeout, bl);
+  auto i = custom_timeouts.find(client_id);
+  if (i != custom_timeouts.end()) {
+    encode(i->second, bl);
+  } else {
+    encode(session_timeout, bl);
+  }
   encode(session_autoclose, bl);
   encode(max_file_size, bl);
   encode(max_mds, bl);
@@ -688,7 +693,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 15;
+  __u16 ev = 16;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -711,6 +716,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(standby_count_wanted, bl);
   encode(old_max_mds, bl);
   encode(min_compat_client, bl);
+  encode(custom_timeouts, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -848,6 +854,9 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     }
   } else if (ev > 14) {
     decode(min_compat_client, p);
+  }
+  if (ev >= 16) {
+    decode(custom_timeouts, p);
   }
 
   DECODE_FINISH(p);

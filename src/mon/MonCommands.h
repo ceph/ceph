@@ -400,6 +400,11 @@ COMMAND("fs set "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=yes_i_really_really_mean_it,type=CephBool,req=false",
 	"set fs parameter <var> to <val>", "mds", "rw")
+COMMAND("fs set_session_timeout "
+	"name=fs_name,type=CephString "
+	"name=session,type=CephInt "
+	"name=val,type=CephInt",
+	"set a custom lower-than-usual timeout for a client ID", "mds", "rw")
 COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
         "name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",

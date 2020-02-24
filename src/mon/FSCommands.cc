@@ -965,6 +965,34 @@ class AliasHandler : public T
   }
 };
 
+class CustomTimeoutHandler : public FileSystemCommandHandler
+{
+public:
+  CustomTimeoutHandler() : FileSystemCommandHandler("fs set_session_timeout") {}
+
+  int handle(
+      Monitor *mon,
+      FSMap &fsmap,
+      MonOpRequestRef op,
+      const cmdmap_t& cmdmap,
+      std::stringstream &ss) override
+  {
+    string fs_name;
+    cmd_getval(cmdmap, "fs_name", fs_name);
+    string sessionid_str;
+    cmd_getval(cmdmap, "session", sessionid_str);
+    string val_str;
+    cmd_getval(cmdmap, "val", val_str);
+    auto fs = fsmap.get_filesystem(fs_name);
+    int64_t sessionid = strtoll(sessionid_str.c_str(), nullptr, 0);
+    int64_t timeout = strtoll(val_str.c_str(), nullptr, 0);
+    fsmap.modify_filesystem(fs->fscid, [sessionid, timeout](std::shared_ptr<Filesystem> fs) {
+	fs->mds_map.custom_timeouts[sessionid] = timeout;
+      });
+    return 0;
+  }
+};
+
 
 std::list<std::shared_ptr<FileSystemCommandHandler> >
 FileSystemCommandHandler::load(Paxos *paxos)
@@ -983,7 +1011,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
   handlers.push_back(std::make_shared<SetDefaultHandler>());
   handlers.push_back(std::make_shared<AliasHandler<SetDefaultHandler> >(
         "fs set_default"));
-
+  handlers.push_back(std::make_shared<CustomTimeoutHandler>());
   return handlers;
 }
 
