@@ -214,16 +214,16 @@ class TestOrchestratorCli(MgrTestCase):
                     ]
                 }
             ],
-            'services': [
+            'daemons': [
                 {
-                    'nodename': 'host0',
-                    'service_type': 'mon',
-                    'service_instance': 'a'
+                    'hostname': 'host0',
+                    'daemon_type': 'mon',
+                    'daemon_id': 'a'
                 },
                 {
-                    'nodename': 'host1',
-                    'service_type': 'osd',
-                    'service_instance': '1'
+                    'hostname': 'host1',
+                    'daemon_type': 'osd',
+                    'daemon_id': '1'
                 }
             ]
         }
@@ -241,14 +241,14 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertEqual(inventory_result[0]['name'], 'host0')
 
         out = self._orch_cmd('ps', '--format=json')
-        services = data['services']
-        services_result = json.loads(out)
-        self.assertEqual(len(services), len(services_result))
+        daemons = data['daemons']
+        daemons_result = json.loads(out)
+        self.assertEqual(len(daemons), len(daemons_result))
 
         out = self._orch_cmd('ps', 'host0', '--format=json')
-        services_result = json.loads(out)
-        self.assertEqual(len(services_result), 1)
-        self.assertEqual(services_result[0]['nodename'], 'host0')
+        daemons_result = json.loads(out)
+        self.assertEqual(len(daemons_result), 1)
+        self.assertEqual(daemons_result[0]['hostname'], 'host0')
 
         # test invalid input file: invalid json
         json_str = '{ "inventory: '
