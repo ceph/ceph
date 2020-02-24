@@ -255,14 +255,19 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
-            'cmd': 'fs nfs create',
-            'desc': "Create dummy exports",
+            'cmd': 'fs nfs export create '
+                   'name=fs,type=CephString '
+                   'name=read-only,type=CephBool,req=false '
+                   'name=path,type=CephString,req=false '
+                   'name=attach,type=CephString,req=false '
+                   'name=binding,type=CephString ',
+            'desc': "Create cephfs export",
             'perm': 'rw'
         },
         {
-            'cmd': 'fs nfs delete '
+            'cmd': 'fs nfs export delete '
                    'name=export_id,type=CephInt,req=true ',
-            'desc': "Delete nfs exports",
+            'desc': "Delete cephfs exports",
             'perm': 'rw'
         },
         {
@@ -459,14 +464,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
-    def _cmd_fs_nfs_create(self, inbuf, cmd):
+    def _cmd_fs_nfs_export_create(self, inbuf, cmd):
         if NFSConfig.check_fsal_valid(self, self.vc.mgr.get('fs_map')):
             pool_name = "nfs-ganesha"
             #NFSConfig.create_rados_pool(self.vc.mgr, pool_name)
             #instance = NFSConfig.create_instance(self, pool_name)
             return NFSConfig.create_export(instance)
 
-    def _cmd_fs_nfs_delete(self, inbuf, cmd):
+    def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
             instance = NFSConfig.create_instance(self, "nfs-ganesha")
             return NFSConfig.delete_export(instance, cmd['export_id'])
 
