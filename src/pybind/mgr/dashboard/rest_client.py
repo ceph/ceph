@@ -24,7 +24,12 @@ from .tools import build_url
 try:
     from requests.packages.urllib3.exceptions import SSLError
 except ImportError:
-    from urllib3.exceptions import SSLError
+    from urllib3.exceptions import SSLError  # type: ignore
+
+try:
+    from typing import List
+except ImportError:
+    pass  # Just for type checking
 
 
 logger = logging.getLogger('rest_client')
@@ -180,13 +185,13 @@ class _ResponseValidator(object):
                 level_next = path[path_sep + 1:].strip()
             else:
                 path_sep = len(path)
-                level_next = None
+                level_next = None  # type: ignore
             key = path[:path_sep].strip()
 
             if key == '*':
                 continue
             elif key == '':  # check all keys
-                for k in resp.keys():
+                for k in resp.keys():  # type: ignore
                     _ResponseValidator._validate_key(k, level_next, resp)
             else:
                 _ResponseValidator._validate_key(key, level_next, resp)
@@ -249,6 +254,7 @@ class _ResponseValidator(object):
 
     @staticmethod
     def _parse_level_paths(level):
+        # type: (str) -> List[str]
         level = level.strip()
         if level[0] == '(':
             level = level[1:]
@@ -446,7 +452,7 @@ class RestClient(object):
                         match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
                                          ex.args[0].reason.args[0])
                     except AttributeError:
-                        match = False
+                        match = None
                     if match:
                         errno = match.group(1)
                         strerror = match.group(2)

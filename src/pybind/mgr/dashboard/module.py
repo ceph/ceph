@@ -104,20 +104,20 @@ class CherryPyConfig(object):
 
         :returns our URI
         """
-        server_addr = self.get_localized_module_option(
+        server_addr = self.get_localized_module_option(  # type: ignore
             'server_addr', get_default_addr())
-        ssl = self.get_localized_module_option('ssl', True)
+        ssl = self.get_localized_module_option('ssl', True)  # type: ignore
         if not ssl:
-            server_port = self.get_localized_module_option('server_port', 8080)
+            server_port = self.get_localized_module_option('server_port', 8080)  # type: ignore
         else:
-            server_port = self.get_localized_module_option('ssl_server_port', 8443)
+            server_port = self.get_localized_module_option('ssl_server_port', 8443)  # type: ignore
 
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
                 'try "ceph config set mgr mgr/{}/{}/server_addr <ip>"'
-                .format(self.module_name, self.get_mgr_id()))
-        self.log.info('server: ssl=%s host=%s port=%d', 'yes' if ssl else 'no',
+                .format(self.module_name, self.get_mgr_id()))  # type: ignore
+        self.log.info('server: ssl=%s host=%s port=%d', 'yes' if ssl else 'no',  # type: ignore
                       server_addr, server_port)
 
         # Initialize custom handlers.
@@ -155,23 +155,23 @@ class CherryPyConfig(object):
 
         if ssl:
             # SSL initialization
-            cert = self.get_store("crt")
+            cert = self.get_store("crt")  # type: ignore
             if cert is not None:
                 self.cert_tmp = tempfile.NamedTemporaryFile()
                 self.cert_tmp.write(cert.encode('utf-8'))
                 self.cert_tmp.flush()  # cert_tmp must not be gc'ed
                 cert_fname = self.cert_tmp.name
             else:
-                cert_fname = self.get_localized_module_option('crt_file')
+                cert_fname = self.get_localized_module_option('crt_file')  # type: ignore
 
-            pkey = self.get_store("key")
+            pkey = self.get_store("key")  # type: ignore
             if pkey is not None:
                 self.pkey_tmp = tempfile.NamedTemporaryFile()
                 self.pkey_tmp.write(pkey.encode('utf-8'))
                 self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
                 pkey_fname = self.pkey_tmp.name
             else:
-                pkey_fname = self.get_localized_module_option('key_file')
+                pkey_fname = self.get_localized_module_option('key_file')  # type: ignore
 
             verify_tls_files(cert_fname, pkey_fname)
 
@@ -181,8 +181,8 @@ class CherryPyConfig(object):
 
         self.update_cherrypy_config(config)
 
-        self._url_prefix = prepare_url_prefix(self.get_module_option('url_prefix',
-                                                                     default=''))
+        self._url_prefix = prepare_url_prefix(self.get_module_option(  # type: ignore
+            'url_prefix', default=''))
 
         uri = "{0}://{1}:{2}{3}/".format(
             'https' if ssl else 'http',
@@ -204,13 +204,13 @@ class CherryPyConfig(object):
             try:
                 uri = self._configure()
             except ServerConfigException as e:
-                self.log.info("Config not ready to serve, waiting: {0}".format(
-                    e
-                ))
+                self.log.info(  # type: ignore
+                    "Config not ready to serve, waiting: {0}".format(e)
+                )
                 # Poll until a non-errored config is present
                 self._stopping.wait(5)
             else:
-                self.log.info("Configured CherryPy, starting engine...")
+                self.log.info("Configured CherryPy, starting engine...")  # type: ignore
                 return uri
 
 
@@ -267,7 +267,7 @@ class Module(MgrModule, CherryPyConfig):
         MODULE_OPTIONS.extend(options)
 
     __pool_stats = collections.defaultdict(lambda: collections.defaultdict(
-        lambda: collections.deque(maxlen=10)))
+        lambda: collections.deque(maxlen=10)))  # type: dict
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)

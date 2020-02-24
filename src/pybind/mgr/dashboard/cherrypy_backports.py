@@ -174,7 +174,7 @@ def patch_request_unique_id(v):
                 It's evaluated lazily on render.
                 """
                 try:
-                    self._uuid4
+                    self._uuid4  # type: ignore
                 except AttributeError:
                     # evaluate on first access
                     self._uuid4 = uuid.uuid4()

@@ -11,7 +11,7 @@ from mgr_util import get_time_series_rates, get_most_recent_rate
 from .. import mgr
 
 try:
-    from typing import Dict, Any  # pylint: disable=unused-import
+    from typing import Dict  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -40,7 +40,7 @@ class CephService(object):
 
     @classmethod
     def get_service_map(cls, service_name):
-        service_map = {}  # type: Dict[str, Dict[str, Any]]
+        service_map = {}  # type: Dict[str, dict]
         for server in mgr.list_servers():
             for service in server['services']:
                 if service['type'] == service_name:
@@ -192,7 +192,7 @@ class CephService(object):
     def get_smart_data_by_host(hostname):
         # type: (str) -> dict
         devices = CephService.get_devices_by_host(hostname)
-        smart_data = {}
+        smart_data = {}  # type: dict
         if devices:
             for device in devices:
                 if device['devid'] not in smart_data:

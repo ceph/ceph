@@ -15,6 +15,11 @@ from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
 from ..tools import json_str_to_object
 
+try:
+    from typing import List
+except ImportError:
+    pass  # Just for type checking
+
 
 logger = logging.getLogger('controllers.rgw')
 
@@ -44,7 +49,7 @@ class Rgw(BaseController):
                 raise RequestException(msg)
             status['available'] = True
         except (RequestException, LookupError) as ex:
-            status['message'] = str(ex)
+            status['message'] = str(ex)  # type: ignore
         return status
 
 
@@ -52,6 +57,7 @@ class Rgw(BaseController):
 class RgwDaemon(RESTController):
 
     def list(self):
+        # type: () -> List[dict]
         daemons = []
         for hostname, server in CephService.get_service_map('rgw').items():
             for service in server['services']:
@@ -69,6 +75,7 @@ class RgwDaemon(RESTController):
         return sorted(daemons, key=lambda k: k['id'])
 
     def get(self, svc_id):
+        # type: (str) -> dict
         daemon = {
             'rgw_metadata': [],
             'rgw_id': svc_id,
@@ -150,7 +157,7 @@ class RgwBucket(RgwRESTController):
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
-        # type (str) => str
+        # type (str) -> str
         """
         >>> RgwBucket.strip_tenant_from_bucket_name('tenant/bucket-name')
         'bucket-name'
@@ -161,7 +168,7 @@ class RgwBucket(RgwRESTController):
 
     @staticmethod
     def get_s3_bucket_name(bucket_name, tenant=None):
-        # type (str, str) => str
+        # type (str, str) -> str
         """
         >>> RgwBucket.get_s3_bucket_name('bucket-name', 'tenant')
         'tenant:bucket-name'
@@ -176,9 +183,11 @@ class RgwBucket(RgwRESTController):
         return bucket_name
 
     def list(self):
+        # type: () -> List[str]
         return self.proxy('GET', 'bucket')
 
     def get(self, bucket):
+        # type: (str) -> dict
         result = self.proxy('GET', 'bucket', {'bucket': bucket})
 
         result['versioning'] =\
@@ -241,10 +250,11 @@ class RgwUser(RgwRESTController):
         return user
 
     def list(self):
-        users = []
+        # type: () -> List[str]
+        users = []  # type: List[str]
         marker = None
         while True:
-            params = {}
+            params = {}  # type: dict
             if marker:
                 params['marker'] = marker
             result = self.proxy('GET', 'user?list', params)
@@ -259,15 +269,17 @@ class RgwUser(RgwRESTController):
         return users
 
     def get(self, uid):
+        # type: (str) -> dict
         result = self.proxy('GET', 'user', {'uid': uid})
         return self._append_uid(result)
 
     @Endpoint()
     @ReadPermission
     def get_emails(self):
+        # type: () -> List[str]
         emails = []
-        for uid in json.loads(self.list()):
-            user = json.loads(self.get(uid))
+        for uid in json.loads(self.list()):  # type: ignore
+            user = json.loads(self.get(uid))  # type: ignore
             if user["email"]:
                 emails.append(user["email"])
         return emails

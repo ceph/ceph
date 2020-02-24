@@ -62,7 +62,7 @@ class Osd(RESTController):
 
     @staticmethod
     def get_osd_map(svc_id=None):
-        # type: (Union[int, None]) -> Dict[int, Union[Dict[str, Any], Any]]
+        # type: (Union[int, None]) -> Dict[int, Union[dict, Any]]
         def add_id(osd):
             osd['id'] = osd['osd']
             return osd

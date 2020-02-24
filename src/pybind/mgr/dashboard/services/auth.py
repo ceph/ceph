@@ -31,7 +31,7 @@ class JwtManager(object):
 
     @classmethod
     def init(cls):
-        cls.logger = logging.getLogger('jwt')
+        cls.logger = logging.getLogger('jwt')  # type: ignore
         # generate a new secret if it does not exist
         secret = mgr.get_store('jwt_secret')
         if secret is None:
@@ -53,13 +53,13 @@ class JwtManager(object):
             'iat': now,
             'username': username
         }
-        return jwt.encode(payload, cls._secret, algorithm=cls.JWT_ALGORITHM)
+        return jwt.encode(payload, cls._secret, algorithm=cls.JWT_ALGORITHM)  # type: ignore
 
     @classmethod
     def decode_token(cls, token):
         if not cls._secret:
             cls.init()
-        return jwt.decode(token, cls._secret, algorithms=cls.JWT_ALGORITHM)
+        return jwt.decode(token, cls._secret, algorithms=cls.JWT_ALGORITHM)  # type: ignore
 
     @classmethod
     def get_token_from_header(cls):
@@ -90,16 +90,20 @@ class JwtManager(object):
                 user = AuthManager.get_user(dtoken['username'])
                 if user.last_update <= dtoken['iat']:
                     return user
-                cls.logger.debug("user info changed after token was issued, iat=%s last_update=%s",
-                                 dtoken['iat'], user.last_update)
+                cls.logger.debug(  # type: ignore
+                    "user info changed after token was issued, iat=%s last_update=%s",
+                    dtoken['iat'], user.last_update
+                )
             else:
-                cls.logger.debug('Token is black-listed')
-        except jwt.exceptions.ExpiredSignatureError:
-            cls.logger.debug("Token has expired")
-        except jwt.exceptions.InvalidTokenError:
-            cls.logger.debug("Failed to decode token")
+                cls.logger.debug('Token is black-listed')  # type: ignore
+        except jwt.ExpiredSignatureError:
+            cls.logger.debug("Token has expired")  # type: ignore
+        except jwt.InvalidTokenError:
+            cls.logger.debug("Failed to decode token")  # type: ignore
         except UserDoesNotExist:
-            cls.logger.debug("Invalid token: user %s does not exist", dtoken['username'])
+            cls.logger.debug(  # type: ignore
+                "Invalid token: user %s does not exist", dtoken['username']
+            )
         return None
 
     @classmethod
@@ -140,15 +144,15 @@ class AuthManager(object):
 
     @classmethod
     def get_user(cls, username):
-        return cls.AUTH_PROVIDER.get_user(username)
+        return cls.AUTH_PROVIDER.get_user(username)  # type: ignore
 
     @classmethod
     def authenticate(cls, username, password):
-        return cls.AUTH_PROVIDER.authenticate(username, password)
+        return cls.AUTH_PROVIDER.authenticate(username, password)  # type: ignore
 
     @classmethod
     def authorize(cls, username, scope, permissions):
-        return cls.AUTH_PROVIDER.authorize(username, scope, permissions)
+        return cls.AUTH_PROVIDER.authorize(username, scope, permissions)  # type: ignore
 
 
 class AuthManagerTool(cherrypy.Tool):

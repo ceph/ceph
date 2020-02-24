@@ -78,7 +78,7 @@ class IscsiGatewaysConfig(object):
 
     @staticmethod
     def _load_config_from_orchestrator():
-        config = {'gateways': {}}
+        config = {'gateways': {}}  # type: dict
         try:
             instances = OrchClient.instance().services.list("iscsi")
             for instance in instances:

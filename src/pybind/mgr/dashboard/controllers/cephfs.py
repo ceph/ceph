@@ -74,7 +74,7 @@ class CephFS(RESTController):
                 "mds_mem.ino"
             ]
 
-        result = {}
+        result = {}  # type: dict
         mds_names = self._get_mds_names(fs_id)
 
         for mds_name in mds_names:
@@ -129,7 +129,7 @@ class CephFS(RESTController):
 
     # pylint: disable=too-many-statements,too-many-branches
     def fs_status(self, fs_id):
-        mds_versions = defaultdict(list)
+        mds_versions = defaultdict(list)  # type: dict
 
         fsmap = mgr.get("fs_map")
         filesystem = None
