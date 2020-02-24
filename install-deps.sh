@@ -184,6 +184,16 @@ function install_boost_on_ubuntu {
 	ceph-libboost-timer$ver-dev
 }
 
+function check_for_curl(){
+    name="curl"
+    dpkg -s $name &> /dev/null  
+
+    if [ $? -ne 0 ]
+        then
+            sudo apt-get install -y $name
+    fi
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -291,6 +301,7 @@ else
         case "$VERSION" in
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
+		check_for_curl
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *Disco*)
@@ -370,7 +381,7 @@ else
                     $SUDO dnf config-manager --set-enabled PowerTools
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-		    $SUDO dnf config-manager --setopt gpgcheck=0 apt-mirror.front.sepia.ceph.com_lab-extras_8_ --save
+		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
 		    $SUDO dnf copr enable -y ktdreyer/ceph-el8
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     $SUDO subscription-manager repos --enable "codeready-builder-for-rhel-8-*-rpms"
