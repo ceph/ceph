@@ -997,7 +997,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 name += '.' + ''.join(random.choice(string.ascii_lowercase)
                                       for _ in range(6))
             if len([d for d in existing if d.daemon_id == name]):
-                self.log('name %s exists, trying again', name)
+                self.log.warning('name %s exists, trying again', name)
                 continue
             return name
 
@@ -1350,9 +1350,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.log.exception(ex)
             raise
 
-    def _get_hosts(self):
-        # type: () -> List[str]
-        return [a for a in self.inventory.keys()]
+    def _get_hosts(self, label=None):
+        # type: (Optional[str]) -> List[str]
+        r = []
+        for h, hostspec in self.inventory.items():
+            if not label or label in hostspec.get('labels', []):
+                r.append(h)
+        return r
 
     @async_completion
     def add_host(self, spec):
@@ -2540,7 +2544,7 @@ class HostAssignment(object):
     def __init__(self,
                  spec=None,  # type: Optional[orchestrator.ServiceSpec]
                  scheduler=None,  # type: Optional[BaseScheduler]
-                 get_hosts_func=None,  # type: Optional[Callable[[],List[str]]]
+                 get_hosts_func=None,  # type: Optional[Callable[[Optional[str]],List[str]]]
                  service_type=None,  # type: Optional[str]
                  ):
         assert spec and get_hosts_func and service_type
@@ -2563,13 +2567,13 @@ class HostAssignment(object):
         """
         Assign hosts based on their label
         """
-        # Querying for labeled hosts doesn't work currently.
-        # Leaving this open for the next iteration
-        # NOTE: This currently queries for all hosts without label restriction
         if self.spec.placement.label:
-            logger.info("Found labels. Assigning hosts that match the label")
-            candidates = [HostPlacementSpec(x, '', '') for x in self.get_hosts_func()]  # TODO: query for labels
-            logger.info('Assigning hosts to spec: {}'.format(candidates))
+            logger.info("Matching label '%s'" % self.spec.placement.label)
+            candidates = [
+                HostPlacementSpec(x, '', '')
+                for x in self.get_hosts_func(self.spec.placement.label)
+            ]
+            logger.info('Assigning hostss to spec: {}'.format(candidates))
             self.spec.placement.set_hosts(candidates)
 
     def assign_hosts(self):
@@ -2582,7 +2586,7 @@ class HostAssignment(object):
         if not self.spec.placement.label and not self.spec.placement.hosts and self.spec.placement.count:
             logger.info("Found num spec. Looking for labeled hosts.")
             # TODO: actually query for labels (self.daemon_type)
-            candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()],
+            candidates = self.scheduler.place([x for x in self.get_hosts_func(None)],
                                               count=self.spec.placement.count)
             # Not enough hosts to deploy on
             if len(candidates) != self.spec.placement.count:
@@ -2594,7 +2598,7 @@ class HostAssignment(object):
                 self.spec.placement.set_hosts(candidates)
                 return None
 
-            candidates = self.scheduler.place([x[0] for x in self.get_hosts_func()], count=self.spec.placement.count)
+            candidates = self.scheduler.place([x for x in self.get_hosts_func(None)], count=self.spec.placement.count)
             # Not enough hosts to deploy on
             if len(candidates) != self.spec.placement.count:
                 raise OrchestratorValidationError("Cannot place {} daemons on {} hosts.".
