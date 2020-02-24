@@ -299,6 +299,8 @@ Architecture: all
 Depends: ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
+Replaces: ceph-mgr (<< 15.1.0)
+Breaks: ceph-mgr (<< 15.1.0)
 Recommends: ceph-mgr-rook
 Description: ceph manager modules which are always enabled
  Ceph is a massively scalable, open-source, distributed
