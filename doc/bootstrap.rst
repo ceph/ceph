@@ -118,12 +118,12 @@ either as a simple IP address or as a CIDR network name.
 
 To deploy additional monitors,::
 
-  [monitor 1] # ceph orch apply mon *<new-num-monitors>* *<host1:network1> [<host1:network2>...]*
+  [monitor 1] # ceph orch daemon add mon *<host1:network1> [<host1:network2>...]*
 
 For example, to deploy a second monitor on ``newhost`` using an IP
 address in network ``10.1.2.0/24``,::
 
-  [monitor 1] # ceph orch apply mon 2 newhost:10.1.2.0/24
+  [monitor 1] # ceph orch daemon add mon newhost:10.1.2.0/24
 
 Deploying OSDs
 ==============

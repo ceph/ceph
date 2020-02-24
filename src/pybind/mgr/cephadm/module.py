@@ -213,12 +213,12 @@ class HostCache():
                 r.append(dd)
         return r
 
-    def get_daemons_by_type(self, daemon_type):
+    def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
         result = []   # type: List[orchestrator.DaemonDescription]
         for host, dm in self.daemons.items():
             for name, d in dm.items():
-                if name.startswith(daemon_type + '.'):
+                if name.startswith(service_name + '.'):
                     result.append(d)
         return result
 
@@ -982,7 +982,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
-                raise RuntimeError('specified name %s already in use', forcename)
+                raise orchestrator.OrchestratorValidationError('name %s already in use', forcename)
             return forcename
 
         if '.' in host:
@@ -997,6 +997,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 name += '.' + ''.join(random.choice(string.ascii_lowercase)
                                       for _ in range(6))
             if len([d for d in existing if d.daemon_id == name]):
+                if not suffix:
+                    raise orchestrator.OrchestratorValidationError('name %s already in use', name)
                 self.log.warning('name %s exists, trying again', name)
                 continue
             return name
@@ -1930,41 +1932,77 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.invalidate_host_daemons(host)
         return "Removed {} from host '{}'".format(name, host)
 
-    def _update_service(self, daemon_type, add_func, spec):
-        daemons = self.cache.get_daemons_by_type(daemon_type)
-        if len(daemons) > spec.count:
+    def _apply_service(self, daemon_type, spec, create_func, config_func=None):
+        """
+        Schedule a service.  Deploy new daemons or remove old ones, depending
+        on the target label and count specified in the placement.
+        """
+        service_name = daemon_type
+        if spec.name:
+            service_name += '.' + spec.name
+        daemons = self.cache.get_daemons_by_service(service_name)
+        spec = HostAssignment(
+            spec=spec,
+            get_hosts_func=self._get_hosts,
+            service_type=daemon_type).load()
+        if len(daemons) > spec.placement.count:
             # remove some
-            to_remove = len(daemons) - spec.count
+            to_remove = len(daemons) - spec.placement.count
             args = []
             for d in daemons[0:to_remove]:
                 args.append(
                     ('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname)
                 )
             return self._remove_daemon(args)
-        elif len(daemons) < spec.count:
-            return add_func(spec)
+        elif len(daemons) < spec.placement.count:
+            # add some
+            spec.placement.count -= len(daemons)
+            hosts_with_daemons = {d.hostname for d in daemons}
+            hosts_without_daemons = {p for p in spec.placement.hosts
+                                     if p.hostname not in hosts_with_daemons}
+            spec.placement.hosts = hosts_without_daemons
+            return self._create_daemons(daemon_type, spec, daemons,
+                                        create_func, config_func)
         return trivial_result([])
 
-    def _add_new_daemon(self,
-                        daemon_type: str,
-                        spec: orchestrator.ServiceSpec,
-                        create_func: Callable):
-        daemons = self.cache.get_daemons_by_type(daemon_type)
-        args = []
-        num_added = 0
-        assert spec.count is not None
-        prefix = f'{daemon_type}.{spec.name}'
-        our_daemons = [d for d in daemons if d.name().startswith(prefix)]
-        hosts_with_daemons = {d.hostname for d in daemons}
-        hosts_without_daemons = {p for p in spec.placement.hosts if p.hostname not in hosts_with_daemons}
+    def _add_daemon(self, daemon_type, spec,
+                    create_func, config_func=None):
+        """
+        Add (and place) a daemon. Require explicit host placement.  Do not
+        schedule, and do not apply the related scheduling limitations.
+        """
+        self.log.debug('_add_daemon %s spec %s' % (daemon_type, spec.placement))
+        if not spec.placement.hosts:
+            raise OrchestratorError('must specify host(s) to deploy on')
+        if not spec.placement.count:
+            spec.placement.count = len(spec.placement.hosts)
+        service_name = daemon_type
+        if spec.name:
+            service_name += '.' + spec.name
+        daemons = self.cache.get_daemons_by_service(service_name)
+        return self._create_daemons(daemon_type, spec, daemons,
+                                    create_func, config_func)
 
-        for host, _, name in hosts_without_daemons:
-            if (len(our_daemons) + num_added) >= spec.count:
-                break
+    def _create_daemons(self, daemon_type, spec, daemons,
+                        create_func, config_func=None):
+        if spec.placement.count > len(spec.placement.hosts):
+            raise OrchestratorError('too few hosts: want %d, have %s' % (
+                spec.placement.count, spec.placement.hosts))
+
+        if config_func:
+            config_func(spec)
+
+        args = [] # type: ignore
+        for host, network, name in spec.placement.hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              spec.name, name)
-            self.log.debug('placing %s.%s on host %s' % (daemon_type, daemon_id, host))
-            args.append((daemon_id, host))
+            self.log.debug('Placing %s.%s on host %s' % (
+                daemon_type, daemon_id, host))
+            if daemon_type == 'mon':
+                args.append((daemon_id, host, network))  # type: ignore
+            else:
+                args.append((daemon_id, host))  # type: ignore
+
             # add to daemon list so next name(s) will also be unique
             sd = orchestrator.DaemonDescription(
                 hostname=host,
@@ -1972,23 +2010,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 daemon_id=daemon_id,
             )
             daemons.append(sd)
-            num_added += 1
-
-        if (len(our_daemons) + num_added) < spec.count:
-            missing = spec.count - len(our_daemons) - num_added
-            available = [p.hostname for p in hosts_without_daemons]
-            m = f'Cannot find placement for {missing} daemons. available hosts = {available}'
-            raise orchestrator.OrchestratorError(m)
         return create_func(args)
 
-
     @async_map_completion
-    def _create_mon(self, host, network, name):
+    def _create_mon(self, name, host, network):
         """
         Create a new monitor on the given host.
         """
-        name = name or host
-
         self.log.info("create_mon({}:{}): starting mon.{}".format(
             host, network, name))
 
@@ -2013,76 +2041,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                    keyring=keyring,
                                    extra_config=extra_config)
 
-    @async_completion
     def add_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-
         # current support requires a network to be specified
         orchestrator.servicespec_validate_hosts_have_network_spec(spec)
-
-        daemons = self.cache.get_daemons_by_type('mon')
-        for _, _, name in spec.placement.hosts:
-            if name and len([d for d in daemons if d.daemon_id == name]):
-                raise RuntimeError('name %s already exists', name)
-
-        # explicit placement: enough hosts provided?
-        if len(spec.placement.hosts) < spec.count:
-            raise RuntimeError("Error: {} hosts provided, expected {}".format(
-                len(spec.placement.hosts), spec.count))
-        self.log.info("creating {} monitors on hosts: '{}'".format(
-            spec.count, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
-        # TODO: we may want to chain the creation of the monitors so they join
-        # the quorum one at a time.
-        return self._create_mon(spec.placement.hosts)
-
-    @async_completion
-    def apply_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        """
-        Adjust the number of cluster managers.
-        """
-        if not spec.placement.hosts and not spec.placement.label:
-            # Improve Error message. Point to parse_host_spec examples
-            raise orchestrator.OrchestratorValidationError("Mons need a host spec. (host, network, name(opt))")
-
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mon').load()
-        return self._update_mons(spec)
-
-    def _update_mons(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        """
-        Adjust the number of cluster monitors.
-        """
-        # current support limited to adding monitors.
-        mon_map = self.get("mon_map")
-        num_mons = len(mon_map["mons"])
-        if spec.count == num_mons:
-            return orchestrator.Completion(value="The requested number of monitors exist.")
-        if spec.count < num_mons:
-            raise NotImplementedError("Removing monitors is not supported.")
-
-        self.log.debug("Trying to update monitors on: {}".format(spec.placement.hosts))
-        # check that all the hosts are registered
-        [self._require_hosts(host.hostname) for host in spec.placement.hosts]
-
-        # current support requires a network to be specified
-        orchestrator.servicespec_validate_hosts_have_network_spec(spec)
-
-        daemons = self.cache.get_daemons_by_type('mon')
-        for _, _, name in spec.placement.hosts:
-            if name and len([d for d in daemons if d.daemon_id == name]):
-                raise RuntimeError('name %s alrady exists', name)
-
-        # explicit placement: enough hosts provided?
-        num_new_mons = spec.count - num_mons
-        if len(spec.placement.hosts) < num_new_mons:
-            raise RuntimeError("Error: {} hosts provided, expected {}".format(
-                len(spec.placement.hosts), num_new_mons))
-        self.log.info("creating {} monitors on hosts: '{}'".format(
-            num_new_mons, ",".join(map(lambda h: ":".join(h), spec.placement.hosts))))
-        # TODO: we may want to chain the creation of the monitors so they join
-        # the quorum one at a time.
-        return self._create_mon(spec.placement.hosts)
+        return self._add_daemon('mon', spec, self._create_mon)
 
     @async_map_completion
     def _create_mgr(self, mgr_id, host):
@@ -2104,92 +2067,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def add_mgr(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
-        return self._add_new_daemon('mgr', spec, self._create_mgr)
+        return self._add_daemon('mgr', spec, self._create_mgr)
 
     def apply_mgr(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        """
-        Adjust the number of cluster managers.
-        """
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mgr').load()
-
-        daemons = self.cache.get_daemons_by_type('mgr')
-        num_mgrs = len(daemons)
-        if spec.count == num_mgrs:
-            return orchestrator.Completion(value="The requested number of managers exist.")
-
-        self.log.debug("Trying to update managers on: {}".format(spec.placement.hosts))
-        # check that all the hosts are registered
-        [self._require_hosts(host.hostname) for host in spec.placement.hosts]
-
-        if spec.count < num_mgrs:
-            num_to_remove = num_mgrs - spec.count
-
-            # first try to remove unconnected mgr daemons that the
-            # cluster doesn't see
-            connected = []
-            mgr_map = self.get("mgr_map")
-            if mgr_map.get("active_name", {}):
-                connected.append(mgr_map.get('active_name', ''))
-            for standby in mgr_map.get('standbys', []):
-                connected.append(standby.get('name', ''))
-            to_remove_damons = []
-            for d in daemons:
-                if d.daemon_id not in connected:
-                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id),
-                                             d.hostname))
-                    num_to_remove -= 1
-                    if num_to_remove == 0:
-                        break
-
-            # otherwise, remove *any* mgr
-            if num_to_remove > 0:
-                for d in daemons:
-                    to_remove_damons.append(('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname))
-                    num_to_remove -= 1
-                    if num_to_remove == 0:
-                        break
-            c = self._remove_daemon(to_remove_damons)
-            c.add_progress('Removing MGRs', self)
-            c.update_progress = True
-            return c
-
-        else:
-            # we assume explicit placement by which there are the same number of
-            # hosts specified as the size of increase in number of daemons.
-            num_new_mgrs = spec.count - num_mgrs
-            if len(spec.placement.hosts) < num_new_mgrs:
-                raise RuntimeError(
-                    "Error: {} hosts provided, expected {}".format(
-                        len(spec.placement.hosts), num_new_mgrs))
-
-            for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.daemon_id == host_spec.name]):
-                    raise RuntimeError('name %s alrady exists', host_spec.name)
-
-            for host_spec in spec.placement.hosts:
-                if host_spec.name and len([d for d in daemons if d.daemon_id == host_spec.name]):
-                    raise RuntimeError('name %s alrady exists', host_spec.name)
-
-            self.log.info("creating {} managers on hosts: '{}'".format(
-                num_new_mgrs, ",".join([_spec.hostname for _spec in spec.placement.hosts])))
-
-            args = []
-            for host_spec in spec.placement.hosts:
-                host = host_spec.hostname
-                name = host_spec.name or self.get_unique_name('mgr', host,
-                                                              daemons)
-                args.append((name, host))
-            c = self._create_mgr(args)
-            c.add_progress('Creating MGRs', self)
-            c.update_progress = True
-            return c
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('mgr', spec, self._create_mgr)
 
     def add_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        if not spec.placement.hosts or spec.placement.count is None or len(spec.placement.hosts) < spec.placement.count:
-            raise RuntimeError("must specify at least %s hosts" % spec.placement.count)
+        return self._add_daemon('mds', spec, self._create_mds, self._config_mds)
+
+    def apply_mds(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('mds', spec, self._create_mds,
+                                   self._config_mds)
+
+    def _config_mds(self, spec):
         # ensure mds_join_fs is set for these daemons
         assert spec.name
         ret, out, err = self.mon_command({
@@ -2198,14 +2091,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'name': 'mds_join_fs',
             'value': spec.name,
         })
-
-        return self._add_new_daemon('mds', spec, self._create_mds)
-
-    def apply_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        spec =HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='mds').load()
-
-        return self._update_service('mds', self.add_mds, spec)
 
     @async_map_completion
     def _create_mds(self, mds_id, host):
@@ -2220,8 +2105,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._create_daemon('mds', mds_id, host, keyring=keyring)
 
     def add_rgw(self, spec):
-        if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
-            raise RuntimeError("must specify at least %d hosts" % spec.count)
+        return self._add_daemon('rgw', spec, self._create_rgw, self._config_rgw)
+
+    def _config_rgw(self, spec):
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mon_command({
             'prefix': 'config set',
@@ -2236,8 +2122,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': spec.rgw_realm,
         })
 
-        return self._add_new_daemon('rgw', spec, self._create_rgw)
-
     @async_map_completion
     def _create_rgw(self, rgw_id, host):
         ret, keyring, err = self.mon_command({
@@ -2250,15 +2134,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
     def apply_rgw(self, spec):
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rgw').load()
-        return self._update_service('rgw', self.add_rgw, spec)
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('rgw', spec, self._create_rgw,
+                                   self._config_rgw)
 
     def add_rbd_mirror(self, spec):
-        if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
-            raise RuntimeError("must specify at least %d hosts" % spec.count)
-        self.log.debug('hosts %s' % spec.placement.hosts)
-
-        return self._add_new_daemon('rbd-mirror', spec, self._create_rbd_mirror)
+        return self._add_daemon('rbd-mirror', spec, self._create_rbd_mirror)
 
     @async_map_completion
     def _create_rbd_mirror(self, daemon_id, host):
@@ -2272,8 +2153,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                    keyring=keyring)
 
     def apply_rbd_mirror(self, spec):
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='rbd-mirror').load()
-        return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('rbd-mirror', spec, self._create_rbd_mirror)
 
     def _generate_prometheus_config(self):
         # scrape mgrs
@@ -2288,7 +2169,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 port = t.split(':')[1]
             # get standbys too.  assume that they are all on the same port
             # as the active.
-            for dd in self.cache.get_daemons_by_type('mgr'):
+            for dd in self.cache.get_daemons_by_service('mgr'):
                 if dd.daemon_id == self.get_mgr_id():
                     continue
                 hi = self.inventory.get(dd.hostname, None)
@@ -2298,7 +2179,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         # scrape node exporters
         node_configs = ''
-        for dd in self.cache.get_daemons_by_type('node-exporter'):
+        for dd in self.cache.get_daemons_by_service('node-exporter'):
             hi = self.inventory.get(dd.hostname, None)
             if hi:
                 addr = hi.get('addr', dd.hostname)
@@ -2336,27 +2217,25 @@ scrape_configs:
         return j
 
     def add_prometheus(self, spec):
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
-        return self._add_new_daemon('prometheus', spec, self._create_prometheus)
+        return self._add_daemon('prometheus', spec, self._create_prometheus)
 
     @async_map_completion
     def _create_prometheus(self, daemon_id, host):
         return self._create_daemon('prometheus', daemon_id, host)
 
     def apply_prometheus(self, spec):
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='prometheus').load()
-        return self._update_service('prometheus', self.add_prometheus, spec)
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('prometheus', spec, self._create_prometheus)
 
     def add_node_exporter(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        # FIXME if no hosts are set (likewise no spec.count?) add node-exporter to all hosts!
-        if not spec.placement.hosts or len(spec.placement.hosts) < spec.count:
-            raise RuntimeError("must specify at least %d hosts" % spec.count)
-        return self._add_new_daemon('node-exporter', spec, self._create_node_exporter)
+        return self._add_daemon('node-exporter', spec,
+                                self._create_node_exporter)
 
     def apply_node_exporter(self, spec):
-        spec = HostAssignment(spec=spec, get_hosts_func=self._get_hosts, service_type='node-exporter').load()
-        return self._update_service('node-exporter', self.add_node_exporter, spec)
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('node-exporter', spec,
+                                   self._create_node_exporter)
 
     @async_map_completion
     def _create_node_exporter(self, daemon_id, host):
