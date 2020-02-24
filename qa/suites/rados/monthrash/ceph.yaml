@@ -15,6 +15,7 @@ overrides:
 # slow mons -> slow peering -> PG_AVAILABILITY
       - \(PG_AVAILABILITY\)
       - \(SLOW_OPS\)
+      - slow request
 tasks:
 - install:
 - ceph:

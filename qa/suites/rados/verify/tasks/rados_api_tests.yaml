@@ -11,6 +11,7 @@ overrides:
       - \(POOL_APP_NOT_ENABLED\)
       - \(PG_AVAILABILITY\)
       - \(OBJECT_MISPLACED\)
+      - slow request
     conf:
       client:
         debug ms: 1

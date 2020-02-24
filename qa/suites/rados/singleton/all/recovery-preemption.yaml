@@ -28,6 +28,7 @@ tasks:
       - \(PG_
       - \(SLOW_OPS\)
       - overall HEALTH
+      - slow request
 - exec:
     osd.0:
       - ceph osd pool create foo 128
