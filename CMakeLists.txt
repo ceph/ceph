@@ -5,30 +5,20 @@ project(ceph
   VERSION 15.1.0
   LANGUAGES CXX C ASM)
 
-if(POLICY CMP0028)
-  cmake_policy(SET CMP0028 NEW)
-endif()
-if(POLICY CMP0046)
-  cmake_policy(SET CMP0046 NEW)
-endif()
-if(POLICY CMP0048)
-  cmake_policy(SET CMP0048 NEW)
-endif()
-if(POLICY CMP0054)
-  cmake_policy(SET CMP0054 NEW)
-endif()
-if(POLICY CMP0056)
-  cmake_policy(SET CMP0056 NEW)
-endif()
-if(POLICY CMP0065)
-  cmake_policy(SET CMP0065 NEW)
-endif()
-if(POLICY CMP0051)
-  cmake_policy(SET CMP0051 NEW)
-endif()
-if(POLICY CMP0075)
-  cmake_policy(SET CMP0075 NEW)
-endif()
+foreach(policy
+    CMP0028
+    CMP0046
+    CMP0048
+    CMP0051
+    CMP0054
+    CMP0056
+    CMP0065
+    CMP0075)
+  if(POLICY ${policy})
+    cmake_policy(SET ${policy} NEW)
+  endif()
+endforeach()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
