@@ -924,6 +924,90 @@ test_config() {
     rbd rm test1
 }
 
+test_trash_purge_schedule() {
+    echo "testing trash purge schedule..."
+    remove_images
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd namespace create rbd2/ns1
+
+    expect_fail rbd trash purge schedule ls
+    test "$(rbd trash purge schedule ls -R --format json)" = "[]"
+
+    rbd trash purge schedule add -p rbd 1d 01:30
+
+    rbd trash purge schedule ls -p rbd | grep 'every 1d starting at 01:30'
+    expect_fail rbd trash purge schedule ls
+    rbd trash purge schedule ls -R | grep 'every 1d starting at 01:30'
+    rbd trash purge schedule ls -R -p rbd | grep 'every 1d starting at 01:30'
+    expect_fail rbd trash purge schedule ls -p rbd2
+    test "$(rbd trash purge schedule ls -p rbd2 -R --format json)" = "[]"
+
+    rbd trash purge schedule add -p rbd2/ns1 2d
+    test "$(rbd trash purge schedule ls -p rbd2 -R --format json)" != "[]"
+    rbd trash purge schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *every 2d'
+    rbd trash purge schedule rm -p rbd2/ns1
+    test "$(rbd trash purge schedule ls -p rbd2 -R --format json)" = "[]"
+
+    for i in `seq 12`; do
+        test "$(rbd trash purge schedule status --format xml |
+            $XMLSTARLET sel -t -v '//scheduled/item/pool')" = 'rbd' && break
+        sleep 10
+    done
+    rbd trash purge schedule status
+    test "$(rbd trash purge schedule status --format xml |
+        $XMLSTARLET sel -t -v '//scheduled/item/pool')" = 'rbd'
+
+    rbd trash purge schedule add 2d 00:17
+    rbd trash purge schedule ls | grep 'every 2d starting at 00:17'
+    rbd trash purge schedule ls -R | grep 'every 2d starting at 00:17'
+    expect_fail rbd trash purge schedule ls -p rbd2
+    rbd trash purge schedule ls -p rbd2 -R | grep 'every 2d starting at 00:17'
+    rbd trash purge schedule ls -p rbd2/ns1 -R | grep 'every 2d starting at 00:17'
+
+    rbd trash purge schedule status --format xml |
+        $XMLSTARLET sel -t -v '//scheduled/item/pool' | grep 'rbd2'
+
+    test "$(echo $(rbd trash purge schedule ls -R --format xml |
+        $XMLSTARLET sel -t -v '//schedules/schedule/items'))" = "2d00:17:00 1d01:30:00"
+
+    rbd trash purge schedule add 1d
+    rbd trash purge schedule ls | grep 'every 2d starting at 00:17'
+    rbd trash purge schedule ls | grep 'every 1d'
+
+    rbd trash purge schedule ls -R --format xml |
+        $XMLSTARLET sel -t -v '//schedules/schedule/items' | grep '2d00:17'
+
+    rbd trash purge schedule rm 1d
+    rbd trash purge schedule ls | grep 'every 2d starting at 00:17'
+    rbd trash purge schedule rm 2d 00:17
+    expect_fail rbd trash purge schedule ls
+
+    for p in rbd2 rbd2/ns1; do
+        rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/test1
+        rbd trash mv rbd2/ns1/test1
+        rbd trash ls rbd2/ns1 | wc -l | grep '^1$'
+
+        rbd trash purge schedule add -p $p 1m
+        rbd trash purge schedule list -p rbd2/ns1 -R | grep 'every 1m'
+
+        for i in `seq 12`; do
+            rbd trash ls rbd2/ns1 | wc -l | grep '^1$' || break
+            sleep 10
+        done
+        rbd trash ls rbd2/ns1 | wc -l | grep '^0$'
+
+        rbd trash purge schedule status | grep 'rbd2  *ns1'
+        rbd trash purge schedule rm -p $p 1m
+    done
+
+    rbd trash purge schedule remove -p rbd 1d 01:30
+    test "$(rbd trash purge schedule ls -R --format json)" = "[]"
+
+    remove_images
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -944,5 +1028,6 @@ test_deep_copy_clone
 test_clone_v2
 test_thick_provision
 test_namespace
+test_trash_purge_schedule
 
 echo OK
