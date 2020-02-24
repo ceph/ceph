@@ -443,6 +443,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
       dout(2) << "ignoring open from " << key << " " << con->get_peer_addr()
               << "; not ready for session (expect reconnect)" << dendl;
       con->mark_down();
+      m->put();
       return true;
     }
   }
