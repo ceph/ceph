@@ -682,6 +682,9 @@ void SessionMap::touch_session(Session *session)
     by_state_entry = by_state.emplace(session->state,
 				      new xlist<Session*>).first;
   by_state_entry->second->push_back(&session->item_session_list);
+  if (session->item_custom_timeout_list.is_on_list()) {
+    custom_timeout_list.push_back(&session->item_custom_timeout_list);
+  }
 
   session->last_cap_renew = clock::now();
 }

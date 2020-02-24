@@ -333,6 +333,8 @@ class MDSRank {
     int config_client(int64_t session_id, bool remove,
 		      const std::string& option, const std::string& value,
 		      std::ostream& ss);
+    bool custom_timeout_exists(Session *session);
+    void custom_timeout_request(Session *session, int64_t timeout);
 
     void mark_base_recursively_scrubbed(inodeno_t ino);
 

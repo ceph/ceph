@@ -1077,6 +1077,24 @@ void Server::find_idle_sessions()
       }
     }
 
+    for (auto session : mds->sessionmap.custom_timeout_list) {
+      if (session->get_state() != Session::STATE_OPEN) {
+	continue;
+      }
+      auto custom_timeout_iter = session->info.client_metadata.find("timeout");
+      ceph_assert(custom_timeout_iter != session->info.client_metadata.end());
+      uint64_t custom_timeout = strtoul(custom_timeout_iter->second.c_str(), nullptr, 0);
+      double custom_cutoff = queue_max_age + custom_timeout;
+      auto last_cap_renew_span = std::chrono::duration<double>
+	(now - session->last_cap_renew).count();
+      if (last_cap_renew_span > custom_cutoff) {
+	dout(20) << "new stale session " << session->info.inst
+		 << "due to custom timeout; last renewed caps "
+		 << last_cap_renew_span << "s ago" << dendl;
+	new_stale.push_back(session);
+      }
+    }
+
     for (auto session : new_stale) {
       mds->sessionmap.set_state(session, Session::STATE_STALE);
       if (mds->locker->revoke_stale_caps(session)) {

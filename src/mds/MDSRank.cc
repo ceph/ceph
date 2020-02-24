@@ -3316,9 +3316,9 @@ int MDSRank::config_client(int64_t session_id, bool remove,
 	ss << "Invalid config for timeout: " << value;
 	return -EINVAL;
       }
-      if (new_timeout < mdsmap->get_session_timeout()) {
-	ss << "Timeouts can only be configured to be HIGHER than the global default";
-	return -EINVAL;
+      if (new_timeout < mdsmap->get_session_timeout() ||
+	  custom_timeout_exists(session)) {
+	custom_timeout_request(session, new_timeout);
       }
       session->info.client_metadata[option] = value;
     }
@@ -3329,6 +3329,16 @@ int MDSRank::config_client(int64_t session_id, bool remove,
   }
 
   return 0;
+}
+
+bool MDSRank::custom_timeout_exists(Session *s)
+{
+  return s->has_custom_timeout();
+}
+
+void MDSRank::custom_timeout_request(Session *s, int64_t new_timeout)
+{
+  sessionmap.custom_timeout_list.push_back(&s->item_custom_timeout_list);
 }
 
 bool MDSRank::evict_client(int64_t session_id,

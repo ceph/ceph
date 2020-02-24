@@ -86,6 +86,7 @@ public:
   Session() = delete;
   Session(ConnectionRef con) :
     item_session_list(this),
+    item_custom_timeout_list(this),
     requests(member_offset(MDRequestImpl, item_session_request)),
     recall_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
     release_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
@@ -97,6 +98,7 @@ public:
     set_connection(std::move(con));
   }
   ~Session() override {
+    item_custom_timeout_list.remove_myself();
     if (state == STATE_CLOSED) {
       item_session_list.remove_myself();
     } else {
@@ -407,11 +409,16 @@ public:
     last_cap_renew = clock::zero();
   }
 
+  bool has_custom_timeout() {
+    return item_custom_timeout_list.is_on_list();
+  }
+
   Session *reclaiming_from = nullptr;
   session_info_t info;                         ///< durable bits
   MDSAuthCaps auth_caps;
 
   xlist<Session*>::item item_session_list;
+  xlist<Session*>::item item_custom_timeout_list;
 
   list<ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
 
@@ -791,6 +798,7 @@ public:
 
   MDSRank *mds;
   map<int,xlist<Session*>* > by_state;
+  xlist<Session*> custom_timeout_list; // oldest-touched
   map<version_t, MDSContext::vec > commit_waiters;
 
   // -- loading, saving --
