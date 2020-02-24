@@ -8395,7 +8395,7 @@ std::vector<Option> get_cephfs_shell_options() {
 
     Option("echo", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(false)
-    .set_description("Allow tracebacks on error for CephFS Shell"),
+    .set_description("Print command issued on prompt before execution"),
 
     Option("editor", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("vim")
