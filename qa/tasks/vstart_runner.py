@@ -325,9 +325,14 @@ class LocalRemote(object):
 
         return args
 
-    def run(self, args, check_status=True, wait=True,
-            stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None, env=None, timeout=None, omit_sudo=False):
+    # Wrapper to keep the interface exactly same as that of
+    # teuthology.remote.run.
+    def run(self, **kwargs):
+        return self._do_run(**kwargs)
+
+    def _do_run(self, args, check_status=True, wait=True, stdout=None,
+                stderr=None, cwd=None, stdin=None, logger=None, label=None,
+                env=None, timeout=None, omit_sudo=False):
         args = self._perform_checks_and_return_list_of_args(args, omit_sudo)
 
         # We have to use shell=True if any run.Raw was present, e.g. &&
@@ -477,7 +482,9 @@ class LocalDaemon(object):
         if self._get_pid() is not None:
             self.stop()
 
-        self.proc = self.controller.run([os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)), "-i", self.daemon_id])
+        self.proc = self.controller.run(args=[
+            os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)),
+            "-i", self.daemon_id])
 
     def signal(self, sig, silent=False):
         if not self.running():
@@ -526,7 +533,7 @@ class LocalKernelMount(KernelMount):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
         # the "cd foo && bar" shenanigans isn't needed to begin with and
         # then we wouldn't have to special case this
-        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
                                       stdin=stdin, check_status=check_status,
                                       omit_sudo=omit_sudo)
 
@@ -544,7 +551,7 @@ class LocalKernelMount(KernelMount):
             args = ['sudo', '-u', user, '-s', '/bin/bash', '-c']
             args.append(cmd)
 
-        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
                                       check_status=check_status, stdin=stdin,
                                       omit_sudo=False)
 
@@ -557,7 +564,7 @@ class LocalKernelMount(KernelMount):
         if isinstance(args, list):
             args.insert(0, 'sudo')
 
-        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
                                       check_status=check_status,
                                       omit_sudo=False)
 
@@ -711,7 +718,7 @@ class LocalFuseMount(FuseMount):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
         # the "cd foo && bar" shenanigans isn't needed to begin with and
         # then we wouldn't have to special case this
-        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
                                       stdin=stdin, check_status=check_status,
                                       omit_sudo=omit_sudo)
 
@@ -729,7 +736,7 @@ class LocalFuseMount(FuseMount):
             args = ['sudo', '-u', user, '-s', '/bin/bash', '-c']
             args.append(cmd)
 
-        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
                                       check_status=check_status, stdin=stdin,
                                       omit_sudo=False)
 
@@ -742,7 +749,7 @@ class LocalFuseMount(FuseMount):
         if isinstance(args, list):
             args.insert(0, 'sudo')
 
-        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
                                       check_status=check_status,
                                       omit_sudo=False)
 
@@ -931,7 +938,7 @@ class LocalCephManager(CephManager):
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        proc = self.controller.run(args, wait=False, stdout=StringIO())
+        proc = self.controller.run(args=args, wait=False, stdout=StringIO())
         return proc
 
     def raw_cluster_cmd(self, *args, **kwargs):
@@ -939,7 +946,8 @@ class LocalCephManager(CephManager):
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
+        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
+                                        list(args), **kwargs)
         return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
@@ -947,7 +955,8 @@ class LocalCephManager(CephManager):
         like raw_cluster_cmd but don't check status, just return rc
         """
         kwargs['check_status'] = False
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
+        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
+                                        list(args), **kwargs)
         return proc.exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True, timeout=None):
@@ -1263,8 +1272,8 @@ class LocalContext(object):
 
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
-    remote.run(args = [os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
-    remote.run(args = ['rm', '-rf', './dev', './out'])
+    remote.run(args=[os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
+    remote.run(args=['rm', '-rf', './dev', './out'])
 
 def clear_old_log():
     from os import stat
@@ -1361,7 +1370,7 @@ def exec_test():
 
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
-        remote.run(args, env=vstart_env, timeout=(3 * 60))
+        remote.run(args=args, env=vstart_env, timeout=(3 * 60))
 
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed
