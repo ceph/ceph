@@ -323,10 +323,9 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
-    parser.add_argument('--watch-channel', dest="watch_channel",
-                        help="log channel to follow " \
-                        "when using -w/--watch; '*' for all",
-                        default='cluster')
+    parser.add_argument('-W', '--watch-channel', dest="watch_channel",
+                        help="watch live cluster changes on a specific channel "
+                        "(e.g., cluster, audit, cephadm, or '*' for all)")
 
     parser.add_argument('--version', '-v', action="store_true", help="display version")
     parser.add_argument('--verbose', action="store_true", help="make verbose")
@@ -913,6 +912,12 @@ def main():
             CEPH_RELEASE_NAME,
             CEPH_RELEASE_TYPE))  # noqa
         return 0
+
+    # --watch-channel|-W implies -w
+    if parsed_args.watch_channel:
+        parsed_args.watch = True
+    elif parsed_args.watch and not parsed_args.watch_channel:
+        parsed_args.watch_channel = 'cluster'
 
     global verbose
     verbose = parsed_args.verbose
