@@ -138,6 +138,18 @@ struct ServiceMap {
     }
     return true;
   }
+
+  static inline bool is_normal_ceph_entity(std::string_view type) {
+    if (type == "osd" ||
+        type == "client" ||
+        type == "mon" ||
+        type == "mds" ||
+        type == "mgr") {
+      return true;
+    }
+
+    return false;
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(ServiceMap)
 WRITE_CLASS_ENCODER_FEATURES(ServiceMap::Service)
