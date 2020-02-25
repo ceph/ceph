@@ -12,10 +12,9 @@ import socket
 import tempfile
 import threading
 import time
-from uuid import uuid4
-from OpenSSL import crypto
 from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
-from mgr_util import get_default_addr, ServerConfigException, verify_tls_files
+from mgr_util import get_default_addr, ServerConfigException, verify_tls_files, \
+    create_self_signed_cert
 
 try:
     import cherrypy
@@ -397,26 +396,9 @@ class Module(MgrModule, CherryPyConfig):
                 .format(cmd['prefix']))
 
     def create_self_signed_cert(self):
-        # create a key pair
-        pkey = crypto.PKey()
-        pkey.generate_key(crypto.TYPE_RSA, 2048)
-
-        # create a self-signed cert
-        cert = crypto.X509()
-        cert.get_subject().O = "IT"
-        cert.get_subject().CN = "ceph-dashboard"
-        cert.set_serial_number(int(uuid4()))
-        cert.gmtime_adj_notBefore(0)
-        cert.gmtime_adj_notAfter(10*365*24*60*60)
-        cert.set_issuer(cert.get_subject())
-        cert.set_pubkey(pkey)
-        cert.sign(pkey, 'sha512')
-
-        cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
-        self.set_store('crt', cert.decode('utf-8'))
-
-        pkey = crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
-        self.set_store('key', pkey.decode('utf-8'))
+        cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
+        self.set_store('crt', cert)
+        self.set_store('key', pkey)
 
     def notify(self, notify_type, notify_id):
         NotificationQueue.new_notification(notify_type, notify_id)
