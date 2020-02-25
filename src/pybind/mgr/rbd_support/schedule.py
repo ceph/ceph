@@ -4,6 +4,7 @@ import rbd
 import re
 
 from datetime import datetime, timedelta, time
+from dateutil.parser import parse
 
 from .common import get_rbd_pools
 
@@ -243,7 +244,7 @@ class StartTime:
             return None
 
         try:
-            t = time.fromisoformat(start_time)
+            t = parse(start_time).timetz()
         except ValueError as e:
             raise ValueError("Invalid start time {}: {}".format(start_time, e))
 
