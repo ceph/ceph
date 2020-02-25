@@ -143,7 +143,7 @@ class SharedDriverQueueData {
   public:
     uint32_t current_queue_depth = 0;
     std::atomic_ulong completed_op_seq, queue_op_seq;
-    std::vector<void*> data_buf_mempool;
+    std::vector<void*> data_buf_mempool[2];
     PerfCounters *logger = nullptr;
     void _aio_handle(Task *t, IOContext *ioc);
 
@@ -163,14 +163,17 @@ class SharedDriverQueueData {
     ceph_assert(qpair != NULL);
 
     // allocate spdk dma memory
-    for (uint16_t i = 0; i < data_buffer_default_num; i++) {
-      void *b = spdk_dma_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
-      if (!b) {
-        derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
-        ceph_assert(b);
+    for (uint16_t j = 0; j < 2; j++) {
+      for (uint16_t i = 0; i < data_buffer_default_num; i++) {
+        void *b = spdk_dma_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
+        if (!b) {
+          derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
+          ceph_assert(b);
+        }
+        data_buf_mempool[j].push_back(b);
       }
-      data_buf_mempool.push_back(b);
     }
+
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
@@ -198,13 +201,15 @@ class SharedDriverQueueData {
     }
 
     // free all spdk dma memory;
-    if (!data_buf_mempool.empty()) {
-      for (uint16_t i = 0; i < data_buffer_default_num; i++) {
-        void *b = data_buf_mempool[i];
-        ceph_assert(b);
-        spdk_dma_free(b);
+    for (uint16_t j = 0; j < 2; j++) {
+      if (!data_buf_mempool[j].empty()) {
+        for (uint16_t i = 0; i < data_buffer_default_num; i++) {
+          void *b = data_buf_mempool[j][i];
+          ceph_assert(b);
+          spdk_dma_free(b);
+        }
+        data_buf_mempool[j].clear();
       }
-      data_buf_mempool.clear();
     }
 
     delete logger;
@@ -244,14 +249,15 @@ struct Task {
       primary->ref--;
     ceph_assert(!io_request.nseg);
   }
-  void release_segs(SharedDriverQueueData *queue_data) {
+  void release_segs(SharedDriverQueueData *queue_data, bool write) {
+    uint16_t index = write ? 0 : 1;
     if (io_request.extra_segs) {
       for (uint16_t i = 0; i < io_request.nseg; i++)
-        queue_data->data_buf_mempool.push_back(io_request.extra_segs[i]);
+        queue_data->data_buf_mempool[index].push_back(io_request.extra_segs[i]);
       delete io_request.extra_segs;
     } else if (io_request.nseg) {
       for (uint16_t i = 0; i < io_request.nseg; i++)
-        queue_data->data_buf_mempool.push_back(io_request.inline_segs[i]);
+        queue_data->data_buf_mempool[index].push_back(io_request.inline_segs[i]);
     }
     ctx->total_nseg -= io_request.nseg;
     io_request.nseg = 0;
@@ -331,10 +337,11 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
 {
   uint64_t count = t->len / data_buffer_size;
+  uint16_t index = write ? 0 : 1;
   if (t->len % data_buffer_size)
     ++count;
   void **segs;
-  if (count > data_buf_mempool.size())
+  if (count > data_buf_mempool[index].size())
     return -ENOMEM;
   if (count <= inline_segment_num) {
     segs = t->io_request.inline_segs;
@@ -343,8 +350,8 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
     segs = t->io_request.extra_segs;
   }
   for (uint16_t i = 0; i < count; i++) {
-    segs[i] = data_buf_mempool.back();
-    data_buf_mempool.pop_back();
+    segs[i] = data_buf_mempool[index].back();
+    data_buf_mempool[index].pop_back();
   }
   t->io_request.nseg = count;
   t->ctx->total_nseg += count;
@@ -410,7 +417,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
           if (r < 0) {
             derr << __func__ << " failed to do write command: " << cpp_strerror(r) << dendl;
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
-            t->release_segs(this);
+            t->release_segs(this, true);
             delete t;
             ceph_abort();
           }
@@ -433,7 +440,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             derr << __func__ << " failed to read: " << cpp_strerror(r) << dendl;
-            t->release_segs(this);
+            t->release_segs(this, false);
             delete t;
             ceph_abort();
           } else {
@@ -449,7 +456,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
           r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush: " << cpp_strerror(r) << dendl;
-            t->release_segs(this);
+            t->release_segs(this, true);
             delete t;
             ceph_abort();
           } else {
@@ -671,14 +678,14 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     } else {
       ctx->try_aio_wake();
     }
-    task->release_segs(queue);
+    task->release_segs(queue, true);
     delete task;
   } else if (task->command == IOCommand::READ_COMMAND) {
     queue->logger->tinc(l_bluestore_nvmedevice_read_lat, dur);
     ceph_assert(!spdk_nvme_cpl_is_error(completion));
     dout(20) << __func__ << " read op successfully" << dendl;
     task->fill_cb();
-    task->release_segs(queue);
+    task->release_segs(queue, false);
     // read submitted by AIO
     if (!task->return_code) {
       if (ctx->priv) {
