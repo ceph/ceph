@@ -13,12 +13,12 @@ log = logging.getLogger(__name__)
 class GaneshaConf(object):
     # pylint: disable=R0902
 
-    def __init__(self, cluster_id, rados_pool, rados_namespace, mgr):
-        self.mgr = mgr
-        self.cephx_key = ""
-        self.cluster_id = cluster_id
-        self.rados_pool = rados_pool
-        self.rados_namespace = rados_namespace
+    def __init__(self, nfs_conf):
+        self.mgr = nfs_conf.mgr
+        self.cephx_key = nfs_conf.key
+        self.cluster_id = nfs_conf.cluster_id
+        self.rados_pool = nfs_conf.pool_name
+        self.rados_namespace = nfs_conf.pool_ns
         self.export_conf_blocks = []
         self.daemons_conf_blocks = {}
         self._defaults = {}
@@ -34,7 +34,7 @@ class GaneshaConf(object):
 
         for export_block in [block for block in self.export_conf_blocks
                              if block['block_name'] == "EXPORT"]:
-            export = Export.from_export_block(export_block, cluster_id,
+            export = Export.from_export_block(export_block, nfs_conf.cluster_id,
                                               self._defaults)
             self.exports[export.export_id] = export
 
@@ -109,19 +109,6 @@ class GaneshaConf(object):
                 break
         return nid
 
-    def fill_keys(self, export):
-        r, auth_dump, outs = self.mgr.mon_command({'prefix':"auth list", "format":"json"})
-        auth_dump_ls = json.loads(auth_dump)
-        result = {}
-        entity_type = "client"
-        for auth_entry in auth_dump_ls['auth_dump']:
-            entity = auth_entry['entity']
-            if not entity_type or entity.startswith('{}.'.format(entity_type)):
-                entity_id = entity[entity.find('.')+1:]
-                result[entity_id] = auth_entry
-        self.cephx_key = result["ganesha-tester"]["key"]
-        export.fsal.cephx_key = self.cephx_key
-
     def _persist_daemon_configuration(self):
         daemon_map = {}
         """
@@ -149,7 +136,7 @@ class GaneshaConf(object):
             ioctx.remove_object("export-{}".format(export_id))
 
     def _save_export(self, export):
-        self.fill_keys(export)
+        export.fsal.cephx_key = self.cephx_key
         self.exports[export.export_id] = export
         conf_block = export.to_export_block(self.export_defaults)
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
@@ -191,6 +178,7 @@ class NFSConfig(object):
         self.pool_ns = cluster_id
         self.mgr = mgr
         self.ganeshaconf = ''
+        self.key = ''
 
     def update_user_caps(self):
         if NFSConfig.exp_num > 0:
@@ -221,8 +209,8 @@ class NFSConfig(object):
                     "write configuration into rados object %s/%s/%s:\n%s",
                     self.pool_name, self.pool_ns, nodeid, result)
 
-    def create_instance(self, orch, pool_name):
-        return GaneshaConf("a", pool_name, "ganesha", orch)
+    def create_instance(self):
+        self.ganeshaconf = GaneshaConf(self)
 
     def create_export(self):
         ex_id = self.ganeshaconf.create_export({
@@ -242,23 +230,21 @@ class NFSConfig(object):
 
         log.info("Export ID is {}".format(ex_id))
         NFSConfig.exp_num += 1
-        self.update_user_caps()
-        return 0, "", ""
+        #self.update_user_caps()
+        return 0, "", "Export Created Successfully"
 
-    def delete_export(self, ganesha_conf, ex_id):
-        if not ganesha_conf.has_export(ex_id):
+    def delete_export(self, ex_id):
+        if not self.ganeshaconf.has_export(ex_id):
             return 0, "No exports available",""
         log.info("Export detected for id:{}".format(ex_id))
-        export = ganesha_conf.remove_export(ex_id)
-        ganesha_conf.reload_daemons(export.daemons)
-        return 0, "", ""
+        export = self.ganeshaconf.remove_export(ex_id)
+        self.ganeshaconf.reload_daemons(export.daemons)
+        return 0, "", "Export Deleted Successfully"
 
-    def check_fsal_valid(self, fs_map):
-        fsmap_res = [{'id': fs['id'], 'name': fs['mdsmap']['fs_name']}
+    def check_fsal_valid(self):
+        fs_map = self.mgr.get('fs_map')
+        return [{'id': fs['id'], 'name': fs['mdsmap']['fs_name']}
                 for fs in fs_map['filesystems']]
-
-        #return 0, json.dumps(fsmap_res, indent=2), ""
-        return fsmap_res
 
     def create_nfs_cluster(self, size):
         pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
@@ -269,7 +255,6 @@ class NFSConfig(object):
             if r != 0:
                 return r, out, err
             log.info("{}".format(out))
-            self.ganeshaconf = GaneshaConf(self.cluster_id, self.pool_name, self.pool_ns, self.mgr)
 
             command = {'prefix': 'osd pool application enable', 'pool': self.pool_name, 'app': 'nfs'}
             r, out, err = self.mgr.mon_command(command)
@@ -288,10 +273,14 @@ class NFSConfig(object):
             return ret, out, err
 
         json_res = json.loads(out)
-        log.info("The user created is {} and key is {} ".format(json_res[0]['entity'], json_res[0]['key']))
+        self.key = json_res[0]['key']
+        log.info("The user created is {}".format(json_res[0]['entity']))
 
+        """
+        Not required, this just gives mgr keyring location.
         keyring = self.mgr.rados.conf_get("keyring")
         log.info("The keyring location is {}".format(keyring))
+        """
 
         log.info("Calling up common config")
         self.create_common_config("a")

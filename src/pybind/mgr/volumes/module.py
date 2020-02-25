@@ -256,11 +256,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs nfs export create '
-                   'name=fs,type=CephString '
+                   'name=fs-name,type=CephString '
                    'name=read-only,type=CephBool,req=false '
                    'name=path,type=CephString,req=false '
                    'name=attach,type=CephString,req=false '
-                   'name=binding,type=CephString ',
+                   'name=binding,type=CephString,req=false ',
             'desc': "Create cephfs export",
             'perm': 'rw'
         },
@@ -297,6 +297,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
+        self.nfs_obj = ""
 
     def __del__(self):
         self.vc.shutdown()
@@ -465,16 +466,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
     def _cmd_fs_nfs_export_create(self, inbuf, cmd):
-        if NFSConfig.check_fsal_valid(self, self.vc.mgr.get('fs_map')):
-            pool_name = "nfs-ganesha"
-            #instance = NFSConfig.create_instance(self, pool_name)
-            return NFSConfig.create_export(instance)
+        if self.nfs_obj and self.nfs_obj.check_fsal_valid():
+            self.nfs_obj.create_instance()
+            return self.nfs_obj.create_export()
 
     def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
-            instance = NFSConfig.create_instance(self, "nfs-ganesha")
-            return NFSConfig.delete_export(instance, cmd['export_id'])
+        if self.nfs_obj:
+            return self.nfs_obj.delete_export(cmd['export_id'])
 
     def _cmd_fs_nfs_cluster_create(self, inbuf, cmd):
-            nfs_obj = NFSConfig(self, cmd['cluster_id'])
-            nfs_obj.create_nfs_cluster(size=cmd.get('size', 1))
-            return nfs_obj.create_export()
+            self.nfs_obj = NFSConfig(self, cmd['cluster_id'])
+            return self.nfs_obj.create_nfs_cluster(size=cmd.get('size', 1))
