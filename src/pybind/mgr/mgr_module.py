@@ -448,8 +448,6 @@ class MgrModuleLoggingMixin(object):
         self.log_to_file = log_to_file
         if log_to_file:
             self._root_logger.addHandler(self._file_log_handler)
-        else:
-            self._root_logger.addHandler(self._ceph_log_handler)
 
         self._root_logger.setLevel(logging.NOTSET)
         self._set_log_level(mgr_level, module_level)
@@ -492,17 +490,15 @@ class MgrModuleLoggingMixin(object):
         self._file_log_handler.setLevel(level)
 
     def _enable_file_log(self):
-        # disable ceph log and enable file log
+        # enable file log
         self.getLogger().warning("enabling logging to file")
         self.log_to_file = True
         self._root_logger.addHandler(self._file_log_handler)
-        self._root_logger.removeHandler(self._ceph_log_handler)
 
     def _disable_file_log(self):
-        # disable file log and enable ceph log
+        # disable file log
         self.getLogger().warning("disabling logging to file")
         self.log_to_file = False
-        self._root_logger.addHandler(self._ceph_log_handler)
         self._root_logger.removeHandler(self._file_log_handler)
 
     def _ceph_log_level_to_python(self, ceph_log_level):
