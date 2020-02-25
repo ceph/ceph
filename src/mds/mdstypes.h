@@ -104,7 +104,9 @@ public:
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   mds_rank_t rank = MDS_RANK_NONE;
 };
-std::ostream& operator<<(std::ostream &out, const mds_role_t &role);
+inline std::ostream& operator<<(std::ostream& out, const mds_role_t& role) {
+  return out << role.fscid << ":" << role.rank;
+}
 
 // CAPS
 inline string gcap_string(int cap)
