@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/image/GetMetadataRequest.h"
 #include "librbd/mirror/snapshot/WriteImageStateRequest.h"
 
 #include <boost/algorithm/string/predicate.hpp>
@@ -78,19 +79,15 @@ void SetImageStateRequest<I>::handle_get_snap_limit(int r) {
 template <typename I>
 void SetImageStateRequest<I>::get_metadata() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "start_key=" << m_last_metadata_key << dendl;
+  ldout(cct, 20) << dendl;
 
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, MAX_METADATA_ITEMS);
-
-  librados::AioCompletion *comp = create_rados_callback<
-    SetImageStateRequest<I>,
-    &SetImageStateRequest<I>::handle_get_metadata>(this);
-  m_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
-                                          &m_bl);
-  ceph_assert(r == 0);
-  comp->release();
+  auto ctx = create_context_callback<
+     SetImageStateRequest<I>,
+     &SetImageStateRequest<I>::handle_get_metadata>(this);
+  auto req = image::GetMetadataRequest<I>::create(
+    m_image_ctx->md_ctx, m_image_ctx->header_oid, true, "", "", 0,
+    &m_image_state.metadata, ctx);
+  req->send();
 }
 
 template <typename I>
@@ -98,27 +95,11 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << "r=" << r << dendl;
 
-  std::map<std::string, bufferlist> metadata;
-  if (r == 0) {
-    auto it = m_bl.cbegin();
-    r = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
   if (r < 0) {
     lderr(cct) << "failed to retrieve metadata: " << cpp_strerror(r)
                << dendl;
     finish(r);
     return;
-  }
-
-  if (!metadata.empty()) {
-    m_image_state.metadata.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = metadata.rbegin()->first;
-    if (boost::starts_with(m_last_metadata_key,
-                           ImageCtx::METADATA_CONF_PREFIX)) {
-      get_metadata();
-      return;
-    }
   }
 
   {
