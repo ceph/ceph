@@ -563,6 +563,8 @@ class VolumeGroup(object):
         for k, v in kw.items():
             setattr(self, k, v)
         self.name = kw['vg_name']
+        if not self.name:
+            raise ValueError('VolumeGroup must have a non-empty name')
         self.tags = parse_tags(kw.get('vg_tags', ''))
 
     def __str__(self):
@@ -908,6 +910,8 @@ class Volume(object):
             setattr(self, k, v)
         self.lv_api = kw
         self.name = kw['lv_name']
+        if not self.name:
+            raise ValueError('Volume must have a non-empty name')
         self.tags = parse_tags(kw['lv_tags'])
         self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
         self.used_by_ceph = 'ceph.osd_id' in self.tags
