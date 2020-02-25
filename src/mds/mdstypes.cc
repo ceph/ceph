@@ -924,11 +924,3 @@ void snaprealm_reconnect_t::generate_test_instances(std::list<snaprealm_reconnec
   ls.back()->realm.seq = 2;
   ls.back()->realm.parent = 1;
 }
-
-
-ostream& operator<<(ostream &out, const mds_role_t &role)
-{
-  out << role.fscid << ":" << role.rank;
-  return out;
-}
-
