@@ -1663,7 +1663,10 @@ def command_bootstrap():
                 raise Error('%s already exists; delete or pass '
                               '--allow-overwrite to overwrite' % f)
 
-    command_prepare_host()
+    if not args.skip_prepare_host:
+        command_prepare_host()
+    else:
+        logger.info('Skip prepare_host')
 
     # initial vars
     fsid = args.fsid or make_fsid()
@@ -3402,6 +3405,10 @@ def _get_parser():
         '--allow-fqdn-hostname',
         action='store_true',
         help='allow hostname that is fully-qualified (contains ".")')
+    parser_bootstrap.add_argument(
+        '--skip-prepare-host',
+        action='store_true',
+        help='Do not prepare host')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
