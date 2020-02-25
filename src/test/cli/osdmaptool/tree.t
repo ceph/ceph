@@ -4,13 +4,13 @@
 
   $ osdmaptool --tree=plain om
   osdmaptool: osdmap file 'om'
-  ID CLASS WEIGHT  TYPE NAME              STATUS REWEIGHT PRI-AFF 
-  -1       3.00000 root default                                   
-  -3       3.00000     rack localrack                             
-  -2       3.00000         host localhost                         
-   0       1.00000             osd.0         DNE        0         
-   1       1.00000             osd.1         DNE        0         
-   2       1.00000             osd.2         DNE        0         
+  ID  CLASS  WEIGHT   TYPE NAME               STATUS  REWEIGHT  PRI-AFF
+  -1         3.00000  root default                                     
+  -3         3.00000      rack localrack                               
+  -2         3.00000          host localhost                           
+   0         1.00000              osd.0          DNE         0         
+   1         1.00000              osd.1          DNE         0         
+   2         1.00000              osd.2          DNE         0         
 
   $ osdmaptool --tree=json-pretty om
   osdmaptool: osdmap file 'om'
