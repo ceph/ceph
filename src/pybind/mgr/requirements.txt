@@ -6,3 +6,4 @@ kubernetes
 requests-mock
 pyyaml
 prettytable
+pyOpenSSL
