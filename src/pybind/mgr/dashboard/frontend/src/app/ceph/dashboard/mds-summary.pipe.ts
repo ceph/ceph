@@ -42,22 +42,39 @@ export class MdsSummaryPipe implements PipeTransform {
       contentLine1 = `${active} ${this.i18n('active')}`;
       contentLine2 = `${standbys + standbyReplay} ${this.i18n('standby')}`;
     }
-
+    const standbyHoverText = value.standbys.map((s: any): string => s.name).join(', ');
+    const standbyTitleText = !standbyHoverText
+      ? ''
+      : `${this.i18n('standby daemons')}: ${standbyHoverText}`;
+    const fsLength = value.filesystems ? value.filesystems.length : 0;
+    const infoObject = fsLength > 0 ? value.filesystems[0].mdsmap.info : {};
+    const activeHoverText = Object.values(infoObject)
+      .map((info: any): string => info.name)
+      .join(', ');
+    let activeTitleText = !activeHoverText
+      ? ''
+      : `${this.i18n('active daemon')}: ${activeHoverText}`;
+    // There is always one standbyreplay to replace active daemon, if active one is down
+    if (!active && fsLength > 0) {
+      activeTitleText = `${standbyReplay} ${this.i18n('standbyReplay')}`;
+    }
     const mgrSummary = [
       {
         content: contentLine1,
-        class: ''
+        class: 'popover-info',
+        titleText: activeTitleText
       }
     ];
-
     if (contentLine2) {
       mgrSummary.push({
         content: '',
-        class: 'card-text-line-break'
+        class: 'card-text-line-break',
+        titleText: ''
       });
       mgrSummary.push({
         content: contentLine2,
-        class: ''
+        class: 'popover-info',
+        titleText: standbyTitleText
       });
     }
 

@@ -20,13 +20,13 @@ describe('MdsSummaryPipe', () => {
 
   it('transforms with 0 active and 2 standy', () => {
     const payload = {
-      standbys: [0],
+      standbys: [{ name: 'a' }],
       filesystems: [{ mdsmap: { info: [{ state: 'up:standby-replay' }] } }]
     };
     const expected = [
-      { class: '', content: '0 active' },
-      { class: 'card-text-line-break', content: '' },
-      { class: '', content: '2 standby' }
+      { class: 'popover-info', content: '0 active', titleText: '1 standbyReplay' },
+      { class: 'card-text-line-break', content: '', titleText: '' },
+      { class: 'popover-info', content: '2 standby', titleText: 'standby daemons: a' }
     ];
 
     expect(pipe.transform(payload)).toEqual(expected);
@@ -34,13 +34,13 @@ describe('MdsSummaryPipe', () => {
 
   it('transforms with 1 active and 1 standy', () => {
     const payload = {
-      standbys: [0],
-      filesystems: [{ mdsmap: { info: [{ state: 'up:active' }] } }]
+      standbys: [{ name: 'b' }],
+      filesystems: [{ mdsmap: { info: [{ state: 'up:active', name: 'a' }] } }]
     };
     const expected = [
-      { class: '', content: '1 active' },
-      { class: 'card-text-line-break', content: '' },
-      { class: '', content: '1 standby' }
+      { class: 'popover-info', content: '1 active', titleText: 'active daemon: a' },
+      { class: 'card-text-line-break', content: '', titleText: '' },
+      { class: 'popover-info', content: '1 standby', titleText: 'standby daemons: b' }
     ];
     expect(pipe.transform(payload)).toEqual(expected);
   });
@@ -50,17 +50,17 @@ describe('MdsSummaryPipe', () => {
       standbys: [0],
       filesystems: []
     };
-    const expected = [{ class: '', content: 'no filesystems' }];
+    const expected = [{ class: 'popover-info', content: 'no filesystems', titleText: '' }];
 
     expect(pipe.transform(payload)).toEqual(expected);
   });
 
   it('transforms without filesystem', () => {
-    const payload = { standbys: [0] };
+    const payload = { standbys: [{ name: 'a' }] };
     const expected = [
-      { class: '', content: '1 up' },
-      { class: 'card-text-line-break', content: '' },
-      { class: '', content: 'no filesystems' }
+      { class: 'popover-info', content: '1 up', titleText: '' },
+      { class: 'card-text-line-break', content: '', titleText: '' },
+      { class: 'popover-info', content: 'no filesystems', titleText: 'standby daemons: a' }
     ];
 
     expect(pipe.transform(payload)).toEqual(expected);
