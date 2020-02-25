@@ -21,7 +21,7 @@
 
 full_path="$0"
 
-SCRIPT_VERSION="15.1.0.437"
+SCRIPT_VERSION="15.1.0.1009"
 active_milestones=""
 backport_pr_labels=""
 backport_pr_number=""
@@ -600,12 +600,7 @@ function interactive_setup_routine {
     [ "$github_token" ] && echo "(default: ${default_val})"
     github_token="$(get_user_input "$default_val")"
     if [ "$github_token" ] ; then
-        if [ "$setup_ok" ] ; then
-            true
-        else
-            info "You must provide a valid GitHub personal access token"
-            abort_due_to_setup_problem
-        fi
+        true
     else
         error "You must provide a valid GitHub personal access token"
         abort_due_to_setup_problem
