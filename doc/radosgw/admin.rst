@@ -415,6 +415,7 @@ the latest quota stats. ::
 
 	radosgw-admin user stats --uid=<uid> --sync-stats
 
+.. _rgw_user_usage_stats:
 
 Get User Usage Stats
 --------------------
