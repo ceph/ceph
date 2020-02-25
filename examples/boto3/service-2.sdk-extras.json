@@ -21,7 +21,7 @@
                 "responseCode":200
             },
             "output": {"shape": "GetUsageStatsOutput"},
-            "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/",
+            "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/serviceops#get-usage-stats",
             "documentation":"<p>Get usage stats for the user</p>"
         }
     },
@@ -61,7 +61,8 @@
                     "shape":"AppendPosition",
                     "documentation": "<p>Position to allow appending</p>",
                     "location": "header",
-                    "locationName": "x-rgw-next-append-position"
+                    "locationName": "x-rgw-next-append-position",
+                    "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/objectops/#append-object"
                 }
             }
         },
@@ -177,7 +178,7 @@
                 }
             },
             "documentation":"<p>A container for object tags filtering rules.</p>"
-        }
+        },
         "GetUsageStatsOutput": {
             "type": "structure",
             "members": {
