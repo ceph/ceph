@@ -3,7 +3,8 @@ meta:
 
 overrides:
    ceph_ansible:
-     branch: stable-3.2
+     ansible-version: '2.6'
+     branch: stable-3.2.30
      vars:
         ceph_conf_overrides:
           global:
@@ -14,7 +15,7 @@ overrides:
             mon_max_pg_per_osd: 1024
         ceph_test: true
         ceph_stable_release: luminous
-        osd_scenario: collocated
+        osd_scenario: lvm
         journal_size: 1024
         osd_auto_discovery: false
         ceph_origin: repository
