@@ -8907,7 +8907,6 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
 loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 {
   Inode *in = f->inode.get();
-  int r;
   bool whence_check = false;
   loff_t pos = -1;
 
@@ -8930,10 +8929,9 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
   }
 
   if (whence_check) {
-    r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
-    if (r < 0) {
+    int r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+    if (r < 0)
       return r;
-    }
   }
 
   switch (whence) {
@@ -8951,22 +8949,17 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 
 #ifdef SEEK_DATA
   case SEEK_DATA:
-    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size) {
-      r = -ENXIO;
-      return offset; 
-    }
+    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size)
+      return -ENXIO;
     pos = offset;
     break;
 #endif
 
 #ifdef SEEK_HOLE
   case SEEK_HOLE:
-    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size) {
-      r = -ENXIO;
-      pos = offset; 
-    } else {
-      pos = in->size;
-    }
+    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size)
+      return -ENXIO;
+    pos = in->size;
     break;
 #endif
 
