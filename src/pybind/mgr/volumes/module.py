@@ -467,7 +467,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_nfs_export_create(self, inbuf, cmd):
         if NFSConfig.check_fsal_valid(self, self.vc.mgr.get('fs_map')):
             pool_name = "nfs-ganesha"
-            #NFSConfig.create_rados_pool(self.vc.mgr, pool_name)
             #instance = NFSConfig.create_instance(self, pool_name)
             return NFSConfig.create_export(instance)
 
