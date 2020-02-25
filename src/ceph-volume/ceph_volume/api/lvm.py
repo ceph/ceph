@@ -866,7 +866,7 @@ def get_device_vgs(device, name_prefix=''):
         verbose_on_failure=False
     )
     vgs = _output_parser(stdout, VG_FIELDS)
-    return [VolumeGroup(**vg) for vg in vgs if vg['vg_name'].startswith(name_prefix)]
+    return [VolumeGroup(**vg) for vg in vgs if vg['vg_name'] and vg['vg_name'].startswith(name_prefix)]
 
 
 #################################
