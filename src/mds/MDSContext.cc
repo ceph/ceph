@@ -98,11 +98,8 @@ void MDSIOContextBase::complete(int r) {
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
             << typeid(*this).name() << dendl;
-    MDSContext::complete(r);
-    return;
-  }
-
-  if (r == -EBLACKLISTED) {
+    delete this;
+  } else if (r == -EBLACKLISTED) {
     derr << "MDSIOContextBase: blacklisted!  Restarting..." << dendl;
     mds->respawn();
   } else {
