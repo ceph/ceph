@@ -106,7 +106,6 @@ class HealthData(object):
         fs_map = mgr.get('fs_map')
         if self._minimal:
             fs_map = self._partial_dict(fs_map, ['filesystems', 'standbys'])
-            fs_map['standbys'] = [{}] * len(fs_map['standbys'])
             fs_map['filesystems'] = [self._partial_dict(item, ['mdsmap']) for
                                      item in fs_map['filesystems']]
             for fs in fs_map['filesystems']:
@@ -114,7 +113,6 @@ class HealthData(object):
                 min_mdsmap_info = dict()
                 for k, v in mdsmap_info.items():
                     min_mdsmap_info[k] = self._partial_dict(v, ['state'])
-                fs['mdsmap'] = dict(info=min_mdsmap_info)
         return fs_map
 
     def host_count(self):
@@ -128,7 +126,6 @@ class HealthData(object):
         mgr_map = mgr.get('mgr_map')
         if self._minimal:
             mgr_map = self._partial_dict(mgr_map, ['active_name', 'standbys'])
-            mgr_map['standbys'] = [{}] * len(mgr_map['standbys'])
         return mgr_map
 
     def mon_status(self):
