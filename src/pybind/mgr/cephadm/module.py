@@ -1273,9 +1273,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         n = self.ssh_user + '@' + host
         self.log.debug("Opening connection to {} with ssh options '{}'".format(
             n, self._ssh_options))
+        child_logger=self.log.getChild(n)
+        child_logger.setLevel('WARNING')
         conn = remoto.Connection(
             n,
-            logger=self.log.getChild(n),
+            logger=child_logger,
             ssh_options=self._ssh_options)
 
         r = conn.import_module(remotes)
