@@ -57,15 +57,39 @@ void PurgeItem::encode(bufferlist &bl) const
 void PurgeItem::decode(bufferlist::const_iterator &p)
 {
   DECODE_START(2, p);
-  decode((uint8_t&)action, p);
-  decode(ino, p);
-  decode(size, p);
-  decode(layout, p);
-  decode(old_pools, p);
-  decode(snapc, p);
-  decode(fragtree, p);
-  if (struct_v >= 2) {
-    decode(stamp, p);
+  bool done = false;
+  if (struct_v == 1) {
+    auto p_start = p;
+    try {
+      // bad encoding introduced by v13.2.2
+      decode(stamp, p);
+      decode(pad_size, p);
+      p += pad_size;
+      decode((uint8_t&)action, p);
+      decode(ino, p);
+      decode(size, p);
+      decode(layout, p);
+      decode(old_pools, p);
+      decode(snapc, p);
+      decode(fragtree, p);
+      if (p.get_off() > struct_end)
+	throw buffer::end_of_buffer();
+      done = true;
+    } catch (const buffer::error &e) {
+      p = p_start;
+    }
+  }
+  if (!done) {
+    decode((uint8_t&)action, p);
+    decode(ino, p);
+    decode(size, p);
+    decode(layout, p);
+    decode(old_pools, p);
+    decode(snapc, p);
+    decode(fragtree, p);
+    if (struct_v >= 2) {
+      decode(stamp, p);
+    }
   }
   DECODE_FINISH(p);
 }
