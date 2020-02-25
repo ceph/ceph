@@ -1091,7 +1091,9 @@ inline namespace v14_2_0 {
 
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
+    int operate(const std::string& oid, ObjectWriteOperation *op, int flags);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
+    int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl, int flags);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
     /**

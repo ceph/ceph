@@ -98,19 +98,35 @@ TEST(ClsHello, WriteReturnData) {
   ASSERT_EQ(-ENOENT, ioctx.getxattr("myobject2", "foo", out));
 
   // this *will* return data due to the RETURNVEC flag
-  in.clear();
-  out.clear();
-  int rval;
-  ObjectWriteOperation o;
-  o.exec("hello", "write_return_data", in, &out, &rval);
-  librados::AioCompletion *completion = cluster.aio_create_completion();
-  ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
+  // using a-sync call
+  {
+    in.clear();
+    out.clear();
+    int rval;
+    ObjectWriteOperation o;
+    o.exec("hello", "write_return_data", in, &out, &rval);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				 librados::OPERATION_RETURNVEC));
-  completion->wait_for_safe();
-  ASSERT_EQ(42, completion->get_return_value());
-  ASSERT_EQ(42, rval);
-  out.hexdump(std::cout);
-  ASSERT_EQ("you might see this", std::string(out.c_str(), out.length()));
+    completion->wait_for_complete();
+    ASSERT_EQ(42, completion->get_return_value());
+    ASSERT_EQ(42, rval);
+    out.hexdump(std::cout);
+    ASSERT_EQ("you might see this", std::string(out.c_str(), out.length()));
+  }
+  // using sync call
+  {
+    in.clear();
+    out.clear();
+    int rval;
+    ObjectWriteOperation o;
+    o.exec("hello", "write_return_data", in, &out, &rval);
+    ASSERT_EQ(42, ioctx.operate("foo", &o,
+				 librados::OPERATION_RETURNVEC));
+    ASSERT_EQ(42, rval);
+    out.hexdump(std::cout);
+    ASSERT_EQ("you might see this", std::string(out.c_str(), out.length()));
+  }
 
   // this will overflow because the return data is too big
   {
