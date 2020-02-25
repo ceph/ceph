@@ -1356,7 +1356,8 @@ def get_device_lvs(device, name_prefix=''):
         verbose_on_failure=False
     )
     lvs = _output_parser(stdout, LV_FIELDS)
-    return [Volume(**lv) for lv in lvs]
+    return [Volume(**lv) for lv in lvs if lv['lv_name'] and
+            lv['lv_name'].startswith(name_prefix)]
 
 
 #############################################################
