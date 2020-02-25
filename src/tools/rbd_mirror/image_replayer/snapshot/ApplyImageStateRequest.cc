@@ -9,6 +9,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/image/GetMetadataRequest.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/Utils.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -593,38 +594,17 @@ uint64_t ApplyImageStateRequest<I>::compute_remote_snap_id(
   // Search our local non-primary snapshots for a mapping to the remote
   // snapshot. The non-primary mirror snapshot with the mappings will always
   // come at or after the snapshot we are searching against
-  auto snap_it = m_local_image_ctx->snap_info.lower_bound(local_snap_id);
-  for (; snap_it != m_local_image_ctx->snap_info.end(); ++snap_it) {
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
-      &snap_it->second.snap_namespace);
-    if (mirror_ns == nullptr || !mirror_ns->is_non_primary()) {
-      continue;
-    }
-
-    if (mirror_ns->primary_mirror_uuid != m_remote_mirror_uuid) {
-      dout(20) << "local snapshot " << snap_it->first << " not tied to remote"
-               << dendl;
-      continue;
-    } else if (local_snap_id == snap_it->first) {
-      dout(15) << "local snapshot " << local_snap_id << " maps to "
-               << "remote snapshot " << mirror_ns->primary_snap_id << dendl;
-      return mirror_ns->primary_snap_id;
-    }
-
-    const auto& snap_seqs = mirror_ns->snap_seqs;
-    for (auto [remote_snap_id_seq, local_snap_id_seq] : snap_seqs) {
-      if (local_snap_id_seq == local_snap_id) {
-        dout(15) << "local snapshot " << local_snap_id << " maps to "
-                 << "remote snapshot " << remote_snap_id_seq << dendl;
-        return remote_snap_id_seq;
-      }
-    }
+  auto remote_snap_id = util::compute_remote_snap_id(
+    m_local_image_ctx->image_lock, m_local_image_ctx->snap_info,
+    local_snap_id, m_remote_mirror_uuid);
+  if (remote_snap_id != CEPH_NOSNAP) {
+    return remote_snap_id;
   }
 
   // if we failed to find a match to a remote snapshot in our local non-primary
   // snapshots, check the remote image for non-primary snapshot mappings back
   // to our snapshot
-  for (snap_it = m_remote_image_ctx->snap_info.begin();
+  for (auto snap_it = m_remote_image_ctx->snap_info.begin();
        snap_it != m_remote_image_ctx->snap_info.end(); ++snap_it) {
     auto snap_id = snap_it->first;
     auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
