@@ -602,6 +602,21 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
+        'orch daemon add grafana',
+        'name=num,type=CephInt,req=false '
+        'name=hosts,type=CephString,n=N,req=false '
+        'name=label,type=CephString,req=false',
+        'Add grafana daemon(s)')
+    def _daemon_add_grafana(self, num=None, label=None, hosts=[]):
+        # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
+        spec = ServiceSpec(
+            placement=PlacementSpec(label=label, hosts=hosts, count=num),
+        )
+        completion = self.add_grafana(spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
         'orch',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
         "name=service_name,type=CephString",
