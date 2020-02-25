@@ -1065,14 +1065,15 @@ EOF
 # https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.7
 
 start_ganesha() {
-    GANESHA_PORT=$(($CEPH_PORT + 4000))
+    #GANESHA_PORT=$(($CEPH_PORT + 4000))
     local ganesha=0
 
     for name in a b c d e f g h i j k l m n o p
     do
         [ $ganesha -eq $GANESHA_DAEMON_NUM ] && break
 
-        port=$(($GANESHA_PORT + ganesha))
+        #port=$(($GANESHA_PORT + ganesha))
+        port=2049
         ganesha=$(($ganesha + 1))
         ganesha_dir="$CEPH_DEV_DIR/ganesha.$name"
 
@@ -1094,7 +1095,7 @@ start_ganesha() {
         pid file = $ganesha_dir/ganesha.pid
 EOF
 
-        #prun ceph_adm fs nfs create
+        prun ceph_adm fs nfs export create --fs-name="a"
         prun ganesha-rados-grace -p nfs-ganesha -n tester add $name
         prun ganesha-rados-grace -p nfs-ganesha -n tester
 
