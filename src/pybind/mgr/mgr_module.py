@@ -413,7 +413,7 @@ class CPlusPlusHandler(logging.Handler):
     def __init__(self, module_inst):
         super(CPlusPlusHandler, self).__init__()
         self._module = module_inst
-        self.setFormatter(logging.Formatter("[{}] [%(levelname)-4s] [%(name)s] %(message)s"
+        self.setFormatter(logging.Formatter("[{} %(levelname)-4s %(name)s] %(message)s"
                           .format(module_inst.module_name)))
 
     def emit(self, record):
