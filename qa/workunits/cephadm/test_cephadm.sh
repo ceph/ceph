@@ -86,6 +86,26 @@ function expect_false()
         if "$@"; then return 1; else return 0; fi
 }
 
+function is_available()
+{
+    local name="$1"
+    local condition="$2"
+    local tries="$3"
+
+    local num=0
+    while ! eval "$condition"; do
+        num=$(($num + 1))
+        if [ "$num" -ge $tries ]; then
+            echo "$name is not available"
+            false
+        fi
+        sleep 5
+    done
+
+    echo "$name is available"
+    true
+}
+
 ## prepare + check host
 $SUDO $CEPHADM check-host
 
@@ -208,58 +228,24 @@ done
 # add node-exporter
 $CEPHADM --image 'prom/node-exporter:latest' \
 	 deploy --name node-exporter.a --fsid $FSID
-TRIES=0
-while true; do
-    if curl 'http://localhost:9100' | grep -q 'Node Exporter'; then
-	break
-    fi
-    TRIES=$(($TRIES + 1))
-    if [ "$TRIES" -eq 5 ]; then
-	echo "node exporter did not come up"
-	exit 1
-    fi
-    sleep 5
-done
-echo "node exporter ok"
+cond="curl 'http://localhost:9100' | grep -q 'Node Exporter'"
+is_available "node-exporter" "$cond" 5
 
 # add prometheus
 cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
         $CEPHADM --image 'prom/prometheus:latest' \
             deploy --name prometheus.a --fsid $FSID \
                    --config-json -
-TRIES=0
-while true; do
-    if curl 'localhost:9095/api/v1/query?query=up' | \
-	    jq -e '.["status"] == "success"'; then
-	break
-    fi
-    TRIES=$(($TRIES + 1))
-    if [ "$TRIES" -eq 5 ]; then
-	echo "prom did not come up"
-	exit 1
-    fi
-    sleep 5
-done
-echo "prom ok"
+cond="curl 'localhost:9095/api/v1/query?query=up'"
+is_available "prometheus" "$cond" 5
 
 # add grafana
 cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
         $CEPHADM --image 'pcuzner/ceph-grafana-el8:latest' \
             deploy --name grafana.a --fsid $FSID \
                    --config-json -
-TRIES=0
-while true; do
-    if curl --insecure 'https://localhost:3000' | grep -q 'grafana'; then
-	break
-    fi
-    TRIES=$(($TRIES + 1))
-    if [ "$TRIES" -eq 30 ]; then
-	echo "grafana did not come up"
-	exit 1
-    fi
-    sleep 5
-done
-echo "grafana ok"
+cond="curl --insecure 'https://localhost:3000' | grep -q 'grafana'"
+is_available "grafana" "$cond" 30
 
 ## run
 # WRITE ME
