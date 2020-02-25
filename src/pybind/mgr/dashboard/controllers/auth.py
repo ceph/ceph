@@ -24,8 +24,8 @@ class Auth(RESTController):
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
         if user_data:
             user_perms = user_data.get('permissions')
-            pwd_expiration_date = user_data.get('pwdExpirationDate')
-            pwd_update_required = user_data.get('pwdUpdateRequired')
+            pwd_expiration_date = user_data.get('pwdExpirationDate', None)
+            pwd_update_required = user_data.get('pwdUpdateRequired', False)
 
         if user_perms is not None:
             logger.debug('Login successful')
