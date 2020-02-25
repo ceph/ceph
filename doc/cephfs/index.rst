@@ -83,6 +83,7 @@ Administration
     MDS Configuration Settings <mds-config-ref>
     Manual: ceph-mds <../../man/8/ceph-mds>
     Export over NFS <nfs>
+    Export over NFS with volume nfs interface <fs-nfs-exports>
     Application best practices <app-best-practices>
     FS volume and subvolumes <fs-volumes>
     CephFS Quotas <quota>
