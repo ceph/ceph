@@ -260,22 +260,6 @@ class NFSConfig(object):
         #return 0, json.dumps(fsmap_res, indent=2), ""
         return fsmap_res
 
-    def create_rados_pool(self, vc_mgr, pool_name):
-        if not NFSConfig.exp_num:
-            r, outb, outs = create_pool(vc_mgr, pool_name)
-
-        """
-        if r != 0:
-        #return r, outb, outs
-
-        command = {'prefix': 'osd pool application enable', 'pool': pool_name, 'app': 'nfs'}
-        r, outb, outs = vc_mgr.mgr.mon_command(command)
-
-        if r != 0:
-        #return r, outb, outs
-        log.info("pool enable done r: {}".format(r))
-        """
-
     def create_nfs_cluster(self, size):
         pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
         client = 'client.%s' % self.cluster_id
