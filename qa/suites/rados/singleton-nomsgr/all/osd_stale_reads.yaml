@@ -13,6 +13,7 @@ overrides:
       - \(PG_AVAILABILITY\)
       - \(PG_DEGRADED\)
       - application not enabled
+      - slow request
     conf:
       osd:
         osd scrub backoff ratio: 0
