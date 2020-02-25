@@ -2471,9 +2471,14 @@ protected:
 
     struct WaitLocalBackfillReserved : boost::statechart::state< WaitLocalBackfillReserved, Active >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >
+	boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RemoteBackfillReserved >
 	> reactions;
       explicit WaitLocalBackfillReserved(my_context ctx);
+      boost::statechart::result react(const RemoteBackfillReserved& evt) {
+	/* no-op */
+	return discard_event();
+      }
       void exit();
     };
 
