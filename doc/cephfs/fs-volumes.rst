@@ -258,5 +258,28 @@ only unprotected snapshots can be removed. This guarantees that a snapshot canno
 .. note:: Cloning only synchronizes directories, regular files and symbolic links. Also, inode timestamps (access and
           modification times) are synchronized upto seconds granularity.
 
+An `in-progress` or a `pending` clone operation can be canceled. To cancel a clone operation use the `clone cancel` command::
+
+  $ ceph fs clone cancel <vol_name> <clone_name> [--group_name <group_name>]
+
+On successful cancelation, the cloned subvolume is moved to `canceled` state::
+
+  $ ceph fs subvolume snapshot protect cephfs subvol1 snap1
+  $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
+  $ ceph fs clone cancel cephfs clone1
+  $ ceph fs clone status cephfs clone1
+  {
+    "status": {
+      "state": "canceled",
+      "source": {
+        "volume": "cephfs",
+        "subvolume": "subvol1",
+        "snapshot": "snap1"
+      }
+    }
+  }
+
+.. note:: The canceled cloned can be deleted by using --force option in `fs subvolume rm` command.
+
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi
