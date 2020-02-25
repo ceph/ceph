@@ -154,7 +154,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         raise Exception('c-v failed')
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, host_name=None, refresh=False):
+    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
         """
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.
@@ -164,8 +164,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             assert daemon_type in daemon_types, daemon_type + " unsupported"
 
         if self._daemons:
-            if host_name:
-                return list(filter(lambda svc: svc.hostname == host_name, self._daemons))
+            if host:
+                return list(filter(lambda svc: svc.hostname == host, self._daemons))
             return self._daemons
 
         out = map(str, check_output(['ps', 'aux']).splitlines())
