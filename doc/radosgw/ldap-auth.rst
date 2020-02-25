@@ -64,7 +64,7 @@ authentication:
   over the wire.
 - ``rgw_ldap_binddn``: The Distinguished Name (DN) of the service account used
   by the Ceph Object Gateway
-- ``rgw_ldap_secret``: The password for the service account
+- ``rgw_ldap_secret``: Path to file containing credentials for ``rgw_ldap_binddn``
 - ``rgw_ldap_searchdn``: Specifies the base in the directory information tree
   for searching users. This might be your users organizational unit or some
   more specific Organizational Unit (OU).
