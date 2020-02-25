@@ -155,7 +155,7 @@ class TestVolumes(CephFSTestCase):
         # XXX: construct the trash dir path (note that there is no mgr
         # [sub]volume interface for this).
         trashdir = os.path.join("./", "volumes", "_deleting")
-        self.mount_a.wait_for_dir_empty(trashdir)
+        self.mount_a.wait_for_dir_empty(trashdir, timeout=timeout)
 
     def setUp(self):
         super(TestVolumes, self).setUp()
@@ -1221,23 +1221,23 @@ class TestVolumes(CephFSTestCase):
                 raise RuntimeError("Error creating or listing subvolume group snapshots")
 
     def test_async_subvolume_rm(self):
-        subvolume = self._generate_random_subvolume_name()
+        subvolumes = self._generate_random_subvolume_name(100)
 
-        # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # fill subvolume w/ some data
-        self._do_subvolume_io(subvolume)
+        # create subvolumes
+        for subvolume in subvolumes:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume)
+            self._do_subvolume_io(subvolume, number_of_files=10)
 
         self.mount_a.umount_wait()
 
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        # remove subvolumes
+        for subvolume in subvolumes:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
         self.mount_a.mount()
 
         # verify trash dir is clean
-        self._wait_for_trash_empty()
+        self._wait_for_trash_empty(timeout=300)
 
     def test_subvolume_upgrade(self):
         """
