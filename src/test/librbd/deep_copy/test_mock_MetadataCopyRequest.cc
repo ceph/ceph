@@ -33,7 +33,8 @@ struct GetMetadataRequest<MockTestImageCtx> {
   static GetMetadataRequest* s_instance;
   static GetMetadataRequest* create(librados::IoCtx&,
                                     const std::string& oid,
-                                    const std::string& filter,
+                                    bool filter_internal,
+                                    const std::string& filter_key_prefix,
                                     const std::string& last_key,
                                     uint32_t max_results,
                                     std::map<std::string, bufferlist>* pairs,

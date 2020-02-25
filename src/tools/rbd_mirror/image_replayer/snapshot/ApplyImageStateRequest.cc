@@ -148,7 +148,7 @@ void ApplyImageStateRequest<I>::get_image_meta() {
     ApplyImageStateRequest<I>,
     &ApplyImageStateRequest<I>::handle_get_image_meta>(this);
   auto req = librbd::image::GetMetadataRequest<I>::create(
-    m_local_image_ctx->md_ctx, m_local_image_ctx->header_oid, "", "", 0U,
+    m_local_image_ctx->md_ctx, m_local_image_ctx->header_oid, true, "", "", 0U,
     &m_metadata, ctx);
   req->send();
 }

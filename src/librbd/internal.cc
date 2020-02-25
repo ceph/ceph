@@ -1639,7 +1639,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond ctx;
     auto req = image::GetMetadataRequest<>::create(
-      ictx->md_ctx, ictx->header_oid, "", start, max, pairs, &ctx);
+      ictx->md_ctx, ictx->header_oid, false, "", start, max, pairs, &ctx);
     req->send();
 
     return ctx.wait();
