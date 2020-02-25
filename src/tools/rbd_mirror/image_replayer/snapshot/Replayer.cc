@@ -4,6 +4,7 @@
 #include "Replayer.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/stringify.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -23,6 +24,7 @@
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/ApplyImageStateRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/Utils.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -36,6 +38,28 @@ namespace rbd {
 namespace mirror {
 namespace image_replayer {
 namespace snapshot {
+
+namespace {
+
+template<typename I>
+std::pair<uint64_t, librbd::SnapInfo*> get_newest_mirror_snapshot(
+    I* image_ctx) {
+  for (auto snap_info_it = image_ctx->snap_info.rbegin();
+       snap_info_it != image_ctx->snap_info.rend(); ++snap_info_it) {
+    const auto& snap_ns = snap_info_it->second.snap_namespace;
+    auto mirror_ns = boost::get<
+      cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
+    if (mirror_ns == nullptr || !mirror_ns->complete) {
+      continue;
+    }
+
+    return {snap_info_it->first, &snap_info_it->second};
+  }
+
+  return {CEPH_NOSNAP, nullptr};
+}
+
+} // anonymous namespace
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
@@ -76,8 +100,8 @@ struct Replayer<I>::ProgressContext : public librbd::ProgressContext {
   ProgressContext(Replayer* replayer) : replayer(replayer) {
   }
 
-  int update_progress(uint64_t offset, uint64_t total) override {
-    replayer->handle_copy_image_progress(offset, total);
+  int update_progress(uint64_t object_number, uint64_t object_count) override {
+    replayer->handle_copy_image_progress(object_number, object_count);
     return 0;
   }
 };
@@ -170,7 +194,82 @@ bool Replayer<I>::get_replay_status(std::string* description,
                                     Context* on_finish) {
   dout(10) << dendl;
 
-  *description = "NOT IMPLEMENTED";
+  std::unique_lock locker{m_lock};
+  if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {
+    locker.unlock();
+
+    derr << "replay not running" << dendl;
+    on_finish->complete(-EAGAIN);
+    return false;
+  }
+
+  std::shared_lock local_image_locker{
+    m_state_builder->local_image_ctx->image_lock};
+  auto [local_snap_id, local_snap_info] = get_newest_mirror_snapshot(
+    m_state_builder->local_image_ctx);
+
+  std::shared_lock remote_image_locker{
+    m_state_builder->remote_image_ctx->image_lock};
+  auto [remote_snap_id, remote_snap_info] = get_newest_mirror_snapshot(
+    m_state_builder->remote_image_ctx);
+
+  if (remote_snap_info == nullptr) {
+    remote_image_locker.unlock();
+    local_image_locker.unlock();
+    locker.unlock();
+
+    derr << "remote image does not contain mirror snapshots" << dendl;
+    on_finish->complete(-EAGAIN);
+    return false;
+  }
+
+  std::string replay_state = "idle";
+  if (m_remote_snap_id_end != CEPH_NOSNAP) {
+    replay_state = "syncing";
+  }
+
+  *description =
+    "{"
+      "\"replay_state\": \"" + replay_state + "\", " +
+      "\"remote_snapshot_timestamp\": " +
+        stringify(remote_snap_info->timestamp.sec());
+
+  auto matching_remote_snap_id = util::compute_remote_snap_id(
+    m_state_builder->local_image_ctx->image_lock,
+    m_state_builder->local_image_ctx->snap_info,
+    local_snap_id, m_state_builder->remote_mirror_uuid);
+  auto matching_remote_snap_it =
+    m_state_builder->remote_image_ctx->snap_info.find(matching_remote_snap_id);
+  if (matching_remote_snap_id != CEPH_NOSNAP &&
+      matching_remote_snap_it !=
+        m_state_builder->remote_image_ctx->snap_info.end()) {
+    // use the timestamp from the matching remote image since
+    // the local snapshot would just be the time the snapshot was
+    // synced and not the consistency point in time.
+    *description += ", "
+      "\"local_snapshot_timestamp\": " +
+        stringify(matching_remote_snap_it->second.timestamp.sec());
+  }
+
+  matching_remote_snap_it = m_state_builder->remote_image_ctx->snap_info.find(
+    m_remote_snap_id_end);
+  if (m_remote_snap_id_end != CEPH_NOSNAP &&
+      matching_remote_snap_it !=
+        m_state_builder->remote_image_ctx->snap_info.end()) {
+    *description += ", "
+      "\"syncing_snapshot_timestamp\": " +
+        stringify(remote_snap_info->timestamp.sec()) + ", " +
+      "\"syncing_percent\": " + stringify(static_cast<uint32_t>(
+        100 * m_local_mirror_snap_ns.last_copied_object_number /
+        static_cast<float>(std::max<uint64_t>(1U, m_local_object_count))));
+  }
+
+  *description +=
+    "}";
+
+  local_image_locker.unlock();
+  remote_image_locker.unlock();
+  locker.unlock();
   on_finish->complete(-EEXIST);
   return true;
 }
@@ -204,7 +303,8 @@ void Replayer<I>::handle_refresh_local_image(int r) {
 template <typename I>
 void Replayer<I>::refresh_remote_image() {
   if (!m_state_builder->remote_image_ctx->state->is_refresh_required()) {
-    scan_local_mirror_snapshots();
+    std::unique_lock locker{m_lock};
+    scan_local_mirror_snapshots(&locker);
     return;
   }
 
@@ -224,12 +324,14 @@ void Replayer<I>::handle_refresh_remote_image(int r) {
     return;
   }
 
-  scan_local_mirror_snapshots();
+  std::unique_lock locker{m_lock};
+  scan_local_mirror_snapshots(&locker);
 }
 
 template <typename I>
-void Replayer<I>::scan_local_mirror_snapshots() {
-  if (is_replay_interrupted()) {
+void Replayer<I>::scan_local_mirror_snapshots(
+    std::unique_lock<ceph::mutex>* locker) {
+  if (is_replay_interrupted(locker)) {
     return;
   }
 
@@ -238,6 +340,7 @@ void Replayer<I>::scan_local_mirror_snapshots() {
   m_local_snap_id_start = 0;
   m_local_snap_id_end = CEPH_NOSNAP;
   m_local_mirror_snap_ns = {};
+  m_local_object_count = 0;
 
   m_remote_snap_id_start = 0;
   m_remote_snap_id_end = CEPH_NOSNAP;
@@ -275,12 +378,14 @@ void Replayer<I>::scan_local_mirror_snapshots() {
         m_local_snap_id_end = CEPH_NOSNAP;
       } else {
         derr << "incomplete local primary snapshot" << dendl;
-        handle_replay_complete(-EINVAL, "incomplete local primary snapshot");
+        handle_replay_complete(locker, -EINVAL,
+                               "incomplete local primary snapshot");
         return;
       }
     } else {
       derr << "unknown local mirror snapshot state" << dendl;
-      handle_replay_complete(-EINVAL, "invalid local mirror snapshot state");
+      handle_replay_complete(locker, -EINVAL,
+                             "invalid local mirror snapshot state");
       return;
     }
   }
@@ -293,12 +398,13 @@ void Replayer<I>::scan_local_mirror_snapshots() {
       // TODO support multiple peers
       derr << "local image linked to unknown peer: "
            << m_local_mirror_snap_ns.primary_mirror_uuid << dendl;
-      handle_replay_complete(-EEXIST, "local image linked to unknown peer");
+      handle_replay_complete(locker, -EEXIST,
+                             "local image linked to unknown peer");
       return;
     } else if (m_local_mirror_snap_ns.state ==
                  cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
       dout(5) << "local image promoted" << dendl;
-      handle_replay_complete(0, "force promoted");
+      handle_replay_complete(locker, 0, "force promoted");
       return;
     }
 
@@ -314,18 +420,16 @@ void Replayer<I>::scan_local_mirror_snapshots() {
 
   // we don't have any mirror snapshots or only completed non-primary
   // mirror snapshots
-  scan_remote_mirror_snapshots();
+  scan_remote_mirror_snapshots(locker);
 }
 
 template <typename I>
-void Replayer<I>::scan_remote_mirror_snapshots() {
+void Replayer<I>::scan_remote_mirror_snapshots(
+    std::unique_lock<ceph::mutex>* locker) {
   dout(10) << dendl;
 
-  {
-    // reset state in case new snapshot is added while we are scanning
-    std::unique_lock locker{m_lock};
-    m_remote_image_updated = false;
-  }
+  // reset state in case new snapshot is added while we are scanning
+  m_remote_image_updated = false;
 
   bool remote_demoted = false;
   auto remote_image_ctx = m_state_builder->remote_image_ctx;
@@ -343,7 +447,8 @@ void Replayer<I>::scan_remote_mirror_snapshots() {
              << "mirror_ns=" << *mirror_ns << dendl;
     if (!mirror_ns->is_primary() && !mirror_ns->is_non_primary()) {
       derr << "unknown remote mirror snapshot state" << dendl;
-      handle_replay_complete(-EINVAL, "invalid remote mirror snapshot state");
+      handle_replay_complete(locker, -EINVAL,
+                             "invalid remote mirror snapshot state");
       return;
     } else {
       remote_demoted = (mirror_ns->is_primary() && mirror_ns->is_demoted());
@@ -420,6 +525,8 @@ void Replayer<I>::scan_remote_mirror_snapshots() {
              << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
              << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
     if (m_remote_mirror_snap_ns.complete) {
+      locker->unlock();
+
       if (m_local_snap_id_end != CEPH_NOSNAP &&
           !m_local_mirror_snap_ns.complete) {
         // attempt to resume image-sync
@@ -437,11 +544,10 @@ void Replayer<I>::scan_remote_mirror_snapshots() {
     }
   }
 
-  std::unique_lock locker{m_lock};
   if (m_remote_image_updated) {
     // received update notification while scanning image, restart ...
     m_remote_image_updated = false;
-    locker.unlock();
+    locker->unlock();
 
     dout(10) << "restarting snapshot scan due to remote update notification"
              << dendl;
@@ -449,13 +555,11 @@ void Replayer<I>::scan_remote_mirror_snapshots() {
     return;
   }
 
-  if (is_replay_interrupted(&locker)) {
+  if (is_replay_interrupted(locker)) {
     return;
   } else if (remote_demoted) {
-    locker.unlock();
-
     dout(10) << "remote image demoted" << dendl;
-    handle_replay_complete(0, "remote image demoted");
+    handle_replay_complete(locker, 0, "remote image demoted");
     return;
   }
 
@@ -631,10 +735,17 @@ void Replayer<I>::handle_copy_image(int r) {
 }
 
 template <typename I>
-void Replayer<I>::handle_copy_image_progress(uint64_t offset, uint64_t total) {
-  dout(10) << "offset=" << offset << ", total=" << total << dendl;
+void Replayer<I>::handle_copy_image_progress(uint64_t object_number,
+                                             uint64_t object_count) {
+  dout(10) << "object_number=" << object_number << ", "
+           << "object_count=" << object_count << dendl;
 
-  // TODO
+  std::unique_lock locker{m_lock};
+  m_local_mirror_snap_ns.last_copied_object_number = std::min(
+    object_number, object_count);
+  m_local_object_count = object_count;
+
+  update_non_primary_snapshot(false);
 }
 
 template <typename I>
@@ -663,25 +774,33 @@ void Replayer<I>::handle_apply_image_state(int r) {
     return;
   }
 
+  std::unique_lock locker{m_lock};
   update_non_primary_snapshot(true);
 }
 
 template <typename I>
 void Replayer<I>::update_non_primary_snapshot(bool complete) {
-  dout(10) << dendl;
-
-  if (complete) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  if (!complete) {
+    // disallow two in-flight updates if this isn't the completion of the sync
+    if (m_updating_sync_point) {
+      return;
+    }
+    m_updating_sync_point = true;
+  } else {
     m_local_mirror_snap_ns.complete = true;
   }
+
+  dout(10) << dendl;
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_snapshot_set_copy_progress(
     &op, m_local_snap_id_end, m_local_mirror_snap_ns.complete,
     m_local_mirror_snap_ns.last_copied_object_number);
 
-  auto ctx = new LambdaContext([this, complete](int r) {
+  auto ctx = new C_TrackedOp(this, new LambdaContext([this, complete](int r) {
       handle_update_non_primary_snapshot(complete, r);
-    });
+    }));
   auto aio_comp = create_rados_callback(ctx);
   int r = m_state_builder->local_image_ctx->md_ctx.aio_operate(
     m_state_builder->local_image_ctx->header_oid, aio_comp, &op);
@@ -696,7 +815,19 @@ void Replayer<I>::handle_update_non_primary_snapshot(bool complete, int r) {
   if (r < 0) {
     derr << "failed to update local snapshot progress: " << cpp_strerror(r)
          << dendl;
-    handle_replay_complete(r, "failed to update local snapshot progress");
+    if (complete) {
+      // only fail if this was the final update
+      handle_replay_complete(r, "failed to update local snapshot progress");
+      return;
+    }
+  }
+
+  if (!complete) {
+    // periodic sync-point update -- do not advance state machine
+    std::unique_lock locker{m_lock};
+
+    ceph_assert(m_updating_sync_point);
+    m_updating_sync_point = false;
     return;
   }
 
@@ -885,6 +1016,15 @@ template <typename I>
 void Replayer<I>::handle_replay_complete(int r,
                                          const std::string& description) {
   std::unique_lock locker{m_lock};
+  handle_replay_complete(&locker, r, description);
+}
+
+template <typename I>
+void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
+                                         int r,
+                                         const std::string& description) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
   if (m_error_code == 0) {
     m_error_code = r;
     m_error_description = description;

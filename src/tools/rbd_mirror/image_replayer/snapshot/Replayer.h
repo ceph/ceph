@@ -194,6 +194,7 @@ private:
   uint64_t m_local_snap_id_start = 0;
   uint64_t m_local_snap_id_end = CEPH_NOSNAP;
   cls::rbd::MirrorSnapshotNamespace m_local_mirror_snap_ns;
+  uint64_t m_local_object_count = 0;
 
   std::string m_remote_mirror_peer_uuid;
   uint64_t m_remote_snap_id_start = 0;
@@ -204,6 +205,7 @@ private:
   ProgressContext* m_progress_ctx = nullptr;
 
   bool m_remote_image_updated = false;
+  bool m_updating_sync_point = false;
 
   void refresh_local_image();
   void handle_refresh_local_image(int r);
@@ -211,8 +213,8 @@ private:
   void refresh_remote_image();
   void handle_refresh_remote_image(int r);
 
-  void scan_local_mirror_snapshots();
-  void scan_remote_mirror_snapshots();
+  void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void copy_snapshots();
   void handle_copy_snapshots(int r);
@@ -228,7 +230,8 @@ private:
 
   void copy_image();
   void handle_copy_image(int r);
-  void handle_copy_image_progress(uint64_t offset, uint64_t total);
+  void handle_copy_image_progress(uint64_t object_number,
+                                  uint64_t object_count);
 
   void apply_image_state();
   void handle_apply_image_state(int r);
@@ -254,6 +257,8 @@ private:
   void handle_remote_image_update_notify();
 
   void handle_replay_complete(int r, const std::string& description);
+  void handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
+                              int r, const std::string& description);
   void notify_status_updated();
 
   bool is_replay_interrupted();
