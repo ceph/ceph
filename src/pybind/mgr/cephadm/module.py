@@ -501,6 +501,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'default': True,
             'desc': 'raise a health warning if the host check fails',
         },
+        {
+            'name': 'log_to_cluster',
+            'type': 'bool',
+            'default': True,
+            'desc': 'log to the "cephadm" cluster log channel"',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -991,6 +997,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     opt,  # type: ignore
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
+
         self.event.set()
 
     def notify(self, notify_type, notify_id):
