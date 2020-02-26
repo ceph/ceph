@@ -7129,11 +7129,12 @@ next:
   if (opt_cmd == OPT::GC_LIST) {
     int index = 0;
     bool truncated;
+    bool processing_queue = false;
     formatter->open_array_section("entries");
 
     do {
       list<cls_rgw_gc_obj_info> result;
-      int ret = store->getRados()->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated);
+      int ret = store->getRados()->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated, processing_queue);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;

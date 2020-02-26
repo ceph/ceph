@@ -154,7 +154,7 @@ int queue_enqueue(cls_method_context_t hctx, cls_queue_enqueue_op& op, cls_queue
     encode(data_size, bl);
     bl.claim_append(bl_data);
   
-    CLS_LOG(10, "INFO: queue_enqueue(): Total size to be written is %u and data size is %u\n", bl.length(), bl_data.length());
+    CLS_LOG(10, "INFO: queue_enqueue(): Total size to be written is %u and data size is %lu\n", bl.length(), data_size);
 
     if (head.tail.offset >= head.front.offset) {
       // check if data can fit in the remaining space in queue
@@ -291,6 +291,8 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     }
 
     //If there is leftover data from previous iteration, append new data to leftover data
+    uint64_t entry_start_offset = start_offset - bl.length();
+    CLS_LOG(20, "INFO: queue_list_entries(): Entry start offset accounting for leftover data is %lu\n", entry_start_offset);
     bl.claim_append(bl_chunk);
     bl_chunk = std::move(bl);
 
@@ -306,7 +308,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       ceph_assert(it.get_off() == index);
       //Populate offset if not done in previous iteration
       if (! offset_populated) {
-        cls_queue_marker marker = {start_offset + index, gen};
+        cls_queue_marker marker = {entry_start_offset + index, gen};
         CLS_LOG(5, "INFO: queue_list_entries(): offset: %s\n", marker.to_str().c_str());
         entry.marker = marker.to_str();
       }
@@ -372,7 +374,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     CLS_LOG(10, "INFO: num_ops: %lu and op.max is %lu\n", num_ops, op.max);
 
     if (num_ops == op.max) {
-      next_marker = cls_queue_marker{(start_offset + index), gen};
+      next_marker = cls_queue_marker{(entry_start_offset + index), gen};
       CLS_LOG(10, "INFO: queue_list_entries(): num_ops is same as op.max, hence breaking out from outer loop with next offset: %lu\n", next_marker.offset);
       break;
     }
