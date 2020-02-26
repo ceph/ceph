@@ -28,6 +28,7 @@ class JobThread(threading.Thread):
         thread_name = thread_id.getName()
 
         while retries < JobThread.MAX_RETRIES_ON_EXCEPTION:
+            vol_job = None
             try:
                 # fetch next job to execute
                 with self.async_job.lock:
@@ -40,10 +41,6 @@ class JobThread(threading.Thread):
 
                 # execute the job (outside lock)
                 self.async_job.execute_job(vol_job[0], vol_job[1], should_cancel=lambda: thread_id.should_cancel())
-
-                # when done, unregister the job
-                with self.async_job.lock:
-                    self.async_job.unregister_async_job(vol_job[0], vol_job[1], thread_id)
                 retries = 0
             except NotImplementedException:
                 raise
@@ -56,7 +53,12 @@ class JobThread(threading.Thread):
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 log.warning("traceback: {0}".format("".join(
                     traceback.format_exception(exc_type, exc_value, exc_traceback))))
-            time.sleep(1)
+            finally:
+                # when done, unregister the job
+                if vol_job:
+                    with self.async_job.lock:
+                        self.async_job.unregister_async_job(vol_job[0], vol_job[1], thread_id)
+                time.sleep(1)
         log.error("thread [{0}] reached exception limit, bailing out...".format(thread_name))
         self.vc.cluster_log("thread {0} bailing out due to exception".format(thread_name))
 
