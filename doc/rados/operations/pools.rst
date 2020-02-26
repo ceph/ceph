@@ -316,7 +316,11 @@ You may set values for the following keys:
 
 :Description: Sets the minimum number of replicas required for I/O.
               See `Set the Number of Object Replicas`_ for further details.
-              Replicated pools only.
+              In the case of Erasure Coded pools this should be set to a value
+              greater than 'k' since if we allow IO at the value 'k' there is no
+              redundancy and data will be lost in the event of a permanent OSD
+              failure. For more information see `Erasure Code
+              <../erasure-code>`_
 
 :Type: Integer
 :Version: ``0.54`` and above
