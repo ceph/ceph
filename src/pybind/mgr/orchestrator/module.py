@@ -34,8 +34,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             'type': 'str',
             'default': None,
             'desc': 'Orchestrator backend',
-            'enum_allowed': ['cephadm', 'rook',
-                             'test_orchestrator'],
+            'enum_allowed': ['cephadm', 'rook'],
             'runtime': True,
         },
     ]

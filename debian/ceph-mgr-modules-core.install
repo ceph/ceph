@@ -18,6 +18,5 @@ usr/share/ceph/mgr/selftest
 usr/share/ceph/mgr/status
 usr/share/ceph/mgr/telegraf
 usr/share/ceph/mgr/telemetry
-usr/share/ceph/mgr/test_orchestrator
 usr/share/ceph/mgr/volumes
 usr/share/ceph/mgr/zabbix
