@@ -92,7 +92,7 @@ about Ceph, see our `Architecture`_ section.
    :hidden:
 
    start/intro
-   bootstrap
+   cephadm/index
    start/index
    install/index
    rados/index
