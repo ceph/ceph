@@ -240,6 +240,21 @@ class CBT(Task):
                 cosbench_version = 'cosbench-0.4.2.c3.1'
             else:
                 cosbench_version = '0.4.2.c3'
+            # note: stop-all requires 'nc'
+            self.first_mon.run(
+                args=[
+                    'cd', testdir, run.Raw('&&'),
+                    'cd', 'cos', run.Raw('&&'),
+                    'sh', 'stop-all.sh',
+                    run.Raw('||'), 'true'
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'sudo', 'killall', '-9', 'java',
+                    run.Raw('||'), 'true'
+                ]
+            )
             self.first_mon.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
