@@ -24,13 +24,13 @@ class FuseMount(CephFSMount):
         self.inst = None
         self.addr = None
 
-    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         if mountpoint is not None:
             self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
 
         try:
-            return self._mount(mount_path, mount_fs_name)
+            return self._mount(mount_path, mount_fs_name, mount_options)
         except RuntimeError:
             # Catch exceptions by the mount() logic (i.e. not remote command
             # failures) and ensure the mount is not left half-up.
@@ -40,7 +40,7 @@ class FuseMount(CephFSMount):
             self.umount_wait(force=True)
             raise
 
-    def _mount(self, mount_path, mount_fs_name):
+    def _mount(self, mount_path, mount_fs_name, mount_options):
         log.info("Client client.%s config is %s" % (self.client_id, self.client_config))
 
         daemon_signal = 'kill'
@@ -69,6 +69,8 @@ class FuseMount(CephFSMount):
 
         if mount_fs_name is not None:
             fuse_cmd += ["--client_mds_namespace={0}".format(mount_fs_name)]
+
+        fuse_cmd += mount_options
 
         fuse_cmd += [
             '--name', 'client.{id}'.format(id=self.client_id),

@@ -10,6 +10,7 @@ import distutils.version as version
 import re
 import os
 
+from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -629,3 +630,95 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_count(1)
 
         self.mount_a.kill_cleanup()
+
+    def test_reconnect_after_blacklisted(self):
+        """
+        Test reconnect after blacklisted.
+        - writing to a fd that was opened before blacklist should return -EBADF
+        - reading/writing to a file with lost file locks should return -EIO
+        - readonly fd should continue to work
+        """
+
+        self.mount_a.umount_wait()
+
+        if isinstance(self.mount_a, FuseMount):
+            self.skipTest("Not implemented in FUSE client yet")
+        else:
+            try:
+                self.mount_a.mount(mount_options=['recover_session=clean'])
+            except CommandFailedError:
+                self.mount_a.kill_cleanup()
+                self.skipTest("Not implemented in current kernel")
+
+        self.mount_a.wait_until_mounted()
+
+        path = os.path.join(self.mount_a.mountpoint, 'testfile_reconnect_after_blacklisted')
+        pyscript = dedent("""
+            import os
+            import sys
+            import fcntl
+            import errno
+            import time
+
+            fd1 = os.open("{path}.1", os.O_RDWR | os.O_CREAT, 0O666)
+            fd2 = os.open("{path}.1", os.O_RDONLY)
+            fd3 = os.open("{path}.2", os.O_RDWR | os.O_CREAT, 0O666)
+            fd4 = os.open("{path}.2", os.O_RDONLY)
+
+            os.write(fd1, b'content')
+            os.read(fd2, 1);
+
+            os.write(fd3, b'content')
+            os.read(fd4, 1);
+            fcntl.flock(fd4, fcntl.LOCK_SH | fcntl.LOCK_NB)
+
+            print("blacklist")
+            sys.stdout.flush()
+
+            sys.stdin.readline()
+
+            # wait for mds to close session
+            time.sleep(10);
+
+            # trigger 'open session' message. kclient relies on 'session reject' message
+            # to detect if itself is blacklisted
+            try:
+                os.stat("{path}.1")
+            except:
+                pass
+
+            # wait for auto reconnect
+            time.sleep(10);
+
+            try:
+                os.write(fd1, b'content')
+            except OSError as e:
+                if e.errno != errno.EBADF:
+                    raise
+            else:
+                raise RuntimeError("write() failed to raise error")
+
+            os.read(fd2, 1);
+
+            try:
+                os.read(fd4, 1)
+            except OSError as e:
+                if e.errno != errno.EIO:
+                    raise
+            else:
+                raise RuntimeError("read() failed to raise error")
+            """).format(path=path)
+        rproc = self.mount_a.client_remote.run(
+                    args=['sudo', 'python3', '-c', pyscript],
+                    wait=False, stdin=run.PIPE, stdout=run.PIPE)
+
+        rproc.stdout.readline()
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+
+        rproc.stdin.writelines(['done\n'])
+        rproc.stdin.flush()
+
+        rproc.wait()
+        self.assertEqual(rproc.exitstatus, 0)
