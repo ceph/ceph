@@ -3826,6 +3826,7 @@ void *BlueStore::MempoolThread::entry()
   utime_t next_balance = ceph_clock_now();
   utime_t next_resize = ceph_clock_now();
   utime_t next_deferred_force_submit = ceph_clock_now();
+  utime_t alloc_stats_dump_clock = ceph_clock_now();
 
   bool interval_stats_trim = false;
   while (!stop) {
@@ -3841,6 +3842,14 @@ void *BlueStore::MempoolThread::entry()
     double resize_interval = store->osd_memory_cache_resize_interval;
     double max_defer_interval = store->max_defer_interval;
 
+    double alloc_stats_dump_interval =
+      store->cct->_conf->bluestore_alloc_stats_dump_interval;
+
+    if (alloc_stats_dump_interval > 0 &&
+        alloc_stats_dump_clock + alloc_stats_dump_interval < ceph_clock_now()) {
+      store->_record_allocation_stats();
+      alloc_stats_dump_clock = ceph_clock_now();
+    }
     if (autotune_interval > 0 && next_balance < ceph_clock_now()) {
       _adjust_cache_settings();
 
@@ -3881,6 +3890,8 @@ void *BlueStore::MempoolThread::entry()
       store->cct->_conf->bluestore_cache_trim_interval);
     cond.wait_for(l, wait);
   }
+  // do final dump
+  store->_record_allocation_stats();
   stop = false;
   return NULL;
 }
@@ -5840,6 +5851,8 @@ int BlueStore::allocate_bluefs_freespace(
     uint64_t gift;
     uint64_t allocated = 0;
     int64_t alloc_len;
+    auto need = size;
+    auto extent_count0 = extents->size();
     do {
       // hard cap to fit into 32 bits
       gift = std::min<uint64_t>(size, 1ull << 30);
@@ -5869,6 +5882,8 @@ int BlueStore::allocate_bluefs_freespace(
 	return -ENOSPC;
       }
     } while (size && alloc_len > 0);
+    _collect_allocation_stats(need, alloc_size, extents->size() - extent_count0);
+
     for (auto& e : *extents) {
       dout(5) << __func__ << " gifting " << e << " to bluefs" << dendl;
       bluefs_extents.insert(e.offset, e.length);
@@ -13438,6 +13453,7 @@ int BlueStore::_do_alloc_write(
     }
     return -ENOSPC;
   }
+  _collect_allocation_stats(need, min_alloc_size, prealloc.size());
 
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
@@ -15427,6 +15443,57 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
       "BLUESTORE_NO_COMPRESSION",
       s0);
   }
+}
+
+void BlueStore::_collect_allocation_stats(uint64_t need, uint32_t alloc_size,
+                                          size_t extents)
+{
+  alloc_stats_count++;
+  alloc_stats_fragments += extents;
+  alloc_stats_size += need;
+}
+
+void BlueStore::_record_allocation_stats()
+{
+  // don't care about data consistency,
+  // fields can be partially modified while making the tuple
+  auto t0 = std::make_tuple(
+    alloc_stats_count.exchange(0),
+    alloc_stats_fragments.exchange(0),
+    alloc_stats_size.exchange(0));
+
+  dout(0) << " allocation stats probe "
+    << probe_count << ":"
+    << " cnt: " << std::get<0>(t0)
+    << " frags: " << std::get<1>(t0)
+    << " size: " << std::get<2>(t0)
+    << dendl;
+
+
+  //
+  // Keep the history for probes from the power-of-two sequence:
+  // -1, -2, -4, -8, -16
+  // 
+  size_t base = 1;
+  for (auto& t : alloc_stats_history) {
+    dout(0) << " probe -"
+      << base + (probe_count % base) << ": "
+      << std::get<0>(t)
+      << ",  " << std::get<1>(t)
+      << ", " << std::get<2>(t)
+      << dendl;
+    base <<= 1;
+  }
+  dout(0) << "------------" << dendl;
+
+  auto prev = probe_count++;
+  auto mask = (1 << alloc_stats_history.size()) - 1;
+  probe_count &= mask;
+
+  for (size_t i = cbits(prev ^ probe_count) - 1; i > 0 ; --i) {
+    alloc_stats_history[i] = alloc_stats_history[i - 1];
+  }
+  alloc_stats_history[0].swap(t0);
 }
 
 // ===========================================
