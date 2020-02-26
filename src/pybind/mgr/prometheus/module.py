@@ -318,6 +318,7 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 'PG {}'.format(state),
+                ('pool_id',)
             )
         for state in DF_CLUSTER:
             path = 'cluster_{}'.format(state)
@@ -404,30 +405,34 @@ class Module(MgrModule):
             ))
 
     def get_pg_status(self):
-        # TODO add per pool status?
-        pg_status = self.get('pg_status')
-
         # Set total count of PGs, first
+        pg_status = self.get('pg_status')
         self.metrics['pg_total'].set(pg_status['num_pgs'])
 
-        reported_states = {}
-        for pg in pg_status['pgs_by_state']:
-            for state in pg['state_name'].split('+'):
-                reported_states[state] =  reported_states.get(state, 0) + pg['count']
+        pg_summary = self.get('pg_summary')
 
-        for state in reported_states:
-            path = 'pg_{}'.format(state)
-            try:
-                self.metrics[path].set(reported_states[state])
-            except KeyError:
-                self.log.warn("skipping pg in unknown state {}".format(state))
+        for pool in pg_summary['by_pool']:
+            for state_name, count in pg_summary['by_pool'][pool].items():
+                reported_states = {}
 
-        for state in PG_STATES:
-            if state not in reported_states:
-                try:
-                    self.metrics['pg_{}'.format(state)].set(0)
-                except KeyError:
-                    self.log.warn("skipping pg in unknown state {}".format(state))
+                for state in state_name.split('+'):
+                    reported_states[state] = reported_states.get(
+                        state, 0) + count
+
+                for state in reported_states:
+                    path = 'pg_{}'.format(state)
+                    try:
+                        self.metrics[path].set(reported_states[state],(pool,))
+                    except KeyError:
+                        self.log.warn("skipping pg in unknown state {}".format(state))
+
+                for state in PG_STATES:
+                    if state not in reported_states:
+                        try:
+                            self.metrics['pg_{}'.format(state)].set(0,(pool,))
+                        except KeyError:
+                            self.log.warn(
+                                "skipping pg in unknown state {}".format(state))
 
     def get_osd_stats(self):
         osd_stats = self.get('osd_stats')
