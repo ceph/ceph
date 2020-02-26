@@ -22,6 +22,11 @@ from ..services.tcmu_service import TcmuService
 from ..exceptions import DashboardException
 from ..tools import str_to_bool, TaskManager
 
+try:
+    from typing import Any, Dict, List, no_type_check
+except ImportError:
+    no_type_check = object()  # Just for type checking
+
 
 @UiApiController('/iscsi', Scope.ISCSI)
 class IscsiUi(BaseController):
@@ -31,6 +36,7 @@ class IscsiUi(BaseController):
 
     @Endpoint()
     @ReadPermission
+    @no_type_check
     def status(self):
         status = {'available': False}
         try:
@@ -559,7 +565,7 @@ class IscsiTarget(RESTController):
                                                      code='disk_control_invalid_max',
                                                      component='iscsi')
 
-        initiators = []
+        initiators = []  # type: List[Any]
         for group in groups:
             initiators = initiators + group['members']
         if len(initiators) != len(set(initiators)):
@@ -895,7 +901,8 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _get_portals_by_host(portals):
-        portals_by_host = {}
+        # type: (List[dict]) -> Dict[str, List[str]]
+        portals_by_host = {}  # type: Dict[str, List[str]]
         for portal in portals:
             host = portal['host']
             ip = portal['ip']

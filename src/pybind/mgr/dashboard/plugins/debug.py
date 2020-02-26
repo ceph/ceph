@@ -8,6 +8,11 @@ from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 from .plugin import SimplePlugin as SP
 
+try:
+    from typing import no_type_check
+except ImportError:
+    no_type_check = object()  # Just for type checking
+
 
 class Actions(Enum):
     ENABLE = 'enable'
@@ -28,6 +33,7 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy):
         )
     ]
 
+    @no_type_check
     def handler(self, action):
         ret = 0
         msg = ''

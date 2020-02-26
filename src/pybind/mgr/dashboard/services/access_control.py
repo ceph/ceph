@@ -383,7 +383,8 @@ class User(object):
         return False
 
     def permissions_dict(self):
-        perms = {}
+        # type: () -> dict
+        perms = {}  # type: dict
         for role in self.roles:
             for scope, perms_list in role.scopes_permissions.items():
                 if scope in perms:
@@ -553,12 +554,12 @@ class AccessControlDB(object):
             db.check_and_update_db()
             return db
 
-        db = json.loads(json_db)
+        dict_db = json.loads(json_db)
         roles = {rn: Role.from_dict(r)
-                 for rn, r in db.get('roles', {}).items()}
+                 for rn, r in dict_db.get('roles', {}).items()}
         users = {un: User.from_dict(u, dict(roles, **SYSTEM_ROLES))
-                 for un, u in db.get('users', {}).items()}
-        return cls(db['version'], users, roles)
+                 for un, u in dict_db.get('users', {}).items()}
+        return cls(dict_db['version'], users, roles)
 
 
 def load_access_control_db():
