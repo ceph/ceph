@@ -13,7 +13,7 @@ Major Changes from Nautilus
   * A new deployment tool called **cephadm** has been introduced that
     integrates Ceph daemon deployment and management via containers
     into the orchestration layer.  For more information see
-    :ref:`cephadm` and :ref:`bootstrap`.
+    :ref:`cephadm-bootstrap`.
   * Health alerts can now be muted, either temporarily or permanently.
   * A simple 'alerts' capability has been introduced to send email
     health alerts for clusters deployed without the benefit of an
