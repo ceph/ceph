@@ -2027,7 +2027,10 @@ def command_bootstrap():
                     fsid,
                     args.output_config,
                     args.output_keyring))
-
+    logger.info('Please consider enabling telemetry to help improve Ceph:\n\n'
+                '\tceph telemetry on\n\n'
+                'For more information see:\n\n'
+                '\thttps://docs.ceph.com/docs/master/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
     return 0
 
