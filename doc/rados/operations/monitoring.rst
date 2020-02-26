@@ -171,18 +171,18 @@ By default we will warn about ping times which exceed 1 second (1000 millisecond
 
 ::
 
-    HEALTH_WARN Long heartbeat ping times on back interface seen, longest is 1118.001 msec
+    HEALTH_WARN Slow OSD heartbeats on back (longest 1118.001ms)
 
 The health detail will add the combination of OSDs are seeing the delays and by how much.  There is a limit of 10
 detail line items.
 
 ::
 
-    [WRN] OSD_SLOW_PING_TIME_BACK: Long heartbeat ping times on back interface seen, longest is 1118.001 msec
-        Slow heartbeat ping on back interface from osd.0 to osd.1 1118.001 msec
-        Slow heartbeat ping on back interface from osd.0 to osd.2 1030.123 msec
-        Slow heartbeat ping on back interface from osd.2 to osd.1 1015.321 msec
-        Slow heartbeat ping on back interface from osd.1 to osd.0 1010.456 msec
+    [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1118.001ms)
+        Slow OSD heartbeats on back from osd.0 [dc1,rack1] to osd.1 [dc1,rack1] 1118.001 msec possibly improving
+        Slow OSD heartbeats on back from osd.0 [dc1,rack1] to osd.2 [dc1,rack2] 1030.123 msec
+        Slow OSD heartbeats on back from osd.2 [dc1,rack2] to osd.1 [dc1,rack1] 1015.321 msec
+        Slow OSD heartbeats on back from osd.1 [dc1,rack1] to osd.0 [dc1,rack1] 1010.456 msec
 
 To see even more detail and a complete dump of network performance information the ``dump_osd_network`` command can be used.  Typically, this would be
 sent to a mgr, but it can be limited to a particular OSD's interactions by issuing it to any OSD.  The current threshold which defaults to 1 second

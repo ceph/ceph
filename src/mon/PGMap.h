@@ -491,6 +491,7 @@ public:
   void get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
                              bool primary, std::set<pg_t>& pgs) const;
 
+  set<std::string> osd_parentage(const OSDMap& osdmap, int id) const;
   void get_health_checks(
     CephContext *cct,
     const OSDMap& osdmap,
