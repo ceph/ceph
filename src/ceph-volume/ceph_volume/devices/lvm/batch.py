@@ -191,7 +191,7 @@ class Batch(object):
         parser.add_argument(
             '--report',
             action='store_true',
-            help='Autodetect the objectstore by inspecting the OSD',
+            help='Only report on OSD that would be created and exit',
         )
         parser.add_argument(
             '--yes',
