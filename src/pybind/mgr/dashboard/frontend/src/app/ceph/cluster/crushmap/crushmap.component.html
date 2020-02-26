@@ -11,7 +11,7 @@
                   (nodeSelected)="onNodeSelected($event)">
               <ng-template let-node>
                 <span class="badge"
-                      [ngClass]="{'badge-success': ['in', 'up'].includes(node.status), 'badge-danger': ['down', 'out'].includes(node.status)}">
+                      [ngClass]="{'badge-success': ['in', 'up'].includes(node.status), 'badge-danger': ['down', 'out', 'destroyed'].includes(node.status)}">
                   {{ node.status }}
                 </span>
                 <span>&nbsp;</span>
