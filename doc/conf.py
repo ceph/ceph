@@ -14,11 +14,11 @@ if tags.has('man'):
     master_doc = 'man_index'
     exclude_patterns += ['index.rst', 'architecture.rst', 'glossary.rst', 'release*.rst',
                          'api/*',
+                         'cephadm/*',
                          'cephfs/*',
                          'dev/*',
                          'governance.rst',
                          'foundation.rst',
-                         'bootstrap.rst',
                          'install/*',
                          'mon/*',
                          'rados/*',
