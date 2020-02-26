@@ -690,7 +690,11 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Create User*::
 
-  $ ceph dashboard ac-user-create [--force-password] <username> [<password>] [<rolename>] [<name>] [<email>] [--enabled] [<pwd_expiration_date>]
+  $ ceph dashboard ac-user-create [--enabled] [--force-password] [--pwd_update_required] <username> [<password>] [<rolename>] [<name>] [<email>] [<pwd_expiration_date>]
+
+  To bypass the password policy checks use the `force-password` option.
+  Use the option `pwd_update_required` so that a newly created user has
+  to change their password after the first login.
 
 - *Delete User*::
 

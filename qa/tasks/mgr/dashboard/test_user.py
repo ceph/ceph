@@ -539,3 +539,17 @@ class UserTest(DashboardTestCase):
             'credits': 0,
             'valuation': 'Password must not be the same as the previous one.'
         })
+
+    def test_create_user_pwd_update_required(self):
+        exit_code = self._ceph_cmd_result([
+            'dashboard', 'ac-user-create', '--force-password',
+            '--pwd_update_required', 'foo', 'bar'
+        ])
+        self.assertEqual(exit_code, 0)
+        self._get('/api/user/foo')
+        self.assertStatus(200)
+        self.assertJsonSubset({
+            'username': 'foo',
+            'pwdUpdateRequired': True
+        })
+        self.delete_user('foo')
