@@ -316,7 +316,6 @@ You may set values for the following keys:
 
 :Description: Sets the minimum number of replicas required for I/O.
               See `Set the Number of Object Replicas`_ for further details.
-              Replicated pools only.
 
 :Type: Integer
 :Version: ``0.54`` and above
