@@ -213,7 +213,7 @@ seastar::future<> OSD::start()
     superblock = std::move(sb);
     return get_map(superblock.current_epoch);
   }).then([this](cached_map_t&& map) {
-    shard_services.update_map(osdmap);
+    shard_services.update_map(map);
     osdmap_gate.got_map(map->get_epoch());
     osdmap = std::move(map);
     return load_pgs();

@@ -174,23 +174,19 @@ seastar::future<> Heartbeat::update_peers(int whoami)
       [=](iteration_state& s) {
         return seastar::do_until(
           [min_peers, &s, this] {
-            return peers.size() < min_peers || s.where == s.end; },
+            return peers.size() <= min_peers || s.where == s.end; },
           [&s, this] {
             return remove_peer(*s.where); }
         );
     });
   }).then([=] {
     // or too few?
-    vector<int> want;
     auto osdmap = service.get_osdmap_service().get_map();
+    auto epoch = osdmap->get_epoch();
     for (auto next = osdmap->get_next_up_osd_after(whoami);
       peers.size() < min_peers && next >= 0 && next != whoami;
       next = osdmap->get_next_up_osd_after(next)) {
-      want.push_back(next);
-    }
-    auto epoch = osdmap->get_epoch();
-    for (int osd : want) {
-      add_peer(osd, epoch);
+      add_peer(next, epoch);
     }
   });
 }
