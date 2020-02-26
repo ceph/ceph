@@ -14,7 +14,7 @@
                 class="bold">Full name</td>
             <td>{{ user.display_name }}</td>
           </tr>
-          <tr *ngIf="user.email.length">
+          <tr *ngIf="user.email?.length">
             <td i18n
                 class="bold">Email address</td>
             <td>{{ user.email }}</td>
@@ -125,7 +125,8 @@
     </div>
   </tab>
 
-  <tab i18n-heading
+  <tab *ngIf="keys.length"
+       i18n-heading
        heading="Keys">
     <cd-table [data]="keys"
               [columns]="keysColumns"

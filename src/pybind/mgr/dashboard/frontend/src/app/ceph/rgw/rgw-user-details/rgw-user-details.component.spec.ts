@@ -7,6 +7,7 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
+import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserDetailsComponent } from './rgw-user-details.component';
 
 describe('RgwUserDetailsComponent', () => {
@@ -28,6 +29,33 @@ describe('RgwUserDetailsComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+
+    const detailsTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Details"]');
+    expect(detailsTab).toBeFalsy();
+    const keysTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Keys"]');
+    expect(keysTab).toBeFalsy();
+  });
+
+  it('should show "Details" tab', () => {
+    component.selection.selected = [{ uid: 'myUsername' }];
+    fixture.detectChanges();
+
+    const detailsTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Details"]');
+    expect(detailsTab).toBeTruthy();
+    const keysTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Keys"]');
+    expect(keysTab).toBeFalsy();
+  });
+
+  it('should show "Keys" tab', () => {
+    const s3Key = new RgwUserS3Key();
+    component.selection.selected = [{ keys: [s3Key] }];
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    const detailsTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Details"]');
+    expect(detailsTab).toBeTruthy();
+    const keysTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Keys"]');
+    expect(keysTab).toBeTruthy();
   });
 
   it('should show correct "System" info', () => {
