@@ -182,3 +182,6 @@ Further Reading
     :maxdepth: 2
 
     Cephadm administration <administration>
+    Cephadm CLI <../mgr/orchestrator>
+    OS recommendations <../start/os-recommendations>
+    
