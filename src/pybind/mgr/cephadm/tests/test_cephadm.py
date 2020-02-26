@@ -137,8 +137,12 @@ class TestCephadm(object):
     def test_mon_update(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.add_mon(ServiceSpec(placement=ps))
+            c = cephadm_module.apply_mon(ServiceSpec(placement=ps))
             assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
+
+            ps = PlacementSpec(hosts=['test:0.0.0.0=b'], count=1)
+            c = cephadm_module.add_mon(ServiceSpec(placement=ps))
+            assert wait(cephadm_module, c) == ["Deployed mon.b on host 'test'"]
 
             with pytest.raises(OrchestratorError, match="is missing a network spec"):
                 ps = PlacementSpec(hosts=['test'], count=1)
