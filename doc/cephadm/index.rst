@@ -1,10 +1,15 @@
-.. _bootstrap:
+.. _cephadm-bootstrap:
 
 ========================
  Installation (cephadm)
 ========================
 
 .. note:: The *cephadm* bootstrap feature is first introduced in Octopus, and is not yet recommended for production deployments.
+
+cephadm is an orchestrator that does not rely
+on a separate system such as Rook or Ansible, but rather manages nodes
+in a cluster by establishing an SSH connection and issuing explicit
+management commands.
 
 A new Ceph cluster is deployed by bootstrapping a cluster on a single
 node, and then adding additional nodes and daemons via the CLI or GUI
@@ -20,6 +25,12 @@ should be issued on which systems.
 "[any node]" identifies any Ceph node, and in the context
 of this installation guide means that the associated command
 can be run on any node.
+
+Requirements
+============
+
+- Podman or Docker
+- LVM2
 
 .. highlight:: console
 
