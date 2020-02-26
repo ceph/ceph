@@ -244,7 +244,6 @@ Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python3-cherrypy3,
          python3-jwt,
-         python3-openssl,
          python3-bcrypt,
          python3-werkzeug,
          python3-routes,
@@ -299,6 +298,7 @@ Architecture: all
 Depends: ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
+         python3-openssl,
 Replaces: ceph-mgr (<< 15.1.0)
 Breaks: ceph-mgr (<< 15.1.0)
 Recommends: ceph-mgr-rook
