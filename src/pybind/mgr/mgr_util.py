@@ -4,6 +4,11 @@ import os
 import socket
 import logging
 
+try:
+    from typing import Tuple
+except ImportError:
+    TYPE_CHECKING = False  # just for type checking
+
 (
     BLACK,
     RED,
@@ -119,6 +124,36 @@ def get_default_addr():
 
 class ServerConfigException(Exception):
     pass
+
+
+def create_self_signed_cert(organisation='Ceph', common_name='mgr') -> Tuple[str, str]:
+    """Returns self-signed PEM certificates valid for 10 years.
+    :return cert, pkey
+    """
+
+    from OpenSSL import crypto
+    from uuid import uuid4
+
+    # create a key pair
+    pkey = crypto.PKey()
+    pkey.generate_key(crypto.TYPE_RSA, 2048)
+
+    # create a self-signed cert
+    cert = crypto.X509()
+    cert.get_subject().O = organisation
+    cert.get_subject().CN = common_name
+    cert.set_serial_number(int(uuid4()))
+    cert.gmtime_adj_notBefore(0)
+    cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)  # 10 years
+    cert.set_issuer(cert.get_subject())
+    cert.set_pubkey(pkey)
+    cert.sign(pkey, 'sha512')
+
+    cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
+    pkey = crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
+
+    return cert.decode('utf-8'), pkey.decode('utf-8')
+
 
 def verify_cacrt(cert_fname):
     # type: (str) -> None

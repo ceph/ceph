@@ -527,11 +527,6 @@ Requires:       python%{python3_pkgversion}-PyJWT
 Requires:       python%{python3_pkgversion}-Routes
 Requires:       python%{python3_pkgversion}-Werkzeug
 %endif
-%if 0%{?rhel} == 7
-Requires:       pyOpenSSL
-%else
-Requires:       python%{python3_pkgversion}-pyOpenSSL
-%endif
 %description mgr-dashboard
 ceph-mgr-dashboard is a manager module, providing a web-based application
 to monitor and manage many aspects of a Ceph cluster and related components.
