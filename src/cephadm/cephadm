@@ -2159,6 +2159,17 @@ def command_shell():
             '-e', 'LANG=C',
             '-e', "PS1=%s" % CUSTOM_PS1,
         ]
+        if args.fsid:
+            home = os.path.join(args.data_dir, args.fsid, 'home')
+            if not os.path.exists(home):
+                logger.debug('Creating root home at %s' % home)
+                makedirs(home, 0, 0, 0o660)
+                if os.path.exists('/etc/skel'):
+                    for f in os.listdir('/etc/skel'):
+                        if f.startswith('.bash'):
+                            shutil.copyfile(os.path.join('/etc/skel', f),
+                                            os.path.join(home, f))
+            mounts[home] = '/root'
 
     c = CephContainer(
         image=args.image,
