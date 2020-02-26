@@ -708,11 +708,12 @@ def ac_user_show_cmd(_, username=None):
                  'name=email,type=CephString,req=false '
                  'name=enabled,type=CephBool,req=false '
                  'name=force_password,type=CephBool,req=false '
-                 'name=pwd_expiration_date,type=CephInt,req=false',
+                 'name=pwd_expiration_date,type=CephInt,req=false '
+                 'name=pwd_update_required,type=CephBool,req=false',
                  'Create a user')
 def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
                        email=None, enabled=True, force_password=False,
-                       pwd_expiration_date=None):
+                       pwd_expiration_date=None, pwd_update_required=False):
     try:
         role = mgr.ACCESS_CTRL_DB.get_role(rolename) if rolename else None
     except RoleDoesNotExist as ex:
@@ -725,7 +726,8 @@ def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
             pw_check = PasswordPolicy(password, username)
             pw_check.check_all()
         user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email,
-                                              enabled, pwd_expiration_date)
+                                              enabled, pwd_expiration_date,
+                                              pwd_update_required)
     except PasswordPolicyException as ex:
         return -errno.EINVAL, '', str(ex)
     except UserAlreadyExists as ex:
