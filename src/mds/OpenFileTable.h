@@ -27,7 +27,8 @@ class MDSRank;
 class OpenFileTable
 {
 public:
-  explicit OpenFileTable(MDSRank *m) : mds(m) {}
+  explicit OpenFileTable(MDSRank *m);
+  ~OpenFileTable();
 
   void add_inode(CInode *in);
   void remove_inode(CInode *in);
@@ -146,6 +147,8 @@ protected:
 
   std::map<uint64_t, vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;
+
+  std::unique_ptr<PerfCounters> logger;
 };
 
 #endif

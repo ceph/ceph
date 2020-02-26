@@ -23,12 +23,42 @@
 #include "common/config.h"
 #include "common/errno.h"
 
+enum {
+  l_oft_first = 1000000,
+  l_oft_omap_total_objs,
+  l_oft_omap_total_kv_pairs,
+  l_oft_omap_total_updates,
+  l_oft_omap_total_removes,
+  l_oft_last
+};
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
 static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".openfiles ";
+}
+
+OpenFileTable::OpenFileTable(MDSRank *m) : mds(m) {
+  PerfCountersBuilder b(mds->cct, "oft", l_oft_first, l_oft_last);
+
+  b.add_u64(l_oft_omap_total_objs, "omap_total_objs");
+  b.add_u64(l_oft_omap_total_kv_pairs, "omap_total_kv_pairs");
+  b.add_u64(l_oft_omap_total_updates, "omap_total_updates");
+  b.add_u64(l_oft_omap_total_removes, "omap_total_removes");
+  logger.reset(b.create_perf_counters());
+  mds->cct->get_perfcounters_collection()->add(logger.get());
+  logger->set(l_oft_omap_total_objs, 0);
+  logger->set(l_oft_omap_total_kv_pairs, 0);
+  logger->set(l_oft_omap_total_updates, 0);
+  logger->set(l_oft_omap_total_removes, 0);
+}
+
+OpenFileTable::~OpenFileTable() {
+  if (logger) {
+    mds->cct->get_perfcounters_collection()->remove(logger.get());
+  }
 }
 
 void OpenFileTable::get_ref(CInode *in)
@@ -536,8 +566,8 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     loaded_dirfrags.clear();
   }
 
+  size_t total_items = 0;
   {
-    size_t total_items = 0;
     unsigned used_objs = 1;
     std::vector<unsigned> objs_to_write;
     bool journaled = false;
@@ -588,6 +618,9 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     ceph_assert(!gather.has_subs());
   }
 
+  uint64_t total_updates = 0;
+  uint64_t total_removes = 0;
+
   for (unsigned omap_idx = 0; omap_idx < omap_updates.size(); omap_idx++) {
     auto& ctl = omap_updates[omap_idx];
     ceph_assert(ctl.to_update.empty() && ctl.to_remove.empty());
@@ -603,6 +636,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 	ctl.write_size = 0;
 	first = false;
       }
+      total_updates++;
     }
 
     for (auto& key : ctl.journaled_remove) {
@@ -613,6 +647,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 	ctl.write_size = 0;
 	first = false;
       }
+      total_removes++;
     }
 
     for (unsigned i = 0; i < ctl.journal_idx; ++i) {
@@ -636,6 +671,10 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   } else {
     submit_ops_func();
   }
+  logger->set(l_oft_omap_total_objs, omap_num_objs);
+  logger->set(l_oft_omap_total_kv_pairs, total_items);
+  logger->inc(l_oft_omap_total_updates, total_updates);
+  logger->inc(l_oft_omap_total_removes, total_removes);
 }
 
 class C_IO_OFT_Load : public MDSIOContextBase {
