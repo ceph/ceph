@@ -3,6 +3,12 @@ from mgr_util import get_most_recent_rate
 from dashboard.services.ceph_service import CephService
 from .. import mgr
 
+try:
+    from typing import Dict
+except ImportError:
+    pass  # Just for type checking
+
+
 SERVICE_TYPE = 'tcmu-runner'
 
 
@@ -10,8 +16,8 @@ class TcmuService(object):
     # pylint: disable=too-many-nested-blocks
     @staticmethod
     def get_iscsi_info():
-        daemons = {}
-        images = {}
+        daemons = {}  # type: Dict[str, dict]
+        images = {}  # type: Dict[str, dict]
         for service in CephService.get_service_list(SERVICE_TYPE):
             metadata = service['metadata']
             if metadata is None:

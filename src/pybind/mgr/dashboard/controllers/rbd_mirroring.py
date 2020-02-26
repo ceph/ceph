@@ -22,6 +22,11 @@ from ..tools import ViewCache
 from ..services.exception import handle_rados_error, handle_rbd_error, \
     serialize_dashboard_exception
 
+try:
+    from typing import no_type_check
+except ImportError:
+    no_type_check = object()  # Just for type checking
+
 
 logger = logging.getLogger('controllers.rbd_mirror')
 
@@ -148,7 +153,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
         for daemon in daemons:
             for _, pool_data in daemon['status'].items():
-                stats = pool_stats.get(pool_data['name'], None)
+                stats = pool_stats.get(pool_data['name'], None)  # type: ignore
                 if stats is None:
                     continue
 
@@ -191,6 +196,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
 
 @ViewCache()
+@no_type_check
 def _get_pool_datum(pool_name):
     data = {}
     logger.debug("Constructing IOCtx %s", pool_name)

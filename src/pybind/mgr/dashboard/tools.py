@@ -29,7 +29,8 @@ from .settings import Settings
 from .services.auth import JwtManager
 
 try:
-    from typing import Any, AnyStr, Dict, List  # noqa pylint: disable=unused-import
+    from typing import Any, AnyStr, Callable, DefaultDict, Deque,\
+        Dict, List, Set, Tuple, Union  # noqa pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -251,7 +252,7 @@ class ViewCache(object):
                 rvc = ViewCache.RemoteViewCache(self.timeout)
                 self.cache_by_args[args] = rvc
             return rvc.run(fn, args, kwargs)
-        wrapper.reset = self.reset
+        wrapper.reset = self.reset  # type: ignore
         return wrapper
 
     def reset(self):
@@ -261,10 +262,10 @@ class ViewCache(object):
 
 class NotificationQueue(threading.Thread):
     _ALL_TYPES_ = '__ALL__'
-    _listeners = collections.defaultdict(set)
+    _listeners = collections.defaultdict(set)  # type: DefaultDict[str, Set[Tuple[int, Callable]]]
     _lock = threading.Lock()
     _cond = threading.Condition()
-    _queue = collections.deque()
+    _queue = collections.deque()  # type: Deque[Tuple[str, Any]]
     _running = False
     _instance = None
 
@@ -279,8 +280,8 @@ class NotificationQueue(threading.Thread):
                 return
             cls._running = True
             cls._instance = NotificationQueue()
-        cls.logger = logging.getLogger('notification_queue')
-        cls.logger.debug("starting notification queue")
+        cls.logger = logging.getLogger('notification_queue')  # type: ignore
+        cls.logger.debug("starting notification queue")  # type: ignore
         cls._instance.start()
 
     @classmethod
@@ -294,9 +295,9 @@ class NotificationQueue(threading.Thread):
             cls._running = False
         with cls._cond:
             cls._cond.notify()
-        cls.logger.debug("waiting for notification queue to finish")
+        cls.logger.debug("waiting for notification queue to finish")  # type: ignore
         instance.join()
-        cls.logger.debug("notification queue stopped")
+        cls.logger.debug("notification queue stopped")  # type: ignore
 
     @classmethod
     def _registered_handler(cls, func, n_types):
@@ -327,11 +328,14 @@ class NotificationQueue(threading.Thread):
             for ev_type in n_types:
                 if not cls._registered_handler(func, ev_type):
                     cls._listeners[ev_type].add((priority, func))
-                    cls.logger.debug("function %s was registered for events of"
-                                     " type %s", func, ev_type)
+                    cls.logger.debug(  # type: ignore
+                        "function %s was registered for events of type %s",
+                        func, ev_type
+                    )
 
     @classmethod
     def deregister(cls, func, n_types=None):
+        # type: (Callable, Union[str, list, None]) -> None
         """Removes the listener function from this notification queue
 
         If the second parameter `n_types` is omitted, the function is removed
@@ -358,11 +362,14 @@ class NotificationQueue(threading.Thread):
                         break
                 if to_remove:
                     listeners.discard(to_remove)
-                    cls.logger.debug("function %s was deregistered for events "
-                                     "of type %s", func, ev_type)
+                    cls.logger.debug(  # type: ignore
+                        "function %s was deregistered for events of type %s",
+                        func, ev_type
+                    )
 
     @classmethod
     def new_notification(cls, notify_type, notify_value):
+        # type: (str, Any) -> None
         with cls._cond:
             cls._queue.append((notify_type, notify_value))
             cls._cond.notify()
@@ -379,10 +386,10 @@ class NotificationQueue(threading.Thread):
                 listener[1](notify_value)
 
     def run(self):
-        self.logger.debug("notification queue started")
+        self.logger.debug("notification queue started")  # type: ignore
         while self._running:
             private_buffer = []
-            self.logger.debug("processing queue: %s", len(self._queue))
+            self.logger.debug("processing queue: %s", len(self._queue))  # type: ignore
             try:
                 while True:
                     private_buffer.append(self._queue.popleft())
@@ -393,10 +400,10 @@ class NotificationQueue(threading.Thread):
                 while self._running and not self._queue:
                     self._cond.wait()
         # flush remaining events
-        self.logger.debug("flush remaining events: %s", len(self._queue))
+        self.logger.debug("flush remaining events: %s", len(self._queue))  # type: ignore
         self._notify_listeners(self._queue)
         self._queue.clear()
-        self.logger.debug("notification queue finished")
+        self.logger.debug("notification queue finished")  # type: ignore
 
 
 # pylint: disable=too-many-arguments, protected-access
@@ -407,20 +414,20 @@ class TaskManager(object):
     VALUE_DONE = "done"
     VALUE_EXECUTING = "executing"
 
-    _executing_tasks = set()
-    _finished_tasks = []
+    _executing_tasks = set()  # type: Set[Task]
+    _finished_tasks = []  # type: List[Task]
     _lock = threading.Lock()
 
     _task_local_data = threading.local()
 
     @classmethod
     def init(cls):
-        cls.logger = logging.getLogger('taskmgr')
+        cls.logger = logging.getLogger('taskmgr')  # type: ignore
         NotificationQueue.register(cls._handle_finished_task, 'cd_task_finished')
 
     @classmethod
     def _handle_finished_task(cls, task):
-        cls.logger.info("finished %s", task)
+        cls.logger.info("finished %s", task)  # type: ignore
         with cls._lock:
             cls._executing_tasks.remove(task)
             cls._finished_tasks.append(task)
@@ -438,13 +445,13 @@ class TaskManager(object):
                     exception_handler)
         with cls._lock:
             if task in cls._executing_tasks:
-                cls.logger.debug("task already executing: %s", task)
+                cls.logger.debug("task already executing: %s", task)  # type: ignore
                 for t in cls._executing_tasks:
                     if t == task:
                         return t
-            cls.logger.debug("created %s", task)
+            cls.logger.debug("created %s", task)  # type: ignore
             cls._executing_tasks.add(task)
-        cls.logger.info("running %s", task)
+        cls.logger.info("running %s", task)  # type: ignore
         task._run()
         return task
 
@@ -522,7 +529,7 @@ class TaskExecutor(object):
     def start(self):
         self.logger.debug("executing task %s", self.task)
         try:
-            self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)
+            self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)  # type: ignore
         except Exception as ex:
             self.logger.exception("Error while calling %s", self.task)
             self.finish(None, ex)
@@ -532,7 +539,7 @@ class TaskExecutor(object):
             self.logger.debug("successfully finished task: %s", self.task)
         else:
             self.logger.debug("task finished with exception: %s", self.task)
-        self.task._complete(ret_value, exception)
+        self.task._complete(ret_value, exception)  # type: ignore
 
 
 # pylint: disable=protected-access
@@ -549,7 +556,7 @@ class ThreadedExecutor(TaskExecutor):
         TaskManager._task_local_data.task = self.task
         try:
             self.logger.debug("executing task %s", self.task)
-            val = self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)
+            val = self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)  # type: ignore
         except Exception as ex:
             self.logger.exception("Error while calling %s", self.task)
             self.finish(None, ex)
@@ -614,7 +621,7 @@ class Task(object):
             self.end_time = now
             self.ret_value = ret_value
             self.exception = exception
-            self.duration = now - self.begin_time
+            self.duration = now - self.begin_time  # type: ignore
             if not self.exception:
                 self.set_progress(100, True)
         NotificationQueue.new_notification('cd_task_finished', self)
@@ -648,7 +655,7 @@ class Task(object):
             raise Exception("Progress delta value must be a positive integer")
         if not in_lock:
             self.lock.acquire()
-        prog = self.progress + delta
+        prog = self.progress + delta  # type: ignore
         self.progress = prog if prog <= 100 else 100
         if not in_lock:
             self.lock.release()
@@ -796,7 +803,7 @@ def json_str_to_object(value):  # type: (AnyStr) -> Any
 
     try:
         # json.loads accepts binary input from version >=3.6
-        value = value.decode('utf-8')
+        value = value.decode('utf-8')  # type: ignore
     except AttributeError:
         pass
 
@@ -821,7 +828,7 @@ def get_request_body_params(request):
     :return: A dictionary containing the parameters.
     :rtype: dict
     """
-    params = {}
+    params = {}  # type: dict
     if request.method not in request.methods_with_bodies:
         return params
 

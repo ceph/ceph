@@ -83,7 +83,7 @@ def serialize_dashboard_exception(e, include_http_status=False, task=None):
     if include_http_status:
         out['status'] = getattr(e, 'status', 500)
     if task:
-        out['task'] = dict(name=task.name, metadata=task.metadata)
+        out['task'] = dict(name=task.name, metadata=task.metadata)  # type: ignore
     return out
 
 

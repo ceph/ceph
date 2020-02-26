@@ -16,6 +16,11 @@ from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..controllers.cephfs import CephFS
 from ..controllers.rgw import Rgw, RgwDaemon, RgwBucket, RgwUser
 
+try:
+    from typing import no_type_check, Set
+except ImportError:
+    no_type_check = object()  # Just for type checking
+
 
 class Features(Enum):
     RBD = 'rbd'
@@ -25,7 +30,7 @@ class Features(Enum):
     RGW = 'rgw'
 
 
-PREDISABLED_FEATURES = set()
+PREDISABLED_FEATURES = set()  # type: Set[str]
 
 
 Feature2Controller = {
@@ -59,7 +64,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
         self.Controller2Feature = {
             controller: feature
             for feature, controllers in Feature2Controller.items()
-            for controller in controllers}
+            for controller in controllers}  # type: ignore
 
     @PM.add_hook
     def get_options(self):
@@ -102,6 +107,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             return ret, '\n'.join(msg), ''
         return {'handle_command': cmd}
 
+    @no_type_check  # https://github.com/python/mypy/issues/7806
     def _get_feature_from_request(self, request):
         try:
             return self.Controller2Feature[
@@ -110,6 +116,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             return None
 
     @ttl_cache(ttl=CACHE_TTL, maxsize=CACHE_MAX_SIZE)
+    @no_type_check  # https://github.com/python/mypy/issues/7806
     def _is_feature_enabled(self, feature):
         return self.mgr.get_module_option(self.OPTION_FMT.format(feature.value))
 

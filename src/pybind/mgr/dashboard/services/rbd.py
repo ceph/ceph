@@ -9,6 +9,11 @@ from .. import mgr
 from ..tools import ViewCache
 from .ceph_service import CephService
 
+try:
+    from typing import List
+except ImportError:
+    pass  # For typing only
+
 
 RBD_FEATURES_NAME_MAPPING = {
     rbd.RBD_FEATURE_LAYERING: "layering",
@@ -81,7 +86,7 @@ class RbdConfiguration(object):
 
     def __init__(self, pool_name='', namespace='', image_name='', pool_ioctx=None,
                  image_ioctx=None):
-        # type: (str, str, object, object) -> None
+        # type: (str, str, str, object, object) -> None
         assert bool(pool_name) != bool(pool_ioctx)  # xor
         self._pool_name = pool_name
         self._namespace = namespace if namespace is not None else ''
@@ -95,7 +100,7 @@ class RbdConfiguration(object):
         return option if option.startswith('conf_') else 'conf_' + option
 
     def list(self):
-        # type: () -> [dict]
+        # type: () -> List[dict]
         def _list(ioctx):
             if self._image_name:  # image config
                 with rbd.Image(ioctx, self._image_name) as image:
@@ -131,23 +136,23 @@ class RbdConfiguration(object):
         pool_ioctx = self._pool_ioctx
         if self._pool_name:  # open ioctx
             pool_ioctx = mgr.rados.open_ioctx(self._pool_name)
-            pool_ioctx.__enter__()
-            pool_ioctx.set_namespace(self._namespace)
+            pool_ioctx.__enter__()  # type: ignore
+            pool_ioctx.set_namespace(self._namespace)  # type: ignore
 
         image_ioctx = self._image_ioctx
         if self._image_name:
             image_ioctx = rbd.Image(pool_ioctx, self._image_name)
-            image_ioctx.__enter__()
+            image_ioctx.__enter__()  # type: ignore
 
         if image_ioctx:
-            image_ioctx.metadata_set(option_name, option_value)
+            image_ioctx.metadata_set(option_name, option_value)  # type: ignore
         else:
             self._rbd.pool_metadata_set(pool_ioctx, option_name, option_value)
 
         if self._image_name:  # Name provided, so we opened it and now have to close it
-            image_ioctx.__exit__(None, None, None)
+            image_ioctx.__exit__(None, None, None)  # type: ignore
         if self._pool_name:
-            pool_ioctx.__exit__(None, None, None)
+            pool_ioctx.__exit__(None, None, None)  # type: ignore
 
     def remove(self, option_name):
         """

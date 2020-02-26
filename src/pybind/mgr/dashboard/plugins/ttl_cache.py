@@ -10,13 +10,18 @@ from collections import OrderedDict
 from threading import RLock
 from time import time
 
+try:
+    from typing import Tuple
+except ImportError:
+    pass  # For typing only
+
 
 def ttl_cache(ttl, maxsize=128, typed=False):
     if typed is not False:
         raise NotImplementedError("typed caching not supported")
 
     def decorating_function(function):
-        cache = OrderedDict()
+        cache = OrderedDict()  # type: OrderedDict[object, Tuple[bool, float]]
         stats = [0, 0, 0]
         rlock = RLock()
         setattr(function, 'cache_info', lambda:
