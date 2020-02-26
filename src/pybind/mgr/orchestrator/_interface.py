@@ -1081,6 +1081,16 @@ class Orchestrator(object):
         """Update existing a Node-Exporter daemon(s)"""
         raise NotImplementedError()
 
+    def add_alertmanager(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Create a new AlertManager service"""
+        raise NotImplementedError()
+
+    def apply_alertmanager(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update an existing AlertManager daemon(s)"""
+        raise NotImplementedError()
+
     def upgrade_check(self, image, version):
         # type: (Optional[str], Optional[str]) -> Completion
         raise NotImplementedError()
