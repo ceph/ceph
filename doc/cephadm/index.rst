@@ -173,3 +173,12 @@ that confiruation isn't already in place (usually in the
 ``client.rgw.<realmname>.<zonename>`` section), then the radosgw
 daemons will start up with default settings (e.g., binding to port
 80).
+
+
+Further Reading
+===============
+
+.. toctree::
+    :maxdepth: 2
+
+    Cephadm administration <administration>

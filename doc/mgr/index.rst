@@ -44,5 +44,4 @@ sensible.
     Crash module <crash>
     Insights module <insights>
     Orchestrator module <orchestrator>
-    Cephadm orchestrator <cephadm>
     Rook module <rook>
