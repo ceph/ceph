@@ -113,7 +113,7 @@ ceph osd pool create clonesonly 24 24
 rbd pool init clonesonly
 
 for pool in rbd rbdnonzero; do
-    rbd create --size 200 --image-format 1 $pool/img0 --image-feature layering
+    rbd create --size 200 --image-format 1 $pool/img0
     rbd create --size 200 $pool/img1 --image-feature layering
     rbd create --size 200 --data-pool repdata $pool/img2 --image-feature layering
     rbd create --size 200 --data-pool ecdata $pool/img3 --image-feature layering
