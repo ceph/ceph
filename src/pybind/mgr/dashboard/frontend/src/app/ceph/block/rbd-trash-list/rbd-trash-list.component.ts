@@ -52,6 +52,7 @@ export class RbdTrashListComponent implements OnInit {
   selection = new CdTableSelection();
   tableActions: CdTableAction[];
   viewCacheStatusList: any[];
+  disablePurgeBtn = true;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -145,6 +146,7 @@ export class RbdTrashListComponent implements OnInit {
       }
       viewCacheStatusMap[pool.status].push(pool.pool_name);
       images = images.concat(pool.value);
+      this.disablePurgeBtn = !images.length;
     });
 
     const viewCacheStatusList: any[] = [];

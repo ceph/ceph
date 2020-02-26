@@ -15,10 +15,10 @@
                       [selection]="selection"
                       [tableActions]="tableActions">
     </cd-table-actions>
-
     <button class="btn btn-light"
             type="button"
             (click)="purgeModal()"
+            [disabled]="disablePurgeBtn"
             *ngIf="permission.delete">
       <i [ngClass]="[icons.destroy]"
          aria-hidden="true"></i>
