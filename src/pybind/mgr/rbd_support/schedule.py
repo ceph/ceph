@@ -332,8 +332,14 @@ class Schedules:
                         schedule_cfg))
 
         for pool_id, pool_name in get_rbd_pools(self.handler.module).items():
-            with self.handler.module.rados.open_ioctx2(int(pool_id)) as ioctx:
-                self.load_from_pool(ioctx, namespace_validator, image_validator)
+            try:
+                with self.handler.module.rados.open_ioctx2(int(pool_id)) as ioctx:
+                    self.load_from_pool(ioctx, namespace_validator,
+                                        image_validator)
+            except rados.Error as e:
+                self.handler.log.error(
+                    "Failed to load schedules for pool {}: {}".format(
+                        pool_name, e))
 
     def load_from_pool(self, ioctx, namespace_validator, image_validator):
         pool_id = ioctx.get_pool_id()
