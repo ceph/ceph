@@ -3235,6 +3235,19 @@ void Monitor::handle_command(MonOpRequestRef op)
        prefix == "smart" ||
        prefix == "mon_status" ||
        prefix == "heap")) {
+    if (m->get_connection()->get_messenger() == 0) {
+      // Prior to octopus, monitors might forward these messages
+      // around. that was broken at baseline, and if we try to process
+      // this message now, it will assert out when we try to send a
+      // message in reply from the asok/tell worker (see
+      // AnonConnection).  Just reply with an error.
+      dout(5) << __func__ << " failing forwarded command from a (presumably) "
+	      << "pre-octopus peer" << dendl;
+      reply_command(
+	op, -EBUSY,
+	"failing forwarded tell command in mixed-version mon cluster", 0);
+      return;
+    }
     dout(5) << __func__ << " passing command to tell/asok" << dendl;
     cct->get_admin_socket()->queue_tell_command(m);
     return;
