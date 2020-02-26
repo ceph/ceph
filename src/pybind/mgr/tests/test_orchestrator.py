@@ -117,6 +117,7 @@ def test_rgwspec():
     """
     {
         "rgw_zone": "zonename",
+        "service_type": "rgw",
         "rgw_frontend_port": 8080,
         "rgw_zonegroup": "group",
         "rgw_zone_user": "user",
