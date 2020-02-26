@@ -491,6 +491,7 @@ public:
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
       acct_type(acct_type) {
     }
+    bool is_anon() const {return (acct_name.compare(RGW_USER_ANON_ID) == 0);}
   };
 
   using aclspec_t = rgw::auth::Identity::aclspec_t;
