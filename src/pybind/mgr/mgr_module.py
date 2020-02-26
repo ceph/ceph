@@ -1562,7 +1562,7 @@ class PersistentStoreDict(object):
     def __init__(self, mgr, prefix):
         # type: (MgrModule, str) -> None
         self.mgr = mgr
-        self.prefix = prefix + '.'
+        self.prefix = prefix + '/'
 
     def _mk_store_key(self, key):
         return self.prefix + key
@@ -1587,7 +1587,7 @@ class PersistentStoreDict(object):
                 self.__missing__(key)
             return json.loads(val)
         except (KeyError, AttributeError, IndexError, ValueError, TypeError):
-            logging.getLogger(__name__).exception('failed to deserialize')
+            logging.getLogger(__name__).debug('failed to deserialize item in store')
             self.mgr.set_store(key, None)
             raise
 

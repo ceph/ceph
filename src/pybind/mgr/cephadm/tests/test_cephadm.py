@@ -137,12 +137,12 @@ class TestCephadm(object):
     def test_mon_update(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.add_mon(ServiceSpec(placement=ps))
+            c = cephadm_module.add_mon(ServiceSpec(placement=ps, service_type='mon'))
             assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
             with pytest.raises(OrchestratorError, match="is missing a network spec"):
                 ps = PlacementSpec(hosts=['test'], count=1)
-                c = cephadm_module.add_mon(ServiceSpec(placement=ps))
+                c = cephadm_module.add_mon(ServiceSpec(placement=ps, service_type='mon'))
                 wait(cephadm_module, c)
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
@@ -154,7 +154,7 @@ class TestCephadm(object):
     def test_mgr_update(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.apply_mgr(ServiceSpec(placement=ps))
+            c = cephadm_module._apply_mgr(ServiceSpec(placement=ps, service_type='mgr'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed mgr.* on host 'test'")
 
@@ -202,7 +202,7 @@ class TestCephadm(object):
     def test_mds(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_mds(ServiceSpec('name', placement=ps))
+            c = cephadm_module.add_mds(ServiceSpec('name', placement=ps, service_type='mds'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed mds.name.* on host 'test'")
 
@@ -216,7 +216,7 @@ class TestCephadm(object):
 
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps))
+            c = cephadm_module.add_rgw(RGWSpec('realm', 'zone', placement=ps, service_type='rgw'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed rgw.realm.zone.* on host 'test'")
 
@@ -232,12 +232,12 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'host1'):
             with self._with_host(cephadm_module, 'host2'):
                 ps = PlacementSpec(hosts=['host1'], count=1)
-                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
 
                 ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
-                c = cephadm_module.apply_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                c = cephadm_module._apply_rgw(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed rgw.realm.zone1.host2.* on host 'host2'")
 
@@ -252,12 +252,12 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'host1'):
             with self._with_host(cephadm_module, 'host2'):
                 ps = PlacementSpec(hosts=['host1'], count=1)
-                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
 
                 ps = PlacementSpec(hosts=['host2'], count=1)
-                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone2', placement=ps))
+                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone2', placement=ps, service_type='rgw'))
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed rgw.realm.zone2.host2.* on host 'host2'")
 
@@ -267,7 +267,7 @@ class TestCephadm(object):
 
                 with pytest.raises(OrchestratorError):
                     ps = PlacementSpec(hosts=['host1', 'host2'], count=3)
-                    c = cephadm_module.apply_rgw(RGWSpec('realm', 'zone1', placement=ps))
+                    c = cephadm_module._apply_rgw(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
                     [out] = wait(cephadm_module, c)
 
 
@@ -285,7 +285,8 @@ class TestCephadm(object):
     ))
     @mock.patch("cephadm.module.HostCache.save_host")
     @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_remove_daemon(self, _save_host, _rm_host, cephadm_module):
+    @mock.patch("cephadm.module.CephadmOrchestrator._remove_key_from_store")
+    def test_remove_daemon(self, _save_host, _rm_host, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
@@ -307,7 +308,8 @@ class TestCephadm(object):
     ))
     @mock.patch("cephadm.module.HostCache.save_host")
     @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_remove_service(self, _save_host, _rm_host, cephadm_module):
+    @mock.patch("cephadm.module.CephadmOrchestrator._remove_key_from_store")
+    def test_remove_service(self, _save_host, _rm_host, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
@@ -325,7 +327,7 @@ class TestCephadm(object):
         # type: (mock.Mock, mock.Mock, mock.Mock, mock.Mock, CephadmOrchestrator) -> None
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_rbd_mirror(ServiceSpec(name='name', placement=ps))
+            c = cephadm_module.add_rbd_mirror(ServiceSpec(name='name', placement=ps, service_type='rbd-mirror'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed rbd-mirror.* on host 'test'")
 
@@ -340,7 +342,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
 
-            c = cephadm_module.add_prometheus(ServiceSpec(placement=ps))
+            c = cephadm_module.add_prometheus(ServiceSpec(placement=ps, service_type='prometheus'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed prometheus.* on host 'test'")
 
@@ -355,7 +357,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
 
-            c = cephadm_module.add_node_exporter(ServiceSpec(placement=ps))
+            c = cephadm_module.add_node_exporter(ServiceSpec(placement=ps, service_type='node-exporter'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed node-exporter.* on host 'test'")
 
@@ -370,7 +372,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
 
-            c = cephadm_module.add_grafana(ServiceSpec(placement=ps))
+            c = cephadm_module.add_grafana(ServiceSpec(placement=ps, service_type='grafana'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed grafana.* on host 'test'")
 
