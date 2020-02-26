@@ -21,6 +21,71 @@ Major Changes from Nautilus
   * Health alerts are now raised for recent Ceph daemons crashes.
 
 
+- *Dashboard*:
+
+  The :ref:`mgr-dashboard` has gained a lot of new features and functionality:
+
+  * UI Enhancements
+
+    - New vertical navigation bar
+    - New unified sidebar: better background task and events notification
+    - Shows all progress mgr module notifications
+    - Multi-select on tables to perform bulk operations
+
+  * Dashboard user account security enhancements
+
+    - Disabling/enabling existing user accounts
+    - Clone an existing user role
+    - Users can change their own password
+    - Configurable password policies: Minimum password complexity/length
+      requirements
+    - Configurable password expiration
+    - Change password after first login
+
+  New and enhanced management of Ceph features/services:
+
+  * OSD/device management
+
+    - List all disks associated with an OSD
+    - Add support for blinking enclosure LEDs via the orchestrator
+    - List all hosts known by the orchestrator
+    - List all disks and their properties attached to a node
+    - Display disk health information (health prediction and SMART data)
+    - Deploy new OSDs on new disks/hosts
+    - Display and allow sorting by an OSD's default device class in the OSD
+      table
+    - Explicitly set/change the device class of an OSD, display and sort OSDs by
+      device class
+
+  * Pool management
+
+    - Viewing and setting pool quotas
+    - Define and change per-pool PG autoscaling mode
+
+  * RGW management enhancements
+
+    - Enable bucket versioning
+    - Enable MFA support
+    - Select placement target on bucket creation
+
+  * CephFS management enhancements
+
+    - CephFS client eviction
+    - CephFS snapshot management
+    - CephFS quota management
+    - Browse CephFS directory
+
+  * iSCSI management enhancements
+
+    - Show iSCSI GW status on landing page
+    - Prevent deletion of IQNs with open sessions
+    - Display iSCSI "logged in" info
+
+  * Prometheus alert management
+
+    - List configured Prometheus alerts
+
+
 - *RADOS*:
   
   * Objects can now be brought in sync during recovery by copying only
