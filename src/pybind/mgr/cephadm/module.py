@@ -2373,6 +2373,19 @@ datasources:
     def _create_grafana(self, daemon_id, host):
         return self._create_daemon('grafana', daemon_id, host)
 
+    def add_alertmanager(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._add_daemon('alertmanager', spec, self._create_alertmanager)
+
+    def apply_alertmanager(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply_service('alertmanager', spec, self._create_alertmanager)
+
+    @async_map_completion
+    def _create_alertmanager(self, daemon_id, host):
+        return self._create_daemon('alertmanager', daemon_id, host)
+
+
     def _get_container_image_id(self, image_name):
         # pick a random host...
         host = None
