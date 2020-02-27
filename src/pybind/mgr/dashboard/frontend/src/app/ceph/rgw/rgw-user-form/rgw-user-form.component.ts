@@ -80,7 +80,15 @@ export class RgwUserFormComponent implements OnInit {
         [CdValidators.email],
         [CdValidators.unique(this.rgwUserService.emailExists, this.rgwUserService)]
       ],
-      max_buckets: [1000, [Validators.required, Validators.min(0)]],
+      max_buckets_mode: [1],
+      max_buckets: [
+        1000,
+        [
+          CdValidators.requiredIf({ max_buckets_mode: '1' }),
+          CdValidators.number(false),
+          Validators.min(1)
+        ]
+      ],
       suspended: [false],
       // S3 key
       generate_key: [true],
@@ -162,6 +170,20 @@ export class RgwUserFormComponent implements OnInit {
           const defaults = _.clone(this.userForm.value);
           // Extract the values displayed in the form.
           let value = _.pick(resp[0], _.keys(this.userForm.value));
+          // Map the max. buckets values.
+          switch (value['max_buckets']) {
+            case -1:
+              value['max_buckets_mode'] = -1;
+              value['max_buckets'] = '';
+              break;
+            case 0:
+              value['max_buckets_mode'] = 0;
+              value['max_buckets'] = '';
+              break;
+            default:
+              value['max_buckets_mode'] = 1;
+              break;
+          }
           // Map the quota values.
           ['user', 'bucket'].forEach((type) => {
             const quota = resp[1][type + '_quota'];
@@ -520,9 +542,11 @@ export class RgwUserFormComponent implements OnInit {
    * @return {Boolean} Returns TRUE if the general user settings have been modified.
    */
   private _isGeneralDirty(): boolean {
-    return ['display_name', 'email', 'max_buckets', 'suspended'].some((path) => {
-      return this.userForm.get(path).dirty;
-    });
+    return ['display_name', 'email', 'max_buckets_mode', 'max_buckets', 'suspended'].some(
+      (path) => {
+        return this.userForm.get(path).dirty;
+      }
+    );
   }
 
   /**
@@ -584,6 +608,12 @@ export class RgwUserFormComponent implements OnInit {
         secret_key: this.userForm.getValue('secret_key')
       });
     }
+    const maxBucketsMode = parseInt(this.userForm.getValue('max_buckets_mode'), 10);
+    if (_.includes([-1, 0], maxBucketsMode)) {
+      // -1 => Disable bucket creation.
+      //  0 => Unlimited bucket creation.
+      _.merge(result, { max_buckets: maxBucketsMode });
+    }
     return result;
   }
 
@@ -592,10 +622,16 @@ export class RgwUserFormComponent implements OnInit {
    * configuration has been modified.
    */
   private _getUpdateArgs() {
-    const result: Record<string, string> = {};
+    const result: Record<string, any> = {};
     const keys = ['display_name', 'email', 'max_buckets', 'suspended'];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
+    }
+    const maxBucketsMode = parseInt(this.userForm.getValue('max_buckets_mode'), 10);
+    if (_.includes([-1, 0], maxBucketsMode)) {
+      // -1 => Disable bucket creation.
+      //  0 => Unlimited bucket creation.
+      result['max_buckets'] = maxBucketsMode;
     }
     return result;
   }
