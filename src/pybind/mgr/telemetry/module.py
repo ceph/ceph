@@ -681,7 +681,7 @@ class Module(MgrModule):
             proxies['http'] = self.proxy
             proxies['https'] = self.proxy
         try:
-            resp = requests.put(url=url, json=report)
+            resp = requests.put(url=url, json=report, proxies=proxies)
             resp.raise_for_status()
         except Exception as e:
             fail_reason = 'Failed to send %s to %s: %s' % (what, url, str(e))

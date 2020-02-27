@@ -114,6 +114,20 @@ The see the current configuration::
 
   ceph telemetry status
 
+Sending telemetry through a proxy
+---------------------------------
+
+If the cluster cannot directly connect to the configured telemetry
+endpoint (default *telemetry.ceph.com*), you can configure a HTTP/HTTPS
+proxy server with::
+
+  ceph config set mgr mgr/telemetry/proxy https://10.0.0.1:8080
+
+You can also include a *user:pass* if needed::
+
+  ceph config set mgr mgr/telemetry/proxy https://ceph:telemetry@10.0.0.1:8080
+
+
 Contact and Description
 -----------------------
 
