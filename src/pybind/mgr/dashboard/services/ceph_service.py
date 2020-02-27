@@ -166,6 +166,7 @@ class CephService(object):
 
     @staticmethod
     def _get_smart_data_by_device(device):
+        # type: (dict) -> Dict[str, dict]
         # Check whether the device is associated with daemons.
         if 'daemons' in device and device['daemons']:
             dev_smart_data = None
@@ -187,7 +188,7 @@ class CephService(object):
             # that are 'up'. All daemons on the same host can deliver
             # SMART data, thus it is not relevant for us which daemon
             # we are using.
-            daemons = list(set(daemons) & set(osd_daemons_up))
+            daemons = list(set(daemons) & set(osd_daemons_up))  # type: ignore
 
             for daemon in daemons:
                 svc_type, svc_id = daemon.split('.')
@@ -249,7 +250,7 @@ class CephService(object):
 
     @staticmethod
     def get_smart_data_by_daemon(daemon_type, daemon_id):
-        # type: (str, str) -> dict
+        # type: (str, str) -> Dict[str, dict]
         """
         Get the SMART data of the devices associated with the given daemon.
         :param daemon_type: The daemon type, e.g. 'osd' or 'mon'.
@@ -259,7 +260,7 @@ class CephService(object):
           key in the dictionary.
         """
         devices = CephService.get_devices_by_daemon(daemon_type, daemon_id)
-        smart_data = {}
+        smart_data = {}  # type: Dict[str, dict]
         if devices:
             for device in devices:
                 if device['devid'] not in smart_data:
