@@ -1343,3 +1343,39 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
             create_lv(name_prefix, uuid.uuid4(), vg=volume_group.name, extents=extents, tags=tags)
         )
     return lvs
+
+
+#############################################################
+#
+# New methods to get PVs, LVs, and VGs.
+# Later, these can be easily merged with get_api_* methods
+#
+###########################################################
+
+PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
+VG_FIELDS = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
+LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
+
+def get_pvs(fields=PV_FIELDS, sep='";"', filters=''):
+    args = ['pvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
+            filters, '-o', fields]
+
+    stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
+    pvs_report = _output_parser(stdout, fields)
+    return [PVolume(**pv_report) for pv_report in pvs_report]
+
+def get_vgs(fields=VG_FIELDS, sep='";"', filters=''):
+    args = ['vgs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
+            filters, '-o', fields]
+
+    stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
+    vgs_report =_output_parser(stdout, fields)
+    return [VolumeGroup(**vg_report) for vg_report in vgs_report]
+
+def get_lvs(fields=LV_FIELDS, sep='";"', filters=''):
+    args = ['lvs', '--no-heading', '--readonly', '--separator=' + sep, '-S',
+            filters, '-o', fields]
+
+    stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
+    lvs_report = _output_parser(stdout, fields)
+    return [Volume(**lv_report) for lv_report in lvs_report]
