@@ -130,7 +130,7 @@ CLS_INIT(queue)
   cls_register(QUEUE_CLASS, &h_class);
 
   /* queue*/
-  cls_register_cxx_method(h_class, QUEUE_INIT, CLS_METHOD_WR, cls_queue_init, &h_queue_init);
+  cls_register_cxx_method(h_class, QUEUE_INIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_queue_init, &h_queue_init);
   cls_register_cxx_method(h_class, QUEUE_GET_CAPACITY, CLS_METHOD_RD, cls_queue_get_capacity, &h_queue_get_capacity);
   cls_register_cxx_method(h_class, QUEUE_ENQUEUE, CLS_METHOD_RD | CLS_METHOD_WR, cls_queue_enqueue, &h_queue_enqueue);
   cls_register_cxx_method(h_class, QUEUE_LIST_ENTRIES, CLS_METHOD_RD, cls_queue_list_entries, &h_queue_list_entries);

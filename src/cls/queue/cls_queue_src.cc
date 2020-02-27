@@ -27,7 +27,7 @@ int queue_write_head(cls_method_context_t hctx, cls_queue_head& head)
 
   int ret = cls_cxx_write2(hctx, 0, bl.length(), &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (ret < 0) {
-    CLS_LOG(5, "ERROR: queue_write_head: failed to write head \n");
+    CLS_LOG(5, "ERROR: queue_write_head: failed to write head\n");
     return ret;
   }
   return 0;
@@ -40,7 +40,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
   bufferlist bl_head;
   int ret = cls_cxx_read(hctx, start_offset, chunk_size, &bl_head);
   if (ret < 0) {
-    CLS_LOG(5, "ERROR: queue_read_head: failed to read head \n");
+    CLS_LOG(5, "ERROR: queue_read_head: failed to read head\n");
     return ret;
   }
 
@@ -51,11 +51,11 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
   try {
     decode(queue_head_start, it);
   } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: queue_read_head: failed to decode queue start \n");
+    CLS_LOG(0, "ERROR: queue_read_head: failed to decode queue start: %s \n", err.what());
     return -EINVAL;
   }
   if (queue_head_start != QUEUE_HEAD_START) {
-    CLS_LOG(0, "ERROR: queue_read_head: invalid queue start \n");
+    CLS_LOG(0, "ERROR: queue_read_head: invalid queue start\n");
     return -EINVAL;
   }
 
@@ -63,7 +63,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
   try {
     decode(encoded_len, it);
   } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: queue_read_head: failed to decode encoded head size \n");
+    CLS_LOG(0, "ERROR: queue_read_head: failed to decode encoded head size: %s\n", err.what());
     return -EINVAL;
   }
 
@@ -74,7 +74,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
     bufferlist bl_remaining_head;
     int ret = cls_cxx_read2(hctx, start_offset, chunk_size, &bl_remaining_head, CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL);
     if (ret < 0) {
-      CLS_LOG(5, "ERROR: queue_read_head: failed to read remaining part of head \n");
+      CLS_LOG(5, "ERROR: queue_read_head: failed to read remaining part of head\n");
       return ret;
     }
     bl_head.claim_append(bl_remaining_head);
@@ -83,7 +83,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
   try {
     decode(head, it);
   } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: queue_read_head: failed to decode head\n");
+    CLS_LOG(0, "ERROR: queue_read_head: failed to decode head: %s\n", err.what());
     return -EINVAL;
   }
 
@@ -319,7 +319,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
           try {
             decode(entry_start, it);
           } catch (buffer::error& err) {
-            CLS_LOG(10, "ERROR: queue_list_entries: failed to decode entry start \n");
+            CLS_LOG(10, "ERROR: queue_list_entries: failed to decode entry start: %s\n", err.what());
             return -EINVAL;
           }
           if (entry_start != QUEUE_ENTRY_START) {
@@ -332,7 +332,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
           try {
             decode(data_size, it);
           } catch (buffer::error& err) {
-            CLS_LOG(10, "ERROR: queue_list_entries: failed to decode data size \n");
+            CLS_LOG(10, "ERROR: queue_list_entries: failed to decode data size: %s\n", err.what());
             return -EINVAL;
           }
         } else {
