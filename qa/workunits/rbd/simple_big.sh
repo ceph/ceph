@@ -2,7 +2,7 @@
 
 mb=100000
 
-rbd create foo --size $mb
+rbd create foo --size $mb --image-feature layering
 DEV=$(sudo rbd map foo)
 dd if=/dev/zero of=$DEV bs=1M count=$mb
 dd if=$DEV of=/dev/null bs=1M count=$mb
