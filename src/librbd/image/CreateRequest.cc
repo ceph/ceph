@@ -575,10 +575,10 @@ void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
     return;
   }
 
-  cls::rbd::MirrorMode mirror_mode_internal = cls::rbd::MIRROR_MODE_DISABLED;
+  m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   if (r == 0) {
     auto it = m_outbl.cbegin();
-    r = cls_client::mirror_mode_get_finish(&it, &mirror_mode_internal);
+    r = cls_client::mirror_mode_get_finish(&it, &m_mirror_mode);
     if (r < 0) {
       lderr(m_cct) << "Failed to retrieve mirror mode" << dendl;
 
@@ -586,21 +586,6 @@ void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
       remove_object_map();
       return;
     }
-  }
-
-  // TODO: remove redundant code...
-  switch (mirror_mode_internal) {
-  case cls::rbd::MIRROR_MODE_DISABLED:
-  case cls::rbd::MIRROR_MODE_IMAGE:
-  case cls::rbd::MIRROR_MODE_POOL:
-    m_mirror_mode = static_cast<rbd_mirror_mode_t>(mirror_mode_internal);
-    break;
-  default:
-    lderr(m_cct) << "Unknown mirror mode ("
-                 << static_cast<uint32_t>(mirror_mode_internal) << ")" << dendl;
-    r = -EINVAL;
-    remove_object_map();
-    return;
   }
 
   journal_create();
@@ -614,15 +599,20 @@ void CreateRequest<I>::journal_create() {
   Context *ctx = create_context_callback<klass, &klass::handle_journal_create>(
     this);
 
+  // only link to remote primary mirror uuid if in journal-based
+  // mirroring mode
+  bool use_primary_mirror_uuid = (
+    m_force_non_primary &&
+    m_mirror_image_mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL);
+
   librbd::journal::TagData tag_data;
-  tag_data.mirror_uuid = (m_force_non_primary ? m_primary_mirror_uuid :
+  tag_data.mirror_uuid = (use_primary_mirror_uuid ? m_primary_mirror_uuid :
                           librbd::Journal<I>::LOCAL_MIRROR_UUID);
 
-  librbd::journal::CreateRequest<I> *req =
-    librbd::journal::CreateRequest<I>::create(
-      m_io_ctx, m_image_id, m_journal_order, m_journal_splay_width,
-      m_journal_pool, cls::journal::Tag::TAG_CLASS_NEW, tag_data,
-      librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
+  auto req = librbd::journal::CreateRequest<I>::create(
+    m_io_ctx, m_image_id, m_journal_order, m_journal_splay_width,
+    m_journal_pool, cls::journal::Tag::TAG_CLASS_NEW, tag_data,
+    librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
   req->send();
 }
 
@@ -644,7 +634,7 @@ void CreateRequest<I>::handle_journal_create(int r) {
 
 template<typename I>
 void CreateRequest<I>::mirror_image_enable() {
-  if (((m_mirror_mode != RBD_MIRROR_MODE_POOL) && !m_force_non_primary) ||
+  if (((m_mirror_mode != cls::rbd::MIRROR_MODE_POOL) && !m_force_non_primary) ||
       m_skip_mirror_enable) {
     complete(0);
     return;
