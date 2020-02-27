@@ -220,6 +220,20 @@ the id is the numeric OSD ID, for MDS services it is the file system name::
     ceph orch daemon status <type> <instance-name> [--refresh]
 
 
+.. _orchestrator-cli-cephfs:
+    
+Depoying CephFS
+===============
+
+In order to set up a :term:`CephFS`, execute::
+
+    ceph fs volume create <fs_name> <placement spec>
+    
+Where ``name`` is the name of the CephFS, ``placement`` is a 
+:ref:`orchestrator-cli-placement-spec`.
+    
+This command will create the required Ceph pools, create the new 
+CephFS, and deploy mds servers.
 
 Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
 =================================================
