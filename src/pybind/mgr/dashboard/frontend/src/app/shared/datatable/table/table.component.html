@@ -284,3 +284,9 @@
     <span *ngIf="!last">&nbsp;</span>
   </span>
 </ng-template>
+
+<ng-template #mapTpl
+             let-column="column"
+             let-value="value">
+  <span>{{ value | map:column?.customTemplateConfig }}</span>
+</ng-template>

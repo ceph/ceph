@@ -19,6 +19,7 @@ import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { JoinPipe } from './join.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
+import { MapPipe } from './map.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
 import { NotAvailablePipe } from './not-available.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
@@ -54,7 +55,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IopsPipe,
     UpperFirstPipe,
     RbdConfigurationSourcePipe,
-    DurationPipe
+    DurationPipe,
+    MapPipe
   ],
   exports: [
     ArrayPipe,
@@ -81,7 +83,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IopsPipe,
     UpperFirstPipe,
     RbdConfigurationSourcePipe,
-    DurationPipe
+    DurationPipe,
+    MapPipe
   ],
   providers: [
     ArrayPipe,
@@ -104,7 +107,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IopsPipe,
     MillisecondsPipe,
     NotAvailablePipe,
-    UpperFirstPipe
+    UpperFirstPipe,
+    MapPipe
   ]
 })
 export class PipesModule {}
