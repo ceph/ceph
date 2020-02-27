@@ -125,12 +125,11 @@ TEST_F(TestInstances, NotifyRemove)
   ASSERT_EQ(0, librbd::cls_client::mirror_instances_add(&m_local_io_ctx,
                                                         instance_id1));
 
-
   C_SaferCond on_init;
   instances.init(&on_init);
   ASSERT_EQ(0, on_init.wait());
 
-  instances.acked({instance_id1, instance_id2});
+  instances.acked({instance_id2});
 
   ASSERT_LT(0U, m_listener.add.count);
   instances.unblock_listener();
