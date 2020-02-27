@@ -1310,6 +1310,18 @@ TEST(BufferList, constructors) {
   }
 }
 
+TEST(BufferList, append_after_move) {
+  bufferlist bl(6);
+  bl.append("ABC", 3);
+  EXPECT_EQ(1, bl.get_num_buffers());
+
+  bufferlist moved_to_bl(std::move(bl));
+  moved_to_bl.append("123", 3);
+  // it's expected that the list(list&&) ctor will preserve the _carriage
+  EXPECT_EQ(1, moved_to_bl.get_num_buffers());
+  EXPECT_EQ(0, ::memcmp("ABC123", moved_to_bl.c_str(), 6));
+}
+
 void bench_bufferlist_alloc(int size, int num, int per)
 {
   utime_t start = ceph_clock_now();
