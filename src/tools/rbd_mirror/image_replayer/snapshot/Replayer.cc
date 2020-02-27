@@ -444,7 +444,8 @@ void Replayer<I>::scan_local_mirror_snapshots(
              << "local_snap_id_start=" << m_local_snap_id_start << ", "
              << "local_snap_id_end=" << m_local_snap_id_end << ", "
              << "local_snap_ns=" << m_local_mirror_snap_ns << dendl;
-    if (m_local_mirror_snap_ns.complete) {
+    if (!m_local_mirror_snap_ns.is_primary() &&
+        m_local_mirror_snap_ns.complete) {
       // our remote sync should start after this completed snapshot
       m_remote_snap_id_start = m_local_mirror_snap_ns.primary_snap_id;
     }
@@ -483,7 +484,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                              "invalid remote mirror snapshot state");
       return;
     } else {
-      remote_demoted = (mirror_ns->is_primary() && mirror_ns->is_demoted());
+      remote_demoted = mirror_ns->is_demoted();
     }
 
     auto remote_snap_id = snap_info_it->first;
@@ -591,7 +592,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     return;
   } else if (remote_demoted) {
     dout(10) << "remote image demoted" << dendl;
-    handle_replay_complete(locker, 0, "remote image demoted");
+    handle_replay_complete(locker, -EREMOTEIO, "remote image demoted");
     return;
   }
 
