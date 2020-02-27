@@ -31,19 +31,15 @@ using librbd::util::create_context_callback;
 template <typename I>
 void PromoteRequest<I>::send() {
   CephContext *cct = m_image_ctx->cct;
+  bool requires_orphan = false;
   if (!util::can_create_primary_snapshot(m_image_ctx, false, true,
+                                         &requires_orphan,
                                          &m_rollback_snap_id)) {
     lderr(cct) << "cannot promote" << dendl;
     finish(-EINVAL);
     return;
-  } else if (m_rollback_snap_id == CEPH_NOSNAP) {
+  } else if (m_rollback_snap_id == CEPH_NOSNAP && !requires_orphan) {
     create_promote_snapshot();
-    return;
-  }
-
-  if (!m_force) {
-    lderr(cct) << "cannot promote: needs rollback and force not set" << dendl;
-    finish(-EINVAL);
     return;
   }
 

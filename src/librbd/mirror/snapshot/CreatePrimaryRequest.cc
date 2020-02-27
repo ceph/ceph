@@ -40,7 +40,7 @@ void CreatePrimaryRequest<I>::send() {
   if (!util::can_create_primary_snapshot(
         m_image_ctx,
         ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0),
-        ((m_flags & CREATE_PRIMARY_FLAG_FORCE) != 0), nullptr)) {
+        ((m_flags & CREATE_PRIMARY_FLAG_FORCE) != 0), nullptr, nullptr)) {
     finish(-EINVAL);
     return;
   }
