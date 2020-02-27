@@ -134,7 +134,39 @@ void CreatePrimaryRequest<I>::handle_create_snapshot(int r) {
     return;
   }
 
-  if (m_snap_id != nullptr) {
+  refresh_image();
+}
+
+template <typename I>
+void CreatePrimaryRequest<I>::refresh_image() {
+  // if snapshot created via remote RPC, refresh is required to retrieve
+  // the snapshot id
+  if (m_snap_id == nullptr) {
+    unlink_peer();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  auto ctx = create_context_callback<
+    CreatePrimaryRequest<I>,
+    &CreatePrimaryRequest<I>::handle_refresh_image>(this);
+  m_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+void CreatePrimaryRequest<I>::handle_refresh_image(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  {
     std::shared_lock image_locker{m_image_ctx->image_lock};
     *m_snap_id = m_image_ctx->get_snap_id(
       cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
