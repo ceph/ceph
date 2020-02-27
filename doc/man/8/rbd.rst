@@ -651,6 +651,18 @@ Commands
   you can not removed it unless use force. But an actively in-use by clones 
   or has snapshots can not be removed.
 
+:command:`trash purge schedule add` [-p | --pool *pool*] [--namespace *namespace*] *interval* [*start-time*]
+  Add trash purge schedule.
+
+:command:`trash purge schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*]
+  List trash purge schedule.
+
+:command:`trash purge schedule remove` [-p | --pool *pool*] [--namespace *namespace*] *interval* [*start-time*]
+  Remove trash purge schedule.
+
+:command:`trash purge schedule status` [-p | --pool *pool*] [--format *format*] [--pretty-format] [--namespace *namespace*]
+  Show trash purge schedule status.
+
 :command:`watch` *image-spec*
   Watch events on image.
 

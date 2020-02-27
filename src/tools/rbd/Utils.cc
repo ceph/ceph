@@ -10,6 +10,7 @@
 #include "include/rbd/features.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/escape.h"
 #include "common/safe_io.h"
 #include "global/global_context.h"
 #include <iostream>
@@ -22,6 +23,24 @@ namespace utils {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+
+namespace {
+
+static std::string mgr_command_args_to_str(
+    const std::map<std::string, std::string> &args) {
+  std::string out = "";
+
+  std::string delimiter;
+  for (auto &it : args) {
+    out += delimiter + "\"" + it.first + "\": \"" +
+      stringify(json_stream_escaper(it.second)) + "\"";
+    delimiter = ",\n";
+  }
+
+  return out;
+}
+
+} // anonymous namespace
 
 int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
   if (progress) {
@@ -1015,6 +1034,34 @@ void populate_unknown_mirror_image_site_statuses(
   }
 
   std::swap(global_status->site_statuses, site_statuses);
+}
+
+int mgr_command(librados::Rados& rados, const std::string& cmd,
+                const std::map<std::string, std::string> &args,
+                std::ostream *out_os, std::ostream *err_os) {
+  std::string command = R"(
+    {
+      "prefix": ")" + cmd + R"(", )" + mgr_command_args_to_str(args) + R"(
+    })";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+  std::string outs;
+  int r = rados.mgr_command(command, in_bl, &out_bl, &outs);
+  if (r < 0) {
+    (*err_os) << "rbd: " << cmd << " failed: " << cpp_strerror(r);
+    if (!outs.empty()) {
+      (*err_os) << ": " << outs;
+    }
+    (*err_os) << std::endl;
+    return r;
+  }
+
+  if (out_bl.length() != 0) {
+    (*out_os) << out_bl.c_str();
+  }
+
+  return 0;
 }
 
 } // namespace utils

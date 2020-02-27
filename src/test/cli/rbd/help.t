@@ -140,6 +140,12 @@
       trash list (trash ls)             List trash images.
       trash move (trash mv)             Move an image to the trash.
       trash purge                       Remove all expired images from trash.
+      trash purge schedule add          Add trash purge schedule.
+      trash purge schedule list (... ls)
+                                        List trash purge schedule.
+      trash purge schedule remove (... rm)
+                                        Remove trash purge schedule.
+      trash purge schedule status       Show trash purge schedule status.
       trash remove (trash rm)           Remove an image from trash.
       trash restore                     Restore an image from trash.
       watch                             Watch events on image.
@@ -2388,6 +2394,63 @@
     --expired-before date purges images that expired before the given date
     --threshold arg       purges images until the current pool data usage is
                           reduced to X%, value range: 0.0-1.0
+  
+  rbd help trash purge schedule add
+  usage: rbd trash purge schedule add [--pool <pool>] [--namespace <namespace>] 
+                                      <interval> <start-time> 
+  
+  Add trash purge schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+  
+  rbd help trash purge schedule list
+  usage: rbd trash purge schedule list [--pool <pool>] [--namespace <namespace>] 
+                                       [--recursive] [--format <format>] 
+                                       [--pretty-format] 
+  
+  List trash purge schedule.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    -R [ --recursive ]   list all schedules
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help trash purge schedule remove
+  usage: rbd trash purge schedule remove
+                                        [--pool <pool>] [--namespace <namespace>] 
+                                        <interval> <start-time> 
+  
+  Remove trash purge schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+  
+  rbd help trash purge schedule status
+  usage: rbd trash purge schedule status
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--format <format>] [--pretty-format] 
+  
+  Show trash purge schedule status.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help trash remove
   usage: rbd trash remove [--pool <pool>] [--namespace <namespace>] 

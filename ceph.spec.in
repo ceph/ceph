@@ -579,11 +579,13 @@ Requires:       python%{python3_version_nodots}-bcrypt
 Requires:       python%{python3_version_nodots}-pyOpenSSL
 Requires:       python%{python3_version_nodots}-requests
 Requires:       python%{python3_version_nodots}-PyYAML
+Requires:       python%{python3_version_nodots}-dateutil
 %else
 Requires:       python%{python3_pkgversion}-bcrypt
 Requires:       python%{python3_pkgversion}-pecan
 Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
+Requires:       python%{python3_pkgversion}-dateutil
 %endif
 %if 0%{?fedora} || 0%{?rhel} >= 8
 Requires:       python%{python3_pkgversion}-cherrypy

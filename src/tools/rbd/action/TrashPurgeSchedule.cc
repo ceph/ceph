@@ -16,6 +16,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <boost/program_options.hpp>
 
@@ -23,7 +24,7 @@
 
 namespace rbd {
 namespace action {
-namespace mirror_snapshot_schedule {
+namespace trash_purge_schedule {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
@@ -45,13 +46,13 @@ public:
     try {
       auto &s = json_root.get_obj();
 
-      if (s["scheduled_images"].type() != json_spirit::array_type) {
+      if (s["scheduled"].type() != json_spirit::array_type) {
         std::cerr << "rbd: unexpected schedule JSON received: "
-                  << "scheduled_images is not array" << std::endl;
+                  << "scheduled is not array" << std::endl;
         return -EBADMSG;
       }
 
-      for (auto &item_val : s["scheduled_images"].get_array()) {
+      for (auto &item_val : s["scheduled"].get_array()) {
         if (item_val.type() != json_spirit::obj_type) {
           std::cerr << "rbd: unexpected schedule status JSON received: "
                     << "schedule item is not object" << std::endl;
@@ -60,6 +61,20 @@ public:
 
         auto &item = item_val.get_obj();
 
+        if (item["pool_name"].type() != json_spirit::str_type) {
+          std::cerr << "rbd: unexpected schedule JSON received: "
+                    << "pool_name is not string" << std::endl;
+          return -EBADMSG;
+        }
+        auto pool_name = item["pool_name"].get_str();
+
+        if (item["namespace"].type() != json_spirit::str_type) {
+          std::cerr << "rbd: unexpected schedule JSON received: "
+                    << "namespace is not string" << std::endl;
+          return -EBADMSG;
+        }
+        auto namespace_name = item["namespace"].get_str();
+
         if (item["schedule_time"].type() != json_spirit::str_type) {
           std::cerr << "rbd: unexpected schedule JSON received: "
                     << "schedule_time is not string" << std::endl;
@@ -67,14 +82,7 @@ public:
         }
         auto schedule_time = item["schedule_time"].get_str();
 
-        if (item["image"].type() != json_spirit::str_type) {
-          std::cerr << "rbd: unexpected schedule JSON received: "
-                    << "image is not string" << std::endl;
-          return -EBADMSG;
-        }
-        auto image = item["image"].get_str();
-
-        scheduled_images.push_back({schedule_time, image});
+        scheduled.insert({pool_name, namespace_name, schedule_time});
       }
 
     } catch (std::runtime_error &) {
@@ -86,30 +94,52 @@ public:
   }
 
   void dump(Formatter *f) {
-    f->open_array_section("scheduled_images");
-    for (auto &image : scheduled_images) {
-      f->open_object_section("image");
-      f->dump_string("schedule_time", image.first);
-      f->dump_string("image", image.second);
-      f->close_section(); // image
+    f->open_array_section("scheduled");
+    for (auto &item : scheduled) {
+      f->open_object_section("item");
+      f->dump_string("pool", item.pool_name);
+      f->dump_string("namespce", item.namespace_name);
+      f->dump_string("schedule_time", item.schedule_time);
+      f->close_section(); // item
     }
-    f->close_section(); // scheduled_images
+    f->close_section(); // scheduled
   }
 
   friend std::ostream& operator<<(std::ostream& os, ScheduleStatus &d);
 
 private:
 
-  std::list<std::pair<std::string, std::string>> scheduled_images;
+  struct Item {
+    std::string pool_name;
+    std::string namespace_name;
+    std::string schedule_time;
+
+    Item(const std::string &pool_name, const std::string &namespace_name,
+         const std::string &schedule_time)
+      : pool_name(pool_name), namespace_name(namespace_name),
+        schedule_time(schedule_time) {
+    }
+
+    bool operator<(const Item &rhs) const {
+      if (pool_name != rhs.pool_name) {
+        return pool_name < rhs.pool_name;
+      }
+      return namespace_name < rhs.namespace_name;
+    }
+  };
+
+  std::set<Item> scheduled;
 };
 
 std::ostream& operator<<(std::ostream& os, ScheduleStatus &s) {
   TextTable tbl;
+  tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
   tbl.define_column("SCHEDULE TIME", TextTable::LEFT, TextTable::LEFT);
-  tbl.define_column("IMAGE", TextTable::LEFT, TextTable::LEFT);
 
-  for (auto &[schedule_time, image] : s.scheduled_images) {
-    tbl << schedule_time << image << TextTable::endrow;
+  for (auto &item : s.scheduled) {
+    tbl << item.pool_name << item.namespace_name << item.schedule_time
+        << TextTable::endrow;
   }
 
   os << tbl;
@@ -120,7 +150,7 @@ std::ostream& operator<<(std::ostream& os, ScheduleStatus &s) {
 
 void get_arguments_add(po::options_description *positional,
                        po::options_description *options) {
-  add_level_spec_options(options);
+  add_level_spec_options(options, false);
   add_schedule_options(positional);
 }
 
@@ -143,7 +173,7 @@ int execute_add(const po::variables_map &vm,
     return r;
   }
 
-  r = utils::mgr_command(rados, "rbd mirror snapshot schedule add", args,
+  r = utils::mgr_command(rados, "rbd trash purge schedule add", args,
                          &std::cout, &std::cerr);
   if (r < 0) {
     return r;
@@ -154,7 +184,7 @@ int execute_add(const po::variables_map &vm,
 
 void get_arguments_remove(po::options_description *positional,
                           po::options_description *options) {
-  add_level_spec_options(options);
+  add_level_spec_options(options, false);
   add_schedule_options(positional);
 }
 
@@ -177,7 +207,7 @@ int execute_remove(const po::variables_map &vm,
     return r;
   }
 
-  r = utils::mgr_command(rados, "rbd mirror snapshot schedule remove", args,
+  r = utils::mgr_command(rados, "rbd trash purge schedule remove", args,
                          &std::cout, &std::cerr);
   if (r < 0) {
     return r;
@@ -188,7 +218,7 @@ int execute_remove(const po::variables_map &vm,
 
 void get_arguments_list(po::options_description *positional,
                         po::options_description *options) {
-  add_level_spec_options(options);
+  add_level_spec_options(options, false);
   options->add_options()
     ("recursive,R", po::bool_switch(), "list all schedules");
   at::add_format_options(options);
@@ -216,13 +246,13 @@ int execute_list(const po::variables_map &vm,
   }
 
   std::stringstream out;
-  r = utils::mgr_command(rados, "rbd mirror snapshot schedule list", args, &out,
+  r = utils::mgr_command(rados, "rbd trash purge schedule list", args, &out,
                          &std::cerr);
   if (r < 0) {
     return r;
   }
 
-  ScheduleList schedule_list;
+  ScheduleList schedule_list(false);
   r = schedule_list.parse(out.str());
   if (r < 0) {
     return r;
@@ -254,7 +284,7 @@ int execute_list(const po::variables_map &vm,
 
 void get_arguments_status(po::options_description *positional,
                           po::options_description *options) {
-  add_level_spec_options(options);
+  add_level_spec_options(options, false);
   at::add_format_options(options);
 }
 
@@ -280,8 +310,8 @@ int execute_status(const po::variables_map &vm,
   }
 
   std::stringstream out;
-  r = utils::mgr_command(rados, "rbd mirror snapshot schedule status", args,
-                         &out, &std::cerr);
+  r = utils::mgr_command(rados, "rbd trash purge schedule status", args, &out,
+                         &std::cerr);
   ScheduleStatus schedule_status;
   r = schedule_status.parse(out.str());
   if (r < 0) {
@@ -299,20 +329,21 @@ int execute_status(const po::variables_map &vm,
 }
 
 Shell::Action add_action(
-  {"mirror", "snapshot", "schedule", "add"}, {},
-  "Add mirror snapshot schedule.", "", &get_arguments_add, &execute_add);
+  {"trash", "purge", "schedule", "add"}, {}, "Add trash purge schedule.", "",
+  &get_arguments_add, &execute_add);
 Shell::Action remove_action(
-  {"mirror", "snapshot", "schedule", "remove"},
-  {"mirror", "snapshot", "schedule", "rm"}, "Remove mirror snapshot schedule.",
+  {"trash", "purge", "schedule", "remove"},
+  {"trash", "purge", "schedule", "rm"}, "Remove trash purge schedule.",
   "", &get_arguments_remove, &execute_remove);
 Shell::Action list_action(
-  {"mirror", "snapshot", "schedule", "list"},
-  {"mirror", "snapshot", "schedule", "ls"}, "List mirror snapshot schedule.",
+  {"trash", "purge", "schedule", "list"},
+  {"trash", "purge", "schedule", "ls"}, "List trash purge schedule.",
   "", &get_arguments_list, &execute_list);
 Shell::Action status_action(
-  {"mirror", "snapshot", "schedule", "status"}, {},
-  "Show mirror snapshot schedule status.", "", &get_arguments_status, &execute_status);
+  {"trash", "purge", "schedule", "status"}, {},
+  "Show trash purge schedule status.", "", &get_arguments_status,
+  &execute_status);
 
-} // namespace mirror_snapshot_schedule
+} // namespace trash_purge_schedule
 } // namespace action
 } // namespace rbd
