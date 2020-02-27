@@ -9,12 +9,12 @@ from mgr_module import CommandResult
 from mgr_util import get_time_series_rates, get_most_recent_rate
 
 from .. import mgr
+from ..exceptions import DashboardException
 
 try:
     from typing import Dict  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
-
 
 logger = logging.getLogger('ceph_service')
 
@@ -166,49 +166,106 @@ class CephService(object):
 
     @staticmethod
     def _get_smart_data_by_device(device):
+        # Check whether the device is associated with daemons.
         if 'daemons' in device and device['daemons']:
-            daemons = [daemon for daemon in device['daemons'] if daemon.startswith('osd')]
-            if daemons:
-                svc_type, svc_id = daemons[0].split('.')
-                dev_smart_data = CephService.send_command(
-                    svc_type, 'smart', svc_id, devid=device['devid'])
+            dev_smart_data = None
+
+            # The daemons associated with the device. Note, the list may
+            # contain daemons that are 'down' or 'destroyed'.
+            daemons = device.get('daemons')
+
+            # Get a list of all OSD daemons on all hosts that are 'up'
+            # because SMART data can not be retrieved from daemons that
+            # are 'down' or 'destroyed'.
+            osd_tree = CephService.send_command('mon', 'osd tree')
+            osd_daemons_up = [
+                node['name'] for node in osd_tree.get('nodes', {})
+                if node.get('status') == 'up'
+            ]
+
+            # Finally get the daemons on the host of the given device
+            # that are 'up'. All daemons on the same host can deliver
+            # SMART data, thus it is not relevant for us which daemon
+            # we are using.
+            daemons = list(set(daemons) & set(osd_daemons_up))
+
+            for daemon in daemons:
+                svc_type, svc_id = daemon.split('.')
+                try:
+                    dev_smart_data = CephService.send_command(
+                        svc_type, 'smart', svc_id, devid=device['devid'])
+                except SendCommandError:
+                    # Try to retrieve SMART data from another daemon.
+                    continue
                 for dev_id, dev_data in dev_smart_data.items():
                     if 'error' in dev_data:
                         logger.warning(
-                            '[SMART] error retrieving smartctl data for device ID "%s": %s', dev_id,
-                            dev_data)
-                return dev_smart_data
-            logger.warning('[SMART] no OSD service found for device ID "%s"', device['devid'])
-            return {}
-        logger.warning('[SMART] key "daemon" not found for device ID "%s"', device['devid'])
+                            '[SMART] Error retrieving smartctl data for device ID "%s": %s',
+                            dev_id, dev_data)
+                break
+            if dev_smart_data is None:
+                raise DashboardException(
+                    'Failed to retrieve SMART data for device ID "{}"'.format(
+                        device['devid']))
+            return dev_smart_data
+        logger.warning('[SMART] No daemons associated with device ID "%s"',
+                       device['devid'])
         return {}
 
     @staticmethod
     def get_devices_by_host(hostname):
         # (str) -> dict
-        return CephService.send_command('mon', 'device ls-by-host', host=hostname)
+        return CephService.send_command('mon',
+                                        'device ls-by-host',
+                                        host=hostname)
+
+    @staticmethod
+    def get_devices_by_daemon(daemon_type, daemon_id):
+        # (str, str) -> dict
+        return CephService.send_command('mon',
+                                        'device ls-by-daemon',
+                                        who='{}.{}'.format(
+                                            daemon_type, daemon_id))
 
     @staticmethod
     def get_smart_data_by_host(hostname):
         # type: (str) -> dict
+        """
+        Get the SMART data of all devices on the given host, regardless
+        of the daemon (osd, mon, ...).
+        :param hostname: The name of the host.
+        :return: A dictionary containing the SMART data of every device
+          on the given host. The device name is used as the key in the
+          dictionary.
+        """
         devices = CephService.get_devices_by_host(hostname)
         smart_data = {}  # type: dict
         if devices:
             for device in devices:
                 if device['devid'] not in smart_data:
-                    smart_data.update(CephService._get_smart_data_by_device(device))
+                    smart_data.update(
+                        CephService._get_smart_data_by_device(device))
         return smart_data
 
     @staticmethod
     def get_smart_data_by_daemon(daemon_type, daemon_id):
         # type: (str, str) -> dict
-        smart_data = CephService.send_command(daemon_type, 'smart', daemon_id)
-        if smart_data:
-            for _, dev_data in smart_data.items():
-                if 'error' in dev_data:
-                    logger.warning('[SMART] Error retrieving smartctl data for daemon "%s.%s"',
-                                   daemon_type, daemon_id)
-        return smart_data or {}
+        """
+        Get the SMART data of the devices associated with the given daemon.
+        :param daemon_type: The daemon type, e.g. 'osd' or 'mon'.
+        :param daemon_id: The daemon identifier.
+        :return: A dictionary containing the SMART data of every device
+          associated with the given daemon. The device name is used as the
+          key in the dictionary.
+        """
+        devices = CephService.get_devices_by_daemon(daemon_type, daemon_id)
+        smart_data = {}
+        if devices:
+            for device in devices:
+                if device['devid'] not in smart_data:
+                    smart_data.update(
+                        CephService._get_smart_data_by_device(device))
+        return smart_data
 
     @classmethod
     def get_rates(cls, svc_type, svc_name, path):
