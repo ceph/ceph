@@ -134,19 +134,6 @@ becomes *effective*, meaning that the operation has really happened
 .. autoclass:: ProgressReference
    :members:
 
-
-Placement
----------
-
-In general, stateless services do not require any specific placement
-rules, as they can run anywhere that sufficient system resources
-are available.  However, some orchestrators may not include the
-functionality to choose a location in this way, so we can optionally
-specify a location when creating a stateless service.
-
-OSD services generally require a specific placement choice, as this
-will determine which storage devices are used.
-
 Error Handling
 --------------
 
@@ -237,7 +224,23 @@ Devices
 
 .. py:currentmodule:: orchestrator
 
+Placement
+---------
 
+A :ref:`orchestrator-cli-placement-spec` defines the placement of
+daemons of a specifc service.
+
+In general, stateless services do not require any specific placement
+rules as they can run anywhere that sufficient system resources
+are available. However, some orchestrators may not include the
+functionality to choose a location in this way. Optionally, you can
+specify a location when creating a stateless service.
+
+
+.. autoclass:: PlacementSpec
+   :members:
+
+   
 Services
 --------
 
