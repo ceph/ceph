@@ -12,15 +12,15 @@ As the orchestrator CLI unifies different external orchestrators, a common nomen
 for the orchestrator module is needed.
 
 +--------------------------------------+---------------------------------------+
-| host                                 | hostname (not DNS name) of the        |
+| *host*                               | hostname (not DNS name) of the        |
 |                                      | physical host. Not the podname,       |
 |                                      | container name, or hostname inside    |
 |                                      | the container.                        |
 +--------------------------------------+---------------------------------------+
-| service type                         | The type of the service. e.g., nfs,   |
+| *service type*                       | The type of the service. e.g., nfs,   |
 |                                      | mds, osd, mon, rgw, mgr, iscsi        |
 +--------------------------------------+---------------------------------------+
-| service                              | A logical service, Typically          |
+| *service*                            | A logical service, Typically          |
 |                                      | comprised of multiple service         |
 |                                      | instances on multiple hosts for HA    |
 |                                      |                                       |
@@ -28,56 +28,20 @@ for the orchestrator module is needed.
 |                                      | * ``rgw_zone`` for rgw type           |
 |                                      | * ``ganesha_cluster_id`` for nfs type |
 +--------------------------------------+---------------------------------------+
-| service instance                     | A single instance of a service.       |
-|                                      |  Usually a daemon, but maybe not      |
+| *daemon*                             | A single instance of a service.       |
+|                                      | Usually a daemon, but maybe not       |
 |                                      | (e.g., might be a kernel service      |
 |                                      | like LIO or knfsd or whatever)        |
 |                                      |                                       |
 |                                      | This identifier should                |
 |                                      | uniquely identify the instance        |
 +--------------------------------------+---------------------------------------+
-| daemon                               | A running process on a host; use      |
-|                                      | “service instance” instead            |
-+--------------------------------------+---------------------------------------+
 
 The relation between the names is the following:
 
-* a service belongs to a service type
-* a service instance belongs to a service type
-* a service instance belongs to a single service group
+* A *service* has a specfic *service type*
+* A *daemon* is a physical instance of a *service type*
 
-Configuration
-=============
-
-To enable the orchestrator, please select the orchestrator module to use
-with the ``set backend`` command::
-
-    ceph orch set backend <module>
-
-For example, to enable the Rook orchestrator module and use it with the CLI::
-
-    ceph mgr module enable rook
-    ceph orch set backend rook
-
-You can then check backend is properly configured::
-
-    ceph orch status
-
-Disable the Orchestrator
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-To disable the orchestrator again, use the empty string ``""``::
-
-    ceph orch set backend ""
-    ceph mgr module disable rook
-
-Usage
-=====
-
-.. warning::
-
-    The orchestrator CLI is unfinished and work in progress. Some commands will not
-    exist, or return a different result.
 
 .. note::
 
@@ -86,7 +50,7 @@ Usage
     differ between implementations.
 
 Status
-~~~~~~
+======
 
 ::
 
@@ -98,7 +62,7 @@ to talk to it)
 Also show any in-progress actions.
 
 Host Management
-~~~~~~~~~~~~~~~
+===============
 
 List hosts associated with the cluster::
 
@@ -110,10 +74,10 @@ Add and remove hosts::
     ceph orch host rm <host>
 
 OSD Management
-~~~~~~~~~~~~~~
+==============
 
 List Devices
-^^^^^^^^^^^^
+------------
 
 Print a list of discovered devices, grouped by host and optionally
 filtered to a particular host:
@@ -139,7 +103,7 @@ Example::
     Output form Ansible orchestrator
 
 Create OSDs
-^^^^^^^^^^^
+-----------
 
 Create OSDs on a group of devices on a single host::
 
@@ -161,7 +125,7 @@ Example::
     Output form Ansible orchestrator
 
 Decommission an OSD
-^^^^^^^^^^^^^^^^^^^
+-------------------
 ::
 
     ceph orch osd rm <osd-id> [osd-id...]
@@ -206,7 +170,7 @@ Example::
 
 
 Monitor and manager management
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+==============================
 
 Creates or removes MONs or MGRs from the cluster. Orchestrator may return an
 error if it doesn't know how to do this transition.
@@ -233,7 +197,7 @@ Update the number of manager hosts::
 
 
 Service Status
-~~~~~~~~~~~~~~
+==============
 
 Print a list of services known to the orchestrator. The list can be limited to
 services on a particular host with the optional --host parameter and/or
@@ -258,7 +222,8 @@ the id is the numeric OSD ID, for MDS services it is the file system name::
 
 
 Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+=================================================
+
 The orchestrator is not responsible for configuring the services. Please look into the corresponding
 documentation for details.
 
@@ -286,6 +251,31 @@ Start/stop/reload::
 
     ceph orch daemon {start,stop,reload} <type> <daemon-id>
 
+    
+Configuring the Orchestrator CLI
+================================
+
+To enable the orchestrator, select the orchestrator module to use
+with the ``set backend`` command::
+
+    ceph orch set backend <module>
+
+For example, to enable the Rook orchestrator module and use it with the CLI::
+
+    ceph mgr module enable rook
+    ceph orch set backend rook
+
+Check the backend is properly configured::
+
+    ceph orch status
+
+Disable the Orchestrator
+------------------------
+
+To disable the orchestrator, use the empty string ``""``::
+
+    ceph orch set backend ""
+    ceph mgr module disable rook
 
 Current Implementation Status
 =============================
