@@ -4,7 +4,7 @@
 
 set -ex
 
-rbd create image -s 100
+rbd create image -s 100 --image-feature layering
 DEV=$(sudo rbd map image)
 dd if=/dev/zero of=$DEV oflag=direct count=10
 rbd snap create image@s1
