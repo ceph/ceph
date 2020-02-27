@@ -28,6 +28,18 @@ class LZ4Compressor : public Compressor {
   LZ4Compressor() : Compressor(COMP_ALG_LZ4, "lz4") {}
 
   int compress(const bufferlist &src, bufferlist &dst) override {
+    // older versions of liblz4 introduce bit errors when compressing
+    // fragmented buffers.  this was fixed in lz4 commit
+    // af127334670a5e7b710bbd6adb71aa7c3ef0cd72, which first
+    // appeared in v1.8.2.
+    //
+    // workaround: rebuild if not contiguous.
+    if (!src.is_contiguous()) {
+      bufferlist new_src = src;
+      new_src.rebuild();
+      return compress(new_src, dst);
+    }
+
     bufferptr outptr = buffer::create_page_aligned(
       LZ4_compressBound(src.length()));
     LZ4_stream_t lz4_stream;
