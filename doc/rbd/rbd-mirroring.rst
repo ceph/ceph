@@ -5,15 +5,36 @@
 .. index:: Ceph Block Device; mirroring
 
 RBD images can be asynchronously mirrored between two Ceph clusters. This
-capability uses the RBD journaling image feature to ensure crash-consistent
-replication between clusters. Mirroring is configured on a per-pool basis
-within peer clusters and can be configured to automatically mirror all
-images within a pool or only a specific subset of images. Mirroring is
-configured using the ``rbd`` command. The ``rbd-mirror`` daemon is responsible
-for pulling image updates from the remote, peer cluster and applying them to
-the image within the local cluster.
+capability is available in two modes:
 
-.. note:: RBD mirroring requires the Ceph Jewel release or later.
+* **Journal-based**: This mode uses the RBD journaling image feature to ensure
+  point-in-time, crash-consistent replication between clusters. Every write to
+  the RBD image is first recorded to the associated journal before modifying the
+  actual image. The remote cluster will read from this associated journal and
+  replay the updates to its local copy of the image. Since each write to the
+  RBD image will result in two writes to the Ceph cluster, expect write
+  latencies to nearly double when using the RBD jouranling image feature.
+
+* **Snapshot-based**: This mode uses periodically scheduled or manually
+  created RBD image mirror-snapshots to replicate crash-consistent RBD images
+  between clusters. The remote cluster will determine any data or metadata
+  updates between two mirror-snapshots and copy the deltas to its local copy of
+  the image. With the help of the RBD fast-diff image feature, updated data
+  blocks can be quickly computed without the need to scan the full RBD image.
+  Since this mode is not point-in-time consistent, the full snapshot delta will
+  need to be synced prior to use during a failover scenario. Any partially
+  applied snapshot deltas will be rolled back to the last fully synced snapshot
+  prior to use.
+
+.. note:: journal-based mirroring requires the Ceph Jewel release or later;
+   snapshot-based mirroring requires the Ceph Octopus release or later.
+
+Mirroring is configured on a per-pool basis within peer clusters and can be
+configured on a specific subset of images within the pool or configured to
+automatically mirror all images within a pool when using journal-based
+mirroring only. Mirroring is configured using the ``rbd`` command. The
+``rbd-mirror`` daemon is responsible for pulling image updates from the remote,
+peer cluster and applying them to the image within the local cluster.
 
 Depending on the desired needs for replication, RBD mirroring can be configured
 for either one- or two-way replication:
@@ -57,17 +78,17 @@ command, the pool name, and the mirroring mode::
 
         rbd mirror pool enable {pool-name} {mode}
 
-The mirroring mode can either be ``pool`` or ``image``:
+The mirroring mode can either be ``image`` or ``pool``:
 
-* **pool**:  When configured in ``pool`` mode, all images in the pool with the
-  journaling feature enabled are mirrored.
 * **image**: When configured in ``image`` mode, mirroring needs to be
   `explicitly enabled`_ on each image.
+* **pool** (default):  When configured in ``pool`` mode, all images in the pool
+  with the journaling feature enabled are mirrored.
 
 For example::
 
-        $ rbd --cluster site-a mirror pool enable image-pool pool
-        $ rbd --cluster site-b mirror pool enable image-pool pool
+        $ rbd --cluster site-a mirror pool enable image-pool image
+        $ rbd --cluster site-b mirror pool enable image-pool image
 
 Disable Mirroring
 -----------------
@@ -200,26 +221,56 @@ pool as follows:
 Image Configuration
 ===================
 
-Unlike pool configuration, image configuration only needs to be performed against
-a single mirroring peer Ceph cluster.
+Unlike pool configuration, image configuration only needs to be performed
+against a single mirroring peer Ceph cluster.
 
 Mirrored RBD images are designated as either primary or non-primary. This is a
 property of the image and not the pool. Images that are designated as
 non-primary cannot be modified.
 
 Images are automatically promoted to primary when mirroring is first enabled on
-an image (either implicitly if the pool mirror mode was **pool** and the image
+an image (either implicitly if the pool mirror mode was ``pool`` and the image
 has the journaling image feature enabled, or `explicitly enabled`_ by the
-``rbd`` command).
+``rbd`` command if the pool mirror mode was ``image``).
 
-Enable Image Journaling Support
+Enable Image Mirroring
+----------------------
+
+If mirroring is configured in ``image`` mode for the image's pool, then it
+is necessary to explicitly enable mirroring for each image within the pool.
+To enable mirroring for a specific image with ``rbd``, specify the
+``mirror image enable`` command along with the pool, image name, and mode::
+
+        rbd mirror image enable {pool-name}/{image-name} {mode}
+
+The mirror image mode can either be ``journal`` or ``snapshot``:
+
+* **journal** (default): When configured in ``journal`` mode, mirroring will
+  utilize the RBD journaling image feature to replicate the image contents. If
+  the RBD journaling image feature is not yet enabled on the image, it will be
+  automatically enabled.
+
+* **snapshot**:  When configured in ``snapshot`` mode, mirroring will utilize
+  RBD image mirror-snapshots to replicate the image contents. Once enabled, an
+  initial mirror-snapshot will automatically be created. Additional RBD image
+  `mirror-snapshots`_ can be created by the ``rbd`` command.
+
+For example::
+
+        $ rbd --cluster site-a mirror image enable image-pool/image-1 snapshot
+        $ rbd --cluster site-a mirror image enable image-pool/image-2 journal
+
+Enable Image Journaling Feature
 -------------------------------
 
-RBD mirroring uses the RBD journaling feature to ensure that the replicated
-image always remains crash-consistent. Before an image can be mirrored to
-a peer cluster, the journaling feature must be enabled. The feature can be
-enabled at image creation time by providing the
-``--image-feature exclusive-lock,journaling`` option to the ``rbd`` command.
+RBD journal-based mirroring uses the RBD image journaling feature to ensure that
+the replicated image always remains crash-consistent. When using the ``image``
+mirroring mode, the journaling feature will be automatically enabled when
+mirroring is enabled on the image. When using the ``pool`` mirroring mode,
+before an image can be mirrored to a peer cluster, the RBD image journaling
+feature must be enabled. The feature can be enabled at image creation time by
+providing the ``--image-feature exclusive-lock,journaling`` option to the
+``rbd`` command.
 
 Alternatively, the journaling feature can be dynamically enabled on
 pre-existing RBD images. To enable journaling with ``rbd``, specify
@@ -238,19 +289,72 @@ For example::
 .. tip:: You can enable journaling on all new images by default by adding
    ``rbd default features = 125`` to your Ceph configuration file.
 
-Enable Image Mirroring
-----------------------
+Create Image Mirror-Snapshots
+-----------------------------
 
-If the mirroring is configured in ``image`` mode for the image's pool, then it
-is necessary to explicitly enable mirroring for each image within the pool.
-To enable mirroring for a specific image with ``rbd``, specify the
-``mirror image enable`` command along with the pool and image name::
+When using snapshot-based mirroring, mirror-snapshots will need to be created
+whenever it is desired to mirror the changed contents of the RBD image. To
+create a mirror-snapshot manually with ``rbd``, specify the
+``mirror image snapshot`` command along with the pool and image name::
 
-        rbd mirror image enable {pool-name}/{image-name}
+        rbd mirror image snapshot {pool-name}/{image-name}
 
 For example::
 
-        $ rbd --cluster site-a mirror image enable image-pool/image-1
+        $ rbd --cluster site-a mirror image snapshot image-pool/image-1
+
+By default only ``3`` mirror-snapshots will be created per-image. The most
+recent mirror-snapshot is automatically pruned if the limit is reached.
+The limit can be overridden via the ``rbd_mirroring_max_mirroring_snapshots``
+configuration option if required. Additionally, mirror-snapshots are
+automatically deleted when the image is removed or when mirroring is disabled.
+
+Mirror-snapshots can also be automatically created on a periodic basis if
+mirror-snapshot schedules are defined. The mirror-snapshot can be scheduled
+globally, per-pool, or per-image levels. Multiple mirror-snapshot schedules can
+be defined at any level, but only the most-specific snapshot schedules that
+match an individual mirrored image will run.
+
+To create a mirror-snapshot schedule with ``rbd``, specify the
+``mirror snapshot schedule add`` command along with an optional pool or
+image name; interval; and optional start time::
+
+        rbd mirror snapshot schedule add [--pool {pool-name}] [--image {image-name}] {interval} [{start-time}]
+
+The ``interval`` can be specified in days, hours, or minutes using ``d``, ``h``,
+``m`` suffix respectively. The optional ``start-time`` can be specified using
+the ISO 8601 time format. For example::
+
+        $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool 24h 14:00:00-05:00
+        $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool --image image1 6h
+
+To remove a mirror-snapshot schedules with ``rbd``, specify the
+``mirror snapshot schedule remove`` command with options that match the
+corresponding ``add`` schedule command.
+
+To list all snapshot schedules for a specific level (global, pool, or image)
+with ``rbd``, specify the ``mirror snapshot schedule ls`` command along with
+an optional pool or image name. Additionally, the ``--recursive`` option can
+be specified to list all schedules at the specified level and below. For
+example::
+
+        $ rbd --cluster site-a mirror schedule ls --pool image-pool --recursive
+        POOL        NAMESPACE IMAGE  SCHEDULE                            
+        image-pool  -         -      every 1d starting at 14:00:00-05:00 
+        image-pool            image1 every 6h                            
+
+To view the status for when the next snapshots will be created for
+snapshot-based mirroring RBD images with ``rbd``, specify the
+``mirror snapshot schedule status`` command along with an optional pool or
+image name::
+
+        rbd mirror snapshot schedule status [--pool {pool-name}] [--image {image-name}]
+
+For example::
+
+        $ rbd --cluster site-a mirror schedule status
+        SCHEDULE TIME       IMAGE             
+        2020-02-26 18:00:00 image-pool/image1 
 
 Disable Image Mirroring
 -----------------------
@@ -328,8 +432,8 @@ Force Image Resync
 If a split-brain event is detected by the ``rbd-mirror`` daemon, it will not
 attempt to mirror the affected image until corrected. To resume mirroring for an
 image, first `demote the image`_ determined to be out-of-date and then request a
-resync to the primary image. To request an image resync with ``rbd``, specify the
-``mirror image resync`` command along with the pool and image name::
+resync to the primary image. To request an image resync with ``rbd``, specify
+the ``mirror image resync`` command along with the pool and image name::
 
         rbd mirror image resync {pool-name}/{image-name}
 
@@ -372,8 +476,8 @@ For example::
 rbd-mirror Daemon
 =================
 
-The two ``rbd-mirror`` daemons are responsible for watching image journals on the
-remote, peer cluster and replaying the journal events against the local
+The two ``rbd-mirror`` daemons are responsible for watching image journals on
+the remote, peer cluster and replaying the journal events against the local
 cluster. The RBD image journaling feature records all modifications to the
 image in the order they occur. This ensures that a crash-consistent mirror of
 the remote image is available locally.
@@ -407,4 +511,4 @@ The ``rbd-mirror`` can also be run in foreground by ``rbd-mirror`` command::
 .. _force resync command: #force-image-resync
 .. _demote the image: #image-promotion-and-demotion
 .. _create a Ceph user: ../../rados/operations/user-management#add-a-user
-
+.. _mirror-snapshots: #create-image-mirror-snapshots
