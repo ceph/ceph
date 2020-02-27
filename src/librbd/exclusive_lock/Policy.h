@@ -10,6 +10,7 @@ namespace exclusive_lock {
 enum OperationRequestType {
   OPERATION_REQUEST_TYPE_GENERAL           = 0,
   OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE = 1,
+  OPERATION_REQUEST_TYPE_FORCE_PROMOTION   = 2,
 };
 
 struct Policy {
