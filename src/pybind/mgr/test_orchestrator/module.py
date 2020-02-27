@@ -4,6 +4,7 @@ import re
 import os
 import threading
 import functools
+import itertools
 from subprocess import check_output, CalledProcessError
 try:
     from typing import Callable, List, Tuple
@@ -117,8 +118,10 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _init_data(self, data=None):
         self._inventory = [orchestrator.InventoryHost.from_json(inventory_host)
                            for inventory_host in data.get('inventory', [])]
-        self._daemons = [orchestrator.DaemonDescription.from_json(service)
-                          for service in data.get('daemons', [])]
+        self._services = [orchestrator.ServiceDescription.from_json(service)
+                           for service in data.get('services', [])]
+        self._daemons = [orchestrator.DaemonDescription.from_json(daemon)
+                          for daemon in data.get('daemons', [])]
 
     @deferred_read
     def get_inventory(self, host_filter=None, refresh=False):
@@ -153,6 +156,60 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')
 
+    def _get_ceph_daemons(self):
+        # type: () -> List[orchestrator.DaemonDescription]
+        """ Return ceph daemons on the running host."""
+        types = ("mds", "osd", "mon", "rgw", "mgr")
+        out = map(str, check_output(['ps', 'aux']).splitlines())
+        processes = [p for p in out if any(
+            [('ceph-' + t in p) for t in types])]
+
+        daemons = []
+        for p in processes:
+            daemon = orchestrator.DaemonDescription()
+            # parse daemon type
+            m = re.search('ceph-([^ ]+)', p)
+            if m:
+                _daemon_type = m.group(1)
+            else:
+                raise AssertionError('Fail to determine daemon type from {}'.format(p))
+
+            # parse daemon ID. Possible options: `-i <id>`, `--id=<id>`, `--id <id>`
+            patterns = ['-i\s(\w+)', '--id[\s=](\w+)']
+            daemon_id = None
+            for pattern in patterns:
+                m = re.search(pattern, p)
+                if m:
+                    daemon_id = m.group(1)
+                    break
+            else:
+                raise AssertionError('Fail to determine daemon ID from {}'.format(p))
+            daemon = orchestrator.DaemonDescription(
+                daemon_type=_daemon_type, daemon_id=daemon_id, hostname='localhost')
+            daemons.append(daemon)
+        return daemons
+
+    @deferred_read
+    def describe_service(self, service_type=None, service_name=None, refresh=False):
+        if self._services:
+            # Dummy data
+            services = self._services
+        else:
+            # Deduce services from daemons running on localhost
+            all_daemons = self._get_ceph_daemons()
+            services = []
+            for daemon_type, daemons in itertools.groupby(all_daemons, key=lambda d: d.daemon_type):
+                daemon_size = len(list(daemons))
+                services.append(orchestrator.ServiceDescription(
+                    service_name=daemon_type, size=daemon_size, running=daemon_size))
+        
+        def _filter_func(svc):
+            if service_type is not None and service_type != svc.service_name:
+                return False
+            return True
+
+        return list(filter(_filter_func, services))
+
     @deferred_read
     def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
         """
@@ -160,29 +217,21 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         it returns the mgr we're running in.
         """
         if daemon_type:
-            daemon_types = ("mds", "osd", "mon", "rgw", "mgr", "iscsi")
+            daemon_types = ("mds", "osd", "mon", "rgw", "mgr", "iscsi", "crash")
             assert daemon_type in daemon_types, daemon_type + " unsupported"
 
-        if self._daemons:
-            if host:
-                return list(filter(lambda svc: svc.hostname == host, self._daemons))
-            return self._daemons
+        daemons = self._daemons if self._daemons else self._get_ceph_daemons()
 
-        out = map(str, check_output(['ps', 'aux']).splitlines())
-        types = (daemon_type, ) if daemon_type else ("mds", "osd", "mon", "rgw", "mgr")
-        assert isinstance(types, tuple)
-        processes = [p for p in out if any([('ceph-' + t in p) for t in types])]
+        def _filter_func(d):
+            if daemon_type is not None and daemon_type != d.daemon_type:
+                return False
+            if daemon_id is not None and daemon_id != d.daemon_id:
+                return False
+            if host is not None and host != d.hostname:
+                return False
+            return True
 
-        result = []
-        for p in processes:
-            sd = orchestrator.DaemonDescription()
-            sd.hostname = 'localhost'
-            res = re.search('ceph-[^ ]+', p)
-            assert res
-            sd.daemon_id = res.group()
-            result.append(sd)
-
-        return result
+        return list(filter(_filter_func, daemons))
 
     def create_osds(self, drive_groups):
         # type: (List[DriveGroupSpec]) -> TestCompletion

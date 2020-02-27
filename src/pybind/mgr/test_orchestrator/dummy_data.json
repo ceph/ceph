@@ -145,11 +145,124 @@
       ]
     }
   ],
+  "services": [
+    {
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "service_name": "crash",
+      "size": 1,
+      "running": 0,
+      "last_refresh": "2020-02-26T07:23:56.501157"
+    },
+    {
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "service_name": "mgr",
+      "size": 1,
+      "running": 1,
+      "last_refresh": "2020-02-26T07:23:56.501087"
+    },
+    {
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "service_name": "mon",
+      "size": 1,
+      "running": 1,
+      "last_refresh": "2020-02-26T07:23:56.501013"
+    },
+    {
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "service_name": "osd",
+      "size": 4,
+      "running": 4,
+      "last_refresh": "2020-02-26T07:23:56.500960"
+    }
+  ],
   "daemons": [
     {
       "hostname": "host0",
+      "container_id": "a8ad2d6ceb5d5b8a308207ea58963b9295d52d3c282a054534b1ed52e5e77d31",
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "daemon_id": "host0",
+      "daemon_type": "crash",
+      "version": "15.1.0-1240-ge5841ce",
+      "status": -1,
+      "status_desc": "unknown",
+      "last_refresh": "2020-02-26T07:23:56.501157"
+    },
+    {
+      "hostname": "host0",
+      "container_id": "10f182e93c9c9110b7223e7b8e0337445fded77a317c649fc54b188f22c6e4cb",
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "daemon_id": "host0.kjapjg",
+      "daemon_type": "mgr",
+      "version": "15.1.0-1240-ge5841ce",
+      "status": 1,
+      "status_desc": "running",
+      "last_refresh": "2020-02-26T07:23:56.501087"
+    },
+    {
+      "hostname": "host0",
+      "container_id": "27f178927ca4dbbd8d73380662f15828f780604f97baae4cac4d3f984e2c32af",
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "daemon_id": "host0",
+      "daemon_type": "mon",
+      "version": "15.1.0-1240-ge5841ce",
+      "status": 1,
+      "status_desc": "running",
+      "last_refresh": "2020-02-26T07:23:56.501013"
+    },
+    {
+      "hostname": "host0",
+      "container_id": "71803dddfb9f736c26cc2127e684c66486034292ea94bc560d00132c29fe8b16",
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "daemon_id": "0",
       "daemon_type": "osd",
-      "daemon_id": "1"
+      "version": "15.1.0-1240-ge5841ce",
+      "status": 1,
+      "status_desc": "running",
+      "last_refresh": "2020-02-26T07:23:56.501050"
+    },
+    {
+      "hostname": "host0",
+      "container_id": "3ca816209df390e8de3cdff78d95f69efd664b4017036b4d7c47563731e1fe37",
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "daemon_id": "1",
+      "daemon_type": "osd",
+      "version": "15.1.0-1240-ge5841ce",
+      "status": 1,
+      "status_desc": "running",
+      "last_refresh": "2020-02-26T07:23:56.500960"
+    },
+    {
+      "hostname": "host0",
+      "container_id": "fcbcc88f023f3734f9015fcdae09277ed4c5e6b0ed1590275e4538d897588acb",
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "daemon_id": "2",
+      "daemon_type": "osd",
+      "version": "15.1.0-1240-ge5841ce",
+      "status": 1,
+      "status_desc": "running",
+      "last_refresh": "2020-02-26T07:23:56.501123"
+    },
+    {
+      "hostname": "host0",
+      "container_id": "55f3894fffa52854e22354c7629cc4c58db46903ac0d977988b81ed5ba4ad759",
+      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
+      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "daemon_id": "3",
+      "daemon_type": "osd",
+      "version": "15.1.0-1240-ge5841ce",
+      "status": 1,
+      "status_desc": "running",
+      "last_refresh": "2020-02-26T07:23:56.501193"
     }
   ]
 }
