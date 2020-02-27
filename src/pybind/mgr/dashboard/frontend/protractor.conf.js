@@ -34,8 +34,8 @@ const config = {
   },
   params: {
     login: {
-      user: 'admin',
-      password: 'admin'
+      user: process.env.E2E_LOGIN_USER || 'admin',
+      password: process.env.E2E_LOGIN_PWD || 'admin'
     }
   },
 
