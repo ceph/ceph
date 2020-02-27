@@ -1,6 +1,10 @@
+import logging
+
 from typing import Dict, Optional
 
 import cephadm
+
+logger = logging.getLogger(__name__)
 
 class NFSGanesha(object):
     def __init__(self,
@@ -40,6 +44,7 @@ class NFSGanesha(object):
 
     def create_keyring(self):
         # type: () -> str
+        logger.info('Create keyring for user: %s' % self.get_rados_user())
         ret, keyring, err = self.mgr.mon_command({
             'prefix': 'auth get',
             'entity': 'client.' + self.get_rados_user(),
@@ -49,6 +54,7 @@ class NFSGanesha(object):
     def create_rados_config_obj(self):
         # type: () -> None
         obj = self.get_rados_config_name()
+        logger.info('Create rados config object: %s' % obj)
         with self.mgr.rados.open_ioctx(self.pool) as ioctx:
             if self.namespace:
                 ioctx.set_namespace(self.namespace)
@@ -73,4 +79,5 @@ RADOS_URLS {{
         config['files'] = {
             'ganesha.conf' : self.get_ganesha_conf(),
         }
+        logger.debug('Generated cephadm config-json: %s' % config)
         return config
