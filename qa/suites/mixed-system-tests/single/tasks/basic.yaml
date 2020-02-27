@@ -1,4 +1,7 @@
 tasks:
+- exec:
+    client.0:
+      - sudo yum install python3 -y
 - parallel:
     - mixed_system_test.rgw_ios:
         test: Mbuckets_with_Nobjects
