@@ -12,13 +12,17 @@ stop() {
 
 BASE_URL=''
 DEVICE=''
+E2E_LOGIN_USER=''
+E2E_LOGIN_PWD=''
 REMOTE='false'
 
-while getopts 'd:r:' flag; do
+while getopts 'd:p:r:u:' flag; do
   case "${flag}" in
     d) DEVICE=$OPTARG;;
+    p) E2E_LOGIN_PWD=$OPTARG;;
     r) REMOTE='true'
        BASE_URL=$OPTARG;;
+    u) E2E_LOGIN_USER=$OPTARG;;
   esac
 done
 
@@ -58,10 +62,9 @@ if [ "$BASE_URL" == "" ]; then
     BASE_URL=$(./bin/ceph mgr services | jq -r .dashboard)
 fi
 
-export BASE_URL
+export BASE_URL E2E_LOGIN_USER E2E_LOGIN_PWD
 
 cd $DASH_DIR/frontend
-jq .[].target=\"$BASE_URL\" proxy.conf.json.sample > proxy.conf.json
 
 [[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
 
@@ -70,10 +73,13 @@ if [ "$DEVICE" == "chrome" ]; then
     stop 0
 elif [ "$DEVICE" == "docker" ]; then
     failed=0
-    docker run -d -v $(pwd):/workdir --net=host --name angular-e2e-container rogargon/angular-e2e || failed=1
-    docker exec -e BASE_URL=$BASE_URL angular-e2e-container npm run e2e:ci || failed=1
-    docker stop angular-e2e-container
-    docker rm angular-e2e-container
+    cat <<EOF > .env
+BASE_URL
+E2E_LOGIN_USER
+E2E_LOGIN_PWD
+EOF
+    docker run --rm -v $(pwd):/ceph --env-file .env --name=e2e --network=host --entrypoint "" \
+        docker.io/rhcsdashboard/e2e npm run e2e:ci || failed=1
     stop $failed
 else
     echo "ERROR: Device not recognized. Valid devices are 'chrome' and 'docker'."

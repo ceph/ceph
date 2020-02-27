@@ -162,9 +162,9 @@ Device:
 
 Remote:
   If you want to run the tests outside the ceph environment, you will need to
-  manually define the dashboard url using ``-r``::
+  manually define the dashboard url using ``-r`` and, optionally, credentials (``-u``, ``-p``)::
 
-    $ ./run-frontend-e2e-tests.sh -r <DASHBOARD_URL>
+    $ ./run-frontend-e2e-tests.sh -r <DASHBOARD_URL> -u <E2E_LOGIN_USER> -p <E2E_LOGIN_PWD>
 
 Note:
   When using docker, as your device, you might need to run the script with sudo
