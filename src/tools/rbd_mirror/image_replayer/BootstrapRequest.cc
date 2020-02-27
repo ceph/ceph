@@ -139,7 +139,7 @@ void BootstrapRequest<I>::handle_prepare_local_image(int r) {
 
   // image replayer will detect the name change (if any) at next
   // status update
-  {
+  if (r >= 0 && !m_prepare_local_image_name.empty()) {
     std::unique_lock locker{m_lock};
     m_local_image_name = m_prepare_local_image_name;
   }
