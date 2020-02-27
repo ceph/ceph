@@ -51,6 +51,9 @@ private:
    * CREATE_SNAPSHOT
    *    |
    *    v
+   * REFRESH_IMAGE
+   *    |
+   *    v
    * UNLINK_PEER (skip if not needed,
    *    |         repeat if needed)
    *    v
@@ -76,6 +79,9 @@ private:
 
   void create_snapshot();
   void handle_create_snapshot(int r);
+
+  void refresh_image();
+  void handle_refresh_image(int r);
 
   void unlink_peer();
   void handle_unlink_peer(int r);
