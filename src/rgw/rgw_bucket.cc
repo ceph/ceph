@@ -2954,6 +2954,13 @@ public:
     if (ret < 0)
       return ret;
 
+    auto lc = bci.attrs.find(RGW_ATTR_LC);
+    if (lc != bci.attrs.end()) {
+      store->get_lc()->set_entry(bci.info.bucket);
+    } else if (old_bci.attrs.find(RGW_ATTR_LC) != old_bci.attrs.end()) {
+      store->get_lc()->rm_entry(bci.info.bucket);
+    }
+
     objv_tracker = bci.info.objv_tracker;
 
     ret = store->init_bucket_index(bci.info, bci.info.num_shards);

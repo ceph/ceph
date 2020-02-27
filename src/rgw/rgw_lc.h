@@ -500,6 +500,8 @@ class RGWLC : public DoutPrefixProvider {
                         RGWLifecycleConfiguration *config);
   int remove_bucket_config(RGWBucketInfo& bucket_info,
                            const map<string, bufferlist>& bucket_attrs);
+  int set_entry(rgw_bucket& bucket);
+  int rm_entry(rgw_bucket& bucket);
 
   CephContext *get_cct() const override { return store->ctx(); }
   unsigned get_subsys() const;

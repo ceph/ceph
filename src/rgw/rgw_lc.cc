@@ -1439,10 +1439,7 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
   rgw_bucket& bucket = bucket_info.bucket;
 
 
-  ret = guard_lc_modify(store, bucket, cookie, [&](librados::IoCtx *ctx, const string& oid,
-                                                   const pair<string, int>& entry) {
-    return cls_rgw_lc_set_entry(*ctx, oid, entry);
-  });
+  ret = set_entry(bucket);
 
   return ret;
 }
@@ -1464,13 +1461,28 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
   }
 
 
-  ret = guard_lc_modify(store, bucket, cookie, [&](librados::IoCtx *ctx, const string& oid,
-                                                   const pair<string, int>& entry) {
-    return cls_rgw_lc_rm_entry(*ctx, oid, entry);
-  });
+  ret = rm_entry(bucket);
 
   return ret;
 }
+
+int RGWLC::set_entry(rgw_bucket& bucket)
+{
+  int ret = guard_lc_modify(store, bucket, cookie, [&](librados::IoCtx *ctx, const string& oid,
+                                                   const pair<string, int>& entry) {
+    return cls_rgw_lc_set_entry(*ctx, oid, entry);
+  });
+  return ret;
+}
+
+int RGWLC::rm_entry(rgw_bucket& bucket)
+{
+  int ret = guard_lc_modify(store, bucket, cookie, [&](librados::IoCtx *ctx, const string& oid,
+                                                    const pair<string, int>& entry) {
+     return cls_rgw_lc_rm_entry(*ctx, oid, entry);
+   });
+   return ret;
+ }
 
 namespace rgw::lc {
 
