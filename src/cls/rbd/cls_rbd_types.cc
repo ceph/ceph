@@ -997,7 +997,7 @@ std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type) {
     os << "non-primary";
     break;
   case MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
-    os << "demoted (demoted)";
+    os << "non-primary (demoted)";
     break;
   default:
     os << "unknown";
