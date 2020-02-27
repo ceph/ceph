@@ -1237,10 +1237,16 @@ public:
       boost::statechart::custom_reaction< QueryState >,
       boost::statechart::transition< GotInfo, GetLog >,
       boost::statechart::custom_reaction< MNotifyRec >,
-      boost::statechart::transition< IsDown, Down >
+      boost::statechart::transition< IsDown, Down >,
+      boost::statechart::custom_reaction< MLogRec >
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const MNotifyRec& infoevt);
+    boost::statechart::result react(const MLogRec& evt) {
+      // If we end up receiving a response from a previous GetLog request when
+      // we have transitioned out of Peering/GetLog due to a map change, just ignore it.
+      return discard_event();
+    }
   };
 
   struct GotLog : boost::statechart::event< GotLog > {
