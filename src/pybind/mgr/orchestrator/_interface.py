@@ -936,13 +936,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def clear_all_specs(self):
-        # type: () -> Completion
-        """
-        Lists saved service specs
-        """
-        raise NotImplementedError()
-
     def remove_service(self, service_name):
         # type: (str) -> Completion
         """
@@ -1404,17 +1397,13 @@ class DaemonDescription(object):
             return self.name().startswith(service_name + '.')
         return False
 
-    def service_name(self, without_service_type=False):
+    def service_name(self):
         if self.daemon_type == 'rgw':
             v = self.daemon_id.split('.')
             s_name = '.'.join(v[0:2])
-            if without_service_type:
-                return s_name
             return 'rgw.%s' % s_name
         if self.daemon_type in ['mds', 'nfs']:
             _s_name = self.daemon_id.split('.')[0]
-            if without_service_type:
-                return _s_name
             return 'mds.%s' % _s_name
         return self.daemon_type
 
@@ -1550,13 +1539,13 @@ class ServiceSpec(object):
         # type: (Optional[str], Optional[PlacementSpec], Optional[str], Optional[int]) -> None
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
+        assert service_type
+        self.service_type = service_type
+
         #: Give this set of stateless services a name: typically it would
         #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
         #: within one ceph cluster. Note: Not all clusters have a name
-        self.name = name  # type: Optional[str]
-
-        assert service_type
-        self.service_type = service_type
+        self.name = name or service_type
 
         if self.placement is not None and self.placement.count is not None:
             #: Count of service instances. Deprecated.
@@ -1634,7 +1623,6 @@ class NFSServiceSpec(ServiceSpec):
         if not self.pool:
             raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
 
-
 class RGWSpec(ServiceSpec):
     """
     Settings to configure a (multisite) Ceph RGW
@@ -1662,8 +1650,7 @@ class RGWSpec(ServiceSpec):
         # default values that makes sense for Ansible. Rook has default values implemented
         # in Rook itself. Thus we don't set any defaults here in this class.
 
-        super(RGWSpec, self).__init__(name=rgw_realm + '.' + rgw_zone,
-                                      placement=placement, service_type=service_type)
+        super(RGWSpec, self).__init__(name=rgw_realm+'.'+rgw_zone, placement=placement, service_type=service_type)
 
         #: List of hosts where RGWs should run. Not for Rook.
         if hosts:

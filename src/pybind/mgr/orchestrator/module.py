@@ -740,16 +740,6 @@ Usage:
         return HandleCommandResult(stdout=specs)
 
     @_cli_write_command(
-        'orch servicespecs clear',
-        desc='Clear all Service specs')
-    def _clear_service_specs(self):
-        completion = self.clear_all_specs()
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-
-    @_cli_write_command(
         'orch apply mgr',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false "
