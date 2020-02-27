@@ -5,5 +5,14 @@ export enum CellTemplate {
   checkIcon = 'checkIcon',
   routerLink = 'routerLink',
   executing = 'executing',
-  classAdding = 'classAdding'
+  classAdding = 'classAdding',
+  // Maps the value using the given dictionary.
+  // {
+  //   ...
+  //   cellTransformation: CellTemplate.map,
+  //   customTemplateConfig: {
+  //     [key: any]: any
+  //   }
+  // }
+  map = 'map'
 }
