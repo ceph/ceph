@@ -4569,15 +4569,8 @@ int main(int argc, const char **argv)
       break;
     case OPT::ZONEGROUP_MODIFY:
       {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store->svc()->sysobj);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
