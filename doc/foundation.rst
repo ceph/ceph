@@ -34,6 +34,7 @@ Premier
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
 * `Red Hat <https://www.redhat.com/>`_
+* `Samsung Electronics <https://samsung.com/>`_
 * `SoftIron <https://www.softiron.com/>`_
 * `SUSE <https://www.suse.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
@@ -105,6 +106,7 @@ Members
 * Lars Marowsky-Bree (SUSE)
 * Matias Bjorling (Western Digital)
 * Mike Perez (Red Hat) - Ceph community manager
+* Myoungwon Oh (Samsung Electronics)
 * Paul Emmerich (croit) - General member representative
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
