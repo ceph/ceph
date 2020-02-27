@@ -1205,9 +1205,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   mdlog->flush();
 
   // clean up requests, too
-  for (auto p = session->requests.begin(); !p.end(); ) {
-    MDRequestRef mdr(*p);
-    ++p;
+  while(!session->requests.empty()) {
+    auto mdr = MDRequestRef(*session->requests.begin());
     mdcache->request_kill(mdr);
   }
 
