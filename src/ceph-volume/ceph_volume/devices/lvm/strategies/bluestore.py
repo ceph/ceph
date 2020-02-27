@@ -6,7 +6,7 @@ from .strategies import Strategy
 from .strategies import MixedStrategy
 from ceph_volume.devices.lvm.create import Create
 from ceph_volume.devices.lvm.prepare import Prepare
-from ceph_volume.util import templates
+from ceph_volume.util import templates, system
 from ceph_volume.exceptions import SizeAllocationError
 
 
@@ -355,23 +355,23 @@ class MixedType(MixedStrategy):
             data_path = osd['data']['path']
             data_vg = data_vgs[data_path]
             data_lv_extents = data_vg.sizing(parts=self.osds_per_device)['extents']
+            data_uuid = system.generate_uuid()
             data_lv = lvm.create_lv(
-                'osd-block', data_vg.name, extents=data_lv_extents, uuid_name=True
-            )
+                'osd-block', data_uuid, vg=data_vg.name, extents=data_lv_extents)
             command = [
                 '--bluestore',
                 '--data', "%s/%s" % (data_lv.vg_name, data_lv.name),
             ]
             if 'block.db' in osd:
+                db_uuid = system.generate_uuid()
                 db_lv = lvm.create_lv(
-                    'osd-block-db', db_vg.name, extents=db_lv_extents, uuid_name=True
-                )
+                    'osd-block-db', db_uuid, vg=db_vg.name, extents=db_lv_extents)
                 command.extend([ '--block.db',
                                 '{}/{}'.format(db_lv.vg_name, db_lv.name)])
             if 'block.wal' in osd:
+                wal_uuid = system.generate_uuid()
                 wal_lv = lvm.create_lv(
-                    'osd-block-wal', wal_vg.name, extents=wal_lv_extents, uuid_name=True
-                )
+                    'osd-block-wal', wal_uuid, vg=wal_vg.name, extents=wal_lv_extents)
                 command.extend(
                     ['--block.wal',
                      '{}/{}'.format(wal_lv.vg_name, wal_lv.name)
