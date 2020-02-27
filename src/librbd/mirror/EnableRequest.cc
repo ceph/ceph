@@ -65,7 +65,12 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
     r = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
   }
 
-  if (r == 0) {
+  if (r == 0 && m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_CREATING &&
+      !m_non_primary_global_image_id.empty()) {
+    // special case where rbd-mirror injects a disabled record to record the
+    // local image id prior to creating ther image
+    r = -ENOENT;
+  } else if (r == 0) {
     if (m_mirror_image.mode != m_mode) {
       lderr(m_cct) << "invalid current image mirror mode" << dendl;
       r = -EINVAL;
@@ -77,9 +82,7 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
     }
     finish(r);
     return;
-  }
-
-  if (r != -ENOENT) {
+  } else if (r != -ENOENT) {
     lderr(m_cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
                  << dendl;
     finish(r);
