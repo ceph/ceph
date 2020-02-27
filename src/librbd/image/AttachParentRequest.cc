@@ -27,7 +27,7 @@ void AttachParentRequest<I>::send() {
 template <typename I>
 void AttachParentRequest<I>::attach_parent() {
   auto cct = m_image_ctx.cct;
-  ldout(cct, 5) << dendl;
+  ldout(cct, 5) << "parent_image_spec=" << m_parent_image_spec << dendl;
 
   librados::ObjectWriteOperation op;
   if (!m_legacy_parent) {

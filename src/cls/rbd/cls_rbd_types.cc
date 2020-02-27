@@ -524,6 +524,16 @@ void ParentImageSpec::generate_test_instances(std::list<ParentImageSpec*>& o) {
   o.push_back(new ParentImageSpec{1, "ns", "foo", 3});
 }
 
+std::ostream& operator<<(std::ostream& os, const ParentImageSpec& rhs) {
+  os << "["
+     << "pool_id=" << rhs.pool_id << ", "
+     << "pool_namespace=" << rhs.pool_namespace << ", "
+     << "image_id=" << rhs.image_id << ", "
+     << "snap_id=" << rhs.snap_id
+     << "]";
+  return os;
+}
+
 void ChildImageSpec::encode(bufferlist &bl) const {
   ENCODE_START(2, 1, bl);
   encode(pool_id, bl);
@@ -552,6 +562,15 @@ void ChildImageSpec::generate_test_instances(std::list<ChildImageSpec*> &o) {
   o.push_back(new ChildImageSpec());
   o.push_back(new ChildImageSpec(123, "", "abc"));
   o.push_back(new ChildImageSpec(123, "ns", "abc"));
+}
+
+std::ostream& operator<<(std::ostream& os, const ChildImageSpec& rhs) {
+  os << "["
+     << "pool_id=" << rhs.pool_id << ", "
+     << "pool_namespace=" << rhs.pool_namespace << ", "
+     << "image_id=" << rhs.image_id
+     << "]";
+  return os;
 }
 
 void GroupImageSpec::encode(bufferlist &bl) const {

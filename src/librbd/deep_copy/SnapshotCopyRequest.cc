@@ -568,14 +568,14 @@ void SnapshotCopyRequest<I>::send_set_head() {
     if (snap_info_it != m_src_image_ctx->snap_info.end()) {
       auto& snap_info = snap_info_it->second;
       size = snap_info.size;
-      if (!m_flatten) {
-        parent_spec = snap_info.parent.spec;
+      if (!m_flatten && snap_info.parent.spec.pool_id != -1) {
+        parent_spec = m_dst_parent_spec;
         parent_overlap = snap_info.parent.overlap;
       }
     } else {
       size = m_src_image_ctx->size;
       if (!m_flatten) {
-        parent_spec = m_src_image_ctx->parent_md.spec;
+        parent_spec = m_dst_image_ctx->parent_md.spec;
         parent_overlap = m_src_image_ctx->parent_md.overlap;
       }
     }
