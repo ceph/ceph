@@ -315,6 +315,8 @@ struct ParentImageSpec {
 
 WRITE_CLASS_ENCODER(ParentImageSpec);
 
+std::ostream& operator<<(std::ostream& os, const ParentImageSpec& rhs);
+
 struct ChildImageSpec {
   int64_t pool_id = -1;
   std::string pool_namespace;
@@ -348,6 +350,8 @@ struct ChildImageSpec {
   }
 };
 WRITE_CLASS_ENCODER(ChildImageSpec);
+
+std::ostream& operator<<(std::ostream& os, const ChildImageSpec& rhs);
 
 typedef std::set<ChildImageSpec> ChildImageSpecs;
 
