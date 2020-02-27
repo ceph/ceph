@@ -128,7 +128,7 @@ private:
   std::string m_id_obj, m_header_obj, m_objmap_name;
 
   bufferlist m_outbl;
-  rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
+  cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
 
   void validate_data_pool();
