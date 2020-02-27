@@ -7,6 +7,7 @@ set(rbd_srcs
   IndentStream.cc
   MirrorDaemonServiceInfo.cc
   OptionPrinter.cc
+  Schedule.cc
   Shell.cc
   Utils.cc
   action/Bench.cc
@@ -46,6 +47,7 @@ set(rbd_srcs
   action/Snap.cc
   action/Sparsify.cc
   action/Status.cc
+  action/TrashPurgeSchedule.cc
   action/Trash.cc
   action/Watch.cc)
 
