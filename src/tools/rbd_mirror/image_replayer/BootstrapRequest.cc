@@ -178,7 +178,14 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
     finish(r);
     return;
   } else if (r == -ENOENT || state_builder == nullptr) {
-    dout(10) << "remote image does not exist" << dendl;
+    dout(10) << "remote image does not exist";
+    if (state_builder != nullptr) {
+      *_dout << ": "
+             << "local_image_id=" << state_builder->local_image_id  << ", "
+             << "remote_image_id=" << state_builder->remote_image_id << ", "
+             << "is_linked=" << state_builder->is_linked();
+    }
+    *_dout << dendl;
 
     // TODO need to support multiple remote images
     if (state_builder != nullptr &&

@@ -118,7 +118,8 @@ private:
   bufferlist m_out_bl;
   std::string m_remote_image_id;
   cls::rbd::MirrorImage m_mirror_image;
-  librbd::mirror::PromotionState m_promotion_state;
+  librbd::mirror::PromotionState m_promotion_state =
+    librbd::mirror::PROMOTION_STATE_UNKNOWN;
   std::string m_primary_mirror_uuid;
 
   // journal-based mirroring
@@ -139,7 +140,7 @@ private:
 
   void finalize_journal_state_builder(cls::journal::ClientState client_state,
                                       const MirrorPeerClientMeta& client_meta);
-  void finalize_snapshot_state_builder();
+  void finalize_snapshot_state_builder(int r);
 
   void finish(int r);
 };
