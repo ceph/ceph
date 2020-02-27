@@ -2795,6 +2795,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         nfs = NFSGanesha(self, daemon_id, spec.pool, namespace=spec.namespace)
         keyring = nfs.create_keyring()
         cephadm_config = nfs.get_cephadm_config()
+        nfs.create_rados_config_obj()
         return self._create_daemon('nfs', daemon_id, host,
                                    keyring=keyring,
                                    cephadm_config=cephadm_config)
