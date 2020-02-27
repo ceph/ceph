@@ -130,7 +130,7 @@ void Instances<I>::handle_acked(const InstanceIds& instance_ids) {
 
 template <typename I>
 void Instances<I>::notify_instances_added(const InstanceIds& instance_ids) {
-  std::lock_guard locker{m_lock};
+  std::unique_lock locker{m_lock};
   InstanceIds added_instance_ids;
   for (auto& instance_id : instance_ids) {
     auto it = m_instances.find(instance_id);
@@ -144,9 +144,9 @@ void Instances<I>::notify_instances_added(const InstanceIds& instance_ids) {
   }
 
   dout(5) << "instance_ids=" << added_instance_ids << dendl;
-  m_lock.unlock();
+  locker.unlock();
   m_listener.handle_added(added_instance_ids);
-  m_lock.lock();
+  locker.lock();
 
   for (auto& instance_id : added_instance_ids) {
     auto it = m_instances.find(instance_id);
