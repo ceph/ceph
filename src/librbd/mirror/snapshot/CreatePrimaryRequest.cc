@@ -107,14 +107,15 @@ void CreatePrimaryRequest<I>::handle_get_mirror_peers(int r) {
 
 template <typename I>
 void CreatePrimaryRequest<I>::create_snapshot() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
   cls::rbd::MirrorSnapshotNamespace ns{
     ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0 ?
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
     m_mirror_peer_uuids, "", CEPH_NOSNAP};
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "name=" << m_snap_name << ", "
+                 << "ns=" << ns << dendl;
   auto ctx = create_context_callback<
     CreatePrimaryRequest<I>,
     &CreatePrimaryRequest<I>::handle_create_snapshot>(this);
@@ -137,6 +138,7 @@ void CreatePrimaryRequest<I>::handle_create_snapshot(int r) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
     *m_snap_id = m_image_ctx->get_snap_id(
       cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
+    ldout(cct, 20) << "snap_id=" << *m_snap_id << dendl;
   }
 
   unlink_peer();
