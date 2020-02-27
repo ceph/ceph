@@ -86,10 +86,13 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
     r = librbd::cls_client::dir_get_name_finish(&it, m_local_image_name);
   }
 
-  if (r < 0) {
-    if (r != -ENOENT) {
-      derr << "failed to retrieve image name: " << cpp_strerror(r) << dendl;
-    }
+  if (r == -ENOENT) {
+    // proceed we should have a mirror image record if we got this far
+    dout(10) << "image does not exist for local image id " << m_local_image_id
+             << dendl;
+    *m_local_image_name = "";
+  } else  if (r < 0) {
+    derr << "failed to retrieve image name: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
