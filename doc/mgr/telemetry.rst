@@ -20,6 +20,20 @@ Interval
 --------
 The module compiles and sends a new report every 72 hours by default.
 
+Sending telemetry through a proxy
+---------------------------------
+
+If the cluster cannot directly connect to the configured telemetry
+endpoint (default *telemetry.ceph.com*), you can configure a HTTP/HTTPS
+proxy server with::
+
+  ceph config-key set mgr/telemetry/proxy https://10.0.0.1:8080
+
+You can also include a *user:pass* if needed::
+
+  ceph config-key set mgr/telemetry/proxy https://ceph:telemetry@10.0.0.1:8080
+
+
 Contact and Description
 -----------------------
 A contact and description can be added to the report, this is optional.
