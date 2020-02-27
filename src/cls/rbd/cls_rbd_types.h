@@ -584,6 +584,12 @@ struct MirrorSnapshotNamespace {
             state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED);
   }
 
+  inline bool is_orphan() const {
+    return (is_non_primary() &&
+            primary_mirror_uuid.empty() &&
+            primary_snap_id == CEPH_NOSNAP);
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& it);
 

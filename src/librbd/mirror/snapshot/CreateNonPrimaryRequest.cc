@@ -122,6 +122,7 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
                  cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY), {},
     m_primary_mirror_uuid, m_primary_snap_id};
   ns.snap_seqs = m_snap_seqs;
+  ns.complete = is_orphan();
   ldout(cct, 20) << "ns=" << ns << dendl;
 
   auto ctx = create_context_callback<
@@ -160,6 +161,7 @@ void CreateNonPrimaryRequest<I>::write_image_state() {
 
   if (is_orphan()) {
     finish(0);
+    return;
   }
 
   CephContext *cct = m_image_ctx->cct;

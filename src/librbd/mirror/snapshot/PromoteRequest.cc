@@ -43,6 +43,8 @@ void PromoteRequest<I>::send() {
     return;
   }
 
+  ldout(cct, 20) << "requires_orphan=" << requires_orphan << ", "
+                 << "rollback_snap_id=" << m_rollback_snap_id << dendl;
   create_orphan_snapshot();
 }
 
@@ -233,6 +235,7 @@ void PromoteRequest<I>::handle_acquire_exclusive_lock(int r) {
       r = m_image_ctx->exclusive_lock->get_unlocked_op_error();
       locker.unlock();
       finish(r);
+      return;
     }
   }
 
