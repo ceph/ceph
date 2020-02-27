@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/image/GetMetadataRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/Utils.h"
+#include <boost/algorithm/string/predicate.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -146,7 +147,7 @@ void ApplyImageStateRequest<I>::get_image_meta() {
     ApplyImageStateRequest<I>,
     &ApplyImageStateRequest<I>::handle_get_image_meta>(this);
   auto req = librbd::image::GetMetadataRequest<I>::create(
-    m_local_image_ctx->md_ctx, m_local_image_ctx->header_oid, "", "", 0U,
+    m_local_image_ctx->md_ctx, m_local_image_ctx->header_oid, true, "", "", 0U,
     &m_metadata, ctx);
   req->send();
 }

@@ -24,17 +24,18 @@ public:
   typedef std::map<std::string, bufferlist> KeyValues;
 
   static GetMetadataRequest* create(
-      IoCtx &io_ctx, const std::string &oid, const std::string& filter,
-      const std::string& last_key, uint32_t max_results, KeyValues* key_values,
-      Context *on_finish) {
-    return new GetMetadataRequest(io_ctx, oid, filter, last_key, max_results,
+      IoCtx &io_ctx, const std::string &oid, bool filter_internal,
+      const std::string& filter_key_prefix, const std::string& last_key,
+      uint32_t max_results, KeyValues* key_values, Context *on_finish) {
+    return new GetMetadataRequest(io_ctx, oid, filter_internal,
+                                  filter_key_prefix, last_key, max_results,
                                   key_values, on_finish);
   }
 
   GetMetadataRequest(
-      IoCtx &io_ctx, const std::string &oid, const std::string& filter,
-      const std::string& last_key, uint32_t max_results, KeyValues* key_values,
-      Context *on_finish);
+      IoCtx &io_ctx, const std::string &oid, bool filter_internal,
+      const std::string& filter_key_prefix, const std::string& last_key,
+      uint32_t max_results, KeyValues* key_values, Context *on_finish);
 
   void send();
 
@@ -56,7 +57,8 @@ private:
    */
   librados::IoCtx m_io_ctx;
   std::string m_oid;
-  std::string m_filter;
+  bool m_filter_internal;
+  std::string m_filter_key_prefix;
   std::string m_last_key;
   uint32_t m_max_results;
   KeyValues* m_key_values;
