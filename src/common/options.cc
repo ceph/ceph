@@ -8535,57 +8535,6 @@ std::vector<Option> get_mds_client_options() {
 }
 
 
-std::vector<Option> get_cephfs_shell_options() {
-  return std::vector<Option>({
-    Option("allow_ansi", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("Terminal")
-    .set_description("Allow ANSI escape sequences in output. Values: "
-		     "Terminal, Always, Never"),
-
-    Option("colors", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("Terminal")
-    .set_description("Colouring CephFS shell input and output. Values: "
-		     "Terminal, Always, Never"),
-
-    Option("continuation_prompt", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default(">")
-    .set_description("Prompt string when a command continue to second line"),
-
-    Option("debug_shell", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-    .set_default(false)
-    .set_description("Allow tracebacks on error for CephFS Shell"),
-
-    Option("echo", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-    .set_default(false)
-    .set_description("Print command issued on prompt before execution"),
-
-    Option("editor", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("vim")
-    .set_description("Default text editor for shell"),
-
-    Option("feedback_to_output", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-    .set_default(false)
-    .set_description("include '|' and '>' in result"),
-
-    Option("max_completion_items", Option::TYPE_INT, Option::LEVEL_BASIC)
-    .set_default(50)
-    .set_description("Maximum number of items to be displayed by tab "
-		     "completion"),
-
-    Option("prompt", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("\x1b[01;33mCephFS:~\x1b[96m/\x1b[0m\x1b[01;33m>>>\x1b[00m ")
-    .set_description("Whether non-essential feedback should be printed."),
-
-    Option("quiet", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-    .set_default(false)
-    .set_description("Whether non-essential feedback should be printed."),
-
-    Option("timing", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-    .set_default(false)
-    .set_description("Whether execution time should be reported"),
-  });
-}
-
 static std::vector<Option> build_options()
 {
   std::vector<Option> result = get_global_options();
@@ -8603,7 +8552,6 @@ static std::vector<Option> build_options()
   ingest(get_immutable_object_cache_options(), "immutable-objet-cache");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
-  ingest(get_cephfs_shell_options(), "cephfs-shell");
 
   return result;
 }
