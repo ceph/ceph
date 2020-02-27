@@ -7180,6 +7180,12 @@ static std::vector<Option> get_rbd_options() {
     .set_description("Compression hint to send to the OSDs during writes")
     .set_flag(Option::FLAG_RUNTIME),
 
+    Option("rbd_read_from_replica_policy", Option::TYPE_STR, Option::LEVEL_BASIC)
+    .set_enum_allowed({"default", "balance", "localize"})
+    .set_default("default")
+    .set_description("Read replica policy send to the OSDS during reads")
+    .set_flag(Option::FLAG_RUNTIME),
+
     Option("rbd_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("true if LTTng-UST tracepoints should be enabled"),

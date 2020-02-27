@@ -1948,6 +1948,7 @@ TEST_F(TestLibRBD, TestIO)
   uint64_t size = 2 << 20;  
 
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_read_from_replica_policy", "balance"));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
   
   char test_data[TEST_IO_SIZE + 1];

@@ -309,7 +309,11 @@ public:
   }
 
   int ImageCtx::get_read_flags(snap_t snap_id) {
-    int flags = librados::OPERATION_NOFLAG | extra_read_flags;
+    int flags = librados::OPERATION_NOFLAG | read_flags;
+    if (flags != 0)
+      return flags;
+
+    flags = librados::OPERATION_NOFLAG | extra_read_flags;
     if (snap_id == LIBRADOS_SNAP_HEAD)
       return flags;
 
@@ -793,6 +797,19 @@ public:
       alloc_hint_flags |= librados::ALLOC_HINT_FLAG_COMPRESSIBLE;
     } else if (compression_hint == "incompressible") {
       alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+    }
+
+    librados::Rados rados(md_ctx);
+    int8_t require_osd_release;
+    int r = rados.get_min_compatible_osd(&require_osd_release);
+    if (r == 0 && require_osd_release >= CEPH_RELEASE_OCTOPUS) {
+      read_flags = 0;
+      auto read_policy = config.get_val<std::string>("rbd_read_from_replica_policy");
+      if (read_policy == "balance") {
+        read_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+      } else if (read_policy == "localize") {
+        read_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+      }
     }
 
     io_work_queue->apply_qos_schedule_tick_min(

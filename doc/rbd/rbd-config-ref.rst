@@ -15,6 +15,14 @@ Generic IO Settings
 :Default: ``none``
 :Values: ``none``, ``compressible``, ``incompressible``
 
+``rbd read from replica policy``
+
+:Description: policy for determining which OSD will receive read operations. If set to `default`, the primary OSD will always be used for read operations. If set to `balance`, read operations will be sent to a randomly selected OSD within the replica set. If set to `localize`, read operations will be sent to the closest OSD as determined by the CRUSH map. Note: this feature requires the cluster to be configured with a minimum compatible OSD release of Octopus.
+:Type: Enum
+:Required: No
+:Default: ``default``
+:Values: ``default``, ``balance``, ``localize``
+
 Cache Settings
 =======================
 
