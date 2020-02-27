@@ -3,16 +3,22 @@
 CephFS Shell
 =============
 
-The File System (FS) shell includes various shell-like commands that directly interact with the :term:`Ceph File System`.
+CephFS Shell provides shell-like commands that directly interact with the
+:term:`Ceph File System`.
+
+Behaviour of CephFS Shell can be tweaked using cephfs-shell.conf. CephFS Shell
+looks for it by default at the path provided in environment variable
+`CEPHFS_SHELL_CONF` and then in user's home directory
+(`~/.cephfs-shell.conf`).
 
 Usage :
 
     cephfs-shell [-options] -- [command, command,...]
 
 Options :
-    -c, --config FILE     Set Configuration file.
-    -b, --batch FILE      Process a batch file.
-    -t, --test FILE       Test against transcript(s) in FILE
+    -c, --config FILE     Path to cephfs-shell.conf
+    -b, --batch FILE      Path to batch file.
+    -t, --test FILE       Path to transcript(s) in FILE for testing
 
 
 .. note::
