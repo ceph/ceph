@@ -1223,9 +1223,9 @@ class PlacementSpec(object):
     def validate(self):
         if self.hosts and self.label:
             # TODO: a less generic Exception
-            raise Exception('Host and label are mutually exclusive')
+            raise OrchestratorValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
-            raise Exception("num/count must be > 1")
+            raise OrchestratorValidationError("num/count must be > 1")
 
     @classmethod
     def from_strings(cls, strings):

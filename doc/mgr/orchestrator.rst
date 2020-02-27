@@ -250,6 +250,20 @@ Start/stop/reload::
     ceph orch service {stop,start,reload} <type> <name>
 
     ceph orch daemon {start,stop,reload} <type> <daemon-id>
+    
+
+.. _orchestrator-cli-placement-spec:
+    
+Placement Specification
+=======================
+
+In order to allow the orchestrator to deploy a *service*, it needs to
+know how many and where it should deploy *daemons*. The orchestrator 
+defines a placement specification:
+
+* To deploy three *daemons*, simply specify the count: ``3``
+* To deploy *daemons* on specific hosts, specify the host names: ``host1 host2 host3``
+* To deploy *daemons* on a subset of hosts, also specify the count: ``2 host1 host2 host3``
 
     
 Configuring the Orchestrator CLI
