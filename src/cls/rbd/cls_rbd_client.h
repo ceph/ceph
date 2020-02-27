@@ -249,6 +249,10 @@ void metadata_remove(librados::ObjectWriteOperation *op,
                      const std::string &key);
 int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
                     const std::string &key);
+void metadata_get_start(librados::ObjectReadOperation* op,
+                 const std::string &key);
+int metadata_get_finish(bufferlist::const_iterator *it,
+                        std::string* value);
 int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
                  const std::string &key, string *v);
 

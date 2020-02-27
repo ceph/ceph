@@ -46,13 +46,14 @@ struct GetMetadataRequest<MockRefreshImageCtx> {
   static GetMetadataRequest* s_instance;
   static GetMetadataRequest* create(librados::IoCtx&,
                                     const std::string& oid,
-                                    const std::string& filter,
+                                    bool filter_internal,
+                                    const std::string& filter_key_prefix,
                                     const std::string& last_key,
                                     uint32_t max_results,
                                     std::map<std::string, bufferlist>* pairs,
                                     Context* on_finish) {
     ceph_assert(s_instance != nullptr);
-    EXPECT_EQ("conf_", filter);
+    EXPECT_EQ("conf_", filter_key_prefix);
     EXPECT_EQ("conf_", last_key);
     s_instance->oid = oid;
     s_instance->pairs = pairs;

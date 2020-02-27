@@ -1522,23 +1522,42 @@ int metadata_list_finish(bufferlist::const_iterator *it,
   return 0;
 }
 
+void metadata_get_start(librados::ObjectReadOperation* op,
+                 const std::string &key) {
+  bufferlist bl;
+  encode(key, bl);
+
+  op->exec("rbd", "metadata_get", bl);
+}
+
+int metadata_get_finish(bufferlist::const_iterator *it,
+                         std::string* value) {
+  try {
+    decode(*value, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
                  const std::string &key, string *s)
 {
   ceph_assert(s);
-  bufferlist in, out;
-  encode(key, in);
-  int r = ioctx->exec(oid, "rbd", "metadata_get", in, out);
-  if (r < 0)
-    return r;
+  librados::ObjectReadOperation op;
+  metadata_get_start(&op, key);
 
-  auto iter = out.cbegin();
-  try {
-    decode(*s, iter);
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
   }
 
+  auto it = out_bl.cbegin();
+  r = metadata_get_finish(&it, s);
+  if (r < 0) {
+    return r;
+  }
   return 0;
 }
 

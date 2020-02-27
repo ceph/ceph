@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/mirror/snapshot/ImageMeta.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 
@@ -22,12 +23,42 @@ namespace mirror {
 namespace image_replayer {
 namespace snapshot {
 
+using librbd::util::create_context_callback;
+
 template <typename I>
 void PrepareReplayRequest<I>::send() {
-  // TODO
   *m_resync_requested = false;
   *m_syncing = false;
 
+  load_local_image_meta();
+}
+
+template <typename I>
+void PrepareReplayRequest<I>::load_local_image_meta() {
+  dout(15) << dendl;
+
+  ceph_assert(m_state_builder->local_image_meta == nullptr);
+  m_state_builder->local_image_meta =
+    librbd::mirror::snapshot::ImageMeta<I>::create(
+      m_state_builder->local_image_ctx, m_local_mirror_uuid);
+
+  auto ctx = create_context_callback<
+    PrepareReplayRequest<I>,
+    &PrepareReplayRequest<I>::handle_load_local_image_meta>(this);
+  m_state_builder->local_image_meta->load(ctx);
+}
+
+template <typename I>
+void PrepareReplayRequest<I>::handle_load_local_image_meta(int r) {
+  dout(15) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to load local image-meta: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  *m_resync_requested = m_state_builder->local_image_meta->resync_requested;
   finish(0);
 }
 

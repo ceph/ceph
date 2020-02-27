@@ -46,7 +46,7 @@ void MetadataCopyRequest<I>::list_src_metadata() {
     MetadataCopyRequest<I>,
     &MetadataCopyRequest<I>::handle_list_src_metadata>(this);
   auto req = image::GetMetadataRequest<I>::create(
-    m_src_image_ctx->md_ctx, m_src_image_ctx->header_oid, "",
+    m_src_image_ctx->md_ctx, m_src_image_ctx->header_oid, true, "",
     m_last_metadata_key, MAX_METADATA_ITEMS, &m_metadata, ctx);
   req->send();
 }

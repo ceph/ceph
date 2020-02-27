@@ -9,7 +9,18 @@
 
 struct Context;
 
-namespace librbd { struct ImageCtx; }
+namespace librbd {
+
+struct ImageCtx;
+
+namespace mirror {
+namespace snapshot {
+
+template <typename> class ImageMeta;
+
+} // namespace snapshot
+} // namespace mirror
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -66,6 +77,7 @@ public:
 
   std::string remote_mirror_peer_uuid;
 
+  librbd::mirror::snapshot::ImageMeta<ImageCtxT>* local_image_meta = nullptr;
 };
 
 } // namespace snapshot

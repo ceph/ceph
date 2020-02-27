@@ -66,6 +66,9 @@ private:
    * <start>
    *    |
    *    v
+   * LOAD_LOCAL_IMAGE_META
+   *    |
+   *    v
    * <finish>
    *
    * @endverbatim
@@ -77,6 +80,10 @@ private:
   StateBuilder<ImageCtxT>* m_state_builder;
   bool* m_resync_requested;
   bool* m_syncing;
+
+  void load_local_image_meta();
+  void handle_load_local_image_meta(int r);
+
 };
 
 } // namespace snapshot

@@ -99,7 +99,7 @@ int PoolMetadata<I>::list(librados::IoCtx& io_ctx, const std::string &start,
   pairs->clear();
   C_SaferCond ctx;
   auto req = image::GetMetadataRequest<I>::create(
-    io_ctx, RBD_INFO, "", start, max, pairs, &ctx);
+    io_ctx, RBD_INFO, false, "", start, max, pairs, &ctx);
   req->send();
 
   int r = ctx.wait();

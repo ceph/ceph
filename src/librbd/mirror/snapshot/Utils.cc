@@ -48,6 +48,10 @@ bool get_rollback_snap_id(
 
 } // anonymous namespace
 
+std::string get_image_meta_key(const std::string& mirror_uuid) {
+  return ".rbd_mirror." + mirror_uuid;
+}
+
 template <typename I>
 bool can_create_primary_snapshot(I *image_ctx, bool demoted, bool force,
                                  uint64_t *rollback_snap_id) {
