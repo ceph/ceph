@@ -1,3 +1,5 @@
+.. _ceph-deploy-index:
+
 ============================
  Installation (ceph-deploy)
 ============================
