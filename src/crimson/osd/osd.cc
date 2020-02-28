@@ -530,7 +530,9 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   }).then([pgid, this] (auto&& create_map) {
     return make_pg(std::move(create_map), pgid, false);
   }).then([this, pgid](Ref<PG> pg) {
-    return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+    return pg->read_state(store.get()).then([pg] {
+      return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+    });
   }).handle_exception([pgid](auto ep) {
     logger().info("pg {} saw exception on load {}", pgid, ep);
     ceph_abort("Could not load pg" == 0);
