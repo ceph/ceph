@@ -97,22 +97,7 @@ private:
                              &CLOG_CONFIG_DEFAULT_KEY);
     }
 
-    string get_log_file(const string &channel) {
-      generic_dout(25) << __func__ << " for channel '"
-                       << channel << "'" << dendl;
-
-      if (expanded_log_file.count(channel) == 0) {
-        string fname = expand_channel_meta(
-            get_str_map_key(log_file, channel, &CLOG_CONFIG_DEFAULT_KEY),
-            channel);
-        expanded_log_file[channel] = fname;
-
-        generic_dout(20) << __func__ << " for channel '"
-                         << channel << "' expanded to '"
-                         << fname << "'" << dendl;
-      }
-      return expanded_log_file[channel];
-    }
+    string get_log_file(const string &channel);
 
     string get_log_file_level(const string &channel) {
       return get_str_map_key(log_file_level, channel,

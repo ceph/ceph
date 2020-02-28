@@ -104,6 +104,28 @@ administrator key in a global location::
    [any node] $ sudo install -m 0644 ceph.conf /etc/ceph/ceph.conf
    [any node] $ sudo install -m 0600 ceph.keyring /etc/ceph/ceph.keyring
 
+Watching cephadm log messages
+=============================
+
+Cephadm logs to the ``cephadm`` cluster log channel, which means you can monitor progress in realtime with::
+
+  ceph -W cephadm
+
+By default it will show info-level events and above.  To see
+debug-level messages too,::
+
+  ceph config set mgr/cephadm/log_to_cluster_level debug
+  ceph -W cephadm --watch-debug
+
+Be careful: the debug messagse are very verbose!
+
+You can see recent events with::
+
+  ceph log last cephadm
+
+These events are also logged to the ``ceph.cephadm.log`` file on
+monitor hosts and/or to the monitor-daemon stderr.
+
 Adding hosts to the cluster
 ===========================
 
