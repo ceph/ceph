@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import base64
 import logging
+import time
 import urllib
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.twofactor.totp import TOTP
+from cryptography.hazmat.primitives.hashes import SHA1
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
 
@@ -54,11 +60,8 @@ class RgwTestCase(DashboardTestCase):
         # Delete administrator account.
         cls._radosgw_admin_cmd(['user', 'rm', '--uid', 'admin'])
         if cls.create_test_user:
-            cls._radosgw_admin_cmd(['user', 'rm', '--uid=teuth-test-user'])
+            cls._radosgw_admin_cmd(['user', 'rm', '--uid=teuth-test-user', '--purge-data'])
         super(RgwTestCase, cls).tearDownClass()
-
-    def setUp(self):
-        super(RgwTestCase, self).setUp()
 
     def get_rgw_user(self, uid):
         return self._get('/api/rgw/user/{}'.format(uid))
@@ -111,12 +114,22 @@ class RgwApiCredentialsTest(RgwTestCase):
 
 class RgwBucketTest(RgwTestCase):
 
+    _mfa_token_serial = '1'
+    _mfa_token_seed = '23456723'
+    _mfa_token_time_step = 1
+
     AUTH_ROLES = ['rgw-manager']
 
     @classmethod
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwBucketTest, cls).setUpClass()
+        # Create MFA TOTP token for test user.
+        cls._radosgw_admin_cmd([
+            'mfa', 'create', '--uid', 'teuth-test-user', '--totp-serial', cls._mfa_token_serial,
+            '--totp-seed', cls._mfa_token_seed, '--totp-seed-type', 'base32',
+            '--totp-seconds', str(cls._mfa_token_time_step), '--totp-window', '2'
+        ])
         # Create tenanted users.
         cls._radosgw_admin_cmd([
             'user', 'create', '--tenant', 'testx', '--uid', 'teuth-test-user',
@@ -130,10 +143,17 @@ class RgwBucketTest(RgwTestCase):
     @classmethod
     def tearDownClass(cls):
         cls._radosgw_admin_cmd(
-            ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user'])
+            ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user', '--purge-data'])
         cls._radosgw_admin_cmd(
-            ['user', 'rm', '--tenant', 'testx2', '--uid=teuth-test-user2'])
+            ['user', 'rm', '--tenant', 'testx2', '--uid=teuth-test-user2', '--purge-data'])
         super(RgwBucketTest, cls).tearDownClass()
+
+    def _get_mfa_token_pin(self):
+        totp_key = base64.b32decode(self._mfa_token_seed)
+        totp = TOTP(totp_key, 6, SHA1(), self._mfa_token_time_step, backend=default_backend(),
+                    enforce_key_length=False)
+        time_value = time.time()
+        return totp.generate(time_value)
 
     def test_all(self):
         # Create a new bucket.
@@ -184,7 +204,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['placement_rule'], 'default-placement')
         self.assertEqual(data['versioning'], 'Suspended')
 
-        # Update the bucket.
+        # Update bucket: change owner, enable versioning.
         self._put(
             '/api/rgw/bucket/teuth-test-bucket',
             params={
@@ -202,6 +222,41 @@ class RgwBucketTest(RgwTestCase):
         }, allow_unknown=True))
         self.assertEqual(data['owner'], 'teuth-test-user')
         self.assertEqual(data['versioning'], 'Enabled')
+
+        # Update bucket: enable MFA Delete.
+        self._put(
+            '/api/rgw/bucket/teuth-test-bucket',
+            params={
+                'bucket_id': data['id'],
+                'uid': 'teuth-test-user',
+                'versioning_state': 'Enabled',
+                'mfa_delete': 'Enabled',
+                'mfa_token_serial': self._mfa_token_serial,
+                'mfa_token_pin': self._get_mfa_token_pin()
+            })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(200)
+        self.assertEqual(data['versioning'], 'Enabled')
+        self.assertEqual(data['mfa_delete'], 'Enabled')
+
+        # Update bucket: disable versioning & MFA Delete.
+        time.sleep(self._mfa_token_time_step)  # Required to get new TOTP pin.
+        self._put(
+            '/api/rgw/bucket/teuth-test-bucket',
+            params={
+                'bucket_id': data['id'],
+                'uid': 'teuth-test-user',
+                'versioning_state': 'Suspended',
+                'mfa_delete': 'Disabled',
+                'mfa_token_serial': self._mfa_token_serial,
+                'mfa_token_pin': self._get_mfa_token_pin()
+            })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(200)
+        self.assertEqual(data['versioning'], 'Suspended')
+        self.assertEqual(data['mfa_delete'], 'Disabled')
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/teuth-test-bucket')
