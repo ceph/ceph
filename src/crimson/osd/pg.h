@@ -62,6 +62,10 @@ class PG : public boost::intrusive_ref_counter<
   pg_shard_t pg_whoami;
   crimson::os::CollectionRef coll_ref;
   ghobject_t pgmeta_oid;
+
+  seastar::timer<seastar::lowres_clock> check_readable_timer;
+  seastar::timer<seastar::lowres_clock> renew_lease_timer;
+
 public:
   PG(spg_t pgid,
      pg_shard_t pg_shard,
