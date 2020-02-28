@@ -574,7 +574,7 @@ flushjournal_out:
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_OSDENC;
 
-  ms_public->set_default_policy(Messenger::Policy::stateless_server(0));
+  ms_public->set_default_policy(Messenger::Policy::stateless_registered_server(0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				   client_byte_throttler.get(),
 				   nullptr);
