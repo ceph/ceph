@@ -8281,18 +8281,19 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     inline bool at_end() const {
       return cursor == end;
     }
-    // add the next unique candidate, or return false if we reach the end
-    bool next_candidate(std::map<std::string, size_t>& candidates,
-                        size_t tracker_idx) {
-      while (!at_end()) {
-        if (candidates.emplace(entry_name(), tracker_idx).second) {
-          return true;
-        }
-        advance(); // skip duplicate common prefixes
-      }
-      return false;
-    }
   }; // ShardTracker
+
+  // add the next unique candidate, or return false if we reach the end
+  auto next_candidate = [] (ShardTracker& t,
+                            std::map<std::string, size_t>& candidates,
+                            size_t tracker_idx) {
+    while (!t.at_end()) {
+      if (candidates.emplace(t.entry_name(), tracker_idx).second) {
+        return;
+      }
+      t.advance(); // skip duplicate common prefixes
+    }
+  };
 
   // one tracker per shard requested (may not be all shards)
   std::vector<ShardTracker> results_trackers;
@@ -8319,7 +8320,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     // it's important that the values in the map refer to the index
     // into the results_trackers vector, which may not be the same
     // as the shard number (i.e., when not all shards are requested)
-    t.next_candidate(candidates, tracker_idx);
+    next_candidate(t, candidates, tracker_idx);
     ++tracker_idx;
   }
 
@@ -8376,9 +8377,10 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     // refresh the candidates map
     candidates.erase(candidates.begin());
     tracker.advance();
-    if (tracker.next_candidate(candidates, tracker_idx)) {
-      // we got a candidate, so we're not at the end yet
-    } else if (tracker.is_truncated()) {
+
+    next_candidate(tracker, candidates, tracker_idx);
+
+    if (tracker.at_end() && tracker.is_truncated()) {
       // once we exhaust one shard that is truncated, we need to stop,
       // as we cannot be certain that one of the next entries needs to
       // come from that shard; S3 and swift protocols allow returning
