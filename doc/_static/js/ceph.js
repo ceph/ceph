@@ -1,5 +1,5 @@
 $(function() {
-  var releases_url = DOCUMENTATION_OPTIONS.URL_ROOT + '/releases.json';
+  var releases_url = DOCUMENTATION_OPTIONS.URL_ROOT + 'releases.json';
 
   function show_edit(branch, data) {
     if (branch) {
