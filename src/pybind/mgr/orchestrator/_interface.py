@@ -1228,6 +1228,8 @@ class PlacementSpec(object):
     """
     def __init__(self, label=None, hosts=None, count=None, all_hosts=False):
         # type: (Optional[str], Optional[List], Optional[int], bool) -> None
+        if all_hosts and (count or hosts or label):
+            raise OrchestratorValidationError('cannot combine all:true and count|hosts|label')
         self.label = label
         self.hosts = []  # type: List[HostPlacementSpec]
         if hosts:
