@@ -878,7 +878,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     return get_map(cur).then([this](cached_map_t&& o) {
       osdmap = std::move(o);
       shard_services.update_map(osdmap);
-      if (up_epoch != 0 &&
+      if (up_epoch == 0 &&
           osdmap->is_up(whoami) &&
           osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
         up_epoch = osdmap->get_epoch();
