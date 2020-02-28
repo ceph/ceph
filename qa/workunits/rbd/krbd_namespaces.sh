@@ -3,7 +3,7 @@
 set -ex
 
 function get_block_name_prefix() {
-    rbd info --format=json $1 | python -c "import sys, json; print json.load(sys.stdin)['block_name_prefix']"
+	rbd info --format=json $1 | python3 -c "import sys, json; print(json.load(sys.stdin)['block_name_prefix'])"
 }
 
 function do_pwrite() {
@@ -52,9 +52,9 @@ SPECS=(foo/img1 foo/img2 foo/ns1/img3 foo/ns1/img4)
 COUNT=1
 for spec in "${SPECS[@]}"; do
     if [[ $spec =~ img1|img3 ]]; then
-        rbd create --size 10 $spec
+        rbd create --size 10 $spec --image-feature layering
     else
-        rbd create --size 10 --data-pool bar $spec
+        rbd create --size 10 --data-pool bar $spec --image-feature layering
     fi
     do_pwrite $spec 000 $(printf %03d $COUNT)
     rbd snap create $spec@snap
