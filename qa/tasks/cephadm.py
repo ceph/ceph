@@ -538,7 +538,7 @@ def ceph_mgrs(ctx, config):
         if nodes:
             _shell(ctx, cluster_name, remote, [
                 'ceph', 'orch', 'apply', 'mgr',
-                str(len(nodes) + 1)] + nodes
+                str(len(nodes))] + nodes
             )
         for mgr, i in daemons.items():
             remote, id_ = i
