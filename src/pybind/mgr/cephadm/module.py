@@ -2057,14 +2057,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.invalidate_host_daemons(host)
         return "Removed {} from host '{}'".format(name, host)
 
-    def _apply_service(self, daemon_type, spec, create_func, config_func=None):
+    def _apply_service(self, spec, create_func, config_func=None):
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
         on the target label and count specified in the placement.
         """
-        service_name = daemon_type
-        if spec.name:
-            service_name += '.' + spec.name
+        daemon_type = spec.service_type
+        service_name = spec.service_name()
+        self.log.debug('Applying service %s spec' % service_name)
         daemons = self.cache.get_daemons_by_service(service_name)
         spec = HostAssignment(
             spec=spec,
@@ -2199,7 +2199,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _apply_mgr(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('mgr', spec, self._create_mgr)
+        return self._apply_service(spec, self._create_mgr)
 
     def add_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2210,7 +2210,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _apply_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('mds', spec, self._create_mds,
+        return self._apply_service(spec, self._create_mds,
                                    self._config_mds)
 
     def _config_mds(self, spec):
@@ -2269,7 +2269,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _apply_rgw(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('rgw', spec, self._create_rgw,
+        return self._apply_service(spec, self._create_rgw,
                                    self._config_rgw)
 
     def add_rbd_mirror(self, spec):
@@ -2291,7 +2291,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _apply_rbd_mirror(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('rbd-mirror', spec, self._create_rbd_mirror)
+        return self._apply_service(spec, self._create_rbd_mirror)
 
     def _generate_prometheus_config(self):
         # scrape mgrs
@@ -2491,7 +2491,7 @@ receivers:
 
     def _apply_prometheus(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('prometheus', spec, self._create_prometheus)
+        return self._apply_service(spec, self._create_prometheus)
 
     def apply_prometheus(self, spec):
         return self._apply(spec)
@@ -2506,7 +2506,7 @@ receivers:
 
     def _apply_node_exporter(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('node-exporter', spec,
+        return self._apply_service(spec,
                                    self._create_node_exporter)
 
     @async_map_completion
@@ -2522,7 +2522,7 @@ receivers:
         return self._apply(spec)
 
     def _apply_grafana(self, spec):
-        return self._apply_service('grafana', spec, self._create_grafana)
+        return self._apply_service(spec, self._create_grafana)
 
     @async_map_completion
     def _create_grafana(self, daemon_id, host):
@@ -2538,7 +2538,7 @@ receivers:
 
     def _apply_alertmanager(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('alertmanager', spec, self._create_alertmanager)
+        return self._apply_service(spec, self._create_alertmanager)
 
     @async_map_completion
     def _create_alertmanager(self, daemon_id, host):
