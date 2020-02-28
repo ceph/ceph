@@ -426,6 +426,9 @@ public:
   void set_log_client(LogClient *clog) {
     log_client = clog;
   }
+  LogClient *get_log_client() {
+    return log_client;
+  }
 
   int build_initial_monmap();
   int get_monmap();

@@ -1575,7 +1575,11 @@ Options
 
 .. option:: -w, --watch
 
-	Watch live cluster changes.
+	Watch live cluster changes on the default 'cluster' channel
+
+.. option:: -W, --watch-channel
+
+	Watch live cluster changes on any channel (cluster, audit, cephadm, or * for all)
 
 .. option:: --watch-debug
 
