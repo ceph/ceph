@@ -1,4 +1,4 @@
-Sphinx == 2.3.0
+Sphinx == 2.4.3
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
 breathe == 4.14.0
 pyyaml >= 5.1.2
