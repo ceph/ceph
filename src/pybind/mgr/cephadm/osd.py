@@ -32,8 +32,6 @@ class RemoveUtil(object):
         self.mgr = mgr
         self.to_remove_osds: Set[OSDRemoval] = set()
         self.osd_removal_report: dict = dict()
-        self.log = logger
-        self.rm_util = self
 
 
     def _remove_osds_bg(self) -> None:
@@ -41,36 +39,36 @@ class RemoveUtil(object):
         Performs actions in the _serve() loop to remove an OSD
         when criteria is met.
         """
-        self.log.debug(
+        logger.debug(
             f"{len(self.to_remove_osds)} OSDs are scheduled for removal: {list(self.to_remove_osds)}")
         self.osd_removal_report = self._generate_osd_removal_status()
         remove_osds: set = self.to_remove_osds.copy()
         for osd in remove_osds:
             if not osd.force:
-                self.rm_util.drain_osd(osd.osd_id)
+                self.drain_osd(osd.osd_id)
                 # skip criteria
-                if not self.rm_util.is_empty(osd.osd_id):
-                    self.log.info(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
+                if not self.is_empty(osd.osd_id):
+                    logger.info(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
                     continue
 
-            if not self.rm_util.ok_to_destroy([osd.osd_id]):
-                self.log.info(
+            if not self.ok_to_destroy([osd.osd_id]):
+                logger.info(
                     f"OSD <{osd.osd_id}> is not safe-to-destroy yet. Waiting a bit more")
                 continue
 
             # abort criteria
-            if not self.rm_util.down_osd([osd.osd_id]):
+            if not self.down_osd([osd.osd_id]):
                 # also remove it from the remove_osd list and set a health_check warning?
                 raise orchestrator.OrchestratorError(
                     f"Could not set OSD <{osd.osd_id}> to 'down'")
 
             if osd.replace:
-                if not self.rm_util.destroy_osd(osd.osd_id):
+                if not self.destroy_osd(osd.osd_id):
                     # also remove it from the remove_osd list and set a health_check warning?
                     raise orchestrator.OrchestratorError(
                         f"Could not destroy OSD <{osd.osd_id}>")
             else:
-                if not self.rm_util.purge_osd(osd.osd_id):
+                if not self.purge_osd(osd.osd_id):
                     # also remove it from the remove_osd list and set a health_check warning?
                     raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
 
@@ -85,25 +83,25 @@ class RemoveUtil(object):
                     else:
                         break
                 if completion.exception is not None:
-                    self.log.error(str(completion.exception))
+                    logger.error(str(completion.exception))
             else:
                 raise orchestrator.OrchestratorError(
                     "Did not receive a completion from _remove_daemon")
 
-            self.log.info(f"Successfully removed removed OSD <{osd.osd_id}> on {osd.nodename}")
-            self.log.debug(f"Removing {osd.osd_id} from the queue.")
+            logger.info(f"Successfully removed removed OSD <{osd.osd_id}> on {osd.nodename}")
+            logger.debug(f"Removing {osd.osd_id} from the queue.")
             self.to_remove_osds.remove(osd)
 
     def _generate_osd_removal_status(self) -> Dict[Any, object]:
         """
         Generate a OSD report that can be printed to the CLI
         """
-        self.log.debug("Assembling report for osd rm status")
+        logger.debug("Assembling report for osd rm status")
         report = {}
         for osd in self.to_remove_osds:
             pg_count = self.get_pg_count(str(osd.osd_id))
             report[osd] = pg_count if pg_count != -1 else 'n/a'
-        self.log.debug(f"Reporting: {report}")
+        logger.debug(f"Reporting: {report}")
         return report
 
     def drain_osd(self, osd_id: str) -> bool:
