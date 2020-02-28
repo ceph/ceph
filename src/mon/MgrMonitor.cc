@@ -62,6 +62,7 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "devicehealth",
       "orchestrator",
       "rbd_support",
+      "osd_support",
       "volumes",
       "pg_autoscaler",
       "telemetry",
