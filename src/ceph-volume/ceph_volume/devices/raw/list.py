@@ -34,9 +34,7 @@ class List(object):
                 'lsblk', '--paths', '--nodeps', '--output=NAME', '--noheadings'
             ])
             assert not ret
-            r = json.loads(''.join(out))
-            for dev in r.get('blockdevices', []):
-                devs.append('/dev/' + dev['name'])
+            devs = out
         result = {}
         for dev in devs:
             logger.debug('Examining %s' % dev)
