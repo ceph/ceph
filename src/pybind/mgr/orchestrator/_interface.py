@@ -1577,6 +1577,12 @@ class ServiceSpec(object):
             args.update({k: v})
         return _cls(**args)  # type: ignore
 
+    def service_name(self):
+        n = self.service_type
+        if self.name:
+            n += '.' + self.name
+        return n
+
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__,
                           sort_keys=True, indent=4)
