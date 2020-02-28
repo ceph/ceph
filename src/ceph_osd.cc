@@ -583,10 +583,6 @@ flushjournal_out:
   ms_public->set_policy(entity_name_t::TYPE_MGR,
                         Messenger::Policy::lossy_client(osd_required));
 
-  //try to poison pill any OSD connections on the wrong address
-  ms_public->set_policy(entity_name_t::TYPE_OSD,
-			Messenger::Policy::stateless_server(0));
-
   ms_cluster->set_default_policy(Messenger::Policy::stateless_server(0));
   ms_cluster->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0));
   ms_cluster->set_policy(entity_name_t::TYPE_OSD,
