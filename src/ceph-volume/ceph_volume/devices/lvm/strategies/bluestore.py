@@ -264,7 +264,7 @@ class MixedType(MixedStrategy):
 
         for device in self.data_devs:
             for hdd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}}
+                osd = {'data': {}}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = device.lvm_size.b / self.osds_per_device
                 osd['data']['percentage'] = 100 / self.osds_per_device
@@ -273,6 +273,7 @@ class MixedType(MixedStrategy):
                 )
 
                 if self.db_or_journal_devs:
+                    osd['block.db'] = {}
                     osd['block.db']['path'] = 'vg: %s' % vg_name
                     osd['block.db']['size'] = int(self.block_db_size.b)
                     osd['block.db']['human_readable_size'] = str(self.block_db_size)
