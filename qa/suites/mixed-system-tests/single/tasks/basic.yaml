@@ -1,0 +1,97 @@
+tasks:
+- exec:
+    client.0:
+      - sudo yum install python3 -y
+- parallel:
+    - mixed_system_test.rgw_ios:
+        test: Mbuckets_with_Nobjects
+        script: test_Mbuckets_with_Nobjects.py
+        clients: ['client.0']
+        config:
+            user_count: 5
+            bucket_count: 5
+            objects_count: 10
+            objects_size_range:
+                min: 100
+                max: 200
+            test_ops:
+                create_bucket: true
+                create_object: true
+                download_object: true
+                delete_bucket_object: true
+                sharding:
+                    enable: false
+                    max_shards: 0
+                compression:
+                    enable: false
+                    type: zlib
+    - mixed_system_test.rgw_ios:
+        test: Mbuckets_with_Nobjects_multipart
+        script: test_Mbuckets_with_Nobjects.py
+        clients: ['client.0']
+        config:
+            user_count: 2
+            bucket_count: 5
+            objects_count: 10
+            objects_size_range:
+                min: 1000
+                max: 1500
+            test_ops:
+                create_bucket: true
+                create_object: true
+                download_object: true
+                delete_bucket_object: true
+                upload_type: multipart
+                sharding:
+                    enable: false
+                    max_shards: 0
+                compression:
+                    enable: false
+                    type: zlib
+    - mixed_system_test.rgw_ios:
+        test: versioning_ops
+        script: test_versioning_with_objects.py
+        clients: ['client.0']
+        config:
+            user_count: 2
+            bucket_count: 2
+            objects_count: 10
+            version_count: 5
+            objects_size_range:
+                min: 50
+                max: 80
+            test_ops:
+                enable_version: true
+                suspend_version: true
+                copy_to_version: false
+                delete_object_versions: false
+                upload_after_suspend: true
+    - mixed_system_test.rgw_ios:
+        test: versioning_ops_delete
+        script: test_versioning_with_objects.py
+        clients: ['client.0']
+        config:
+            user_count: 2
+            bucket_count: 2
+            objects_count: 10
+            version_count: 5
+            objects_size_range:
+                min: 50
+                max: 80
+            test_ops:
+                enable_version: true
+                suspend_version: false
+                copy_to_version: false
+                delete_object_versions: true
+                upload_after_suspend: false
+    - rbd_fio:
+        client.0:
+            fio-io-size: 100%
+            formats: [2]
+            features: [[layering],[layering,exclusive-lock,object-map]]
+            io-engine: rbd
+            test-clone-io: 1
+            rw: randrw
+            runtime: 900
+    - mixed_system_test.restart_tests:
+        daemons: ["mgr", "mon", "mds", "osd"]
