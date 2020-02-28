@@ -233,7 +233,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         'orch host label rm',
         'name=hostname,type=CephString '
         'name=label,type=CephString',
-        'Add a host label')
+        'Remove a host label')
     def _host_label_rm(self, hostname, label):
         completion = self.remove_host_label(hostname, label)
         self._orchestrator_wait([completion])
