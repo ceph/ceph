@@ -414,7 +414,7 @@ class TestCephadm(object):
             spec = ServiceSpec(placement=ps, service_type='mgr')
             c = cephadm_module.apply_mgr(spec)
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c) == 'Scheduled MGR creation..'
+            assert wait(cephadm_module, c) == 'Scheduled mgr update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -429,7 +429,7 @@ class TestCephadm(object):
             spec = ServiceSpec(placement=ps, service_type='mds')
             c = cephadm_module.apply_mds(spec)
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c) == 'Scheduled MDS creation..'
+            assert wait(cephadm_module, c) == 'Scheduled mds update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -444,7 +444,7 @@ class TestCephadm(object):
             spec = ServiceSpec(placement=ps, service_type='rgw')
             c = cephadm_module.apply_rgw(spec)
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c) == 'Scheduled RGW creation..'
+            assert wait(cephadm_module, c) == 'Scheduled rgw update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -459,7 +459,7 @@ class TestCephadm(object):
             spec = ServiceSpec(placement=ps, service_type='rbd-mirror')
             c = cephadm_module.apply_rbd_mirror(spec)
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c) == 'Scheduled rbd-mirror creation..'
+            assert wait(cephadm_module, c) == 'Scheduled rbd-mirror update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -474,7 +474,7 @@ class TestCephadm(object):
             spec = ServiceSpec(placement=ps, service_type='prometheus')
             c = cephadm_module.apply_prometheus(spec)
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c) == 'Scheduled prometheus creation..'
+            assert wait(cephadm_module, c) == 'Scheduled prometheus update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
@@ -489,7 +489,7 @@ class TestCephadm(object):
             spec = ServiceSpec(placement=ps, service_type='node_exporter')
             c = cephadm_module.apply_node_exporter(spec)
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c) == 'Scheduled node-exporter creation..'
+            assert wait(cephadm_module, c) == 'Scheduled node_exporter update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.send_command")

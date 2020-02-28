@@ -2188,10 +2188,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('mgr', spec, self._create_mgr)
 
-    def apply_mgr(self, spec):
+    def _apply(self, spec):
+        self.log.info('Saving service %s spec' % spec.service_name())
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        return trivial_result("Scheduled MGR creation..")
+        return trivial_result("Scheduled %s update..." % spec.service_type)
+
+    def apply_mgr(self, spec):
+        return self._apply(spec)
 
     def _apply_mgr(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2202,9 +2206,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._add_daemon('mds', spec, self._create_mds, self._config_mds)
 
     def apply_mds(self, spec: orchestrator.ServiceSpec) -> orchestrator.Completion:
-        self.spec_store.save(spec)
-        self._kick_serve_loop()
-        return trivial_result("Scheduled MDS creation..")
+        return self._apply(spec)
 
     def _apply_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2263,9 +2265,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
 
     def apply_rgw(self, spec):
-        self.spec_store.save(spec)
-        self._kick_serve_loop()
-        return trivial_result("Scheduled RGW creation..")
+        return self._apply(spec)
 
     def _apply_rgw(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2287,9 +2287,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                    keyring=keyring)
 
     def apply_rbd_mirror(self, spec):
-        self.spec_store.save(spec)
-        self._kick_serve_loop()
-        return trivial_result("Scheduled rbd-mirror creation..")
+        return self._apply(spec)
 
     def _apply_rbd_mirror(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2496,9 +2494,7 @@ receivers:
         return self._apply_service('prometheus', spec, self._create_prometheus)
 
     def apply_prometheus(self, spec):
-        self.spec_store.save(spec)
-        self._kick_serve_loop()
-        return trivial_result("Scheduled prometheus creation..")
+        return self._apply(spec)
 
     def add_node_exporter(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2506,9 +2502,7 @@ receivers:
                                 self._create_node_exporter)
 
     def apply_node_exporter(self, spec):
-        self.spec_store.save(spec)
-        self._kick_serve_loop()
-        return trivial_result("Scheduled node-exporter creation..")
+        return self._apply(spec)
 
     def _apply_node_exporter(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
@@ -2525,7 +2519,10 @@ receivers:
 
     def apply_grafana(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
-        return self._apply_service('grafana', spec, self.add_grafana)
+        return self._apply(spec)
+
+    def _apply_grafana(self, spec):
+        return self._apply_service('grafana', spec, self._create_grafana)
 
     @async_map_completion
     def _create_grafana(self, daemon_id, host):
@@ -2536,6 +2533,10 @@ receivers:
         return self._add_daemon('alertmanager', spec, self._create_alertmanager)
 
     def apply_alertmanager(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._apply(spec)
+
+    def _apply_alertmanager(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         return self._apply_service('alertmanager', spec, self._create_alertmanager)
 
@@ -2842,6 +2843,8 @@ receivers:
         super_completions.extend(self.trigger_deployment('mds', self._apply_mds))
         super_completions.extend(self.trigger_deployment('rgw', self._apply_rgw))
         super_completions.extend(self.trigger_deployment('rbd-mirror', self._apply_rbd_mirror))
+        super_completions.extend(self.trigger_deployment('grafana', self._apply_grafana))
+        super_completions.extend(self.trigger_deployment('alertmanager', self._apply_alertmanager))
 
         # Not implemented
 
