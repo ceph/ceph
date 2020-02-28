@@ -134,6 +134,9 @@ Major Changes from Nautilus
   * The mgr volumes plugin has received numerous improvements to support CephFS
     via CSI, including snapshots and cloning.
   * cephfs-shell has had numerous incremental improvements and bug fixes.
+  * The Linux kernel (as of release v5.4) supports a new
+    "recover_session=clean" mount option that allows the client to
+    automatically reconnect to the MDS after being blacklisted.
 
 
 Upgrading from Mimic or Nautilus
