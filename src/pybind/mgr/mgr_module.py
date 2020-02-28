@@ -5,7 +5,6 @@ try:
 except ImportError:
     # just for type checking
     pass
-import datetime
 import logging
 import errno
 import json
