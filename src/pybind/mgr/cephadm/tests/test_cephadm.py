@@ -380,6 +380,21 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.HostCache.save_host")
     @mock.patch("cephadm.module.HostCache.rm_host")
+    def test_alertmanager(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+        # type: (mock.Mock, mock.Mock, mock.Mock, mock.Mock, CephadmOrchestrator) -> None
+        with self._with_host(cephadm_module, 'test'):
+            ps = PlacementSpec(hosts=['test'], count=1)
+
+            c = cephadm_module.add_alertmanager(ServiceSpec(placement=ps))
+            [out] = wait(cephadm_module, c)
+            match_glob(out, "Deployed alertmanager.* on host 'test'")
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    @mock.patch("cephadm.module.HostCache.save_host")
+    @mock.patch("cephadm.module.HostCache.rm_host")
     def test_blink_device_light(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
