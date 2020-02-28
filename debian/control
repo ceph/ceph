@@ -78,6 +78,7 @@ Build-Depends: cmake (>= 3.5),
 # Make-Check   python3-six,
 # Make-Check   tox,
 # Make-Check   python3-coverage,
+# Make-Check   python3-dateutil,
 # Make-Check   python3-openssl,
 # Make-Check   python3-prettytable,
 # Make-Check   python3-requests,
@@ -298,6 +299,7 @@ Architecture: all
 Depends: ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
+         python3-dateutil,
          python3-openssl,
 Replaces: ceph-mgr (<< 15.1.0)
 Breaks: ceph-mgr (<< 15.1.0)
