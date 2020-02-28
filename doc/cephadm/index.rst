@@ -114,7 +114,7 @@ Cephadm logs to the ``cephadm`` cluster log channel, which means you can monitor
 By default it will show info-level events and above.  To see
 debug-level messages too,::
 
-  ceph config set mgr/cephadm/log_to_cluster_level debug
+  ceph config set mgr mgr/cephadm/log_to_cluster_level debug
   ceph -W cephadm --watch-debug
 
 Be careful: the debug messagse are very verbose!
