@@ -238,12 +238,12 @@ class FsNewHandler : public FileSystemCommandHandler
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
     ceph_assert(metadata_pool != NULL);  // Checked it existed above
 
-    int r = _check_pool(mon->osdmon()->osdmap, data, POOL_DATA_DEFAULT, force, &ss);
+    int r = _check_pool(mon->osdmon()->osdmap, data, false, force, &ss);
     if (r < 0) {
       return r;
     }
 
-    r = _check_pool(mon->osdmon()->osdmap, metadata, POOL_METADATA, force, &ss);
+    r = _check_pool(mon->osdmon()->osdmap, metadata, true, force, &ss);
     if (r < 0) {
       return r;
     }
@@ -679,7 +679,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       }
     }
 
-    int r = _check_pool(mon->osdmon()->osdmap, poolid, POOL_DATA_EXTRA, false, &ss);
+    int r = _check_pool(mon->osdmon()->osdmap, poolid, false, false, &ss);
     if (r != 0) {
       return r;
     }
@@ -986,7 +986,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
 int FileSystemCommandHandler::_check_pool(
     OSDMap &osd_map,
     const int64_t pool_id,
-    int type,
+    bool metadata,
     bool force,
     std::stringstream *ss) const
 {
@@ -1000,41 +1000,32 @@ int FileSystemCommandHandler::_check_pool(
 
   const string& pool_name = osd_map.get_pool_name(pool_id);
 
-  if (pool->is_erasure()) {
-    if (type == POOL_METADATA) {
+  if (pool->is_erasure() && metadata) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
          << " is an erasure-coded pool.  Use of erasure-coded pools"
          << " for CephFS metadata is not permitted";
-      return -EINVAL;
-    } else if (type == POOL_DATA_DEFAULT && !force) {
+    return -EINVAL;
+  } else if (pool->is_erasure() && !pool->allows_ecoverwrites()) {
+    // non-overwriteable EC pools are only acceptable with a cache tier overlay
+    if (!pool->has_tiers() || !pool->has_read_tier() || !pool->has_write_tier()) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
-             " is an erasure-coded pool."
-             " Use of an EC pool for the default data pool is discouraged;"
-             " see the online CephFS documentation for more information."
-             " Use --force to override.";
+         << " is an erasure-coded pool, with no overwrite support";
       return -EINVAL;
-    } else if (!pool->allows_ecoverwrites()) {
-      // non-overwriteable EC pools are only acceptable with a cache tier overlay
-      if (!pool->has_tiers() || !pool->has_read_tier() || !pool->has_write_tier()) {
-        *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
-            << " is an erasure-coded pool, with no overwrite support";
-        return -EINVAL;
-      }
+    }
 
-      // That cache tier overlay must be writeback, not readonly (it's the
-      // write operations like modify+truncate we care about support for)
-      const pg_pool_t *write_tier = osd_map.get_pg_pool(
-          pool->write_tier);
-      ceph_assert(write_tier != NULL);  // OSDMonitor shouldn't allow DNE tier
-      if (write_tier->cache_mode == pg_pool_t::CACHEMODE_FORWARD
-          || write_tier->cache_mode == pg_pool_t::CACHEMODE_READONLY) {
-        *ss << "EC pool '" << pool_name << "' has a write tier ("
-            << osd_map.get_pool_name(pool->write_tier)
-            << ") that is configured "
-               "to forward writes.  Use a cache mode such as 'writeback' for "
-               "CephFS";
-        return -EINVAL;
-      }
+    // That cache tier overlay must be writeback, not readonly (it's the
+    // write operations like modify+truncate we care about support for)
+    const pg_pool_t *write_tier = osd_map.get_pg_pool(
+        pool->write_tier);
+    ceph_assert(write_tier != NULL);  // OSDMonitor shouldn't allow DNE tier
+    if (write_tier->cache_mode == pg_pool_t::CACHEMODE_FORWARD
+        || write_tier->cache_mode == pg_pool_t::CACHEMODE_READONLY) {
+      *ss << "EC pool '" << pool_name << "' has a write tier ("
+          << osd_map.get_pool_name(pool->write_tier)
+          << ") that is configured "
+             "to forward writes.  Use a cache mode such as 'writeback' for "
+             "CephFS";
+      return -EINVAL;
     }
   }
 

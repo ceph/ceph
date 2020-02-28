@@ -30,11 +30,6 @@ class FileSystemCommandHandler : protected CommandHandler
 protected:
   std::string prefix;
 
-  enum {
-    POOL_METADATA,
-    POOL_DATA_DEFAULT,
-    POOL_DATA_EXTRA,
-  };
   /**
    * Return 0 if the pool is suitable for use with CephFS, or
    * in case of errors return a negative error code, and populate
@@ -45,7 +40,7 @@ protected:
   int _check_pool(
       OSDMap &osd_map,
       const int64_t pool_id,
-      int type,
+      bool metadata,
       bool force,
       std::stringstream *ss) const;
 
