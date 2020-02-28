@@ -1,9 +1,11 @@
+import datetime
 import json
 from contextlib import contextmanager
 
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from cephadm.osd import OSDRemoval
 
 try:
     from typing import Any
@@ -134,13 +136,26 @@ class TestCephadm(object):
             )
         ])
     ))
+    @mock.patch("cephadm.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
     def test_remove_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
+
             c = cephadm_module.remove_daemons(['osd.0'], False)
             out = wait(cephadm_module, c)
             assert out == ["Removed osd.0 from host 'test'"]
+
+            osd_removal_op = OSDRemoval(0, False, False, 'test', 'osd.0', datetime.datetime.utcnow())
+            cephadm_module.rm_util.to_remove_osds.add(osd_removal_op)
+            cephadm_module.rm_util._remove_osds_bg()
+            assert cephadm_module.rm_util.to_remove_osds == set()
+
+            c = cephadm_module.remove_osds_status()
+            out = wait(cephadm_module, c)
+            assert out == {osd_removal_op: 0}
+
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_mds(self, cephadm_module):
