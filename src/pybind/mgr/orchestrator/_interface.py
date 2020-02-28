@@ -1585,7 +1585,7 @@ class ServiceSpec(object):
 
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__,
-                          sort_keys=True, indent=4)
+                          sort_keys=True)
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
