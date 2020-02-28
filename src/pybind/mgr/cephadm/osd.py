@@ -3,7 +3,7 @@ import json
 import logging
 import time
 
-from typing import List, NamedTuple, Dict, Any, Set
+from typing import List, NamedTuple, Dict, Any, Set, Union
 
 import orchestrator
 from orchestrator import OrchestratorError
@@ -31,7 +31,7 @@ class RemoveUtil(object):
     def __init__(self, mgr):
         self.mgr = mgr
         self.to_remove_osds: Set[OSDRemoval] = set()
-        self.osd_removal_report: dict = dict()
+        self.osd_removal_report: Dict[OSDRemoval, Union[int,str]] = dict()
 
 
     def _remove_osds_bg(self) -> None:
@@ -73,7 +73,7 @@ class RemoveUtil(object):
                     raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
 
             completion = self.mgr._remove_daemon([(osd.fullname, osd.nodename, True)])
-            completion.add_progress('Removing OSDs', self)
+            completion.add_progress('Removing OSDs', self.mgr)
             completion.update_progress = True
             if completion:
                 while not completion.has_result:
@@ -92,12 +92,12 @@ class RemoveUtil(object):
             logger.debug(f"Removing {osd.osd_id} from the queue.")
             self.to_remove_osds.remove(osd)
 
-    def _generate_osd_removal_status(self) -> Dict[Any, object]:
+    def _generate_osd_removal_status(self) -> Dict[OSDRemoval, Union[int,str]]:
         """
         Generate a OSD report that can be printed to the CLI
         """
         logger.debug("Assembling report for osd rm status")
-        report = {}
+        report: Dict[OSDRemoval, Union[int,str]] = {}
         for osd in self.to_remove_osds:
             pg_count = self.get_pg_count(str(osd.osd_id))
             report[osd] = pg_count if pg_count != -1 else 'n/a'
