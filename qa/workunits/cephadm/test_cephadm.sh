@@ -11,7 +11,12 @@ IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
 
 TMPDIR=$(mktemp -d)
-trap "rm -rf $TMPDIR" EXIT
+
+function cleanup()
+{
+    rm -rf $TMPDIR
+}
+trap cleanup EXIT
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
