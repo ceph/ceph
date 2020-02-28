@@ -360,6 +360,14 @@ public:
 				    i.on_applied_sync);
     }
   }
+  static Context *collect_all_contexts(
+    Transaction& t) {
+    list<Context*> contexts;
+    contexts.splice(contexts.end(), t.on_applied);
+    contexts.splice(contexts.end(), t.on_commit);
+    contexts.splice(contexts.end(), t.on_applied_sync);
+    return C_Contexts::list_to_context(contexts);
+  }
 
   Context *get_on_applied() {
     return C_Contexts::list_to_context(on_applied);
