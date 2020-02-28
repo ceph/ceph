@@ -206,11 +206,13 @@ BuildRequires:	libuuid-devel
 BuildRequires:	python%{python3_version_nodots}-bcrypt
 BuildRequires:	python%{python3_version_nodots}-nose
 BuildRequires:	python%{python3_version_nodots}-requests
+BuildRequires:	python%{python3_version_nodots}-dateutil
 %else
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
 BuildRequires:	python%{python3_pkgversion}-requests
+BuildRequires:	python%{python3_pkgversion}-dateutil
 %endif
 %if 0%{?rhel} == 7
 BuildRequires:	python%{python3_version_nodots}-six
