@@ -8309,7 +8309,9 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
       // it's important that the values in the map refer to the index
       // into the results_trackers vector, which may not be the same
       // as the shard number (i.e., when not all shards are requested)
-      candidates[t.entry_name()] = tracker_idx;
+      if (!candidates.emplace(t.entry_name(), tracker_idx).second) {
+        t.advance(); // skip duplicate common prefixes
+      }
     }
     ++tracker_idx;
   }
@@ -8367,7 +8369,9 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     // refresh the candidates map
     candidates.erase(candidates.begin());
     if (! tracker.advance().at_end()) {
-      candidates[tracker.entry_name()] = tracker_idx;
+      if (!candidates.emplace(tracker.entry_name(), tracker_idx).second) {
+        tracker.advance(); // skip duplicate common prefixes
+      }
     } else if (tracker.is_truncated()) {
       // once we exhaust one shard that is truncated, we need to stop,
       // as we cannot be certain that one of the next entries needs to
