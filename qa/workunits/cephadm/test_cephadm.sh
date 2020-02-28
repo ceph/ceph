@@ -14,6 +14,7 @@ TMPDIR=$(mktemp -d)
 
 function cleanup()
 {
+    dump_all_logs
     rm -rf $TMPDIR
 }
 trap cleanup EXIT
@@ -109,6 +110,32 @@ function is_available()
 
     echo "$name is available"
     true
+}
+
+function dump_log()
+{
+    local name="$1"
+    local num_lines="$2"
+
+    if [ -z $num_lines ]; then
+        num_lines=100
+    fi
+
+    echo '-------------------------'
+    echo 'dump daemon log:' $name
+    echo '-------------------------'
+
+    $CEPHADM logs --name $name -- --no-pager -n $num_lines
+}
+
+function dump_all_logs()
+{
+    names=$($CEPHADM ls | jq -r '.[].name')
+
+    echo 'dumping logs for daemons: ' $names
+    for name in $names; do
+        dump_log $name
+    done
 }
 
 ## prepare + check host
