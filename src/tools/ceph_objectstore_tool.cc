@@ -3199,7 +3199,7 @@ int main(int argc, char **argv)
   ghobject_t ghobj;
   bool human_readable;
   Formatter *formatter;
-  bool head;
+  bool head, tty;
 
   po::options_description desc("Allowed options");
   desc.add_options()
@@ -3239,6 +3239,7 @@ int main(int argc, char **argv)
     ("skip-mount-omap", "Disable mounting of omap")
     ("head", "Find head/snapdir when searching for objects by name")
     ("dry-run", "Don't modify the objectstore")
+    ("tty", "Treat stdout as a tty (no binary data)")
     ("namespace", po::value<string>(&argnspace), "Specify namespace when searching for objects")
     ("rmtype", po::value<string>(&rmtypestr), "Specify corrupting object removal 'snapmap' or 'nosnapmap' - TESTING USE ONLY")
     ("slow-omap-threshold", po::value<unsigned>(&slow_threshold),
@@ -3293,6 +3294,7 @@ int main(int argc, char **argv)
     nspace = argnspace;
 
   dry_run = (vm.count("dry-run") > 0);
+  tty = (vm.count("tty") > 0);
 
   osflagbits_t flags = 0;
   if (dry_run || vm.count("skip-journal-replay"))
@@ -3389,7 +3391,7 @@ int main(int argc, char **argv)
     usage(desc);
     return 1;
   }
-  outistty = isatty(STDOUT_FILENO);
+  outistty = isatty(STDOUT_FILENO) || tty;
 
   file_fd = fd_none;
   if ((op == "export" || op == "export-remove" || op == "get-osdmap" || op == "get-inc-osdmap") && !dry_run) {

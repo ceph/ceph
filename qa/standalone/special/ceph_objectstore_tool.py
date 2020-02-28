@@ -152,7 +152,7 @@ def cat_file(level, filename):
 
 def vstart(new, opt="-o osd_pool_default_pg_autoscale_mode=off"):
     print("vstarting....", end="")
-    NEW = new and "-n" or "-N"
+    NEW = new and "-n" or "-k"
     call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print("DONE")
 
@@ -1535,7 +1535,7 @@ def main(argv):
                     jsondict[1]['shard_id'] = int(pg.split('s')[1])
                     JSON = json.dumps((pg, jsondict[1]))
                     for osd in OSDS:
-                        cmd = (CFSD_PREFIX + " '{json}' get-attr hinfo_key").format(osd=osd, json=JSON)
+                        cmd = (CFSD_PREFIX + " --tty '{json}' get-attr hinfo_key").format(osd=osd, json=JSON)
                         logging.debug("TRY: " + cmd)
                         try:
                             out = check_output(cmd, shell=True, stderr=subprocess.STDOUT)
@@ -1543,9 +1543,9 @@ def main(argv):
                             found += 1
                         except subprocess.CalledProcessError as e:
                             logging.debug("Error message: {output}".format(output=e.output))
-                            if "No such file or directory" not in e.output and \
-                               "No data available" not in e.output and \
-                               "not contained by pg" not in e.output:
+                            if "No such file or directory" not in str(e.output) and \
+                               "No data available" not in str(e.output) and \
+                               "not contained by pg" not in str(e.output):
                                 raise
                 # Assuming k=2 m=1 for the default ec pool
                 if found != 3:
