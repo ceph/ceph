@@ -70,9 +70,9 @@ describe('RgwBucketService', () => {
   });
 
   it('should call update', () => {
-    service.update('foo', 'bar', 'baz', 'Enabled').subscribe();
+    service.update('foo', 'bar', 'baz', 'Enabled', 'Enabled', '1', '223344').subscribe();
     const req = httpTesting.expectOne(
-      'api/rgw/bucket/foo?bucket_id=bar&uid=baz&versioning_state=Enabled'
+      'api/rgw/bucket/foo?bucket_id=bar&uid=baz&versioning_state=Enabled&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344'
     );
     expect(req.request.method).toBe('PUT');
   });

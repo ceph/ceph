@@ -9,11 +9,14 @@ import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
+import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -30,6 +33,11 @@ export class RgwBucketFormComponent implements OnInit {
   resource: string;
   zonegroup: string;
   placementTargets: object[] = [];
+  isVersioningEnabled = false;
+  isVersioningAlreadyEnabled = false;
+  isMfaDeleteEnabled = false;
+  isMfaDeleteAlreadyEnabled = false;
+  icons = Icons;
 
   constructor(
     private route: ActivatedRoute,
@@ -54,7 +62,10 @@ export class RgwBucketFormComponent implements OnInit {
       bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
       owner: [null, [Validators.required]],
       'placement-target': [null, this.editing ? [] : [Validators.required]],
-      versioning: [null, this.editing ? [Validators.required] : []]
+      versioning: [null],
+      'mfa-delete': [null],
+      'mfa-token-serial': [''],
+      'mfa-token-pin': ['']
     });
   }
 
@@ -101,6 +112,13 @@ export class RgwBucketFormComponent implements OnInit {
         value = _.merge(defaults, value);
         // Update the form.
         this.bucketForm.setValue(value);
+        if (this.editing) {
+          this.setVersioningStatus(resp['versioning']);
+          this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
+          this.setMfaDeleteStatus(resp['mfa_delete']);
+          this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
+          this.setMfaDeleteValidators();
+        }
       });
     });
   }
@@ -121,9 +139,20 @@ export class RgwBucketFormComponent implements OnInit {
     if (this.editing) {
       // Edit
       const idCtl = this.bucketForm.get('id');
-      const versioningCtl = this.bucketForm.get('versioning');
+      const versioning = this.getVersioningStatus();
+      const mfaDelete = this.getMfaDeleteStatus();
+      const mfaTokenSerial = this.bucketForm.getValue('mfa-token-serial');
+      const mfaTokenPin = this.bucketForm.getValue('mfa-token-pin');
       this.rgwBucketService
-        .update(bidCtl.value, idCtl.value, ownerCtl.value, versioningCtl.value)
+        .update(
+          bidCtl.value,
+          idCtl.value,
+          ownerCtl.value,
+          versioning,
+          mfaDelete,
+          mfaTokenSerial,
+          mfaTokenPin
+        )
         .subscribe(
           () => {
             this.notificationService.show(
@@ -225,5 +254,57 @@ export class RgwBucketFormComponent implements OnInit {
         });
       });
     };
+  }
+
+  areMfaCredentialsRequired() {
+    return (
+      this.isMfaDeleteEnabled !== this.isMfaDeleteAlreadyEnabled ||
+      (this.isMfaDeleteAlreadyEnabled &&
+        this.isVersioningEnabled !== this.isVersioningAlreadyEnabled)
+    );
+  }
+
+  setMfaDeleteValidators() {
+    const mfaTokenSerialControl = this.bucketForm.get('mfa-token-serial');
+    const mfaTokenPinControl = this.bucketForm.get('mfa-token-pin');
+
+    if (this.areMfaCredentialsRequired()) {
+      mfaTokenSerialControl.setValidators(Validators.required);
+      mfaTokenPinControl.setValidators(Validators.required);
+    } else {
+      mfaTokenSerialControl.setValidators(null);
+      mfaTokenPinControl.setValidators(null);
+    }
+
+    mfaTokenSerialControl.updateValueAndValidity();
+    mfaTokenPinControl.updateValueAndValidity();
+  }
+
+  getVersioningStatus() {
+    return this.isVersioningEnabled ? RgwBucketVersioning.ENABLED : RgwBucketVersioning.SUSPENDED;
+  }
+
+  setVersioningStatus(status: RgwBucketVersioning) {
+    this.isVersioningEnabled = status === RgwBucketVersioning.ENABLED;
+  }
+
+  updateVersioning() {
+    this.isVersioningEnabled = !this.isVersioningEnabled;
+
+    this.setMfaDeleteValidators();
+  }
+
+  getMfaDeleteStatus() {
+    return this.isMfaDeleteEnabled ? RgwBucketMfaDelete.ENABLED : RgwBucketMfaDelete.DISABLED;
+  }
+
+  setMfaDeleteStatus(status: RgwBucketMfaDelete) {
+    this.isMfaDeleteEnabled = status === RgwBucketMfaDelete.ENABLED;
+  }
+
+  updateMfaDelete() {
+    this.isMfaDeleteEnabled = !this.isMfaDeleteEnabled;
+
+    this.setMfaDeleteValidators();
   }
 }

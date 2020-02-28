@@ -119,44 +119,87 @@
         </div>
 
         <!-- Versioning -->
-        <div class="form-group row"
-             *ngIf="editing">
-          <legend class="cd-header ml-5 mr-5"
-                  i18n>Versioning</legend>
-          <div class="cd-col-form-offset">
-            <input type="radio"
-                   id="enabled"
-                   name="versioning"
-                   formControlName="versioning"
-                   value="Enabled"
-                   [checked]="bucketForm.get('versioning').value == 'Enabled'"
-                   class="custom-control custom-radio custom-control-inline align-top">
-            <label class="align-text-top"
-                   for="enabled">
-              <span i18n>Enabled</span>
-              <div class="text-muted"
-                   i18n>Enables versioning for the objects in the bucket.</div>
-            </label>
+        <legend class="cd-header"
+                i18n>Versioning</legend>
+
+        <ng-container *ngIf="editing">
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="versioning"
+                       name="versioning"
+                       formControlName="versioning"
+                       [checked]="isVersioningEnabled"
+                       (change)="updateVersioning()">
+                <label class="custom-control-label"
+                       for="versioning"
+                       i18n>Versioning enabled</label>
+                <cd-helper>
+                  <span i18n>Enables versioning for the objects in the bucket.</span>
+                </cd-helper>
+              </div>
+            </div>
           </div>
-          <div class="cd-col-form-offset">
-            <input type="radio"
-                   id="suspended"
-                   name="versioning"
-                   formControlName="versioning"
-                   value="Suspended"
-                   [checked]="bucketForm.get('versioning').value != 'Enabled'"
-                   class="custom-control custom-radio custom-control-inline align-top">
-            <label class="align-text-top"
-                   for="suspended">
-              <span i18n>Suspended</span>
-              <div class="text-muted"
-                   i18n>Disables versioning for the objects in the bucket.</div>
-            </label>
-          <span class="invalid-feedback"
-                *ngIf="bucketForm.showError('versioning', frm, 'required')"
-                i18n>This field is required.</span>
+
+          <!-- MFA Delete -->
+          <legend class="cd-header"
+                  i18n>Multi-Factor Authentication</legend>
+
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="mfa-delete"
+                       name="mfa-delete"
+                       formControlName="mfa-delete"
+                       [checked]="isMfaDeleteEnabled"
+                       (change)="updateMfaDelete()">
+                <label class="custom-control-label"
+                       for="mfa-delete"
+                       i18n>Delete enabled</label>
+                <cd-helper>
+                  <span i18n>Enables MFA (multi-factor authentication) Delete, which requires additional authentication for changing the bucket versioning state.</span>
+                </cd-helper>
+              </div>
+            </div>
           </div>
-        </div>
+          <div *ngIf="areMfaCredentialsRequired()"
+               class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="mfa-token-serial">Token Serial Number</label>
+            <div class="cd-col-form-input">
+              <input type="text"
+                     id="mfa-token-serial"
+                     name="mfa-token-serial"
+                     formControlName="mfa-token-serial"
+                     class="form-control">
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('mfa-token-serial', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <div *ngIf="areMfaCredentialsRequired()"
+               class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="mfa-token-pin">Token PIN</label>
+            <div class="cd-col-form-input">
+              <input type="text"
+                     id="mfa-token-pin"
+                     name="mfa-token-pin"
+                     formControlName="mfa-token-pin"
+                     class="form-control">
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('mfa-token-pin', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+        </ng-container>
+
 
       </div>
       <div class="card-footer">

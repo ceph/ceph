@@ -58,11 +58,22 @@ export class RgwBucketService {
     return this.http.post(this.url, null, { params: params });
   }
 
-  update(bucket: string, bucketId: string, uid: string, versioningState: string) {
+  update(
+    bucket: string,
+    bucketId: string,
+    uid: string,
+    versioningState: string,
+    mfaDelete: string,
+    mfaTokenSerial: string,
+    mfaTokenPin: string
+  ) {
     let params = new HttpParams();
     params = params.append('bucket_id', bucketId);
     params = params.append('uid', uid);
     params = params.append('versioning_state', versioningState);
+    params = params.append('mfa_delete', mfaDelete);
+    params = params.append('mfa_token_serial', mfaTokenSerial);
+    params = params.append('mfa_token_pin', mfaTokenPin);
     return this.http.put(`${this.url}/${bucket}`, null, { params: params });
   }
 
