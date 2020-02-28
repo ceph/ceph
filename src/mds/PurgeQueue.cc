@@ -590,8 +590,14 @@ void PurgeQueue::_execute_item(
   gather.set_finisher(new C_OnFinisher(
                       new LambdaContext([this, expire_to](int r){
     std::lock_guard l(lock);
-    _execute_item_complete(expire_to);
 
+    if (r == -EBLACKLISTED) {
+      finisher.queue(on_error, r);
+      on_error = nullptr;
+      return;
+    }
+
+    _execute_item_complete(expire_to);
     _consume();
 
     // Have we gone idle?  If so, do an extra write_head now instead of
