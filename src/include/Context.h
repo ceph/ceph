@@ -75,9 +75,7 @@ class Context {
   virtual ~Context() {}       // we want a virtual destructor!!!
   virtual void complete(int r) {
     finish(r);
-#ifndef WITH_SEASTAR
-    delete this;   //alien store need its callback fun alive to get future.
-#endif
+    delete this;
   }
   virtual bool sync_complete(int r) {
     if (sync_finish(r)) {

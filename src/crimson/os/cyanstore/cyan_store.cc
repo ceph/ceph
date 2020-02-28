@@ -416,7 +416,6 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
       t.get_on_applied_sync()}) {
     if (i) {
       i->complete(0);
-      delete i;
     }
   }
   return seastar::now();
