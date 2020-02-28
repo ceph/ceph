@@ -1562,6 +1562,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
+            '--pid=host',
         ] + self.container_args + priv + \
         cname + envs + \
         vols + entrypoint + \
