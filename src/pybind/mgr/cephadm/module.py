@@ -1710,10 +1710,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             for name in names:
                 if name in dm:
                     args.append((name, host, force))
-                    # TODO: bail out for OSDs when https://github.com/ceph/ceph/pull/32983 is merged
-                    if dm[name].daemon_type == 'osd':
-                        continue
-                    self._remove_key_from_store(dm[name].service_name())
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         self.log.info('Remove daemons %s' % [a[0] for a in args])
