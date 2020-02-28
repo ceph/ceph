@@ -70,8 +70,8 @@ def test_ceph_volume_command_2():
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G')
                           )
-    inventory = _mk_inventory(_mk_device(rotational=True)*2 +
-                              _mk_device(rotational=False)*2 +
+    inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
+                              _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
@@ -88,8 +88,8 @@ def test_ceph_volume_command_3():
                           wal_devices=DeviceSelection(size='10G'),
                           encrypted=True
                           )
-    inventory = _mk_inventory(_mk_device(rotational=True)*2 +
-                              _mk_device(rotational=False)*2 +
+    inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
+                              _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
@@ -110,8 +110,8 @@ def test_ceph_volume_command_4():
                           osds_per_device=3,
                           encrypted=True
                           )
-    inventory = _mk_inventory(_mk_device(rotational=True)*2 +
-                              _mk_device(rotational=False)*2 +
+    inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
+                              _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
