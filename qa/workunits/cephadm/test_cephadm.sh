@@ -89,7 +89,7 @@ fi
 function expect_false()
 {
         set -x
-        if "$@"; then return 1; else return 0; fi
+        if eval "$@"; then return 1; else return 0; fi
 }
 
 function is_available()
@@ -136,6 +136,20 @@ function dump_all_logs()
     for name in $names; do
         dump_log $name
     done
+}
+
+function nfs_stop()
+{
+    # stop the running nfs server
+    local units="nfs-server nfs-kernel-server"
+    for unit in $units; do
+        if systemctl status $unit; then
+            $SUDO systemctl stop $unit
+        fi
+    done
+
+    # ensure the NFS port is no longer in use
+    expect_false "$SUDO ss -tlnp '( sport = :nfs )' | grep LISTEN"
 }
 
 ## prepare + check host
@@ -279,6 +293,7 @@ cond="curl --insecure 'https://localhost:3000' | grep -q 'grafana'"
 is_available "grafana" "$cond" 30
 
 # add nfs-ganesha
+nfs_stop
 nfs_rados_pool=$(cat ${CEPHADM_SAMPLES_DIR}/nfs.json | jq -r '.["pool"]')
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
         ceph osd pool create $nfs_rados_pool 64
