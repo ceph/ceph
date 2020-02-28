@@ -10,7 +10,7 @@ from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
 
 import string
 try:
-    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, Any, NamedTuple, Iterator
+    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, Any, NamedTuple, Iterator, Set
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
@@ -37,7 +37,7 @@ from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValid
     CLICommandMeta, ServiceSpec
 
 from . import remotes
-from ._utils import RemoveUtil
+from .osd import RemoveUtil, OSDRemoval
 
 
 try:
@@ -85,20 +85,6 @@ except ImportError:
         def __exit__(self, exc_type, exc_value, traceback):
             self.cleanup()
 
-class OSDRemoval(NamedTuple):
-    osd_id: int
-    replace: bool
-    force: bool
-    nodename: str
-    fullname: str
-    started_at: datetime.datetime
-
-    # needed due to changing 'started_at' attr
-    def __eq__(self, other):
-        return self.osd_id == other.osd_id
-
-    def __hash__(self):
-        return hash(self.osd_id)
 
 # high-level TODO:
 #  - bring over some of the protections from ceph-deploy that guard against
@@ -668,8 +654,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         self.cache = HostCache(self)
         self.cache.load()
-        self.to_remove_osds: set = set()
-        self.osd_removal_report: dict = dict()
         self.rm_util = RemoveUtil(self)
 
         self.spec_store = SpecStore(self)
@@ -1067,8 +1051,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self.set_health_checks(self.health_checks)
 
             self._check_for_strays()
-
-            self._remove_osds_bg()
 
             if self._apply_all_services():
                 continue  # did something, refresh
@@ -2856,7 +2838,7 @@ receivers:
         """
 
         daemons = self.cache.get_daemons_by_service('osd')
-        found = set()
+        found: Set[OSDRemoval] = set()
         for daemon in daemons:
             if daemon.daemon_id not in osd_ids:
                 continue
@@ -2864,86 +2846,21 @@ receivers:
                                  daemon.hostname, daemon.name(),
                                  datetime.datetime.utcnow()))
 
-        not_found: set = {osd_id for osd_id in osd_ids if osd_id not in [x.osd_id for x in found]}
+        not_found = {osd_id for osd_id in osd_ids if osd_id not in [x.osd_id for x in found]}
         if not_found:
             raise OrchestratorError('Unable to find OSD: %s' % not_found)
 
         for osd in found:
-            self.to_remove_osds.add(osd)
+            self.rm_util.to_remove_osds.add(osd)
             # trigger the serve loop to initiate the removal
         self._kick_serve_loop()
         return trivial_result(f"Scheduled OSD(s) for removal")
-
-    def _remove_osds_bg(self) -> None:
-        """
-        Performs actions in the _serve() loop to remove an OSD
-        when criteria is met.
-        """
-        self.log.debug(f"{len(self.to_remove_osds)} OSDs are scheduled for removal: {list(self.to_remove_osds)}")
-        self.osd_removal_report = self._generate_osd_removal_status()
-        remove_osds: set = self.to_remove_osds.copy()
-        for osd in remove_osds:
-            if not osd.force:
-                self.rm_util.drain_osd(osd.osd_id)
-                # skip criteria
-                if not self.rm_util.is_empty(osd.osd_id):
-                    self.log.info(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
-                    continue
-
-            if not self.rm_util.ok_to_destroy([osd.osd_id]):
-                self.log.info(f"OSD <{osd.osd_id}> is not safe-to-destroy yet. Waiting a bit more")
-                continue
-
-            # abort criteria
-            if not self.rm_util.down_osd([osd.osd_id]):
-                # also remove it from the remove_osd list and set a health_check warning?
-                raise orchestrator.OrchestratorError(f"Could not set OSD <{osd.osd_id}> to 'down'")
-
-            if osd.replace:
-                if not self.rm_util.destroy_osd(osd.osd_id):
-                    # also remove it from the remove_osd list and set a health_check warning?
-                    raise orchestrator.OrchestratorError(f"Could not destroy OSD <{osd.osd_id}>")
-            else:
-                if not self.rm_util.purge_osd(osd.osd_id):
-                    # also remove it from the remove_osd list and set a health_check warning?
-                    raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
-
-            completion = self._remove_daemons([(osd.fullname, osd.nodename, True)])
-            completion.add_progress('Removing OSDs', self)
-            completion.update_progress = True
-            if completion:
-                while not completion.has_result:
-                    self.process([completion])
-                    if completion.needs_result:
-                        time.sleep(1)
-                    else:
-                        break
-                if completion.exception is not None:
-                    self.log.error(str(completion.exception))
-            else:
-                raise orchestrator.OrchestratorError("Did not receive a completion from _remove_daemon")
-
-            self.log.info(f"Successfully removed removed OSD <{osd.osd_id}> on {osd.nodename}")
-            self.log.debug(f"Removing {osd.osd_id} from the queue.")
-            self.to_remove_osds.remove(osd)
-
-    def _generate_osd_removal_status(self) -> Dict[Any, object]:
-        """
-        Generate a OSD report that can be printed to the CLI
-        """
-        self.log.debug("Assembling report for osd rm status")
-        report = {}
-        for osd in self.to_remove_osds:
-            pg_count = self.rm_util.get_pg_count(osd.osd_id)
-            report[osd] = pg_count if pg_count != -1 else 'n/a'
-        self.log.debug(f"Reporting: {report}")
-        return report
 
     def remove_osds_status(self) -> orchestrator.Completion:
         """
         The CLI call to retrieve an osd removal report
         """
-        return trivial_result(self.osd_removal_report)
+        return trivial_result(self.rm_util.osd_removal_report)
 
     def list_specs(self) -> orchestrator.Completion:
         """
