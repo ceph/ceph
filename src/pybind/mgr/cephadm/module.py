@@ -2813,7 +2813,11 @@ receivers:
         specs = self.spec_store.find(service_name)
         completions = list()
         for spec in specs:
-            completions.append(func(spec))
+            try:
+                completions.append(func(spec))
+            except Exception as e:
+                self.log.warning('Failed to apply %s spec %s: %s' % (
+                    service_name, spec, e))
         if completions:
             return completions
         return [trivial_result("Nothing to do..")]
