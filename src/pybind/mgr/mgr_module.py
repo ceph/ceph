@@ -451,7 +451,25 @@ class FileHandler(logging.FileHandler):
         self.setFormatter(logging.Formatter("%(asctime)s [%(threadName)s] [%(levelname)-4s] [%(name)s] %(message)s"))
 
 
+def _define_logging_options(cls):
+    cls.MODULE_OPTIONS.append(
+        Option(name='log_level', type='str', default="", runtime=True,
+               enum_allowed=['info', 'debug', 'critical', 'error',
+                             'warning', '']))
+    cls.MODULE_OPTIONS.append(
+        Option(name='log_to_file', type='bool', default=False, runtime=True))
+    if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_cluster', type='bool', default=False,
+                   runtime=True))
+    cls.MODULE_OPTIONS.append(
+        Option(name='log_to_cluster_level', type='str', default='info',
+               runtime=True,
+               enum_allowed=['info', 'debug', 'critical', 'error',
+                             'warning', '']))
+
 class MgrModuleLoggingMixin(object):
+
     def _configure_logging(self, mgr_level, module_level, cluster_level,
                            log_to_file, log_to_cluster):
         self._mgr_level = None
@@ -581,6 +599,8 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
 
+        _define_logging_options(self)
+
         # see also MgrModule.__init__()
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
@@ -689,6 +709,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
+        _define_logging_options(self)
+
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
                 if 'type' in o:
@@ -725,22 +747,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @classmethod
     def _register_commands(cls, module_name):
-        cls.MODULE_OPTIONS.append(
-            Option(name='log_level', type='str', default="", runtime=True,
-                   enum_allowed=['info', 'debug', 'critical', 'error',
-                                 'warning', '']))
-        cls.MODULE_OPTIONS.append(
-            Option(name='log_to_file', type='bool', default=False, runtime=True))
-        if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
-            cls.MODULE_OPTIONS.append(
-                Option(name='log_to_cluster', type='bool', default=False,
-                       runtime=True))
-        cls.MODULE_OPTIONS.append(
-            Option(name='log_to_cluster_level', type='str', default='info',
-                   runtime=True,
-                   enum_allowed=['info', 'debug', 'critical', 'error',
-                                 'warning', '']))
-
         cls.COMMANDS.extend(CLICommand.dump_cmd_list())
 
     @property
