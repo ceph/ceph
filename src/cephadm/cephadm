@@ -1040,8 +1040,8 @@ def get_parm(option):
 
     try:
         js = json.loads(j)
-    except ValueError:
-        raise Error("Invalid JSON in {}".format(option))
+    except ValueError as e:
+        raise Error("Invalid JSON in {}: {}".format(option, e))
     else:
         return js
 
