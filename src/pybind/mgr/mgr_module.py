@@ -470,8 +470,13 @@ def _define_logging_options(cls):
 
 class MgrModuleLoggingMixin(object):
 
-    def _configure_logging(self, mgr_level, module_level, cluster_level,
-                           log_to_file, log_to_cluster):
+    def _configure_logging(self):
+        mgr_level = self.get_ceph_option("debug_mgr")
+        module_level = self.get_module_option("log_level")
+        cluster_level = self.get_module_option('log_to_cluster_level')
+        log_to_file = self.get_module_option("log_to_file")
+        log_to_cluster = self.get_module_option("log_to_cluster")
+
         self._mgr_level = None
         self._module_level = None
         self._root_logger = logging.getLogger()
@@ -609,11 +614,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
                 else:
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
-        mgr_level = self.get_ceph_option("debug_mgr")
-        log_level = self.get_module_option("log_level")
-        cluster_level = self.get_module_option('log_to_cluster_level')
-        self._configure_logging(mgr_level, log_level, cluster_level,
-                                False, False)
+        self._configure_logging()
 
         # for backwards compatibility
         self._logger = self.getLogger()
@@ -723,13 +724,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     # with default and user-supplied option values.
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
-        mgr_level = self.get_ceph_option("debug_mgr")
-        log_level = self.get_module_option("log_level")
-        cluster_level = self.get_module_option('log_to_cluster_level')
-        log_to_file = self.get_module_option("log_to_file")
-        log_to_cluster = self.get_module_option("log_to_cluster")
-        self._configure_logging(mgr_level, log_level, cluster_level,
-                                log_to_file, log_to_cluster)
+        self._configure_logging()
 
         # for backwards compatibility
         self._logger = self.getLogger()
