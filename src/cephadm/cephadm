@@ -1496,14 +1496,6 @@ def install_base_units(fsid):
 }
 """ % fsid)
 
-def deploy_crash(fsid, uid, gid, config, keyring):
-    # type: (str, int, int, str, str) -> None
-    crash_dir = os.path.join(args.data_dir, fsid, 'crash')
-    makedirs(crash_dir, uid, gid, DATA_DIR_MODE)
-    c = get_container(fsid, 'crash', get_hostname())
-    deploy_daemon(fsid, 'crash', get_hostname(), c, uid, gid,
-                  config, keyring)
-
 def get_unit_file(fsid, uid, gid):
     # type: (str, int, int) -> str
     install_path = find_program('install')
@@ -1952,11 +1944,6 @@ def command_bootstrap():
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
 
-    # crash unit
-    logger.info('Creating crash agent...')
-    deploy_crash(fsid, uid, gid, config,
-                 '[client.crash.%s]\n\tkey = %s\n' % (hostname, crash_key))
-
     # output files
     with open(args.output_keyring, 'w') as f:
         os.fchmod(f.fileno(), 0o600)
@@ -2111,9 +2098,6 @@ def command_deploy():
                       config, keyring,
                       osd_fsid=args.osd_fsid,
                       reconfig=args.reconfig)
-
-        if crash_keyring and not args.reconfig:
-            deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter

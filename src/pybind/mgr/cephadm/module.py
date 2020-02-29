@@ -2019,21 +2019,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if extra_config:
                 config += extra_config
 
-            if daemon_type != 'crash':
-                # crash_keyring
-                ret, crash_keyring, err = self.mon_command({
-                    'prefix': 'auth get-or-create',
-                    'entity': 'client.crash.%s' % host,
-                    'caps': ['mon', 'profile crash',
-                             'mgr', 'profile crash'],
-                })
-            else:
-                crash_keyring = None
-
             j = json.dumps({
                 'config': config,
                 'keyring': keyring,
-                'crash_keyring': crash_keyring,
             })
             extra_args.extend(['--config-and-keyrings', '-'])
 
