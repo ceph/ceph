@@ -995,19 +995,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug("serve starting")
         while self.run:
             self._check_hosts()
-            self._remove_osds_bg()
-            service_completions = self._apply_services()
-            for service_completion in service_completions:
-                if service_completion:
-                    while not service_completion.has_result:
-                        self.process([service_completion])
-                        self.log.debug(f'Still processing {service_completion}')
-                        if service_completion.needs_result:
-                            time.sleep(1)
-                        else:
-                            break
-                    if service_completion.exception is not None:
-                        self.log.error(str(service_completion.exception))
 
             # refresh daemons
             self.log.debug('refreshing hosts')
@@ -1036,6 +1023,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self.set_health_checks(self.health_checks)
 
             self._check_for_strays()
+
+            self._remove_osds_bg()
+
+            service_completions = self._apply_services()
+            for service_completion in service_completions:
+                if service_completion:
+                    while not service_completion.has_result:
+                        self.process([service_completion])
+                        self.log.debug(f'Still processing {service_completion}')
+                        if service_completion.needs_result:
+                            time.sleep(1)
+                        else:
+                            break
+                    if service_completion.exception is not None:
+                        self.log.error(str(service_completion.exception))
 
             if self.upgrade_state and not self.upgrade_state.get('paused'):
                 upgrade_completion = self._do_upgrade()
