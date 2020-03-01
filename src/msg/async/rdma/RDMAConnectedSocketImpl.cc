@@ -29,6 +29,19 @@ class C_handle_connection_established : public EventCallback {
   }
 };
 
+class C_handle_connection_read : public EventCallback {
+  RDMAConnectedSocketImpl *csi;
+  bool active = true;
+ public:
+  explicit C_handle_connection_read(RDMAConnectedSocketImpl *w): csi(w) {}
+  void do_request(uint64_t fd) final {
+    if (active)
+      csi->handle_connection();
+  }
+  void close() {
+    active = false;
+  }
+};
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -38,7 +51,7 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
 						 RDMAWorker *w)
   : cct(cct), connected(0), error(0), infiniband(ib),
     dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
-    is_server(false), con_handler(new C_handle_connection(this)),
+    is_server(false), read_handler(new C_handle_connection_read(this)),
     established_handler(new C_handle_connection_established(this)),
     active(false), pending(false)
 {
@@ -241,7 +254,7 @@ int RDMAConnectedSocketImpl::handle_connection_established(bool need_set_fault) 
     }
     return r;
   }
-  worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+  worker->center.create_file_event(tcp_fd, EVENT_READABLE, read_handler);
   ldout(cct, 20) << __func__ << " finish " << dendl;
   return 0;
 }
@@ -657,13 +670,13 @@ void RDMAConnectedSocketImpl::fin() {
 }
 
 void RDMAConnectedSocketImpl::cleanup() {
-  if (con_handler && tcp_fd >= 0) {
-    (static_cast<C_handle_connection*>(con_handler))->close();
+  if (read_handler && tcp_fd >= 0) {
+    (static_cast<C_handle_connection_read*>(read_handler))->close();
     worker->center.submit_to(worker->center.get_id(), [this]() {
       worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
     }, false);
-    delete con_handler;
-    con_handler = nullptr;
+    delete read_handler;
+    read_handler = nullptr;
   }
   if (established_handler) {
     (static_cast<C_handle_connection_established*>(established_handler))->close();
@@ -714,7 +727,7 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd)
   tcp_fd = sd;
   is_server = true;
   worker->center.submit_to(worker->center.get_id(), [this]() {
-			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, read_handler);
 			   }, true);
 }
 
