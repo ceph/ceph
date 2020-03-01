@@ -1642,65 +1642,15 @@ class RGWSpec(ServiceSpec):
                  rgw_zone,  # type: str
                  placement=None,
                  service_type='rgw',
-                 name=None,  # type: Optional[str]
-                 hosts=None,  # type: Optional[List[str]]
-                 rgw_multisite=None,  # type: Optional[bool]
-                 rgw_zonemaster=None,  # type: Optional[bool]
-                 rgw_zonesecondary=None,  # type: Optional[bool]
-                 rgw_multisite_proto=None,  # type: Optional[str]
                  rgw_frontend_port=None,  # type: Optional[int]
-                 rgw_zonegroup=None,  # type: Optional[str]
-                 rgw_zone_user=None,  # type: Optional[str]
-                 system_access_key=None,  # type: Optional[str]
-                 system_secret_key=None,  # type: Optional[str]
-                 count=None  # type: Optional[int]
                  ):
-        # Regarding default values. Ansible has a `set_rgwspec_defaults` that sets
-        # default values that makes sense for Ansible. Rook has default values implemented
-        # in Rook itself. Thus we don't set any defaults here in this class.
         assert service_type == 'rgw'
         super(RGWSpec, self).__init__('rgw', service_id=rgw_realm+'.'+rgw_zone, placement=placement)
 
-        #: List of hosts where RGWs should run. Not for Rook.
-        if hosts:
-            self.placement = PlacementSpec(hosts=hosts)
-
-        #: is multisite
-        self.rgw_multisite = rgw_multisite
-        self.rgw_zonemaster = rgw_zonemaster
-        self.rgw_zonesecondary = rgw_zonesecondary
-        self.rgw_multisite_proto = rgw_multisite_proto
-        self.rgw_frontend_port = rgw_frontend_port
-
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
-        self.rgw_zonegroup = rgw_zonegroup
-        self.rgw_zone_user = rgw_zone_user
+        self.rgw_frontend_port = rgw_frontend_port
 
-        self.system_access_key = system_access_key
-        self.system_secret_key = system_secret_key
-
-    @property
-    def rgw_multisite_endpoint_addr(self):
-        """Returns the first host. Not supported for Rook."""
-        return self.placement.hosts[0]
-
-    @property
-    def rgw_multisite_endpoints_list(self):
-        return ",".join(["{}://{}:{}".format(self.rgw_multisite_proto,
-                                             host,
-                                             self.rgw_frontend_port) for host in self.placement.hosts])
-
-    def genkey(self, nchars):
-        """ Returns a random string of nchars
-
-        :nchars : Length of the returned string
-        """
-        # TODO Python 3: use Secrets module instead.
-
-        return ''.join(random.choice(string.ascii_uppercase +
-                                     string.ascii_lowercase +
-                                     string.digits) for _ in range(nchars))
 
 
 class InventoryFilter(object):
