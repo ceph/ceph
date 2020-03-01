@@ -202,10 +202,17 @@ To read the log file of one specific daemon, run::
 
     cephadm logs --name <name-of-daemon>
 
+Note: this only works when run on the same host where the daemon is running. To
+get logs of a daemon running on a different host, give the ``--fsid`` option::
+
+    cephadm logs --fsid <fsid> --name <name-of-daemon>
+
+Where the ``<fsid>`` corresponds to the cluster id printed by ``ceph status``.
+
 To fetch all log files of all daemons on a given host, run::
 
     for name in $(cephadm ls | jq -r '.[].name') ; do
-      cephadm logs --name "$name" > $name;
+      cephadm logs --fsid <fsid> --name "$name" > $name;
     done
 
 Collecting systemd status
