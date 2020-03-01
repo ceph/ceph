@@ -18,6 +18,7 @@ recreate_pool() {
     PG_NUM=100
     ceph osd pool delete $POOL_NAME $POOL_NAME --yes-i-really-really-mean-it
     ceph osd pool create $POOL_NAME $PG_NUM
+    rbd pool init $POOL_NAME
 }
 
 run_cli_tests() {
