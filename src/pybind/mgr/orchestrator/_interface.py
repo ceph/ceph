@@ -8,6 +8,7 @@ import copy
 import functools
 import logging
 import pickle
+import json
 import sys
 import time
 from collections import namedtuple
@@ -913,12 +914,25 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def apply_service_config(self, spec_document: str) -> Completion:
+        """
+        Saves Service Specs from a yaml|json file
+        """
+        raise NotImplementedError()
+
     def remove_daemons(self, names, force):
         # type: (List[str], bool) -> Completion
         """
         Remove specific daemon(s).
 
         :return: None
+        """
+        raise NotImplementedError()
+
+    def list_specs(self):
+        # type: () -> Completion
+        """
+        Lists saved service specs
         """
         raise NotImplementedError()
 
@@ -1222,7 +1236,6 @@ class PlacementSpec(object):
             else:
                 self.hosts = [HostPlacementSpec.parse(x, require_network=False) for x in hosts if x]
 
-
         self.count = count  # type: Optional[int]
         self.all_hosts = all_hosts  # type: bool
 
@@ -1387,9 +1400,11 @@ class DaemonDescription(object):
     def service_name(self):
         if self.daemon_type == 'rgw':
             v = self.daemon_id.split('.')
-            return 'rgw.%s' % ('.'.join(v[0:2]))
+            s_name = '.'.join(v[0:2])
+            return 'rgw.%s' % s_name
         if self.daemon_type in ['mds', 'nfs']:
-            return 'mds.%s' % (self.daemon_id.split('.')[0])
+            _s_name = self.daemon_id.split('.')[0]
+            return 'mds.%s' % _s_name
         return self.daemon_type
 
     def __repr__(self):
@@ -1442,6 +1457,7 @@ class ServiceDescription(object):
                  service_url=None,
                  last_refresh=None,
                  size=0,
+                 spec_presence='absent',
                  running=0):
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
@@ -1469,6 +1485,11 @@ class ServiceDescription(object):
 
         # datetime when this info was last refreshed
         self.last_refresh = last_refresh   # type: Optional[datetime.datetime]
+
+        # status string to indicate the presence of a persistent servicespec
+        # possible strings are "absent", "present" and "not applicable" while
+        # the "not applicable" is mostly for OSDs.
+        self.spec_presence = spec_presence
 
     def service_type(self):
         if self.service_name:
@@ -1514,14 +1535,16 @@ class ServiceSpec(object):
 
     """
 
-    def __init__(self, name=None, placement=None):
-        # type: (Optional[str], Optional[PlacementSpec]) -> None
+    def __init__(self,
+                 service_type : str,
+                 service_id : Optional[str] = None,
+                 placement : Optional[PlacementSpec] = None,
+                 count : Optional[int] = None):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
-        #: Give this set of stateless services a name: typically it would
-        #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
-        #: within one ceph cluster. Note: Not all clusters have a name
-        self.name = name  # type: Optional[str]
+        assert service_type
+        self.service_type = service_type
+        self.service_id = service_id
 
         if self.placement is not None and self.placement.count is not None:
             #: Count of service instances. Deprecated.
@@ -1529,12 +1552,51 @@ class ServiceSpec(object):
         else:
             self.count = 1
 
+    @classmethod
+    def from_json(cls, json_spec: dict) -> "ServiceSpec":
+        """
+        Initialize 'ServiceSpec' object data from a json structure
+        :param json_spec: A valid dict with ServiceSpec
+        """
+        args: Dict[str, Dict[Any, Any]] = {}
+        service_type = json_spec.get('service_type', '')
+        assert service_type
+        if service_type == 'rgw':
+            _cls = RGWSpec  # type: ignore
+        elif service_type == 'nfs':
+            _cls = NFSServiceSpec  # type: ignore
+        else:
+            _cls = ServiceSpec  # type: ignore
+        for k, v in json_spec.items():
+            if k == 'placement':
+                v = PlacementSpec.from_dict(v)
+            if k == 'spec':
+                args.update(v)
+                continue
+            args.update({k: v})
+        return _cls(**args)  # type: ignore
+
+    def service_name(self):
+        n = self.service_type
+        if self.service_id:
+            n += '.' + self.service_id
+        return n
+
+    def to_json(self):
+        return json.dumps(self, default=lambda o: o.__dict__,
+                          sort_keys=True)
+
+    def __repr__(self):
+        return "{}({!r})".format(self.__class__.__name__, self.__dict__)
+
 
 def servicespec_validate_add(self: ServiceSpec):
     # This must not be a method of ServiceSpec, otherwise you'll hunt
     # sub-interpreter affinity bugs.
-    if not self.name:
-        raise OrchestratorValidationError('Cannot add Service: Name required')
+    if not self.service_type:
+        raise OrchestratorValidationError('Cannot add Service: type required')
+    if self.service_type in ['mds', 'rgw', 'nfs'] and not self.service_id:
+        raise OrchestratorValidationError('Cannot add Service: id required')
 
 
 def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
@@ -1552,10 +1614,11 @@ def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
             raise OrchestratorValidationError(m)
 
 
-
 class NFSServiceSpec(ServiceSpec):
-    def __init__(self, name, pool=None, namespace=None, placement=None):
-        super(NFSServiceSpec, self).__init__(name, placement)
+    def __init__(self, service_id, pool=None, namespace=None, placement=None,
+                 service_type='nfs'):
+        assert service_type == 'nfs'
+        super(NFSServiceSpec, self).__init__('nfs', service_id=service_id, placement=placement)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
@@ -1569,7 +1632,6 @@ class NFSServiceSpec(ServiceSpec):
         if not self.pool:
             raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
 
-
 class RGWSpec(ServiceSpec):
     """
     Settings to configure a (multisite) Ceph RGW
@@ -1579,76 +1641,16 @@ class RGWSpec(ServiceSpec):
                  rgw_realm,  # type: str
                  rgw_zone,  # type: str
                  placement=None,
-                 hosts=None,  # type: Optional[List[str]]
-                 rgw_multisite=None,  # type: Optional[bool]
-                 rgw_zonemaster=None,  # type: Optional[bool]
-                 rgw_zonesecondary=None,  # type: Optional[bool]
-                 rgw_multisite_proto=None,  # type: Optional[str]
+                 service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
-                 rgw_zonegroup=None,  # type: Optional[str]
-                 rgw_zone_user=None,  # type: Optional[str]
-                 system_access_key=None,  # type: Optional[str]
-                 system_secret_key=None,  # type: Optional[str]
-                 count=None  # type: Optional[int]
                  ):
-        # Regarding default values. Ansible has a `set_rgwspec_defaults` that sets
-        # default values that makes sense for Ansible. Rook has default values implemented
-        # in Rook itself. Thus we don't set any defaults here in this class.
-
-        super(RGWSpec, self).__init__(name=rgw_realm + '.' + rgw_zone,
-                                      placement=placement)
-
-        #: List of hosts where RGWs should run. Not for Rook.
-        if hosts:
-            self.placement = PlacementSpec(hosts=hosts)
-
-        #: is multisite
-        self.rgw_multisite = rgw_multisite
-        self.rgw_zonemaster = rgw_zonemaster
-        self.rgw_zonesecondary = rgw_zonesecondary
-        self.rgw_multisite_proto = rgw_multisite_proto
-        self.rgw_frontend_port = rgw_frontend_port
+        assert service_type == 'rgw'
+        super(RGWSpec, self).__init__('rgw', service_id=rgw_realm+'.'+rgw_zone, placement=placement)
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
-        self.rgw_zonegroup = rgw_zonegroup
-        self.rgw_zone_user = rgw_zone_user
+        self.rgw_frontend_port = rgw_frontend_port
 
-        self.system_access_key = system_access_key
-        self.system_secret_key = system_secret_key
-
-    @property
-    def rgw_multisite_endpoint_addr(self):
-        """Returns the first host. Not supported for Rook."""
-        return self.placement.hosts[0]
-
-    @property
-    def rgw_multisite_endpoints_list(self):
-        return ",".join(["{}://{}:{}".format(self.rgw_multisite_proto,
-                             host,
-                             self.rgw_frontend_port) for host in self.placement.hosts])
-
-    def genkey(self, nchars):
-        """ Returns a random string of nchars
-
-        :nchars : Length of the returned string
-        """
-        # TODO Python 3: use Secrets module instead.
-
-        return ''.join(random.choice(string.ascii_uppercase +
-                                     string.ascii_lowercase +
-                                     string.digits) for _ in range(nchars))
-
-    @classmethod
-    def from_json(cls, json_rgw_spec):
-        # type: (dict) -> RGWSpec
-        """
-        Initialize 'RGWSpec' object data from a json structure
-        :param json_rgw_spec: A valid dict with a the RGW settings
-        """
-        # TODO: also add PlacementSpec(**json_rgw_spec['placement'])
-        args = {k:v for k, v in json_rgw_spec.items()}
-        return RGWSpec(**args)
 
 
 class InventoryFilter(object):

@@ -335,7 +335,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
-                ['NAME', 'RUNNING', 'REFRESHED', 'IMAGE NAME', 'IMAGE ID'],
+                ['NAME', 'RUNNING', 'REFRESHED', 'IMAGE NAME', 'IMAGE ID', 'SPEC'],
                 border=False)
             table.align['NAME'] = 'l'
             table.align['RUNNING'] = 'r'
@@ -354,7 +354,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     '%d/%d' % (s.running, s.size),
                     age,
                     ukn(s.container_image_name),
-                    ukn(s.container_image_id)[0:12]))
+                    ukn(s.container_image_id)[0:12],
+                    ukn(s.spec_presence)
+                ))
 
             return HandleCommandResult(stdout=table.get_string())
 
@@ -507,7 +509,7 @@ Usage:
         placement = PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = ServiceSpec(placement=placement)
+        spec = ServiceSpec('mon', placement=placement)
 
         completion = self.add_mon(spec)
         self._orchestrator_wait([completion])
@@ -521,8 +523,18 @@ Usage:
         'Start rbd-mirror daemon(s)')
     def _daemon_add_mgr(self, num=None, hosts=None):
         spec = ServiceSpec(
+            'mgr',
             placement=PlacementSpec(hosts=hosts, count=num))
         completion = self.add_mgr(spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch apply',
+        desc='Applies a Service Specification from a file. ceph orch apply -i $file')
+    def _apply_services(self, inbuf):
+        completion = self.apply_service_config(inbuf)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -534,7 +546,7 @@ Usage:
         'Start rbd-mirror daemon(s)')
     def _rbd_mirror_add(self, num=None, hosts=None):
         spec = ServiceSpec(
-            None,
+            'rbd-mirror',
             placement=PlacementSpec(hosts=hosts, count=num))
         completion = self.add_rbd_mirror(spec)
         self._orchestrator_wait([completion])
@@ -549,7 +561,7 @@ Usage:
         'Start MDS daemon(s)')
     def _mds_add(self, fs_name, num=None, hosts=None):
         spec = ServiceSpec(
-            fs_name,
+            'mds', fs_name,
             placement=PlacementSpec(hosts=hosts, count=num))
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
@@ -616,6 +628,7 @@ Usage:
     def _daemon_add_prometheus(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'prometheus',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_prometheus(spec)
@@ -631,6 +644,7 @@ Usage:
     def _daemon_add_node_exporter(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'node-exporter',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_node_exporter(spec)
@@ -646,6 +660,7 @@ Usage:
     def _daemon_add_grafana(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'grafana',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_grafana(spec)
@@ -661,6 +676,7 @@ Usage:
     def _daemon_add_alertmanager(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'alertmanager',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_alertmanager(spec)
@@ -719,6 +735,16 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
+        'orch spec dump',
+        desc='List all Service specs')
+    def _get_service_specs(self):
+        completion = self.list_specs()
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        specs = completion.result_str()
+        return HandleCommandResult(stdout=specs)
+
+    @_cli_write_command(
         'orch apply mgr',
         "name=num,type=CephInt,req=false "
         "name=hosts,type=CephString,n=N,req=false "
@@ -729,7 +755,7 @@ Usage:
             label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = ServiceSpec(placement=placement)
+        spec = ServiceSpec('mgr', placement=placement)
 
         completion = self.apply_mgr(spec)
         self._orchestrator_wait([completion])
@@ -749,7 +775,7 @@ Usage:
         placement = PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = ServiceSpec(placement=placement)
+        spec = ServiceSpec('mon', placement=placement)
 
         completion = self.apply_mon(spec)
         self._orchestrator_wait([completion])
@@ -766,11 +792,9 @@ Usage:
     def _apply_mds(self, fs_name, num=None, label=None, hosts=[]):
         placement = PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
-
         spec = ServiceSpec(
-            fs_name,
+            'mds', fs_name,
             placement=placement)
-
         completion = self.apply_mds(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -784,6 +808,7 @@ Usage:
         'Update the number of rbd-mirror instances')
     def _apply_rbd_mirror(self, num, label=None, hosts=[]):
         spec = ServiceSpec(
+            'rbd-mirror',
             placement=PlacementSpec(hosts=hosts, count=num, label=label))
         completion = self.apply_rbd_mirror(spec)
         self._orchestrator_wait([completion])
@@ -834,6 +859,7 @@ Usage:
     def _apply_prometheus(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'prometheus',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.apply_prometheus(spec)
@@ -849,6 +875,7 @@ Usage:
     def _apply_node_exporter(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'node-exporter',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.apply_node_exporter(spec)

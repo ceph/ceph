@@ -292,7 +292,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _service_add_decorate(self, typename, spec, func):
         return write_completion(
             on_complete=lambda : func(spec),
-            message="Creating {} services for {}".format(typename, spec.name),
+            message="Creating {} services for {}".format(typename, spec.service_id),
             mgr=self
         )
 
@@ -348,8 +348,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: (orchestrator.ServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
-            lambda: self.rook_cluster.update_mds_count(spec.name, num),
-            "Updating MDS server count in {0} to {1}".format(spec.name, num),
+            lambda: self.rook_cluster.update_mds_count(spec.service_id, num),
+            "Updating MDS server count in {0} to {1}".format(spec.service_id, num),
             mgr=self
         )
 
@@ -357,8 +357,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: (orchestrator.NFSServiceSpec) -> RookCompletion
         num = spec.count
         return write_completion(
-            lambda: self.rook_cluster.update_nfs_count(spec.name, num),
-            "Updating NFS server count in {0} to {1}".format(spec.name, num),
+            lambda: self.rook_cluster.update_nfs_count(spec.service_id, num),
+            "Updating NFS server count in {0} to {1}".format(spec.service_id, num),
             mgr=self
         )
 
