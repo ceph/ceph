@@ -639,6 +639,19 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
+        'orch daemon add crash',
+        'name=placement,type=CephString,n=N,req=false',
+        'Add node-exporter daemon(s)')
+    def _daemon_add_crash(self, placement=None):
+        spec = ServiceSpec(
+            'crash',
+            placement=PlacementSpec.from_strings(placement),
+        )
+        completion = self.add_crash(spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
         'orch daemon add grafana',
         'name=placement,type=CephString,n=N,req=false',
         'Add grafana daemon(s)')
@@ -841,6 +854,19 @@ Usage:
             placement=PlacementSpec.from_strings(placement),
         )
         completion = self.apply_node_exporter(spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch apply crash',
+        'name=placement,type=CephString,n=N,req=false',
+        'Update node_exporter service')
+    def _apply_crash(self, placement=None):
+        spec = ServiceSpec(
+            'crash',
+            placement=PlacementSpec.from_strings(placement),
+        )
+        completion = self.apply_crash(spec)
         self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 

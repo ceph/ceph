@@ -1104,6 +1104,16 @@ class Orchestrator(object):
         """Update existing a Node-Exporter daemon(s)"""
         raise NotImplementedError()
 
+    def add_crash(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Create a new crash service"""
+        raise NotImplementedError()
+
+    def apply_crash(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update existing a crash daemon(s)"""
+        raise NotImplementedError()
+
     def add_grafana(self, spec):
         # type: (ServiceSpec) -> Completion
         """Create a new Node-Exporter service"""
