@@ -188,7 +188,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   ceph::mutex lock = ceph::make_mutex("RDMAConnectedSocketImpl::lock");
   std::vector<ibv_wc> wc;
   bool is_server;
-  EventCallbackRef con_handler;
+  EventCallbackRef read_handler;
   EventCallbackRef established_handler;
   int tcp_fd = -1;
   bool active;// qp is active ?
@@ -234,21 +234,6 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   void set_pending(bool val) {pending = val;}
   void post_chunks_to_rq(int num);
   void update_post_backlog();
-
-  class C_handle_connection : public EventCallback {
-    RDMAConnectedSocketImpl *csi;
-    bool active;
-   public:
-    explicit C_handle_connection(RDMAConnectedSocketImpl *w): csi(w), active(true) {}
-    void do_request(uint64_t fd) {
-      if (active)
-        csi->handle_connection();
-    }
-    void close() {
-      active = false;
-    }
-  };
-  
 };
 
 enum RDMA_CM_STATUS {
