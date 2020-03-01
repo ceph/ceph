@@ -154,7 +154,7 @@ class TestCephadm(object):
     def test_mgr_update(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module._apply_mgr(ServiceSpec(placement=ps, service_type='mgr'))
+            c = cephadm_module._apply_service(ServiceSpec(placement=ps, service_type='mgr'))
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed mgr.* on host 'test'")
 
@@ -237,7 +237,7 @@ class TestCephadm(object):
                 match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
 
                 ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
-                c = cephadm_module._apply_rgw(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
+                c = cephadm_module._apply_service(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
                 [out] = wait(cephadm_module, c)
                 match_glob(out, "Deployed rgw.realm.zone1.host2.* on host 'host2'")
 
@@ -267,7 +267,7 @@ class TestCephadm(object):
 
                 with pytest.raises(OrchestratorError):
                     ps = PlacementSpec(hosts=['host1', 'host2'], count=3)
-                    c = cephadm_module._apply_rgw(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
+                    c = cephadm_module._apply_service(RGWSpec('realm', 'zone1', placement=ps, service_type='rgw'))
                     [out] = wait(cephadm_module, c)
 
 
@@ -508,48 +508,3 @@ class TestCephadm(object):
             _sspec.from_json.assert_called_once()
             assert wait(cephadm_module, c) == 'ServiceSpecs saved'
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    @mock.patch("cephadm.module.SpecStore.find")
-    def test_trigger_deployment_todo(self, _find, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            _find.return_value = ['something']
-            c = cephadm_module.trigger_deployment('foo', lambda x: x)
-            _find.assert_called_with('foo')
-            assert c == ['something']
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    @mock.patch("cephadm.module.SpecStore.find")
-    def test_trigger_deployment_no_todo(self, _find, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            _find.return_value = []
-            c = cephadm_module.trigger_deployment('foo', lambda x: x)
-            _find.assert_called_with('foo')
-            assert wait(cephadm_module, c[0]) == 'Nothing to do..'
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    @mock.patch("cephadm.module.CephadmOrchestrator.trigger_deployment")
-    def test_apply_services(self, _trigger_deployment, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module._apply_services()
-            _trigger_deployment.assert_any_call('mgr', cephadm_module._apply_mgr)
-            _trigger_deployment.assert_any_call('prometheus', cephadm_module._apply_prometheus)
-            _trigger_deployment.assert_any_call('node-exporter', cephadm_module._apply_node_exporter)
-            _trigger_deployment.assert_any_call('mds', cephadm_module._apply_mds)
-            _trigger_deployment.assert_any_call('rgw', cephadm_module._apply_rgw)
-            _trigger_deployment.assert_any_call('rbd-mirror', cephadm_module._apply_rbd_mirror)
-            assert isinstance(c, list)
