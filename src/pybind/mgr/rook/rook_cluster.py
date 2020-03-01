@@ -351,7 +351,7 @@ class RookCluster(object):
         rook_fs = cfs.CephFilesystem(
             apiVersion=self.rook_env.api_name,
             metadata=dict(
-                name=spec.name,
+                name=spec.service_id,
                 namespace=self.rook_env.namespace,
             ),
             spec=cfs.Spec(
@@ -362,7 +362,7 @@ class RookCluster(object):
             )
         )
 
-        with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.name)):
+        with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.service_id)):
             self.rook_api_post("cephfilesystems/", body=rook_fs.to_json())
 
     def add_nfsgw(self, spec):
@@ -373,7 +373,7 @@ class RookCluster(object):
         rook_nfsgw = cnfs.CephNFS(
             apiVersion=self.rook_env.api_name,
             metadata=dict(
-                name=spec.name,
+                name=spec.service_id,
                 namespace=self.rook_env.namespace,
             ),
             spec=cnfs.Spec(
@@ -389,7 +389,7 @@ class RookCluster(object):
         if spec.namespace:
             rook_nfsgw.spec.rados.namespace = spec.namespace
 
-        with self.ignore_409("NFS cluster '{0}' already exists".format(spec.name)):
+        with self.ignore_409("NFS cluster '{0}' already exists".format(spec.service_id)):
             self.rook_api_post("cephnfses/", body=rook_nfsgw.to_json())
 
     def add_objectstore(self, spec):
@@ -397,7 +397,7 @@ class RookCluster(object):
         rook_os = cos.CephObjectStore(
             apiVersion=self.rook_env.api_name,
             metadata=dict(
-                name=spec.name,
+                name=spec.service_id,
                 namespace=self.rook_env.namespace
             ),
             spec=cos.Spec(
@@ -421,7 +421,7 @@ class RookCluster(object):
             )
         )
         
-        with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.name)):
+        with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.service_id)):
             self.rook_api_post("cephobjectstores/", body=rook_os.to_json())
 
     def rm_service(self, rooktype, service_id):

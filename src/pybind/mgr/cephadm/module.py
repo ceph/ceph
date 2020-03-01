@@ -2134,9 +2134,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             raise OrchestratorError('must specify host(s) to deploy on')
         if not spec.placement.count:
             spec.placement.count = len(spec.placement.hosts)
-        # TODO: rename service_name to spec.name if works
-        service_name = spec.name
-        daemons = self.cache.get_daemons_by_service(service_name)
+        daemons = self.cache.get_daemons_by_service(spec.service_name())
         return self._create_daemons(daemon_type, spec, daemons,
                                     create_func, config_func)
 
@@ -2152,7 +2150,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         args = [] # type: ignore
         for host, network, name in spec.placement.hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
-                                             spec.name, name)
+                                             spec.service_id, name)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
             if daemon_type == 'mon':
@@ -2239,12 +2237,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _config_mds(self, spec):
         # ensure mds_join_fs is set for these daemons
-        assert spec.name
+        assert spec.service_id
         ret, out, err = self.mon_command({
             'prefix': 'config set',
-            'who': 'mds.' + spec.name,
+            'who': 'mds.' + spec.service_id,
             'name': 'mds_join_fs',
-            'value': spec.name,
+            'value': spec.service_id,
         })
 
     @async_map_completion
@@ -2266,7 +2264,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mon_command({
             'prefix': 'config set',
-            'who': 'client.rgw.' + spec.name,
+            'who': 'client.rgw.' + spec.service_id,
             'name': 'rgw_zone',
             'value': spec.rgw_zone,
         })
