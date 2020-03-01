@@ -1548,12 +1548,6 @@ class ServiceSpec(object):
         self.service_type = service_type
         self.service_id = service_id
 
-        if self.placement is not None and self.placement.count is not None:
-            #: Count of service instances. Deprecated.
-            self.count = self.placement.count  # type: int
-        else:
-            self.count = 1
-
     @classmethod
     def from_json(cls, json_spec: dict) -> "ServiceSpec":
         """
