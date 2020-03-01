@@ -72,14 +72,14 @@ class TestOrchestratorCli(MgrTestCase):
 
 
     def test_service_action(self):
-        self._orch_cmd("service", "restart", "mds", "cephfs")
-        self._orch_cmd("service", "stop", "mds", "cephfs")
-        self._orch_cmd("service", "start", "mds", "cephfs")
+        self._orch_cmd("restart", "mds.cephfs")
+        self._orch_cmd("stop", "mds.cephfs")
+        self._orch_cmd("start", "mds.cephfs")
 
     def test_service_instance_action(self):
-        self._orch_cmd("daemon", "restart", "mds", "a")
-        self._orch_cmd("daemon", "stop", "mds", "a")
-        self._orch_cmd("daemon", "start", "mds", "a")
+        self._orch_cmd("daemon", "restart", "mds.a")
+        self._orch_cmd("daemon", "stop", "mds.a")
+        self._orch_cmd("daemon", "start", "mds.a")
 
     def test_osd_create(self):
         self._orch_cmd("osd", "create", "*:device")
