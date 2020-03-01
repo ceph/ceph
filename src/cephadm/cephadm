@@ -2002,6 +2002,9 @@ def command_bootstrap():
         logger.info('Adding host %s...' % host)
         cli(['orch', 'host', 'add', host])
 
+        logger.info('Deploy crash collectors...')
+        cli(['orch', 'apply', 'crash', 'all:true'])
+
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
