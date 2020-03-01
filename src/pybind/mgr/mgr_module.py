@@ -1562,7 +1562,7 @@ class PersistentStoreDict(object):
     def __init__(self, mgr, prefix):
         # type: (MgrModule, str) -> None
         self.mgr = mgr
-        self.prefix = prefix + '/'
+        self.prefix = prefix + '.'
 
     def _mk_store_key(self, key):
         return self.prefix + key
