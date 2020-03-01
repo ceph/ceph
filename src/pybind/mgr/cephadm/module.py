@@ -1632,6 +1632,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.save_host(host)
         return None
 
+    def _get_spec_size(self, spec):
+        if spec.placement.count:
+            return spec.placement.count
+        elif spec.placement.all_hosts:
+            return len(self.inventory)
+        elif spec.placement.label:
+            return len(self._get_hosts(spec.placement.label))
+        elif spec.placement.hosts:
+            return len(spec.placement.hosts)
+        # hmm!
+        return 0
+
     def describe_service(self, service_type=None, service_name=None,
                          refresh=False):
         if refresh:
@@ -1648,8 +1660,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 n: str = dd.service_name()
                 if service_name and service_name != n:
                     continue
+                spec = None
                 if dd.service_name() in self.spec_store.specs:
                     spec_presence = "present"
+                    spec = self.spec_store.specs[dd.service_name()]
                 else:
                     spec_presence = "absent"
                 if dd.daemon_type == 'osd':
@@ -1662,7 +1676,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         container_image_name=dd.container_image_name,
                         spec_presence=spec_presence,
                     )
-                sm[n].size += 1
+                if spec:
+                    sm[n].size = self._get_spec_size(spec)
+                else:
+                    sm[n].size += 1
                 if dd.status == 1:
                     sm[n].running += 1
                 if not sm[n].last_refresh or not dd.last_refresh or dd.last_refresh < sm[n].last_refresh:  # type: ignore
