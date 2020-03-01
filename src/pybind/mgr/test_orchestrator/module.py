@@ -154,7 +154,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         raise Exception('c-v failed')
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, host_name=None, refresh=False):
+    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
         """
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.
@@ -164,8 +164,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             assert daemon_type in daemon_types, daemon_type + " unsupported"
 
         if self._daemons:
-            if host_name:
-                return list(filter(lambda svc: svc.hostname == host_name, self._daemons))
+            if host:
+                return list(filter(lambda svc: svc.hostname == host, self._daemons))
             return self._daemons
 
         out = map(str, check_output(['ps', 'aux']).splitlines())
@@ -214,7 +214,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
 
     @deferred_write("remove_daemons")
-    def remove_daemons(self, names):
+    def remove_daemons(self, names, force):
         assert isinstance(names, list)
 
     @deferred_write("remove_service")
@@ -231,13 +231,17 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def service_action(self, action, service_name):
         pass
 
+    @deferred_write("daemon_action")
+    def daemon_action(self, action, daemon_type, daemon_id):
+        pass
+
     @deferred_write("Adding NFS service")
     def add_nfs(self, spec):
         # type: (orchestrator.NFSServiceSpec) -> None
         assert isinstance(spec.pool, str)
 
-    @deferred_write("update_nfs")
-    def update_nfs(self, spec):
+    @deferred_write("apply_nfs")
+    def apply_nfs(self, spec):
         pass
 
     @deferred_write("add_mds")
@@ -274,15 +278,15 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def remove_host(self, host):
         assert isinstance(host, six.string_types)
 
-    @deferred_write("update_mgrs")
-    def update_mgrs(self, spec):
+    @deferred_write("apply_mgr")
+    def apply_mgr(self, spec):
         # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h, str) for h in spec.placement.hosts])
 
-    @deferred_write("update_mons")
-    def update_mons(self, spec):
+    @deferred_write("apply_mon")
+    def apply_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
