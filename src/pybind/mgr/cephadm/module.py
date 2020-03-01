@@ -1688,6 +1688,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     sm[n].container_image_id = 'mix'
                 if sm[n].container_image_name != dd.container_image_name:
                     sm[n].container_image_name = 'mix'
+        for n, spec in self.spec_store.specs.items():
+            if n in sm:
+                continue
+            sm[n] = orchestrator.ServiceDescription(
+                service_name=n,
+                spec_presence='present',
+                size=self._get_spec_size(spec),
+                running=0,
+            )
         return trivial_result([s for n, s in sm.items()])
 
     def list_daemons(self, daemon_type=None, daemon_id=None,
