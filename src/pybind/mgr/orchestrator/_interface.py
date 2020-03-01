@@ -1535,17 +1535,16 @@ class ServiceSpec(object):
 
     """
 
-    def __init__(self, name=None, placement=None, service_type=None, count=None):
-        # type: (Optional[str], Optional[PlacementSpec], Optional[str], Optional[int]) -> None
+    def __init__(self,
+                 service_type : str,
+                 service_id : Optional[str] = None,
+                 placement : Optional[PlacementSpec] = None,
+                 count : Optional[int] = None):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         assert service_type
         self.service_type = service_type
-
-        #: Give this set of stateless services a name: typically it would
-        #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
-        #: within one ceph cluster. Note: Not all clusters have a name
-        self.name = name or service_type
+        self.service_id = service_id
 
         if self.placement is not None and self.placement.count is not None:
             #: Count of service instances. Deprecated.
@@ -1579,8 +1578,8 @@ class ServiceSpec(object):
 
     def service_name(self):
         n = self.service_type
-        if self.name:
-            n += '.' + self.name
+        if self.service_id:
+            n += '.' + self.service_id
         return n
 
     def to_json(self):
@@ -1594,8 +1593,10 @@ class ServiceSpec(object):
 def servicespec_validate_add(self: ServiceSpec):
     # This must not be a method of ServiceSpec, otherwise you'll hunt
     # sub-interpreter affinity bugs.
-    if not self.name:
-        raise OrchestratorValidationError('Cannot add Service: Name required')
+    if not self.service_type:
+        raise OrchestratorValidationError('Cannot add Service: type required')
+    if self.service_type in ['mds', 'rgw', 'nfs'] and not self.service_id:
+        raise OrchestratorValidationError('Cannot add Service: id required')
 
 
 def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
@@ -1614,8 +1615,10 @@ def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
 
 
 class NFSServiceSpec(ServiceSpec):
-    def __init__(self, name, pool=None, namespace=None, placement=None, service_type=None):
-        super(NFSServiceSpec, self).__init__(name=name, placement=placement, service_type=service_type)
+    def __init__(self, service_id, pool=None, namespace=None, placement=None,
+                 service_type='nfs'):
+        assert service_type == 'nfs'
+        super(NFSServiceSpec, self).__init__('nfs', service_id=service_id, placement=placement)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
@@ -1638,7 +1641,7 @@ class RGWSpec(ServiceSpec):
                  rgw_realm,  # type: str
                  rgw_zone,  # type: str
                  placement=None,
-                 service_type=None,  # type: Optional[str]
+                 service_type='rgw',
                  name=None,  # type: Optional[str]
                  hosts=None,  # type: Optional[List[str]]
                  rgw_multisite=None,  # type: Optional[bool]
@@ -1655,8 +1658,8 @@ class RGWSpec(ServiceSpec):
         # Regarding default values. Ansible has a `set_rgwspec_defaults` that sets
         # default values that makes sense for Ansible. Rook has default values implemented
         # in Rook itself. Thus we don't set any defaults here in this class.
-
-        super(RGWSpec, self).__init__(name=rgw_realm+'.'+rgw_zone, placement=placement, service_type=service_type)
+        assert service_type == 'rgw'
+        super(RGWSpec, self).__init__('rgw', service_id=rgw_realm+'.'+rgw_zone, placement=placement)
 
         #: List of hosts where RGWs should run. Not for Rook.
         if hosts:

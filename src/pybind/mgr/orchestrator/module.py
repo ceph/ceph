@@ -509,7 +509,7 @@ Usage:
         placement = PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = ServiceSpec(placement=placement, service_type='mon')
+        spec = ServiceSpec('mon', placement=placement)
 
         completion = self.add_mon(spec)
         self._orchestrator_wait([completion])
@@ -523,6 +523,7 @@ Usage:
         'Start rbd-mirror daemon(s)')
     def _daemon_add_mgr(self, num=None, hosts=None):
         spec = ServiceSpec(
+            'mgr',
             placement=PlacementSpec(hosts=hosts, count=num))
         completion = self.add_mgr(spec)
         self._orchestrator_wait([completion])
@@ -545,7 +546,7 @@ Usage:
         'Start rbd-mirror daemon(s)')
     def _rbd_mirror_add(self, num=None, hosts=None):
         spec = ServiceSpec(
-            None,
+            'rbd-mirror',
             placement=PlacementSpec(hosts=hosts, count=num))
         completion = self.add_rbd_mirror(spec)
         self._orchestrator_wait([completion])
@@ -560,7 +561,7 @@ Usage:
         'Start MDS daemon(s)')
     def _mds_add(self, fs_name, num=None, hosts=None):
         spec = ServiceSpec(
-            fs_name,
+            'mds', fs_name,
             placement=PlacementSpec(hosts=hosts, count=num))
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
@@ -627,6 +628,7 @@ Usage:
     def _daemon_add_prometheus(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'prometheus',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_prometheus(spec)
@@ -642,6 +644,7 @@ Usage:
     def _daemon_add_node_exporter(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'node-exporter',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_node_exporter(spec)
@@ -657,6 +660,7 @@ Usage:
     def _daemon_add_grafana(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'grafana',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_grafana(spec)
@@ -672,6 +676,7 @@ Usage:
     def _daemon_add_alertmanager(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'alertmanager',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
         )
         completion = self.add_alertmanager(spec)
@@ -750,7 +755,7 @@ Usage:
             label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = ServiceSpec(placement=placement, service_type='mgr')
+        spec = ServiceSpec('mgr', placement=placement)
 
         completion = self.apply_mgr(spec)
         self._orchestrator_wait([completion])
@@ -770,7 +775,7 @@ Usage:
         placement = PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
 
-        spec = ServiceSpec(placement=placement)
+        spec = ServiceSpec('mon', placement=placement)
 
         completion = self.apply_mon(spec)
         self._orchestrator_wait([completion])
@@ -788,8 +793,7 @@ Usage:
         placement = PlacementSpec(label=label, count=num, hosts=hosts)
         placement.validate()
         spec = ServiceSpec(
-            service_type='mds',
-            name=fs_name,
+            'mds', fs_name,
             placement=placement)
         completion = self.apply_mds(spec)
         self._orchestrator_wait([completion])
@@ -804,8 +808,8 @@ Usage:
         'Update the number of rbd-mirror instances')
     def _apply_rbd_mirror(self, num, label=None, hosts=[]):
         spec = ServiceSpec(
-            placement=PlacementSpec(hosts=hosts, count=num, label=label),
-            service_type='rbd-mirror')
+            'rbd-mirror',
+            placement=PlacementSpec(hosts=hosts, count=num, label=label))
         completion = self.apply_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -821,7 +825,6 @@ Usage:
         'Update the number of RGW instances for the given zone')
     def _apply_rgw(self, zone_name, realm_name, num=None, label=None, hosts=[]):
         spec = RGWSpec(
-            service_type='rgw',
             rgw_realm=realm_name,
             rgw_zone=zone_name,
             placement=PlacementSpec(hosts=hosts, label=label, count=num))
@@ -856,8 +859,8 @@ Usage:
     def _apply_prometheus(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'prometheus',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
-            service_type='prometheus'
         )
         completion = self.apply_prometheus(spec)
         self._orchestrator_wait([completion])
@@ -872,8 +875,8 @@ Usage:
     def _apply_node_exporter(self, num=None, label=None, hosts=[]):
         # type: (Optional[int], Optional[str], List[str]) -> HandleCommandResult
         spec = ServiceSpec(
+            'node-exporter',
             placement=PlacementSpec(label=label, hosts=hosts, count=num),
-            service_type='node-exporter'
         )
         completion = self.apply_node_exporter(spec)
         self._orchestrator_wait([completion])
