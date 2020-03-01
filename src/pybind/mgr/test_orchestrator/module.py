@@ -231,6 +231,10 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def service_action(self, action, service_name):
         pass
 
+    @deferred_write("daemon_action")
+    def daemon_action(self, action, daemon_type, daemon_id):
+        pass
+
     @deferred_write("Adding NFS service")
     def add_nfs(self, spec):
         # type: (orchestrator.NFSServiceSpec) -> None
