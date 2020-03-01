@@ -2089,6 +2089,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'alertmanager': self._create_alertmanager,
             'prometheus': self._create_prometheus,
             'node-exporter': self._create_node_exporter,
+            'crash': self._create_crash,
         }
         config_fns = {
             'mds': self._config_mds,
@@ -2530,6 +2531,24 @@ receivers:
     @async_map_completion
     def _create_node_exporter(self, daemon_id, host):
         return self._create_daemon('node-exporter', daemon_id, host)
+
+    def add_crash(self, spec):
+        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        return self._add_daemon('crash', spec,
+                                self._create_crash)
+
+    def apply_crash(self, spec):
+        return self._apply(spec)
+
+    @async_map_completion
+    def _create_crash(self, daemon_id, host):
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.crash.' + host,
+            'caps': ['mon', 'profile crash',
+                     'mgr', 'profile crash'],
+        })
+        return self._create_daemon('crash', daemon_id, host, keyring=keyring)
 
     def add_grafana(self, spec):
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
