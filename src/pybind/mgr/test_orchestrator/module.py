@@ -236,8 +236,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: (orchestrator.NFSServiceSpec) -> None
         assert isinstance(spec.pool, str)
 
-    @deferred_write("update_nfs")
-    def update_nfs(self, spec):
+    @deferred_write("apply_nfs")
+    def apply_nfs(self, spec):
         pass
 
     @deferred_write("add_mds")
@@ -274,15 +274,15 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def remove_host(self, host):
         assert isinstance(host, six.string_types)
 
-    @deferred_write("update_mgrs")
-    def update_mgrs(self, spec):
+    @deferred_write("apply_mgr")
+    def apply_mgr(self, spec):
         # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h, str) for h in spec.placement.hosts])
 
-    @deferred_write("update_mons")
-    def update_mons(self, spec):
+    @deferred_write("apply_mon")
+    def apply_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
