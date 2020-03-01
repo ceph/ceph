@@ -119,6 +119,7 @@ enum {
   l_osdc_osdop_cmpxattr,
   l_osdc_osdop_rmxattr,
   l_osdc_osdop_resetxattrs,
+  l_osdc_osdop_tmap_up,
   l_osdc_osdop_call,
   l_osdc_osdop_watch,
   l_osdc_osdop_notify,
@@ -161,6 +162,9 @@ enum {
   l_osdc_osdop_omap_rd,
   l_osdc_osdop_omap_del,
 
+  l_osdc_write_latency,
+  l_osdc_read_latency,
+  
   l_osdc_last,
 };
 
@@ -312,6 +316,8 @@ void Objecter::init()
 			"Remove xattr operations");
     pcb.add_u64_counter(l_osdc_osdop_resetxattrs, "osdop_resetxattrs",
 			"Reset xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_tmap_up, "osdop_tmap_up",
+	                "TMAP update operations");
     pcb.add_u64_counter(l_osdc_osdop_call, "osdop_call",
 			"Call (execute) operations");
     pcb.add_u64_counter(l_osdc_osdop_watch, "osdop_watch",
@@ -378,6 +384,9 @@ void Objecter::init()
 			"OSD OMAP read operations");
     pcb.add_u64_counter(l_osdc_osdop_omap_del, "omap_del",
 			"OSD OMAP delete operations");
+
+    pcb.add_time_avg(l_osdc_write_latency, "write_latency", "latency of write ops");
+    pcb.add_time_avg(l_osdc_read_latency, "read_latency", "latency of read ops");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2341,6 +2350,8 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_CMPXATTR: code = l_osdc_osdop_cmpxattr; break;
     case CEPH_OSD_OP_RMXATTR: code = l_osdc_osdop_rmxattr; break;
     case CEPH_OSD_OP_RESETXATTRS: code = l_osdc_osdop_resetxattrs; break;
+    case CEPH_OSD_OP_TMAPUP: code = l_osdc_osdop_tmap_up; break;
+    
 
     // OMAP read operations
     case CEPH_OSD_OP_OMAPGETVALS:
@@ -3145,6 +3156,32 @@ void Objecter::_finish_op(Op *op, int r)
 
   if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
+
+  ceph::coarse_mono_time now = ceph::coarse_mono_time::now();
+  auto latency = now - op->init_stamp;
+  int stat_type = 0;
+  for (const auto& p : op->ops) {
+    switch (p.op.op) {
+    case CEPH_OSD_OP_READ:
+    case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_SYNC_READ:
+      stat_type = l_osdc_read_latency;
+      break;
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
+    case CEPH_OSD_OP_APPEND;
+    case CEPH_OSD_OP_WRITESAME;
+      stat_type = l_osdc_write_latency;
+      break;
+    default:
+      break;
+    }
+    if (stat_type) {
+      logger->tinc(stat_type, latency);
+      break;
+    }
+  }
+
 
   if (op->session) {
     _session_op_remove(op->session, op);
