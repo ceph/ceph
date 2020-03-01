@@ -1587,7 +1587,7 @@ class PersistentStoreDict(object):
                 self.__missing__(key)
             return json.loads(val)
         except (KeyError, AttributeError, IndexError, ValueError, TypeError):
-            logging.getLogger(__name__).exception('failed to deserialize')
+            logging.getLogger(__name__).debug('failed to deserialize item in store')
             self.mgr.set_store(key, None)
             raise
 

@@ -117,11 +117,9 @@ def test_rgwspec():
     """
     {
         "rgw_zone": "zonename",
+        "service_type": "rgw",
         "rgw_frontend_port": 8080,
-        "rgw_zonegroup": "group",
-        "rgw_zone_user": "user",
-        "rgw_realm": "realm",
-        "count": 3
+        "rgw_realm": "realm"
     }
     """
     example = json.loads(test_rgwspec.__doc__.strip())
