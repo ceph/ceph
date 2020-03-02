@@ -534,16 +534,16 @@ describe('PoolFormComponent', () => {
       });
     };
 
-    it('returns nothing if osd count is 0', () => {
+    it('returns 0 if osd count is 0', () => {
       component.info.osd_count = 0;
-      expect(component.getMinSize()).toBe(undefined);
-      expect(component.getMaxSize()).toBe(undefined);
+      expect(component.getMinSize()).toBe(0);
+      expect(component.getMaxSize()).toBe(0);
     });
 
-    it('returns nothing if info is not there', () => {
+    it('returns 0 if info is not there', () => {
       delete component.info;
-      expect(component.getMinSize()).toBe(undefined);
-      expect(component.getMaxSize()).toBe(undefined);
+      expect(component.getMinSize()).toBe(0);
+      expect(component.getMaxSize()).toBe(0);
     });
 
     it('returns minimum and maximum of rule', () => {
