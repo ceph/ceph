@@ -79,7 +79,7 @@ ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents)
    * and last_image_byte, inclusive, but we don't guarantee here
    * that they address all of those bytes. There may be gaps. */
   first_image_byte = extents.front().first;
-  last_image_byte = first_image_byte + extents.front().second;
+  last_image_byte = first_image_byte + extents.front().second - 1;
   for (auto &extent : extents) {
     /* Ignore zero length extents */
     if (extent.second) {
@@ -87,8 +87,9 @@ ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents)
       if (extent.first < first_image_byte) {
         first_image_byte = extent.first;
       }
-      if ((extent.first + extent.second) > last_image_byte) {
-        last_image_byte = extent.first + extent.second;
+      auto extent_tail = extent.first + extent.second - 1;
+      if (extent_tail > last_image_byte) {
+        last_image_byte = extent_tail;
       }
     }
   }
