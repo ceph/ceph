@@ -38,6 +38,9 @@ tasks:
     - \(POOL_APP_NOT_ENABLED\)
     - \(AUTH_BAD_CAPS\)
     - \(FS_INLINE_DATA_DEPRECATED\)
+    - \(MON_DOWN\)
+    - \(SLOW_OPS\)
+    - slow request
 - workunit:
     clients:
       all:
