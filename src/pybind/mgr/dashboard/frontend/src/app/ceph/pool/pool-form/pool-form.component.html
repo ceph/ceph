@@ -228,15 +228,15 @@
                   </button>
                   <button class="btn btn-light"
                           type="button"
-                          [disabled]="editing"
+                          *ngIf="!editing"
                           (click)="addErasureCodeProfile()">
                     <i [ngClass]="[icons.add]"
                        aria-hidden="true"></i>
                   </button>
                   <button class="btn btn-light"
                           type="button"
-                          (click)="deleteErasureCodeProfile()"
-                          [disabled]="editing || ecProfiles.length < 1">
+                          *ngIf="!editing"
+                          (click)="deleteErasureCodeProfile()">
                     <i [ngClass]="[icons.trash]"
                        aria-hidden="true"></i>
                   </button>
@@ -254,7 +254,18 @@
           </div>
 
           <!-- Crush ruleset selection -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="isErasure && !editing">
+            <label class="cd-col-form-label"
+                   for="crushRule"
+                   i18n>Crush ruleset</label>
+            <div class="cd-col-form-input">
+              <span class="form-text text-muted"
+                    i18n>A new crush ruleset will be implicitly created.</span>
+            </div>
+          </div>
+          <div class="form-group row"
+               *ngIf="isReplicated || editing">
             <label class="cd-col-form-label"
                    for="crushRule"
                    i18n>Crush ruleset</label>
@@ -262,8 +273,6 @@
               <ng-template #noRules>
                 <span class="form-text text-muted">
                   <span i18n>There are no rules.</span>&nbsp;
-                  <span *ngIf="form.getValue('poolType') === 'erasure'"
-                        i18n>A new crush ruleset will be implicitly created.</span>
                 </span>
               </ng-template>
               <div *ngIf="current.rules.length > 0; else noRules">
