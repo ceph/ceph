@@ -2904,7 +2904,7 @@ class HostAssignment(object):
         """
         # respect any explicit host list
         if self.spec.placement.hosts and not self.spec.placement.count:
-            logger.info('Provided hosts: %s' % self.spec.placement.hosts)
+            logger.debug('Provided hosts: %s' % self.spec.placement.hosts)
             return self.spec.placement.hosts
 
         # respect all_hosts=true
@@ -2913,7 +2913,7 @@ class HostAssignment(object):
                 HostPlacementSpec(x, '', '')
                 for x in self.get_hosts_func(None)
             ]
-            logger.info('All hosts: {}'.format(candidates))
+            logger.debug('All hosts: {}'.format(candidates))
             return candidates
 
         if self.spec.placement.hosts and \
@@ -2926,7 +2926,7 @@ class HostAssignment(object):
             hosts = self.pick_candidates()
 
         if not self.spec.placement.count:
-            logger.info('Labeled hosts: {}'.format(hosts))
+            logger.debug('Labeled hosts: {}'.format(hosts))
             return hosts
 
         # we need to select a subset of the candidates
@@ -2946,14 +2946,14 @@ class HostAssignment(object):
             chosen = chosen + self.scheduler.place(
                 existing,
                 self.spec.placement.count - len(chosen))
-            logger.info('Hosts with existing daemons: {}'.format(chosen))
+            logger.debug('Hosts with existing daemons: {}'.format(chosen))
             return chosen
 
         need = self.spec.placement.count - len(existing + chosen)
         others = [hs for hs in hosts
                   if hs.hostname not in hosts_with_daemons]
         chosen = chosen + self.scheduler.place(others, need)
-        logger.info('Combine hosts with existing daemons %s + new hosts %s' % (
+        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
             existing, chosen))
         return existing + chosen
 
@@ -2969,7 +2969,7 @@ class HostAssignment(object):
                 HostPlacementSpec(x, '', '')
                 for x in self.get_hosts_func(self.spec.placement.label)
             ]
-            logger.info('Candidate hosts with label %s: %s' % (
+            logger.debug('Candidate hosts with label %s: %s' % (
                 self.spec.placement.label, candidates))
             return candidates
 
@@ -2979,7 +2979,7 @@ class HostAssignment(object):
             for x in self.get_hosts_func(self.service_name)
         ]
         if candidates:
-            logger.info('Candidate hosts with service label %s: %s' % (
+            logger.debug('Candidate hosts with service label %s: %s' % (
                 self.service_name, candidates))
             return candidates
 
@@ -2997,7 +2997,7 @@ class HostAssignment(object):
                                "unlabeled hosts.".format(
                                    self.spec.placement.count))
             else:
-                logger.info('Candidate hosts with service type label: %s' % (
+                logger.debug('Candidate hosts with service type label: %s' % (
                     candidates))
                 return candidates
 
@@ -3011,5 +3011,5 @@ class HostAssignment(object):
             HostPlacementSpec(x, '', '')
             for x in self.get_hosts_func(None)
         ]
-        logger.info('Candidate hosts (all): {}'.format(candidates))
+        logger.debug('Candidate hosts (all): {}'.format(candidates))
         return candidates
