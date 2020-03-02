@@ -1318,9 +1318,9 @@ protected:
   /**
    * scan a (hash) range of objects in the current pg
    *
-   * @begin first item should be >= this value
    * @min return at least this many items, unless we are done
    * @max return no more than this many items
+   * @bi.begin first item should be >= this value
    * @bi [out] resulting map of objects to eversion_t's
    */
   void scan_range(
