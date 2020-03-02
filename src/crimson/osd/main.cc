@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <iostream>
+#include <random>
 
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
@@ -105,6 +106,18 @@ seastar::future<> make_keyring()
   });
 }
 
+uint64_t get_nonce()
+{
+  if (auto pid = getpid(); pid != 1) {
+    return pid;
+  } else {
+    // we're running in a container; use a random number instead!
+    std::random_device rd;
+    std::default_random_engine rng{rd()};
+    return std::uniform_int_distribution<uint64_t>{}(rng);
+  }
+}
+
 int main(int argc, char* argv[])
 {
   seastar::app_template app;
@@ -153,14 +166,15 @@ int main(int argc, char* argv[])
         local_conf().parse_argv(ceph_args).get();
         pidfile_write(local_conf()->pid_file);
         const int whoami = std::stoi(local_conf()->name.get_id());
-        const auto nonce = static_cast<uint32_t>(getpid());
+        const auto nonce = get_nonce();
         crimson::net::MessengerRef cluster_msgr, client_msgr;
         crimson::net::MessengerRef hb_front_msgr, hb_back_msgr;
         for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
                                   make_pair(std::ref(client_msgr), "client"s),
                                   make_pair(std::ref(hb_front_msgr), "hb_front"s),
                                   make_pair(std::ref(hb_back_msgr), "hb_back"s)}) {
-          msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami), name, nonce);
+          msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami), name,
+                                                 nonce);
           if (local_conf()->ms_crc_data) {
             msgr->set_crc_data();
           }
