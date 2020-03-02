@@ -96,7 +96,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
         # Only query for os_type/os_version if non-vps and non-libcloud, since
         # in that case we just create them.
         vm_types = ['vps'] + teuthology.provision.cloud.get_types()
-        reimage_types = teuthology.provision.fog.get_types()
+        reimage_types = teuthology.provision.get_reimage_types()
         if machine_type not in vm_types + reimage_types:
             if os_type:
                 data['os_type'] = os_type
@@ -140,7 +140,8 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                     update_nodes(reimaged, True)
                     with teuthology.parallel.parallel() as p:
                         for machine in machines:
-                            p.spawn(teuthology.provision.reimage, ctx, machine)
+                            p.spawn(teuthology.provision.reimage, ctx,
+                                    machine, machine_type)
                             reimaged[machine] = machines[machine]
                 reimaged = do_update_keys(reimaged.keys())[1]
                 update_nodes(reimaged)

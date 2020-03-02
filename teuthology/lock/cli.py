@@ -148,14 +148,16 @@ def main(ctx):
                 ctx.machine_type, ctx.os_type, ctx.os_version):
             log.error('Invalid os-type or version detected -- lock failed')
             return 1
-        reimage_types = teuthology.provision.fog.get_types()
+        reimage_types = teuthology.provision.get_reimage_types()
         reimage_machines = list()
         updatekeys_machines = list()
+        machine_types = dict()
         for machine in machines:
             resp = ops.lock_one(machine, user, ctx.desc)
             if resp.ok:
                 machine_status = resp.json()
                 machine_type = machine_status['machine_type']
+                machine_types[machine] = machine_type
             if not resp.ok:
                 ret = 1
                 if not ctx.f:
@@ -176,7 +178,7 @@ def main(ctx):
         with teuthology.parallel.parallel() as p:
             ops.update_nodes(reimage_machines, True)
             for machine in reimage_machines:
-                p.spawn(teuthology.provision.reimage, ctx, machine)
+                p.spawn(teuthology.provision.reimage, ctx, machine, machine_types[machine])
         for machine in updatekeys_machines:
             ops.do_update_keys([machine])
         ops.update_nodes(reimage_machines + machines_to_update)
