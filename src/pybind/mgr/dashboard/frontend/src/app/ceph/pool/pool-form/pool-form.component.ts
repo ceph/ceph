@@ -54,6 +54,8 @@ export class PoolFormComponent implements OnInit {
   info: PoolFormInfo;
   routeParamsSubscribe: any;
   editing = false;
+  isReplicated = false;
+  isErasure = false;
   data = new PoolFormData(this.i18n);
   externalPgChange = false;
   private modalSubscription: Subscription;
@@ -219,7 +221,7 @@ export class PoolFormComponent implements OnInit {
       initialData: pool.configuration,
       sourceType: RbdConfigurationSourceField.pool
     });
-
+    this.rulesChange(pool.type);
     const dataMap = {
       name: pool.pool_name,
       poolType: pool.type,
@@ -249,7 +251,6 @@ export class PoolFormComponent implements OnInit {
     this.data.pgs = this.form.getValue('pgNum');
     this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
-    this.rulesChange();
   }
 
   private setAvailableApps(apps: string[] = this.data.applications.default) {
@@ -293,15 +294,10 @@ export class PoolFormComponent implements OnInit {
 
   private listenToChangesDuringAdd() {
     this.form.get('poolType').valueChanges.subscribe((poolType) => {
-      this.form.get('size').updateValueAndValidity();
-      this.rulesChange();
-      if (poolType === 'replicated') {
-        this.replicatedRuleChange();
-      }
-      this.pgCalc();
+      this.rulesChange(poolType);
     });
     this.form.get('crushRule').valueChanges.subscribe(() => {
-      if (this.form.getValue('poolType') === 'replicated') {
+      if (this.isReplicated) {
         this.replicatedRuleChange();
       }
       this.pgCalc();
@@ -325,13 +321,23 @@ export class PoolFormComponent implements OnInit {
     });
   }
 
-  private rulesChange() {
-    const poolType = this.form.getValue('poolType');
+  private rulesChange(poolType: string) {
+    if (poolType === 'replicated') {
+      this.setTypeBooleans(true, false);
+    } else if (poolType === 'erasure') {
+      this.setTypeBooleans(false, true);
+    } else {
+      this.setTypeBooleans(false, false);
+    }
     if (!poolType || !this.info) {
       this.current.rules = [];
       return;
     }
     const rules = this.info['crush_rules_' + poolType] || [];
+    this.current.rules = rules;
+    if (this.editing) {
+      return;
+    }
     const control = this.form.get('crushRule');
     if (rules.length === 1) {
       control.setValue(rules[0]);
@@ -343,8 +349,13 @@ export class PoolFormComponent implements OnInit {
     this.current.rules = rules;
   }
 
+  private setTypeBooleans(replicated: boolean, erasure: boolean) {
+    this.isReplicated = replicated;
+    this.isErasure = erasure;
+  }
+
   private replicatedRuleChange() {
-    if (this.form.getValue('poolType') !== 'replicated') {
+    if (!this.isReplicated) {
       return;
     }
     const control = this.form.get('size');
@@ -392,8 +403,7 @@ export class PoolFormComponent implements OnInit {
       return;
     }
     const pgMax = this.info.osd_count * 100;
-    const pgs =
-      poolType === 'replicated' ? this.replicatedPgCalc(pgMax) : this.erasurePgCalc(pgMax);
+    const pgs = this.isReplicated ? this.replicatedPgCalc(pgMax) : this.erasurePgCalc(pgMax);
     if (!pgs) {
       return;
     }
@@ -446,20 +456,16 @@ export class PoolFormComponent implements OnInit {
           )
         ]);
     } else {
-      CdValidators.validateIf(
-        this.form.get('size'),
-        () => this.form.get('poolType').value === 'replicated',
-        [
-          CdValidators.custom(
-            'min',
-            (value: number) => this.form.getValue('size') && value < this.getMinSize()
-          ),
-          CdValidators.custom(
-            'max',
-            (value: number) => this.form.getValue('size') && this.getMaxSize() < value
-          )
-        ]
-      );
+      CdValidators.validateIf(this.form.get('size'), () => this.isReplicated, [
+        CdValidators.custom(
+          'min',
+          (value: number) => this.form.getValue('size') && value < this.getMinSize()
+        ),
+        CdValidators.custom(
+          'max',
+          (value: number) => this.form.getValue('size') && this.getMaxSize() < value
+        )
+      ]);
       this.form
         .get('name')
         .setValidators([
@@ -561,7 +567,7 @@ export class PoolFormComponent implements OnInit {
         replaceFn: (value: number) => (this.form.getValue('pgAutoscaleMode') === 'on' ? 1 : value),
         editable: true
       },
-      this.form.getValue('poolType') === 'replicated'
+      this.isReplicated
         ? { externalFieldName: 'size', formControlName: 'size' }
         : {
             externalFieldName: 'erasure_code_profile',
@@ -588,7 +594,7 @@ export class PoolFormComponent implements OnInit {
       this.assignFormField(pool, {
         externalFieldName: 'flags',
         formControlName: 'ecOverwrites',
-        replaceFn: () => ['ec_overwrites']
+        replaceFn: () => (this.isErasure ? ['ec_overwrites'] : undefined)
       });
 
       if (this.form.getValue('mode') !== 'none') {
@@ -650,10 +656,7 @@ export class PoolFormComponent implements OnInit {
 
     // Only collect configuration data for replicated pools, as QoS cannot be configured on EC
     // pools. EC data pools inherit their settings from the corresponding replicated metadata pool.
-    if (
-      this.form.get('poolType').value === 'replicated' &&
-      !_.isEmpty(this.currentConfigurationValues)
-    ) {
+    if (this.isReplicated && !_.isEmpty(this.currentConfigurationValues)) {
       pool['configuration'] = this.currentConfigurationValues;
     }
 
