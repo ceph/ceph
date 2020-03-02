@@ -105,16 +105,6 @@ int BlkDev::get_devid(dev_t *id) const
 }
 
 #ifdef __linux__
-static const char *blkdev_props2strings[] = {
-  [BLKDEV_PROP_DEV]                 = "dev",
-  [BLKDEV_PROP_DISCARD_GRANULARITY] = "queue/discard_granularity",
-  [BLKDEV_PROP_MODEL]               = "device/model",
-  [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
-  [BLKDEV_PROP_SERIAL]              = "device/serial",
-  [BLKDEV_PROP_VENDOR]              = "device/device/vendor",
-  [BLKDEV_PROP_NUMA_NODE]           = "device/device/numa_node",
-  [BLKDEV_PROP_NUMA_CPUS]           = "device/device/local_cpulist",
-};
 
 const char *BlkDev::sysfsdir() const {
   return "/sys";
@@ -144,13 +134,11 @@ int BlkDev::get_size(int64_t *psize) const
  * return 0 on success
  * return negative error on error
  */
-int64_t BlkDev::get_string_property(blkdev_prop_t prop,
+int64_t BlkDev::get_string_property(const char* prop,
 				    char *val, size_t maxlen) const
 {
   char filename[PATH_MAX], wd[PATH_MAX];
   const char* dev = nullptr;
-  assert(prop < BLKDEV_PROP_NUMPROPS);
-  const char *propstr = blkdev_props2strings[prop];
 
   if (fd >= 0) {
     // sysfs isn't fully populated for partitions, so we need to lookup the sysfs
@@ -162,7 +150,7 @@ int64_t BlkDev::get_string_property(blkdev_prop_t prop,
     dev = devname.c_str();
   }
   if (snprintf(filename, sizeof(filename), "%s/block/%s/%s", sysfsdir(), dev,
-	       propstr) >= static_cast<int>(sizeof(filename))) {
+	       prop) >= static_cast<int>(sizeof(filename))) {
     return -ERANGE;
   }
 
@@ -191,7 +179,7 @@ int64_t BlkDev::get_string_property(blkdev_prop_t prop,
  * return the value (we assume it is positive)
  * return negative error on error
  */
-int64_t BlkDev::get_int_property(blkdev_prop_t prop) const
+int64_t BlkDev::get_int_property(const char* prop) const
 {
   char buff[256] = {0};
   int r = get_string_property(prop, buff, sizeof(buff));
@@ -213,7 +201,7 @@ int64_t BlkDev::get_int_property(blkdev_prop_t prop) const
 
 bool BlkDev::support_discard() const
 {
-  return get_int_property(BLKDEV_PROP_DISCARD_GRANULARITY) > 0;
+  return get_int_property("queue/discard_granularity") > 0;
 }
 
 int BlkDev::discard(int64_t offset, int64_t len) const
@@ -224,12 +212,12 @@ int BlkDev::discard(int64_t offset, int64_t len) const
 
 bool BlkDev::is_rotational() const
 {
-  return get_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
+  return get_int_property("queue/rotational") > 0;
 }
 
 int BlkDev::get_numa_node(int *node) const
 {
-  int numa = get_int_property(BLKDEV_PROP_NUMA_NODE);
+  int numa = get_int_property("device/device/numa_node");
   if (numa < 0)
     return -1;
   *node = numa;
@@ -238,22 +226,22 @@ int BlkDev::get_numa_node(int *node) const
 
 int BlkDev::dev(char *dev, size_t max) const
 {
-  return get_string_property(BLKDEV_PROP_DEV, dev, max);
+  return get_string_property("dev", dev, max);
 }
 
 int BlkDev::vendor(char *vendor, size_t max) const
 {
-  return get_string_property(BLKDEV_PROP_VENDOR, vendor, max);
+  return get_string_property("device/device/vendor", vendor, max);
 }
 
 int BlkDev::model(char *model, size_t max) const
 {
-  return get_string_property(BLKDEV_PROP_MODEL, model, max);
+  return get_string_property("device/model", model, max);
 }
 
 int BlkDev::serial(char *serial, size_t max) const
 {
-  return get_string_property(BLKDEV_PROP_SERIAL, serial, max);
+  return get_string_property("device/serial", serial, max);
 }
 
 int BlkDev::partition(char *partition, size_t max) const
@@ -841,7 +829,7 @@ int BlkDev::get_size(int64_t *psize) const
   return ret;
 }
 
-int64_t BlkDev::get_int_property(blkdev_prop_t prop) const
+int64_t BlkDev::get_int_property(const char* prop) const
 {
   return 0;
 }
@@ -957,7 +945,7 @@ int BlkDev::get_size(int64_t *psize) const
   return ret;
 }
 
-int64_t BlkDev::get_int_property(blkdev_prop_t prop) const
+int64_t BlkDev::get_int_property(const char* prop) const
 {
   return 0;
 }
@@ -1013,7 +1001,7 @@ bool BlkDev::is_rotational() const
 
 int BlkDev::get_numa_node(int *node) const
 {
-  int numa = get_int_property(BLKDEV_PROP_NUMA_NODE);
+  int numa = get_int_property("device/device/numa_node");
   if (numa < 0)
     return -1;
   *node = numa;
