@@ -34,7 +34,6 @@
 #include "messages/MOSDPGNotify.h"
 // #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGInfo.h"
-#include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
