@@ -57,13 +57,9 @@ export class BucketsPageHelper extends PageHelper {
     await this.selectOwner(new_owner);
 
     // Enable versioning
-    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
-      this.versioningStateSuspended
-    );
-    await element(by.css('input[id=enabled]')).click();
-    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
-      this.versioningStateEnabled
-    );
+    await expect(element(by.css('input[id=versioning]')).getAttribute('checked')).toBeFalsy();
+    await element(by.css('label[for=versioning]')).click();
+    await expect(element(by.css('input[id=versioning]')).getAttribute('checked')).toBeTruthy();
 
     await element(by.cssContainingText('button', 'Edit Bucket')).click();
 
@@ -96,10 +92,8 @@ export class BucketsPageHelper extends PageHelper {
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
-    await element(by.css('input[id=suspended]')).click();
-    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
-      this.versioningStateSuspended
-    );
+    await element(by.css('label[for=versioning]')).click();
+    await expect(element(by.css('input[id=versioning]')).getAttribute('checked')).toBeFalsy();
     await element(by.cssContainingText('button', 'Edit Bucket')).click();
 
     // Check versioning suspended:
@@ -185,9 +179,7 @@ export class BucketsPageHelper extends PageHelper {
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
 
-    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
-      this.versioningStateSuspended
-    );
+    await expect(element(by.css('input[id=versioning]')).getAttribute('checked')).toBeFalsy();
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input

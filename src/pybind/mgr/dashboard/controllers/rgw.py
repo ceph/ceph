@@ -152,9 +152,14 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner)
         return rgw_client.get_bucket_versioning(bucket_name)
 
-    def _set_versioning(self, owner, bucket_name, versioning_state):
-        rgw_client = RgwClient.instance(owner)
-        return rgw_client.set_bucket_versioning(bucket_name, versioning_state)
+    def _set_versioning(self, owner, bucket_name, versioning_state, mfa_delete,
+                        mfa_token_serial, mfa_token_pin):
+        bucket_versioning = self._get_versioning(owner, bucket_name)
+        if versioning_state != bucket_versioning['Status']\
+                or (mfa_delete and mfa_delete != bucket_versioning['MfaDelete']):
+            rgw_client = RgwClient.instance(owner)
+            rgw_client.set_bucket_versioning(bucket_name, versioning_state, mfa_delete,
+                                             mfa_token_serial, mfa_token_pin)
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
@@ -191,9 +196,11 @@ class RgwBucket(RgwRESTController):
         # type: (str) -> dict
         result = self.proxy('GET', 'bucket', {'bucket': bucket})
 
-        result['versioning'] =\
+        bucket_versioning =\
             self._get_versioning(result['owner'],
                                  RgwBucket.get_s3_bucket_name(result['bucket'], result['tenant']))
+        result['versioning'] = bucket_versioning['Status']
+        result['mfa_delete'] = bucket_versioning['MfaDelete']
 
         return self._append_bid(result)
 
@@ -204,7 +211,8 @@ class RgwBucket(RgwRESTController):
         except RequestException as e:
             raise DashboardException(e, http_status_code=500, component='rgw')
 
-    def set(self, bucket, bucket_id, uid, versioning_state=None):
+    def set(self, bucket, bucket_id, uid, versioning_state=None, mfa_delete=None,
+            mfa_token_serial=None, mfa_token_pin=None):
         # When linking a non-tenant-user owned bucket to a tenanted user, we
         # need to prefix bucket name with '/'. e.g. photos -> /photos
         if '$' in uid and '/' not in bucket:
@@ -221,7 +229,7 @@ class RgwBucket(RgwRESTController):
             uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
             self._set_versioning(uid,
                                  RgwBucket.get_s3_bucket_name(bucket, uid_tenant),
-                                 versioning_state)
+                                 versioning_state, mfa_delete, mfa_token_serial, mfa_token_pin)
 
         return self._append_bid(result)
 
