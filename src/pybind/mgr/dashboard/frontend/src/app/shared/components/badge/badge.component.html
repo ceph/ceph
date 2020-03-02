@@ -1,0 +1,6 @@
+<span *ngIf="config.onChange | async as onChange"
+  [hidden]="onChange.hidden"
+  [ngClass]="onChange.class"
+  [ngStyle]="onChange.style">
+    {{ onChange.label }}
+</span>

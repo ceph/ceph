@@ -1,0 +1,18 @@
+<ngx-simplebar>
+  <ul class="list-unstyled component cd-navbar-primary">
+    <ng-container *ngFor="let item of items">
+      <ng-container *ngIf="item.children; else nochildren">
+        <menu-parent-item
+          *cdFeature="item.permissions"
+          [item]="item"
+          [expanded]="item === childExpanded"
+          (clicked)="childExpanded = (childExpanded !== $event) ? $event : undefined">
+        </menu-parent-item>
+      </ng-container>
+
+      <ng-template #nochildren>
+        <menu-item *cdFeature="item.permissions" [item]="item"></menu-item>
+      </ng-template>
+    </ng-container>
+  </ul>
+</ngx-simplebar>

@@ -1,0 +1,9 @@
+:host {
+  &:first-of-type {
+    margin-left: 0.25rem;
+  }
+
+  &:last-of-type {
+    margin-right: 0.25rem;
+  }
+}

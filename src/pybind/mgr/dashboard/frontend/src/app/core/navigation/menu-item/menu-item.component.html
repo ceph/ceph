@@ -1,0 +1,8 @@
+<li routerLinkActive="active"
+    class="nav-item">
+  <a [routerLink]="item.link"
+     class="nav-link">
+    {{item.label}}
+    <cd-badge *ngFor="let badge of item.badges" [config]="badge"></cd-badge>
+  </a>
+</li>

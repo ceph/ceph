@@ -18,6 +18,7 @@ import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { AlertPanelComponent } from './alert-panel/alert-panel.component';
 import { BackButtonComponent } from './back-button/back-button.component';
+import { BadgeComponent } from './badge/badge.component';
 import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
@@ -77,7 +78,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     ConfigOptionComponent,
     AlertPanelComponent,
     FormModalComponent,
-    PwdExpirationNotificationComponent
+    PwdExpirationNotificationComponent,
+    BadgeComponent
   ],
   providers: [],
   exports: [
@@ -97,7 +99,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     RefreshSelectorComponent,
     ConfigOptionComponent,
     AlertPanelComponent,
-    PwdExpirationNotificationComponent
+    PwdExpirationNotificationComponent,
+    BadgeComponent
   ],
   entryComponents: [
     ModalComponent,

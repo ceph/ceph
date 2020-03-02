@@ -92,6 +92,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     CephReleaseNamePipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
+    HealthColorPipe,
     DimlessPipe,
     RelativeDatePipe,
     IscsiBackstorePipe,
