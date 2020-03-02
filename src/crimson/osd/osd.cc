@@ -530,7 +530,9 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   }).then([pgid, this] (auto&& create_map) {
     return make_pg(std::move(create_map), pgid, false);
   }).then([this, pgid](Ref<PG> pg) {
-    return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+    return pg->read_state(store.get()).then([pg] {
+      return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+    });
   }).handle_exception([pgid](auto ep) {
     logger().info("pg {} saw exception on load {}", pgid, ep);
     ceph_abort("Could not load pg" == 0);
@@ -878,7 +880,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     return get_map(cur).then([this](cached_map_t&& o) {
       osdmap = std::move(o);
       shard_services.update_map(osdmap);
-      if (up_epoch != 0 &&
+      if (up_epoch == 0 &&
           osdmap->is_up(whoami) &&
           osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
         up_epoch = osdmap->get_epoch();

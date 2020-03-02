@@ -13,7 +13,6 @@
 #include <boost/range/numeric.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <seastar/core/sleep.hh>
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -141,7 +140,8 @@ bool PG::try_flush_or_schedule_async() {
 void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
 {
   // handle the peering event in the background
-  std::ignore = seastar::sleep(delay).then([last_peering_reset, this] {
+  check_readable_timer.cancel();
+  check_readable_timer.set_callback([last_peering_reset, this] {
     shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
@@ -151,6 +151,8 @@ void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
       last_peering_reset,
       PeeringState::CheckReadable{});
     });
+  check_readable_timer.arm(
+    std::chrono::duration_cast<seastar::lowres_clock::duration>(delay));
 }
 
 void PG::recheck_readable()
@@ -329,7 +331,8 @@ HeartbeatStampsRef PG::get_hb_stamps(int peer)
 void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
 {
   // handle the peering event in the background
-  std::ignore = seastar::sleep(delay).then([last_peering_reset, this] {
+  renew_lease_timer.cancel();
+  renew_lease_timer.set_callback([last_peering_reset, this] {
     shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
@@ -339,6 +342,8 @@ void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
       last_peering_reset,
       RenewLease{});
     });
+  renew_lease_timer.arm(
+    std::chrono::duration_cast<seastar::lowres_clock::duration>(delay));
 }
 
 
@@ -358,10 +363,8 @@ void PG::init(
 
 seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 {
-  return store->open_collection(coll_t(pgid)).then([this, store](auto ch) {
-    coll_ref = ch;
-    return PGMeta{store, pgid}.load();
-  }).then([this, store](pg_info_t pg_info, PastIntervals past_intervals) {
+  return PGMeta{store, pgid}.load(
+  ).then([this, store](pg_info_t pg_info, PastIntervals past_intervals) {
     return peering_state.init_from_disk_state(
 	std::move(pg_info),
 	std::move(past_intervals),
