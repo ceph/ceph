@@ -382,7 +382,7 @@ export class PoolFormComponent implements OnInit {
 
   getMinSize(): number {
     if (!this.info || this.info.osd_count < 1) {
-      return undefined;
+      return 0;
     }
     const rule = this.form.getValue('crushRule');
     if (rule) {
@@ -393,7 +393,7 @@ export class PoolFormComponent implements OnInit {
 
   getMaxSize(): number {
     if (!this.info || this.info.osd_count < 1) {
-      return undefined;
+      return 0;
     }
     const osds: number = this.info.osd_count;
     if (this.form.getValue('crushRule')) {
@@ -426,21 +426,13 @@ export class PoolFormComponent implements OnInit {
   private replicatedPgCalc(pgs: number): number {
     const sizeControl = this.form.get('size');
     const size = sizeControl.value;
-    if (sizeControl.valid && size > 0) {
-      return pgs / size;
-    }
-
-    return undefined;
+    return sizeControl.valid && size > 0 ? pgs / size : 0;
   }
 
   private erasurePgCalc(pgs: number): number {
     const ecpControl = this.form.get('erasureProfile');
     const ecp = ecpControl.value;
-    if ((ecpControl.valid || ecpControl.disabled) && ecp) {
-      return pgs / (ecp.k + ecp.m);
-    }
-
-    return undefined;
+    return (ecpControl.valid || ecpControl.disabled) && ecp ? pgs / (ecp.k + ecp.m) : 0;
   }
 
   private alignPgs(pgs = this.form.getValue('pgNum')) {
