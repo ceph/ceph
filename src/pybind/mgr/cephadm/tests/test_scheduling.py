@@ -64,10 +64,11 @@ class NodeAssignmentTest(NamedTuple):
         ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
-    s = HostAssignment(spec=ServiceSpec(service_type, placement=placement),
-                       get_hosts_func=lambda _: hosts,
-                       get_daemons_func=lambda _: daemons).load()
-    assert sorted([h.hostname for h in s.placement.hosts]) == sorted(expected)
+    hosts = HostAssignment(
+        spec=ServiceSpec(service_type, placement=placement),
+        get_hosts_func=lambda _: hosts,
+        get_daemons_func=lambda _: daemons).place()
+    assert sorted([h.hostname for h in hosts]) == sorted(expected)
 
 class NodeAssignmentTest2(NamedTuple):
     service_type: str
@@ -140,11 +141,12 @@ class NodeAssignmentTest2(NamedTuple):
     ])
 def test_node_assignment2(service_type, placement, hosts,
                           daemons, expected_len, in_set):
-    s = HostAssignment(spec=ServiceSpec(service_type, placement=placement),
-                       get_hosts_func=lambda _: hosts,
-                       get_daemons_func=lambda _: daemons).load()
-    assert len(s.placement.hosts) == expected_len
-    for h in [h.hostname for h in s.placement.hosts]:
+    hosts = HostAssignment(
+        spec=ServiceSpec(service_type, placement=placement),
+        get_hosts_func=lambda _: hosts,
+        get_daemons_func=lambda _: daemons).place()
+    assert len(hosts) == expected_len
+    for h in [h.hostname for h in hosts]:
         assert h in in_set
 
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,must_have",
@@ -170,12 +172,13 @@ def test_node_assignment2(service_type, placement, hosts,
     ])
 def test_node_assignment3(service_type, placement, hosts,
                           daemons, expected_len, must_have):
-    s = HostAssignment(spec=ServiceSpec(service_type, placement=placement),
-                       get_hosts_func=lambda _: hosts,
-                       get_daemons_func=lambda _: daemons).load()
-    assert len(s.placement.hosts) == expected_len
+    hosts = HostAssignment(
+        spec=ServiceSpec(service_type, placement=placement),
+        get_hosts_func=lambda _: hosts,
+        get_daemons_func=lambda _: daemons).place()
+    assert len(hosts) == expected_len
     for h in must_have:
-        assert h in [h.hostname for h in s.placement.hosts]
+        assert h in [h.hostname for h in hosts]
 
 
 @pytest.mark.parametrize("placement",
