@@ -350,6 +350,7 @@ void usage()
   cout << "                             set list of zones to sync from\n";
   cout << "   --sync-from-rm=[zone-name][,...]\n";
   cout << "                             remove zones from list of zones to sync from\n";
+  cout << "   --bucket-index-max-shards override a zone/zonegroup's default bucket index shard count\n";
   cout << "   --fix                     besides checking bucket index, will also fix it\n";
   cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
   cout << "                             actual objects state\n";
@@ -3157,6 +3158,7 @@ int main(int argc, const char **argv)
   string job_id;
   int num_shards = 0;
   bool num_shards_specified = false;
+  std::optional<int> bucket_index_max_shards;
   int max_concurrent_ios = 32;
   uint64_t orphan_stale_secs = (24 * 3600);
   int detail = false;
@@ -3360,6 +3362,12 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       num_shards_specified = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--bucket-index-max-shards", (char*)NULL)) {
+      bucket_index_max_shards = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse bucket-index-max-shards: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
       max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -4435,7 +4443,7 @@ int main(int argc, const char **argv)
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
                                  psync_from_all, sync_from, sync_from_rm,
-                                 predirect_zone,
+                                 predirect_zone, bucket_index_max_shards,
 				 store->svc()->sync_modules->get_manager());
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
@@ -4561,15 +4569,8 @@ int main(int argc, const char **argv)
       break;
     case OPT::ZONEGROUP_MODIFY:
       {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store->svc()->sysobj);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4607,6 +4608,13 @@ int main(int argc, const char **argv)
           if (ret < 0) {
             cerr << "failed to find realm by name " << realm_name << std::endl;
             return -ret;
+          }
+          need_update = true;
+        }
+
+        if (bucket_index_max_shards) {
+          for (auto& [name, zone] : zonegroup.zones) {
+            zone.bucket_index_max_shards = *bucket_index_max_shards;
           }
           need_update = true;
         }
@@ -4905,7 +4913,7 @@ int main(int argc, const char **argv)
                                    ptier_type,
                                    psync_from_all,
                                    sync_from, sync_from_rm,
-                                   predirect_zone,
+                                   predirect_zone, bucket_index_max_shards,
 				   store->svc()->sync_modules->get_manager());
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
@@ -5188,7 +5196,7 @@ int main(int argc, const char **argv)
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
                                  psync_from_all, sync_from, sync_from_rm,
-                                 predirect_zone,
+                                 predirect_zone, bucket_index_max_shards,
 				 store->svc()->sync_modules->get_manager());
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
