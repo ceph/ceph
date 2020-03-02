@@ -1228,6 +1228,8 @@ class PlacementSpec(object):
     """
     def __init__(self, label=None, hosts=None, count=None, all_hosts=False):
         # type: (Optional[str], Optional[List], Optional[int], bool) -> None
+        if all_hosts and (count or hosts or label):
+            raise OrchestratorValidationError('cannot combine all:true and count|hosts|label')
         self.label = label
         self.hosts = []  # type: List[HostPlacementSpec]
         if hosts:
@@ -1545,12 +1547,6 @@ class ServiceSpec(object):
         assert service_type
         self.service_type = service_type
         self.service_id = service_id
-
-        if self.placement is not None and self.placement.count is not None:
-            #: Count of service instances. Deprecated.
-            self.count = self.placement.count  # type: int
-        else:
-            self.count = 1
 
     @classmethod
     def from_json(cls, json_spec: dict) -> "ServiceSpec":
