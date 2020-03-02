@@ -279,6 +279,12 @@ template <typename I>
 void Replayer<I>::load_local_image_meta() {
   dout(10) << dendl;
 
+  {
+    // reset state in case new snapshot is added while we are scanning
+    std::unique_lock locker{m_lock};
+    m_image_updated = false;
+  }
+
   ceph_assert(m_state_builder->local_image_meta != nullptr);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_load_local_image_meta>(this);
@@ -460,9 +466,6 @@ template <typename I>
 void Replayer<I>::scan_remote_mirror_snapshots(
     std::unique_lock<ceph::mutex>* locker) {
   dout(10) << dendl;
-
-  // reset state in case new snapshot is added while we are scanning
-  m_image_updated = false;
 
   bool split_brain = false;
   bool remote_demoted = false;
