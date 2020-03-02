@@ -176,6 +176,7 @@ class HostCache():
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = [] # type: List[str]
         self.device_refresh_queue = [] # type: List[str]
+        self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
 
     def load(self):
         # type: () -> None
@@ -197,11 +198,18 @@ class HostCache():
                 self.daemon_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.devices[host] = []
+                self.daemon_config_deps[host] = {}
                 for name, d in j.get('daemons', {}).items():
                     self.daemons[host][name] = \
                         orchestrator.DaemonDescription.from_json(d)
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
+                for name, d in j.get('daemon_config_deps', {}).items():
+                    self.daemon_config_deps[host][name] = {
+                        'deps': d.get('deps', []),
+                        'last_config': datetime.datetime.strptime(
+                            d['last_config'], DATEFMT),
+                    }
                 self.mgr.log.debug('HostCache.load: host %s has %d daemons, %d devices' % (
                     host, len(self.daemons[host]), len(self.devices[host])))
             except Exception as e:
@@ -219,6 +227,12 @@ class HostCache():
         self.devices[host] = dls
         self.last_device_update[host] = datetime.datetime.utcnow()
 
+    def update_daemon_config_deps(self, host, name, deps, stamp):
+        self.daemon_config_deps[host][name] = {
+            'deps': deps,
+            'last_config': stamp,
+        }
+
     def prime_empty_host(self, host):
         # type: (str) -> None
         """
@@ -226,6 +240,7 @@ class HostCache():
         """
         self.daemons[host] = {}
         self.devices[host] = []
+        self.daemon_config_deps[host] = {}
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
 
@@ -248,6 +263,7 @@ class HostCache():
         j = {   # type: ignore
             'daemons': {},
             'devices': [],
+            'daemon_config_deps': {},
         }
         if host in self.last_daemon_update:
             j['last_daemon_update'] = self.last_daemon_update[host].strftime(DATEFMT) # type: ignore
@@ -257,6 +273,11 @@ class HostCache():
             j['daemons'][name] = dd.to_json()  # type: ignore
         for d in self.devices[host]:
             j['devices'].append(d.to_json())  # type: ignore
+        for name, depi in self.daemon_config_deps[host].items():
+            j['daemon_config_deps'][name] = {   # type: ignore
+                'deps': depi.get('deps', []),
+                'last_config': depi['last_config'].strftime(DATEFMT),
+            }
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
 
     def rm_host(self, host):
@@ -269,6 +290,8 @@ class HostCache():
             del self.last_daemon_update[host]
         if host in self.last_device_update:
             del self.last_device_update[host]
+        if host in self.daemon_config_deps:
+            del self.daemon_config_deps[host]
         self.mgr.set_store(HOST_CACHE_PREFIX + host, None)
 
     def get_hosts(self):
@@ -302,6 +325,13 @@ class HostCache():
             for name, dd in dm.items():
                 r.append(name)
         return r
+
+    def get_daemon_last_config_deps(self, host, name):
+        if host in self.daemon_config_deps:
+            if name in self.daemon_config_deps[host]:
+                return self.daemon_config_deps[host][name].get('deps', []), \
+                    self.daemon_config_deps[host][name].get('last_config', None)
+        return None, None
 
     def host_needs_daemon_refresh(self, host):
         # type: (str) -> bool
@@ -1980,6 +2010,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.invalidate_host_devices(host)
         return "Created osd(s) on host '{}'".format(host)
 
+    def _calc_daemon_deps(self, daemon_type, daemon_id):
+        need = {
+            'prometheus': ['mgr', 'alertmanager', 'node-exporter'],
+            'grafana': ['prometheus'],
+            'alertmanager': ['alertmanager'],
+        }
+        deps = []
+        for dep_type in need.get(daemon_type, []):
+            for dd in self.cache.get_daemons_by_service(dep_type):
+                deps.append(dd.name())
+        return sorted(deps)
+
     def _create_daemon(self, daemon_type, daemon_id, host,
                        keyring=None,
                        extra_args=None, extra_config=None,
@@ -1989,16 +2031,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             extra_args = []
         name = '%s.%s' % (daemon_type, daemon_id)
 
+        start_time = datetime.datetime.utcnow()
+        deps = []  # type: List[str]
+        j = None  # type: Optional[str]
         if daemon_type == 'prometheus':
-            j = self._generate_prometheus_config()
+            j, deps = self._generate_prometheus_config()
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'node-exporter':
             j = None
         elif daemon_type == 'grafana':
-            j = self._generate_grafana_config()
+            j, deps = self._generate_grafana_config()
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'alertmanager':
-            j = self._generate_alertmanager_config()
+            j, deps = self._generate_alertmanager_config()
             extra_args.extend(['--config-json', '-'])
         else:
             # keyring
@@ -2054,6 +2099,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             sd.status_desc = 'starting'
             self.cache.add_daemon(host, sd)
         self.cache.invalidate_host_daemons(host)
+        self.cache.update_daemon_config_deps(host, name, deps, start_time)
+        self.cache.save_host(host)
         return "{} {} on host '{}'".format(
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
@@ -2322,6 +2369,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._apply(spec)
 
     def _generate_prometheus_config(self):
+        # type: () -> Tuple[str, List[str]]
+        deps = []  # type: List[str]
+
         # scrape mgrs
         mgr_scrape_list = []
         mgr_map = self.get('mgr_map')
@@ -2335,6 +2385,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # get standbys too.  assume that they are all on the same port
             # as the active.
             for dd in self.cache.get_daemons_by_service('mgr'):
+                deps.append(dd.name())
                 if dd.daemon_id == self.get_mgr_id():
                     continue
                 hi = self.inventory.get(dd.hostname, None)
@@ -2347,6 +2398,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         for dd in self.cache.get_daemons_by_service('node-exporter'):
             hi = self.inventory.get(dd.hostname, None)
             if hi:
+                deps.append(dd.name())
                 addr = hi.get('addr', dd.hostname)
                 if not node_configs:
                     node_configs = """
@@ -2366,6 +2418,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             hi = self.inventory.get(dd.hostname, None)
             if hi is None:
                 continue
+            deps.append(dd.name())
             addr = hi.get('addr', dd.hostname)
             alertmgr_targets.append("'{}:9093'".format(addr.split(':')[0]))
         if alertmgr_targets:
@@ -2401,9 +2454,11 @@ scrape_configs:
     ),
             },
         })
-        return j
+        return j, sorted(deps)
 
     def _generate_grafana_config(self):
+        # type: () -> Tuple[str, List[str]]
+        deps = []  # type: List[str]
         def generate_grafana_ds_config(hosts: List[str]) -> str:
             config = '''# generated by cephadm
 deleteDatasources:
@@ -2442,7 +2497,10 @@ datasources:
                 data_sources=data_sources,
             )
 
-        prom_services = [ps.hostname for ps in self.cache.get_daemons_by_service('prometheus')]
+        prom_services = []  # type: List[str]
+        for dd in self.cache.get_daemons_by_service('prometheus'):
+            prom_services.append(dd.hostname)
+            deps.append(dd.name())
         cert, pkey = create_self_signed_cert('Ceph', 'cephadm')
         config_file = json.dumps({
             'files': {
@@ -2470,14 +2528,15 @@ datasources:
                 'certs/cert_key': '# generated by cephadm\n%s' % pkey,
             }
         })
-        return config_file
+        return config_file, sorted(deps)
 
     def _get_dashboard_url(self):
         # type: () -> str
         return self.get('mgr_map').get('services', {}).get('dashboard', '')
 
     def _generate_alertmanager_config(self):
-        # type: () -> str
+        # type: () -> Tuple[str, List[str]]
+        deps = [] # type: List[str]
         yml = """# generated by cephadm
 # See https://prometheus.io/docs/alerting/configuration/ for documentation.
 
@@ -2498,8 +2557,7 @@ receivers:
         peers = []
         port = '9094'
         for dd in self.cache.get_daemons_by_service('alertmanager'):
-            if dd.daemon_id == self.get_mgr_id():
-                continue
+            deps.append(dd.name())
             hi = self.inventory.get(dd.hostname, None)
             addr = hi.get('addr', dd.hostname) if hi else ""
             peers.append(addr.split(':')[0] + ':' + port)
@@ -2508,7 +2566,7 @@ receivers:
                 "alertmanager.yml": yml
             },
             "peers": peers
-        })
+        }), sorted(deps)
 
     def add_prometheus(self, spec):
         return self._add_daemon('prometheus', spec, self._create_prometheus)
