@@ -16,6 +16,7 @@ from ceph_manager import CephManager
 from tarfile import ReadError
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
@@ -106,6 +107,9 @@ def download_cephadm(ctx, config, ref):
                 ],
             )
         else:
+            for remote in ctx.cluster.remotes.keys():
+                if packaging.get_package_version(remote, 'git') is None:
+                    packaging.install_package('git', remote)
             ctx.cluster.run(
                 args=[
                     'git', 'archive',
