@@ -894,9 +894,9 @@ int BlueFS::_adjust_granularity(
     }
   }
   if (oldo != *offset || oldl != *length) {
-    derr << __func__ << " " << op << " "
-	 << (int)id << ":" << std::hex << oldo << "~" << oldl
-	 << " -> " << (int)id << ":" << *offset << "~" << *length << dendl;
+    dout(10) << __func__ << " " << op << " "
+	     << (int)id << ":" << std::hex << oldo << "~" << oldl
+	     << " -> " << (int)id << ":" << *offset << "~" << *length << dendl;
   }
   return 0;
 }
