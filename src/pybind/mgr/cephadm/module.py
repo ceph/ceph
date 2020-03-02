@@ -1069,6 +1069,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     if service_completion.exception is not None:
                         self.log.error(str(service_completion.exception))
 
+            self._refresh_configs()
+
             if self.upgrade_state and not self.upgrade_state.get('paused'):
                 upgrade_completion = self._do_upgrade()
                 if upgrade_completion:
@@ -2184,6 +2186,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self.log.warning('Failed to apply %s spec %s: %s' % (
                     spec.service_name(), spec, e))
         return r
+
+    def _refresh_configs(self):
+        daemons = self.cache.get_daemons()
+        for dd in daemons:
+            deps = self._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
+            last_deps, last_config = self.cache.get_daemon_last_config_deps(
+                dd.hostname, dd.name())
+            if last_deps != deps:
+                self.log.debug('%s deps %s -> %s' % (dd.name(), last_deps,
+                                                     deps))
+                self.log.info('Reconfiguring %s (dependencies changed)...' % (
+                    dd.name()))
+                self._create_daemon(dd.daemon_type, dd.daemon_id,
+                                    dd.hostname, reconfig=True)
 
     def _add_daemon(self, daemon_type, spec,
                     create_func, config_func=None):
