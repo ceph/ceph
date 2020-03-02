@@ -178,6 +178,9 @@ class Prepare(object):
             kwargs = {
                 'device': device_name,
                 'tags': tags,
+                'slots': getattr(self.args,
+                                 'block_{}_slots'.format(device_type),
+                                 1),
             }
             if size != 0:
                 kwargs['size'] = disk.Size.parse(size)
@@ -213,6 +216,7 @@ class Prepare(object):
             lv_name_prefix = "osd-{}".format(device_type)
             kwargs = {'device': device,
                       'tags': {'ceph.type': device_type},
+                      'slots': self.args.data_slots,
                      }
             logger.debug('data device size: {}'.format(self.args.data_size))
             if self.args.data_size != 0:
