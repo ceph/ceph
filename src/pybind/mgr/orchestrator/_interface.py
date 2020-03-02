@@ -1256,17 +1256,20 @@ class PlacementSpec(object):
         # in the orchestrator backend.
         self.hosts = hosts
 
-    def __repr__(self):
+    def pretty_str(self):
         kv = []
         if self.count:
             kv.append('count=%d' % self.count)
         if self.label:
             kv.append('label=%s' % self.label)
         if self.hosts:
-            kv.append('hosts=%s' % self.hosts)
+            kv.append('hosts=%s' % ','.join([str(h) for h in self.hosts]))
         if self.all_hosts:
             kv.append('all=true')
-        return "PlacementSpec(%s)" % (' '.join(kv))
+        return ' '.join(kv)
+
+    def __repr__(self):
+        return "PlacementSpec(%s)" % self.pretty_str()
 
     @classmethod
     def from_dict(cls, data):
