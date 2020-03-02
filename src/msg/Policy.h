@@ -65,10 +65,10 @@ public:
   static Policy stateful_server(uint64_t req) {
     return Policy(false, true, true, true, true, req);
   }
-  static Policy stateless_server(uint64_t req) {
+  static Policy stateless_registered_server(uint64_t req) {
     return Policy(true, true, false, false, true, req);
   }
-  static Policy stateless_anon_server(uint64_t req) {
+  static Policy stateless_server(uint64_t req) {
     return Policy(true, true, false, false, false, req);
   }
   static Policy lossless_peer(uint64_t req) {

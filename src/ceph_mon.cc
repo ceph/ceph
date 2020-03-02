@@ -778,23 +778,24 @@ int main(int argc, const char **argv)
   std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MON(rank), "mon",
-				      0, Messenger::HAS_MANY_CONNECTIONS);
+				      0,  // zero nonce
+				      Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
   msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
-  msgr->set_default_policy(Messenger::Policy::stateless_anon_server(0));
+  msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MON,
                    Messenger::Policy::lossless_peer_reuse(
 		     CEPH_FEATURE_SERVER_LUMINOUS));
   msgr->set_policy(entity_name_t::TYPE_OSD,
-                   Messenger::Policy::stateless_anon_server(
+                   Messenger::Policy::stateless_server(
 		     CEPH_FEATURE_SERVER_LUMINOUS));
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
-                   Messenger::Policy::stateless_anon_server(0));
+                   Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MDS,
-                   Messenger::Policy::stateless_anon_server(0));
+                   Messenger::Policy::stateless_server(0));
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
@@ -829,7 +830,8 @@ int main(int argc, const char **argv)
 
   Messenger *mgr_msgr = Messenger::create(g_ceph_context, public_msgr_type,
 					  entity_name_t::MON(rank), "mon-mgrc",
-					  getpid(), 0);
+					  Messenger::get_pid_nonce(),
+					  0);
   if (!mgr_msgr) {
     derr << "unable to create mgr_msgr" << dendl;
     prefork.exit(1);
