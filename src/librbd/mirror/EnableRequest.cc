@@ -69,7 +69,8 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
       !m_non_primary_global_image_id.empty()) {
     // special case where rbd-mirror injects a disabled record to record the
     // local image id prior to creating ther image
-    r = -ENOENT;
+    ldout(m_cct, 10) << "enabling mirroring on in-progress image replication"
+                     << dendl;
   } else if (r == 0) {
     if (m_mirror_image.mode != m_mode) {
       lderr(m_cct) << "invalid current image mirror mode" << dendl;
