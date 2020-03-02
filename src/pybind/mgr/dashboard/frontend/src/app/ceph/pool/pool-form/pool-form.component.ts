@@ -574,7 +574,11 @@ export class PoolFormComponent implements OnInit {
             formControlName: 'erasureProfile',
             attr: 'name'
           },
-      { externalFieldName: 'rule_name', formControlName: 'crushRule', attr: 'rule_name' },
+      {
+        externalFieldName: 'rule_name',
+        formControlName: 'crushRule',
+        replaceFn: (value: CrushRule) => (this.isReplicated ? value && value.rule_name : undefined)
+      },
       {
         externalFieldName: 'quota_max_bytes',
         formControlName: 'max_bytes',
