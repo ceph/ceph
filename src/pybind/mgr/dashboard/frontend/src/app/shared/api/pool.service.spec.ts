@@ -37,7 +37,7 @@ describe('PoolService', () => {
 
   it('should call getInfo', () => {
     service.getInfo().subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/_info`);
+    const req = httpTesting.expectOne(`ui-${apiPath}/info`);
     expect(req.request.method).toBe('GET');
   });
 
