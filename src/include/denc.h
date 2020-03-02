@@ -402,6 +402,44 @@ struct denc_traits<T, std::enable_if_t<!std::is_void_v<_denc::ExtType_t<T>>>>
   }
 };
 
+
+// enum
+//
+template<typename T>
+struct denc_traits<T, std::enable_if_t<std::is_enum_v<T>>>
+{
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+
+  using enum_type = T;
+  using underlying_type = std::underlying_type_t<enum_type>;
+  using base_traits = denc_traits<underlying_type>;
+
+  static void bound_encode(const T &o, size_t& p, uint64_t f=0) {
+    base_traits::bound_encode(static_cast<underlying_type>(o), p, f);
+  }
+  template<class It>
+  static std::enable_if_t<!is_const_iterator_v<It>>
+  encode(const T &o, It& p, uint64_t f=0) {
+    base_traits::encode(static_cast<underlying_type>(o), p, f);
+  }
+  template<class It>
+  static std::enable_if_t<is_const_iterator_v<It>>
+  decode(T& o, It& p, uint64_t f=0) {
+    underlying_type v;
+    base_traits::decode(v, p, f);
+    o = static_cast<enum_type>(v);
+  }
+  static void decode(T& o, ceph::buffer::list::const_iterator &p) {
+    underlying_type v;
+    base_traits::decode(v, p);
+    o = static_cast<enum_type>(v);
+  }
+};
+
+
 // varint
 //
 // high bit of each byte indicates another byte follows.
