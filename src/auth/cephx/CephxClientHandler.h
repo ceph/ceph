@@ -18,8 +18,8 @@
 #include "auth/AuthClientHandler.h"
 #include "CephxProtocol.h"
 #include "auth/RotatingKeyRing.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class KeyRing;
 
 class CephxClientHandler : public AuthClientHandler {

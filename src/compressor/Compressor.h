@@ -20,6 +20,7 @@
 #include <string_view>
 #include <boost/optional.hpp>
 #include "include/ceph_assert.h"    // boost clobbers this
+#include "include/common_fwd.h"
 #include "include/buffer.h"
 #include "include/int_types.h"
 #ifdef HAVE_QATZIP
@@ -28,7 +29,6 @@
 
 class Compressor;
 typedef std::shared_ptr<Compressor> CompressorRef;
-class CephContext;
 
 class Compressor {
 public:

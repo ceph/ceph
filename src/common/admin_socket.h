@@ -15,7 +15,7 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #include "crimson/admin/admin_socket.h"
 #else
 
@@ -26,11 +26,11 @@
 #include <thread>
 
 #include "include/buffer.h"
+#include "include/common_fwd.h"
 #include "common/ref.h"
 #include "common/cmdparse.h"
 
 class AdminSocket;
-class CephContext;
 class MCommand;
 class MMonCommand;
 

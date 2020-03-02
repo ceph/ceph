@@ -28,7 +28,7 @@ seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
   return store->read(coll,
                      osdmap_oid(e), 0, 0,
                      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).handle_error(
-    crimson::ct_error::enoent::handle([e] {
+    read_errorator::all_same_way([e] {
       throw std::runtime_error(fmt::format("read gave enoent on {}",
                                            osdmap_oid(e)));
     }));
@@ -50,7 +50,7 @@ seastar::future<OSDSuperblock> OSDMeta::load_superblock()
       OSDSuperblock superblock;
       decode(superblock, p);
       return seastar::make_ready_future<OSDSuperblock>(std::move(superblock));
-    }, crimson::ct_error::enoent::handle([] {
+    }, read_errorator::all_same_way([] {
       throw std::runtime_error(fmt::format("read gave enoent on {}",
                                            superblock_oid()));
     }));
@@ -74,7 +74,7 @@ OSDMeta::load_final_pool_info(int64_t pool) {
                                       ec_profile_t>(std::move(pi),
                                                     std::move(name),
                                                     std::move(ec_profile));
-  }, crimson::ct_error::enoent::handle([pool] {
+  },read_errorator::all_same_way([pool] {
     throw std::runtime_error(fmt::format("read gave enoent on {}",
                                          final_pool_info_oid(pool)));
   }));

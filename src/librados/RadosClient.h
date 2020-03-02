@@ -19,6 +19,7 @@
 #include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "include/common_fwd.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
@@ -29,7 +30,6 @@
 
 struct AuthAuthorizer;
 struct Context;
-class CephContext;
 struct Connection;
 class Message;
 class MLog;

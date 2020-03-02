@@ -22,6 +22,7 @@
 #include "common/ceph_mutex.h"
 #include "common/cmdparse.h"
 #include "common/compiler_extensions.h"
+#include "include/common_fwd.h"
 #include "include/cephfs/ceph_statx.h"
 #include "include/filepath.h"
 #include "include/interval_set.h"
@@ -53,7 +54,6 @@ class FSMap;
 class FSMapUser;
 class MonClient;
 
-class CephContext;
 
 struct DirStat;
 struct LeaseStat;
@@ -63,7 +63,6 @@ class Filer;
 class Objecter;
 class WritebackHandler;
 
-class PerfCounters;
 class MDSMap;
 class Message;
 

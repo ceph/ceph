@@ -22,8 +22,7 @@
 
 #include "common/ceph_time.h"
 #include "common/ceph_mutex.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace ceph {
 

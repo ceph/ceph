@@ -28,6 +28,7 @@
 
 #include "acconfig.h"
 #include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #include "ceph_aio.h"
@@ -63,7 +64,6 @@
 #define  WRITE_LIFE_MAX  	1
 #endif
 
-class CephContext;
 
 /// track in-flight io
 struct IOContext {

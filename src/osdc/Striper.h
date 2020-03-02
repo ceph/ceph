@@ -15,11 +15,11 @@
 #ifndef CEPH_STRIPER_H
 #define CEPH_STRIPER_H
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
 #include "osdc/StriperTypes.h"
 
-class CephContext;
 
 //namespace ceph {
 

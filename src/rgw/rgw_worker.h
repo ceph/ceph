@@ -22,8 +22,8 @@
 
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class RGWRados;
 
 class RGWRadosThread {

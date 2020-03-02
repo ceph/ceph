@@ -17,8 +17,7 @@
 
 #include "auth/AuthServiceHandler.h"
 #include "auth/Auth.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 class AuthNoneServiceHandler  : public AuthServiceHandler {
 public:

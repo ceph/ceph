@@ -43,6 +43,7 @@
 
 
 using std::ostringstream;
+using namespace TOPNSPC::common;
 
 /*
  * UNIX domain sockets created by an application persist even after that

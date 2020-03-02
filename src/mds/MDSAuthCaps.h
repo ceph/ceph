@@ -19,6 +19,7 @@
 #include <string_view>
 #include <vector>
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/debug.h"
 
@@ -147,8 +148,6 @@ struct MDSCapGrant {
   unsigned network_prefix = 0;
   bool network_valid = true;
 };
-
-class CephContext;
 
 class MDSAuthCaps
 {

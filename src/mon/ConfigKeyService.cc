@@ -27,6 +27,7 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
+using namespace TOPNSPC::common;
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
                         const ConfigKeyService *service) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
@@ -195,7 +196,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   string prefix;
   cmdmap_t cmdmap;
 
-  if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
+  if (!TOPNSPC::common::cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
     return false;
   }
 

@@ -32,6 +32,7 @@
 
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include "include/btree_map.h"
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/ceph_releases.h"
 #include "osd_types.h"
@@ -40,7 +41,6 @@
 #include "crush/CrushWrapper.h"
 
 // forward declaration
-class CephContext;
 class CrushWrapper;
 class health_check_map_t;
 

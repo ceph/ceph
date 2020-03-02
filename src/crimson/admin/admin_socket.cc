@@ -15,6 +15,7 @@
 #include "crimson/common/log.h"
 #include "crimson/net/Socket.h"
 
+using namespace crimson::common;
 /**
  *  A Crimson-wise version of the admin socket - implementation file
  *

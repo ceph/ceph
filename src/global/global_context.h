@@ -18,9 +18,9 @@
 #include <limits.h>
 
 #include "common/config_fwd.h"
+#include "include/common_fwd.h"
 
-class CephContext;
-
+namespace TOPNSPC::global {
 extern CephContext *g_ceph_context;
 ConfigProxy& g_conf();
 
@@ -49,4 +49,6 @@ extern int note_io_error_event(
   unsigned long long offset,
   unsigned long long length);
 
+}
+using namespace TOPNSPC::global;
 #endif

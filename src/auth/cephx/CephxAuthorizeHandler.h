@@ -16,8 +16,7 @@
 #define CEPH_CEPHXAUTHORIZEHANDLER_H
 
 #include "auth/AuthAuthorizeHandler.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 struct CephxAuthorizeHandler : public AuthAuthorizeHandler {
   bool verify_authorizer(

@@ -20,6 +20,7 @@
 #include <queue>
 #include <boost/intrusive_ptr.hpp>
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 #include "common/Throttle.h"
 #include "common/ceph_mutex.h"
 #include "common/Thread.h"
@@ -27,7 +28,6 @@
 
 #include "Message.h"
 
-class CephContext;
 class Messenger;
 struct Connection;
 

@@ -7,6 +7,7 @@
 #include <string>
 #include <seastar/core/future.hh>
 #include "osd/osd_types.h"
+#include "crimson/os/futurized_collection.h"
 
 namespace ceph::os {
   class Transaction;
@@ -30,7 +31,6 @@ public:
           crimson::os::FuturizedStore* store)
     : store{store}, coll{coll}
   {}
-
 
   auto collection() {
     return coll;

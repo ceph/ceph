@@ -52,8 +52,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/hobject.cc
   ${PROJECT_SOURCE_DIR}/src/common/hostname.cc
   ${PROJECT_SOURCE_DIR}/src/common/ipaddr.cc
-  ${PROJECT_SOURCE_DIR}/src/common/lockdep.cc
-  ${PROJECT_SOURCE_DIR}/src/common/mutex_debug.cc
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
   ${PROJECT_SOURCE_DIR}/src/common/options.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
@@ -80,7 +78,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
-  ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/crush/builder.c

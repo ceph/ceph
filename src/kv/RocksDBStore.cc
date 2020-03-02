@@ -22,6 +22,7 @@
 using std::string;
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
+#include "include/common_fwd.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"

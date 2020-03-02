@@ -34,6 +34,8 @@
 
 #define dout_subsys ceph_subsys_mon
 
+using namespace TOPNSPC::common;
+
 string LogMonitor::log_channel_info::get_log_file(const string &channel)
 {
   dout(25) << __func__ << " for channel '"

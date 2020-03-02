@@ -3,6 +3,7 @@
 #ifndef LIBRBD_TASK_FINISHER_H
 #define LIBRBD_TASK_FINISHER_H
 
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include "common/ceph_context.h"
 #include "common/Finisher.h"
@@ -11,7 +12,6 @@
 #include <map>
 #include <utility>
 
-class CephContext;
 
 namespace librbd {
 

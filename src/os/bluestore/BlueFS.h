@@ -12,11 +12,10 @@
 #include "common/RefCountedObj.h"
 #include "common/ceph_context.h"
 #include "global/global_context.h"
+#include "include/common_fwd.h"
 
 #include "boost/intrusive/list.hpp"
 #include "boost/dynamic_bitset.hpp"
-
-class PerfCounters;
 
 class Allocator;
 

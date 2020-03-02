@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IMAGE_CREATE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_CREATE_REQUEST_H
 
+#include "common/config_fwd.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
@@ -11,7 +12,6 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
 
-class ConfigProxy;
 class Context;
 class ContextWQ;
 

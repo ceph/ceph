@@ -5,10 +5,10 @@
 
 #include <string>
 #include "common/ceph_time.h"
+#include "include/common_fwd.h"
 #include "rgw_notify_event_type.h"
 
 // forward declarations
-class CephContext;
 namespace rgw::sal {
     class RGWRadosStore;
 }

@@ -27,11 +27,10 @@
 #include "common/Cond.h"
 
 #include "common/ceph_context.h"
+#include "include/common_fwd.h"
 
 // reinclude our assert to clobber the system one
 # include "include/ceph_assert.h"
-
-class PerfCounters;
 
 enum {
   l_leveldb_first = 34300,

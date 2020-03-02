@@ -29,6 +29,7 @@
 #include <string>
 #include <vector>
 
+#include "include/common_fwd.h"
 #include "include/int_types.h"
 #include "include/page.h"
 #include "include/scope_guard.h"
@@ -57,7 +58,6 @@ struct ib_cm_meta_t {
 } __attribute__((packed));
 
 class RDMAStack;
-class CephContext;
 
 class Port {
   struct ibv_context* ctxt;

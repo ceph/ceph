@@ -28,6 +28,7 @@
 
 // re-include our assert to clobber boost's
 #include "include/ceph_assert.h" 
+#include "include/common_fwd.h"
 
 #include "include/types.h"
 #include "include/stringify.h"
@@ -70,7 +71,6 @@ class PG;
 struct OpRequest;
 typedef OpRequest::Ref OpRequestRef;
 class MOSDPGLog;
-class CephContext;
 class DynamicPerfStats;
 
 namespace Scrub {

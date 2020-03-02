@@ -19,6 +19,7 @@
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
 
+using TOPNSPC::common::cmd_getval;
 
 static const string EXPERIMENTAL_WARNING("Warning! This feature is experimental."
 "It may cause problems up to and including data loss."

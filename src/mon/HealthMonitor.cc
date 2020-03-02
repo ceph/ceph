@@ -18,6 +18,7 @@
 #include <regex>
 
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 #include "include/stringify.h"
 
 #include "mon/Monitor.h"
@@ -30,6 +31,7 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
+using namespace TOPNSPC::common;
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
                         const HealthMonitor *hmon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
