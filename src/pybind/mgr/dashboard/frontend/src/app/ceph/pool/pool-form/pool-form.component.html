@@ -65,7 +65,7 @@
           </div>
         </div>
 
-        <div *ngIf="form.getValue('poolType')">
+        <div *ngIf="isReplicated || isErasure">
           <!-- PG Autoscale Mode -->
           <div class="form-group row">
             <label i18n
@@ -123,7 +123,7 @@
 
           <!-- Replica Size -->
           <div class="form-group row"
-               *ngIf="form.getValue('poolType') === 'replicated'">
+               *ngIf="isReplicated">
             <label class="cd-col-form-label required"
                    for="size"
                    i18n>Replicated size</label>
@@ -151,7 +151,7 @@
 
           <!-- Flags -->
           <div class="form-group row"
-               *ngIf="info.is_all_bluestore && form.getValue('poolType') === 'erasure'">
+               *ngIf="info.is_all_bluestore && isErasure">
             <label i18n
                    class="cd-col-form-label">Flags</label>
             <div class="cd-col-form-input">
@@ -187,13 +187,13 @@
         </div>
 
         <!-- CRUSH -->
-        <div *ngIf="form.getValue('poolType')">
+        <div *ngIf="isErasure || isReplicated">
 
           <legend i18n>CRUSH</legend>
 
           <!-- Erasure Profile select -->
           <div class="form-group row"
-               *ngIf="form.getValue('poolType') === 'erasure'">
+               *ngIf="isErasure">
             <label i18n
                    class="cd-col-form-label"
                    for="erasureProfile">Erasure code profile</label>
@@ -498,7 +498,7 @@
         </div>
 
         <!-- Pool configuration -->
-        <div [hidden]="form.get('poolType').value !== 'replicated' || data.applications.selected.indexOf('rbd') === -1">
+        <div [hidden]="isErasure || data.applications.selected.indexOf('rbd') === -1">
           <cd-rbd-configuration-form [form]="form"
                                      [initializeData]="initializeConfigData"
                                      (changes)="currentConfigurationValues = $event()">
