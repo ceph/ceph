@@ -6,17 +6,15 @@
 #include <variant>
 
 #include "include/types.h"
+#include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 #include "objclass/objclass.h"
 
 //forward declaration
-class CephContext;
-
 class ClassHandler
 {
 public:
   CephContext *cct;
-
   struct ClassData;
 
   struct ClassMethod {

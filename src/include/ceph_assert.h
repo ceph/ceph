@@ -23,7 +23,7 @@
 # include "acconfig.h"
 #endif
 
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace ceph {
 

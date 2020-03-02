@@ -7,6 +7,7 @@
 #include "include/lru.h"
 #include "include/Context.h"
 #include "include/xlist.h"
+#include "include/common_fwd.h"
 
 #include "common/Cond.h"
 #include "common/Finisher.h"
@@ -16,9 +17,7 @@
 #include "Objecter.h"
 #include "Striper.h"
 
-class CephContext;
 class WritebackHandler;
-class PerfCounters;
 
 enum {
   l_objectcacher_first = 25000,

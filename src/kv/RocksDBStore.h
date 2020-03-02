@@ -21,12 +21,12 @@
 #include "common/errno.h"
 #include "common/dout.h"
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "common/Cond.h"
 #include "common/ceph_context.h"
 #include "common/PriorityCache.h"
 
-class PerfCounters;
 
 enum {
   l_rocksdb_first = 34300,

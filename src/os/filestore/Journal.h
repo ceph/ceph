@@ -19,13 +19,13 @@
 #include <errno.h>
 
 #include "include/buffer_fwd.h"
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include "common/Finisher.h"
 #include "common/TrackedOp.h"
 #include "os/ObjectStore.h"
 #include "common/zipkin_trace.h"
 
-class PerfCounters;
 
 class Journal {
 protected:

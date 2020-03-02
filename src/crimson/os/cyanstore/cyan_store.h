@@ -11,6 +11,7 @@
 
 #include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/future-util.hh>
 
 #include "osd/osd_types.h"
 #include "include/uuid.h"
@@ -38,11 +39,12 @@ public:
   CyanStore(const std::string& path);
   ~CyanStore() final;
 
+  seastar::future<> stop() final {return seastar::now();}
   seastar::future<> mount() final;
   seastar::future<> umount() final;
 
   seastar::future<> mkfs(uuid_d new_osd_fsid) final;
-  store_statfs_t stat() const final;
+  seastar::future<store_statfs_t> stat() const final;
 
   read_errorator::future<ceph::bufferlist> read(
     CollectionRef c,

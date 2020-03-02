@@ -8,7 +8,7 @@
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/optional.hpp>
 
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace rgw::kafka {
 // forward declaration of connection object

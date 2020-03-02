@@ -16,8 +16,7 @@
 #define CEPH_AUTHNONEPROTOCOL_H
 
 #include "auth/Auth.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }

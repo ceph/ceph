@@ -21,13 +21,11 @@
 #include <pthread.h>
 
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 
 #include "ceph_time.h"
 #include "likely.h"
 #include "lockdep.h"
-
-class CephContext;
-class PerfCounters;
 
 namespace ceph {
 namespace mutex_debug_detail {

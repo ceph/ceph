@@ -16,9 +16,11 @@
 #include "common/perf_counters.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
+#include "include/common_fwd.h"
 
 using std::ostringstream;
 
+namespace TOPNSPC::common {
 PerfCountersCollectionImpl::PerfCountersCollectionImpl()
 {
 }
@@ -474,7 +476,7 @@ PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
     m_lower_bound(lower_bound),
     m_upper_bound(upper_bound),
     m_name(name)
-#ifndef WITH_SEASTAR
+#if !defined(WITH_SEASTAR) || defined(WITH_ALIEN)
     ,
     m_lock_name(std::string("PerfCounters::") + name.c_str()),
     m_lock(ceph::make_mutex(m_lock_name))
@@ -583,3 +585,4 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
   return ret;
 }
 
+}

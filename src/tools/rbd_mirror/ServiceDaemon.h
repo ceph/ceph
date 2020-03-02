@@ -5,12 +5,12 @@
 #define CEPH_RBD_MIRROR_SERVICE_DAEMON_H
 
 #include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 #include <map>
 #include <string>
 
-struct CephContext;
 struct Context;
 namespace librbd { struct ImageCtx; }
 

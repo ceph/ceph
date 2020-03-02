@@ -17,6 +17,7 @@
  
 #include "common/ceph_mutex.h"
 #include "common/ref.h"
+#include "include/common_fwd.h"
 
 #include <atomic>
 
@@ -39,10 +40,10 @@
  * constructors.
  *
  */
-
+namespace TOPNSPC::common {
 class RefCountedObject {
 public:
-  void set_cct(class CephContext *c) {
+  void set_cct(CephContext *c) {
     cct = c;
   }
 
@@ -66,20 +67,20 @@ protected:
   RefCountedObject& operator=(const RefCountedObject& o) = delete;
   RefCountedObject(RefCountedObject&&) = delete;
   RefCountedObject& operator=(RefCountedObject&&) = delete;
-  RefCountedObject(class CephContext* c) : cct(c) {}
+  RefCountedObject(CephContext* c) : cct(c) {}
 
   virtual ~RefCountedObject();
 
 private:
   void _get() const;
 
-#ifndef WITH_SEASTAR
-  mutable std::atomic<uint64_t> nref{1};
-#else
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
   // crimson is single threaded at the moment
   mutable uint64_t nref{1};
+#else
+  mutable std::atomic<uint64_t> nref{1};
 #endif
-  class CephContext *cct{nullptr};
+  CephContext *cct{nullptr};
 };
 
 class RefCountedObjectSafe : public RefCountedObject {
@@ -93,7 +94,7 @@ template<typename... Args>
   virtual ~RefCountedObjectSafe() override {}
 };
 
-#ifndef WITH_SEASTAR
+#if !defined(WITH_SEASTAR)|| defined(WITH_ALIEN)
 
 /**
  * RefCountedCond
@@ -184,7 +185,7 @@ struct RefCountedWaitObject {
   }
 };
 
-#endif // WITH_SEASTAR
+#endif // !defined(WITH_SEASTAR)|| defined(WITH_ALIEN)
 
 static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
   p->get();
@@ -192,7 +193,7 @@ static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
 static inline void intrusive_ptr_release(const RefCountedObject *p) {
   p->put();
 }
-
-using RefCountedPtr = ceph::ref_t<RefCountedObject>;
+}
+using RefCountedPtr = ceph::ref_t<TOPNSPC::common::RefCountedObject>;
 
 #endif

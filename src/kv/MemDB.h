@@ -15,6 +15,7 @@
 #include <string>
 #include <memory>
 #include <boost/scoped_ptr.hpp>
+#include "include/common_fwd.h"
 #include "include/encoding.h"
 #include "include/btree_map.h"
 #include "KeyValueDB.h"
@@ -23,7 +24,6 @@
 using std::string;
 #define KEY_DELIM '\0' 
 
-class PerfCounters;
 
 enum {
   l_memdb_first = 34440,

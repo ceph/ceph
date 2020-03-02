@@ -37,6 +37,7 @@
 #include "osd/ClassHandler.h"
 
 #include "include/CompatSet.h"
+#include "include/common_fwd.h"
 
 #include "OpRequest.h"
 #include "Session.h"
@@ -74,7 +75,6 @@
 class Messenger;
 class Message;
 class MonClient;
-class PerfCounters;
 class ObjectStore;
 class FuseStore;
 class OSDMap;
@@ -89,7 +89,6 @@ class TestOpsSocketHook;
 struct C_FinishSplits;
 struct C_OpenPGs;
 class LogChannel;
-class CephContext;
 class MOSDOp;
 
 class MOSDPGCreate2;

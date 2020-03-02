@@ -26,6 +26,7 @@
 #include <boost/thread/shared_mutex.hpp>
 
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 #include "include/buffer.h"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
@@ -57,7 +58,6 @@ class MStatfsReply;
 class MCommandReply;
 class MWatchNotify;
 
-class PerfCounters;
 
 // -----------------------------------------
 

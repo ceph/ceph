@@ -27,7 +27,8 @@ class FuturizedStore {
 
 public:
   static std::unique_ptr<FuturizedStore> create(const std::string& type,
-                                                const std::string& data);
+                                                const std::string& data,
+                                                const ConfigValues& values);
   FuturizedStore() = default;
   virtual ~FuturizedStore() = default;
 
@@ -35,14 +36,19 @@ public:
   explicit FuturizedStore(const FuturizedStore& o) = delete;
   const FuturizedStore& operator=(const FuturizedStore& o) = delete;
 
+  virtual seastar::future<> start() {
+    return seastar::now();
+  }
+  virtual seastar::future<> stop() = 0;
   virtual seastar::future<> mount() = 0;
   virtual seastar::future<> umount() = 0;
 
   virtual seastar::future<> mkfs(uuid_d new_osd_fsid) = 0;
-  virtual store_statfs_t stat() const = 0;
+  virtual seastar::future<store_statfs_t> stat() const = 0;
 
   using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
-  using read_errorator = crimson::errorator<crimson::ct_error::enoent>;
+  using read_errorator = crimson::errorator<crimson::ct_error::enoent,
+                                            crimson::ct_error::input_output_error>;
   virtual read_errorator::future<ceph::bufferlist> read(
     CollectionRef c,
     const ghobject_t& oid,

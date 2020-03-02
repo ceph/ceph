@@ -31,6 +31,7 @@ using std::stringstream;
 using std::vector;
 
 using ceph::bufferlist;
+using TOPNSPC::common::cmd_getval;
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMapDigest, pgmap_digest, pgmap);
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap, pgmap, pgmap);

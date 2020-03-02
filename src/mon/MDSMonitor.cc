@@ -42,6 +42,8 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_fsmap())
+using namespace TOPNSPC::common;
+
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, const FSMap& fsmap) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -56,6 +58,7 @@ static const string MDS_HEALTH_PREFIX("mds_health");
  * Specialized implementation of cmd_getval to allow us to parse
  * out strongly-typedef'd types
  */
+namespace TOPNSPC::common {
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
 			   const std::string& k, mds_gid_t &val)
 {
@@ -73,7 +76,7 @@ template<> bool cmd_getval(const cmdmap_t& cmdmap,
 {
   return cmd_getval(cmdmap, k, (int64_t&)val);
 }
-
+}
 // my methods
 
 template <int dblV>

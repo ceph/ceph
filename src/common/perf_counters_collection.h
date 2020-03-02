@@ -2,9 +2,9 @@
 
 #include "common/perf_counters.h"
 #include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 
-class CephContext;
-
+namespace ceph::common {
 class PerfCountersCollection
 {
   CephContext *m_cct;
@@ -40,7 +40,5 @@ public:
   PerfCountersDeleter(CephContext* cct) noexcept : cct(cct) {}
   void operator()(PerfCounters* p) noexcept;
 };
-
-using PerfCountersRef = std::unique_ptr<PerfCounters, PerfCountersDeleter>;
-
-
+}
+using PerfCountersRef = std::unique_ptr<ceph::common::PerfCounters, ceph::common::PerfCountersDeleter>;

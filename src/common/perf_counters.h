@@ -25,12 +25,15 @@
 
 #include "common/perf_histogram.h"
 #include "include/utime.h"
+#include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 
-class CephContext;
-class PerfCountersBuilder;
-class PerfCounters;
+namespace TOPNSPC::common {
+  class CephContext;
+  class PerfCountersBuilder;
+  class PerfCounters;
+}
 
 enum perfcounter_type_d : uint8_t
 {
@@ -56,6 +59,7 @@ enum unit_t : uint8_t
  * In the future, we will probably get rid of the first/last arguments, since
  * PerfCountersBuilder can deduce them itself.
  */
+namespace TOPNSPC::common {
 class PerfCountersBuilder
 {
 public:
@@ -285,7 +289,7 @@ private:
 
   int prio_adjust = 0;
 
-#ifndef WITH_SEASTAR
+#if !defined(WITH_SEASTAR) || defined(WITH_ALIEN)
   const std::string m_lock_name;
   /** Protects m_data */
   ceph::mutex m_lock;
@@ -374,5 +378,5 @@ public:
   }
 };
 
-
+}
 #endif
