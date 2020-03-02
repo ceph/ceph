@@ -863,6 +863,32 @@ struct btree_iterator {
   int position = -1;
 };
 
+template <size_t Alignment, class Alloc>
+class AlignedAlloc {
+  struct alignas(Alignment) M {};
+  using alloc_t =
+    typename std::allocator_traits<Alloc>::template rebind_alloc<M>;
+  using traits_t =
+    typename std::allocator_traits<Alloc>::template rebind_traits<M>;
+  static constexpr size_t num_aligned_objects(size_t size) {
+    return (size + sizeof(M) - 1) / sizeof(M);
+  }
+public:
+  static void* allocate(Alloc* alloc, size_t size) {
+    alloc_t aligned_alloc(*alloc);
+    void* p = traits_t::allocate(aligned_alloc,
+                                 num_aligned_objects(size));
+    assert(reinterpret_cast<uintptr_t>(p) % Alignment == 0 &&
+         "allocator does not respect alignment");
+    return p;
+  }
+  static void deallocate(Alloc* alloc, void* p, size_t size) {
+    alloc_t aligned_alloc(*alloc);
+    traits_t::deallocate(aligned_alloc, static_cast<M*>(p),
+                         num_aligned_objects(size));
+  }
+};
+
 template <typename Params>
 class btree {
   using node_type = btree_node<Params>;
@@ -1257,10 +1283,10 @@ class btree {
   }
 
   node_type *allocate(const size_type size) {
-    constexpr size_t alignment = node_type::Alignment();
-    return reinterpret_cast<node_type *>(mutable_allocator()->allocate(
-      // p2roundup(size, alignment)
-      -(-size & -alignment)));
+    using aligned_alloc_t =
+      AlignedAlloc<node_type::Alignment(), allocator_type>;
+    return static_cast<node_type*>(
+      aligned_alloc_t::allocate(mutable_allocator(), size));
   }
 
   // Node creation/deletion routines.
@@ -1284,16 +1310,9 @@ class btree {
 
   // Deallocates a node of a certain size in bytes using the allocator.
   void deallocate(const size_type size, node_type *node) {
-    constexpr size_t alignment = node_type::Alignment();
-    using alloc_t = typename std::allocator_traits<allocator_type>::template rebind_alloc<node_type>;
-    using traits_t = typename std::allocator_traits<allocator_type>::template rebind_traits<node_type>;
-    alloc_t alloc(*mutable_allocator());
-    traits_t::deallocate(
-      alloc,
-      node,
-      size % alignment ?
-      (size + alignment - size % alignment) :
-      size);
+    using aligned_alloc_t =
+      AlignedAlloc<node_type::Alignment(), allocator_type>;
+    aligned_alloc_t::deallocate(mutable_allocator(), node, size);
   }
 
   void delete_internal_node(node_type *node) {
