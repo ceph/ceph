@@ -342,6 +342,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align['REFRESHED'] = 'l'
             table.align['IMAGE NAME'] = 'l'
             table.align['IMAGE ID'] = 'l'
+            table.align['SPEC'] = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(services, key=lambda s: s.service_name):
