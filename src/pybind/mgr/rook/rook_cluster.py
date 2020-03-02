@@ -356,7 +356,7 @@ class RookCluster(object):
             ),
             spec=cfs.Spec(
                 metadataServer=cfs.MetadataServer(
-                    activeCount=spec.count,
+                    activeCount=spec.placement.count,
                     activeStandby=True
                 )
             )
@@ -381,7 +381,7 @@ class RookCluster(object):
                     pool=spec.pool
                 ),
                 server=cnfs.Server(
-                    active=spec.count
+                    active=spec.placement.count
                 )
             )
         )
@@ -416,7 +416,7 @@ class RookCluster(object):
                 gateway=cos.Gateway(
                     type='s3',
                     port=spec.rgw_frontend_port if spec.rgw_frontend_port is not None else 80,
-                    instances=spec.count
+                    instances=spec.placement.count
                 )
             )
         )

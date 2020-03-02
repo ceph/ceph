@@ -346,7 +346,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def apply_mds(self, spec):
         # type: (orchestrator.ServiceSpec) -> RookCompletion
-        num = spec.count
+        num = spec.placement.count
         return write_completion(
             lambda: self.rook_cluster.update_mds_count(spec.service_id, num),
             "Updating MDS server count in {0} to {1}".format(spec.service_id, num),
@@ -355,7 +355,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def apply_nfs(self, spec):
         # type: (orchestrator.NFSServiceSpec) -> RookCompletion
-        num = spec.count
+        num = spec.placement.count
         return write_completion(
             lambda: self.rook_cluster.update_nfs_count(spec.service_id, num),
             "Updating NFS server count in {0} to {1}".format(spec.service_id, num),
