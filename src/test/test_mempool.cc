@@ -20,6 +20,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
+#include "include/btree_map.h"
 #include "include/mempool.h"
 
 void check_usage(mempool::pool_index_t ix)
@@ -364,6 +365,29 @@ TEST(mempool, bufferlist_reassign)
   ASSERT_EQ(items_before, mempool::osd::allocated_items());
   ASSERT_EQ(bytes_before, mempool::osd::allocated_bytes());
 }
+
+TEST(mempool, btree_map_test)
+{
+  typedef mempool::pool_allocator<mempool::mempool_osd,
+    pair<const uint64_t,uint64_t>> allocator_t;
+  typedef btree::btree_map<uint64_t,uint64_t,std::less<uint64_t>,allocator_t> btree_t;
+
+  {
+    btree_t btree;
+    ASSERT_EQ(0, mempool::osd::allocated_items());
+    ASSERT_EQ(0, mempool::osd::allocated_bytes());
+    for (size_t i = 0; i < 1000; ++i) {
+      btree[rand()] = rand();
+    }
+    ASSERT_LT(0, mempool::osd::allocated_items());
+    ASSERT_LT(0, mempool::osd::allocated_bytes());
+  }
+
+  ASSERT_EQ(0, mempool::osd::allocated_items());
+  ASSERT_EQ(0, mempool::osd::allocated_bytes());
+}
+
+
 
 int main(int argc, char **argv)
 {
