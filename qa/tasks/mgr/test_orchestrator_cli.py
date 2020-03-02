@@ -3,7 +3,7 @@ import json
 import logging
 from time import sleep
 
-from teuthology.exceptions import CommandFailedError
+from ceph.deployment.drive_group import DriveGroupValidationError
 
 from mgr_test_case import MgrTestCase
 
@@ -95,8 +95,8 @@ class TestOrchestratorCli(MgrTestCase):
         res = self._orch_cmd_result("osd", "create", "-i", "-", stdin=json.dumps(drive_groups))
         self.assertEqual(res, 0)
 
-        #with self.assertRaises(Exception):
-        #    self._orch_cmd("osd", "create", "notfound:device")
+        with self.assertRaises(DriveGroupValidationError):
+            self._orch_cmd("osd", "create", "notfound:device")
 
     def test_blink_device_light(self):
         def _ls_lights(what):
