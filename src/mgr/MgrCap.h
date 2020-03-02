@@ -4,12 +4,11 @@
 #ifndef CEPH_MGRCAP_H
 #define CEPH_MGRCAP_H
 
-#include <ostream>
+#include <iosfwd>
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/entity_name.h"
-
-class CephContext;
 
 static const __u8 MGR_CAP_R     = (1 << 1);      // read
 static const __u8 MGR_CAP_W     = (1 << 2);      // write
