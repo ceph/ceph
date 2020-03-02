@@ -8283,6 +8283,18 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     }
   }; // ShardTracker
 
+  // add the next unique candidate, or return false if we reach the end
+  auto next_candidate = [] (ShardTracker& t,
+                            std::map<std::string, size_t>& candidates,
+                            size_t tracker_idx) {
+    while (!t.at_end()) {
+      if (candidates.emplace(t.entry_name(), tracker_idx).second) {
+        return;
+      }
+      t.advance(); // skip duplicate common prefixes
+    }
+  };
+
   // one tracker per shard requested (may not be all shards)
   std::vector<ShardTracker> results_trackers;
   results_trackers.reserve(shard_list_results.size());
@@ -8305,12 +8317,10 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   map<string, size_t> candidates;
   size_t tracker_idx = 0;
   for (auto& t : results_trackers) {
-    if (!t.at_end()) {
-      // it's important that the values in the map refer to the index
-      // into the results_trackers vector, which may not be the same
-      // as the shard number (i.e., when not all shards are requested)
-      candidates[t.entry_name()] = tracker_idx;
-    }
+    // it's important that the values in the map refer to the index
+    // into the results_trackers vector, which may not be the same
+    // as the shard number (i.e., when not all shards are requested)
+    next_candidate(t, candidates, tracker_idx);
     ++tracker_idx;
   }
 
@@ -8366,9 +8376,11 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
     // refresh the candidates map
     candidates.erase(candidates.begin());
-    if (! tracker.advance().at_end()) {
-      candidates[tracker.entry_name()] = tracker_idx;
-    } else if (tracker.is_truncated()) {
+    tracker.advance();
+
+    next_candidate(tracker, candidates, tracker_idx);
+
+    if (tracker.at_end() && tracker.is_truncated()) {
       // once we exhaust one shard that is truncated, we need to stop,
       // as we cannot be certain that one of the next entries needs to
       // come from that shard; S3 and swift protocols allow returning
