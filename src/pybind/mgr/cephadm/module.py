@@ -1662,19 +1662,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     continue
                 spec = None
                 if dd.service_name() in self.spec_store.specs:
-                    spec_presence = "present"
                     spec = self.spec_store.specs[dd.service_name()]
-                else:
-                    spec_presence = "absent"
-                if dd.daemon_type == 'osd':
-                    spec_presence = "not applicable"
                 if n not in sm:
                     sm[n] = orchestrator.ServiceDescription(
                         service_name=n,
                         last_refresh=dd.last_refresh,
                         container_image_id=dd.container_image_id,
                         container_image_name=dd.container_image_name,
-                        spec_presence=spec_presence,
+                        spec=spec,
                     )
                 if spec:
                     sm[n].size = self._get_spec_size(spec)
@@ -1693,7 +1688,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 continue
             sm[n] = orchestrator.ServiceDescription(
                 service_name=n,
-                spec_presence='present',
+                spec=spec,
                 size=self._get_spec_size(spec),
                 running=0,
             )

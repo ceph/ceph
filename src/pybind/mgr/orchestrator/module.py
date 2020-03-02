@@ -355,7 +355,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     age,
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
-                    ukn(s.spec_presence)
+                    'present' if s.spec else '-',
                 ))
 
             return HandleCommandResult(stdout=table.get_string())
