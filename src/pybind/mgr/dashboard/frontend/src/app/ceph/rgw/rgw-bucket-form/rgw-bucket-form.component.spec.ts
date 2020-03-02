@@ -14,6 +14,8 @@ import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
+import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 
 describe('RgwBucketFormComponent', () => {
@@ -21,6 +23,7 @@ describe('RgwBucketFormComponent', () => {
   let fixture: ComponentFixture<RgwBucketFormComponent>;
   let rgwBucketService: RgwBucketService;
   let getPlacementTargetsSpy: jasmine.Spy;
+  let rgwBucketServiceGetSpy: jasmine.Spy;
 
   configureTestBed({
     declarations: [RgwBucketFormComponent],
@@ -38,6 +41,7 @@ describe('RgwBucketFormComponent', () => {
     fixture = TestBed.createComponent(RgwBucketFormComponent);
     component = fixture.componentInstance;
     rgwBucketService = TestBed.get(RgwBucketService);
+    rgwBucketServiceGetSpy = spyOn(rgwBucketService, 'get');
     getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'getPlacementTargets');
   });
 
@@ -206,6 +210,108 @@ describe('RgwBucketFormComponent', () => {
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
         'Updated Object Gateway bucket "".'
+      );
+    });
+  });
+
+  describe('mfa credentials', () => {
+    const checkMfaCredentialsVisibility = (
+      fakeResponse: object,
+      versioningChecked: boolean,
+      mfaDeleteChecked: boolean,
+      expectedVisibility: boolean
+    ) => {
+      component['route'].params = observableOf({ bid: 'bid' });
+      component.editing = true;
+      rgwBucketServiceGetSpy.and.returnValue(observableOf(fakeResponse));
+      component.ngOnInit();
+      component.isVersioningEnabled = versioningChecked;
+      component.isMfaDeleteEnabled = mfaDeleteChecked;
+      fixture.detectChanges();
+
+      const mfaTokenSerial = fixture.debugElement.nativeElement.querySelector('#mfa-token-serial');
+      const mfaTokenPin = fixture.debugElement.nativeElement.querySelector('#mfa-token-pin');
+      if (expectedVisibility) {
+        expect(mfaTokenSerial).toBeTruthy();
+        expect(mfaTokenPin).toBeTruthy();
+      } else {
+        expect(mfaTokenSerial).toBeFalsy();
+        expect(mfaTokenPin).toBeFalsy();
+      }
+    };
+
+    it('inputs should be visible when required', () => {
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        false,
+        false,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        true,
+        false,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.ENABLED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        false,
+        false,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.ENABLED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        true,
+        true,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        false,
+        true,
+        true
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        false,
+        false,
+        true
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        true,
+        true,
+        true
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.ENABLED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        false,
+        true,
+        true
       );
     });
   });

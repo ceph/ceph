@@ -8,6 +8,7 @@ from distutils.util import strtobool
 import xml.etree.ElementTree as ET  # noqa: N814
 import six
 from ..awsauth import S3Auth
+from ..exceptions import DashboardException
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
 from ..tools import build_url, dict_contains_path, json_str_to_object, partial_dict
@@ -486,28 +487,52 @@ class RgwClient(RestClient):
         """
         Get bucket versioning.
         :param str bucket_name: the name of the bucket.
-        :return: versioning state
-        :rtype: str
+        :return: versioning info
+        :rtype: Dict
         """
         # pylint: disable=unused-argument
         result = request()
         if 'Status' not in result:
             result['Status'] = 'Suspended'
-        return result['Status']
+        if 'MfaDelete' not in result:
+            result['MfaDelete'] = 'Disabled'
+        return result
 
     @RestClient.api_put('/{bucket_name}?versioning')
-    def set_bucket_versioning(self, bucket_name, versioning_state, request=None):
+    def set_bucket_versioning(self, bucket_name, versioning_state, mfa_delete,
+                              mfa_token_serial, mfa_token_pin, request=None):
         """
         Set bucket versioning.
         :param str bucket_name: the name of the bucket.
         :param str versioning_state:
             https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html
+        :param str mfa_delete: MFA Delete state.
+        :param str mfa_token_serial:
+            https://docs.ceph.com/docs/master/radosgw/mfa/
+        :param str mfa_token_pin: value of a TOTP token at a certain time (auth code)
         :return: None
         """
         # pylint: disable=unused-argument
         versioning_configuration = ET.Element('VersioningConfiguration')
-        status = ET.SubElement(versioning_configuration, 'Status')
-        status.text = versioning_state
+        status_element = ET.SubElement(versioning_configuration, 'Status')
+        status_element.text = versioning_state
+
+        headers = {}
+        if mfa_delete and mfa_token_serial and mfa_token_pin:
+            headers['x-amz-mfa'] = '{} {}'.format(mfa_token_serial, mfa_token_pin)
+            mfa_delete_element = ET.SubElement(versioning_configuration, 'MfaDelete')
+            mfa_delete_element.text = mfa_delete
+
         data = ET.tostring(versioning_configuration, encoding='utf-8')
 
-        return request(data=data)
+        try:
+            request(data=data, headers=headers)
+        except RequestException as error:
+            msg = str(error)
+            if error.status_code == 403:
+                msg = 'Bad MFA credentials: {}'.format(msg)
+            # Avoid dashboard GUI redirections caused by status code (403, ...):
+            http_status_code = 400 if 400 <= error.status_code < 500 else error.status_code
+            raise DashboardException(msg=msg,
+                                     http_status_code=http_status_code,
+                                     component='rgw')

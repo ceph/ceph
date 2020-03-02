@@ -304,7 +304,8 @@ class _Request(object):
                  method=None,
                  params=None,
                  data=None,
-                 raw_content=False):
+                 raw_content=False,
+                 headers=None):
         method = method if method else self.method
         if not method:
             raise Exception('No HTTP request method specified')
@@ -319,7 +320,7 @@ class _Request(object):
                         method.upper()))
                 data = req_data
         resp = self.rest_client.do_request(method, self._gen_path(), params,
-                                           data, raw_content)
+                                           data, raw_content, headers)
         if raw_content and self.resp_structure:
             raise Exception("Cannot validate response in raw format")
         _ResponseValidator.validate(self.resp_structure, resp)
@@ -377,32 +378,36 @@ class RestClient(object):
                    path,
                    params=None,
                    data=None,
-                   raw_content=False):
+                   raw_content=False,
+                   headers=None):
         url = '{}{}'.format(self.base_url, path)
         logger.debug('%s REST API %s req: %s data: %s', self.client_name,
                      method.upper(), path, data)
+        request_headers = self.headers.copy()
+        if headers:
+            request_headers.update(headers)
         try:
             if method.lower() == 'get':
                 resp = self.session.get(
-                    url, headers=self.headers, params=params, auth=self.auth)
+                    url, headers=request_headers, params=params, auth=self.auth)
             elif method.lower() == 'post':
                 resp = self.session.post(
                     url,
-                    headers=self.headers,
+                    headers=request_headers,
                     params=params,
                     data=data,
                     auth=self.auth)
             elif method.lower() == 'put':
                 resp = self.session.put(
                     url,
-                    headers=self.headers,
+                    headers=request_headers,
                     params=params,
                     data=data,
                     auth=self.auth)
             elif method.lower() == 'delete':
                 resp = self.session.delete(
                     url,
-                    headers=self.headers,
+                    headers=request_headers,
                     params=params,
                     data=data,
                     auth=self.auth)
