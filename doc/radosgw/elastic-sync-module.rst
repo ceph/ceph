@@ -96,7 +96,7 @@ As of Luminous RGW in the metadata master zone can now service end user
 requests. This allows for not exposing the elasticsearch endpoint in public and
 also solves the authentication and authorization problem since RGW itself can
 authenticate the end user requests. For this purpose RGW introduces a new query
-in the bucket apis that can service elasticsearch requests. All these requests
+in the bucket APIs that can service elasticsearch requests. All these requests
 must be sent to the metadata master zone.
 
 Syntax
