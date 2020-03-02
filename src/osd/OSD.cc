@@ -8148,11 +8148,11 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   if (osdmap->get_epoch() > 0 &&
       is_active()) {
     if (!osdmap->exists(whoami)) {
-      dout(0) << "map says i do not exist.  shutting down." << dendl;
+      derr << "map says i do not exist.  shutting down." << dendl;
       do_shutdown = true;   // don't call shutdown() while we have
 			    // everything paused
     } else if (osdmap->is_stop(whoami)) {
-      dout(0) << "map says i am stopped by admin. shutting down." << dendl;
+      derr << "map says i am stopped by admin. shutting down." << dendl;
       do_shutdown = true;
     } else if (!osdmap->is_up(whoami) ||
 	       !osdmap->get_addrs(whoami).legacy_equals(
@@ -8219,12 +8219,12 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	utime_t grace = utime_t(cct->_conf->osd_max_markdown_period, 0);
 	osd_markdown_log.push_back(now);
 	if ((int)osd_markdown_log.size() > cct->_conf->osd_max_markdown_count) {
-	  dout(0) << __func__ << " marked down "
-		  << osd_markdown_log.size()
-		  << " > osd_max_markdown_count "
-		  << cct->_conf->osd_max_markdown_count
-		  << " in last " << grace << " seconds, shutting down"
-		  << dendl;
+	  derr << __func__ << " marked down "
+	       << osd_markdown_log.size()
+	       << " > osd_max_markdown_count "
+	       << cct->_conf->osd_max_markdown_count
+	       << " in last " << grace << " seconds, shutting down"
+	       << dendl;
 	  do_restart = false;
 	  do_shutdown = true;
 	}
@@ -8244,8 +8244,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	if (r != 0) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
-          dout(0) << __func__ << " marked down:"
-                  << " rebind cluster_messenger failed" << dendl;
+          derr << __func__ << " marked down:"
+	       << " rebind cluster_messenger failed" << dendl;
         }
 
 	hb_back_server_messenger->mark_down_all();
