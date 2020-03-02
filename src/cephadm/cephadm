@@ -2404,156 +2404,161 @@ def command_adopt():
 
     (daemon_type, daemon_id) = args.name.split('.', 1)
 
-    if daemon_type == 'prometheus':
-        (uid, gid) = extract_uid_gid_monitoring(daemon_type)
-        command_adopt_prometheus(daemon_id, uid, gid)
-        return
-
-    (uid, gid) = extract_uid_gid()
-    if args.style == 'legacy':
-        fsid = get_legacy_daemon_fsid(args.cluster,
-                                      daemon_type,
-                                      daemon_id,
-                                      legacy_dir=args.legacy_dir)
-        if not fsid:
-            raise Error('could not detect legacy fsid; set fsid in ceph.conf')
-
-        l = FileLock(fsid)
-        l.acquire()
-
-        data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
-                        (daemon_type, args.cluster, daemon_id))
-        data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
-
-        osd_fsid = None
-        if daemon_type == 'osd':
-            path = os.path.join(data_dir_src, 'fsid')
-            try:
-                with open(path, 'r') as f:
-                    osd_fsid = f.read().strip()
-            except IOError:
-                raise Error('unable to read OSD fsid from %s' % path)
-            os_type = None
-            if os.path.exists(os.path.join(data_dir_src, 'type')):
-                with open(os.path.join(data_dir_src, 'type')) as f:
-                    os_type = f.read().strip()
-            else:
-                raise Error('"type" file missing for OSD data dir')
-            logger.info('objectstore_type is %s' % os_type)
-            if os_type == 'filestore':
-                raise Error('FileStore is not supported by cephadm')
-
-        # NOTE: implicit assumption here that the units correspond to the
-        # cluster we are adopting based on the /etc/{defaults,sysconfig}/ceph
-        # CLUSTER field.
-        unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
-        (enabled, state, _) = check_unit(unit_name)
-
-        if state == 'running':
-            logger.info('Stopping old systemd unit %s...' % unit_name)
-            call_throws(['systemctl', 'stop', unit_name])
-        if enabled:
-            logger.info('Disabling old systemd unit %s...' % unit_name)
-            call_throws(['systemctl', 'disable', unit_name])
-
-        # data
-        logger.info('Moving data...')
-        data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
-                                     uid=uid, gid=gid)
-        move_files(glob(os.path.join(data_dir_src, '*')),
-                   data_dir_dst,
-                   uid=uid, gid=gid)
-        logger.debug('Remove dir \'%s\'' % (data_dir_src))
-        if os.path.ismount(data_dir_src):
-            call_throws(['umount', data_dir_src])
-        os.rmdir(data_dir_src)
-
-        logger.info('Chowning content...')
-        call_throws(['chown', '-c', '-R', '%d.%d' % (uid, gid), data_dir_dst])
-
-        if daemon_type == 'mon':
-            # rename *.ldb -> *.sst, in case they are coming from ubuntu
-            store = os.path.join(data_dir_dst, 'store.db')
-            num_renamed = 0
-            if os.path.exists(store):
-                for oldf in os.listdir(store):
-                    if oldf.endswith('.ldb'):
-                        newf = oldf.replace('.ldb', '.sst')
-                        oldp = os.path.join(store, oldf)
-                        newp = os.path.join(store, newf)
-                        logger.debug('Renaming %s -> %s' % (oldp, newp))
-                        os.rename(oldp, newp)
-            if num_renamed:
-                logger.info('Renamed %d leveldb *.ldb files to *.sst',
-                            num_renamed)
-        if daemon_type == 'osd':
-            for n in ['block', 'block.db', 'block.wal']:
-                p = os.path.join(data_dir_dst, n)
-                if os.path.exists(p):
-                    logger.info('Chowning %s...' % p)
-                    os.chown(p, uid, gid)
-            # disable the ceph-volume 'simple' mode files on the host
-            simple_fn = os.path.join('/etc/ceph/osd',
-                                     '%s-%s.json' % (daemon_id, osd_fsid))
-            if os.path.exists(simple_fn):
-                new_fn = simple_fn + '.adopted-by-cephadm'
-                logger.info('Renaming %s -> %s', simple_fn, new_fn)
-                os.rename(simple_fn, new_fn)
-                logger.info('Disabling host unit ceph-volume@ simple unit...')
-                call_throws(['systemctl', 'disable',
-                             'ceph-volume@simple-%s-%s.service' % (
-                                 daemon_id, osd_fsid)])
-            else:
-                # assume this is an 'lvm' c-v for now, but don't error
-                # out if it's not.
-                logger.info('Disabling host unit ceph-volume@ lvm unit...')
-                call(['systemctl', 'disable',
-                      'ceph-volume@lvm-%s-%s.service' % (daemon_id, osd_fsid)])
-
-        # config
-        config_src = '/etc/ceph/%s.conf' % (args.cluster)
-        config_src = os.path.abspath(args.legacy_dir + config_src)
-        config_dst = os.path.join(data_dir_dst, 'config')
-        copy_files([config_src], config_dst, uid=uid, gid=gid)
-
-        # logs
-        logger.info('Moving logs...')
-        log_dir_src = ('/var/log/ceph/%s-%s.%s.log*' %
-                        (args.cluster, daemon_type, daemon_id))
-        log_dir_src = os.path.abspath(args.legacy_dir + log_dir_src)
-        log_dir_dst = make_log_dir(fsid, uid=uid, gid=gid)
-        move_files(glob(log_dir_src),
-                   log_dir_dst,
-                   uid=uid, gid=gid)
-
-        logger.info('Creating new units...')
-        make_var_run(fsid, uid, gid)
-        c = get_container(fsid, daemon_type, daemon_id)
-        deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
-                            enable=True,  # unconditionally enable the new unit
-                            start=(state == 'running'),
-                            osd_fsid=osd_fsid)
-        update_firewalld(daemon_type)
-
-    else:
-        raise Error('adoption of style %s not implemented' % args.style)
-
-def command_adopt_prometheus(daemon_id, uid, gid):
-    # type: (str, int, int) -> None
-
-    daemon_type = 'prometheus'
+    # legacy check
     if args.style != 'legacy':
         raise Error('adoption of style %s not implemented' % args.style)
 
+    # lock
     fsid = get_legacy_daemon_fsid(args.cluster,
                                   daemon_type,
                                   daemon_id,
                                   legacy_dir=args.legacy_dir)
     if not fsid:
         raise Error('could not detect legacy fsid; set fsid in ceph.conf')
-
     l = FileLock(fsid)
     l.acquire()
+
+    # call correct adoption
+    if daemon_type in Ceph.daemons:
+        command_adopt_ceph(daemon_type, daemon_id, fsid);
+    elif daemon_type == 'prometheus':
+        command_adopt_prometheus(daemon_id, fsid)
+    elif daemon_type == 'grafana':
+        raise Error('adoption of grafana not implemented')
+    elif daemon_type == 'node-exporter':
+        raise Error('adoption of node-exporter not implemented')
+    elif daemon_type == 'alertmanager':
+        raise Error('adoption of alert-manager not implemented')
+    else:
+        raise Error('daemon type %s not recognized' % daemon_type)
+
+
+
+def command_adopt_ceph(daemon_type, daemon_id, fsid):
+    # type: (str, str, str) -> None
+
+    (uid, gid) = extract_uid_gid()
+
+    data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
+                    (daemon_type, args.cluster, daemon_id))
+    data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
+
+    osd_fsid = None
+    if daemon_type == 'osd':
+        path = os.path.join(data_dir_src, 'fsid')
+        try:
+            with open(path, 'r') as f:
+                osd_fsid = f.read().strip()
+        except IOError:
+            raise Error('unable to read OSD fsid from %s' % path)
+        os_type = None
+        if os.path.exists(os.path.join(data_dir_src, 'type')):
+            with open(os.path.join(data_dir_src, 'type')) as f:
+                os_type = f.read().strip()
+        else:
+            raise Error('"type" file missing for OSD data dir')
+        logger.info('objectstore_type is %s' % os_type)
+        if os_type == 'filestore':
+            raise Error('FileStore is not supported by cephadm')
+
+    # NOTE: implicit assumption here that the units correspond to the
+    # cluster we are adopting based on the /etc/{defaults,sysconfig}/ceph
+    # CLUSTER field.
+    unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
+    (enabled, state, _) = check_unit(unit_name)
+
+    if state == 'running':
+        logger.info('Stopping old systemd unit %s...' % unit_name)
+        call_throws(['systemctl', 'stop', unit_name])
+    if enabled:
+        logger.info('Disabling old systemd unit %s...' % unit_name)
+        call_throws(['systemctl', 'disable', unit_name])
+
+    # data
+    logger.info('Moving data...')
+    data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
+                                 uid=uid, gid=gid)
+    move_files(glob(os.path.join(data_dir_src, '*')),
+               data_dir_dst,
+               uid=uid, gid=gid)
+    logger.debug('Remove dir \'%s\'' % (data_dir_src))
+    if os.path.ismount(data_dir_src):
+        call_throws(['umount', data_dir_src])
+    os.rmdir(data_dir_src)
+
+    logger.info('Chowning content...')
+    call_throws(['chown', '-c', '-R', '%d.%d' % (uid, gid), data_dir_dst])
+
+    if daemon_type == 'mon':
+        # rename *.ldb -> *.sst, in case they are coming from ubuntu
+        store = os.path.join(data_dir_dst, 'store.db')
+        num_renamed = 0
+        if os.path.exists(store):
+            for oldf in os.listdir(store):
+                if oldf.endswith('.ldb'):
+                    newf = oldf.replace('.ldb', '.sst')
+                    oldp = os.path.join(store, oldf)
+                    newp = os.path.join(store, newf)
+                    logger.debug('Renaming %s -> %s' % (oldp, newp))
+                    os.rename(oldp, newp)
+        if num_renamed:
+            logger.info('Renamed %d leveldb *.ldb files to *.sst',
+                        num_renamed)
+    if daemon_type == 'osd':
+        for n in ['block', 'block.db', 'block.wal']:
+            p = os.path.join(data_dir_dst, n)
+            if os.path.exists(p):
+                logger.info('Chowning %s...' % p)
+                os.chown(p, uid, gid)
+        # disable the ceph-volume 'simple' mode files on the host
+        simple_fn = os.path.join('/etc/ceph/osd',
+                                 '%s-%s.json' % (daemon_id, osd_fsid))
+        if os.path.exists(simple_fn):
+            new_fn = simple_fn + '.adopted-by-cephadm'
+            logger.info('Renaming %s -> %s', simple_fn, new_fn)
+            os.rename(simple_fn, new_fn)
+            logger.info('Disabling host unit ceph-volume@ simple unit...')
+            call_throws(['systemctl', 'disable',
+                         'ceph-volume@simple-%s-%s.service' % (
+                             daemon_id, osd_fsid)])
+        else:
+            # assume this is an 'lvm' c-v for now, but don't error
+            # out if it's not.
+            logger.info('Disabling host unit ceph-volume@ lvm unit...')
+            call(['systemctl', 'disable',
+                  'ceph-volume@lvm-%s-%s.service' % (daemon_id, osd_fsid)])
+
+    # config
+    config_src = '/etc/ceph/%s.conf' % (args.cluster)
+    config_src = os.path.abspath(args.legacy_dir + config_src)
+    config_dst = os.path.join(data_dir_dst, 'config')
+    copy_files([config_src], config_dst, uid=uid, gid=gid)
+
+    # logs
+    logger.info('Moving logs...')
+    log_dir_src = ('/var/log/ceph/%s-%s.%s.log*' %
+                    (args.cluster, daemon_type, daemon_id))
+    log_dir_src = os.path.abspath(args.legacy_dir + log_dir_src)
+    log_dir_dst = make_log_dir(fsid, uid=uid, gid=gid)
+    move_files(glob(log_dir_src),
+               log_dir_dst,
+               uid=uid, gid=gid)
+
+    logger.info('Creating new units...')
+    make_var_run(fsid, uid, gid)
+    c = get_container(fsid, daemon_type, daemon_id)
+    deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
+                        enable=True,  # unconditionally enable the new unit
+                        start=(state == 'running'),
+                        osd_fsid=osd_fsid)
+    update_firewalld(daemon_type)
+
+
+def command_adopt_prometheus(daemon_id, fsid):
+    # type: (str, str) -> None
+
+    daemon_type = 'prometheus'
+    (uid, gid) = extract_uid_gid_monitoring(daemon_type)
 
     unit_name = 'prometheus'
     (enabled, state, _) = check_unit(unit_name)
