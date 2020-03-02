@@ -697,7 +697,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
       } else {
 	  task->return_code = 0;
       }
-      ctx->try_aio_wake();
+      --ctx->num_running;
     }
   } else {
     ceph_assert(task->command == IOCommand::FLUSH_COMMAND);
@@ -937,7 +937,6 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   make_read_tasks(this, off, ioc, buf, len, &t, off, len);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   aio_submit(ioc);
-  ioc->aio_wait();
 
   pbl->push_back(std::move(p));
   return t.return_code;
@@ -975,7 +974,6 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
 
   make_read_tasks(this, aligned_off, &ioc, buf, aligned_len, &t, off, len);
   aio_submit(&ioc);
-  ioc.aio_wait();
 
   return t.return_code;
 }
