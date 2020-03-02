@@ -1096,35 +1096,6 @@ def get_config_and_keyring():
             config = f.read()
     return (config, keyring)
 
-def get_config_and_both_keyrings():
-    # type: () -> Tuple[str, str, Optional[str]]
-    if args.config_and_keyrings:
-        if args.config_and_keyrings == '-':
-            try:
-                j = injected_stdin # type: ignore
-            except NameError:
-                j = sys.stdin.read()
-        else:
-            with open(args.config_and_keyrings, 'r') as f:
-                j = f.read()
-        d = json.loads(j)
-        return (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
-    else:
-        if args.key:
-            keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
-        elif args.keyring:
-            with open(args.keyring, 'r') as f:
-                keyring = f.read()
-        else:
-            raise Error('no keyring provided')
-        crash_keyring = None
-        if args.crash_keyring:
-            with open(args.crash_keyring, 'r') as f:
-                crash_keyring = f.read()
-        with open(args.config, 'r') as f:
-            config = f.read()
-        return (config, keyring, crash_keyring)
-
 def get_container_mounts(fsid, daemon_type, daemon_id,
                          no_config=False):
     # type: (str, str, Union[int, str, None], Optional[bool]) -> Dict[str, str]
@@ -1495,14 +1466,6 @@ def install_base_units(fsid):
     su root root
 }
 """ % fsid)
-
-def deploy_crash(fsid, uid, gid, config, keyring):
-    # type: (str, int, int, str, str) -> None
-    crash_dir = os.path.join(args.data_dir, fsid, 'crash')
-    makedirs(crash_dir, uid, gid, DATA_DIR_MODE)
-    c = get_container(fsid, 'crash', get_hostname())
-    deploy_daemon(fsid, 'crash', get_hostname(), c, uid, gid,
-                  config, keyring)
 
 def get_unit_file(fsid, uid, gid):
     # type: (str, int, int) -> str
@@ -1952,11 +1915,6 @@ def command_bootstrap():
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
 
-    # crash unit
-    logger.info('Creating crash agent...')
-    deploy_crash(fsid, uid, gid, config,
-                 '[client.crash.%s]\n\tkey = %s\n' % (hostname, crash_key))
-
     # output files
     with open(args.output_keyring, 'w') as f:
         os.fchmod(f.fileno(), 0o600)
@@ -2014,6 +1972,9 @@ def command_bootstrap():
         host = get_hostname()
         logger.info('Adding host %s...' % host)
         cli(['orch', 'host', 'add', host])
+
+        logger.info('Deploy crash collectors...')
+        cli(['orch', 'apply', 'crash', 'all:true'])
 
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
@@ -2103,7 +2064,7 @@ def command_deploy():
         raise Error('daemon type %s not recognized' % daemon_type)
 
     if daemon_type in Ceph.daemons:
-        (config, keyring, crash_keyring) = get_config_and_both_keyrings()
+        (config, keyring) = get_config_and_keyring()
         (uid, gid) = extract_uid_gid()
         make_var_run(args.fsid, uid, gid)
         c = get_container(args.fsid, daemon_type, daemon_id)
@@ -2111,9 +2072,6 @@ def command_deploy():
                       config, keyring,
                       osd_fsid=args.osd_fsid,
                       reconfig=args.reconfig)
-
-        if crash_keyring and not args.reconfig:
-            deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
@@ -3545,9 +3503,6 @@ def _get_parser():
     parser_deploy.add_argument(
         '--keyring',
         help='keyring for new daemon')
-    parser_deploy.add_argument(
-        '--crash-keyring',
-        help='crash keyring for crash agent daemon')
     parser_deploy.add_argument(
         '--key',
         help='key for new daemon')
