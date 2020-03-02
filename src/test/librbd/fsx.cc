@@ -2437,11 +2437,12 @@ void clone_filename(char *buf, size_t len, int clones)
 
 void clone_imagename(char *buf, size_t len, int clones)
 {
-	if (clones > 0)
+	if (clones > 0) {
 		snprintf(buf, len, "%s-clone%d", iname, clones);
-	else
-		strncpy(buf, iname, len);
-        buf[len - 1] = '\0';
+	} else {
+		strncpy(buf, iname, len - 1);
+		buf[len - 1] = '\0';
+	}
 }
 
 void replay_imagename(char *buf, size_t len, int clones)
