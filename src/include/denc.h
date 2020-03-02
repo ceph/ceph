@@ -268,17 +268,7 @@ template<typename T> int DencDumper<T>::i = 0;
 namespace _denc {
 template<typename T, typename... Us>
 inline constexpr bool is_any_of = (... || std::is_same_v<T, Us>);
-
-template<typename T, typename=void> struct underlying_type {
-  using type = T;
-};
-template<typename T>
-struct underlying_type<T, std::enable_if_t<std::is_enum_v<T>>> {
-  using type = std::underlying_type_t<T>;
-};
-template<typename T>
-using underlying_type_t = typename underlying_type<T>::type;
-}
+} // namespace _denc
 
 template<class It>
 struct is_const_iterator
@@ -307,11 +297,12 @@ get_pos_add(It& i) {
   return *reinterpret_cast<T*>(i.get_pos_add(sizeof(T)));
 }
 
+// network-order integer encoding
 template<typename T>
 struct denc_traits<
   T,
   std::enable_if_t<
-    _denc::is_any_of<_denc::underlying_type_t<T>,
+    _denc::is_any_of<T,
 		     ceph_le64, ceph_le32, ceph_le16, uint8_t
 #ifndef _CHAR_IS_SIGNED
 		       , int8_t
