@@ -29,8 +29,3 @@ class ErasureCodeProfileTest(ControllerTestCase):
         self._get('/api/erasure_code_profile')
         self.assertStatus(200)
         self.assertJsonBody([{'k': 2, 'm': 1, 'name': 'test'}])
-
-    def test_get(self):
-        self._get('/api/erasure_code_profile/test')
-        self.assertStatus(200)
-        self.assertJsonBody({'k': 2, 'm': 1, 'name': 'test'})

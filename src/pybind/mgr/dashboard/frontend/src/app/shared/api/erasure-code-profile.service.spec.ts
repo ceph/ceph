@@ -41,27 +41,15 @@ describe('ErasureCodeProfileService', () => {
     expect(req.request.method).toBe('POST');
   });
 
-  it('should call update', () => {
-    service.update(testProfile).subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/test`);
-    expect(req.request.method).toBe('PUT');
-  });
-
   it('should call delete', () => {
     service.delete('test').subscribe();
     const req = httpTesting.expectOne(`${apiPath}/test`);
     expect(req.request.method).toBe('DELETE');
   });
 
-  it('should call get', () => {
-    service.get('test').subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/test`);
-    expect(req.request.method).toBe('GET');
-  });
-
   it('should call getInfo', () => {
     service.getInfo().subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/_info`);
+    const req = httpTesting.expectOne(`ui-${apiPath}/info`);
     expect(req.request.method).toBe('GET');
   });
 });
