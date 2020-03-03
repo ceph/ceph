@@ -41,10 +41,11 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         ('2 host1 host2', "PlacementSpec(count=2 hosts=host1,host2)"),
         ('label:foo', "PlacementSpec(label=foo)"),
         ('3 label:foo', "PlacementSpec(count=3 label=foo)"),
+        (['*'], 'PlacementSpec(all=true)'),
         ('*', 'PlacementSpec(all=true)'),
     ])
 def test_parse_placement_specs(test_input, expected):
-    ret = PlacementSpec.from_strings(test_input.split())
+    ret = PlacementSpec.from_strings(test_input)
     assert str(ret) == expected
 
 @pytest.mark.parametrize("test_input",
