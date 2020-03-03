@@ -94,8 +94,8 @@ class GaneshaConf(object):
         """
         return {
             'access_type': export_defaults.get('access_type', 'NONE'),
-            'protocols': export_defaults.get('protocols', [3, 4]),
-            'transports': export_defaults.get('transports', ['TCP', 'UDP']),
+            'protocols': export_defaults.get('protocols', [4]),
+            'transports': export_defaults.get('transports', ['TCP']),
             'squash': export_defaults.get('squash', 'root_squash')
         }
 
@@ -227,7 +227,6 @@ class NFSConfig(object):
             'fsal': {"name": "CEPH", "user_id":self.cluster_id, "fs_name": "a", "sec_label_xattr": ""},
             'clients': []
             })
-
         log.info("Export ID is {}".format(ex_id))
         NFSConfig.exp_num += 1
         #self.update_user_caps()
