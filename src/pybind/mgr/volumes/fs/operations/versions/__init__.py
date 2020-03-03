@@ -6,7 +6,7 @@ import cephfs
 
 from .subvolume_base import SubvolumeBase
 from ..op_sm import OpSm
-from ...exception import VolumeException, MetadataMgrException
+from ...exception import MetadataMgrException, OpSmException, VolumeException
 
 log = logging.getLogger(__name__)
 
