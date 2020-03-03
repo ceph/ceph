@@ -13,7 +13,7 @@ capability is available in two modes:
   actual image. The remote cluster will read from this associated journal and
   replay the updates to its local copy of the image. Since each write to the
   RBD image will result in two writes to the Ceph cluster, expect write
-  latencies to nearly double when using the RBD jouranling image feature.
+  latencies to nearly double when using the RBD journaling image feature.
 
 * **Snapshot-based**: This mode uses periodically scheduled or manually
   created RBD image mirror-snapshots to replicate crash-consistent RBD images
