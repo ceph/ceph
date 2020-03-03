@@ -166,6 +166,15 @@ Advanced
     int (bytes), max write size. Default: 16777216 (16*1024*1024) (writeback
     uses smaller of wsize and stripe unit)
 
+:command:`wsync`
+    Execute all namespace operations synchronously. This ensures that the
+    namespace operation will only complete after receiving a reply from
+    the MDS. This is the default.
+
+:command:`nowsync`
+    Allow the client to do namespace operations asynchronously. When this
+    option is enabled, a namespace operation may complete before the MDS
+    replies, if it has sufficient capabilities to do so.
 
 Examples
 ========
@@ -216,10 +225,15 @@ history::
 Availability
 ============
 
-**mount.ceph** is part of Ceph, a massively scalable, open-source, distributed storage system. Please
-refer to the Ceph documentation at http://ceph.com/docs for more
-information.
+**mount.ceph** is part of Ceph, a massively scalable, open-source, distributed
+storage system. Please refer to the Ceph documentation at http://ceph.com/docs
+for more information.
 
+Feature Availability
+====================
+
+The ``recover_session=`` option was added to mainline Linux kernels in v5.4.
+``wsync`` and ``nowsync`` were added in v5.7.
 
 See also
 ========
