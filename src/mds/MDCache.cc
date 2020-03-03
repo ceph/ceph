@@ -8551,17 +8551,23 @@ CInode *MDCache::cache_traverse(const filepath& fp)
   dout(10) << "cache_traverse " << fp << dendl;
 
   CInode *in;
-  if (fp.get_ino())
+  unsigned depth = 0;
+
+  if (fp.get_ino()) {
     in = get_inode(fp.get_ino());
-  else
+  } else if (fp.depth() > 0 && fp[0] == "~mdsdir") {
+    in = myin;
+    depth = 1;
+  } else {
     in = root;
+  }
   if (!in)
     return NULL;
 
-  for (unsigned i = 0; i < fp.depth(); i++) {
-    std::string_view dname = fp[i];
+  for (; depth < fp.depth(); depth++) {
+    std::string_view dname = fp[depth];
     frag_t fg = in->pick_dirfrag(dname);
-    dout(20) << " " << i << " " << dname << " frag " << fg << " from " << *in << dendl;
+    dout(20) << " " << depth << " " << dname << " frag " << fg << " from " << *in << dendl;
     CDir *curdir = in->get_dirfrag(fg);
     if (!curdir)
       return NULL;
@@ -11361,8 +11367,8 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     dout(7) << "can_fragment: i won't merge|split anything in stray" << dendl;
     return false;
   }
-  if (diri->is_mdsdir() || diri->is_stray() || diri->ino() == MDS_INO_CEPH) {
-    dout(7) << "can_fragment: i won't fragment the mdsdir or straydir or .ceph" << dendl;
+  if (diri->is_mdsdir() || diri->ino() == MDS_INO_CEPH) {
+    dout(7) << "can_fragment: i won't fragment mdsdir or .ceph" << dendl;
     return false;
   }
 
