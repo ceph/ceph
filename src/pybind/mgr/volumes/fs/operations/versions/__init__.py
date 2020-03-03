@@ -67,7 +67,6 @@ class SubvolumeLoader(object):
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT and upgrade:
                 self.upgrade_legacy_subvolume(fs, subvolume)
-                subvolume = None
                 return self.get_subvolume_object(fs, vol_spec, group, subvolname, upgrade=False)
             else:
                 # log the actual error and generalize error string returned to user
