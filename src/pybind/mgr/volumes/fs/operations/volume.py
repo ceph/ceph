@@ -1,15 +1,15 @@
 import time
 import errno
 import logging
+import sys
+
 from contextlib import contextmanager
 from threading import Lock, Condition
 
-try:
-    # py2
-    from threading import _Timer as Timer
-except ImportError:
-    #py3
+if sys.version_info >= (3, 3):
     from threading import Timer
+else:
+    from threading import _Timer as Timer
 
 import cephfs
 import orchestrator
