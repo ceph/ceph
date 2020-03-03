@@ -45,7 +45,7 @@ void OSDMapGate::got_map(epoch_t epoch) {
   current = epoch;
   auto first = waiting_peering.begin();
   auto last = waiting_peering.upper_bound(epoch);
-  std::for_each(first, last, [epoch, this](auto& blocked_requests) {
+  std::for_each(first, last, [epoch](auto& blocked_requests) {
     blocked_requests.second.promise.set_value(epoch);
   });
   waiting_peering.erase(first, last);
