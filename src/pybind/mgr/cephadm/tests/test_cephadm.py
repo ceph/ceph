@@ -146,15 +146,14 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == ["Removed osd.0 from host 'test'"]
 
-            osd_removal_op = OSDRemoval(0, False, False, 'test', 'osd.0', datetime.datetime.utcnow())
-            cephadm_module.rm_util.to_remove_osds.add(osd_removal_op)
+            osd_removal_op = OSDRemoval(0, False, False, 'test', 'osd.0', datetime.datetime.utcnow(), -1)
+            cephadm_module.rm_util.queue_osds_for_removal({osd_removal_op})
             cephadm_module.rm_util._remove_osds_bg()
             assert cephadm_module.rm_util.to_remove_osds == set()
 
             c = cephadm_module.remove_osds_status()
             out = wait(cephadm_module, c)
-            assert out == {osd_removal_op: 0}
-
+            assert out == set()
 
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
