@@ -1256,17 +1256,20 @@ class PlacementSpec(object):
         # in the orchestrator backend.
         self.hosts = hosts
 
-    def __repr__(self):
+    def pretty_str(self):
         kv = []
         if self.count:
             kv.append('count=%d' % self.count)
         if self.label:
             kv.append('label=%s' % self.label)
         if self.hosts:
-            kv.append('hosts=%s' % self.hosts)
+            kv.append('hosts=%s' % ','.join([str(h) for h in self.hosts]))
         if self.all_hosts:
             kv.append('all=true')
-        return "PlacementSpec(%s)" % (' '.join(kv))
+        return ' '.join(kv)
+
+    def __repr__(self):
+        return "PlacementSpec(%s)" % self.pretty_str()
 
     @classmethod
     def from_dict(cls, data):
@@ -1469,8 +1472,8 @@ class ServiceDescription(object):
                  service_url=None,
                  last_refresh=None,
                  size=0,
-                 spec_presence='absent',
-                 running=0):
+                 running=0,
+                 spec=None):
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
         # (image name)
@@ -1498,10 +1501,7 @@ class ServiceDescription(object):
         # datetime when this info was last refreshed
         self.last_refresh = last_refresh   # type: Optional[datetime.datetime]
 
-        # status string to indicate the presence of a persistent servicespec
-        # possible strings are "absent", "present" and "not applicable" while
-        # the "not applicable" is mostly for OSDs.
-        self.spec_presence = spec_presence
+        self.spec = spec
 
     def service_type(self):
         if self.service_name:

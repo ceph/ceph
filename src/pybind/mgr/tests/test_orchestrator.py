@@ -35,8 +35,10 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
     [
         ('', "PlacementSpec()"),
         ("3", "PlacementSpec(count=3)"),
-        ("host1 host2", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
-        ('2 host1 host2', "PlacementSpec(count=2 hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
+        ("host1 host2", "PlacementSpec(hosts=host1,host2)"),
+        ("host1=a host2=b", "PlacementSpec(hosts=host1=a,host2=b)"),
+        ("host1:1.2.3.4=a host2:1.2.3.5=b", "PlacementSpec(hosts=host1:1.2.3.4=a,host2:1.2.3.5=b)"),
+        ('2 host1 host2', "PlacementSpec(count=2 hosts=host1,host2)"),
         ('label:foo', "PlacementSpec(label=foo)"),
         ('3 label:foo', "PlacementSpec(count=3 label=foo)"),
         ('*', 'PlacementSpec(all=true)'),
