@@ -37,13 +37,13 @@ class Group(GroupTemplate):
     def uid(self):
         return self.user_id
 
-    @property
-    def gid(self):
-        return self.group_id
-
     @uid.setter
     def uid(self, val):
         self.user_id = val
+
+    @property
+    def gid(self):
+        return self.group_id
 
     @gid.setter
     def gid(self, val):
