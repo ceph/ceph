@@ -306,7 +306,7 @@
 
 * RGW S3: Support has been added for BlockPublicAccess set of APIs at a bucket
   level, currently blocking/ignoring public acls & policies are supported.
-  User/Account level apis are planned to be added in the future
+  User/Account level APIs are planned to be added in the future
 
 * RGW: The default number of bucket index shards for new buckets was raised
   from 1 to 11 to increase the amount of write throughput for small buckets
