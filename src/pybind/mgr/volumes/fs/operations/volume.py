@@ -213,15 +213,15 @@ def create_volume(mgr, volname, placement):
     r, outb, outs = create_pool(mgr, data_pool)
     if r != 0:
         #cleanup
-        remove_pool(metadata_pool)
+        remove_pool(mgr, metadata_pool)
         return r, outb, outs
     # create filesystem
     r, outb, outs = create_filesystem(mgr, volname, metadata_pool, data_pool)
     if r != 0:
         log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
         #cleanup
-        remove_pool(data_pool)
-        remove_pool(metadata_pool)
+        remove_pool(mgr, data_pool)
+        remove_pool(mgr, metadata_pool)
         return r, outb, outs
     # create mds
     return create_mds(mgr, volname, placement)
