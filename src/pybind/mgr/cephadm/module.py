@@ -2023,7 +2023,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'config': config,
                 'keyring': keyring,
             })
-            extra_args.extend(['--config-and-keyrings', '-'])
+            extra_args.extend(['--config-and-keyring', '-'])
 
             # osd deployments needs an --osd-uuid arg
             if daemon_type == 'osd':

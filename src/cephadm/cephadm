@@ -3507,7 +3507,7 @@ def _get_parser():
         '--key',
         help='key for new daemon')
     parser_deploy.add_argument(
-        '--config-and-keyrings',
+        '--config-and-keyring',
         help='JSON file with config and keyrings for the daemon and crash agent')
     parser_deploy.add_argument(
         '--osd-fsid',
