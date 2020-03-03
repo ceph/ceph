@@ -2933,15 +2933,15 @@ receivers:
                 continue
             found.add(OSDRemoval(daemon.daemon_id, replace, force,
                                  daemon.hostname, daemon.name(),
-                                 datetime.datetime.utcnow()))
+                                 datetime.datetime.utcnow(), -1))
 
         not_found = {osd_id for osd_id in osd_ids if osd_id not in [x.osd_id for x in found]}
         if not_found:
             raise OrchestratorError('Unable to find OSD: %s' % not_found)
 
-        for osd in found:
-            self.rm_util.to_remove_osds.add(osd)
-            # trigger the serve loop to initiate the removal
+        self.rm_util.queue_osds_for_removal(found)
+
+        # trigger the serve loop to initiate the removal
         self._kick_serve_loop()
         return trivial_result(f"Scheduled OSD(s) for removal")
 
@@ -2949,7 +2949,7 @@ receivers:
         """
         The CLI call to retrieve an osd removal report
         """
-        return trivial_result(self.rm_util.osd_removal_report)
+        return trivial_result(self.rm_util.report)
 
     def list_specs(self) -> orchestrator.Completion:
         """
