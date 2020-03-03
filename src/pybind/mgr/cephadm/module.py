@@ -728,10 +728,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     ev_progress=progress)
 
     def _do_upgrade(self):
-        # type: () -> Optional[AsyncCompletion]
+        # type: () -> None
         if not self.upgrade_state:
             self.log.debug('_do_upgrade no state, exiting')
-            return None
+            return
 
         target_name = self.upgrade_state.get('target_name')
         target_id = self.upgrade_state.get('target_id', None)
@@ -747,7 +747,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'count': 1,
                     'detail': [str(e)],
                 })
-                return None
+                return
             self.upgrade_state['target_id'] = target_id
             self.upgrade_state['target_version'] = target_version
             self._save_upgrade_state()
@@ -809,13 +809,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                 'failed to pull %s on host %s' % (target_name,
                                                                   d.hostname)],
                         })
-                        return None
+                        return
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
                         self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.hostname, r['image_id'], target_id))
                         self.upgrade_state['target_id'] = r['image_id']
                         self._save_upgrade_state()
-                        return None
+                        return
 
                 self._update_upgrade_progress(done / len(daemons))
 
@@ -824,7 +824,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         self.log.debug('daemon %s is stopped but has correct image name' % (d.name()))
                         continue
                 if not self._wait_for_ok_to_stop(d):
-                    return None
+                    return
                 self.log.info('Upgrade: Redeploying %s.%s' %
                               (d.daemon_type, d.daemon_id))
                 ret, out, err = self.mon_command({
@@ -833,12 +833,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'value': target_name,
                     'who': daemon_type + '.' + d.daemon_id,
                 })
-                return self._daemon_action([(
+                self._daemon_action(
                     d.daemon_type,
                     d.daemon_id,
                     d.hostname,
                     'redeploy'
-                )])
+                )
+                return
 
             if need_upgrade_self:
                 mgr_map = self.get('mgr_map')
@@ -853,7 +854,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                             'but it needs at least one standby to proceed.',
                         ],
                     })
-                    return None
+                    return
 
                 self.log.info('Upgrade: there are %d other already-upgraded '
                               'standby mgrs, failing over' % num)
@@ -865,7 +866,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'prefix': 'mgr fail',
                     'who': self.get_mgr_id(),
                 })
-                return None
+                return
             elif daemon_type == 'mgr':
                 if 'UPGRADE_NO_STANDBY_MGR' in self.health_checks:
                     del self.health_checks['UPGRADE_NO_STANDBY_MGR']
@@ -929,7 +930,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         self.upgrade_state['progress_id'])
         self.upgrade_state = None
         self._save_upgrade_state()
-        return None
+        return
 
     def _check_hosts(self):
         self.log.debug('_check_hosts')
@@ -1058,19 +1059,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self._refresh_configs()
 
             if self.upgrade_state and not self.upgrade_state.get('paused'):
-                upgrade_completion = self._do_upgrade()
-                if upgrade_completion:
-                    while not upgrade_completion.has_result:
-                        self.process([upgrade_completion])
-                        if upgrade_completion.needs_result:
-                            time.sleep(1)
-                        else:
-                            break
-                    if upgrade_completion.exception is not None:
-                        self.log.error(str(upgrade_completion.exception))
-                self.log.debug('did _do_upgrade')
-            else:
-                self._serve_sleep()
+                self._do_upgrade()
+                continue
+
+            self._serve_sleep()
         self.log.debug("serve exit")
 
     def config_notify(self):
@@ -1744,9 +1736,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             raise orchestrator.OrchestratorError(
                 'Unable to find %s.%s.* daemon(s)' % (service_name))
         self.log.info('%s service %s' % (action, service_name))
-        return self._daemon_action(args)
+        return self._daemon_actions(args)
 
     @async_map_completion
+    def _daemon_actions(self, daemon_type, daemon_id, host, action):
+        return self._daemon_action(daemon_type, daemon_id, host, action)
+
     def _daemon_action(self, daemon_type, daemon_id, host, action):
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
@@ -1782,7 +1777,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     daemon_type, daemon_id))
         self.log.info('%s daemons %s' % (action,
                                          ['%s.%s' % (a[0], a[1]) for a in args]))
-        return self._daemon_action(args)
+        return self._daemon_actions(args)
 
     def remove_daemons(self, names, force):
         # type: (List[str], bool) -> orchestrator.Completion
