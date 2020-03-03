@@ -18,7 +18,6 @@ import {
   i18nProviders
 } from '../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../core/not-found/not-found.component';
-import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -40,7 +39,6 @@ describe('PoolFormComponent', () => {
   let component: PoolFormComponent;
   let fixture: ComponentFixture<PoolFormComponent>;
   let poolService: PoolService;
-  let configurationService: ConfigurationService;
   let form: CdFormGroup;
   let router: Router;
   let ecpService: ErasureCodeProfileService;
@@ -133,7 +131,9 @@ describe('PoolFormComponent', () => {
       compression_algorithms: ['snappy'],
       compression_modes: ['none', 'passive'],
       crush_rules_replicated: [],
-      crush_rules_erasure: []
+      crush_rules_erasure: [],
+      pg_autoscale_default_mode: 'off',
+      pg_autoscale_modes: ['off', 'warn', 'on']
     };
     const ecp1 = new ErasureCodeProfile();
     ecp1.name = 'ecp1';
@@ -164,10 +164,6 @@ describe('PoolFormComponent', () => {
 
   beforeEach(() => {
     setUpPoolComponent();
-    configurationService = TestBed.get(ConfigurationService);
-    spyOn(configurationService, 'get').and.callFake(() => [
-      { default: 'off', enum_values: ['on', 'warn', 'off'], value: [] }
-    ]);
     poolService = TestBed.get(PoolService);
     spyOn(poolService, 'getInfo').and.callFake(() => [component.info]);
     ecpService = TestBed.get(ErasureCodeProfileService);
