@@ -4,13 +4,12 @@
 #ifndef CEPH_LIBRBD_DEEP_COPY_UTILS_H
 #define CEPH_LIBRBD_DEEP_COPY_UTILS_H
 
+#include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
 #include "librbd/Types.h"
 #include "librbd/deep_copy/Types.h"
 
 #include <boost/optional.hpp>
-
-struct CephContext;
 
 namespace librbd {
 namespace deep_copy {
