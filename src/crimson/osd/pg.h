@@ -202,8 +202,8 @@ public:
   }
   void request_local_background_io_reservation(
     unsigned priority,
-    PGPeeringEventRef on_grant,
-    PGPeeringEventRef on_preempt) final {
+    PGPeeringEventURef on_grant,
+    PGPeeringEventURef on_preempt) final {
     shard_services.local_reserver.request_reservation(
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {

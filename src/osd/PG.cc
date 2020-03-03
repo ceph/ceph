@@ -1620,15 +1620,15 @@ void PG::schedule_event_after(
 
 void PG::request_local_background_io_reservation(
   unsigned priority,
-  PGPeeringEventRef on_grant,
-  PGPeeringEventRef on_preempt) {
+  PGPeeringEventURef on_grant,
+  PGPeeringEventURef on_preempt) {
   osd->local_reserver.request_reservation(
     pg_id,
     on_grant ? new QueuePeeringEvt(
-      this, on_grant) : nullptr,
+      this, std::move(on_grant)) : nullptr,
     priority,
     on_preempt ? new QueuePeeringEvt(
-      this, on_preempt) : nullptr);
+      this, std::move(on_preempt)) : nullptr);
 }
 
 void PG::update_local_background_io_priority(
