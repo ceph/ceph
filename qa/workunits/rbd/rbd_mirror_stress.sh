@@ -97,7 +97,7 @@ for i in `seq 1 10`
 do
   stress_write_image ${CLUSTER2} ${POOL} ${image}
 
-  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
   snap_name="snap${i}"
   create_snap ${CLUSTER2} ${POOL} ${image} ${snap_name}

@@ -86,10 +86,13 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
     r = librbd::cls_client::dir_get_name_finish(&it, m_local_image_name);
   }
 
-  if (r < 0) {
-    if (r != -ENOENT) {
-      derr << "failed to retrieve image name: " << cpp_strerror(r) << dendl;
-    }
+  if (r == -ENOENT) {
+    // proceed we should have a mirror image record if we got this far
+    dout(10) << "image does not exist for local image id " << m_local_image_id
+             << dendl;
+    *m_local_image_name = "";
+  } else  if (r < 0) {
+    derr << "failed to retrieve image name: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -128,7 +131,11 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
   switch (m_mirror_image.mode) {
   case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
     // journal-based local image exists
-    *m_state_builder = journal::StateBuilder<I>::create(m_global_image_id);
+    {
+      auto state_builder = journal::StateBuilder<I>::create(m_global_image_id);
+      state_builder->local_primary_mirror_uuid = m_primary_mirror_uuid;
+      *m_state_builder = state_builder;
+    }
     break;
   case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
     // snapshot-based local image exists
@@ -141,9 +148,11 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
     break;
   }
 
+  dout(10) << "local_image_id=" << m_local_image_id << ", "
+           << "local_promotion_state=" << m_promotion_state << ", "
+           << "local_primary_mirror_uuid=" << m_primary_mirror_uuid << dendl;
   (*m_state_builder)->local_image_id = m_local_image_id;
   (*m_state_builder)->local_promotion_state = m_promotion_state;
-  (*m_state_builder)->local_primary_mirror_uuid = m_primary_mirror_uuid;
   finish(0);
 }
 

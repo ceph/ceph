@@ -1047,7 +1047,14 @@ void ImageReplayer<I>::reregister_admin_socket_hook() {
     return;
   }
 
+  dout(15) << "old_image_spec=" << m_image_spec << ", "
+           << "new_image_spec=" << image_spec << dendl;
   m_image_spec = image_spec;
+
+  if (m_state == STATE_STOPPING || m_state == STATE_STOPPED) {
+    // no need to re-register if stopping
+    return;
+  }
   locker.unlock();
 
   unregister_admin_socket_hook();

@@ -82,9 +82,9 @@ void PreRemoveRequest<I>::acquire_exclusive_lock() {
   m_exclusive_lock = m_image_ctx->exclusive_lock;
 
   auto ctx = create_context_callback<
-    PreRemoveRequest<I>, &PreRemoveRequest<I>::handle_exclusive_lock>(this, m_exclusive_lock);
-
-  m_exclusive_lock->try_acquire_lock(ctx);
+    PreRemoveRequest<I>,
+    &PreRemoveRequest<I>::handle_exclusive_lock>(this, m_exclusive_lock);
+  m_exclusive_lock->acquire_lock(ctx);
 }
 
 template <typename I>

@@ -46,6 +46,7 @@ Mock *Mock::s_instance = nullptr;
 
 template<> bool can_create_primary_snapshot(librbd::MockTestImageCtx *image_ctx,
                                             bool demoted, bool force,
+                                            bool* requires_orphan,
                                             uint64_t *rollback_snap_id) {
   return Mock::s_instance->can_create_primary_snapshot(image_ctx, demoted,
                                                        force, rollback_snap_id);

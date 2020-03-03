@@ -62,11 +62,13 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
 
   bool accept_blocked_request(
       librbd::exclusive_lock::OperationRequestType request_type) override {
-    if (request_type ==
-        librbd::exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE) {
+    switch (request_type) {
+    case librbd::exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE:
+    case librbd::exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION:
       return true;
+    default:
+      return false;
     }
-    return false;
   }
 };
 

@@ -315,6 +315,8 @@ struct ParentImageSpec {
 
 WRITE_CLASS_ENCODER(ParentImageSpec);
 
+std::ostream& operator<<(std::ostream& os, const ParentImageSpec& rhs);
+
 struct ChildImageSpec {
   int64_t pool_id = -1;
   std::string pool_namespace;
@@ -348,6 +350,8 @@ struct ChildImageSpec {
   }
 };
 WRITE_CLASS_ENCODER(ChildImageSpec);
+
+std::ostream& operator<<(std::ostream& os, const ChildImageSpec& rhs);
 
 typedef std::set<ChildImageSpec> ChildImageSpecs;
 
@@ -582,6 +586,12 @@ struct MirrorSnapshotNamespace {
   inline bool is_demoted() const {
     return (state == MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED ||
             state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED);
+  }
+
+  inline bool is_orphan() const {
+    return (is_non_primary() &&
+            primary_mirror_uuid.empty() &&
+            primary_snap_id == CEPH_NOSNAP);
   }
 
   void encode(bufferlist& bl) const;
