@@ -201,8 +201,10 @@ function TEST_scrub_snaps() {
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd || return 1
+      activate_osd $dir $osd || return 1
     done
+
+    wait_for_clean || return 1
 
     local pgid="${poolid}.0"
     if ! pg_scrub "$pgid" ; then
@@ -811,8 +813,10 @@ function _scrub_snaps_multi() {
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd || return 1
+      activate_osd $dir $osd || return 1
     done
+
+    wait_for_clean || return 1
 
     local pgid="${poolid}.0"
     if ! pg_scrub "$pgid" ; then
