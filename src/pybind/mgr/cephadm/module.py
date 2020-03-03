@@ -1804,7 +1804,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         self.log.info('Remove daemons %s' % [a[0] for a in args])
-        return self._remove_daemon(args)
+        return self._remove_daemons(args)
 
     def remove_service(self, service_name, force=False):
         args = []
@@ -1820,7 +1820,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 service_name))
         self.log.info('Remove service %s (daemons %s)' % (
             service_name, [a[0] for a in args]))
-        return self._remove_daemon(args)
+        return self._remove_daemons(args)
 
     def get_inventory(self, host_filter=None, refresh=False):
         """
@@ -2098,6 +2098,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
+    def _remove_daemons(self, name, host, force=False):
+        return self._remove_daemon(name, host, force)
+
     def _remove_daemon(self, name, host, force=False):
         """
         Remove a daemon
@@ -2833,7 +2836,7 @@ receivers:
                     # also remove it from the remove_osd list and set a health_check warning?
                     raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
 
-            completion = self._remove_daemon([(osd.fullname, osd.nodename, True)])
+            completion = self._remove_daemons([(osd.fullname, osd.nodename, True)])
             completion.add_progress('Removing OSDs', self)
             completion.update_progress = True
             if completion:
