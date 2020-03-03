@@ -56,7 +56,7 @@ class VolumeClient(object):
             self.purge_queue.queue_job(fs['mdsmap']['fs_name'])
 
     def is_stopping(self):
-        return self.stopping.isSet()
+        return self.stopping.is_set()
 
     def shutdown(self):
         log.info("shutting down")
@@ -103,7 +103,7 @@ class VolumeClient(object):
         return delete_volume(self.mgr, volname)
 
     def list_fs_volumes(self):
-        if self.stopping.isSet():
+        if self.stopping.is_set():
             return -errno.ESHUTDOWN, "", "shutdown in progress"
         volumes = list_volumes(self.mgr)
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
