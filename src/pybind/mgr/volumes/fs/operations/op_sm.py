@@ -1,3 +1,5 @@
+import errno
+
 from ..exception import OpSmException
 
 class OpSm(object):
