@@ -24,6 +24,7 @@
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "rgw_acl.h"
+#include "rgw_bucket_layout.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
 #include "rgw_quota.h"
@@ -1123,6 +1124,9 @@ struct RGWBucketInfo {
   bool has_instance_obj{false};
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   RGWQuotaInfo quota;
+
+  // layout of bucket index objects
+  rgw::BucketLayout layout;
 
   // Represents the number of bucket index object shards:
   //   - value of 0 indicates there is no sharding (this is by default
