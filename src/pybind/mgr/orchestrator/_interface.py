@@ -1520,7 +1520,9 @@ class ServiceDescription(object):
             'service_url': self.service_url,
             'size': self.size,
             'running': self.running,
+            'spec_presence': self.spec_presence
         }
+
         if self.last_refresh:
             out['last_refresh'] = self.last_refresh.strftime(DATEFMT)
         return {k: v for (k, v) in out.items() if v is not None}
