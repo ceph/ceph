@@ -55,7 +55,7 @@ public:
   BlockGuard &operator=(const BlockGuard&) = delete;
 
   /**
-   * Detain future IO for a range of blocks. the guard will assume
+   * Detain future IO for a range of blocks. the guard will keep
    * ownership of the provided operation if the operation is blocked.
    * @return 0 upon success and IO can be issued
    *         >0 if the IO is blocked,
