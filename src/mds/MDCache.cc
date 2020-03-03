@@ -9942,29 +9942,40 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
-  std::vector<CDir*> ls;
+  if (next.ino)
+    next.frag = strays[MDS_INO_STRAY_INDEX(next.ino)]->dirfragtree[next.frag.value()];
+
   for (int i = 0; i < NUM_STRAY; ++i) {
     if (strays[i]->ino() < next.ino)
       continue;
-    strays[i]->get_dirfrags(ls);
-  }
 
-  for (const auto& dir : ls) {
-    if (dir->dirfrag() < next)
-      continue;
-    if (!dir->is_complete()) {
-      dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
-      return;
-    }
-    for (auto &p : dir->items) {
-      CDentry *dn = p.second;
-      dn->state_set(CDentry::STATE_STRAY);
-      CDentry::linkage_t *dnl = dn->get_projected_linkage();
-      if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
-	if (in->inode.nlink == 0)
-	  in->state_set(CInode::STATE_ORPHAN);
-	maybe_eval_stray(in);
+    std::vector<CDir*> ls;
+    strays[i]->get_dirfrags(ls);
+
+    for (const auto& dir : ls) {
+      if (dir->get_frag() < next.frag)
+	continue;
+
+      if (!dir->can_auth_pin()) {
+	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	return;
+      }
+
+      if (!dir->is_complete()) {
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	return;
+      }
+
+      for (auto &p : dir->items) {
+	CDentry *dn = p.second;
+	dn->state_set(CDentry::STATE_STRAY);
+	CDentry::linkage_t *dnl = dn->get_projected_linkage();
+	if (dnl->is_primary()) {
+	  CInode *in = dnl->get_inode();
+	  if (in->inode.nlink == 0)
+	    in->state_set(CInode::STATE_ORPHAN);
+	  maybe_eval_stray(in);
+	}
       }
     }
   }
