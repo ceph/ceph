@@ -2045,6 +2045,8 @@ def extract_uid_gid_monitoring(daemon_type):
         uid, gid = 65534, 65534
     elif daemon_type == 'grafana':
         uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
+    elif daemon_type == 'alertmanager':
+        uid, gid = extract_uid_gid(file_path='/etc/alertmanager')
     else:
         raise Error("{} not implemented yet".format(daemon_type))
     return uid, gid
