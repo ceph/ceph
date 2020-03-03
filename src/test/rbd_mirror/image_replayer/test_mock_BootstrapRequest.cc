@@ -397,7 +397,7 @@ public:
   void expect_close_remote_image(
       MockStateBuilder& mock_state_builder, int r) {
     EXPECT_CALL(mock_state_builder, close_remote_image(_))
-      .WillOnce(Invoke([this, &mock_state_builder, r]
+      .WillOnce(Invoke([&mock_state_builder, r]
                        (Context* on_finish) {
           mock_state_builder.remote_image_ctx = nullptr;
           on_finish->complete(r);
@@ -409,7 +409,7 @@ public:
     EXPECT_CALL(mock_state_builder,
                 create_local_image_request(_, _, _, _, _, _))
       .WillOnce(WithArg<5>(
-        Invoke([this, &mock_state_builder, local_image_id, r](Context* ctx) {
+        Invoke([&mock_state_builder, local_image_id, r](Context* ctx) {
           if (r >= 0) {
             mock_state_builder.local_image_id = local_image_id;
           }
@@ -428,7 +428,7 @@ public:
     EXPECT_CALL(mock_state_builder,
                 create_prepare_replay_request(_, _, _, _, _))
       .WillOnce(WithArgs<2, 3, 4>(
-        Invoke([this, &mock_state_builder, resync_requested, syncing, r]
+        Invoke([&mock_state_builder, resync_requested, syncing, r]
                (bool* resync, bool* sync, Context* ctx) {
           if (r >= 0) {
             *resync = resync_requested;
