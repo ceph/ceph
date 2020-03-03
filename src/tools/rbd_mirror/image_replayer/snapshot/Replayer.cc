@@ -279,6 +279,12 @@ template <typename I>
 void Replayer<I>::load_local_image_meta() {
   dout(10) << dendl;
 
+  {
+    // reset state in case new snapshot is added while we are scanning
+    std::unique_lock locker{m_lock};
+    m_image_updated = false;
+  }
+
   ceph_assert(m_state_builder->local_image_meta != nullptr);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_load_local_image_meta>(this);
@@ -444,7 +450,8 @@ void Replayer<I>::scan_local_mirror_snapshots(
              << "local_snap_id_start=" << m_local_snap_id_start << ", "
              << "local_snap_id_end=" << m_local_snap_id_end << ", "
              << "local_snap_ns=" << m_local_mirror_snap_ns << dendl;
-    if (m_local_mirror_snap_ns.complete) {
+    if (!m_local_mirror_snap_ns.is_primary() &&
+        m_local_mirror_snap_ns.complete) {
       // our remote sync should start after this completed snapshot
       m_remote_snap_id_start = m_local_mirror_snap_ns.primary_snap_id;
     }
@@ -460,9 +467,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     std::unique_lock<ceph::mutex>* locker) {
   dout(10) << dendl;
 
-  // reset state in case new snapshot is added while we are scanning
-  m_image_updated = false;
-
+  bool split_brain = false;
   bool remote_demoted = false;
   auto remote_image_ctx = m_state_builder->remote_image_ctx;
   std::shared_lock image_locker{remote_image_ctx->image_lock};
@@ -483,7 +488,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                              "invalid remote mirror snapshot state");
       return;
     } else {
-      remote_demoted = (mirror_ns->is_primary() && mirror_ns->is_demoted());
+      remote_demoted = mirror_ns->is_demoted();
     }
 
     auto remote_snap_id = snap_info_it->first;
@@ -521,11 +526,13 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                    << "remote_snap_id=" << remote_snap_id << ", "
                    << "local_snap_id=" << m_local_snap_id_start << dendl;
           m_remote_snap_id_start = remote_snap_id;
+          split_brain = false;
           continue;
         } else if (m_remote_snap_id_start == 0) {
           // still looking for our matching demotion snapshot
           dout(15) << "skipping remote snapshot " << remote_snap_id << " "
                    << "while searching for demotion" << dendl;
+          split_brain = true;
           continue;
         }
       } else {
@@ -589,9 +596,16 @@ void Replayer<I>::scan_remote_mirror_snapshots(
 
   if (is_replay_interrupted(locker)) {
     return;
+  } else if (split_brain) {
+    derr << "split-brain detected: failed to find matching non-primary "
+         << "snapshot in remote image: "
+         << "local_snap_id_start=" << m_local_snap_id_start << ", "
+         << "local_snap_ns=" << m_local_mirror_snap_ns << dendl;
+    handle_replay_complete(locker, -EEXIST, "split-brain");
+    return;
   } else if (remote_demoted) {
     dout(10) << "remote image demoted" << dendl;
-    handle_replay_complete(locker, 0, "remote image demoted");
+    handle_replay_complete(locker, -EREMOTEIO, "remote image demoted");
     return;
   }
 

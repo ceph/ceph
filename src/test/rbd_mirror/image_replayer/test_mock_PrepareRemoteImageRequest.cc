@@ -120,6 +120,8 @@ struct GetMirrorImageIdRequest<librbd::MockTestImageCtx> {
 template<>
 struct StateBuilder<librbd::MockTestImageCtx> {
   std::string local_image_id;
+  librbd::mirror::PromotionState local_promotion_state =
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   std::string remote_image_id;
   std::string remote_mirror_uuid;
   librbd::mirror::PromotionState remote_promotion_state;

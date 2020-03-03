@@ -101,7 +101,6 @@ struct StateBuilder<librbd::MockTestImageCtx> {
 
   std::string local_image_id;
   librbd::mirror::PromotionState local_promotion_state;
-  std::string local_primary_mirror_uuid;
 };
 
 GetMirrorImageIdRequest<librbd::MockTestImageCtx>* GetMirrorImageIdRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -115,6 +114,8 @@ struct StateBuilder<librbd::MockTestImageCtx>
 
   cls::rbd::MirrorImageMode mirror_image_mode =
     cls::rbd::MIRROR_IMAGE_MODE_JOURNAL;
+
+  std::string local_primary_mirror_uuid;
 
   static StateBuilder* create(const std::string&) {
     ceph_assert(s_instance != nullptr);
@@ -298,8 +299,6 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, SuccessSnapshot) {
             mock_journal_state_builder.mirror_image_mode);
   ASSERT_EQ(librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
             mock_journal_state_builder.local_promotion_state);
-  ASSERT_EQ(std::string("remote mirror uuid"),
-            mock_journal_state_builder.local_primary_mirror_uuid);
 }
 
 TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageIdError) {
@@ -321,12 +320,42 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageIdError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageReplayerPrepareLocalImageRequest, DirGetNameError) {
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest, DirGetNameDNE) {
   InSequence seq;
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
                              0);
   expect_dir_get_name(m_local_io_ctx, "", -ENOENT);
+
+  MockGetMirrorInfoRequest mock_get_mirror_info_request;
+  expect_get_mirror_info(mock_get_mirror_info_request,
+                         {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                          "global image id",
+                          cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
+                         librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
+                         "remote mirror uuid", 0);
+
+  MockJournalStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
+  std::string local_image_name;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+                                                  "global image id",
+                                                  &local_image_name,
+                                                  &mock_state_builder,
+                                                  m_threads->work_queue,
+                                                  &ctx);
+  req->send();
+
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest, DirGetNameError) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
+  expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
+                             0);
+  expect_dir_get_name(m_local_io_ctx, "", -EPERM);
 
   MockStateBuilder* mock_state_builder = nullptr;
   std::string local_image_name;
@@ -339,7 +368,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, DirGetNameError) {
                                                   &ctx);
   req->send();
 
-  ASSERT_EQ(-ENOENT, ctx.wait());
+  ASSERT_EQ(-EPERM, ctx.wait());
 }
 
 TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageInfoError) {

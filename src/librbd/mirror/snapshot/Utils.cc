@@ -54,9 +54,13 @@ std::string get_image_meta_key(const std::string& mirror_uuid) {
 
 template <typename I>
 bool can_create_primary_snapshot(I *image_ctx, bool demoted, bool force,
+                                 bool* requires_orphan,
                                  uint64_t *rollback_snap_id) {
   CephContext *cct = image_ctx->cct;
 
+  if (requires_orphan != nullptr) {
+    *requires_orphan = false;
+  }
   if (rollback_snap_id) {
     *rollback_snap_id = CEPH_NOSNAP;
   }
@@ -72,10 +76,7 @@ bool can_create_primary_snapshot(I *image_ctx, bool demoted, bool force,
     }
     ldout(cct, 20) << "previous snapshot snap_id=" << it->first << " "
                    << *mirror_ns << dendl;
-    if ((mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED ||
-         mirror_ns->state ==
-           cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED) &&
-        !force) {
+    if (mirror_ns->is_demoted() && !force) {
       lderr(cct) << "trying to create primary snapshot without force "
                  << "when previous primary snapshot is demoted"
                  << dendl;
@@ -94,6 +95,10 @@ bool can_create_primary_snapshot(I *image_ctx, bool demoted, bool force,
                    << "when previous snapshot is non-primary"
                    << dendl;
         return false;
+      }
+
+      if (requires_orphan != nullptr) {
+        *requires_orphan = !mirror_ns->is_demoted();
       }
       if (!mirror_ns->complete) {
         ldout(cct, 20) << "needs rollback" << dendl;
@@ -172,7 +177,7 @@ std::string image_state_object_name(I *image_ctx, uint64_t snap_id,
 
 template bool librbd::mirror::snapshot::util::can_create_primary_snapshot(
   librbd::ImageCtx *image_ctx, bool demoted, bool force,
-  uint64_t *rollback_snap_id);
+  bool* requires_orphan, uint64_t *rollback_snap_id);
 
 template bool librbd::mirror::snapshot::util::can_create_non_primary_snapshot(
   librbd::ImageCtx *image_ctx);

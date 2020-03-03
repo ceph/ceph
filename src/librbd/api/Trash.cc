@@ -43,25 +43,12 @@ namespace {
 
 template <typename I>
 int disable_mirroring(I *ictx) {
-  cls::rbd::MirrorImage mirror_image;
-  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
-  if (r == -ENOENT) {
-    ldout(ictx->cct, 10) << "mirroring is not enabled for this image" << dendl;
-    return 0;
-  }
-
-  if (r < 0) {
-    lderr(ictx->cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
-                     << dendl;
-    return r;
-  }
-
   ldout(ictx->cct, 10) << dendl;
 
   C_SaferCond ctx;
   auto req = mirror::DisableRequest<I>::create(ictx, false, true, &ctx);
   req->send();
-  r = ctx.wait();
+  int r = ctx.wait();
   if (r < 0) {
     lderr(ictx->cct) << "failed to disable mirroring: " << cpp_strerror(r)
                      << dendl;
@@ -141,6 +128,26 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
   }
 
   if (r == 0) {
+    cls::rbd::MirrorImage mirror_image;
+    int mirror_r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                                &mirror_image);
+    if (mirror_r == -ENOENT) {
+      ldout(ictx->cct, 10) << "mirroring is not enabled for this image"
+                           << dendl;
+    } else if (mirror_r < 0) {
+      lderr(ictx->cct) << "failed to retrieve mirror image: "
+                       << cpp_strerror(mirror_r) << dendl;
+      return mirror_r;
+    } else if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      // a remote rbd-mirror might own the exclusive-lock on this image
+      // and therefore we need to disable mirroring so that it closes the image
+      r = disable_mirroring<I>(ictx);
+      if (r < 0) {
+        ictx->state->close();
+        return r;
+      }
+    }
+
     if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
       std::unique_lock image_locker{ictx->image_lock};
       ictx->set_journal_policy(new journal::DisabledPolicy());
@@ -170,10 +177,13 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     }
     ictx->image_lock.unlock_shared();
 
-    r = disable_mirroring<I>(ictx);
-    if (r < 0) {
-      ictx->state->close();
-      return r;
+    if (mirror_r >= 0 &&
+        mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      r = disable_mirroring<I>(ictx);
+      if (r < 0) {
+        ictx->state->close();
+        return r;
+      }
     }
 
     ictx->state->close();

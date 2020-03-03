@@ -28,7 +28,7 @@ struct MockTestImageCtx : public MockImageCtx {
 #include "librbd/mirror/snapshot/Utils.cc"
 template bool librbd::mirror::snapshot::util::can_create_primary_snapshot(
   librbd::MockTestImageCtx *image_ctx, bool demoted, bool force,
-  uint64_t *rollback_snap_id);
+  bool* requires_orphan, uint64_t *rollback_snap_id);
 template bool librbd::mirror::snapshot::util::can_create_non_primary_snapshot(
   librbd::MockTestImageCtx *image_ctx);
 
@@ -67,9 +67,12 @@ TEST_F(TestMockMirrorSnapshotUtils, CanCreatePrimarySnapshot) {
   MockTestImageCtx mock_image_ctx(*ictx);
 
   // no previous mirror snapshots found
+  bool requires_orphan;
   uint64_t rollback_snap_id;
   ASSERT_TRUE(util::can_create_primary_snapshot(&mock_image_ctx, false, false,
+                                                &requires_orphan,
                                                 &rollback_snap_id));
+  ASSERT_FALSE(requires_orphan);
   ASSERT_EQ(rollback_snap_id, CEPH_NOSNAP);
 
   cls::rbd::MirrorSnapshotNamespace nns{
@@ -79,15 +82,17 @@ TEST_F(TestMockMirrorSnapshotUtils, CanCreatePrimarySnapshot) {
 
   // without force, previous snapshot is non-primary
   ASSERT_FALSE(util::can_create_primary_snapshot(&mock_image_ctx, false, false,
-                                                 nullptr));
+                                                 nullptr, nullptr));
 
   // demoted, previous snapshot is non-primary
   ASSERT_FALSE(util::can_create_primary_snapshot(&mock_image_ctx, true, true,
-                                                 nullptr));
+                                                 nullptr, nullptr));
 
   // previous non-primary snapshot is copied
   ASSERT_TRUE(util::can_create_primary_snapshot(&mock_image_ctx, false, true,
+                                                &requires_orphan,
                                                 &rollback_snap_id));
+  ASSERT_TRUE(requires_orphan);
   ASSERT_EQ(rollback_snap_id, CEPH_NOSNAP);
 
   nns.complete = false;
@@ -95,11 +100,11 @@ TEST_F(TestMockMirrorSnapshotUtils, CanCreatePrimarySnapshot) {
 
   // previous non-primary snapshot is not copied yet
   ASSERT_FALSE(util::can_create_primary_snapshot(&mock_image_ctx, false, true,
-                                                 nullptr));
+                                                 nullptr, nullptr));
 
   // can rollback
   ASSERT_TRUE(util::can_create_primary_snapshot(&mock_image_ctx, false, true,
-                                                &rollback_snap_id));
+                                                nullptr, &rollback_snap_id));
   ASSERT_EQ(rollback_snap_id, copied_snap_id);
 
   nns.state = cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED;
@@ -107,7 +112,7 @@ TEST_F(TestMockMirrorSnapshotUtils, CanCreatePrimarySnapshot) {
 
   // previous non-primary snapshot is orphan
   ASSERT_TRUE(util::can_create_primary_snapshot(&mock_image_ctx, false, true,
-                                                nullptr));
+                                                nullptr, nullptr));
 
   cls::rbd::MirrorSnapshotNamespace pns{
     cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {"uuid"}, "", CEPH_NOSNAP};
@@ -115,18 +120,18 @@ TEST_F(TestMockMirrorSnapshotUtils, CanCreatePrimarySnapshot) {
 
   // previous primary snapshot is demoted, no force
   ASSERT_FALSE(util::can_create_primary_snapshot(&mock_image_ctx, false, false,
-                                                 nullptr));
+                                                 nullptr, nullptr));
 
   // previous primary snapshot is demoted, force
   ASSERT_TRUE(util::can_create_primary_snapshot(&mock_image_ctx, false, true,
-                                                nullptr));
+                                                nullptr, nullptr));
 
   pns.state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
   snap_create(mock_image_ctx, pns, "PS2");
 
   // previous snapshot is not demoted primary
   ASSERT_TRUE(util::can_create_primary_snapshot(&mock_image_ctx, false, false,
-                                                nullptr));
+                                                nullptr, nullptr));
 }
 
 TEST_F(TestMockMirrorSnapshotUtils, CanCreateNonPrimarySnapshot) {
