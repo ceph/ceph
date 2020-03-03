@@ -335,13 +335,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
-                ['NAME', 'RUNNING', 'REFRESHED', 'IMAGE NAME', 'IMAGE ID', 'SPEC'],
+                ['NAME', 'RUNNING', 'REFRESHED', 'IMAGE NAME', 'IMAGE ID', 'SPEC', 'PLACEMENT'],
                 border=False)
             table.align['NAME'] = 'l'
             table.align['RUNNING'] = 'r'
             table.align['REFRESHED'] = 'l'
             table.align['IMAGE NAME'] = 'l'
             table.align['IMAGE ID'] = 'l'
+            table.align['SPEC'] = 'l'
+            table.align['PLACEMENT'] = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(services, key=lambda s: s.service_name):
@@ -355,7 +357,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     age,
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
-                    ukn(s.spec_presence)
+                    'present' if s.spec else '-',
+                    s.spec.placement.pretty_str() if s.spec else '-',
                 ))
 
             return HandleCommandResult(stdout=table.get_string())
