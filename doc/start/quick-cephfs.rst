@@ -164,9 +164,9 @@ by the mount.ceph helper program::
     sudo mount -t ceph {ip-address-of-MON}:{port-number-of-MON}:{path-to-be-mounted} -o name={user-name},secret={secret-key} {mount-point}
 
 If you have multiple file systems on your cluster you would need to pass
-``mds_namespace={fs-name}`` option to ``-o`` option to the ``mount`` command::
+``fs={fs-name}`` option to ``-o`` option to the ``mount`` command::
 
-    sudo mount -t ceph :/ /mnt/kcephfs2 -o name=admin,mds_namespace=mycephfs2
+    sudo mount -t ceph :/ /mnt/kcephfs2 -o name=admin,fs=mycephfs2
 
 Refer `mount.ceph man page`_ and `Mount CephFS using Kernel Driver`_ to read
 more about this.
