@@ -310,8 +310,8 @@ public:
      */
     virtual void request_local_background_io_reservation(
       unsigned priority,
-      PGPeeringEventRef on_grant,
-      PGPeeringEventRef on_preempt) = 0;
+      PGPeeringEventURef on_grant,
+      PGPeeringEventURef on_preempt) = 0;
     /// Modify pending local background reservation request priority
     virtual void update_local_background_io_priority(
       unsigned priority) = 0;

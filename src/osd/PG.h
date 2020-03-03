@@ -407,8 +407,8 @@ public:
     float delay) override;
   void request_local_background_io_reservation(
     unsigned priority,
-    PGPeeringEventRef on_grant,
-    PGPeeringEventRef on_preempt) override;
+    PGPeeringEventURef on_grant,
+    PGPeeringEventURef on_preempt) override;
   void update_local_background_io_priority(
     unsigned priority) override;
   void cancel_local_background_io_reservation() override;
