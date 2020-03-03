@@ -49,21 +49,45 @@ class TestVolumes(CephFSTestCase):
     def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("failed", clone, clone_group, timo)
 
-    def _verify_clone(self, subvolume, clone, source_group=None, clone_group=None, timo=120):
+    def _verify_clone_attrs(self, subvolume, clone, source_group=None, clone_group=None):
         path1 = self._get_subvolume_path(self.volname, subvolume, group_name=source_group)
         path2 = self._get_subvolume_path(self.volname, clone, group_name=clone_group)
 
-        s_uid = int(self.mount_a.run_shell(['stat', '-c' '%u', path1]).stdout.getvalue().strip())
-        c_uid = int(self.mount_a.run_shell(['stat', '-c' '%u', path2]).stdout.getvalue().strip())
-        self.assertEqual(s_uid, c_uid)
+        p = self.mount_a.run_shell(["find", path1])
+        paths = p.stdout.getvalue().strip().split()
 
-        s_gid = int(self.mount_a.run_shell(['stat', '-c' '%g', path1]).stdout.getvalue().strip())
-        c_gid = int(self.mount_a.run_shell(['stat', '-c' '%g', path2]).stdout.getvalue().strip())
-        self.assertEqual(s_gid, c_gid)
+        # for each entry in source and clone (sink) verify certain inode attributes:
+        # inode type, mode, ownership, [am]time.
+        for source_path in paths:
+            sink_entry = source_path[len(path1)+1:]
+            sink_path = os.path.join(path2, sink_entry)
 
-        s_mode = int(self.mount_a.run_shell(['stat', '-c' '%a', path1]).stdout.getvalue().strip())
-        c_mode = int(self.mount_a.run_shell(['stat', '-c' '%a', path2]).stdout.getvalue().strip())
-        self.assertEqual(s_mode, c_mode)
+            # mode+type
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%f', source_path]).stdout.getvalue().strip(), 16)
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%f', sink_path]).stdout.getvalue().strip(), 16)
+            self.assertEqual(sval, cval)
+
+            # ownership
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%u', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%u', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%g', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%g', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+            # inode timestamps
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%X', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%X', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%Y', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%Y', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+    def _verify_clone(self, subvolume, clone, source_group=None, clone_group=None, timo=120):
+        path1 = self._get_subvolume_path(self.volname, subvolume, group_name=source_group)
+        path2 = self._get_subvolume_path(self.volname, clone, group_name=clone_group)
 
         check = 0
         while check < timo:
@@ -74,6 +98,8 @@ class TestVolumes(CephFSTestCase):
             check += 1
             time.sleep(1)
         self.assertTrue(check < timo)
+
+        self._verify_clone_attrs(subvolume, clone)
 
     def _generate_random_volume_name(self, count=1):
         r = random.sample(range(10000), count)
@@ -150,6 +176,23 @@ class TestVolumes(CephFSTestCase):
         for i in range(number_of_files):
             filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
             self.mount_a.write_n_mb(os.path.join(io_path, filename), file_size)
+
+    def _do_subvolume_io_mixed(self, subvolume, subvolume_group=None):
+        subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
+
+        reg_file = "regfile.0"
+        reg_path = os.path.join(subvolpath, reg_file)
+        dir_path = os.path.join(subvolpath, "dir.0")
+        sym_path1 = os.path.join(subvolpath, "sym.0")
+        # this symlink's ownership would be changed
+        sym_path2 = os.path.join(dir_path, "sym.0")
+
+        #self.mount_a.write_n_mb(reg_path, TestVolumes.DEFAULT_FILE_SIZE)
+        self.mount_a.run_shell(["sudo", "mkdir", dir_path], omit_sudo=False)
+        self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path1], omit_sudo=False)
+        self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path2], omit_sudo=False)
+        # flip ownership to nobody. assumption: nobody's id is 65534
+        self.mount_a.run_shell(["sudo", "chown", "-h", "65534:65534", sym_path2], omit_sudo=False)
 
     def _wait_for_trash_empty(self, timeout=30):
         # XXX: construct the trash dir path (note that there is no mgr
@@ -2041,6 +2084,45 @@ class TestVolumes(CephFSTestCase):
 
         #  ... and with force, failed clone can be removed
         self._fs_cmd("subvolume", "rm", self.volname, clone2, "--force")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_attr_clone(self):
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io_mixed(subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # verify clone
+        self._verify_clone(subvolume, clone)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()

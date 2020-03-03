@@ -255,8 +255,8 @@ Note that unprotecting a snapshot would fail if there are pending or in progress
 only unprotected snapshots can be removed. This guarantees that a snapshot cannot be deleted when clones are pending
 (or in progress).
 
-.. note:: Cloning only synchronizes directories, regular files and symbolic links. Also, certain attributes such as
-          inode timestamps (for supported file types) and ownership (for symbolic links) are not synchronized.
+.. note:: Cloning only synchronizes directories, regular files and symbolic links. Also, inode timestamps (access and
+          modification times) are synchronized upto seconds granularity.
 
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi

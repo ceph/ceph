@@ -85,7 +85,7 @@ def list_one_entry_at_a_time(fs, dirpath):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
-def copy_file(fs, src, dst, mode, uid, gid):
+def copy_file(fs, src, dst, mode):
     """
     Copy a regular file from @src to @dst. @dst is overwritten if it exists.
     """
@@ -93,7 +93,6 @@ def copy_file(fs, src, dst, mode, uid, gid):
     try:
         src_fd = fs.open(src, os.O_RDONLY);
         dst_fd = fs.open(dst, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, mode)
-        fs.chown(dst, uid, gid)
     except cephfs.Error as e:
         if src_fd is not None:
             fs.close(src_fd)
