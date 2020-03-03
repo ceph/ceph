@@ -67,7 +67,7 @@ class JobThread(threading.Thread):
         self.cancel_event.set()
 
     def should_cancel(self):
-        return self.cancel_event.isSet()
+        return self.cancel_event.is_set()
 
     def reset_cancel(self):
         self.cancel_event.clear()
