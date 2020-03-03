@@ -35,7 +35,7 @@ class CloneIndex(Index):
         except (VolumeException, cephfs.Error) as e:
             if isinstance(e, cephfs.Error):
                 e = IndexException(-e.args[0], e.args[1])
-            elif isinstance(VolumeException, e):
+            elif isinstance(e, VolumeException):
                 e = IndexException(e.errno, e.error_str)
             raise e
 
