@@ -854,7 +854,7 @@ class LocalFuseMount(FuseMount):
             prefix += ["--client_mountpoint={0}".format(mount_path)]
 
         if mount_fs_name is not None:
-            prefix += ["--client_mds_namespace={0}".format(mount_fs_name)]
+            prefix += ["--client_fs={0}".format(mount_fs_name)]
 
         prefix += mount_options;
 
