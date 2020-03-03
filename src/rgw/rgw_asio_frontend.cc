@@ -14,6 +14,7 @@
 
 #include "common/async/shared_mutex.h"
 #include "common/errno.h"
+#include "common/strtol.h"
 
 #include "rgw_asio_client.h"
 #include "rgw_asio_frontend.h"
@@ -466,7 +467,17 @@ int AsioFrontend::init()
       return -ec.value();
     }
 
-    l.acceptor.listen(boost::asio::socket_base::max_connections);
+    auto it = config.find("max_connection_backlog");
+    auto max_connection_backlog = boost::asio::socket_base::max_listen_connections;
+    if (it != config.end()) {
+      string err;
+      max_connection_backlog = strict_strtol(it->second.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldout(ctx(), 0) << "WARNING: invalid value for max_connection_backlog=" << it->second << dendl;
+        max_connection_backlog = boost::asio::socket_base::max_listen_connections;
+      }
+    }
+    l.acceptor.listen(max_connection_backlog);
     l.acceptor.async_accept(l.socket,
                             [this, &l] (boost::system::error_code ec) {
                               accept(l, ec);
