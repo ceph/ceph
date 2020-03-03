@@ -3942,7 +3942,7 @@ public:
 
 typedef ::testing::Types<DiffIterateParams<false>,
                          DiffIterateParams<true> > DiffIterateTypes;
-TYPED_TEST_CASE(DiffIterateTest, DiffIterateTypes);
+TYPED_TEST_SUITE(DiffIterateTest, DiffIterateTypes);
 
 TYPED_TEST(DiffIterateTest, DiffIterate)
 {
