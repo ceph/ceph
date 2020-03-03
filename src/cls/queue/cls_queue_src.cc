@@ -38,7 +38,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
   uint64_t chunk_size = 1024, start_offset = 0;
 
   bufferlist bl_head;
-  int ret = cls_cxx_read(hctx, start_offset, chunk_size, &bl_head);
+  const auto  ret = cls_cxx_read(hctx, start_offset, chunk_size, &bl_head);
   if (ret < 0) {
     CLS_LOG(5, "ERROR: queue_read_head: failed to read head\n");
     return ret;
@@ -67,12 +67,12 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
     return -EINVAL;
   }
 
-  uint8_t decoded_head_size = sizeof(uint64_t) + sizeof(uint16_t);
+  constexpr auto decoded_head_size = sizeof(queue_head_start) + sizeof(encoded_len);
   if (encoded_len > (chunk_size - decoded_head_size)) {
+    start_offset = chunk_size;
     chunk_size = (encoded_len - (chunk_size - decoded_head_size));
-    start_offset += decoded_head_size;
     bufferlist bl_remaining_head;
-    int ret = cls_cxx_read2(hctx, start_offset, chunk_size, &bl_remaining_head, CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL);
+    const auto ret = cls_cxx_read2(hctx, start_offset, chunk_size, &bl_remaining_head, CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL);
     if (ret < 0) {
       CLS_LOG(5, "ERROR: queue_read_head: failed to read remaining part of head\n");
       return ret;
