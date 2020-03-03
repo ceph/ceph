@@ -89,6 +89,7 @@ class ConnectionPool(object):
 
         def disconnect(self):
             try:
+                assert self.fs
                 assert self.ops_in_progress == 0
                 log.info("disconnecting from cephfs '{0}'".format(self.fs_name))
                 addrs = self.fs.get_addrs()
@@ -100,6 +101,7 @@ class ConnectionPool(object):
                 raise
 
         def abort(self):
+            assert self.fs
             assert self.ops_in_progress == 0
             log.info("aborting connection from cephfs '{0}'".format(self.fs_name))
             self.fs.abort_conn()
