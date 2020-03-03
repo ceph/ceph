@@ -2149,27 +2149,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         service_name = spec.service_name()
         self.log.debug('Applying service %s spec' % service_name)
         daemons = self.cache.get_daemons_by_service(service_name)
-        spec = HostAssignment(
+        hosts = HostAssignment(
             spec=spec,
             get_hosts_func=self._get_hosts,
-            get_daemons_func=self.cache.get_daemons_by_service).load()
-        if len(daemons) > spec.placement.count:
+            get_daemons_func=self.cache.get_daemons_by_service).place()
+        count = len(hosts)
+        if len(daemons) > count:
             # remove some
-            to_remove = len(daemons) - spec.placement.count
+            to_remove = len(daemons) - count
             args = []
             for d in daemons[0:to_remove]:
                 args.append(
                     ('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname)
                 )
             return self._remove_daemon(args)
-        elif len(daemons) < spec.placement.count:
+        elif len(daemons) < count:
             # add some
-            spec.placement.count -= len(daemons)
+            count -= len(daemons)
             hosts_with_daemons = {d.hostname for d in daemons}
             hosts_without_daemons = {p for p in spec.placement.hosts
                                      if p.hostname not in hosts_with_daemons}
-            spec.placement.hosts = hosts_without_daemons
             return self._create_daemons(daemon_type, spec, daemons,
+                                        hosts_without_daemons, count,
                                         create_func, config_func)
         return trivial_result([])
 
@@ -2206,23 +2207,24 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug('_add_daemon %s spec %s' % (daemon_type, spec.placement))
         if not spec.placement.hosts:
             raise OrchestratorError('must specify host(s) to deploy on')
-        if not spec.placement.count:
-            spec.placement.count = len(spec.placement.hosts)
+        count = spec.placement.count or len(spec.placement.hosts)
         daemons = self.cache.get_daemons_by_service(spec.service_name())
         return self._create_daemons(daemon_type, spec, daemons,
+                                    spec.placement.hosts, count,
                                     create_func, config_func)
 
     def _create_daemons(self, daemon_type, spec, daemons,
+                        hosts, count,
                         create_func, config_func=None):
-        if spec.placement.count > len(spec.placement.hosts):
+        if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
-                spec.placement.count, spec.placement.hosts))
+                count, hosts))
 
         if config_func:
             config_func(spec)
 
         args = [] # type: ignore
-        for host, network, name in spec.placement.hosts:
+        for host, network, name in hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              spec.service_id, name)
             self.log.debug('Placing %s.%s on host %s' % (
@@ -2965,17 +2967,15 @@ class HostAssignment(object):
         self.get_daemons_func = get_daemons_func
         self.service_name = spec.service_name()
 
-    def load(self):
-        # type: () -> orchestrator.ServiceSpec
+    def place(self):
+        # type: () -> List[orchestrator.HostPlacementSpec]
         """
         Load hosts into the spec.placement.hosts container.
         """
         # respect any explicit host list
         if self.spec.placement.hosts and not self.spec.placement.count:
-            logger.info('Provided hosts: %s' % self.spec.placement.hosts)
-            if not self.spec.placement.count:
-                self.spec.placement.count = len(self.spec.placement.hosts)
-            return self.spec
+            logger.debug('Provided hosts: %s' % self.spec.placement.hosts)
+            return self.spec.placement.hosts
 
         # respect all_hosts=true
         if self.spec.placement.all_hosts:
@@ -2983,10 +2983,8 @@ class HostAssignment(object):
                 HostPlacementSpec(x, '', '')
                 for x in self.get_hosts_func(None)
             ]
-            logger.info('All hosts: {}'.format(candidates))
-            self.spec.placement.set_hosts(candidates)
-            self.spec.placement.count = len(self.spec.placement.hosts)
-            return self.spec
+            logger.debug('All hosts: {}'.format(candidates))
+            return candidates
 
         if self.spec.placement.hosts and \
            self.spec.placement.count and \
@@ -2998,11 +2996,8 @@ class HostAssignment(object):
             hosts = self.pick_candidates()
 
         if not self.spec.placement.count:
-            logger.info('Labeled hosts: {}'.format(hosts))
-            self.spec.placement.set_hosts(hosts)
-            if not self.spec.placement.count:
-                self.spec.placement.count = len(self.spec.placement.hosts)
-            return self.spec
+            logger.debug('Labeled hosts: {}'.format(hosts))
+            return hosts
 
         # we need to select a subset of the candidates
 
@@ -3021,22 +3016,16 @@ class HostAssignment(object):
             chosen = chosen + self.scheduler.place(
                 existing,
                 self.spec.placement.count - len(chosen))
-            logger.info('Hosts with existing daemons: {}'.format(chosen))
-            self.spec.placement.set_hosts(chosen)
-            if not self.spec.placement.count:
-                self.spec.placement.count = len(self.spec.placement.hosts)
-            return self.spec
+            logger.debug('Hosts with existing daemons: {}'.format(chosen))
+            return chosen
 
         need = self.spec.placement.count - len(existing + chosen)
         others = [hs for hs in hosts
                   if hs.hostname not in hosts_with_daemons]
         chosen = chosen + self.scheduler.place(others, need)
-        self.spec.placement.set_hosts(existing + chosen)
-        logger.info('Combine hosts with existing daemons %s + new hosts %s' % (
+        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
             existing, chosen))
-        if not self.spec.placement.count:
-            self.spec.placement.count = len(self.spec.placement.hosts)
-        return self.spec
+        return existing + chosen
 
     def pick_candidates(self):
         # type: () -> List[orchestrator.HostPlacementSpec]
@@ -3050,7 +3039,7 @@ class HostAssignment(object):
                 HostPlacementSpec(x, '', '')
                 for x in self.get_hosts_func(self.spec.placement.label)
             ]
-            logger.info('Candidate hosts with label %s: %s' % (
+            logger.debug('Candidate hosts with label %s: %s' % (
                 self.spec.placement.label, candidates))
             return candidates
 
@@ -3060,7 +3049,7 @@ class HostAssignment(object):
             for x in self.get_hosts_func(self.service_name)
         ]
         if candidates:
-            logger.info('Candidate hosts with service label %s: %s' % (
+            logger.debug('Candidate hosts with service label %s: %s' % (
                 self.service_name, candidates))
             return candidates
 
@@ -3078,7 +3067,7 @@ class HostAssignment(object):
                                "unlabeled hosts.".format(
                                    self.spec.placement.count))
             else:
-                logger.info('Candidate hosts with service type label: %s' % (
+                logger.debug('Candidate hosts with service type label: %s' % (
                     candidates))
                 return candidates
 
@@ -3092,5 +3081,5 @@ class HostAssignment(object):
             HostPlacementSpec(x, '', '')
             for x in self.get_hosts_func(None)
         ]
-        logger.info('Candidate hosts (all): {}'.format(candidates))
+        logger.debug('Candidate hosts (all): {}'.format(candidates))
         return candidates
