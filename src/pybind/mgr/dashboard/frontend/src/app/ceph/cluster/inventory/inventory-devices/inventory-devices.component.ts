@@ -1,11 +1,21 @@
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnDestroy,
+  OnInit,
+  Output,
+  ViewChild
+} from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { Subscription } from 'rxjs';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
+import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
@@ -24,7 +34,10 @@ import { InventoryDevice } from './inventory-device.model';
   templateUrl: './inventory-devices.component.html',
   styleUrls: ['./inventory-devices.component.scss']
 })
-export class InventoryDevicesComponent implements OnInit, OnChanges {
+export class InventoryDevicesComponent implements OnInit, OnDestroy {
+  @ViewChild(TableComponent, { static: true })
+  table: TableComponent;
+
   // Devices
   @Input() devices: InventoryDevice[] = [];
 
@@ -46,11 +59,14 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
 
   @Output() filterChange = new EventEmitter<CdTableColumnFiltersChange>();
 
+  @Output() fetchInventory = new EventEmitter();
+
   icons = Icons;
   columns: Array<CdTableColumn> = [];
   selection: CdTableSelection = new CdTableSelection();
   permission: Permission;
   tableActions: CdTableAction[];
+  fetchInventorySub: Subscription;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -141,10 +157,18 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
         col.filterable = true;
       }
     });
+
+    if (this.fetchInventory.observers.length > 0) {
+      this.fetchInventorySub = this.table.fetchData.subscribe(() => {
+        this.fetchInventory.emit();
+      });
+    }
   }
 
-  ngOnChanges() {
-    this.devices = [...this.devices];
+  ngOnDestroy() {
+    if (this.fetchInventorySub) {
+      this.fetchInventorySub.unsubscribe();
+    }
   }
 
   onColumnFiltersChanged(event: CdTableColumnFiltersChange) {
