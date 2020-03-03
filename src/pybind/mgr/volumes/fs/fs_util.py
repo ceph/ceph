@@ -34,7 +34,9 @@ def remove_filesystem(mgr, fs_name):
     return mgr.mon_command(command)
 
 def create_mds(mgr, fs_name, placement):
-    spec = orchestrator.ServiceSpec(fs_name, orchestrator.PlacementSpec.from_strings(placement.split()))
+    spec = orchestrator.ServiceSpec(service_type='mds',
+                                    service_id=fs_name,
+                                    placement=orchestrator.PlacementSpec.from_strings(placement.split()))
     try:
         completion = mgr.apply_mds(spec)
         mgr._orchestrator_wait([completion])
