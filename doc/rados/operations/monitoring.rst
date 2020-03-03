@@ -19,7 +19,7 @@ with no arguments.  For example::
 	ceph> health
 	ceph> status
 	ceph> quorum_status
-	ceph> mon_status
+	ceph> mon stat
 
 Non-default paths
 -----------------
