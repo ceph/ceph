@@ -3190,23 +3190,39 @@ bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
 
 CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 {
+  string straydname;
+  in->name_stray_dentry(straydname);
+
   CDentry *straydn = mdr->straydn;
   if (straydn) {
-    string straydname;
-    in->name_stray_dentry(straydname);
     ceph_assert(straydn->get_name() == straydname);
     return straydn;
   }
-
   CDir *straydir = mdcache->get_stray_dir(in);
 
   if (!mdr->client_request->is_replay() &&
       !check_fragment_space(mdr, straydir))
-    return NULL;
+    return nullptr;
 
-  straydn = mdcache->get_or_create_stray_dentry(in);
+  straydn = straydir->lookup(straydname);
+  if (!straydn) {
+    if (straydir->is_frozen_dir()) {
+      dout(10) << __func__ << ": " << *straydir << " is frozen, waiting" << dendl;
+      mds->locker->drop_locks(mdr.get());
+      mdr->drop_local_auth_pins();
+      straydir->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+      return nullptr;
+    }
+    straydn = straydir->add_null_dentry(straydname);
+    straydn->mark_new();
+  } else {
+    ceph_assert(straydn->get_projected_linkage()->is_null());
+  }
+
+  straydn->state_set(CDentry::STATE_STRAY);
   mdr->straydn = straydn;
   mdr->pin(straydn);
+
   return straydn;
 }
 

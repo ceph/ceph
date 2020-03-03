@@ -760,7 +760,6 @@ class MDCache {
 
   void open_foreign_mdsdir(inodeno_t ino, MDSContext *c);
   CDir *get_stray_dir(CInode *in);
-  CDentry *get_or_create_stray_dentry(CInode *in);
 
   /**
    * Find the given dentry (and whether it exists or not), its ancestors,

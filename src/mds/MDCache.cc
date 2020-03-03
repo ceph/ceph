@@ -794,25 +794,6 @@ CDir *MDCache::get_stray_dir(CInode *in)
   return straydir;
 }
 
-CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
-{
-  CDir *straydir = get_stray_dir(in);
-  string straydname;
-  in->name_stray_dentry(straydname);
-  CDentry *straydn = straydir->lookup(straydname);
-  if (!straydn) {
-    straydn = straydir->add_null_dentry(straydname);
-    straydn->mark_new();
-  } else {
-    ceph_assert(straydn->get_projected_linkage()->is_null());
-  }
-
-  straydn->state_set(CDentry::STATE_STRAY);
-  return straydn;
-}
-
-
-
 MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 {
   // inode?
@@ -10813,6 +10794,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
  
 void MDCache::encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
 {
+  ceph_assert(straydn->get_num_auth_pins());
   ENCODE_START(1, 1, bl);
   uint64_t features = mds->mdsmap->get_up_features();
   encode_replica_inode(get_myin(), who, bl, features);
