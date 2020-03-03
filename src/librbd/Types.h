@@ -94,6 +94,11 @@ enum {
   OPEN_FLAG_IGNORE_MIGRATING = 1 << 2
 };
 
+enum ImageReadOnlyFlag {
+  IMAGE_READ_ONLY_FLAG_USER        = 1 << 0,
+  IMAGE_READ_ONLY_FLAG_NON_PRIMARY = 1 << 1,
+};
+
 struct MigrationInfo {
   int64_t pool_id = -1;
   std::string pool_namespace;

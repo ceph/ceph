@@ -100,6 +100,7 @@ public:
       snap_id(CEPH_NOSNAP),
       snap_exists(true),
       read_only(ro),
+      read_only_flags(ro ? IMAGE_READ_ONLY_FLAG_USER : 0U),
       exclusive_locked(false),
       name(image_name),
       image_watcher(NULL),

@@ -113,7 +113,7 @@ Context *RefreshRequest<I>::handle_get_migration_header(int *result) {
 
   switch(m_migration_spec.header_type) {
   case cls::rbd::MIGRATION_HEADER_TYPE_SRC:
-    if (!m_image_ctx.read_only) {
+    if (!m_read_only) {
       lderr(cct) << "image being migrated" << dendl;
       *result = -EROFS;
       return m_on_finish;
@@ -191,6 +191,12 @@ Context *RefreshRequest<I>::handle_v1_read_header(int *result) {
       *result = -ENXIO;
       return m_on_finish;
     }
+  }
+
+  {
+    std::shared_lock image_locker{m_image_ctx.image_lock};
+    m_read_only = m_image_ctx.read_only;
+    m_read_only_flags = m_image_ctx.read_only_flags;
   }
 
   memcpy(&v1_header, m_out_bl.c_str(), sizeof(v1_header));
@@ -332,9 +338,14 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
   {
     std::shared_lock image_locker{m_image_ctx.image_lock};
     snap_id = m_image_ctx.snap_id;
+    m_read_only = m_image_ctx.read_only;
+    m_read_only_flags = m_image_ctx.read_only_flags;
   }
 
-  bool read_only = m_image_ctx.read_only || snap_id != CEPH_NOSNAP;
+  // mask out the non-primary read-only flag since its state can change
+  bool read_only = (
+    ((m_read_only_flags & ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY) != 0) ||
+    (snap_id != CEPH_NOSNAP));
   librados::ObjectReadOperation op;
   cls_client::get_size_start(&op, CEPH_NOSNAP);
   cls_client::get_features_start(&op, read_only);
@@ -410,6 +421,21 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
     m_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
     m_incomplete_update = true;
   }
+
+  if (((m_incompatible_features & RBD_FEATURE_NON_PRIMARY) != 0U) &&
+      ((m_read_only_flags & IMAGE_READ_ONLY_FLAG_NON_PRIMARY) == 0U) &&
+      ((m_image_ctx.read_only_mask & IMAGE_READ_ONLY_FLAG_NON_PRIMARY) != 0U)) {
+    // implies we opened a non-primary image in R/W mode
+    ldout(cct, 5) << "adding non-primary read-only image flag" << dendl;
+    m_read_only_flags |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  } else if ((((m_incompatible_features & RBD_FEATURE_NON_PRIMARY) == 0U) ||
+              ((m_image_ctx.read_only_mask &
+                  IMAGE_READ_ONLY_FLAG_NON_PRIMARY) == 0U)) &&
+             ((m_read_only_flags & IMAGE_READ_ONLY_FLAG_NON_PRIMARY) != 0U)) {
+    ldout(cct, 5) << "removing non-primary read-only image flag" << dendl;
+    m_read_only_flags &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  }
+  m_read_only = (m_read_only_flags != 0U);
 
   send_v2_get_parent();
   return nullptr;
@@ -804,7 +830,7 @@ Context *RefreshRequest<I>::handle_v2_refresh_parent(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_init_exclusive_lock() {
   if ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0 ||
-      m_image_ctx.read_only || !m_image_ctx.snap_name.empty() ||
+      m_read_only || !m_image_ctx.snap_name.empty() ||
       m_image_ctx.exclusive_lock != nullptr) {
     send_v2_open_object_map();
     return;
@@ -846,7 +872,7 @@ template <typename I>
 void RefreshRequest<I>::send_v2_open_journal() {
   bool journal_disabled = (
     (m_features & RBD_FEATURE_JOURNALING) == 0 ||
-     m_image_ctx.read_only ||
+     m_read_only ||
      !m_image_ctx.snap_name.empty() ||
      m_image_ctx.journal != nullptr ||
      m_image_ctx.exclusive_lock == nullptr ||
@@ -948,7 +974,7 @@ void RefreshRequest<I>::send_v2_open_object_map() {
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == 0 ||
       m_image_ctx.object_map != nullptr ||
       (m_image_ctx.snap_name.empty() &&
-       (m_image_ctx.read_only ||
+       (m_read_only ||
         m_image_ctx.exclusive_lock == nullptr ||
         !m_image_ctx.exclusive_lock->is_lock_owner()))) {
     send_v2_open_journal();
@@ -1234,6 +1260,8 @@ void RefreshRequest<I>::apply() {
 
   std::scoped_lock locker{m_image_ctx.owner_lock, m_image_ctx.image_lock};
 
+  m_image_ctx.read_only_flags = m_read_only_flags;
+  m_image_ctx.read_only = m_read_only;
   m_image_ctx.size = m_size;
   m_image_ctx.lockers = m_lockers;
   m_image_ctx.lock_tag = m_lock_tag;
