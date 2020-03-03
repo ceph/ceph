@@ -217,6 +217,14 @@ class NFSGanesha(object):
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha'
         return mounts
 
+    @staticmethod
+    def get_container_envs():
+        # type: () -> List[str]
+        envs = [
+            'CEPH_CONF=%s' % ('/etc/ceph/ceph.conf')
+        ]
+        return envs
+
     def validate(self):
         # type () -> None
         if not is_fsid(self.fsid):
@@ -286,6 +294,7 @@ class NFSGanesha(object):
 
         data_dir = get_data_dir(self.fsid, self.daemon_type, self.daemon_id)
         volume_mounts = self.get_container_mounts(data_dir)
+        envs = self.get_container_envs()
 
         logger.info('Creating RADOS grace for action: %s' % (action))
         c = CephContainer(
@@ -293,7 +302,8 @@ class NFSGanesha(object):
             entrypoint=entrypoint,
             args=args,
             volume_mounts=volume_mounts,
-            cname=self.get_container_name(desc='grace-%s' % (action))
+            cname=self.get_container_name(desc='grace-%s' % (action)),
+            envs=envs
         )
         return c
 
@@ -1419,6 +1429,10 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
     elif daemon_type in Ceph.daemons:
         ceph_args = ['-n', name, '-f']
 
+    envs=[] # type: List[str]
+    if daemon_type == NFSGanesha.daemon_type:
+        envs.extend(NFSGanesha.get_container_envs())
+
     return CephContainer(
         image=args.image,
         entrypoint=entrypoint,
@@ -1426,6 +1440,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
+        envs=envs,
         privileged=privileged,
     )
 
