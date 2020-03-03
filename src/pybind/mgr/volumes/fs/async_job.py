@@ -25,6 +25,7 @@ class JobThread(threading.Thread):
     def run(self):
         retries = 0
         thread_id = threading.currentThread()
+        assert isinstance(thread_id, JobThread)
         thread_name = thread_id.getName()
 
         while retries < JobThread.MAX_RETRIES_ON_EXCEPTION:
