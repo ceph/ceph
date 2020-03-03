@@ -55,11 +55,11 @@ root of CephFS on your local FS::
     ceph-fuse --id foo -r /path/to/dir /mnt/mycephfs
 
 If you have more than one FS on your Ceph cluster, use the option
-``--client_mds_namespace`` to mount the non-default FS::
+``--client_fs`` to mount the non-default FS::
 
-    ceph-fuse --id foo --client_mds_namespace mycephfs2 /mnt/mycephfs2
+    ceph-fuse --id foo --client_fs mycephfs2 /mnt/mycephfs2
 
-You may also add a ``client_mds_namespace`` setting to your ``ceph.conf``
+You may also add a ``client_fs`` setting to your ``ceph.conf``
 
 Unmounting CephFS
 =================

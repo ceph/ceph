@@ -257,8 +257,8 @@ int ceph_init(struct ceph_mount_info *cmount);
  *
  * An error will be returned if this libcephfs instance is already
  * mounted. This function is an alternative to setting the global
- * client_mds_namespace setting.  Using this function enables multiple
- * libcephfs instances in the same process to mount different filesystems.
+ * client_fs setting.  Using this function enables multiple libcephfs
+ * instances in the same process to mount different filesystems.
  *
  * The filesystem name is *not* validated in this function.  That happens
  * during mount(), where an ENOENT error will result if a non-existent

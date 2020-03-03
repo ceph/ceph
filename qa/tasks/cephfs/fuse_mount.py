@@ -68,7 +68,7 @@ class FuseMount(CephFSMount):
             fuse_cmd += ["--client_mountpoint={0}".format(mount_path)]
 
         if mount_fs_name is not None:
-            fuse_cmd += ["--client_mds_namespace={0}".format(mount_fs_name)]
+            fuse_cmd += ["--client_fs={0}".format(mount_fs_name)]
 
         fuse_cmd += mount_options
 
