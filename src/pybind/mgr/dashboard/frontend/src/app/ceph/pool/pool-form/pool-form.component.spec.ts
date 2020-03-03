@@ -500,9 +500,13 @@ describe('PoolFormComponent', () => {
       });
 
       it('disables rule field if only one rule exists which is used in the disabled field', () => {
-        formHelper.setValue('poolType', 'erasure');
+        infoReturn.crush_rules_replicated = [
+          createCrushRule({ id: 0, min: 2, max: 4, name: 'rep1', type: 'replicated' })
+        ];
+        setUpPoolComponent();
+        formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(component.info.crush_rules_erasure[0]);
+        expect(control.value).toEqual(component.info.crush_rules_replicated[0]);
         expect(control.disabled).toBe(true);
       });
 
@@ -513,15 +517,14 @@ describe('PoolFormComponent', () => {
         expect(control.disabled).toBe(false);
       });
 
-      it('changing between both types will not leave crushRule in a bad state', () => {
-        formHelper.setValue('poolType', 'erasure');
+      it('changing between both pool types will not forget the crush rule selection', () => {
         formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(null);
-        expect(control.disabled).toBe(false);
+        const currentRule = component.info.crush_rules_replicated[0];
+        control.setValue(currentRule);
         formHelper.setValue('poolType', 'erasure');
-        expect(control.value).toEqual(component.info.crush_rules_erasure[0]);
-        expect(control.disabled).toBe(true);
+        formHelper.setValue('poolType', 'replicated');
+        expect(control.value).toEqual(currentRule);
       });
     });
   });

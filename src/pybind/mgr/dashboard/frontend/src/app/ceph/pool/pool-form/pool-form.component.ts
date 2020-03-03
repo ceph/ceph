@@ -346,12 +346,14 @@ export class PoolFormComponent implements OnInit {
       return;
     }
     const control = this.form.get('crushRule');
-    if (rules.length === 1) {
-      control.setValue(rules[0]);
-      control.disable();
-    } else {
-      control.setValue(null);
-      control.enable();
+    if (this.isReplicated && !control.value) {
+      if (rules.length === 1) {
+        control.setValue(rules[0]);
+        control.disable();
+      } else {
+        control.setValue(null);
+        control.enable();
+      }
     }
     this.replicatedRuleChange();
     this.pgCalc();
