@@ -23,7 +23,7 @@ def get_trash_entry_for_volume(volume_client, volname, running_jobs):
                     return 0, None
                 raise ve
     except VolumeException as ve:
-        log.error("error fetching trash entry for volume '{0}' ({1})".format(volname), ve)
+        log.error("error fetching trash entry for volume '{0}' ({1})".format(volname, ve))
         return ve.errno, None
     return ret
 
