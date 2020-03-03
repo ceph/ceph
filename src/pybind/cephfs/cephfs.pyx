@@ -14,6 +14,7 @@ from datetime import datetime
 import errno
 import os
 import sys
+import time
 
 # Are we running Python 2.x
 if sys.version_info[0] < 3:
@@ -94,6 +95,16 @@ cdef extern from "time.h":
 
 cdef extern from "sys/types.h":
     ctypedef unsigned long mode_t
+
+cdef extern from "<utime.h>":
+    cdef struct utimbuf:
+        time_t actime
+        time_t modtime
+
+cdef extern from "sys/time.h":
+    cdef struct timeval:
+        long tv_sec
+        long tv_usec
 
 cdef extern from "cephfs/ceph_statx.h":
     cdef struct statx "ceph_statx":
@@ -178,9 +189,16 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
+    int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
+    int ceph_utime(ceph_mount_info *cmount, const char *path, utimbuf *buf)
+    int ceph_futime(ceph_mount_info *cmount, int fd, utimbuf *buf)
+    int ceph_utimes(ceph_mount_info *cmount, const char *path, timeval times[2])
+    int ceph_lutimes(ceph_mount_info *cmount, const char *path, timeval times[2])
+    int ceph_futimes(ceph_mount_info *cmount, int fd, timeval times[2])
+    int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2])
 
 
 class Error(Exception):
@@ -414,6 +432,21 @@ def decode_cstr(val, encoding="utf-8"):
 
     return val.decode(encoding)
 
+cdef timeval to_timeval(t):
+    """
+    return timeval equivalent from time
+    """
+    tt = int(t)
+    cdef timeval buf = timeval(tt, (t - tt) * 1000000)
+    return buf
+
+cdef timespec to_timespec(t):
+    """
+    return timespec equivalent from time
+    """
+    tt = int(t)
+    cdef timespec buf = timespec(tt, (t - tt) * 1000000000)
+    return buf
 
 cdef char* opt_str(s) except? NULL:
     if s is None:
@@ -892,12 +925,14 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
-    def chown(self, path, uid, gid):
+    def chown(self, path, uid, gid, follow_symlink=True):
         """
         Change directory ownership
         :param path: the path of the directory to change.
         :param uid: the uid to set
         :param gid: the gid to set
+        :param follow_symlink: perform the operation on the target file if @path
+                               is a symbolic link (default)
         """
         self.require_state("mounted")
         path = cstr(path, 'path')
@@ -910,10 +945,23 @@ cdef class LibCephFS(object):
             char* _path = path
             int _uid = uid
             int _gid = gid
-        with nogil:
-            ret = ceph_chown(self.cluster, _path, _uid, _gid)
+        if follow_symlink:
+            with nogil:
+                ret = ceph_chown(self.cluster, _path, _uid, _gid)
+        else:
+            with nogil:
+                ret = ceph_lchown(self.cluster, _path, _uid, _gid)
         if ret < 0:
             raise make_ex(ret, "error in chown {}".format(path.decode('utf-8')))
+
+    def lchown(self, path, uid, gid):
+        """
+        Change ownership of a symbolic link
+        :param path: the path of the symbolic link to change.
+        :param uid: the uid to set
+        :param gid: the gid to set
+        """
+        self.chown(path, uid, gid, follow_symlink=False)
 
     def mkdirs(self, path, mode):
         """
@@ -1541,3 +1589,172 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in lseek")
 
         return ret      
+
+    def utime(self, path, times=None):
+        """
+        Set access and modification time for path
+
+        :param path: file path for which timestamps have to be changed
+        :param times: if times is not None, it must be a tuple (atime, mtime)
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if times:
+            if not isinstance(times, tuple):
+                raise TypeError('times must be a tuple')
+            if not isinstance(times[0], int):
+                raise TypeError('atime must be an int')
+            if not isinstance(times[1], int):
+                raise TypeError('mtime must be an int')
+        actime = modtime = int(time.time())
+        if times:
+            actime = times[0]
+            modtime = times[1]
+
+        cdef:
+            char *pth = path
+            utimbuf buf = utimbuf(actime, modtime)
+        with nogil:
+            ret = ceph_utime(self.cluster, pth, &buf)
+        if ret < 0:
+            raise make_ex(ret, "error in utime {}".format(path.decode('utf-8')))
+
+    def futime(self, fd, times=None):
+        """
+        Set access and modification time for a file pointed by descriptor
+
+        :param fd: file descriptor of the open file
+        :param times: if times is not None, it must be a tuple (atime, mtime)
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if times:
+            if not isinstance(times, tuple):
+                raise TypeError('times must be a tuple')
+            if not isinstance(times[0], int):
+                raise TypeError('atime must be an int')
+            if not isinstance(times[1], int):
+                raise TypeError('mtime must be an int')
+        actime = modtime = int(time.time())
+        if times:
+            actime = times[0]
+            modtime = times[1]
+
+        cdef:
+            int _fd = fd
+            utimbuf buf = utimbuf(actime, modtime)
+        with nogil:
+            ret = ceph_futime(self.cluster, _fd, &buf)
+        if ret < 0:
+            raise make_ex(ret, "error in futime")
+
+    def utimes(self, path, times=None, follow_symlink=True):
+        """
+        Set access and modification time for path
+
+        :param path: file path for which timestamps have to be changed
+        :param times: if times is not None, it must be a tuple (atime, mtime)
+        :param follow_symlink: perform the operation on the target file if @path
+                               is a symbolic link (default)
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if times:
+            if not isinstance(times, tuple):
+                raise TypeError('times must be a tuple')
+            if not isinstance(times[0], (int, float)):
+                raise TypeError('atime must be an int or a float')
+            if not isinstance(times[1], (int, float)):
+                raise TypeError('mtime must be an int or a float')
+        actime = modtime = time.time()
+        if times:
+            actime = float(times[0])
+            modtime = float(times[1])
+
+        cdef:
+            char *pth = path
+            timeval *buf = [to_timeval(actime), to_timeval(modtime)]
+        if follow_symlink:
+            with nogil:
+                ret = ceph_utimes(self.cluster, pth, buf)
+        else:
+            with nogil:
+                ret = ceph_lutimes(self.cluster, pth, buf)
+        if ret < 0:
+            raise make_ex(ret, "error in utimes {}".format(path.decode('utf-8')))
+
+    def lutimes(self, path, times=None):
+        """
+        Set access and modification time for a file. If the file is a symbolic
+        link do not follow to the target.
+
+        :param path: file path for which timestamps have to be changed
+        :param times: if times is not None, it must be a tuple (atime, mtime)
+        """
+        self.utimes(path, times=times, follow_symlink=False)
+
+    def futimes(self, fd, times=None):
+        """
+        Set access and modification time for a file pointer by descriptor
+
+        :param fd: file descriptor of the open file
+        :param times: if times is not None, it must be a tuple (atime, mtime)
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if times:
+            if not isinstance(times, tuple):
+                raise TypeError('times must be a tuple')
+            if not isinstance(times[0], (int, float)):
+                raise TypeError('atime must be an int or a float')
+            if not isinstance(times[1], (int, float)):
+                raise TypeError('mtime must be an int or a float')
+        actime = modtime = time.time()
+        if times:
+            actime = float(times[0])
+            modtime = float(times[1])
+
+        cdef:
+            int _fd = fd
+            timeval *buf = [to_timeval(actime), to_timeval(modtime)]
+        with nogil:
+                ret = ceph_futimes(self.cluster, _fd, buf)
+        if ret < 0:
+            raise make_ex(ret, "error in futimes")
+
+    def futimens(self, fd, times=None):
+        """
+        Set access and modification time for a file pointer by descriptor
+
+        :param fd: file descriptor of the open file
+        :param times: if times is not None, it must be a tuple (atime, mtime)
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if times:
+            if not isinstance(times, tuple):
+                raise TypeError('times must be a tuple')
+            if not isinstance(times[0], (int, float)):
+                raise TypeError('atime must be an int or a float')
+            if not isinstance(times[1], (int, float)):
+                raise TypeError('mtime must be an int or a float')
+        actime = modtime = time.time()
+        if times:
+            actime = float(times[0])
+            modtime = float(times[1])
+
+        cdef:
+            int _fd = fd
+            timespec *buf = [to_timespec(actime), to_timespec(modtime)]
+        with nogil:
+                ret = ceph_futimens(self.cluster, _fd, buf)
+        if ret < 0:
+            raise make_ex(ret, "error in futimens")
