@@ -102,6 +102,8 @@ vstart_runner.py can take the following options -
 --teardown                  tears Ceph cluster down after test(s) has finished
                             runnng
 --kclient                   use the kernel cephfs client instead of FUSE
+--brxnet=<net/mask>         specify a new net/mask for the mount clients' network
+                            namespace container (Default: 192.168.0.0/16)
 
 .. note:: If using the FUSE client, ensure that the fuse package is installed
           and enabled on the system and that ``user_allow_other`` is added
