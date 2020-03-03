@@ -240,36 +240,6 @@ class TestCephadm(object):
                 assert r
 
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_rgw_update_fail(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-
-        with self._with_host(cephadm_module, 'host1'):
-            with self._with_host(cephadm_module, 'host2'):
-                ps = PlacementSpec(hosts=['host1'], count=1)
-                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone1', placement=ps))
-                [out] = wait(cephadm_module, c)
-                match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
-
-                ps = PlacementSpec(hosts=['host2'], count=1)
-                c = cephadm_module.add_rgw(RGWSpec('realm', 'zone2', placement=ps))
-                [out] = wait(cephadm_module, c)
-                match_glob(out, "Deployed rgw.realm.zone2.host2.* on host 'host2'")
-
-                c = cephadm_module.list_daemons()
-                r = wait(cephadm_module, c)
-                assert len(r) == 2
-
-                with pytest.raises(OrchestratorError):
-                    ps = PlacementSpec(hosts=['host1', 'host2'], count=3)
-                    r = cephadm_module._apply_service(RGWSpec('realm', 'zone1', placement=ps))
-                    assert r
-
-
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
