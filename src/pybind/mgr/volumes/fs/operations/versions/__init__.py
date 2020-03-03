@@ -32,7 +32,7 @@ class SubvolumeLoader(object):
                 self.max_version = cls.version()
                 self.versions[cls.version()] = cls
         if self.max_version == SubvolumeLoader.INVALID_VERSION:
-            raise VolumeException("no subvolume version available")
+            raise VolumeException(-errno.EINVAL, "no subvolume version available")
         log.info("max subvolume version is v{0}".format(self.max_version))
 
     def _get_subvolume_version(self, version):
