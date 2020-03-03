@@ -2078,6 +2078,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if reconfig:
             extra_args.append('--reconfig')
 
+        self.log.info('%s daemon %s on %s' % (
+            'Reconfiguring' if reconfig else 'Deploying',
+            name, host))
+
         out, err, code = self._run_cephadm(
             host, name, 'deploy',
             [
@@ -2111,6 +2115,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         args = ['--name', name]
         if force:
             args.extend(['--force'])
+        self.log.info('Removing daemon %s from %s' % (name, host))
         out, err, code = self._run_cephadm(
             host, name, 'rm-daemon', args)
         if not code:
