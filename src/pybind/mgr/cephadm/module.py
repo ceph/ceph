@@ -774,18 +774,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             for d in daemons:
                 if d.daemon_type != daemon_type:
                     continue
-                if not d.container_image_id:
-                    self.log.debug('daemon %s.%s image_id is not known' % (
-                        daemon_type, d.daemon_id))
-                    return None
                 if d.container_image_id == target_id:
                     self.log.debug('daemon %s.%s version correct' % (
                         daemon_type, d.daemon_id))
                     done += 1
                     continue
-                self.log.debug('daemon %s.%s version incorrect (%s, %s)' % (
+                self.log.debug('daemon %s.%s not correct (%s, %s, %s)' % (
                     daemon_type, d.daemon_id,
-                    d.container_image_id, d.version))
+                    d.container_image_name, d.container_image_id, d.version))
 
                 if daemon_type == 'mgr' and \
                    d.daemon_id == self.get_mgr_id():
