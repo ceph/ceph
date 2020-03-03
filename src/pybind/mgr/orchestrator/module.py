@@ -506,7 +506,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add mon',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Start monitor daemon(s)')
     def _daemon_add_mon(self, placement=None):
         placement = PlacementSpec.from_strings(placement)
@@ -521,7 +521,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add mgr',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Start rbd-mirror daemon(s)')
     def _daemon_add_mgr(self, placement=None):
         spec = ServiceSpec(
@@ -544,7 +544,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add rbd-mirror',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Start rbd-mirror daemon(s)')
     def _rbd_mirror_add(self, placement=None):
         spec = ServiceSpec(
@@ -559,7 +559,7 @@ Usage:
     @_cli_write_command(
         'orch daemon add mds',
         'name=fs_name,type=CephString '
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Start MDS daemon(s)')
     def _mds_add(self, fs_name, placement=None):
         spec = ServiceSpec(
@@ -575,7 +575,7 @@ Usage:
         'orch daemon add rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Start RGW daemon(s)')
     def _rgw_add(self, realm_name, zone_name, placement=None, inbuf=None):
         usage = """
@@ -605,7 +605,7 @@ Usage:
         "name=svc_arg,type=CephString "
         "name=pool,type=CephString "
         "name=namespace,type=CephString,req=false "
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Start NFS daemon(s)')
     def _nfs_add(self, svc_arg, pool, namespace=None, placement=None):
         spec = NFSServiceSpec(
@@ -622,7 +622,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add prometheus',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Add prometheus daemon(s)')
     def _daemon_add_prometheus(self, placement=None):
         spec = ServiceSpec(
@@ -635,7 +635,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add node-exporter',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Add node-exporter daemon(s)')
     def _daemon_add_node_exporter(self, placement=None):
         spec = ServiceSpec(
@@ -648,7 +648,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add crash',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Add node-exporter daemon(s)')
     def _daemon_add_crash(self, placement=None):
         spec = ServiceSpec(
@@ -661,10 +661,10 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add grafana',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Add grafana daemon(s)')
     def _daemon_add_grafana(self, placement=None):
-        # type: (Optional[List[str]]) -> HandleCommandResult
+        # type: (Optional[str]) -> HandleCommandResult
         spec = ServiceSpec(
             'grafana',
             placement=PlacementSpec.from_strings(placement),
@@ -675,10 +675,10 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add alertmanager',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Add alertmanager daemon(s)')
     def _daemon_add_alertmanager(self, placement=None):
-        # type: (Optional[List[str]]) -> HandleCommandResult
+        # type: (Optional[str]) -> HandleCommandResult
         spec = ServiceSpec(
             'alertmanager',
             placement=PlacementSpec.from_strings(placement),
@@ -751,7 +751,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply mgr',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Update the size or placement of managers')
     def _apply_mgr(self, placement=None):
         placement = PlacementSpec.from_strings(placement)
@@ -766,7 +766,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply mon',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Update the number of monitor instances')
     def _apply_mon(self, placement=None):
         placement = PlacementSpec.from_strings(placement)
@@ -782,7 +782,7 @@ Usage:
     @_cli_write_command(
         'orch apply mds',
         'name=fs_name,type=CephString '
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Update the number of MDS instances for the given fs_name')
     def _apply_mds(self, fs_name, placement=None):
         placement = PlacementSpec.from_strings(placement)
@@ -797,7 +797,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply rbd-mirror',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Update the number of rbd-mirror instances')
     def _apply_rbd_mirror(self, placement=None):
         spec = ServiceSpec(
@@ -813,7 +813,7 @@ Usage:
         'orch apply rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Update the number of RGW instances for the given zone')
     def _apply_rgw(self, zone_name, realm_name, placement=None):
         spec = RGWSpec(
@@ -829,7 +829,7 @@ Usage:
     @_cli_write_command(
         'orch apply nfs',
         "name=svc_id,type=CephString "
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Scale an NFS service')
     def _apply_nfs(self, svc_id, placement=None):
         spec = NFSServiceSpec(
@@ -842,7 +842,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply prometheus',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Scale prometheus service')
     def _apply_prometheus(self, placement=None):
         spec = ServiceSpec(
@@ -855,7 +855,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply grafana',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Scale grafana service')
     def _apply_grafana(self, placement=None):
         spec = ServiceSpec(
@@ -868,7 +868,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply alertmanager',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Scale alertmanager service')
     def _apply_alertmanager(self, placement=None):
         spec = ServiceSpec(
@@ -881,7 +881,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply node-exporter',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Update node_exporter service')
     def _apply_node_exporter(self, placement=None):
         spec = ServiceSpec(
@@ -894,7 +894,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply crash',
-        'name=placement,type=CephString,n=N,req=false',
+        'name=placement,type=CephString,req=false',
         'Update node_exporter service')
     def _apply_crash(self, placement=None):
         spec = ServiceSpec(
