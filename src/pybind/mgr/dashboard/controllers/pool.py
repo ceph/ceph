@@ -207,20 +207,23 @@ class Pool(RESTController):
             return all(o['osd_objectstore'] == 'bluestore'
                        for o in mgr.get('osd_metadata').values())
 
-        def compression_enum(conf_name):
+        def get_config_option_enum(conf_name):
             return [[v for v in o['enum_values'] if len(v) > 0]
                     for o in mgr.get('config_options')['options']
                     if o['name'] == conf_name][0]
 
+        mgr_config = mgr.get('config')
         result = {
             "pool_names": [p['pool_name'] for p in self._pool_list()],
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
             "is_all_bluestore": all_bluestore(),
             "osd_count": len(mgr.get('osd_map')['osds']),
-            "bluestore_compression_algorithm": mgr.get('config')['bluestore_compression_algorithm'],
-            "compression_algorithms": compression_enum('bluestore_compression_algorithm'),
-            "compression_modes": compression_enum('bluestore_compression_mode'),
+            "bluestore_compression_algorithm": mgr_config['bluestore_compression_algorithm'],
+            "compression_algorithms": get_config_option_enum('bluestore_compression_algorithm'),
+            "compression_modes": get_config_option_enum('bluestore_compression_mode'),
+            "pg_autoscale_default_mode": mgr_config['osd_pool_default_pg_autoscale_mode'],
+            "pg_autoscale_modes": get_config_option_enum('osd_pool_default_pg_autoscale_mode'),
         }
 
         if pool_name:
