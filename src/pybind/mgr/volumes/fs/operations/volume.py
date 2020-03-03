@@ -5,6 +5,7 @@ import sys
 
 from contextlib import contextmanager
 from threading import Lock, Condition
+from typing import no_type_check
 
 if sys.version_info >= (3, 3):
     from threading import Timer
@@ -109,6 +110,7 @@ class ConnectionPool(object):
         """
         recurring timer variant of Timer
         """
+        @no_type_check
         def run(self):
             try:
                 while not self.finished.is_set():
