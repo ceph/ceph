@@ -36,7 +36,6 @@ def get_next_clone_entry(volume_client, volname, running_jobs):
     except VolumeException as ve:
         log.error("error fetching clone entry for volume '{0}' ({1})".format(volname, ve))
         return ve.errno, None
-    return ret
 
 @contextmanager
 def open_at_volume(volume_client, volname, groupname, subvolname, need_complete=False, expected_types=[]):
