@@ -1934,9 +1934,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     continue
                 cmds.append((host, cmd))
 
-        return self._create_osd(cmds)
+        return self._create_osds(cmds)
 
     @async_map_completion
+    def _create_osds(self, host, cmd):
+        return self._create_osd(host, cmd)
+
     def _create_osd(self, host, cmd):
 
         self._require_hosts(host)
