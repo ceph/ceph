@@ -2242,9 +2242,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 daemon_id=daemon_id,
             )
             daemons.append(sd)
-        return create_func(args)
 
-    @async_map_completion
+        @async_map_completion
+        def create_func_map(*args):
+            return create_func(*args)
+
+        return create_func_map(args)
+
     def _create_mon(self, name, host, network):
         """
         Create a new monitor on the given host.
@@ -2276,7 +2280,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         orchestrator.servicespec_validate_hosts_have_network_spec(spec)
         return self._add_daemon('mon', spec, self._create_mon)
 
-    @async_map_completion
     def _create_mgr(self, mgr_id, host):
         """
         Create a new manager instance on a host.
@@ -2322,7 +2325,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': spec.service_id,
         })
 
-    @async_map_completion
     def _create_mds(self, mds_id, host):
         # get mgr. key
         ret, keyring, err = self.mon_command({
@@ -2352,7 +2354,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': spec.rgw_realm,
         })
 
-    @async_map_completion
     def _create_rgw(self, rgw_id, host):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
@@ -2369,7 +2370,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def add_rbd_mirror(self, spec):
         return self._add_daemon('rbd-mirror', spec, self._create_rbd_mirror)
 
-    @async_map_completion
     def _create_rbd_mirror(self, daemon_id, host):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
@@ -2586,7 +2586,6 @@ receivers:
     def add_prometheus(self, spec):
         return self._add_daemon('prometheus', spec, self._create_prometheus)
 
-    @async_map_completion
     def _create_prometheus(self, daemon_id, host):
         return self._create_daemon('prometheus', daemon_id, host)
 
@@ -2601,7 +2600,6 @@ receivers:
     def apply_node_exporter(self, spec):
         return self._apply(spec)
 
-    @async_map_completion
     def _create_node_exporter(self, daemon_id, host):
         return self._create_daemon('node-exporter', daemon_id, host)
 
@@ -2613,7 +2611,6 @@ receivers:
     def apply_crash(self, spec):
         return self._apply(spec)
 
-    @async_map_completion
     def _create_crash(self, daemon_id, host):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
@@ -2631,7 +2628,6 @@ receivers:
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
-    @async_map_completion
     def _create_grafana(self, daemon_id, host):
         return self._create_daemon('grafana', daemon_id, host)
 
@@ -2643,7 +2639,6 @@ receivers:
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
-    @async_map_completion
     def _create_alertmanager(self, daemon_id, host):
         return self._create_daemon('alertmanager', daemon_id, host)
 
