@@ -94,7 +94,7 @@ class AsyncJobs(object):
     def __init__(self, volume_client, name_pfx, nr_concurrent_jobs):
         self.vc = volume_client
         # queue of volumes for starting async jobs
-        self.q = deque()
+        self.q = deque() # type: deque
         # volume => job tracking
         self.jobs = {}
         # lock, cv for kickstarting jobs
