@@ -1312,8 +1312,8 @@ class PlacementSpec(object):
             raise OrchestratorValidationError("num/count must be > 1")
 
     @classmethod
-    def from_strings(cls, strings):
-        # type: (Optional[List[str]]) -> PlacementSpec
+    def from_strings(cls, arg):
+        # type: (Optional[str]) -> PlacementSpec
         """
         A single integer is parsed as a count:
         >>> PlacementSpec.from_strings('3'.split())
@@ -1333,7 +1333,25 @@ class PlacementSpec(object):
         >>> PlacementSpec.from_strings(None)
         PlacementSpec()
         """
-        strings = strings or []
+        if arg is None:
+            strings = []
+        elif isinstance(arg, str):
+            if ' ' in arg:
+                strings = arg.split(' ')
+            elif ';' in arg:
+                strings = arg.split(';')
+            elif ',' in arg and '[' not in arg:
+                # FIXME: this isn't quite right.  we want to avoid breaking
+                # a list of mons with addrvecs... so we're basically allowing
+                # , most of the time, except when addrvecs are used.  maybe
+                # ok?
+                strings = arg.split(',')
+            else:
+                strings = [arg]
+        elif isinstance(arg, list):
+            strings = arg
+        else:
+            raise OrchestratorValidationError('invalid placement %s' % arg)
 
         count = None
         if strings:
