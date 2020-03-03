@@ -1,3 +1,4 @@
+import errno
 import os
 
 from .template import GroupTemplate
