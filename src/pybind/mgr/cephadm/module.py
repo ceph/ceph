@@ -1600,6 +1600,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 continue
             sd = orchestrator.DaemonDescription()
             sd.last_refresh = datetime.datetime.utcnow()
+            for k in ['created', 'started', 'last_configured', 'last_deployed']:
+                v = d.get(k, None)
+                if v:
+                    setattr(sd, k, datetime.datetime.strptime(d[k], DATEFMT))
             sd.daemon_type = d['name'].split('.')[0]
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
             sd.hostname = host
