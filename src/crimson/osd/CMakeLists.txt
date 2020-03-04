@@ -19,6 +19,9 @@ add_executable(crimson-osd
   osd_operations/pg_advance_map.cc
   osd_operations/replicated_request.cc
   osd_operations/background_recovery.cc
+  pg_recovery.cc
+  recovery_backend.cc
+  replicated_recovery_backend.cc
   scheduler/scheduler.cc
   scheduler/mclock_scheduler.cc
   osdmap_gate.cc

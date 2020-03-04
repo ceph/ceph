@@ -1739,6 +1739,9 @@ public:
   /// Updates info.hit_set to hset_history, does not dirty
   void update_hset(const pg_hit_set_history_t &hset_history);
 
+  /// Get all pg_shards that needs recovery
+  std::vector<pg_shard_t> get_replica_recovery_order() const;
+
   /**
    * update_history
    *
