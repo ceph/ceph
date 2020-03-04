@@ -1635,6 +1635,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
         call_throws(['systemctl', 'start', unit_name])
 
 def update_firewalld(daemon_type):
+    # type: (str) -> None
     if args.skip_firewalld:
         return
     cmd = find_executable('firewall-cmd')
@@ -1672,16 +1673,16 @@ def update_firewalld(daemon_type):
         else:
             logger.debug('firewalld service %s is enabled in current zone' % svc)
     for port in fw_ports:
-        port = str(port) + '/tcp'
-        out, err, ret = call([cmd, '--permanent', '--query-port', port])
+        tcp_port = str(port) + '/tcp'
+        out, err, ret = call([cmd, '--permanent', '--query-port', tcp_port])
         if ret:
-            logger.info('Enabling firewalld port %s in current zone...' % port)
-            out, err, ret = call([cmd, '--permanent', '--add-port', port])
+            logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
+            out, err, ret = call([cmd, '--permanent', '--add-port', tcp_port])
             if ret:
                 raise RuntimeError('unable to add port %s to current zone: %s' %
-                                   (port, err))
+                                   (tcp_port, err))
         else:
-            logger.debug('firewalld port %s is enabled in current zone' % port)
+            logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
     call_throws([cmd, '--reload'])
 
 def install_base_units(fsid):
