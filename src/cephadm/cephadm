@@ -1145,7 +1145,7 @@ def check_units(units, enabler=None):
             logger.info('Unit %s is enabled and running' % u)
             return True
         if enabler is not None:
-            if not enabled and installed:
+            if installed:
                 logger.info('Enabling unit %s' % u)
                 enabler.enable_service(u)
     return False
