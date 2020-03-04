@@ -135,7 +135,7 @@ def task(ctx, config):
     finally:
         timeout = config.get('time', 360) * 30 + 300
         log.info('joining radosbench (timing out after %ss)', timeout)
-        run.wait(radosbench.itervalues(), timeout=timeout)
+        run.wait(radosbench.values(), timeout=timeout)
 
         if pool != 'data' and create_pool:
             manager.remove_pool(pool)

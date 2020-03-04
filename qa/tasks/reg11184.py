@@ -8,8 +8,8 @@ divergent priors.
 """
 import logging
 import time
-from cStringIO import StringIO
 
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from util.rados import rados
@@ -176,9 +176,10 @@ def task(ctx, config):
     expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
     cmd = ((prefix + "--op export-remove --pgid 2.0 --file {file}").
            format(id=divergent, file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
+    try:
+        exp_remote.sh(cmd, wait=True)
+    except CommandFailedError as e:
+        assert e.exitstatus == 0
 
     # Kill one of non-divergent OSDs
     log.info('killing osd.%d' % non_divergent[0])
@@ -189,14 +190,14 @@ def task(ctx, config):
     # An empty collection for pg 2.0 might need to be cleaned up
     cmd = ((prefix + "--force --op remove --pgid 2.0").
            format(id=non_divergent[0]))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
+    exp_remote.sh(cmd, wait=True, check_status=False)
 
     cmd = ((prefix + "--op import --file {file}").
            format(id=non_divergent[0], file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
+    try:
+        exp_remote.sh(cmd, wait=True)
+    except CommandFailedError as e:
+        assert e.exitstatus == 0
 
     # bring in our divergent friend and other node
     log.info("revive divergent %d", divergent)

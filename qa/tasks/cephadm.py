@@ -1,7 +1,7 @@
 """
 Ceph cluster task, deployed via cephadm orchestrator
 """
-from cStringIO import StringIO
+from io import BytesIO
 
 import argparse
 import configobj
@@ -189,7 +189,7 @@ def ceph_log(ctx, config):
                 run.Raw('|'), 'head', '-n', '1',
             ])
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
-                stdout=StringIO(),
+                stdout=BytesIO(),
                 args=args,
             )
             stdout = r.stdout.getvalue()
@@ -313,7 +313,7 @@ def ceph_bootstrap(ctx, config):
     try:
         # write seed config
         log.info('Writing seed config...')
-        conf_fp = StringIO()
+        conf_fp = BytesIO()
         seed_config = build_initial_config(ctx, config)
         seed_config.write(conf_fp)
         teuthology.write_file(
@@ -423,7 +423,7 @@ def ceph_bootstrap(ctx, config):
             ])
             r = _shell(ctx, cluster_name, remote,
                        ['ceph', 'orch', 'host', 'ls', '--format=json'],
-                       stdout=StringIO())
+                       stdout=BytesIO())
             hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
             assert remote.shortname in hosts
 
@@ -490,7 +490,7 @@ def ceph_mons(ctx, config):
                             args=[
                                 'ceph', 'mon', 'dump', '-f', 'json',
                             ],
-                            stdout=StringIO(),
+                            stdout=BytesIO(),
                         )
                         j = json.loads(r.stdout.getvalue())
                         if len(j['mons']) == num_mons:
@@ -748,7 +748,7 @@ def ceph_clients(ctx, config):
                     'mds', 'allow *',
                     'mgr', 'allow *',
                 ],
-                stdout=StringIO(),
+                stdout=BytesIO(),
             )
             keyring = r.stdout.getvalue()
             teuthology.sudo_write_file(

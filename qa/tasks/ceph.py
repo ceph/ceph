@@ -3,7 +3,7 @@ Ceph cluster task.
 
 Handle the setup, starting, and clean-up of a Ceph cluster.
 """
-from cStringIO import StringIO
+from io import BytesIO
 
 import argparse
 import configobj
@@ -15,17 +15,18 @@ import json
 import time
 import gevent
 import re
+import six
 import socket
 
 from paramiko import SSHException
-from ceph_manager import CephManager, write_conf
+from tasks.ceph_manager import CephManager, write_conf
 from tarfile import ReadError
 from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
 from teuthology.orchestra import run
-import ceph_client as cclient
+import tasks.ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
 
@@ -189,24 +190,26 @@ def ceph_log(ctx, config):
 
     def write_rotate_conf(ctx, daemons):
         testdir = teuthology.get_testdir(ctx)
+        remote_logrotate_conf = '%s/logrotate.ceph-test.conf' % testdir
         rotate_conf_path = os.path.join(os.path.dirname(__file__), 'logrotate.conf')
         with open(rotate_conf_path, 'rb') as f:
             conf = ""
             for daemon, size in daemons.items():
-                log.info('writing logrotate stanza for {daemon}'.format(daemon=daemon))
-                conf += f.read().format(daemon_type=daemon, max_size=size)
+                log.info('writing logrotate stanza for {}'.format(daemon))
+                conf += six.ensure_str(f.read()).format(daemon_type=daemon,
+                                                   max_size=size)
                 f.seek(0, 0)
 
             for remote in ctx.cluster.remotes.keys():
                 teuthology.write_file(remote=remote,
-                                      path='{tdir}/logrotate.ceph-test.conf'.format(tdir=testdir),
-                                      data=StringIO(conf)
+                                      path=remote_logrotate_conf,
+                                      data=BytesIO(conf.encode())
                                       )
                 remote.run(
                     args=[
                         'sudo',
                         'mv',
-                        '{tdir}/logrotate.ceph-test.conf'.format(tdir=testdir),
+                        remote_logrotate_conf,
                         '/etc/logrotate.d/ceph-test.conf',
                         run.Raw('&&'),
                         'sudo',
@@ -311,27 +314,20 @@ def valgrind_post(ctx, config):
         for remote in ctx.cluster.remotes.keys():
             # look at valgrind logs for each node
             proc = remote.run(
-                args=[
-                    'sudo',
-                    'zgrep',
-                    '<kind>',
-                    run.Raw('/var/log/ceph/valgrind/*'),
-                    '/dev/null',  # include a second file so that we always get a filename prefix on the output
-                    run.Raw('|'),
-                    'sort',
-                    run.Raw('|'),
-                    'uniq',
-                ],
+                args='sudo zgrep <kind> /var/log/ceph/valgrind/* '
+                     # include a second file so that we always get
+                     # a filename prefix on the output
+                     '/dev/null | sort | uniq',
                 wait=False,
                 check_status=False,
-                stdout=StringIO(),
+                stdout=BytesIO(),
             )
             lookup_procs.append((proc, remote))
 
         valgrind_exception = None
         for (proc, remote) in lookup_procs:
             proc.wait()
-            out = proc.stdout.getvalue()
+            out = six.ensure_str(proc.stdout.getvalue())
             for line in out.split('\n'):
                 if line == '':
                     continue
@@ -537,11 +533,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
         path
     ])
 
-    r = remote.run(
-        args=args,
-        stdout=StringIO()
-    )
-    monmap_output = r.stdout.getvalue()
+    monmap_output = remote.sh(args)
     fsid = re.search("generated fsid (.+)$",
                      monmap_output, re.MULTILINE).group(1)
     return fsid
@@ -613,7 +605,7 @@ def cluster(ctx, config):
             log.info('fs option selected, checking for scratch devs')
             log.info('found devs: %s' % (str(devs),))
             devs_id_map = teuthology.get_wwn_id_map(remote, devs)
-            iddevs = devs_id_map.values()
+            iddevs = list(devs_id_map.values())
             roles_to_devs = assign_devs(
                 teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), iddevs
             )
@@ -907,13 +899,7 @@ def cluster(ctx, config):
                 mkfs = ['mkfs.%s' % fs] + mkfs_options
                 log.info('%s on %s on %s' % (mkfs, dev, remote))
                 if package is not None:
-                    remote.run(
-                        args=[
-                            'sudo',
-                            'apt-get', 'install', '-y', package
-                        ],
-                        stdout=StringIO(),
-                    )
+                    remote.sh('sudo apt-get install -y %s' % package)
 
                 try:
                     remote.run(args=['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
@@ -1001,7 +987,7 @@ def cluster(ctx, config):
                          'probably installing hammer: %s', e)
 
     log.info('Reading keys from all nodes...')
-    keys_fp = StringIO()
+    keys_fp = BytesIO()
     keys = []
     for remote, roles_for_host in ctx.cluster.remotes.items():
         for type_ in ['mgr',  'mds', 'osd']:
@@ -1038,7 +1024,7 @@ def cluster(ctx, config):
         ],
         stdin=run.PIPE,
         wait=False,
-        stdout=StringIO(),
+        stdout=BytesIO(),
     )
     keys_fp.seek(0)
     teuthology.feed_many_stdins_and_close(keys_fp, writes)
@@ -1140,14 +1126,8 @@ def cluster(ctx, config):
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
-            r = mon0_remote.run(
-                stdout=StringIO(),
-                args=args,
-            )
-            stdout = r.stdout.getvalue()
-            if stdout != '':
-                return stdout
-            return None
+            stdout = mon0_remote.sh(args)
+            return stdout or None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
                              config['log_whitelist']) is not None:
@@ -1364,11 +1344,11 @@ def run_daemon(ctx, config, type_):
             if type_ == 'osd':
                 datadir='/var/lib/ceph/osd/{cluster}-{id}'.format(
                     cluster=cluster_name, id=id_)
-                osd_uuid = teuthology.get_file(
+                osd_uuid = six.ensure_str(teuthology.get_file(
                     remote=remote,
                     path=datadir + '/fsid',
                     sudo=True,
-                ).strip()
+                )).strip()
                 osd_uuids[id_] = osd_uuid
     for osd_id in range(len(osd_uuids)):
         id_ = str(osd_id)
@@ -1513,16 +1493,9 @@ def wait_for_mon_quorum(ctx, config):
     with contextutil.safe_while(sleep=10, tries=60,
                                 action='wait for monitor quorum') as proceed:
         while proceed():
-            r = remote.run(
-                args=[
-                    'sudo',
-                    'ceph',
-                    'quorum_status',
-                ],
-                stdout=StringIO(),
-                logger=log.getChild('quorum_status'),
-            )
-            j = json.loads(r.stdout.getvalue())
+            quorum_status = remote.sh('sudo ceph quorum_status',
+                                      logger=log.getChild('quorum_status'))
+            j = json.loads(quorum_status)
             q = j.get('quorum_names', [])
             log.debug('Quorum: %s', q)
             if sorted(q) == sorted(mons):

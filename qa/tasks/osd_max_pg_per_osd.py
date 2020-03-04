@@ -6,12 +6,12 @@ log = logging.getLogger(__name__)
 
 
 def pg_num_in_all_states(pgs, *states):
-    return sum(1 for state in pgs.itervalues()
+    return sum(1 for state in pgs.values()
                if all(s in state for s in states))
 
 
 def pg_num_in_any_state(pgs, *states):
-    return sum(1 for state in pgs.itervalues()
+    return sum(1 for state in pgs.values()
                if any(s in state for s in states))
 
 

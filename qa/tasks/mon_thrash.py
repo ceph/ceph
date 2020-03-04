@@ -3,13 +3,13 @@ Monitor thrash
 """
 import logging
 import contextlib
-import ceph_manager
 import random
 import time
 import gevent
 import json
 import math
 from teuthology import misc as teuthology
+from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster
 from tasks.thrasher import Thrasher
 

@@ -3,8 +3,8 @@ Special case divergence test with ceph-objectstore-tool export/remove/import
 """
 import logging
 import time
-from cStringIO import StringIO
 
+from teuthology.exceptions import CommandFailedError
 from teuthology import misc as teuthology
 from util.rados import rados
 import os
@@ -158,15 +158,17 @@ def task(ctx, config):
     expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
     cmd = ((prefix + "--op export-remove --pgid 2.0 --file {file}").
            format(id=divergent, file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
+    try:
+        exp_remote.sh(cmd, wait=True)
+    except CommandFailedError as e:
+        assert e.exitstatus == 0
 
     cmd = ((prefix + "--op import --file {file}").
            format(id=divergent, file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
+    try:
+        exp_remote.sh(cmd, wait=True)
+    except CommandFailedError as e:
+        assert e.exitstatus == 0
 
     log.info("reviving divergent %d", divergent)
     manager.revive_osd(divergent)

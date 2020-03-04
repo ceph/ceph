@@ -1,5 +1,4 @@
 """Scrub testing"""
-from cStringIO import StringIO
 
 import contextlib
 import json
@@ -41,12 +40,7 @@ def find_victim_object(ctx, pg, osd):
         )
 
     # fuzz time
-    with contextlib.closing(StringIO()) as ls_fp:
-        osd_remote.run(
-            args=['sudo', 'ls', data_path],
-            stdout=ls_fp,
-        )
-        ls_out = ls_fp.getvalue()
+    ls_out = osd_remote.sh('sudo ls %s' % data_path)
 
     # find an object file we can mess with (and not the pg info object)
     osdfilename = next(line for line in ls_out.split('\n')
@@ -306,16 +300,12 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
             deep_scrub(manager, pg, pool)
             cmd = 'rados list-inconsistent-pg {pool} ' \
                   '--format=json'.format(pool=pool)
-            with contextlib.closing(StringIO()) as out:
-                mon.run(args=cmd.split(), stdout=out)
-                pgs = json.loads(out.getvalue())
+            pgs = json.loads(mon.sh(cmd))
             assert pgs == [pg]
 
             cmd = 'rados list-inconsistent-obj {pg} ' \
                   '--format=json'.format(pg=pg)
-            with contextlib.closing(StringIO()) as out:
-                mon.run(args=cmd.split(), stdout=out)
-                objs = json.loads(out.getvalue())
+            objs = json.loads(mon.sh(cmd))
             assert len(objs['inconsistents']) == 1
 
             checker = InconsistentObjChecker(osd_id, acting, obj_name)
