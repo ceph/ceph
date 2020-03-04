@@ -1,6 +1,5 @@
 import json
 from contextlib import contextmanager
-import fnmatch
 
 import pytest
 
@@ -14,7 +13,7 @@ except ImportError:
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     ServiceSpec, PlacementSpec, RGWSpec, HostSpec, OrchestratorError
 from tests import mock
-from .fixtures import cephadm_module, wait
+from .fixtures import cephadm_module, wait, _run_cephadm, mon_command, match_glob
 from cephadm.module import CephadmOrchestrator
 
 
@@ -25,21 +24,6 @@ TODOs:
     also testing this here is the development roundtrip time.
 """
 
-
-
-def _run_cephadm(ret):
-    def foo(*args, **kwargs):
-        return ret, '', 0
-    return foo
-
-def mon_command(*args, **kwargs):
-    return 0, '', ''
-
-
-def match_glob(val, pat):
-    ok = fnmatch.fnmatchcase(val, pat)
-    if not ok:
-        assert pat in val
 
 class TestCephadm(object):
 
@@ -60,11 +44,7 @@ class TestCephadm(object):
         new_mgr = cephadm_module.get_unique_name('mgr', 'myhost', existing)
         match_glob(new_mgr, 'myhost.*')
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_host(self, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_host(self, cephadm_module):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with self._with_host(cephadm_module, 'test'):
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
@@ -82,18 +62,12 @@ class TestCephadm(object):
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_service_ls(self, _save_host, _rm_host, cephadm_module):
+    def test_service_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_device_ls(self, _save_host, _rm_host, cephadm_module):
+    def test_device_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.get_inventory()
             assert wait(cephadm_module, c) == [InventoryHost('test')]
@@ -110,12 +84,7 @@ class TestCephadm(object):
             )
         ])
     ))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_daemon_action(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_daemon_action(self, cephadm_module):
         cephadm_module.service_cache_timeout = 10
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
@@ -128,13 +97,7 @@ class TestCephadm(object):
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
 
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_mon_update(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_mon_update(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
@@ -145,13 +108,7 @@ class TestCephadm(object):
                 c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
                 wait(cephadm_module, c)
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_mgr_update(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_mgr_update(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             r = cephadm_module._apply_service(ServiceSpec('mgr', placement=ps))
@@ -159,12 +116,7 @@ class TestCephadm(object):
 
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_create_osds(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_create_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec('test', data_devices=DeviceSelection(paths=['']))
             c = cephadm_module.create_osds([dg])
@@ -182,9 +134,7 @@ class TestCephadm(object):
             )
         ])
     ))
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_remove_osds(self, _save_host, _rm_host, cephadm_module):
+    def test_remove_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
@@ -193,12 +143,7 @@ class TestCephadm(object):
             assert out == ["Removed osd.0 from host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_mds(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_mds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_mds(ServiceSpec('mds', 'name', placement=ps))
@@ -206,12 +151,7 @@ class TestCephadm(object):
             match_glob(out, "Deployed mds.name.* on host 'test'")
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_rgw(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_rgw(self, cephadm_module):
 
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
@@ -221,13 +161,7 @@ class TestCephadm(object):
 
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_rgw_update(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-
+    def test_rgw_update(self, cephadm_module):
         with self._with_host(cephadm_module, 'host1'):
             with self._with_host(cephadm_module, 'host2'):
                 ps = PlacementSpec(hosts=['host1'], count=1)
@@ -238,7 +172,6 @@ class TestCephadm(object):
                 ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
                 r = cephadm_module._apply_service(RGWSpec('realm', 'zone1', placement=ps))
                 assert r
-
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
@@ -252,9 +185,7 @@ class TestCephadm(object):
             )
         ])
     ))
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_remove_daemon(self, _rm_host, _save_spec, cephadm_module):
+    def test_remove_daemon(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
@@ -274,10 +205,7 @@ class TestCephadm(object):
             )
         ])
     ))
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    @mock.patch("cephadm.module.SpecStore.rm")
-    def test_remove_service(self, _rm_spec, _rm_host, _save_spec, cephadm_module):
+    def test_remove_service(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             wait(cephadm_module, c)
@@ -286,13 +214,7 @@ class TestCephadm(object):
             assert out == ["Removed rgw.myrgw.foobar from host 'test'"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_rbd_mirror(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-        # type: (mock.Mock, mock.Mock, mock.Mock, mock.Mock, CephadmOrchestrator) -> None
+    def test_rbd_mirror(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             c = cephadm_module.add_rbd_mirror(ServiceSpec('rbd-mirror', placement=ps))
@@ -301,12 +223,7 @@ class TestCephadm(object):
 
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_prometheus(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_prometheus(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
 
@@ -315,13 +232,7 @@ class TestCephadm(object):
             match_glob(out, "Deployed prometheus.* on host 'test'")
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_node_exporter(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-        # type: (mock.Mock, mock.Mock, mock.Mock, mock.Mock, CephadmOrchestrator) -> None
+    def test_node_exporter(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
 
@@ -330,13 +241,7 @@ class TestCephadm(object):
             match_glob(out, "Deployed node-exporter.* on host 'test'")
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_grafana(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-        # type: (mock.Mock, mock.Mock, mock.Mock, mock.Mock, CephadmOrchestrator) -> None
+    def test_grafana(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
 
@@ -345,13 +250,7 @@ class TestCephadm(object):
             match_glob(out, "Deployed grafana.* on host 'test'")
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_alertmanager(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
-        # type: (mock.Mock, mock.Mock, mock.Mock, mock.Mock, CephadmOrchestrator) -> None
+    def test_alertmanager(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
 
@@ -360,24 +259,14 @@ class TestCephadm(object):
             match_glob(out, "Deployed alertmanager.* on host 'test'")
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_blink_device_light(self, _send_command, _get_connection, _save_host, _rm_host, cephadm_module):
+    def test_blink_device_light(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_apply_mgr_save(self, _send_command, _get_connection, _save_spec, _save_host, _rm_host, cephadm_module):
+    def test_apply_mgr_save(self, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('mgr', placement=ps)
@@ -386,13 +275,8 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled mgr update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_apply_mds_save(self, _send_command, _get_connection, _save_spec, _save_host, _rm_host, cephadm_module):
+    def test_apply_mds_save(self, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('mds', 'fsname', placement=ps)
@@ -401,13 +285,8 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled mds update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_apply_rgw_save(self, _send_command, _get_connection, _save_spec, _save_host, _rm_host, cephadm_module):
+    def test_apply_rgw_save(self, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('rgw', 'r.z', placement=ps)
@@ -416,13 +295,8 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled rgw update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_apply_rbd_mirror_save(self, _send_command, _get_connection, _save_spec, _save_host, _rm_host, cephadm_module):
+    def test_apply_rbd_mirror_save(self, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('rbd-mirror', placement=ps)
@@ -431,13 +305,8 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled rbd-mirror update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_apply_prometheus_save(self, _send_command, _get_connection, _save_spec, _save_host, _rm_host, cephadm_module):
+    def test_apply_prometheus_save(self, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('prometheus', placement=ps)
@@ -446,13 +315,8 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled prometheus update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
-    def test_apply_node_exporter_save(self, _send_command, _get_connection, _save_spec, _save_host, _rm_host, cephadm_module):
+    def test_apply_node_exporter_save(self, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('node_exporter', placement=ps)
@@ -461,16 +325,10 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled node_exporter update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.send_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command)
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.HostCache.save_host")
-    @mock.patch("cephadm.module.HostCache.rm_host")
     @mock.patch("cephadm.module.yaml.load_all", return_value=[{'service_type': 'rgw', 'placement': {'count': 1}, 'spec': {'rgw_realm': 'realm1', 'rgw_zone': 'zone1'}}])
     @mock.patch("cephadm.module.ServiceSpec")
-    def test_apply_service_config(self, _sspec, _yaml, _send_command, _get_connection, _save_spec, _save_host,
-                                  _rm_host, cephadm_module):
+    def test_apply_service_config(self, _sspec, _yaml, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.apply_service_config('dummy')
             _save_spec.assert_called_once()
