@@ -570,10 +570,15 @@ def test_lazyio():
 def test_replication():
     fd = cephfs.open(b'/file-rep', 'w', 0o755)
     assert_raises(TypeError, cephfs.get_file_replication, "fd")
+    l_dict = cephfs.get_layout(fd)
+    assert('pool_name' in l_dict.keys())
     cnt = cephfs.get_file_replication(fd)
-    assert_equal(cnt, 3)
+    get_rep_cnt_cmd = "ceph osd pool get " + l_dict["pool_name"] + " size"
+    s=os.popen(get_rep_cnt_cmd).read().strip('\n')
+    size=int(s.split(" ")[-1])
+    assert_equal(cnt, size)
     cnt = cephfs.get_path_replication(b'/file-rep')
-    assert_equal(cnt, 3)
+    assert_equal(cnt, size)
     cephfs.close(fd)
     cephfs.unlink(b'/file-rep')
 
@@ -640,3 +645,79 @@ def test_preadv_pwritev():
     assert_equal([b"asdf", b"zxcvb"], list(buf))
     cephfs.close(fd)
     cephfs.unlink(b'file-1')
+
+@with_setup(setup_test)
+def test_setattrx():
+    fd = cephfs.open(b'file-setattrx', 'w', 0o655)
+    cephfs.write(fd, b"1111", 0)
+    cephfs.close(fd)
+    st = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE, 0)
+    mode = st["mode"] | stat.S_IXUSR
+    assert_raises(TypeError, cephfs.setattrx, b'file-setattrx', "dict", 0, 0)
+
+    time.sleep(1)
+    statx_dict = dict()
+    statx_dict["mode"] = mode
+    statx_dict["uid"] = 9999
+    statx_dict["gid"] = 9999
+    dt = datetime.now()
+    statx_dict["mtime"] = dt
+    statx_dict["atime"] = dt
+    statx_dict["ctime"] = dt
+    statx_dict["size"] = 10
+    statx_dict["btime"] = dt
+    cephfs.setattrx(b'file-setattrx', statx_dict, libcephfs.CEPH_SETATTR_MODE | libcephfs.CEPH_SETATTR_UID |
+                                                  libcephfs.CEPH_SETATTR_GID | libcephfs.CEPH_SETATTR_MTIME |
+                                                  libcephfs.CEPH_SETATTR_ATIME | libcephfs.CEPH_SETATTR_CTIME |
+                                                  libcephfs.CEPH_SETATTR_SIZE | libcephfs.CEPH_SETATTR_BTIME, 0)
+    st1 = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_UID |
+                                         libcephfs.CEPH_STATX_GID | libcephfs.CEPH_STATX_MTIME |
+                                         libcephfs.CEPH_STATX_ATIME | libcephfs.CEPH_STATX_CTIME |
+                                         libcephfs.CEPH_STATX_SIZE | libcephfs.CEPH_STATX_BTIME, 0)
+    assert_equal(mode, st1["mode"])
+    assert_equal(9999, st1["uid"])
+    assert_equal(9999, st1["gid"])
+    assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
+    assert_equal(10, st1["size"])
+    cephfs.unlink(b'file-setattrx')
+
+@with_setup(setup_test)
+def test_fsetattrx():
+    fd = cephfs.open(b'file-fsetattrx', 'w', 0o655)
+    cephfs.write(fd, b"1111", 0)
+    st = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE, 0)
+    mode = st["mode"] | stat.S_IXUSR
+    assert_raises(TypeError, cephfs.fsetattrx, fd, "dict", 0, 0)
+
+    time.sleep(1)
+    statx_dict = dict()
+    statx_dict["mode"] = mode
+    statx_dict["uid"] = 9999
+    statx_dict["gid"] = 9999
+    dt = datetime.now()
+    statx_dict["mtime"] = dt
+    statx_dict["atime"] = dt
+    statx_dict["ctime"] = dt
+    statx_dict["size"] = 10
+    statx_dict["btime"] = dt
+    cephfs.fsetattrx(fd, statx_dict, libcephfs.CEPH_SETATTR_MODE | libcephfs.CEPH_SETATTR_UID |
+                                                  libcephfs.CEPH_SETATTR_GID | libcephfs.CEPH_SETATTR_MTIME |
+                                                  libcephfs.CEPH_SETATTR_ATIME | libcephfs.CEPH_SETATTR_CTIME |
+                                                  libcephfs.CEPH_SETATTR_SIZE | libcephfs.CEPH_SETATTR_BTIME)
+    st1 = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_UID |
+                                         libcephfs.CEPH_STATX_GID | libcephfs.CEPH_STATX_MTIME |
+                                         libcephfs.CEPH_STATX_ATIME | libcephfs.CEPH_STATX_CTIME |
+                                         libcephfs.CEPH_STATX_SIZE | libcephfs.CEPH_STATX_BTIME, 0)
+    assert_equal(mode, st1["mode"])
+    assert_equal(9999, st1["uid"])
+    assert_equal(9999, st1["gid"])
+    assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
+    assert_equal(10, st1["size"])
+    cephfs.close(fd)
+    cephfs.unlink(b'file-fsetattrx')

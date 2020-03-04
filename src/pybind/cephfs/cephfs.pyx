@@ -45,6 +45,15 @@ FALLOC_FL_KEEP_SIZE = 0x01
 FALLOC_FL_PUNCH_HOLE = 0x02
 FALLOC_FL_NO_HIDE_STALE = 0x04
 
+CEPH_SETATTR_MODE = 0x1
+CEPH_SETATTR_UID = 0x2
+CEPH_SETATTR_GID = 0x4
+CEPH_SETATTR_MTIME = 0x8
+CEPH_SETATTR_ATIME = 0x10
+CEPH_SETATTR_SIZE  = 0x20
+CEPH_SETATTR_CTIME = 0x40
+CEPH_SETATTR_BTIME = 0x200
+
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
     # PyObject*, which invokes assumptions in cpython that we need to
@@ -166,6 +175,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
 
+    int ceph_setattrx(ceph_mount_info *cmount, const char *relpath, statx *stx, int mask, int flags)
+    int ceph_fsetattrx(ceph_mount_info *cmount, int fd, statx *stx, int mask)
     int ceph_mds_command(ceph_mount_info *cmount, const char *mds_spec, const char **cmd, size_t cmdlen,
                          const char *inbuf, size_t inbuflen, char **outbuf, size_t *outbuflen,
                          char **outs, size_t *outslen)
@@ -1959,6 +1970,101 @@ cdef class LibCephFS(object):
             dict_result["version"] = stx.stx_version
 
         return dict_result
+
+    def setattrx(self, path, dict_stx, mask, flags):
+        """
+        Set a file's attributes.
+
+        :param path: the path to the file/directory to set the attributes of.
+        :param mask: a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+        :param stx: a dict of statx structure that must include attribute values to set on the file.
+        :param flags: mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if not isinstance(dict_stx, dict):
+            raise TypeError('dict_stx must be a dict')
+        if not isinstance(mask, int):
+            raise TypeError('mask must be a int')
+        if not isinstance(flags, int):
+            raise TypeError('flags must be a int')
+
+        cdef statx stx
+
+        if (mask & CEPH_SETATTR_MODE):
+            stx.stx_mode = dict_stx["mode"]
+        if (mask & CEPH_SETATTR_UID):
+            stx.stx_uid = dict_stx["uid"]
+        if (mask & CEPH_SETATTR_GID):
+            stx.stx_gid = dict_stx["gid"]
+        if (mask & CEPH_SETATTR_MTIME):
+            stx.stx_mtime = to_timespec(dict_stx["mtime"].timestamp())
+        if (mask & CEPH_SETATTR_ATIME):
+            stx.stx_atime = to_timespec(dict_stx["atime"].timestamp())
+        if (mask & CEPH_SETATTR_CTIME):
+            stx.stx_ctime = to_timespec(dict_stx["ctime"].timestamp())
+        if (mask & CEPH_SETATTR_SIZE):
+            stx.stx_size = dict_stx["size"]
+        if (mask & CEPH_SETATTR_BTIME):
+            stx.stx_btime = to_timespec(dict_stx["btime"].timestamp())
+
+        cdef:
+            char* _path = path
+            int _mask = mask
+            int _flags = flags
+            dict_result = dict()
+
+        with nogil:
+            ret = ceph_setattrx(self.cluster, _path, &stx, _mask, _flags)
+        if ret < 0:
+            raise make_ex(ret, "error in setattrx: %s" % path)
+
+    def fsetattrx(self, fd, dict_stx, mask):
+        """
+        Set a file's attributes.
+
+        :param path: the path to the file/directory to set the attributes of.
+        :param mask: a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+        :param stx: a dict of statx structure that must include attribute values to set on the file.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be a int')
+        if not isinstance(dict_stx, dict):
+            raise TypeError('dict_stx must be a dict')
+        if not isinstance(mask, int):
+            raise TypeError('mask must be a int')
+
+        cdef statx stx
+
+        if (mask & CEPH_SETATTR_MODE):
+            stx.stx_mode = dict_stx["mode"]
+        if (mask & CEPH_SETATTR_UID):
+            stx.stx_uid = dict_stx["uid"]
+        if (mask & CEPH_SETATTR_GID):
+            stx.stx_gid = dict_stx["gid"]
+        if (mask & CEPH_SETATTR_MTIME):
+            stx.stx_mtime = to_timespec(dict_stx["mtime"].timestamp())
+        if (mask & CEPH_SETATTR_ATIME):
+            stx.stx_atime = to_timespec(dict_stx["atime"].timestamp())
+        if (mask & CEPH_SETATTR_CTIME):
+            stx.stx_ctime = to_timespec(dict_stx["ctime"].timestamp())
+        if (mask & CEPH_SETATTR_SIZE):
+            stx.stx_size = dict_stx["size"]
+        if (mask & CEPH_SETATTR_BTIME):
+            stx.stx_btime = to_timespec(dict_stx["btime"].timestamp())
+
+        cdef:
+            int _fd = fd
+            int _mask = mask
+            dict_result = dict()
+
+        with nogil:
+            ret = ceph_fsetattrx(self.cluster, _fd, &stx, _mask)
+        if ret < 0:
+            raise make_ex(ret, "error in fsetattrx")
 
     def symlink(self, existing, newname):
         """
