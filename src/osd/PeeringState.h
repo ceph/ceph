@@ -2159,6 +2159,9 @@ public:
   bool is_recovery_unfound() const {
     return state_test(PG_STATE_RECOVERY_UNFOUND);
   }
+  bool is_backfilling() const {
+    return state_test(PG_STATE_BACKFILLING);
+  }
   bool is_backfill_unfound() const {
     return state_test(PG_STATE_BACKFILL_UNFOUND);
   }
