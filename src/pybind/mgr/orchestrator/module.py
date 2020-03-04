@@ -393,7 +393,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
-                ['NAME', 'HOST', 'STATUS', 'REFRESHED',
+                ['NAME', 'HOST', 'STATUS', 'REFRESHED', 'AGE',
                  'VERSION', 'IMAGE NAME', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
@@ -407,15 +407,17 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     None: '<unknown>'
                 }[s.status]
 
-                if s.last_refresh:
-                    age = to_pretty_timedelta(now - s.last_refresh) + ' ago'
-                else:
-                    age = '-'
+                def nice_delta(t, suffix=''):
+                    if t:
+                        return to_pretty_timedelta(now - t) + suffix
+                    else:
+                        return '-'
                 table.add_row((
                     s.name(),
                     ukn(s.hostname),
                     status,
-                    age,
+                    nice_delta(s.last_refresh, ' ago'),
+                    nice_delta(s.created),
                     ukn(s.version),
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
