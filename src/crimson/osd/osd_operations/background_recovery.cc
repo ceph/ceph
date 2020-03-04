@@ -19,25 +19,36 @@ namespace {
 namespace crimson::osd {
 
 BackgroundRecovery::BackgroundRecovery(
+  Ref<PG> pg,
   ShardServices &ss,
-  PG &pg,
-  : ss(ss), pg(pg), scheduler_class(scheduler_class)
+  epoch_t epoch_started,
   crimson::osd::scheduler::scheduler_class_t scheduler_class)
+  : pg(pg), ss(ss), epoch_started(epoch_started),
+    scheduler_class(scheduler_class)
 {}
 
 seastar::future<bool> BackgroundRecovery::do_recovery()
 {
-  return seastar::make_ready_future<bool>(false);
+  if (pg->has_reset_since(epoch_started))
+    return seastar::make_ready_future<bool>(false);
+  return with_blocking_future(
+    pg->start_recovery_ops(
+      crimson::common::local_conf()->osd_recovery_max_single_start));
 }
 
 void BackgroundRecovery::print(std::ostream &lhs) const
 {
-  lhs << "BackgroundRecovery(" << pg.get_pgid() << ")";
+  lhs << "BackgroundRecovery(" << pg->get_pgid() << ")";
 }
 
 void BackgroundRecovery::dump_detail(Formatter *f) const
 {
-  f->dump_stream("pgid") << pg.get_pgid();
+  f->dump_stream("pgid") << pg->get_pgid();
+  f->open_object_section("recovery_detail");
+  {
+    // TODO pg->dump_recovery_state(f);
+  }
+  f->close_section();
 }
 
 seastar::future<> BackgroundRecovery::start()
