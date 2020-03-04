@@ -3215,7 +3215,18 @@ private:
 			CollectionRef& d,
 			unsigned bits);
 
+  void _collect_allocation_stats(uint64_t need, uint32_t alloc_size,
+                                 size_t extents);
+  void _record_allocation_stats();
 private:
+  uint64_t probe_count = 0;
+  std::atomic<uint64_t> alloc_stats_count = {0};
+  std::atomic<uint64_t> alloc_stats_fragments = { 0 };
+  std::atomic<uint64_t> alloc_stats_size = { 0 };
+  // 
+  std::array<std::tuple<uint64_t, uint64_t, uint64_t>, 5> alloc_stats_history =
+  { std::make_tuple(0ul, 0ul, 0ul) };
+
   std::atomic<uint64_t> out_of_sync_fm = {0};
   // --------------------------------------------------------
   // BlueFSDeviceExpander implementation
