@@ -575,3 +575,14 @@ def test_replication():
     assert_equal(cnt, 3)
     cephfs.close(fd)
     cephfs.unlink(b'/file-rep')
+
+@with_setup(setup_test)
+def test_caps():
+    fd = cephfs.open(b'/file-caps', 'w', 0o755)
+    timeout = cephfs.get_cap_return_timeout()
+    assert_equal(timeout, 300)
+    fd_caps = cephfs.debug_get_fd_caps(fd)
+    file_caps = cephfs.debug_get_file_caps(b'/file-caps')
+    assert_equal(fd_caps, file_caps)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-caps')
