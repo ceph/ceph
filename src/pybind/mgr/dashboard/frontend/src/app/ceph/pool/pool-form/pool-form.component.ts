@@ -7,7 +7,6 @@ import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin, Subscription } from 'rxjs';
 
-import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -77,7 +76,6 @@ export class PoolFormComponent implements OnInit {
     private router: Router,
     private modalService: BsModalService,
     private poolService: PoolService,
-    private configurationService: ConfigurationService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
     private bsModalService: BsModalService,
@@ -165,25 +163,21 @@ export class PoolFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    forkJoin(
-      this.configurationService.get('osd_pool_default_pg_autoscale_mode'),
-      this.poolService.getInfo(),
-      this.ecpService.list()
-    ).subscribe((data: [any, PoolFormInfo, ErasureCodeProfile[]]) => {
-      const pgAutoscaleConfig = data[0];
-      this.pgAutoscaleModes = pgAutoscaleConfig.enum_values;
-      const defaultPgAutoscaleMode = this.configurationService.getValue(pgAutoscaleConfig, 'mon');
-      this.form.silentSet('pgAutoscaleMode', defaultPgAutoscaleMode);
-      this.initInfo(data[1]);
-      this.initEcp(data[2]);
-      if (this.editing) {
-        this.initEditMode();
-      } else {
-        this.setAvailableApps();
+    forkJoin(this.poolService.getInfo(), this.ecpService.list()).subscribe(
+      (data: [PoolFormInfo, ErasureCodeProfile[]]) => {
+        this.pgAutoscaleModes = data[0].pg_autoscale_modes;
+        this.form.silentSet('pgAutoscaleMode', data[0].pg_autoscale_default_mode);
+        this.initInfo(data[0]);
+        this.initEcp(data[1]);
+        if (this.editing) {
+          this.initEditMode();
+        } else {
+          this.setAvailableApps();
+        }
+        this.listenToChanges();
+        this.setComplexValidators();
       }
-      this.listenToChanges();
-      this.setComplexValidators();
-    });
+    );
   }
 
   private initInfo(info: PoolFormInfo) {
