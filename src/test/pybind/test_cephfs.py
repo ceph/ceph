@@ -141,6 +141,35 @@ def test_xattr():
     assert_equal("user.big\x00", ret_buff.decode('utf-8'))
 
 @with_setup(setup_test)
+def test_fxattr():
+    fd = cephfs.open(b'/file-fxattr', 'w', 0o755)
+    assert_raises(libcephfs.OperationNotSupported, cephfs.fsetxattr, fd, "key", b"value", 0)
+    assert_raises(TypeError, cephfs.fsetxattr, "fd", "user.key", b"value", 0)
+    assert_raises(TypeError, cephfs.fsetxattr, fd, "user.key", "value", 0)
+    assert_raises(TypeError, cephfs.fsetxattr, fd, "user.key", b"value", "0")
+    cephfs.fsetxattr(fd, "user.key", b"value", 0)
+    assert_equal(b"value", cephfs.fgetxattr(fd, "user.key"))
+
+    cephfs.fsetxattr(fd, "user.big", b"x" * 300, 0)
+
+    # Default size is 255, get ERANGE
+    assert_raises(libcephfs.OutOfRange, cephfs.fgetxattr, fd, "user.big")
+
+    # Pass explicit size, and we'll get the value
+    assert_equal(300, len(cephfs.fgetxattr(fd, "user.big", 300)))
+
+    cephfs.fremovexattr(fd, "user.key")
+    # user.key is already removed
+    assert_raises(libcephfs.NoData, cephfs.fgetxattr, fd, "user.key")
+
+    # user.big is only listed
+    ret_val, ret_buff = cephfs.flistxattr(fd)
+    assert_equal(9, ret_val)
+    assert_equal("user.big\x00", ret_buff.decode('utf-8'))
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fxattr')
+
+@with_setup(setup_test)
 def test_rename():
     cephfs.mkdir(b"/a", 0o755)
     cephfs.mkdir(b"/a/b", 0o755)
