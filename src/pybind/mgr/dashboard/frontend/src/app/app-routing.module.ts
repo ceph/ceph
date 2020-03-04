@@ -259,7 +259,7 @@ const routes: Routes = [
       },
       {
         path: 'nfs',
-        canActivateChild: [ModuleStatusGuardService],
+        canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'nfs-ganesha',

@@ -102,7 +102,7 @@ class NFSGanesha(RESTController):
         try:
             Ganesha.get_ganesha_clusters()
         except NFSException as e:
-            status['message'] = str(e)
+            status['message'] = str(e)  # type: ignore
             status['available'] = False
 
         return status
