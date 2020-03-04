@@ -34,6 +34,7 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
     "test_input,expected",
     [
         ('', "PlacementSpec()"),
+        ("count:2", "PlacementSpec(count:2)"),
         ("3", "PlacementSpec(count:3)"),
         ("host1 host2", "PlacementSpec(host1,host2)"),
         ("host1=a host2=b", "PlacementSpec(host1=a,host2=b)"),
