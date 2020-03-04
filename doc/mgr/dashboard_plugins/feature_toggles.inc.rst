@@ -21,6 +21,7 @@ The list of features that can be enabled/disabled is:
    - iSCSI: ``iscsi``
 - **Filesystem (Cephfs)**: ``cephfs``
 - **Objects (RGW)**: ``rgw`` (including daemon, user and bucket management).
+- **NFS**: ``nfs-ganesha`` exports.
 
 By default all features come enabled.
 
@@ -32,6 +33,7 @@ To retrieve a list of features and their current statuses::
   Feature 'mirroring': 'enabled'
   Feature 'rbd': 'enabled'
   Feature 'rgw': 'enabled'
+  Feature 'nfs': 'enabled'
 
 To enable or disable the status of a single or multiple features::
 
