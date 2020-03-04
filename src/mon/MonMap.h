@@ -101,7 +101,7 @@ class MonMap {
   /* ranks which were removed when this map took effect.
      There should only be one at a time, but leave support
      for arbitrary numbers just to be safe. */
-  std::list<int> removed_ranks;
+  std::set<int> removed_ranks;
 
   /**
    * Persistent Features are all those features that once set on a
@@ -246,7 +246,7 @@ public:
     disallowed_leaders.erase(name);
     ceph_assert(mon_info.count(name) == 0);
     if (rank >= 0 ) {
-      removed_ranks.push_back(rank);
+      removed_ranks.insert(rank);
     }
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
