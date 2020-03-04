@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class XFSTestsDev(CephFSTestCase):
 
     def setUp(self):
-        CephFSTestCase.setUp(self)
+        super(XFSTestsDev, self).setUp()
         self.prepare_xfstests_dev()
 
     def prepare_xfstests_dev(self):
@@ -172,3 +172,5 @@ class XFSTestsDev(CephFSTestCase):
         self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
                                              self.repo_path],
                                        omit_sudo=False, check_status=False)
+
+        super(XFSTestsDev, self).tearDown()
