@@ -1360,6 +1360,14 @@ class PlacementSpec(object):
                 strings = strings[1:]
             except ValueError:
                 pass
+        for s in strings:
+            if s.startswith('count:'):
+                try:
+                    count = int(s[6:])
+                    strings.remove(s)
+                    break
+                except ValueError:
+                    pass
 
         all_hosts = False
         if '*' in strings:
