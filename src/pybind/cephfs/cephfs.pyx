@@ -204,6 +204,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
+    int ceph_lazyio(ceph_mount_info *cmount, int fd, int enable)
+    int ceph_lazyio_propagate(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
+    int ceph_lazyio_synchronize(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
@@ -831,6 +834,85 @@ cdef class LibCephFS(object):
             ret = ceph_fsync(self.cluster, fd, syncdataonly)
         if ret < 0:
             raise make_ex(ret, "fsync failed")
+
+    def lazyio(self, fd, enable):
+        """
+        Enable/disable lazyio for the file.
+
+        :param fd: the file descriptor of the file for which to enable lazio.
+        :param enable: a boolean to enable lazyio or disable lazyio.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(enable, int):
+            raise TypeError('enable must be an int')
+
+        cdef:
+            int _fd = fd
+            int _enable = enable
+
+        with nogil:
+            ret = ceph_lazyio(self.cluster, _fd, _enable)
+        if ret < 0:
+            raise make_ex(ret, "lazyio failed")
+
+    def lazyio_propagate(self, fd, offset, count):
+        """
+        Flushes the write buffer for the file thereby propogating the buffered write to the file.
+
+        :param fd: the file descriptor of the file to sync.
+        :param offset: the byte range starting.
+        :param count: the number of bytes starting from offset.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        if not isinstance(count, int):
+            raise TypeError('count must be an int')
+
+        cdef:
+            int _fd = fd
+            int64_t _offset = offset
+            size_t _count = count
+
+        with nogil:
+            ret = ceph_lazyio_propagate(self.cluster, _fd, _offset, _count)
+        if ret < 0:
+            raise make_ex(ret, "lazyio_propagate failed")
+
+    def lazyio_synchronize(self, fd, offset, count):
+        """
+        Flushes the write buffer for the file and invalidate the read cache. This allows a
+        subsequent read operation to read and cache data directly from the file and hence
+        everyone's propagated writes would be visible.
+
+        :param fd: the file descriptor of the file to sync.
+        :param offset: the byte range starting.
+        :param count: the number of bytes starting from offset.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        if not isinstance(count, int):
+            raise TypeError('count must be an int')
+
+        cdef:
+            int _fd = fd
+            int64_t _offset = offset
+            size_t _count = count
+
+        with nogil:
+            ret = ceph_lazyio_synchronize(self.cluster, _fd, _offset, _count)
+        if ret < 0:
+            raise make_ex(ret, "lazyio_synchronize failed")
 
     def fallocate(self, fd, offset, length, mode=0):
         """
