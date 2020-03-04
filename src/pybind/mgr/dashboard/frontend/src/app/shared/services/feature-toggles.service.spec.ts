@@ -27,15 +27,13 @@ describe('FeatureTogglesService', () => {
   });
 
   it('should fetch HTTP endpoint once and only once', fakeAsync(() => {
-    const mockFeatureTogglesMap = [
-      {
-        rbd: true,
-        mirroring: true,
-        iscsi: true,
-        cephfs: true,
-        rgw: true
-      }
-    ];
+    const mockFeatureTogglesMap: Record<string, boolean> = {
+      rbd: true,
+      mirroring: true,
+      iscsi: true,
+      cephfs: true,
+      rgw: true
+    };
 
     service
       .get()

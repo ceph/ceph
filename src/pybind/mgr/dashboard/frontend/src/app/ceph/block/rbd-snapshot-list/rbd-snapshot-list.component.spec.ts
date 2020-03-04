@@ -18,7 +18,6 @@ import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { DataTableModule } from '../../../shared/datatable/datatable.module';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { Permissions } from '../../../shared/models/permissions';
 import { PipesModule } from '../../../shared/pipes/pipes.module';
@@ -217,7 +216,7 @@ describe('RbdSnapshotListComponent', () => {
 
   it('should test all TableActions combinations', () => {
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+    const tableActions: any = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
     );
 

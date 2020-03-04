@@ -117,7 +117,7 @@ describe('TableActionsComponent', () => {
   });
 
   it('should test all TableActions combinations', () => {
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+    const tableActions: any = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
     );
     expect(tableActions).toEqual({

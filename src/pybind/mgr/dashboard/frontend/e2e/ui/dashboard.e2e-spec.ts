@@ -79,9 +79,9 @@ describe('Dashboard Main Page', () => {
       ];
 
       for (let i = 0; i < order.length; i++) {
-        await expect((await dashboard.infoCard(i)).getText()).toContain(
+        await expect((await dashboard.infoCard(i)).getText(),`Order of ${order[i]} seems to be wrong`).toContain(
           order[i],
-          `Order of ${order[i]} seems to be wrong`
+
         );
       }
     });
@@ -130,11 +130,11 @@ describe('Dashboard Main Page', () => {
       }
       await spec.pageObject.navigateTo();
       const tableCount = await spec.pageObject.getTableTotalCount();
-      await expect(dashCount).toBe(
-        tableCount,
+      await expect(
+        dashCount,
         `Text of card "${spec.cardName}" and regex "${spec.regexMatcher}" resulted in ${dashCount} ` +
-          `but did not match table count ${tableCount}`
-      );
+        `but did not match table count ${tableCount}`)
+        .toBe(tableCount);
     }
   });
 });

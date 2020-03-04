@@ -13,7 +13,7 @@ describe('SummaryService', () => {
   let summaryService: SummaryService;
   let authStorageService: AuthStorageService;
 
-  const summary: Record<string, any> = {
+  const summary: ReturnType<typeof summaryService.getCurrentSummary> = {
     executing_tasks: [],
     health_status: 'HEALTH_OK',
     mgr_id: 'x',

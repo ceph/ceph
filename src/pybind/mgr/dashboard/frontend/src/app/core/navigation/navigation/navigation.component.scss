@@ -140,15 +140,17 @@
 
 $sidebar-width: 200px;
 
-.cd-navbar-primary .active > a,
-.cd-navbar-primary > .active > a:focus,
-.cd-navbar-primary > .active > a:hover {
-  color: $color-nav-links !important;
-  background-color: $color-nav-links-hover !important;
-  border: 0 !important;
+::ng-deep {
+  .cd-navbar-primary .active > a,
+  .cd-navbar-primary > .active > a:focus,
+  .cd-navbar-primary > .active > a:hover {
+    color: $color-nav-links !important;
+    background-color: $color-nav-links-hover !important;
+    border: 0 !important;
+  }
 }
 
-.wrapper {
+.wrapper ::ng-deep {
   display: flex;
   width: 100%;
 
@@ -200,7 +202,7 @@ $sidebar-width: 200px;
     }
   }
 
-  a.dropdown-toggle {
+  .nav-item > a.dropdown-toggle {
     position: relative;
 
     &::after {

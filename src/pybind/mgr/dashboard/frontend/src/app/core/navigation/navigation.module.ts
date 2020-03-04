@@ -17,6 +17,9 @@ import { AdministrationComponent } from './administration/administration.compone
 import { BreadcrumbsComponent } from './breadcrumbs/breadcrumbs.component';
 import { DashboardHelpComponent } from './dashboard-help/dashboard-help.component';
 import { IdentityComponent } from './identity/identity.component';
+import { MenuItemComponent } from './menu-item/menu-item.component';
+import { MenuParentItemComponent } from './menu-parent-item/menu-parent-item.component';
+import { MenuComponent } from './menu/menu.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 
@@ -42,7 +45,10 @@ import { NotificationsComponent } from './notifications/notifications.component'
     NotificationsComponent,
     DashboardHelpComponent,
     AdministrationComponent,
-    IdentityComponent
+    IdentityComponent,
+    MenuComponent,
+    MenuItemComponent,
+    MenuParentItemComponent
   ],
   exports: [NavigationComponent, BreadcrumbsComponent]
 })

@@ -1,0 +1,15 @@
+<li routerLinkActive="active"
+    [hidden]="noSubitems"
+    class="nav-item">
+  <a (click)="clicked.emit(item)" class="nav-link dropdown-toggle"
+    [attr.aria-expanded]="expanded"
+    aria-controls="collapseBasic">
+    {{ item.label }}
+  </a>
+  <ul *ngFor="let child of item.children"
+      class="list-unstyled"
+      [collapse]="!expanded"
+      [isAnimated]="true">
+      <menu-item [item]="child" *cdFeature="child.permissions"></menu-item>
+  </ul>
+</li>

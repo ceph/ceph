@@ -12,7 +12,6 @@ import {
   PermissionHelper
 } from '../../../../../testing/unit-test-helper';
 import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -51,7 +50,7 @@ describe('MgrModuleListComponent', () => {
 
   it('should test all TableActions combinations', () => {
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+    const tableActions: any = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
     );
 

@@ -11,7 +11,6 @@ import {
   PermissionHelper
 } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../../shared/shared.module';
 import { CephModule } from '../../../ceph.module';
 import { DashboardModule } from '../../../dashboard/dashboard.module';
@@ -51,7 +50,7 @@ describe('ActiveAlertListComponent', () => {
   it('should test all TableActions combinations', () => {
     component.ngOnInit();
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+    const tableActions: any = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
     );
 
