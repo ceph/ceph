@@ -41,6 +41,10 @@ CEPH_STATX_BLOCKS = 0x400
 CEPH_STATX_BTIME = 0x800
 CEPH_STATX_VERSION = 0x1000
 
+FALLOC_FL_KEEP_SIZE = 0x01
+FALLOC_FL_PUNCH_HOLE = 0x02
+FALLOC_FL_NO_HIDE_STALE = 0x04
+
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
     # PyObject*, which invokes assumptions in cpython that we need to
@@ -95,6 +99,7 @@ cdef extern from "time.h":
 
 cdef extern from "sys/types.h":
     ctypedef unsigned long mode_t
+    ctypedef unsigned long dev_t
 
 cdef extern from "<utime.h>":
     cdef struct utimbuf:
@@ -185,6 +190,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
+    int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev)
     int ceph_close(ceph_mount_info *cmount, int fd)
     int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode)
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
@@ -198,6 +204,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
+    int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
@@ -825,6 +832,43 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "fsync failed")
 
+    def fallocate(self, fd, offset, length, mode=0):
+        """
+        Preallocate or release disk space for the file for the byte range.
+
+        :param fd: the file descriptor of the file to fallocate.
+        :param mode: the flags determines the operation to be performed on the given
+                     range. default operation (0) allocate and initialize to zero
+                     the file in the byte range, and the file size will be changed
+                     if offset + length is greater than the file size. if the
+                     FALLOC_FL_KEEP_SIZE flag is specified in the mode, the file size
+                     will not be changed. if the FALLOC_FL_PUNCH_HOLE flag is specified
+                     in the mode, the operation is deallocate space and zero the byte range.
+        :param offset: the byte range starting.
+        :param length: the length of the range.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        if not isinstance(length, int):
+            raise TypeError('length must be an int')
+
+        cdef:
+            int _fd = fd
+            int _mode = mode
+            int64_t _offset = offset
+            int64_t _length = length
+
+        with nogil:
+            ret = ceph_fallocate(self.cluster, _fd, _mode, _offset, _length)
+        if ret < 0:
+            raise make_ex(ret, "fallocate failed")
+
     def getcwd(self):
         """
         Get the current working directory.
@@ -1225,6 +1269,36 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in write")
         return ret
+
+    def mknod(self, path, mode, rdev=0):
+        """
+        Make a block or character special file.
+
+        :param path: the path to the special file.
+        :param mode: the permissions to use and the type of special file. The type can be
+                     one of stat.S_IFREG, stat.S_IFCHR, stat.S_IFBLK, stat.S_IFIFO. Both
+                     should be combined using bitwise OR.
+        :param rdev: If the file type is stat.S_IFCHR or stat.S_IFBLK then this parameter
+                     specifies the major and minor numbers of the newly created device
+                     special file. Otherwise, it is ignored.
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        if not isinstance(rdev, int):
+            raise TypeError('rdev must be an int')
+
+        cdef:
+            char* _path = path
+            mode_t _mode = mode
+            dev_t _rdev = rdev
+
+        with nogil:
+            ret = ceph_mknod(self.cluster, _path, _mode, _rdev)
+        if ret < 0:
+            raise make_ex(ret, "error in mknod {}".format(path.decode('utf-8')))
 
     def getxattr(self, path, name, size=255, follow_symlink=True):
         """
