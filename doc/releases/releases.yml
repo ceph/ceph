@@ -19,6 +19,8 @@ releases:
     target_eol: 2021-06-01
   nautilus:
     releases:
+      - version: 14.2.8
+        released: 2020-03-03
       - version: 14.2.7
         released: 2020-01-31
       - version: 14.2.6
