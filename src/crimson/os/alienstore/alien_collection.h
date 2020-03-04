@@ -11,15 +11,16 @@
 
 namespace crimson::os {
 
-struct AlienCollection final : public FuturizedCollection {
-
-  ObjectStore::CollectionHandle collection;
-
+class AlienCollection final : public FuturizedCollection {
+public:
   AlienCollection(ObjectStore::CollectionHandle ch)
   : FuturizedCollection(ch->cid),
     collection(ch) {}
 
   ~AlienCollection() {}
-};
 
+private:
+  ObjectStore::CollectionHandle collection;
+  friend AlienStore;
+};
 }
