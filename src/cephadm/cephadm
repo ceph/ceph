@@ -1137,6 +1137,19 @@ def check_unit(unit_name):
         state = 'unknown'
     return (enabled, state, installed)
 
+def check_units(units, enabler=None):
+    # type: (List[str], Optional[Packager]) -> bool
+    for u in units:
+        (enabled, state, installed) = check_unit(u)
+        if enabled and state == 'running':
+            logger.info('Unit %s is enabled and running' % u)
+            return True
+        if enabler is not None:
+            if not enabled and installed:
+                logger.info('Enabling unit %s' % u)
+                enabler.enable_service(u)
+    return False
+
 def get_legacy_config_fsid(cluster, legacy_dir=None):
     # type: (str, str) -> Optional[str]
     config_file = '/etc/ceph/%s.conf' % cluster
@@ -3101,17 +3114,10 @@ def check_time_sync(enabler=None):
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
     ]
-    for u in units:
-        (enabled, state, installed) = check_unit(u)
-        if enabled and state == 'running':
-            logger.info('Time sync unit %s is enabled and running' % u)
-            return True
-        if enabler is not None:
-            if not enabled and installed:
-                logger.info('Enabling time sync unit %s' % u)
-                enabler.enable_service(u)
-    logger.warning('No time sync service is running; checked for %s' % units)
-    return False
+    if not check_units(units, enabler=None):
+        logger.warning('No time sync service is running; checked for %s' % units)
+        return False
+    return True
 
 def command_check_host():
     # caller already checked for docker/podman
