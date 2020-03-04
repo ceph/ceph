@@ -6,5 +6,5 @@ add_executable(unittest_compression
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_compression)
-target_link_libraries(unittest_compression global)
+target_link_libraries(unittest_compression global GTest::GTest)
 add_dependencies(unittest_compression ceph_example)
