@@ -1488,6 +1488,7 @@ class ServiceDescription(object):
                  rados_config_location=None,
                  service_url=None,
                  last_refresh=None,
+                 created=None,
                  size=0,
                  running=0,
                  spec=None):
@@ -1517,6 +1518,7 @@ class ServiceDescription(object):
 
         # datetime when this info was last refreshed
         self.last_refresh = last_refresh   # type: Optional[datetime.datetime]
+        self.created = created   # type: Optional[datetime.datetime]
 
         self.spec = spec
 
@@ -1538,18 +1540,19 @@ class ServiceDescription(object):
             'size': self.size,
             'running': self.running,
         }
-        if self.last_refresh:
-            out['last_refresh'] = self.last_refresh.strftime(DATEFMT)
+        for k in ['last_refresh', 'created']:
+            if getattr(self, k):
+                out[k] = getattr(self, k).strftime(DATEFMT)
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
-        if 'last_refresh' in data:
-            data['last_refresh'] = datetime.datetime.strptime(
-                data['last_refresh'],
-                DATEFMT)
-        return cls(**data)
+        c = data.copy()
+        for k in ['last_refresh', 'created']:
+            if k in c:
+                c[k] = datetime.datetime.strptime(c[k], DATEFMT)
+        return cls(**c)
 
 
 class ServiceSpec(object):
