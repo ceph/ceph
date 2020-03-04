@@ -5,6 +5,7 @@ import fcntl
 import os
 import time
 import stat
+import uuid
 from datetime import datetime
 
 cephfs = None
@@ -586,3 +587,14 @@ def test_caps():
     assert_equal(fd_caps, file_caps)
     cephfs.close(fd)
     cephfs.unlink(b'/file-caps')
+
+@with_setup(setup_test)
+def test_setuuid():
+    ses_id_uid = uuid.uuid1()
+    ses_id_str = str(ses_id_uid)
+    cephfs.set_uuid(ses_id_str)
+
+@with_setup(setup_test)
+def test_session_timeout():
+    assert_raises(TypeError, cephfs.set_session_timeout, "300")
+    cephfs.set_session_timeout(300)
