@@ -1324,6 +1324,17 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                             osd_fsid=osd_fsid)
 
+    if not os.path.exists(data_dir + '/unit.created'):
+        with open(data_dir + '/unit.created', 'w') as f:
+            os.fchmod(f.fileno(), 0o600)
+            os.fchown(f.fileno(), uid, gid)
+            f.write('mtime is time the daemon deployment was created\n')
+
+    with open(data_dir + '/unit.configured', 'w') as f:
+        f.write('mtime is time we were last configured\n')
+        os.fchmod(f.fileno(), 0o600)
+        os.fchown(f.fileno(), uid, gid)
+
     update_firewalld(daemon_type)
 
     if reconfig and daemon_type not in Ceph.daemons:
@@ -2442,8 +2453,14 @@ def list_daemons(detail=True, legacy_dir=None):
                         i['container_image_id'] = image_id
                         i['version'] = version
                         i['started'] = start_stamp
+                        i['created'] = get_file_timestamp(
+                            os.path.join(data_dir, fsid, j, 'unit.created')
+                        )
                         i['deployed'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.image'))
+                        i['configured'] = get_file_timestamp(
+                            os.path.join(data_dir, fsid, j, 'unit.configured'))
+
                     ls.append(i)
 
     # /var/lib/rook
