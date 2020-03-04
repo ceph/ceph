@@ -30,6 +30,7 @@ enum class OperationTypeCode {
   pg_creation,
   replicated_request,
   background_recovery,
+  background_recovery_sub,
   last_op
 };
 
@@ -41,6 +42,7 @@ static constexpr const char* const OP_NAMES[] = {
   "pg_creation",
   "replicated_request",
   "background_recovery",
+  "background_recovery_sub",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
