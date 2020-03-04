@@ -203,6 +203,11 @@ public:
     }
 
     int watch_flush();
+
+    int mon_command(std::string cmd,
+                    const bufferlist& inbl,
+                    bufferlist *outbl,
+                    std::string *outs);
   };
 
   Handle handle() {
