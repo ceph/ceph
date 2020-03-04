@@ -728,10 +728,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     ev_progress=progress)
 
     def _do_upgrade(self):
-        # type: () -> Optional[AsyncCompletion]
+        # type: () -> None
         if not self.upgrade_state:
             self.log.debug('_do_upgrade no state, exiting')
-            return None
+            return
 
         target_name = self.upgrade_state.get('target_name')
         target_id = self.upgrade_state.get('target_id', None)
@@ -747,7 +747,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'count': 1,
                     'detail': [str(e)],
                 })
-                return None
+                return
             self.upgrade_state['target_id'] = target_id
             self.upgrade_state['target_version'] = target_version
             self._save_upgrade_state()
@@ -809,13 +809,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                 'failed to pull %s on host %s' % (target_name,
                                                                   d.hostname)],
                         })
-                        return None
+                        return
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
                         self.log.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.hostname, r['image_id'], target_id))
                         self.upgrade_state['target_id'] = r['image_id']
                         self._save_upgrade_state()
-                        return None
+                        return
 
                 self._update_upgrade_progress(done / len(daemons))
 
@@ -824,7 +824,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         self.log.debug('daemon %s is stopped but has correct image name' % (d.name()))
                         continue
                 if not self._wait_for_ok_to_stop(d):
-                    return None
+                    return
                 self.log.info('Upgrade: Redeploying %s.%s' %
                               (d.daemon_type, d.daemon_id))
                 ret, out, err = self.mon_command({
@@ -833,12 +833,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'value': target_name,
                     'who': daemon_type + '.' + d.daemon_id,
                 })
-                return self._daemon_action([(
+                self._daemon_action(
                     d.daemon_type,
                     d.daemon_id,
                     d.hostname,
                     'redeploy'
-                )])
+                )
+                return
 
             if need_upgrade_self:
                 mgr_map = self.get('mgr_map')
@@ -853,7 +854,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                             'but it needs at least one standby to proceed.',
                         ],
                     })
-                    return None
+                    return
 
                 self.log.info('Upgrade: there are %d other already-upgraded '
                               'standby mgrs, failing over' % num)
@@ -865,7 +866,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'prefix': 'mgr fail',
                     'who': self.get_mgr_id(),
                 })
-                return None
+                return
             elif daemon_type == 'mgr':
                 if 'UPGRADE_NO_STANDBY_MGR' in self.health_checks:
                     del self.health_checks['UPGRADE_NO_STANDBY_MGR']
@@ -929,7 +930,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         self.upgrade_state['progress_id'])
         self.upgrade_state = None
         self._save_upgrade_state()
-        return None
+        return
 
     def _check_hosts(self):
         self.log.debug('_check_hosts')
@@ -1052,35 +1053,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
             self._remove_osds_bg()
 
-            service_completions = self._apply_all_services()
-            for service_completion in service_completions:
-                if service_completion:
-                    while not service_completion.has_result:
-                        self.process([service_completion])
-                        self.log.debug(f'Still processing {service_completion}')
-                        if service_completion.needs_result:
-                            time.sleep(1)
-                        else:
-                            break
-                    if service_completion.exception is not None:
-                        self.log.error(str(service_completion.exception))
+            if self._apply_all_services():
+                continue  # did something, refresh
 
             self._refresh_configs()
 
             if self.upgrade_state and not self.upgrade_state.get('paused'):
-                upgrade_completion = self._do_upgrade()
-                if upgrade_completion:
-                    while not upgrade_completion.has_result:
-                        self.process([upgrade_completion])
-                        if upgrade_completion.needs_result:
-                            time.sleep(1)
-                        else:
-                            break
-                    if upgrade_completion.exception is not None:
-                        self.log.error(str(upgrade_completion.exception))
-                self.log.debug('did _do_upgrade')
-            else:
-                self._serve_sleep()
+                self._do_upgrade()
+                continue
+
+            self._serve_sleep()
         self.log.debug("serve exit")
 
     def config_notify(self):
@@ -1754,9 +1736,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             raise orchestrator.OrchestratorError(
                 'Unable to find %s.%s.* daemon(s)' % (service_name))
         self.log.info('%s service %s' % (action, service_name))
-        return self._daemon_action(args)
+        return self._daemon_actions(args)
 
     @async_map_completion
+    def _daemon_actions(self, daemon_type, daemon_id, host, action):
+        return self._daemon_action(daemon_type, daemon_id, host, action)
+
     def _daemon_action(self, daemon_type, daemon_id, host, action):
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
@@ -1792,7 +1777,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     daemon_type, daemon_id))
         self.log.info('%s daemons %s' % (action,
                                          ['%s.%s' % (a[0], a[1]) for a in args]))
-        return self._daemon_action(args)
+        return self._daemon_actions(args)
 
     def remove_daemons(self, names, force):
         # type: (List[str], bool) -> orchestrator.Completion
@@ -1804,7 +1789,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         self.log.info('Remove daemons %s' % [a[0] for a in args])
-        return self._remove_daemon(args)
+        return self._remove_daemons(args)
 
     def remove_service(self, service_name, force=False):
         args = []
@@ -1820,7 +1805,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 service_name))
         self.log.info('Remove service %s (daemons %s)' % (
             service_name, [a[0] for a in args]))
-        return self._remove_daemon(args)
+        return self._remove_daemons(args)
 
     def get_inventory(self, host_filter=None, refresh=False):
         """
@@ -1934,9 +1919,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     continue
                 cmds.append((host, cmd))
 
-        return self._create_osd(cmds)
+        return self._create_osds(cmds)
 
     @async_map_completion
+    def _create_osds(self, host, cmd):
+        return self._create_osd(host, cmd)
+
     def _create_osd(self, host, cmd):
 
         self._require_hosts(host)
@@ -2075,6 +2063,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if reconfig:
             extra_args.append('--reconfig')
 
+        self.log.info('%s daemon %s on %s' % (
+            'Reconfiguring' if reconfig else 'Deploying',
+            name, host))
+
         out, err, code = self._run_cephadm(
             host, name, 'deploy',
             [
@@ -2098,6 +2090,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
+    def _remove_daemons(self, name, host, force=False):
+        return self._remove_daemon(name, host, force)
+
     def _remove_daemon(self, name, host, force=False):
         """
         Remove a daemon
@@ -2105,6 +2100,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         args = ['--name', name]
         if force:
             args.extend(['--force'])
+        self.log.info('Removing daemon %s from %s' % (name, host))
         out, err, code = self._run_cephadm(
             host, name, 'rm-daemon', args)
         if not code:
@@ -2148,32 +2144,54 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             spec=spec,
             get_hosts_func=self._get_hosts,
             get_daemons_func=self.cache.get_daemons_by_service).place()
-        count = len(hosts)
-        if len(daemons) > count:
-            # remove some
-            to_remove = len(daemons) - count
-            args = []
-            for d in daemons[0:to_remove]:
-                args.append(
-                    ('%s.%s' % (d.daemon_type, d.daemon_id), d.hostname)
+
+        r = False
+
+        # add any?
+        did_config = False
+        hosts_with_daemons = {d.hostname for d in daemons}
+        self.log.debug('hosts with daemons: %s' % hosts_with_daemons)
+        for host, network, name in hosts:
+            if host not in hosts_with_daemons:
+                if not did_config and config_func:
+                    config_func(spec)
+                    did_config = True
+                daemon_id = self.get_unique_name(daemon_type, host, daemons,
+                                                 spec.service_id, name)
+                self.log.debug('Placing %s.%s on host %s' % (
+                    daemon_type, daemon_id, host))
+                if daemon_type == 'mon':
+                    create_func(daemon_id, host, network)  # type: ignore
+                else:
+                    create_func(daemon_id, host)           # type: ignore
+
+                # add to daemon list so next name(s) will also be unique
+                sd = orchestrator.DaemonDescription(
+                    hostname=host,
+                    daemon_type=daemon_type,
+                    daemon_id=daemon_id,
                 )
-            return self._remove_daemon(args)
-        elif len(daemons) < count:
-            # add some
-            count -= len(daemons)
-            hosts_with_daemons = {d.hostname for d in daemons}
-            hosts_without_daemons = {p for p in spec.placement.hosts
-                                     if p.hostname not in hosts_with_daemons}
-            return self._create_daemons(daemon_type, spec, daemons,
-                                        hosts_without_daemons, count,
-                                        create_func, config_func)
-        return trivial_result([])
+                daemons.append(sd)
+                r = True
+
+        # remove any?
+        target_hosts = [h.hostname for h in hosts]
+        for d in daemons:
+            if d.hostname not in target_hosts:
+                self._remove_daemon(d.name(), d.hostname)
+                r = True
+
+        return r
 
     def _apply_all_services(self):
-        r : List[orchestrator.Completion] = []
+        r = False
+        specs = [] # type: List[orchestrator.ServiceSpec]
         for sn, spec in self.spec_store.specs.items():
+            specs.append(spec)
+        for spec in specs:
             try:
-                r.extend(self._apply_service(spec))
+                if self._apply_service(spec):
+                    r = True
             except Exception as e:
                 self.log.warning('Failed to apply %s spec %s: %s' % (
                     spec.service_name(), spec, e))
@@ -2236,9 +2254,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 daemon_id=daemon_id,
             )
             daemons.append(sd)
-        return create_func(args)
 
-    @async_map_completion
+        @async_map_completion
+        def create_func_map(*args):
+            return create_func(*args)
+
+        return create_func_map(args)
+
     def _create_mon(self, name, host, network):
         """
         Create a new monitor on the given host.
@@ -2270,7 +2292,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         orchestrator.servicespec_validate_hosts_have_network_spec(spec)
         return self._add_daemon('mon', spec, self._create_mon)
 
-    @async_map_completion
     def _create_mgr(self, mgr_id, host):
         """
         Create a new manager instance on a host.
@@ -2316,7 +2337,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': spec.service_id,
         })
 
-    @async_map_completion
     def _create_mds(self, mds_id, host):
         # get mgr. key
         ret, keyring, err = self.mon_command({
@@ -2346,7 +2366,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': spec.rgw_realm,
         })
 
-    @async_map_completion
     def _create_rgw(self, rgw_id, host):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
@@ -2363,7 +2382,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def add_rbd_mirror(self, spec):
         return self._add_daemon('rbd-mirror', spec, self._create_rbd_mirror)
 
-    @async_map_completion
     def _create_rbd_mirror(self, daemon_id, host):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
@@ -2580,7 +2598,6 @@ receivers:
     def add_prometheus(self, spec):
         return self._add_daemon('prometheus', spec, self._create_prometheus)
 
-    @async_map_completion
     def _create_prometheus(self, daemon_id, host):
         return self._create_daemon('prometheus', daemon_id, host)
 
@@ -2595,7 +2612,6 @@ receivers:
     def apply_node_exporter(self, spec):
         return self._apply(spec)
 
-    @async_map_completion
     def _create_node_exporter(self, daemon_id, host):
         return self._create_daemon('node-exporter', daemon_id, host)
 
@@ -2607,7 +2623,6 @@ receivers:
     def apply_crash(self, spec):
         return self._apply(spec)
 
-    @async_map_completion
     def _create_crash(self, daemon_id, host):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
@@ -2625,7 +2640,6 @@ receivers:
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
-    @async_map_completion
     def _create_grafana(self, daemon_id, host):
         return self._create_daemon('grafana', daemon_id, host)
 
@@ -2637,7 +2651,6 @@ receivers:
         # type: (orchestrator.ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
-    @async_map_completion
     def _create_alertmanager(self, daemon_id, host):
         return self._create_daemon('alertmanager', daemon_id, host)
 
@@ -2833,7 +2846,7 @@ receivers:
                     # also remove it from the remove_osd list and set a health_check warning?
                     raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
 
-            completion = self._remove_daemon([(osd.fullname, osd.nodename, True)])
+            completion = self._remove_daemons([(osd.fullname, osd.nodename, True)])
             completion.add_progress('Removing OSDs', self)
             completion.update_progress = True
             if completion:
