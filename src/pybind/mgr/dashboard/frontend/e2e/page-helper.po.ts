@@ -154,6 +154,7 @@ export abstract class PageHelper {
   /**
    * Helper method to select an option inside a select element.
    * This method will also expect that the option was set.
+   * @param option The option text (not value) to be selected.
    */
   async selectOption(selectionName: string, option: string) {
     await element(by.cssContainingText(`select[name=${selectionName}] option`, option)).click();
@@ -162,6 +163,8 @@ export abstract class PageHelper {
 
   /**
    * Helper method to expect a set option inside a select element.
+   * @param option The selected option text (not value) that is to
+   *   be expected.
    */
   async expectSelectOption(selectionName: string, option: string) {
     return expect(

@@ -32,7 +32,7 @@
           <tr>
             <td i18n
                 class="bold">Maximum buckets</td>
-            <td>{{ user.max_buckets }}</td>
+            <td>{{ user.max_buckets | map:maxBucketsMap }}</td>
           </tr>
           <tr *ngIf="user.subusers && user.subusers.length">
             <td i18n
