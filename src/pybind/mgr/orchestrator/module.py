@@ -406,6 +406,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     1: 'running',
                     None: '<unknown>'
                 }[s.status]
+                if s.status == 1 and s.started:
+                    status += ' (%s)' % to_pretty_timedelta(now - s.started)
 
                 def nice_delta(t, suffix=''):
                     if t:
