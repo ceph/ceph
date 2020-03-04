@@ -5687,8 +5687,8 @@ boost::statechart::result PeeringState::Active::react(const MTrim& trim)
 
   // peer is informing us of their last_complete_ondisk
   ldout(ps->cct,10) << " replica osd." << trim.from << " lcod " << trim.trim_to << dendl;
-  ps->peer_last_complete_ondisk[pg_shard_t(trim.from, trim.shard)] = trim.trim_to;
-
+  ps->update_peer_last_complete_ondisk(pg_shard_t{trim.from, trim.shard},
+                                       trim.trim_to);
   // trim log when the pg is recovered
   ps->calc_min_last_complete_ondisk();
   return discard_event();
