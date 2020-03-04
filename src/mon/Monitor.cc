@@ -6442,8 +6442,12 @@ int Monitor::ms_handle_authentication(Connection *con)
 void Monitor::notify_new_monmap()
 {
   elector.notify_strategy_maybe_changed(monmap->strategy);
-  for (auto i : monmap->removed_ranks) {
-    elector.notify_rank_removed(i);
+  dout(30) << __func__ << "we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
+  for (auto i = monmap->removed_ranks.rbegin();
+       i != monmap->removed_ranks.rend(); ++i) {
+    int rank = *i;
+    dout(10) << __func__ << "removing rank " << rank << dendl;
+    elector.notify_rank_removed(rank);
   }
   set<int> dl;
   for (auto name : monmap->disallowed_leaders) {
