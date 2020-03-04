@@ -50,6 +50,12 @@ InstanceReplayer<I>::~InstanceReplayer() {
 }
 
 template <typename I>
+bool InstanceReplayer<I>::is_blacklisted() const {
+  std::lock_guard locker{m_lock};
+  return m_blacklisted;
+}
+
+template <typename I>
 int InstanceReplayer<I>::init() {
   C_SaferCond init_ctx;
   init(&init_ctx);
@@ -303,6 +309,7 @@ void InstanceReplayer<I>::start_image_replayer(
   } else if (image_replayer->is_blacklisted()) {
     derr << "global_image_id=" << global_image_id << ": blacklisted detected "
          << "during image replay" << dendl;
+    m_blacklisted = true;
     return;
   } else if (image_replayer->is_finished()) {
     // TODO temporary until policy integrated
