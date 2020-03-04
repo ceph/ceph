@@ -1076,15 +1076,16 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
 
         # populate the config directory for the component from the config-json
         for fname in required_files:
-            if isinstance(config['files'][fname], list):  # type: ignore
-                content = '\n'.join(config['files'][fname])  # type: ignore
-            else:
-                content = config['files'][fname]  # type: ignore
+            if 'files' in config: # type: ignore
+                if isinstance(config['files'][fname], list):  # type: ignore
+                    content = '\n'.join(config['files'][fname])  # type: ignore
+                else:
+                    content = config['files'][fname]  # type: ignore
 
-            with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
-                f.write(content)
+                with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
+                    os.fchown(f.fileno(), uid, gid)
+                    os.fchmod(f.fileno(), 0o600)
+                    f.write(content)
 
 def get_parm(option):
     # type: (str) -> Dict[str, str]
@@ -2499,7 +2500,7 @@ def command_adopt():
     elif daemon_type == 'prometheus':
         command_adopt_prometheus(daemon_id, fsid)
     elif daemon_type == 'grafana':
-        raise Error('adoption of grafana not implemented')
+        command_adopt_grafana(daemon_id, fsid)
     elif daemon_type == 'node-exporter':
         raise Error('adoption of node-exporter not implemented')
     elif daemon_type == 'alertmanager':
@@ -2541,7 +2542,6 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
     # CLUSTER field.
     unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
     (enabled, state, _) = check_unit(unit_name)
-
     if state == 'running':
         logger.info('Stopping old systemd unit %s...' % unit_name)
         call_throws(['systemctl', 'stop', unit_name])
@@ -2635,15 +2635,7 @@ def command_adopt_prometheus(daemon_id, fsid):
     daemon_type = 'prometheus'
     (uid, gid) = extract_uid_gid_monitoring(daemon_type)
 
-    unit_name = 'prometheus'
-    (enabled, state, _) = check_unit(unit_name)
-
-    if state == 'running':
-        logger.info('Stopping old systemd unit %s...' % unit_name)
-        call_throws(['systemctl', 'stop', unit_name])
-    if enabled:
-        logger.info('Disabling old systemd unit %s...' % unit_name)
-        call_throws(['systemctl', 'disable', unit_name])
+    _stop_and_disable('prometheus')
 
     data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
                                      uid=uid, gid=gid)
@@ -2664,6 +2656,97 @@ def command_adopt_prometheus(daemon_id, fsid):
     c = get_container(fsid, daemon_type, daemon_id)
     deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid)
     update_firewalld(daemon_type)
+
+def command_adopt_grafana(daemon_id, fsid):
+    # type: (str, str) -> None
+
+    daemon_type = 'grafana'
+    (uid, gid) = extract_uid_gid_monitoring(daemon_type)
+
+    _stop_and_disable('grafana-server')
+
+    data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
+                                     uid=uid, gid=gid)
+
+    # config
+    config_src = '/etc/grafana/grafana.ini'
+    config_src = os.path.abspath(args.legacy_dir + config_src)
+    config_dst = os.path.join(data_dir_dst, 'etc/grafana')
+    makedirs(config_dst, uid, gid, 0o755)
+    copy_files([config_src], config_dst, uid=uid, gid=gid)
+
+    prov_src = '/etc/grafana/provisioning/'
+    prov_src = os.path.abspath(args.legacy_dir + prov_src)
+    prov_dst = os.path.join(data_dir_dst, 'etc/grafana')
+    copy_tree([prov_src], prov_dst, uid=uid, gid=gid)
+
+    # cert
+    cert = '/etc/grafana/grafana.crt'
+    key = '/etc/grafana/grafana.key'
+    if os.path.exists(cert) and os.path.exists(key):
+        cert_src = '/etc/grafana/grafana.crt'
+        cert_src = os.path.abspath(args.legacy_dir + cert_src)
+        makedirs(os.path.join(data_dir_dst, 'etc/grafana/certs'), uid, gid, 0o755)
+        cert_dst = os.path.join(data_dir_dst, 'etc/grafana/certs/cert_file')
+        copy_files([cert_src], cert_dst, uid=uid, gid=gid)
+
+        key_src = '/etc/grafana/grafana.key'
+        key_src = os.path.abspath(args.legacy_dir + key_src)
+        key_dst = os.path.join(data_dir_dst, 'etc/grafana/certs/cert_key')
+        copy_files([key_src], key_dst, uid=uid, gid=gid)
+
+        _adjust_grafana_ini(os.path.join(config_dst, 'grafana.ini'))
+    else:
+        logger.debug("Skipping ssl, missing cert {} or key {}".format(cert, key))
+
+
+    # data - possible custom dashboards/plugins
+    data_src = '/var/lib/grafana/'
+    data_src = os.path.abspath(args.legacy_dir + data_src)
+    data_dst = os.path.join(data_dir_dst, 'data')
+    copy_tree([data_src], data_dst, uid=uid, gid=gid)
+
+    make_var_run(fsid, uid, gid)
+    c = get_container(fsid, daemon_type, daemon_id)
+    deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid)
+    update_firewalld(daemon_type)
+
+def _adjust_grafana_ini(filename):
+    # type: (str) -> None
+
+    # Update cert_file, cert_key pathnames in server section
+    # ConfigParser does not preserve comments
+    try:
+        with open(filename, "r") as grafana_ini:
+            lines = grafana_ini.readlines()
+        with open("{}.new".format(filename), "w") as grafana_ini:
+            server_section=False
+            for line in lines:
+                if line.startswith('['):
+                    server_section=False
+                if line.startswith('[server]'):
+                    server_section=True
+                if server_section:
+                    line = re.sub(r'^cert_file.*',
+                            'cert_file = /etc/grafana/certs/cert_file', line)
+                    line = re.sub(r'^cert_key.*',
+                            'cert_key = /etc/grafana/certs/cert_key', line)
+                grafana_ini.write(line)
+        os.rename("{}.new".format(filename), filename)
+    except OSError as err:
+        raise Error("Cannot update {}: {}".format(filename, err))
+
+
+def _stop_and_disable(unit_name):
+    # type: (str) -> None
+
+    (enabled, state, _) = check_unit(unit_name)
+    if state == 'running':
+        logger.info('Stopping old systemd unit %s...' % unit_name)
+        call_throws(['systemctl', 'stop', unit_name])
+    if enabled:
+        logger.info('Disabling old systemd unit %s...' % unit_name)
+        call_throws(['systemctl', 'disable', unit_name])
 
 
 ##################################
