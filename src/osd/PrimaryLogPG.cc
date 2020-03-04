@@ -12437,6 +12437,7 @@ bool PrimaryLogPG::start_recovery_ops(
       dout(10) << "deferring backfill due to NOREBALANCE" << dendl;
       deferred_backfill = true;
     } else if (!recovery_state.is_backfill_reserved()) {
+      /* DNMNOTE I think this branch is dead */
       dout(10) << "deferring backfill due to !backfill_reserved" << dendl;
       if (!backfill_reserving) {
 	dout(10) << "queueing RequestBackfill" << dendl;
