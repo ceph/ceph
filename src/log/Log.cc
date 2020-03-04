@@ -62,9 +62,9 @@ Log::~Log()
 void Log::set_coarse_timestamps(bool coarse) {
   std::scoped_lock lock(m_flush_mutex);
   if (coarse)
-    clock.coarsen();
+    Entry::clock().coarsen();
   else
-    clock.refine();
+    Entry::clock().refine();
 }
 
 void Log::set_flush_on_exit()
