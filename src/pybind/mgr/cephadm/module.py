@@ -2162,7 +2162,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # add some
             count -= len(daemons)
             hosts_with_daemons = {d.hostname for d in daemons}
-            hosts_without_daemons = {p for p in spec.placement.hosts
+            hosts_without_daemons = {p for p in hosts
                                      if p.hostname not in hosts_with_daemons}
             return self._create_daemons(daemon_type, spec, daemons,
                                         hosts_without_daemons, count,
