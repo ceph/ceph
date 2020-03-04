@@ -33,12 +33,15 @@ and major events. ::
 Execute the following to show the monitor quorum, including which monitors are
 participating and which one is the leader. ::
 
+	ceph mon stat
 	ceph quorum_status
 
 Execute the following to query the status of a single monitor, including whether
 or not it is in the quorum. ::
 
-	ceph [-m monhost] mon_status
+	ceph tell mon.[id] mon_status
+
+where the value of ``[id]`` can be determined, e.g., from ``ceph -s``.
 
 
 Authentication Subsystem
@@ -396,13 +399,12 @@ This is also available more directly::
 
 The above will block until a quorum is reached.
 
-For a status of just the monitor you connect to (use ``-m HOST:PORT``
-to select)::
+For a status of just a single monitor::
 
-	ceph mon_status -f json-pretty
+	ceph tell mon.[name] mon_status
 	
-	
-.. code-block:: javascript
+where the value of ``[name]`` can be taken from ``ceph quorum_status``. Sample
+output::
 	
 	{
 	    "name": "b",
