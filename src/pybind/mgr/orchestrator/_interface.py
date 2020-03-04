@@ -1275,13 +1275,13 @@ class PlacementSpec(object):
     def pretty_str(self):
         kv = []
         if self.count:
-            kv.append('count=%d' % self.count)
+            kv.append('count:%d' % self.count)
         if self.label:
-            kv.append('label=%s' % self.label)
+            kv.append('label:%s' % self.label)
         if self.hosts:
-            kv.append('hosts=%s' % ','.join([str(h) for h in self.hosts]))
+            kv.append('%s' % ','.join([str(h) for h in self.hosts]))
         if self.all_hosts:
-            kv.append('all=true')
+            kv.append('all:true')
         return ' '.join(kv)
 
     def __repr__(self):
