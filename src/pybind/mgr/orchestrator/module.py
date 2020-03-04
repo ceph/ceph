@@ -335,11 +335,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
-                ['NAME', 'RUNNING', 'REFRESHED', 'IMAGE NAME', 'IMAGE ID', 'SPEC', 'PLACEMENT'],
+                ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
+                 'SPEC', 'PLACEMENT',
+                 'IMAGE NAME', 'IMAGE ID',
+                ],
                 border=False)
             table.align['NAME'] = 'l'
             table.align['RUNNING'] = 'r'
             table.align['REFRESHED'] = 'l'
+            table.align['AGE'] = 'l'
             table.align['IMAGE NAME'] = 'l'
             table.align['IMAGE ID'] = 'l'
             table.align['SPEC'] = 'l'
@@ -347,18 +351,20 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(services, key=lambda s: s.service_name):
-                if s.last_refresh:
-                    age = to_pretty_timedelta(now - s.last_refresh) + ' ago'
-                else:
-                    age = '-'
+                def nice_delta(t, suffix=''):
+                    if t:
+                        return to_pretty_timedelta(now - t) + suffix
+                    else:
+                        return '-'
                 table.add_row((
                     s.service_name,
                     '%d/%d' % (s.running, s.size),
-                    age,
-                    ukn(s.container_image_name),
-                    ukn(s.container_image_id)[0:12],
+                    nice_delta(s.last_refresh, ' age'),
+                    nice_delta(s.created),
                     'present' if s.spec else '-',
                     s.spec.placement.pretty_str() if s.spec else '-',
+                    ukn(s.container_image_name),
+                    ukn(s.container_image_id)[0:12],
                 ))
 
             return HandleCommandResult(stdout=table.get_string())
