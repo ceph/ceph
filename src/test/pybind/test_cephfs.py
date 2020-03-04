@@ -522,3 +522,22 @@ def test_fchown():
     assert_equal(st["gid"], 9999)
     cephfs.close(fd)
     cephfs.unlink(b'/file-fchown')
+
+@with_setup(setup_test)
+def test_fallocate():
+    fd = cephfs.open(b'/file-fallocate', 'w', 0o755)
+    assert_raises(TypeError, cephfs.fallocate, b'/file-fallocate', 0, 10)
+    cephfs.fallocate(fd, 0, 10)
+    stat = cephfs.fsync(fd, 0)
+    st = cephfs.fstat(fd)
+    assert_equal(st.st_size, 10)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fallocate')
+
+@with_setup(setup_test)
+def test_mknod():
+    mode = stat.S_IFIFO | stat.S_IRUSR | stat.S_IWUSR
+    cephfs.mknod(b'/file-fifo', mode)
+    st = cephfs.statx(b'/file-fifo', libcephfs.CEPH_STATX_MODE, 0)
+    assert_equal(st["mode"] & mode, mode)
+    cephfs.unlink(b'/file-fifo')
