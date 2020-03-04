@@ -32,7 +32,7 @@ seastar::future<bool> BackgroundRecovery::do_recovery()
   if (pg->has_reset_since(epoch_started))
     return seastar::make_ready_future<bool>(false);
   return with_blocking_future(
-    pg->start_recovery_ops(
+    pg->get_recovery_handler()->start_recovery_ops(
       crimson::common::local_conf()->osd_recovery_max_single_start));
 }
 
@@ -57,8 +57,14 @@ seastar::future<> BackgroundRecovery::start()
 
   IRef ref = this;
   return ss.throttler.with_throttle_while(
-    this, get_scheduler_params(), [ref, this] {
+    this, get_scheduler_params(), [this] {
       return do_recovery();
+    }).handle_exception_type([ref, this](const std::system_error& err) {
+      if (err.code() == std::make_error_code(std::errc::interrupted)) {
+	logger().debug("{} recovery interruped: {}", *pg, err.what());
+	return seastar::now();
+      }
+      return seastar::make_exception_future<>(err);
     });
 }
 

@@ -6,10 +6,8 @@
 #include "messages/MOSDRepOpReply.h"
 
 #include "crimson/common/log.h"
-#include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/shard_services.h"
-#include "crimson/osd/pg.h"
 #include "osd/PeeringState.h"
 
 namespace {

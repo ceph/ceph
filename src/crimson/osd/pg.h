@@ -27,6 +27,9 @@
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
+#include "crimson/osd/pg_recovery.h"
+#include "crimson/osd/pg_recovery_listener.h"
+#include "crimson/osd/recovery_backend.h"
 
 class OSDMap;
 class MQuery;
@@ -52,6 +55,7 @@ class ClientRequest;
 class PG : public boost::intrusive_ref_counter<
   PG,
   boost::thread_unsafe_counter>,
+  public PGRecoveryListener,
   PeeringState::PeeringListener,
   DoutPrefixProvider
 {
@@ -82,11 +86,11 @@ public:
 
   ~PG();
 
-  const pg_shard_t& get_pg_whoami() const {
+  const pg_shard_t& get_pg_whoami() const final {
     return pg_whoami;
   }
 
-  const spg_t& get_pgid() const {
+  const spg_t& get_pgid() const final {
     return pgid;
   }
 
@@ -96,8 +100,6 @@ public:
   const PGBackend& get_backend() const {
     return *backend;
   }
-
-  
   // EpochSource
   epoch_t get_osdmap_epoch() const final {
     return peering_state.get_osdmap_epoch();
@@ -199,7 +201,9 @@ public:
 	start_peering_event_operation(std::move(*event));
       });
   }
-
+  std::vector<pg_shard_t> get_replica_recovery_order() const final {
+    return peering_state.get_replica_recovery_order();
+  }
   void request_local_background_io_reservation(
     unsigned priority,
     PGPeeringEventRef on_grant,
@@ -303,7 +307,7 @@ public:
     // Not needed yet
   }
   void on_change(ceph::os::Transaction &t) final {
-    // Not needed yet
+    recovery_backend->on_peering_interval_change(t);
   }
   void on_activate(interval_set<snapid_t> to_trim) final;
   void on_activate_complete() final;
@@ -344,24 +348,15 @@ public:
     return 0;
   }
 
-  void start_background_recovery(
-    crimson::osd::scheduler::scheduler_class_t klass) {
-    shard_services.start_operation<BackgroundRecovery>(
-      this,
-      shard_services,
-      get_osdmap_epoch(),
-      klass);
-  }
-
   void on_backfill_reserved() final {
-    start_background_recovery(
+    recovery_handler->start_background_recovery(
       crimson::osd::scheduler::scheduler_class_t::background_best_effort);
   }
   void on_backfill_canceled() final {
     ceph_assert(0 == "Not implemented");
   }
   void on_recovery_reserved() final {
-    start_background_recovery(
+    recovery_handler->start_background_recovery(
       crimson::osd::scheduler::scheduler_class_t::background_recovery);
   }
 
@@ -437,16 +432,16 @@ public:
 
 
   // Utility
-  bool is_primary() const {
+  bool is_primary() const final {
     return peering_state.is_primary();
   }
-  bool is_peered() const {
+  bool is_peered() const final {
     return peering_state.is_peered();
   }
-  bool is_recovering() const {
+  bool is_recovering() const final {
     return peering_state.is_recovering();
   }
-  bool is_backfilling() const {
+  bool is_backfilling() const final {
     return peering_state.is_backfilling();
   }
   pg_stat_t get_stats() {
@@ -565,15 +560,67 @@ public:
     return eversion_t(projected_last_update.epoch,
 		      ++projected_last_update.version);
   }
-
+  ShardServices& get_shard_services() final {
+    return shard_services;
+  }
 private:
   std::unique_ptr<PGBackend> backend;
+  std::unique_ptr<RecoveryBackend> recovery_backend;
+  std::unique_ptr<PGRecovery> recovery_handler;
 
   PeeringState peering_state;
   eversion_t projected_last_update;
 public:
-  bool has_reset_since(epoch_t epoch) const {
+  RecoveryBackend* get_recovery_backend() final {
+    return recovery_backend.get();
+  }
+  PGRecovery* get_recovery_handler() final {
+    return recovery_handler.get();
+  }
+  PeeringState& get_peering_state() final {
+    return peering_state;
+  }
+  bool has_reset_since(epoch_t epoch) const final {
     return peering_state.pg_has_reset_since(epoch);
+  }
+
+  const pg_missing_tracker_t& get_local_missing() const {
+    return peering_state.get_pg_log().get_missing();
+  }
+  epoch_t get_last_peering_reset() const {
+    return peering_state.get_last_peering_reset();
+  }
+  const set<pg_shard_t> &get_acting_recovery_backfill() const {
+    return peering_state.get_acting_recovery_backfill();
+  }
+  void begin_peer_recover(pg_shard_t peer, const hobject_t oid) {
+    peering_state.begin_peer_recover(peer, oid);
+  }
+  uint64_t min_peer_features() const {
+    return peering_state.get_min_peer_features();
+  }
+  const map<hobject_t, set<pg_shard_t>>&
+  get_missing_loc_shards() const {
+    return peering_state.get_missing_loc().get_missing_locs();
+  }
+  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
+    return peering_state.get_peer_missing();
+  }
+  const pg_missing_const_i* get_shard_missing(pg_shard_t shard) const {
+    if (shard == pg_whoami)
+      return &get_local_missing();
+    else {
+      auto it = peering_state.get_peer_missing().find(shard);
+      if (it == peering_state.get_peer_missing().end())
+	return nullptr;
+      else
+	return &it->second;
+    }
+  }
+  int get_recovery_op_priority() const {
+    int64_t pri = 0;
+    get_pool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+    return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
   }
 
 private:
@@ -599,41 +646,23 @@ private:
   friend class PGAdvanceMap;
   friend class PeeringEvent;
   friend class RepRequest;
-public:
-  crimson::osd::blocking_future<bool> start_recovery_ops(size_t max_to_start);
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
   }
 
-  bool new_backfill;
-  hobject_t last_backfill_started;
-
-  size_t start_primary_recovery_ops(
-    size_t max_to_start,
-    std::vector<crimson::osd::blocking_future<>> *out);
-  size_t start_replica_recovery_ops(
-    size_t max_to_start,
-    std::vector<crimson::osd::blocking_future<>> *out);
-  size_t start_backfill_ops(
-    size_t max_to_start,
-    std::vector<crimson::osd::blocking_future<>> *out);
-
-  std::vector<pg_shard_t> get_replica_recovery_order() const;
-  std::optional<crimson::osd::blocking_future<>> recover_missing(
-    const hobject_t &hoid, eversion_t need);
-
-  size_t prep_object_replica_deletes(
-    const hobject_t& soid,
-    eversion_t need,
-    std::vector<crimson::osd::blocking_future<>> *in_progress);
-
-  size_t prep_object_replica_pushes(
-    const hobject_t& soid,
-    eversion_t need,
-    std::vector<crimson::osd::blocking_future<>> *in_progress) {
-    return 0;
+  bool is_missing_object(const hobject_t& soid) const {
+    return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }
+  bool is_unreadable_object(const hobject_t &oid) const final {
+    return is_missing_object(oid) ||
+      !peering_state.get_missing_loc().readable_with_acting(
+	oid, get_actingset());
+  }
+  const set<pg_shard_t> &get_actingset() const {
+    return peering_state.get_actingset();
+  }
+};
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
 
