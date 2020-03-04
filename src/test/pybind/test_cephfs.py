@@ -564,3 +564,14 @@ def test_lazyio():
     assert_equal(st.st_size, 8)
     cephfs.close(fd)
     cephfs.unlink(b'/file-lazyio')
+
+@with_setup(setup_test)
+def test_replication():
+    fd = cephfs.open(b'/file-rep', 'w', 0o755)
+    assert_raises(TypeError, cephfs.get_file_replication, "fd")
+    cnt = cephfs.get_file_replication(fd)
+    assert_equal(cnt, 3)
+    cnt = cephfs.get_path_replication(b'/file-rep')
+    assert_equal(cnt, 3)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-rep')
