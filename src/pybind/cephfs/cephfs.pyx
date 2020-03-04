@@ -168,14 +168,20 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                       const void *value, size_t size, int flags)
     int ceph_fsetxattr(ceph_mount_info *cmount, int fd, const char *name,
                        const void *value, size_t size, int flags)
+    int ceph_lsetxattr(ceph_mount_info *cmount, const char *path, const char *name,
+                       const void *value, size_t size, int flags)
     int ceph_getxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       void *value, size_t size)
     int ceph_fgetxattr(ceph_mount_info *cmount, int fd, const char *name,
                        void *value, size_t size)
+    int ceph_lgetxattr(ceph_mount_info *cmount, const char *path, const char *name,
+                       void *value, size_t size)
     int ceph_removexattr(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_fremovexattr(ceph_mount_info *cmount, int fd, const char *name)
+    int ceph_lremovexattr(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_listxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
     int ceph_flistxattr(ceph_mount_info *cmount, int fd, char *list, size_t size)
+    int ceph_llistxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
@@ -1220,7 +1226,7 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in write")
         return ret
 
-    def getxattr(self, path, name, size=255):
+    def getxattr(self, path, name, size=255, follow_symlink=True):
         """
          Get an extended attribute.
          
@@ -1242,9 +1248,14 @@ cdef class LibCephFS(object):
 
         try:
             ret_buf = <char *>realloc_chk(ret_buf, ret_length)
-            with nogil:
-                ret = ceph_getxattr(self.cluster, _path, _name, ret_buf,
-                                    ret_length)
+            if follow_symlink:
+                with nogil:
+                    ret = ceph_getxattr(self.cluster, _path, _name, ret_buf,
+                                        ret_length)
+            else:
+                with nogil:
+                    ret = ceph_lgetxattr(self.cluster, _path, _name, ret_buf,
+                                         ret_length)
 
             if ret < 0:
                 raise make_ex(ret, "error in getxattr")
@@ -1287,10 +1298,24 @@ cdef class LibCephFS(object):
         finally:
             free(ret_buf)
 
-    def setxattr(self, path, name, value, flags):
+    def lgetxattr(self, path, name, size=255):
+        """
+         Get an extended attribute without following symbolic links. This
+         function is identical to ceph_getxattr, but if the path refers to
+         a symbolic link, we get the extended attributes of the symlink
+         rather than the attributes of the file it points to.
+
+         :param path: the path to the file
+         :param name: the name of the extended attribute to get
+         :param size: the size of the pre-allocated buffer
+        """
+
+        return self.getxattr(path, name, size=size, follow_symlink=False)
+
+    def setxattr(self, path, name, value, flags, follow_symlink=True):
         """
         Set an extended attribute on a file.
-        
+
        :param path: the path to the file.
        :param name: the name of the extended attribute to set.
        :param value: the bytes of the extended attribute value
@@ -1311,9 +1336,15 @@ cdef class LibCephFS(object):
             size_t _value_len = len(value)
             int _flags = flags
 
-        with nogil:
-            ret = ceph_setxattr(self.cluster, _path, _name,
-                                _value, _value_len, _flags)
+        if follow_symlink:
+            with nogil:
+                ret = ceph_setxattr(self.cluster, _path, _name,
+                                    _value, _value_len, _flags)
+        else:
+            with nogil:
+                ret = ceph_lsetxattr(self.cluster, _path, _name,
+                                    _value, _value_len, _flags)
+
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
@@ -1348,8 +1379,18 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in fsetxattr")
 
+    def lsetxattr(self, path, name, value, flags):
+        """
+        Set an extended attribute on a file but do not follow symbolic link.
 
-    def removexattr(self, path, name):
+        :param path: the path to the file.
+        :param name: the name of the extended attribute to set.
+        :param value: the bytes of the extended attribute value
+        """
+
+        self.setxattr(path, name, value, flags, follow_symlink=False)
+
+    def removexattr(self, path, name, follow_symlink=True):
         """
         Remove an extended attribute of a file.
 
@@ -1365,8 +1406,13 @@ cdef class LibCephFS(object):
             char *_path = path
             char *_name = name
 
-        with nogil:
-            ret = ceph_removexattr(self.cluster, _path, _name)
+        if follow_symlink:
+            with nogil:
+                ret = ceph_removexattr(self.cluster, _path, _name)
+        else:
+            with nogil:
+                ret = ceph_lremovexattr(self.cluster, _path, _name)
+
         if ret < 0:
             raise make_ex(ret, "error in removexattr")
 
@@ -1392,8 +1438,16 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in fremovexattr")
 
+    def lremovexattr(self, path, name):
+        """
+        Remove an extended attribute of a file but do not follow symbolic link.
 
-    def listxattr(self, path, size=65536):
+        :param path: path of the file.
+        :param name: name of the extended attribute to remove.
+        """
+        self.removexattr(path, name, follow_symlink=False)
+
+    def listxattr(self, path, size=65536, follow_symlink=True):
         """
         List the extended attribute keys set on a file.
 
@@ -1411,8 +1465,12 @@ cdef class LibCephFS(object):
 
         try:
             ret_buf = <char *>realloc_chk(ret_buf, ret_length)
-            with nogil:
-                ret = ceph_listxattr(self.cluster, _path, ret_buf, ret_length)
+            if follow_symlink:
+                with nogil:
+                    ret = ceph_listxattr(self.cluster, _path, ret_buf, ret_length)
+            else:
+                with nogil:
+                    ret = ceph_llistxattr(self.cluster, _path, ret_buf, ret_length)
 
             if ret < 0:
                 raise make_ex(ret, "error in listxattr")
@@ -1449,6 +1507,16 @@ cdef class LibCephFS(object):
             return ret, ret_buf[:ret]
         finally:
             free(ret_buf)
+
+    def llistxattr(self, path, size=65536):
+        """
+        List the extended attribute keys set on a file but do not follow symbolic link.
+
+        :param path: path of the file.
+        :param size: the size of list buffer to be filled with extended attribute keys.
+        """
+
+        return self.listxattr(path, size=size, follow_symlink=False)
 
     def stat(self, path, follow_symlink=True):
         """
