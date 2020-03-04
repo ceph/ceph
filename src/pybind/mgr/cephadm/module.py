@@ -1732,9 +1732,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if d.matches_service(service_name):
                     args.append((d.daemon_type, d.daemon_id,
                                  d.hostname, action))
-        if not args:
-            raise orchestrator.OrchestratorError(
-                'Unable to find %s.%s.* daemon(s)' % (service_name))
         self.log.info('%s service %s' % (action, service_name))
         return self._daemon_actions(args)
 
@@ -1800,9 +1797,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         (d.name(), d.hostname, force)
                     )
                     self.spec_store.rm(d.service_name())
-        if not args:
-            raise OrchestratorError('Unable to find daemons in %s service' % (
-                service_name))
         self.log.info('Remove service %s (daemons %s)' % (
             service_name, [a[0] for a in args]))
         return self._remove_daemons(args)
