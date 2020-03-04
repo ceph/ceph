@@ -664,12 +664,16 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
              << queue->queue_op_seq - queue->completed_op_seq << dendl;
     // check waiting count before doing callback (which may
     // destroy this ioc).
-    if (ctx->priv) {
-      if (!--ctx->num_running) {
-        task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
+    if(!task->return_code)
+      if (ctx->priv) {
+        if (!--ctx->num_running) {
+          task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
+        }
+      } else {
+        ctx->try_aio_wake();
       }
-    } else {
-      ctx->try_aio_wake();
+    else {
+      --ctx->num_running;
     }
     task->release_segs(queue);
     delete task;
@@ -826,7 +830,7 @@ static void write_split(
     NVMEDevice *dev,
     uint64_t off,
     bufferlist &bl,
-    IOContext *ioc)
+    IOContext *ioc, int return_code)
 {
   uint64_t remain_len = bl.length(), begin = 0, write_size;
   Task *t;
@@ -835,7 +839,7 @@ static void write_split(
 
   while (remain_len > 0) {
     write_size = std::min(remain_len, split_size);
-    t = new Task(dev, IOCommand::WRITE_COMMAND, off + begin, write_size);
+    t = new Task(dev, IOCommand::WRITE_COMMAND, off + begin, write_size, return_code);
     // TODO: if upper layer alloc memory with known physical address,
     // we can reduce this copy
     bl.splice(0, write_size, &t->bl);
@@ -896,7 +900,7 @@ int NVMEDevice::aio_write(
            << " buffered " << buffered << dendl;
   ceph_assert(is_valid_io(off, len));
 
-  write_split(this, off, bl, ioc);
+  write_split(this, off, bl, ioc, 0);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
 
   return 0;
@@ -914,10 +918,9 @@ int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered, int write_hin
   ceph_assert(off + len <= size);
 
   IOContext ioc(cct, NULL);
-  write_split(this, off, bl, &ioc);
+  write_split(this, off, bl, &ioc, 1);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   aio_submit(&ioc);
-  ioc.aio_wait();
   return 0;
 }
 
