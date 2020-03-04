@@ -890,6 +890,8 @@ void MonClient::tick()
 {
   ldout(cct, 10) << __func__ << dendl;
 
+  utime_t now = ceph_clock_now();
+
   auto reschedule_tick = make_scope_guard([this] {
       schedule_tick();
     });
@@ -902,7 +904,6 @@ void MonClient::tick()
     return _reopen_session();
   } else if (active_con) {
     // just renew as needed
-    utime_t now = ceph_clock_now();
     auto cur_con = active_con->get_con();
     if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
       const bool maybe_renew = sub.need_renew();
@@ -913,22 +914,28 @@ void MonClient::tick()
       }
     }
 
-    cur_con->send_keepalive();
+    if (now > last_keepalive + cct->_conf->mon_client_ping_interval) {
+      cur_con->send_keepalive();
+      last_keepalive = now;
 
-    if (cct->_conf->mon_client_ping_timeout > 0 &&
-	cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
-      utime_t lk = cur_con->get_last_keepalive_ack();
-      utime_t interval = now - lk;
-      if (interval > cct->_conf->mon_client_ping_timeout) {
-	ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
-		      << " seconds), reconnecting" << dendl;
-	return _reopen_session();
+      if (cct->_conf->mon_client_ping_timeout > 0 &&
+	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
+	utime_t lk = cur_con->get_last_keepalive_ack();
+	utime_t interval = now - lk;
+	if (interval > cct->_conf->mon_client_ping_timeout) {
+	  ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
+			<< " seconds), reconnecting" << dendl;
+	  return _reopen_session();
+	}
       }
+
+      _un_backoff();
     }
 
-    _un_backoff();
-
-    send_log();
+    if (now > last_send_log + cct->_conf->mon_client_log_interval) {
+      send_log();
+      last_send_log = now;
+    }
   }
 }
 
@@ -951,7 +958,9 @@ void MonClient::schedule_tick()
 				reopen_interval_multiplier);
     timer.add_event_after(hunt_interval, do_tick);
   } else {
-    timer.add_event_after(cct->_conf->mon_client_ping_interval, do_tick);
+    timer.add_event_after(std::min(cct->_conf->mon_client_ping_interval,
+				   cct->_conf->mon_client_log_interval),
+			  do_tick);
   }
 }
 
