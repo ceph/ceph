@@ -1732,7 +1732,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if d.matches_service(service_name):
                     args.append((d.daemon_type, d.daemon_id,
                                  d.hostname, action))
-        self.log.info('%s service %s' % (action, service_name))
+        self.log.info('%s service %s' % (action.capitalize(), service_name))
         return self._daemon_actions(args)
 
     @async_map_completion
@@ -1772,8 +1772,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             raise orchestrator.OrchestratorError(
                 'Unable to find %s.%s daemon(s)' % (
                     daemon_type, daemon_id))
-        self.log.info('%s daemons %s' % (action,
-                                         ['%s.%s' % (a[0], a[1]) for a in args]))
+        self.log.info('%s daemons %s' % (
+            action.capitalize(),
+            ','.join(['%s.%s' % (a[0], a[1]) for a in args])))
         return self._daemon_actions(args)
 
     def remove_daemons(self, names, force):
