@@ -403,10 +403,15 @@ class Device(object):
         return rejected
 
     def _check_lvm_reject_reasons(self):
-        rejected = self._check_generic_reject_reasons()
+        rejected = []
         available_vgs = [vg for vg in self.vgs if vg.free >= 5368709120]
         if self.vgs and not available_vgs:
             rejected.append('Insufficient space (<5GB) on vgs')
+
+        if not self.vgs:
+            # only check generic if no vgs are present. Vgs might hold lvs and
+            # that might cause 'locked' to trigger
+            rejected.extend(self._check_generic_reject_reasons())
 
         return len(rejected) == 0, rejected
 
