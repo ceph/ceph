@@ -227,6 +227,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_get_path_replication(ceph_mount_info *cmount, const char *path)
     int ceph_get_pool_id(ceph_mount_info *cmount, const char *pool_name)
     int ceph_get_pool_replication(ceph_mount_info *cmount, int pool_id)
+    int ceph_debug_get_fd_caps(ceph_mount_info *cmount, int fd)
+    int ceph_debug_get_file_caps(ceph_mount_info *cmount, const char *path)
+    uint32_t ceph_get_cap_return_timeout(ceph_mount_info *cmount)
 
 
 class Error(Exception):
@@ -2236,5 +2239,64 @@ cdef class LibCephFS(object):
             ret = ceph_get_pool_replication(self.cluster, _pool_id)
         if ret < 0:
             raise make_ex(ret, "error in get_pool_replication")
+
+        return ret
+
+    def debug_get_fd_caps(self, fd):
+        """
+        Get the capabilities currently issued to the client given the fd.
+
+        :param fd: the file descriptor to get issued
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+
+        with nogil:
+            ret = ceph_debug_get_fd_caps(self.cluster, _fd)
+        if ret < 0:
+            raise make_ex(ret, "error in debug_get_fd_caps")
+
+        return ret
+
+    def debug_get_file_caps(self, path):
+        """
+        Get the capabilities currently issued to the client given the path.
+
+        :param path: the path of the file/directory to get the capabilities of.
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+
+        cdef:
+            char* _path = path
+
+        with nogil:
+            ret = ceph_debug_get_file_caps(self.cluster, _path)
+        if ret < 0:
+            raise make_ex(ret, "error in debug_get_file_caps")
+
+        return ret
+
+    def get_cap_return_timeout(self):
+        """
+        Get the amount of time that the client has to return caps
+
+        In the event that a client does not return its caps, the MDS may blacklist
+        it after this timeout. Applications should check this value and ensure
+        that they set the delegation timeout to a value lower than this.
+        """
+
+        self.require_state("mounted")
+
+        with nogil:
+            ret = ceph_get_cap_return_timeout(self.cluster)
+        if ret < 0:
+            raise make_ex(ret, "error in get_cap_return_timeout")
 
         return ret
