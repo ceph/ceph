@@ -180,6 +180,9 @@ private:
 					Ref<MOSDRepOpReply> m);
   seastar::future<> handle_peering_op(crimson::net::Connection* conn,
 				      Ref<MOSDPeeringOp> m);
+  seastar::future<> handle_recovery_subreq(crimson::net::Connection* conn,
+					   Ref<MOSDFastDispatchOp> m);
+
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
