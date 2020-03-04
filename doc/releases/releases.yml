@@ -12,11 +12,6 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
-  octopus:
-    releases:
-      - version: 15.1.0
-        released: 2020-01-29
-    target_eol: 2021-06-01
   nautilus:
     releases:
       - version: 14.2.8
@@ -37,6 +32,7 @@ releases:
         released: 2019-04-29
       - version: 14.2.0
         released: 2019-03-19
+    target_eol: 2021-06-01
 
   mimic:
     releases:
@@ -245,6 +241,8 @@ releases:
 
 development:
   releases:
+    - version: 15.1.0
+      released: 2020-01-29
     - version: 15.0.0
       released: 2019-04-03
       skip_ref: true        
