@@ -4,6 +4,7 @@ import cephfs as libcephfs
 import fcntl
 import os
 import time
+import stat
 from datetime import datetime
 
 cephfs = None
@@ -431,3 +432,34 @@ def test_futimens():
 
     cephfs.close(fd)
     cephfs.unlink(b'/file-1')
+
+@with_setup(setup_test)
+def test_fchmod():
+    fd = cephfs.open(b'/file-fchmod', 'w', 0o655)
+    st = cephfs.statx(b'/file-fchmod', libcephfs.CEPH_STATX_MODE, 0)
+    mode = st["mode"] | stat.S_IXUSR
+    cephfs.fchmod(fd, mode)
+    st = cephfs.statx(b'/file-fchmod', libcephfs.CEPH_STATX_MODE, 0)
+    assert_equal(st["mode"] & stat.S_IRWXU, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    assert_raises(TypeError, cephfs.fchmod, "/file-fchmod", stat.S_IXUSR)
+    assert_raises(TypeError, cephfs.fchmod, fd, "stat.S_IXUSR")
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fchmod')
+
+@with_setup(setup_test)
+def test_fchown():
+    fd = cephfs.open(b'/file-fchown', 'w', 0o655)
+    uid = os.getuid()
+    gid = os.getgid()
+    assert_raises(TypeError, cephfs.fchown, b'/file-fchown', uid, gid)
+    assert_raises(TypeError, cephfs.fchown, fd, "uid", "gid")
+    cephfs.fchown(fd, uid, gid)
+    st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
+    assert_equal(st["uid"], uid)
+    assert_equal(st["gid"], gid)
+    cephfs.fchown(fd, 9999, 9999)
+    st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
+    assert_equal(st["uid"], 9999)
+    assert_equal(st["gid"], 9999)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fchown')
