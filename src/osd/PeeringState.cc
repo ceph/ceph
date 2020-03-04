@@ -5027,21 +5027,21 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 	evt.primary_num_bytes, evt.local_num_bytes)) {
     post_event(RejectTooFullRemoteReservation());
   } else {
-    PGPeeringEventRef preempt;
+    PGPeeringEventURef preempt;
     if (HAVE_FEATURE(ps->upacting_features, RECOVERY_RESERVATION_2)) {
       // older peers will interpret preemption as TOOFULL
-      preempt = std::make_shared<PGPeeringEvent>(
+      preempt = std::make_unique<PGPeeringEvent>(
 	pl->get_osdmap_epoch(),
 	pl->get_osdmap_epoch(),
 	RemoteBackfillPreempted());
     }
     pl->request_remote_recovery_reservation(
       evt.priority,
-      std::make_shared<PGPeeringEvent>(
+      std::make_unique<PGPeeringEvent>(
 	pl->get_osdmap_epoch(),
 	pl->get_osdmap_epoch(),
         RemoteBackfillReserved()),
-      preempt);
+      std::move(preempt));
   }
   return transit<RepWaitBackfillReserved>();
 }
@@ -5055,10 +5055,10 @@ PeeringState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
   // (pre-mimic compat)
   int prio = evt.priority ? evt.priority : ps->get_recovery_priority();
 
-  PGPeeringEventRef preempt;
+  PGPeeringEventURef preempt;
   if (HAVE_FEATURE(ps->upacting_features, RECOVERY_RESERVATION_2)) {
     // older peers can't handle this
-    preempt = std::make_shared<PGPeeringEvent>(
+    preempt = std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       RemoteRecoveryPreempted());
@@ -5066,11 +5066,11 @@ PeeringState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
 
   pl->request_remote_recovery_reservation(
     prio,
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       RemoteRecoveryReserved()),
-    preempt);
+    std::move(preempt));
   return transit<RepWaitRecoveryReserved>();
 }
 

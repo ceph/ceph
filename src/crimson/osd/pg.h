@@ -230,8 +230,8 @@ public:
 
   void request_remote_recovery_reservation(
     unsigned priority,
-    PGPeeringEventRef on_grant,
-    PGPeeringEventRef on_preempt) final {
+    PGPeeringEventURef on_grant,
+    PGPeeringEventURef on_preempt) final {
     shard_services.remote_reserver.request_reservation(
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
