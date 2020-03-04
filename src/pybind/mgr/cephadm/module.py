@@ -2185,7 +2185,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _apply_all_services(self):
         r = False
+        specs = [] # type: List[orchestrator.ServiceSpec]
         for sn, spec in self.spec_store.specs.items():
+            specs.append(spec)
+        for spec in specs:
             try:
                 if self._apply_service(spec):
                     r = True
