@@ -166,10 +166,16 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags)
+    int ceph_fsetxattr(ceph_mount_info *cmount, int fd, const char *name,
+                       const void *value, size_t size, int flags)
     int ceph_getxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       void *value, size_t size)
+    int ceph_fgetxattr(ceph_mount_info *cmount, int fd, const char *name,
+                       void *value, size_t size)
     int ceph_removexattr(ceph_mount_info *cmount, const char *path, const char *name)
+    int ceph_fremovexattr(ceph_mount_info *cmount, int fd, const char *name)
     int ceph_listxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
+    int ceph_flistxattr(ceph_mount_info *cmount, int fd, char *list, size_t size)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
@@ -1247,6 +1253,40 @@ cdef class LibCephFS(object):
         finally:
             free(ret_buf)
 
+    def fgetxattr(self, fd, name, size=255):
+        """
+         Get an extended attribute given the fd of a file.
+
+         :param fd: the open file descriptor referring to the file
+         :param name: the name of the extended attribute to get
+         :param size: the size of the pre-allocated buffer
+        """
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        name = cstr(name, 'name')
+
+        cdef:
+            int _fd = fd
+            char* _name = name
+
+            size_t ret_length = size
+            char *ret_buf = NULL
+
+        try:
+            ret_buf = <char *>realloc_chk(ret_buf, ret_length)
+            with nogil:
+                ret = ceph_fgetxattr(self.cluster, _fd, _name, ret_buf,
+                                    ret_length)
+
+            if ret < 0:
+                raise make_ex(ret, "error in fgetxattr")
+
+            return ret_buf[:ret]
+        finally:
+            free(ret_buf)
+
     def setxattr(self, path, name, value, flags):
         """
         Set an extended attribute on a file.
@@ -1277,6 +1317,38 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
+    def fsetxattr(self, fd, name, value, flags):
+        """
+        Set an extended attribute on a file.
+
+        :param fd: the open file descriptor referring to the file.
+        :param name: the name of the extended attribute to set.
+        :param value: the bytes of the extended attribute value
+        """
+        self.require_state("mounted")
+
+        name = cstr(name, 'name')
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(flags, int):
+            raise TypeError('flags must be a int')
+        if not isinstance(value, bytes):
+            raise TypeError('value must be a bytes')
+
+        cdef:
+            int _fd = fd
+            char *_name = name
+            char *_value = value
+            size_t _value_len = len(value)
+            int _flags = flags
+
+        with nogil:
+            ret = ceph_fsetxattr(self.cluster, _fd, _name,
+                                 _value, _value_len, _flags)
+        if ret < 0:
+            raise make_ex(ret, "error in fsetxattr")
+
+
     def removexattr(self, path, name):
         """
         Remove an extended attribute of a file.
@@ -1297,6 +1369,29 @@ cdef class LibCephFS(object):
             ret = ceph_removexattr(self.cluster, _path, _name)
         if ret < 0:
             raise make_ex(ret, "error in removexattr")
+
+    def fremovexattr(self, fd, name):
+        """
+        Remove an extended attribute of a file.
+
+        :param fd: the open file descriptor referring to the file.
+        :param name: name of the extended attribute to remove.
+        """
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        name = cstr(name, 'name')
+
+        cdef:
+            int _fd = fd
+            char *_name = name
+
+        with nogil:
+            ret = ceph_fremovexattr(self.cluster, _fd, _name)
+        if ret < 0:
+            raise make_ex(ret, "error in fremovexattr")
+
 
     def listxattr(self, path, size=65536):
         """
@@ -1321,6 +1416,35 @@ cdef class LibCephFS(object):
 
             if ret < 0:
                 raise make_ex(ret, "error in listxattr")
+
+            return ret, ret_buf[:ret]
+        finally:
+            free(ret_buf)
+
+    def flistxattr(self, fd, size=65536):
+        """
+        List the extended attribute keys set on a file.
+
+        :param fd: the open file descriptor referring to the file.
+        :param size: the size of list buffer to be filled with extended attribute keys.
+        """
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+            char *ret_buf = NULL
+            size_t ret_length = size
+
+        try:
+            ret_buf = <char *>realloc_chk(ret_buf, ret_length)
+            with nogil:
+                ret = ceph_flistxattr(self.cluster, _fd, ret_buf, ret_length)
+
+            if ret < 0:
+                raise make_ex(ret, "error in flistxattr")
 
             return ret, ret_buf[:ret]
         finally:
