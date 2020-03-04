@@ -188,8 +188,10 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
+    int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid)
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
@@ -926,6 +928,25 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
+    def fchmod(self, fd, mode) :
+        """
+        Change file mode based on fd.
+        :param fd: the file descriptor of the file to change file mode
+        :param mode: the permissions to be set.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        cdef:
+            int _fd = fd
+            int _mode = mode
+        with nogil:
+            ret = ceph_fchmod(self.cluster, _fd, _mode)
+        if ret < 0:
+            raise make_ex(ret, "error in fchmod")
+
     def chown(self, path, uid, gid, follow_symlink=True):
         """
         Change directory ownership
@@ -964,6 +985,30 @@ cdef class LibCephFS(object):
         :param gid: the gid to set
         """
         self.chown(path, uid, gid, follow_symlink=False)
+
+    def fchown(self, fd, uid, gid):
+        """
+        Change file ownership
+        :param fd: the file descriptor of the file to change ownership
+        :param uid: the uid to set
+        :param gid: the gid to set
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(uid, int):
+            raise TypeError('uid must be an int')
+        elif not isinstance(gid, int):
+            raise TypeError('gid must be an int')
+
+        cdef:
+            int _fd = fd
+            int _uid = uid
+            int _gid = gid
+        with nogil:
+            ret = ceph_fchown(self.cluster, _fd, _uid, _gid)
+        if ret < 0:
+            raise make_ex(ret, "error in fchown")
 
     def mkdirs(self, path, mode):
         """
