@@ -230,6 +230,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_debug_get_fd_caps(ceph_mount_info *cmount, int fd)
     int ceph_debug_get_file_caps(ceph_mount_info *cmount, const char *path)
     uint32_t ceph_get_cap_return_timeout(ceph_mount_info *cmount)
+    void ceph_set_uuid(ceph_mount_info *cmount, const char *uuid)
+    void ceph_set_session_timeout(ceph_mount_info *cmount, unsigned timeout)
 
 
 class Error(Exception):
@@ -2300,3 +2302,34 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in get_cap_return_timeout")
 
         return ret
+
+    def set_uuid(self, uuid):
+        """
+        Set ceph client uuid. Must be called before mount.
+
+        :param uuid: the uuid to set
+        """
+
+        uuid = cstr(uuid, 'uuid')
+
+        cdef:
+            char* _uuid = uuid
+
+        with nogil:
+            ceph_set_uuid(self.cluster, _uuid)
+
+    def set_session_timeout(self, timeout):
+        """
+        Set ceph client session timeout. Must be called before mount.
+
+        :param timeout: the timeout to set
+        """
+
+        if not isinstance(timeout, int):
+            raise TypeError('timeout must be an int')
+
+        cdef:
+            int _timeout = timeout
+
+        with nogil:
+            ceph_set_session_timeout(self.cluster, _timeout)
