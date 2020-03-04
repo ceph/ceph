@@ -20,6 +20,12 @@
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 #include <boost/asio/ssl.hpp>
+
+#include "services/svc_config_key.h"
+#include "services/svc_zone.h"
+
+#include "rgw_zone.h"
+
 #endif
 
 #include "rgw_dmclock_async_scheduler.h"
@@ -249,6 +255,11 @@ class AsioFrontend {
   boost::asio::io_context context;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   boost::optional<ssl::context> ssl_context;
+  int get_config_key_val(string name,
+                         const string& type,
+                         bufferlist *pbl);
+  int ssl_set_private_key(const string& name, bool is_ssl_cert);
+  int ssl_set_certificate_chain(const string& name);
   int init_ssl();
 #endif
   SharedMutex pause_mutex;
@@ -502,53 +513,223 @@ int AsioFrontend::init()
 }
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
+
+static string config_val_prefix = "config://";
+
+namespace {
+
+class ExpandMetaVar {
+  map<string, string> meta_map;
+
+public:
+  ExpandMetaVar(RGWSI_Zone *zone_svc) {
+    meta_map["realm"] = zone_svc->get_realm().get_name();
+    meta_map["realm_id"] = zone_svc->get_realm().get_id();
+    meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
+    meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
+    meta_map["zone"] = zone_svc->zone_name();
+    meta_map["zone_id"] = zone_svc->zone_id().id;
+  }
+
+  string process_str(const string& in);
+};
+
+string ExpandMetaVar::process_str(const string& in)
+{
+  if (meta_map.empty()) {
+    return in;
+  }
+
+  auto pos = in.find('$');
+  if (pos == std::string::npos) {
+    return in;
+  }
+
+  string out;
+  decltype(pos) last_pos = 0;
+
+  while (pos != std::string::npos) {
+    if (pos > last_pos) {
+      out += in.substr(last_pos, pos - last_pos);
+    }
+
+    string var;
+    const char *valid_chars = "abcdefghijklmnopqrstuvwxyz_";
+
+    size_t endpos = 0;
+    if (in[pos+1] == '{') {
+      // ...${foo_bar}...
+      endpos = in.find_first_not_of(valid_chars, pos + 2);
+      if (endpos != std::string::npos &&
+	  in[endpos] == '}') {
+	var = in.substr(pos + 2, endpos - pos - 2);
+	endpos++;
+      }
+    } else {
+      // ...$foo...
+      endpos = in.find_first_not_of(valid_chars, pos + 1);
+      if (endpos != std::string::npos)
+	var = in.substr(pos + 1, endpos - pos - 1);
+      else
+	var = in.substr(pos + 1);
+    }
+    string var_source = in.substr(pos, endpos - pos);
+    last_pos = endpos;
+
+    auto iter = meta_map.find(var);
+    if (iter != meta_map.end()) {
+      out += iter->second;
+    } else {
+      out += var_source;
+    }
+    pos = in.find('$', last_pos);
+  }
+  if (last_pos != std::string::npos) {
+    out += in.substr(last_pos);
+  }
+
+  return out;
+}
+
+} /* anonymous namespace */
+
+int AsioFrontend::get_config_key_val(string name,
+                                     const string& type,
+                                     bufferlist *pbl)
+{
+  if (name.empty()) {
+    lderr(ctx()) << "bad " << type << " config value" << dendl;
+    return -EINVAL;
+  }
+
+  auto svc = env.store->svc()->config_key;
+  int r = svc->get(name, pbl);
+  if (r < 0) {
+    lderr(ctx()) << type << " was not found: " << name << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificate)
+{
+  boost::system::error_code ec;
+
+  if (!boost::algorithm::starts_with(name, config_val_prefix)) {
+    ssl_context->use_private_key_file(name, ssl::context::pem, ec);
+  } else {
+    bufferlist bl;
+    int r = get_config_key_val(name.substr(config_val_prefix.size()),
+                               "ssl_private_key",
+                               &bl);
+    if (r < 0) {
+      return r;
+    }
+    ssl_context->use_private_key(boost::asio::buffer(bl.c_str(), bl.length()),
+                                 ssl::context::pem, ec);
+  }
+
+  if (ec) {
+    if (!is_ssl_certificate) {
+      lderr(ctx()) << "failed to add ssl_private_key=" << name
+        << ": " << ec.message() << dendl;
+    } else {
+      lderr(ctx()) << "failed to use ssl_certificate=" << name
+        << " as a private key: " << ec.message() << dendl;
+    }
+    return -ec.value();
+  }
+
+  return 0;
+}
+
+int AsioFrontend::ssl_set_certificate_chain(const string& name)
+{
+  boost::system::error_code ec;
+
+  if (!boost::algorithm::starts_with(name, config_val_prefix)) {
+    ssl_context->use_certificate_chain_file(name, ec);
+  } else {
+    bufferlist bl;
+    int r = get_config_key_val(name.substr(config_val_prefix.size()),
+                               "ssl_certificate",
+                               &bl);
+    if (r < 0) {
+      return r;
+    }
+    ssl_context->use_certificate_chain(boost::asio::buffer(bl.c_str(), bl.length()),
+                                 ec);
+  }
+
+  if (ec) {
+    lderr(ctx()) << "failed to use ssl_certificate=" << name
+      << ": " << ec.message() << dendl;
+    return -ec.value();
+  }
+
+  return 0;
+}
+
 int AsioFrontend::init_ssl()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
 
   // ssl configuration
-  auto cert = config.find("ssl_certificate");
-  const bool have_cert = cert != config.end();
-  if (have_cert) {
+  std::optional<string> cert = conf->get_val("ssl_certificate");
+  if (cert) {
     // only initialize the ssl context if it's going to be used
     ssl_context = boost::in_place(ssl::context::tls);
   }
 
-  auto key = config.find("ssl_private_key");
-  const bool have_private_key = key != config.end();
-  if (have_private_key) {
-    if (!have_cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
-      return -EINVAL;
-    }
-    ssl_context->use_private_key_file(key->second, ssl::context::pem, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to add ssl_private_key=" << key->second
-          << ": " << ec.message() << dendl;
-      return -ec.value();
-    }
+  std::optional<string> key = conf->get_val("ssl_private_key");
+  bool have_cert = false;
+
+  if (key && !cert) {
+    lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
+    return -EINVAL;
   }
-  if (have_cert) {
-    ssl_context->use_certificate_chain_file(cert->second, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to use ssl_certificate=" << cert->second
-          << ": " << ec.message() << dendl;
-      return -ec.value();
+
+  auto ports = config.equal_range("ssl_port");
+  auto endpoints = config.equal_range("ssl_endpoint");
+
+  /*
+   * don't try to config certificate if frontend isn't configured for ssl
+   */
+  if (ports.first == ports.second &&
+      endpoints.first == endpoints.second) {
+    return 0;
+  }
+
+  bool key_is_cert = false;
+
+  if (cert) {
+    if (!key) {
+      key = cert;
+      key_is_cert = true;
     }
-    if (!have_private_key) {
-      // attempt to use it as a private key if a separate one wasn't provided
-      ssl_context->use_private_key_file(cert->second, ssl::context::pem, ec);
-      if (ec) {
-        lderr(ctx()) << "failed to use ssl_certificate=" << cert->second
-            << " as a private key: " << ec.message() << dendl;
-        return -ec.value();
+
+    ExpandMetaVar emv(env.store->svc()->zone);
+
+    cert = emv.process_str(*cert);
+    key = emv.process_str(*key);
+
+    int r = ssl_set_private_key(*key, key_is_cert);
+    bool have_private_key = (r >= 0);
+    if (r < 0) {
+      if (!key_is_cert) {
+        r = ssl_set_private_key(*cert, true);
+        have_private_key = (r >= 0);
       }
+    }
+
+    if (have_private_key) {
+      int r = ssl_set_certificate_chain(*cert);
+      have_cert = (r >= 0);
     }
   }
 
   // parse ssl endpoints
-  auto ports = config.equal_range("ssl_port");
   for (auto i = ports.first; i != ports.second; ++i) {
     if (!have_cert) {
       lderr(ctx()) << "no ssl_certificate configured for ssl_port" << dendl;
@@ -568,7 +749,6 @@ int AsioFrontend::init_ssl()
     listeners.back().use_ssl = true;
   }
 
-  auto endpoints = config.equal_range("ssl_endpoint");
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
     if (!have_cert) {
       lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
