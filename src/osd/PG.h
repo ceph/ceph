@@ -415,8 +415,8 @@ public:
 
   void request_remote_recovery_reservation(
     unsigned priority,
-    PGPeeringEventRef on_grant,
-    PGPeeringEventRef on_preempt) override;
+    PGPeeringEventURef on_grant,
+    PGPeeringEventURef on_preempt) override;
   void cancel_remote_recovery_reservation() override;
 
   void schedule_event_on_commit(

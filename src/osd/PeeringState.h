@@ -326,8 +326,8 @@ public:
      */
     virtual void request_remote_recovery_reservation(
       unsigned priority,
-      PGPeeringEventRef on_grant,
-      PGPeeringEventRef on_preempt) = 0;
+      PGPeeringEventURef on_grant,
+      PGPeeringEventURef on_preempt) = 0;
     /// Cancel pending remote background reservation request
     virtual void cancel_remote_recovery_reservation() = 0;
 
