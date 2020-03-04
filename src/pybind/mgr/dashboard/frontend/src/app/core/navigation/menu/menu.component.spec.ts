@@ -1,4 +1,4 @@
-import { byText, createTestComponentFactory, Spectator } from '@ngneat/spectator';
+import { byText, createTestComponentFactory, Spectator } from '@ngneat/spectator/jest';
 import { MockComponent, MockModule } from 'ng-mocks';
 
 import { CollapseModule } from 'ngx-bootstrap/collapse';

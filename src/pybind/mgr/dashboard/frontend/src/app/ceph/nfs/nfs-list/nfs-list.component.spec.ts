@@ -13,7 +13,6 @@ import {
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { NfsService } from '../../../shared/api/nfs.service';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
@@ -167,7 +166,7 @@ describe('NfsListComponent', () => {
 
   it('should test all TableActions combinations', () => {
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+    const tableActions: any = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
     );
 

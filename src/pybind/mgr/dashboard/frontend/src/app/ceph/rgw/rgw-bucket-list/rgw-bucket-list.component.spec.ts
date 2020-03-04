@@ -10,7 +10,6 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwBucketDetailsComponent } from '../rgw-bucket-details/rgw-bucket-details.component';
 import { RgwBucketListComponent } from './rgw-bucket-list.component';
@@ -43,7 +42,7 @@ describe('RgwBucketListComponent', () => {
 
   it('should test all TableActions combinations', () => {
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+    const tableActions: any = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
     );
 

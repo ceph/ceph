@@ -15,7 +15,6 @@ import {
 } from '../../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -53,7 +52,7 @@ describe('SilenceListComponent', () => {
 
   it('should test all TableActions combinations', () => {
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+    const tableActions: any = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
     );
 
