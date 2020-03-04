@@ -75,20 +75,38 @@
 
         <!-- Max. buckets -->
         <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="max_buckets"
+          <label class="cd-col-form-label"
+                 for="max_buckets_mode"
                  i18n>Max. buckets</label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    formControlName="max_buckets_mode"
+                    name="max_buckets_mode"
+                    id="max_buckets_mode">
+              <option i18n
+                      value="-1">Disabled</option>
+              <option i18n
+                      value="0">Unlimited</option>
+              <option i18n
+                      value="1">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div *ngIf="1 == userForm.get('max_buckets_mode').value"
+             class="form-group row">
+          <label class="cd-col-form-label"></label>
           <div class="cd-col-form-input">
             <input id="max_buckets"
                    class="form-control"
                    type="number"
-                   formControlName="max_buckets">
+                   formControlName="max_buckets"
+                   min="1">
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('max_buckets', frm, 'required')"
                   i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('max_buckets', frm, 'min')"
-                  i18n>The entered value must be >= 0.</span>
+                  i18n>The entered value must be >= 1.</span>
           </div>
         </div>
 
