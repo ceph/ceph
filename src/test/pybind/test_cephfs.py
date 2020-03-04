@@ -283,6 +283,36 @@ def test_mount_unmount():
     test_open()
 
 @with_setup(setup_test)
+def test_lxattr():
+    fd = cephfs.open(b'/file-lxattr', 'w', 0o755)
+    cephfs.close(fd)
+    cephfs.setxattr(b"/file-lxattr", "user.key", b"value", 0)
+    cephfs.symlink(b"/file-lxattr", b"/file-sym-lxattr")
+    assert_equal(b"value", cephfs.getxattr(b"/file-sym-lxattr", "user.key"))
+    assert_raises(libcephfs.NoData, cephfs.lgetxattr, b"/file-sym-lxattr", "user.key")
+
+    cephfs.lsetxattr(b"/file-sym-lxattr", "trusted.key-sym", b"value-sym", 0)
+    assert_equal(b"value-sym", cephfs.lgetxattr(b"/file-sym-lxattr", "trusted.key-sym"))
+    cephfs.lsetxattr(b"/file-sym-lxattr", "trusted.big", b"x" * 300, 0)
+
+    # Default size is 255, get ERANGE
+    assert_raises(libcephfs.OutOfRange, cephfs.lgetxattr, b"/file-sym-lxattr", "trusted.big")
+
+    # Pass explicit size, and we'll get the value
+    assert_equal(300, len(cephfs.lgetxattr(b"/file-sym-lxattr", "trusted.big", 300)))
+
+    cephfs.lremovexattr(b"/file-sym-lxattr", "trusted.key-sym")
+    # trusted.key-sym is already removed
+    assert_raises(libcephfs.NoData, cephfs.lgetxattr, b"/file-sym-lxattr", "trusted.key-sym")
+
+    # trusted.big is only listed
+    ret_val, ret_buff = cephfs.llistxattr(b"/file-sym-lxattr")
+    assert_equal(12, ret_val)
+    assert_equal("trusted.big\x00", ret_buff.decode('utf-8'))
+    cephfs.unlink(b'/file-lxattr')
+    cephfs.unlink(b'/file-sym-lxattr')
+
+@with_setup(setup_test)
 def test_mount_root():
     cephfs.mkdir(b"/mount-directory", 0o755)
     cephfs.unmount()
