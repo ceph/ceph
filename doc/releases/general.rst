@@ -125,6 +125,7 @@ Release timeline
 .. _15.1.0: ../octopus#v15-1-0-octopus
 
 .. _Nautilus: ../nautilus
+.. _14.2.8: ../nautilus#v14-2-8-nautilus
 .. _14.2.7: ../nautilus#v14-2-7-nautilus
 .. _14.2.6: ../nautilus#v14-2-6-nautilus
 .. _14.2.5: ../nautilus#v14-2-5-nautilus
