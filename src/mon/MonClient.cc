@@ -924,10 +924,11 @@ void MonClient::tick()
 		      << " seconds), reconnecting" << dendl;
 	return _reopen_session();
       }
-      send_log();
     }
 
     _un_backoff();
+
+    send_log();
   }
 }
 
