@@ -223,6 +223,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_lutimes(ceph_mount_info *cmount, const char *path, timeval times[2])
     int ceph_futimes(ceph_mount_info *cmount, int fd, timeval times[2])
     int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2])
+    int ceph_get_file_replication(ceph_mount_info *cmount, int fh)
+    int ceph_get_path_replication(ceph_mount_info *cmount, const char *path)
 
 
 class Error(Exception):
@@ -2153,3 +2155,43 @@ cdef class LibCephFS(object):
                 ret = ceph_futimens(self.cluster, _fd, buf)
         if ret < 0:
             raise make_ex(ret, "error in futimens")
+
+    def get_file_replication(self, fd):
+        """
+        Get the file replication information from an open file descriptor.
+
+        :param fd : the open file descriptor referring to the file to get
+                    the replication information of.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+
+        with nogil:
+            ret = ceph_get_file_replication(self.cluster, _fd)
+        if ret < 0:
+            raise make_ex(ret, "error in get_file_replication")
+
+        return ret
+
+    def get_path_replication(self, path):
+        """
+        Get the file replication information given the path.
+
+        :param path: the path of the file/directory to get the replication information of.
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+
+        cdef:
+            char* _path = path
+
+        with nogil:
+            ret = ceph_get_path_replication(self.cluster, _path)
+        if ret < 0:
+            raise make_ex(ret, "error in get_path_replication")
+
+        return ret
