@@ -1609,8 +1609,11 @@ class ServiceSpec(object):
         return n
 
     def to_json(self):
-        return json.dumps(self, default=lambda o: o.__dict__,
-                          sort_keys=True)
+        # type: () -> Dict[str, Any]
+        c = self.__dict__.copy()
+        if self.placement:
+            c['placement'] = self.placement.__dict__
+        return c
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
