@@ -198,6 +198,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)
     void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp)
+    int64_t ceph_telldir(ceph_mount_info *cmount, ceph_dir_result *dirp)
+    void ceph_seekdir(ceph_mount_info *cmount, ceph_dir_result *dirp, int64_t offset)
     int ceph_chdir(ceph_mount_info *cmount, const char *path)
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
@@ -425,6 +427,34 @@ cdef class DirResult(object):
             if ret < 0:
                 raise make_ex(ret, "closedir failed")
             self.handle = NULL
+
+    def rewinddir(self):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        self.lib.require_state("mounted")
+        with nogil:
+            ceph_rewinddir(self.lib.cluster, self.handle)
+
+    def telldir(self):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        self.lib.require_state("mounted")
+        with nogil:
+            ret = ceph_telldir(self.lib.cluster, self.handle)
+        if ret < 0:
+            raise make_ex(ret, "telldir failed")
+        return ret
+
+    def seekdir(self, offset):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        self.lib.require_state("mounted")
+        cdef int64_t _offset = offset
+        with nogil:
+            ceph_seekdir(self.lib.cluster, self.handle, _offset)
+
 
 def cstr(val, name, encoding="utf-8", opt=False):
     """
@@ -1033,6 +1063,37 @@ cdef class LibCephFS(object):
         self.require_state("mounted")
 
         return handle.close()
+
+    def rewinddir(self, DirResult handle):
+        """
+        Rewind the directory stream to the beginning of the directory.
+
+        :param handle: the open directory stream handle
+        """
+        return handle.rewinddir()
+
+    def telldir(self, DirResult handle):
+        """
+        Get the current position of a directory stream.
+
+        :param handle: the open directory stream handle
+        :return value: The position of the directory stream. Note that the offsets
+                       returned by ceph_telldir do not have a particular order (cannot
+                       be compared with inequality).
+        """
+        return handle.telldir()
+
+    def seekdir(self, DirResult handle, offset):
+        """
+        Move the directory stream to a position specified by the given offset.
+
+        :param handle: the open directory stream handle
+        :param offset: the position to move the directory stream to. This offset should be
+                       a value returned by telldir. Note that this value does not refer to
+                       the nth entry in a directory, and can not be manipulated with plus
+                       or minus.
+        """
+        return handle.seekdir(offset)
 
     def mkdir(self, path, mode):
         """

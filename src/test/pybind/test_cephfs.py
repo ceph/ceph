@@ -598,3 +598,34 @@ def test_setuuid():
 def test_session_timeout():
     assert_raises(TypeError, cephfs.set_session_timeout, "300")
     cephfs.set_session_timeout(300)
+
+@with_setup(setup_test)
+def test_readdirops():
+    cephfs.chdir(b"/")
+    dirs = [b"dir-1", b"dir-2", b"dir-3"]
+    for i in dirs:
+        cephfs.mkdir(i, 0o755)
+    handler = cephfs.opendir(b"/")
+    d1 = cephfs.readdir(handler)
+    d2 = cephfs.readdir(handler)
+    d3 = cephfs.readdir(handler)
+    offset_d4 = cephfs.telldir(handler)
+    d4 = cephfs.readdir(handler)
+    cephfs.rewinddir(handler)
+    d = cephfs.readdir(handler)
+    assert_equal(d.d_name, d1.d_name)
+    cephfs.seekdir(handler, offset_d4)
+    d = cephfs.readdir(handler)
+    assert_equal(d.d_name, d4.d_name)
+    dirs += [b".", b".."]
+    cephfs.rewinddir(handler)
+    d = cephfs.readdir(handler)
+    while d:
+        assert(d.d_name in dirs)
+        dirs.remove(d.d_name)
+        d = cephfs.readdir(handler)
+    assert(len(dirs) == 0)
+    dirs = [b"/dir-1", b"/dir-2", b"/dir-3"]
+    for i in dirs:
+        cephfs.rmdir(i)
+    cephfs.closedir(handler)
