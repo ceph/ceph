@@ -225,6 +225,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2])
     int ceph_get_file_replication(ceph_mount_info *cmount, int fh)
     int ceph_get_path_replication(ceph_mount_info *cmount, const char *path)
+    int ceph_get_pool_id(ceph_mount_info *cmount, const char *pool_name)
+    int ceph_get_pool_replication(ceph_mount_info *cmount, int pool_id)
 
 
 class Error(Exception):
@@ -2193,5 +2195,46 @@ cdef class LibCephFS(object):
             ret = ceph_get_path_replication(self.cluster, _path)
         if ret < 0:
             raise make_ex(ret, "error in get_path_replication")
+
+        return ret
+
+    def get_pool_id(self, pool_name):
+        """
+        Get the id of the named pool.
+
+        :param pool_name: the name of the pool.
+        """
+
+        self.require_state("mounted")
+        pool_name = cstr(pool_name, 'pool_name')
+
+        cdef:
+            char* _pool_name = pool_name
+
+        with nogil:
+            ret = ceph_get_pool_id(self.cluster, _pool_name)
+        if ret < 0:
+            raise make_ex(ret, "error in get_pool_id")
+
+        return ret
+
+    def get_pool_replication(self, pool_id):
+        """
+        Get the pool replication factor.
+
+        :param pool_id: the pool id to look up
+        """
+
+        self.require_state("mounted")
+        if not isinstance(pool_id, int):
+            raise TypeError('pool_id must be an int')
+
+        cdef:
+            int _pool_id = pool_id
+
+        with nogil:
+            ret = ceph_get_pool_replication(self.cluster, _pool_id)
+        if ret < 0:
+            raise make_ex(ret, "error in get_pool_replication")
 
         return ret
