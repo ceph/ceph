@@ -1,4 +1,5 @@
 import time
+import fnmatch
 try:
     from typing import Any
 except ImportError:
@@ -27,17 +28,41 @@ def get_store_prefix(self, prefix):
         if k.startswith(prefix)
     }
 
+
 def get_ceph_option(_, key):
     return __file__
+
+
+def _run_cephadm(ret):
+    def foo(*args, **kwargs):
+        return ret, '', 0
+    return foo
+
+
+def match_glob(val, pat):
+    ok = fnmatch.fnmatchcase(val, pat)
+    if not ok:
+        assert pat in val
+
+
+def mon_command(*args, **kwargs):
+    return 0, '', ''
+
 
 @pytest.yield_fixture()
 def cephadm_module():
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
             mock.patch("cephadm.module.CephadmOrchestrator._configure_logging", lambda *args: None),\
             mock.patch("cephadm.module.CephadmOrchestrator.remote"),\
-            mock.patch("cephadm.module.CephadmOrchestrator.set_store", set_store),\
+            mock.patch("cephadm.module.CephadmOrchestrator.set_store", set_store), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_store", get_store),\
+            mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]')), \
+            mock.patch("cephadm.module.HostCache.save_host"), \
+            mock.patch("cephadm.module.HostCache.rm_host"), \
+            mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
+            mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix", get_store_prefix):
+
         CephadmOrchestrator._register_commands('')
         m = CephadmOrchestrator.__new__ (CephadmOrchestrator)
         m._root_logger = mock.MagicMock()
