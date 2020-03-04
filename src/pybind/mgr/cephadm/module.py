@@ -1788,13 +1788,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Remove daemons %s' % [a[0] for a in args])
         return self._remove_daemons(args)
 
-    def remove_service(self, service_name, force=False):
+    def remove_service(self, service_name):
         args = []
         for host, dm in self.cache.daemons.items():
             for name, d in dm.items():
                 if d.matches_service(service_name):
                     args.append(
-                        (d.name(), d.hostname, force)
+                        (d.name(), d.hostname, True)
                     )
                     self.spec_store.rm(d.service_name())
         self.log.info('Remove service %s (daemons %s)' % (
