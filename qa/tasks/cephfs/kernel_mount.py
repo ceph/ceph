@@ -20,8 +20,6 @@ class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote, brxnet):
         super(KernelMount, self).__init__(ctx, test_dir, client_id, client_remote, brxnet)
 
-        self.mounted = False
-
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         if mountpoint is not None:
             self.mountpoint = mountpoint
@@ -121,9 +119,6 @@ class KernelMount(CephFSMount):
             self.mounted = False
             self.cleanup_netns()
             self.cleanup()
-
-    def is_mounted(self):
-        return self.mounted
 
     def wait_until_mounted(self):
         """

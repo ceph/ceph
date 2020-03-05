@@ -184,7 +184,7 @@ class FuseMount(CephFSMount):
             if self.inst is None:
                 raise RuntimeError("cannot find client session")
 
-    def is_mounted(self):
+    def check_mounted_state(self):
         proc = self.client_remote.run(
             args=[
                 'stat',
@@ -228,12 +228,14 @@ class FuseMount(CephFSMount):
         sleep for 5 seconds and check again.
         """
 
-        while not self.is_mounted():
+        while not self.check_mounted_state():
             # Even if it's not mounted, it should at least
             # be running: catch simple failures where it has terminated.
             assert not self.fuse_daemon.poll()
 
             time.sleep(5)
+
+        self.mounted = True
 
         # Now that we're mounted, set permissions so that the rest of the test will have
         # unrestricted access to the filesystem mount.
@@ -253,6 +255,7 @@ class FuseMount(CephFSMount):
     def umount(self):
         try:
             log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
+            stderr = BytesIO()
             self.client_remote.run(
                 args = [
                     'sudo',
@@ -261,49 +264,57 @@ class FuseMount(CephFSMount):
                     self.mountpoint,
                 ],
                 cwd=self.test_dir,
+                stderr=stderr,
                 timeout=(30*60),
             )
         except run.CommandFailedError:
-            log.info('Failed to unmount ceph-fuse on {name}, aborting...'.format(name=self.client_remote.name))
+            if "mountpoint not found" in stderr.getvalue():
+                # This happens if the mount directory doesn't exist
+                log.info('mount point does not exist: %s', self.mountpoint)
+            elif "not mounted" in stderr.getvalue():
+                # This happens if the mount directory already unmouted
+                log.info('mount point not mounted: %s', self.mountpoint)
+            else:
+                log.info('Failed to unmount ceph-fuse on {name}, aborting...'.format(name=self.client_remote.name))
 
-            self.client_remote.run(args=[
-                'sudo',
-                run.Raw('PATH=/usr/sbin:$PATH'),
-                'lsof',
-                run.Raw(';'),
-                'ps',
-                'auxf',
-            ], timeout=(60*15))
+                self.client_remote.run(args=[
+                    'sudo',
+                    run.Raw('PATH=/usr/sbin:$PATH'),
+                    'lsof',
+                    run.Raw(';'),
+                    'ps',
+                    'auxf',
+                ], timeout=(60*15))
 
-            # abort the fuse mount, killing all hung processes
-            if self._fuse_conn:
-                self.run_python(dedent("""
-                import os
-                path = "/sys/fs/fuse/connections/{0}/abort"
-                if os.path.exists(path):
-                    open(path, "w").write("1")
-                """).format(self._fuse_conn))
-                self._fuse_conn = None
+                # abort the fuse mount, killing all hung processes
+                if self._fuse_conn:
+                    self.run_python(dedent("""
+                    import os
+                    path = "/sys/fs/fuse/connections/{0}/abort"
+                    if os.path.exists(path):
+                        open(path, "w").write("1")
+                    """).format(self._fuse_conn))
+                    self._fuse_conn = None
 
-            stderr = BytesIO()
-            try:
+                stderr = BytesIO()
                 # make sure its unmounted
-                self.client_remote.run(
-                    args=[
-                        'sudo',
-                        'umount',
-                        '-l',
-                        '-f',
-                        self.mountpoint,
-                    ],
-                    stderr=stderr,
-                    timeout=(60*15)
-                )
-            except CommandFailedError:
-                if self.is_mounted():
-                    raise
+                try:
+                    self.client_remote.run(
+                        args=[
+                            'sudo',
+                            'umount',
+                            '-l',
+                            '-f',
+                            self.mountpoint,
+                        ],
+                        stderr=stderr,
+                        timeout=(60*15)
+                    )
+                except CommandFailedError:  
+                    if self.is_mounted():   
+                        raise
 
-        assert not self.is_mounted()
+        self.mounted = False
         self._fuse_conn = None
         self.id = None
         self.inst = None
