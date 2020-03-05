@@ -9,7 +9,6 @@ import contextlib
 import json
 import logging
 import os
-import StringIO
 
 from teuthology.parallel import parallel
 from teuthology import misc as teuthology
@@ -77,10 +76,8 @@ def get_ioengine_package_name(ioengine, remote):
 
 def run_rbd_map(remote, image, iodepth):
     iodepth = max(iodepth, 128)  # RBD_QUEUE_DEPTH_DEFAULT
-    out = StringIO.StringIO()
-    remote.run(args=['sudo', 'rbd', 'device', 'map', '-o',
-                     'queue_depth={}'.format(iodepth), image], stdout=out)
-    dev = out.getvalue().rstrip('\n')
+    dev = remote.sh(['sudo', 'rbd', 'device', 'map', '-o',
+                     'queue_depth={}'.format(iodepth), image]).rstripg('\n')
     teuthology.sudo_write_file(
         remote,
         '/sys/block/{}/queue/nr_requests'.format(os.path.basename(dev)),
@@ -214,9 +211,8 @@ def run_fio(remote, config, rbd_test_dir):
         remote.run(args=['sudo', run.Raw('{tdir}/fio-fio-{v}/fio {f}'.format(tdir=rbd_test_dir,v=fio_version,f=fio_config.name))])
         remote.run(args=['ceph', '-s'])
     finally:
-        out=StringIO.StringIO()
-        remote.run(args=['rbd', 'device', 'list', '--format=json'], stdout=out)
-        mapped_images = json.loads(out.getvalue())
+        out = remote.sh('rbd device list --format=json')
+        mapped_images = json.loads(out)
         if mapped_images:
             log.info("Unmapping rbd images on {sn}".format(sn=sn))
             for image in mapped_images:
