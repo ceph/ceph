@@ -1376,7 +1376,11 @@ class DaemonDescription(object):
                  version=None,
                  status=None,
                  status_desc=None,
-                 last_refresh=None):
+                 last_refresh=None,
+                 created=None,
+                 started=None,
+                 last_configured=None,
+                 last_deployed=None):
         # Host is at the same granularity as InventoryHost
         self.hostname = hostname
 
@@ -1407,6 +1411,11 @@ class DaemonDescription(object):
 
         # datetime when this info was last refreshed
         self.last_refresh = last_refresh  # type: Optional[datetime.datetime]
+
+        self.created = created    # type: Optional[datetime.datetime]
+        self.started = started    # type: Optional[datetime.datetime]
+        self.last_configured = last_configured # type: Optional[datetime.datetime]
+        self.last_deployed = last_deployed    # type: Optional[datetime.datetime]
 
     def name(self):
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -1443,18 +1452,21 @@ class DaemonDescription(object):
             'status': self.status,
             'status_desc': self.status_desc,
         }
-        if self.last_refresh:
-            out['last_refresh'] = self.last_refresh.strftime(DATEFMT)
+        for k in ['last_refresh', 'created', 'started', 'last_deployed',
+                  'last_configured']:
+            if getattr(self, k):
+                out[k] = getattr(self, k).strftime(DATEFMT)
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
-        if 'last_refresh' in data:
-            data['last_refresh'] = datetime.datetime.strptime(
-                data['last_refresh'],
-                DATEFMT)
-        return cls(**data)
+        c = data.copy()
+        for k in ['last_refresh', 'created', 'started', 'last_deployed',
+                  'last_configured']:
+            if k in c:
+                c[k] = datetime.datetime.strptime(c[k], DATEFMT)
+        return cls(**c)
 
 class ServiceDescription(object):
     """
@@ -1476,6 +1488,7 @@ class ServiceDescription(object):
                  rados_config_location=None,
                  service_url=None,
                  last_refresh=None,
+                 created=None,
                  size=0,
                  running=0,
                  spec=None):
@@ -1505,6 +1518,7 @@ class ServiceDescription(object):
 
         # datetime when this info was last refreshed
         self.last_refresh = last_refresh   # type: Optional[datetime.datetime]
+        self.created = created   # type: Optional[datetime.datetime]
 
         self.spec = spec
 
@@ -1526,18 +1540,19 @@ class ServiceDescription(object):
             'size': self.size,
             'running': self.running,
         }
-        if self.last_refresh:
-            out['last_refresh'] = self.last_refresh.strftime(DATEFMT)
+        for k in ['last_refresh', 'created']:
+            if getattr(self, k):
+                out[k] = getattr(self, k).strftime(DATEFMT)
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
-        if 'last_refresh' in data:
-            data['last_refresh'] = datetime.datetime.strptime(
-                data['last_refresh'],
-                DATEFMT)
-        return cls(**data)
+        c = data.copy()
+        for k in ['last_refresh', 'created']:
+            if k in c:
+                c[k] = datetime.datetime.strptime(c[k], DATEFMT)
+        return cls(**c)
 
 
 class ServiceSpec(object):
@@ -1594,8 +1609,11 @@ class ServiceSpec(object):
         return n
 
     def to_json(self):
-        return json.dumps(self, default=lambda o: o.__dict__,
-                          sort_keys=True)
+        # type: () -> Dict[str, Any]
+        c = self.__dict__.copy()
+        if self.placement:
+            c['placement'] = self.placement.__dict__
+        return c
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
