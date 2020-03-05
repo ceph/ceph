@@ -33,6 +33,7 @@ class CephFSMount(object):
         self.mountpoint_dir_name = 'mnt.{id}'.format(id=self.client_id)
         self._mountpoint = None
         self.fs = None
+        self.mounted = False
         self._netns_name = None
         self.nsid = -1
         if brxnet is None:
@@ -86,7 +87,7 @@ class CephFSMount(object):
         self._netns_name = name
 
     def is_mounted(self):
-        raise NotImplementedError()
+        return self.mounted
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
