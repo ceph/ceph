@@ -108,6 +108,8 @@ void MetadataUpdate::finish(int r)
       DaemonStatePtr state;
       if (daemon_state.exists(key)) {
         state = daemon_state.get(key);
+	state->hostname = daemon_meta.at("hostname").get_str();
+
         if (key.first == "mds" || key.first == "mgr" || key.first == "mon") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
