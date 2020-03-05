@@ -482,10 +482,6 @@ class LocalFuseMount(FuseMount):
         log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
         return path
 
-    def umount(self):
-        if self.is_mounted():
-            super(LocalFuseMount, self).umount()
-
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
         if mountpoint is not None:
             self.mountpoint = mountpoint
