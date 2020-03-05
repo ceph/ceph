@@ -18,12 +18,6 @@
 #define dout_prefix *_dout << "librbd::mirror_snapshot::SetImageStateRequest: " \
                            << this << " " << __func__ << ": "
 
-namespace {
-
-const uint64_t MAX_METADATA_ITEMS = 128;
-
-}
-
 namespace librbd {
 namespace mirror {
 namespace snapshot {

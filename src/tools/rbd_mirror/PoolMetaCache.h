@@ -9,8 +9,6 @@
 #include "tools/rbd_mirror/Types.h"
 #include <map>
 
-struct CephContext;
-
 namespace rbd {
 namespace mirror {
 

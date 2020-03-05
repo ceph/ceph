@@ -6,12 +6,12 @@
 
 #include "common/snap_types.h"
 #include "include/buffer.h"
+#include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
 #include "librbd/Types.h"
 #include "librbd/mirror/Types.h"
 #include <string>
 
-class CephContext;
 class ContextWQ;
 struct Context;
 
