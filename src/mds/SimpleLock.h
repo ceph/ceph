@@ -228,7 +228,7 @@ public:
   }
   void add_cache(MDLockCacheItem& item);
   void remove_cache(MDLockCacheItem& item);
-  MDLockCache* get_first_cache();
+  std::vector<MDLockCache*> get_active_caches();
 
   // state
   int get_state() const { return state; }
