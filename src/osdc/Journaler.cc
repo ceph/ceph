@@ -417,6 +417,13 @@ void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
     return;
   }
 
+  // Let the caller know that the operation has failed or was intentionally
+  // failed since the caller has been blacklisted.
+  if (r == -EBLACKLISTED) {
+    onfinish->complete(r);
+    return;
+  }
+
   ceph_assert(!r); //if we get an error, we're boned
   _reprobe(onfinish);
 }
