@@ -20,10 +20,10 @@
 #include <type_traits>
 #include <boost/optional.hpp>
 
-// Basic random number facility, adapted from N3551:
+// Basic random number facility (see N3551 for inspiration):
 namespace ceph::util {
 
-inline namespace version_1_0_2 {
+inline namespace version_1_0_3 {
 
 namespace detail {
 
@@ -281,6 +281,9 @@ class random_number_generator final
     detail::randomize_rng(n, l, e); 
   }
 };
+
+template <typename NumberT>
+random_number_generator(const NumberT max) -> random_number_generator<NumberT>;
 
 } // inline namespace version_*
 
