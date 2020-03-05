@@ -169,10 +169,9 @@ class TestScrubChecks(CephFSTestCase):
         log.info("Cloning repo into place")
         repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
 
-        log.info("Initiating mds_scrub_checks on mds.{id_}, " +
-                 "test_path {path}, run_seq {seq}".format(
-                     id_=mds_rank, path=abs_test_path, seq=run_seq)
-                 )
+        log.info("Initiating mds_scrub_checks on mds.{id_} test_path {path}, run_seq {seq}".format(
+            id_=mds_rank, path=abs_test_path, seq=run_seq)
+        )
 
 
         success_validator = lambda j, r: self.json_validator(j, r, "return_code", 0)
@@ -329,9 +328,8 @@ class TestScrubChecks(CephFSTestCase):
         else:
             jout = None
 
-        log.info("command '{command}' got response code " +
-                 "'{rout}' and stdout '{sout}'".format(
-                     command=command, rout=rout, sout=sout))
+        log.info("command '{command}' got response code '{rout}' and stdout '{sout}'".format(
+            command=command, rout=rout, sout=sout))
 
         success, errstring = validator(jout, rout)
 
@@ -371,7 +369,5 @@ class AsokCommandFailedError(Exception):
         self.errstring = errstring
 
     def __str__(self):
-        return "Admin socket: {command} failed with rc={rc}," + \
-               "json output={json}, because '{es}'".format(
-                   command=self.command, rc=self.rc,
-                   json=self.json, es=self.errstring)
+        return "Admin socket: {command} failed with rc={rc} json output={json}, because '{es}'".format(
+            command=self.command, rc=self.rc, json=self.json, es=self.errstring)

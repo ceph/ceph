@@ -358,7 +358,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
             run.Raw('&&'),
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
-            'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
+            'find', '-executable', '-type', 'f', '-printf', r'%P\0',
             run.Raw('>{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)),
         ],
     )

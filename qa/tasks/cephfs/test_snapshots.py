@@ -189,9 +189,9 @@ class TestSnapshots(CephFSTestCase):
         rank1 = self.fs.get_rank(rank=1, status=status)
         self.fs.rank_freeze(True, rank=0)
         self.fs.rank_freeze(True, rank=1)
-        self.fs.rank_asok(['config', 'set', "mds_kill_mdstable_at", "8".format(i)], rank=0, status=status)
-        self.fs.rank_asok(['config', 'set', "mds_kill_mdstable_at", "3".format(i)], rank=1, status=status)
-        proc = self.mount_a.run_shell(["mkdir", "d1/dir/.snap/s4".format(i)], wait=False)
+        self.fs.rank_asok(['config', 'set', "mds_kill_mdstable_at", "8"], rank=0, status=status)
+        self.fs.rank_asok(['config', 'set', "mds_kill_mdstable_at", "3"], rank=1, status=status)
+        proc = self.mount_a.run_shell(["mkdir", "d1/dir/.snap/s4"], wait=False)
         self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(rank=1), timeout=grace*2);
         self.delete_mds_coredump(rank1['name']);
 

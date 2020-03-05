@@ -147,8 +147,7 @@ def start_rgw(ctx, config, clients):
             run.Raw('|'),
             'sudo',
             'tee',
-            '/var/log/ceph/rgw.{client_with_cluster}.stdout'.format(tdir=testdir,
-                                                       client_with_cluster=client_with_cluster),
+            '/var/log/ceph/rgw.{client_with_cluster}.stdout'.format(client_with_cluster=client_with_cluster),
             run.Raw('2>&1'),
             ])
 
