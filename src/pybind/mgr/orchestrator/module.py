@@ -723,10 +723,11 @@ Usage:
 
     @_cli_write_command(
         'orch rm',
-        "name=service_name,type=CephString",
+        'name=service_name,type=CephString '
+        'name=force,type=CephBool,req=false',
         'Remove a service')
-    def _service_rm(self, service_name):
-        if service_name in ['mon', 'mgr']:
+    def _service_rm(self, service_name, force=False):
+        if service_name in ['mon', 'mgr'] and not force:
             raise OrchestratorError('The mon and mgr services cannot be removed')
         completion = self.remove_service(service_name)
         self._orchestrator_wait([completion])
