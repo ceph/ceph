@@ -221,27 +221,36 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   return count;
 }
 
+void ProtocolV2::reset_security() {
+  ldout(cct, 5) << __func__ << dendl;
+
+  auth_meta.reset(new AuthConnectionMeta);
+  session_stream_handlers.rx.reset(nullptr);
+  session_stream_handlers.tx.reset(nullptr);
+  pre_auth.rxbuf.clear();
+  pre_auth.txbuf.clear();
+}
+
 // it's expected the `write_lock` is held while calling this method.
 void ProtocolV2::reset_recv_state() {
   ldout(cct, 5) << __func__ << dendl;
 
-  // execute in the same thread that uses the rx/tx handlers. We need
-  // to do the warp because holding `write_lock` is not enough as
-  // `write_event()` unlocks it just before calling `write_message()`.
-  // `submit_to()` here is NOT blocking.
-  connection->center->submit_to(connection->center->get_id(), [this] {
-    ldout(cct, 5) << "reset_recv_state reseting crypto handlers" << dendl;
-
-    // Possibly unnecessary. See the comment in `deactivate_existing`.
-    std::lock_guard<std::mutex> l(connection->lock);
-    std::lock_guard<std::mutex> wl(connection->write_lock);
-
-    auth_meta.reset(new AuthConnectionMeta);
-    session_stream_handlers.rx.reset(nullptr);
-    session_stream_handlers.tx.reset(nullptr);
-    pre_auth.rxbuf.clear();
-    pre_auth.txbuf.clear();
-  }, /* nowait = */true);
+  if (!connection->center->in_thread()) {
+    // execute in the same thread that uses the rx/tx handlers. We need
+    // to do the warp because holding `write_lock` is not enough as
+    // `write_event()` unlocks it just before calling `write_message()`.
+    // `submit_to()` here is NOT blocking.
+    connection->center->submit_to(connection->center->get_id(), [this] {
+      ldout(cct, 5) << "reset_recv_state (warped) reseting crypto handlers"
+                    << dendl;
+      // Possibly unnecessary. See the comment in `deactivate_existing`.
+      std::lock_guard<std::mutex> l(connection->lock);
+      std::lock_guard<std::mutex> wl(connection->write_lock);
+      reset_security();
+    }, /* nowait = */true);
+  } else {
+    reset_security();
+  }
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
