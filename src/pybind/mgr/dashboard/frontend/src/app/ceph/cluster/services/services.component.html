@@ -8,10 +8,15 @@
 <ng-container *ngIf="orchestratorExist">
   <cd-table [data]="services"
             [columns]="columns"
-            identifier="uid"
+            identifier="service_name"
             forceIdentifier="true"
             columnMode="flex"
+            selectionType="single"
             (fetchData)="getServices($event)"
-            selectionType="single">
+            (updateSelection)="updateSelection($event)">
+    <cd-service-details cdTableDetail
+                        [permissions]="permissions"
+                        [selection]="selection">
+    </cd-service-details>
   </cd-table>
 </ng-container>

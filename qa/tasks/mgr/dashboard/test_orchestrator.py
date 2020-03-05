@@ -57,7 +57,6 @@ class OrchestratorControllerTest(DashboardTestCase):
 
     URL_STATUS = '/api/orchestrator/status'
     URL_INVENTORY = '/api/orchestrator/inventory'
-    URL_SERVICE = '/api/orchestrator/service'
     URL_OSD = '/api/orchestrator/osd'
 
 
@@ -109,8 +108,6 @@ class OrchestratorControllerTest(DashboardTestCase):
         self._get(self.URL_STATUS)
         self.assertStatus(200)
         self._get(self.URL_INVENTORY)
-        self.assertStatus(403)
-        self._get(self.URL_SERVICE)
         self.assertStatus(403)
 
     def test_status_get(self):

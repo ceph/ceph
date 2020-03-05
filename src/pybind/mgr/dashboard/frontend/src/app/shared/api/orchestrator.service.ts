@@ -49,11 +49,6 @@ export class OrchestratorService {
     );
   }
 
-  serviceList(hostname?: string) {
-    const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get(`${this.url}/service`, options);
-  }
-
   osdCreate(driveGroup: {}) {
     const request = {
       drive_group: driveGroup

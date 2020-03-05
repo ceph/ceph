@@ -36,7 +36,7 @@ def get_device_osd_map():
              }
     :rtype: dict
     """
-    result = {}
+    result: dict = {}
     for osd_id, osd_metadata in mgr.get('osd_metadata').items():
         hostname = osd_metadata.get('hostname')
         devices = osd_metadata.get('devices')
@@ -121,15 +121,6 @@ class OrchestratorInventory(RESTController):
                 else:
                     device['osd_ids'] = []
         return inventory_hosts
-
-
-@ApiController('/orchestrator/service', Scope.HOSTS)
-class OrchestratorService(RESTController):
-
-    @raise_if_no_orchestrator
-    def list(self, hostname=None):
-        orch = OrchClient.instance()
-        return [service.to_json() for service in orch.services.list(None, None, hostname)]
 
 
 @ApiController('/orchestrator/osd', Scope.OSD)
