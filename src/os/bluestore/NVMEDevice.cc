@@ -488,25 +488,12 @@ class NVMEManager {
 
  private:
   ceph::mutex lock = ceph::make_mutex("NVMEManager::lock");
-  bool stopping = false;
+  bool spdk_env_is_ready = false;
   std::vector<SharedDriverData*> shared_driver_datas;
-  std::thread dpdk_thread;
-  ceph::mutex probe_queue_lock = ceph::make_mutex("NVMEManager::probe_queue_lock");
-  ceph::condition_variable probe_queue_cond;
-  std::list<ProbeContext*> probe_queue;
 
  public:
   NVMEManager() {}
-  ~NVMEManager() {
-    if (!dpdk_thread.joinable())
-      return;
-    {
-      std::lock_guard guard(probe_queue_lock);
-      stopping = true;
-      probe_queue_cond.notify_all();
-    }
-    dpdk_thread.join();
-  }
+  ~NVMEManager() {}
 
   int try_get(const spdk_nvme_transport_id& trid, SharedDriverData **driver);
   void register_ctrlr(const spdk_nvme_transport_id& trid, spdk_nvme_ctrlr *c, SharedDriverData **driver) {
@@ -571,74 +558,53 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
     }
   }
 
-  auto coremask_arg = g_conf().get_val<std::string>("bluestore_spdk_coremask");
-  int m_core_arg = -1;
-  try {
-    auto core_value = stoull(coremask_arg, nullptr, 16);
-    m_core_arg = ffsll(core_value);
-  } catch (const std::logic_error& e) {
-    derr << __func__ << " invalid bluestore_spdk_coremask: "
-	 << coremask_arg << dendl;
-    return -EINVAL;
-  }
-  // at least one core is needed for using spdk
-  if (m_core_arg == 0) {
-    derr << __func__ << " invalid bluestore_spdk_coremask, "
-	 << "at least one core is needed" << dendl;
-    return -ENOENT;
-  }
-  m_core_arg -= 1;
 
-  uint32_t mem_size_arg = (uint32_t)g_conf().get_val<Option::size_t>("bluestore_spdk_mem");
+  // SPDK enviroment is not initialized
+  if (!spdk_env_is_ready) {
+    auto coremask_arg = g_conf().get_val<std::string>("bluestore_spdk_coremask");
+    int m_core_arg = -1;
+    try {
+      auto core_value = stoull(coremask_arg, nullptr, 16);
+      m_core_arg = ffsll(core_value);
+    } catch (const std::logic_error& e) {
+      derr << __func__ << " invalid bluestore_spdk_coremask: "
+	   << coremask_arg << dendl;
+      return -EINVAL;
+    }
+    // at least one core is needed for using spdk
+    if (m_core_arg == 0) {
+      derr << __func__ << " invalid bluestore_spdk_coremask, "
+	   << "at least one core is needed" << dendl;
+      return -ENOENT;
+    }
+    m_core_arg -= 1;
 
-  if (!dpdk_thread.joinable()) {
-    dpdk_thread = std::thread(
-      [this, coremask_arg, m_core_arg, mem_size_arg]() {
-        static struct spdk_env_opts opts;
-        int r;
+    uint32_t mem_size_arg = (uint32_t)g_conf().get_val<Option::size_t>("bluestore_spdk_mem");
 
-        spdk_env_opts_init(&opts);
-        opts.name = "nvme-device-manager";
-        opts.core_mask = coremask_arg.c_str();
-        opts.master_core = m_core_arg;
-        opts.mem_size = mem_size_arg;
-        spdk_env_init(&opts);
-        spdk_unaffinitize_thread();
+    static struct spdk_env_opts opts;
 
-        spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
-        if (spdk_nvme_retry_count < 0)
-          spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
+    spdk_env_opts_init(&opts);
+    opts.name = "nvme-device-manager";
+    opts.core_mask = coremask_arg.c_str();
+    opts.master_core = m_core_arg;
+    opts.mem_size = mem_size_arg;
+    spdk_env_init(&opts);
+    spdk_unaffinitize_thread();
 
-        std::unique_lock l(probe_queue_lock);
-        while (!stopping) {
-          if (!probe_queue.empty()) {
-            ProbeContext* ctxt = probe_queue.front();
-            probe_queue.pop_front();
-            r = spdk_nvme_probe(NULL, ctxt, probe_cb, attach_cb, NULL);
-            if (r < 0) {
-              ceph_assert(!ctxt->driver);
-              derr << __func__ << " device probe nvme failed" << dendl;
-            }
-            ctxt->done = true;
-            probe_queue_cond.notify_all();
-          } else {
-            probe_queue_cond.wait(l);
-          }
-        }
-        for (auto p : probe_queue)
-          p->done = true;
-        probe_queue_cond.notify_all();
-      }
-    );
+    spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
+    if (spdk_nvme_retry_count < 0)
+      spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
+    spdk_env_is_ready = true;
   }
 
   ProbeContext ctx{trid, this, nullptr, false};
-  {
-    std::unique_lock l(probe_queue_lock);
-    probe_queue.push_back(&ctx);
-    while (!ctx.done)
-      probe_queue_cond.wait(l);
+  int r = spdk_nvme_probe(NULL, &ctx, probe_cb, attach_cb, NULL);
+  if (r < 0) {
+    ceph_assert(!ctx.driver);
+    derr << __func__ << " device probe nvme failed" << dendl;
+    return -1;
   }
+
   if (!ctx.driver)
     return -1;
   *driver = ctx.driver;
