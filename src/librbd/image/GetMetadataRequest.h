@@ -4,12 +4,12 @@
 #ifndef CEPH_LIBRBD_IMAGE_GET_METADATA_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_GET_METADATA_REQUEST_H
 
+#include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include <string>
 #include <map>
 
-class CephContext;
 class Context;
 
 namespace librbd {

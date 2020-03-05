@@ -581,7 +581,7 @@ typedef ::testing::Types<TestImageReplayerParams<
                            cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT>>
     TestImageReplayerTypes;
 
-TYPED_TEST_CASE(TestImageReplayer, TestImageReplayerTypes);
+TYPED_TEST_SUITE(TestImageReplayer, TestImageReplayerTypes);
 
 TYPED_TEST(TestImageReplayer, Bootstrap)
 {

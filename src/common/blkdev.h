@@ -9,18 +9,6 @@
 #include <string>
 #include "json_spirit/json_spirit_value.h"
 
-enum blkdev_prop_t {
-  BLKDEV_PROP_DEV,
-  BLKDEV_PROP_DISCARD_GRANULARITY,
-  BLKDEV_PROP_MODEL,
-  BLKDEV_PROP_ROTATIONAL,
-  BLKDEV_PROP_SERIAL,
-  BLKDEV_PROP_VENDOR,
-  BLKDEV_PROP_NUMA_NODE,
-  BLKDEV_PROP_NUMA_CPUS,
-  BLKDEV_PROP_NUMPROPS,
-};
-
 extern int get_device_by_path(const char *path, char* partition, char* device, size_t max);
 
 extern std::string _decode_model_enc(const std::string& in);  // helper, exported only so we can unit test
@@ -89,8 +77,8 @@ public:
   }
 
 protected:
-  int64_t get_int_property(blkdev_prop_t prop) const;
-  int64_t get_string_property( blkdev_prop_t prop, char *val,
+  int64_t get_int_property(const char* prop) const;
+  int64_t get_string_property(const char* prop, char *val,
     size_t maxlen) const;
 
 private:

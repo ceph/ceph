@@ -29,12 +29,6 @@
 namespace librbd {
 namespace image {
 
-namespace {
-
-const uint64_t MAX_METADATA_ITEMS = 128;
-
-}
-
 using util::create_rados_callback;
 using util::create_async_context_callback;
 using util::create_context_callback;
