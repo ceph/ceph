@@ -545,13 +545,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         {
             'name': 'device_cache_timeout',
             'type': 'secs',
-            'default': 10 * 60,
+            'default': 30 * 60,
             'desc': 'seconds to cache device inventory',
         },
         {
             'name': 'daemon_cache_timeout',
             'type': 'secs',
-            'default': 60,
+            'default': 10 * 60,
             'desc': 'seconds to cache service (daemon) inventory',
         },
         {
