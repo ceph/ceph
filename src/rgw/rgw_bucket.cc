@@ -1504,12 +1504,12 @@ int RGWBucketAdminOp::limit_check(rgw::sal::RGWRadosStore *store,
 	  stringstream ss;
 	  if (objs_per_shard > safe_max_objs_per_shard) {
 	    double over =
-	      100 - (safe_max_objs_per_shard/objs_per_shard * 100);
+	      100 - safe_max_objs_per_shard/(objs_per_shard * 100.0);
 	      ss << boost::format("OVER %4f%%") % over;
 	      warn = true;
 	  } else {
 	    double fill_pct =
-	      objs_per_shard / safe_max_objs_per_shard * 100;
+	      objs_per_shard / (safe_max_objs_per_shard * 100.0);
 	    if (fill_pct >= shard_warn_pct) {
 	      ss << boost::format("WARN %4f%%") % fill_pct;
 	      warn = true;
