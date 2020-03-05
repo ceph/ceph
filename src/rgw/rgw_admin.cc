@@ -6762,6 +6762,8 @@ next:
     uint16_t expansion_factor = 1;
     while (is_truncated) {
       RGWRados::ent_map_t result;
+      result.reserve(NUM_ENTRIES);
+
       int r = store->getRados()->cls_bucket_list_ordered(
 	bucket_info, RGW_NO_SHARD,
 	marker, empty_prefix, empty_delimiter,
