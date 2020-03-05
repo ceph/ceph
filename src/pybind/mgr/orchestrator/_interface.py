@@ -16,7 +16,7 @@ import errno
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError
+    ServiceSpecValidationError, IscsiServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult
@@ -855,6 +855,7 @@ class Orchestrator(object):
             'alertmanager': self.apply_alertmanager,
             'crash': self.apply_crash,
             'grafana': self.apply_grafana,
+            'iscsi': cast(Callable[[ServiceSpec], Completion], self.apply_iscsi),
             'mds': self.apply_mds,
             'mgr': self.apply_mgr,
             'mon': self.apply_mon,
@@ -1033,6 +1034,16 @@ class Orchestrator(object):
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> Completion
         """Update NFS cluster"""
+        raise NotImplementedError()
+
+    def add_iscsi(self, spec):
+        # type: (IscsiServiceSpec) -> Completion
+        """Create iscsi daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_iscsi(self, spec):
+        # type: (IscsiServiceSpec) -> Completion
+        """Update iscsi cluster"""
         raise NotImplementedError()
 
     def add_prometheus(self, spec):
@@ -1271,12 +1282,12 @@ class DaemonDescription(object):
         if self.daemon_type == 'rgw':
             v = self.daemon_id.split('.')
             return '.'.join(v[0:2])
-        if self.daemon_type in ['mds', 'nfs']:
+        if self.daemon_type in ['mds', 'nfs', 'iscsi']:
             return self.daemon_id.split('.')[0]
         return self.daemon_type
 
     def service_name(self):
-        if self.daemon_type in ['rgw', 'mds', 'nfs']:
+        if self.daemon_type in ['rgw', 'mds', 'nfs', 'iscsi']:
             return f'{self.daemon_type}.{self.service_id()}'
         return self.daemon_type
 
