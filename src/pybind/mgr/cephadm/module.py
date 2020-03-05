@@ -1732,10 +1732,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if d.matches_service(service_name):
                     args.append((d.daemon_type, d.daemon_id,
                                  d.hostname, action))
-        if not args:
-            raise orchestrator.OrchestratorError(
-                'Unable to find %s.%s.* daemon(s)' % (service_name))
-        self.log.info('%s service %s' % (action, service_name))
+        self.log.info('%s service %s' % (action.capitalize(), service_name))
         return self._daemon_actions(args)
 
     @async_map_completion
@@ -1775,8 +1772,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             raise orchestrator.OrchestratorError(
                 'Unable to find %s.%s daemon(s)' % (
                     daemon_type, daemon_id))
-        self.log.info('%s daemons %s' % (action,
-                                         ['%s.%s' % (a[0], a[1]) for a in args]))
+        self.log.info('%s daemons %s' % (
+            action.capitalize(),
+            ','.join(['%s.%s' % (a[0], a[1]) for a in args])))
         return self._daemon_actions(args)
 
     def remove_daemons(self, names, force):
@@ -1791,18 +1789,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Remove daemons %s' % [a[0] for a in args])
         return self._remove_daemons(args)
 
-    def remove_service(self, service_name, force=False):
+    def remove_service(self, service_name):
         args = []
         for host, dm in self.cache.daemons.items():
             for name, d in dm.items():
                 if d.matches_service(service_name):
                     args.append(
-                        (d.name(), d.hostname, force)
+                        (d.name(), d.hostname, True)
                     )
                     self.spec_store.rm(d.service_name())
-        if not args:
-            raise OrchestratorError('Unable to find daemons in %s service' % (
-                service_name))
         self.log.info('Remove service %s (daemons %s)' % (
             service_name, [a[0] for a in args]))
         return self._remove_daemons(args)
@@ -2402,6 +2397,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # scrape mgrs
         mgr_scrape_list = []
         mgr_map = self.get('mgr_map')
+        port = None
         t = mgr_map.get('services', {}).get('prometheus', None)
         if t:
             t = t.split('/')[2]
@@ -2409,16 +2405,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             port = '9283'
             if ':' in t:
                 port = t.split(':')[1]
-            # get standbys too.  assume that they are all on the same port
-            # as the active.
-            for dd in self.cache.get_daemons_by_service('mgr'):
-                deps.append(dd.name())
-                if dd.daemon_id == self.get_mgr_id():
-                    continue
-                hi = self.inventory.get(dd.hostname, None)
-                if hi:
-                    addr = hi.get('addr', dd.hostname)
-                mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
+        # scan all mgrs to generate deps and to get standbys too.
+        # assume that they are all on the same port as the active mgr.
+        for dd in self.cache.get_daemons_by_service('mgr'):
+            # we consider the mgr a dep even if the prometheus module is
+            # disabled in order to be consistent with _calc_daemon_deps().
+            deps.append(dd.name())
+            if not port:
+                continue
+            if dd.daemon_id == self.get_mgr_id():
+                continue
+            hi = self.inventory.get(dd.hostname, None)
+            if hi:
+                addr = hi.get('addr', dd.hostname)
+            mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
 
         # scrape node exporters
         node_configs = ''
