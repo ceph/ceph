@@ -333,7 +333,7 @@ class LocalRemote(object):
 
         # Filter out helper tools that don't exist in a vstart environment
         args = [a for a in args if a not in {
-            'adjust-ulimits', 'ceph-coverage', 'timeout'}]
+            'adjust-ulimits', 'ceph-coverage'}]
 
         # Adjust binary path prefix if given a bare program name
         if "/" not in args[0]:
