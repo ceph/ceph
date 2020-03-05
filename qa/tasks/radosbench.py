@@ -82,12 +82,14 @@ def task(ctx, config):
             else:
                 pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
-        size = ['-b', str(config.get('size', 65536))]
+        size = config.get('size', 65536)
         osize = config.get('objectsize', 65536)
-        if osize == 0 or osize == size:
-            objectsize = []
-        else:
-            objectsize = ['-O', str(osize)]
+        sizeargs = ['-b', str(size)]
+        if osize != 0 and osize != size:
+            # only use -O if this varies from size. kludgey workaround the
+            # fact that -O was -o in older releases.
+            sizeargs.extend(['-O', str(osize)])
+
         # If doing a reading run then populate data
         if runtype != "write":
             proc = remote.run(
@@ -99,7 +101,7 @@ def task(ctx, config):
                               'rados',
                               '--no-log-to-stderr',
                               '--name', role]
-                              + size + objectsize +
+                              + sizeargs +
                               ['-p' , pool,
                           'bench', str(60), "write", "--no-cleanup"
                           ]).format(tdir=testdir),
@@ -107,8 +109,7 @@ def task(ctx, config):
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             wait=True
             )
-            size = []
-            objectsize = []
+            sizeargs = []
 
         proc = remote.run(
             args=[
@@ -119,7 +120,7 @@ def task(ctx, config):
                           'rados',
 			  '--no-log-to-stderr',
                           '--name', role]
-                          + size + objectsize +
+                          + sizeargs +
                           ['-p' , pool,
                           'bench', str(config.get('time', 360)), runtype,
                           ] + write_to_omap + cleanup).format(tdir=testdir),
