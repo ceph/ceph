@@ -123,6 +123,16 @@ The see the current configuration::
 
   ceph telemetry status
 
+Manually sending telemetry
+--------------------------
+
+To ad hoc send telemetry data::
+
+  ceph telemetry send
+
+In case telemetry is not enabled (with 'ceph telemetry on'), you need to add
+'--license sharing-1-0' to 'ceph telemetry send' command.
+
 Sending telemetry through a proxy
 ---------------------------------
 
