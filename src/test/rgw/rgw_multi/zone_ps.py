@@ -66,13 +66,6 @@ class PSZone(Zone):  # pylint: disable=too-many-ancestors
 NO_HTTP_BODY = ''
 
 
-def print_connection_info(conn):
-    """print connection details"""
-    print('Endpoint: ' + conn.host + ':' + str(conn.port))
-    print('AWS Access Key:: ' + conn.aws_access_key_id)
-    print('AWS Secret Key:: ' + conn.aws_secret_access_key)
-
-
 def make_request(conn, method, resource, parameters=None, sign_parameters=False, extra_parameters=None):
     """generic request sending to pubsub radogw
     should cover: topics, notificatios and subscriptions
@@ -171,7 +164,7 @@ def delete_all_s3_topics(zone, region):
             print('topic cleanup, deleting: ' + topic['TopicArn'])
             assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
     except Exception as err:
-        print 'failed to do topic cleanup: ' + str(err)
+        print('failed to do topic cleanup: ' + str(err))
     
 
 def delete_all_objects(conn, bucket_name):

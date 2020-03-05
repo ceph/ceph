@@ -7,7 +7,7 @@ import logging
 import errno
 
 try:
-    from itertools import izip_longest as zip_longest
+    from itertools import izip_longest as zip_longest  # type: ignore
 except ImportError:
     from itertools import zip_longest
 from itertools import combinations
@@ -79,15 +79,6 @@ def mdlog_list(zone, period = None):
     (mdlog_json, _) = zone.cluster.admin(cmd, read_only=True)
     mdlog_json = mdlog_json.decode('utf-8')
     return json.loads(mdlog_json)
-
-def meta_sync_status(zone):
-    while True:
-        cmd = ['metadata', 'sync', 'status'] + zone.zone_args()
-        meta_sync_status_json, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
-        if retcode == 0:
-            break
-        assert(retcode == 2) # ENOENT
-        time.sleep(5)
 
 def mdlog_autotrim(zone):
     zone.cluster.admin(['mdlog', 'autotrim'])

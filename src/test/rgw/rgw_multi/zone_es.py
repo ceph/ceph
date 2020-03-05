@@ -9,7 +9,7 @@ import dateutil.parser
 
 from nose.tools import eq_ as eq
 try:
-    from itertools import izip_longest as zip_longest
+    from itertools import izip_longest as zip_longest  # type: ignore
 except ImportError:
     from itertools import zip_longest
 
@@ -52,13 +52,6 @@ def make_request(conn, method, bucket, key, query_args, headers):
         raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
     return result
 
-def append_query_arg(s, n, v):
-    if not v:
-        return s
-    nv = '{n}={v}'.format(n=n, v=v)
-    if not s:
-        return nv
-    return '{s}&{nv}'.format(s=s, nv=nv)
 
 class MDSearch:
     def __init__(self, conn, bucket_name, query, query_args = None, marker = None):
