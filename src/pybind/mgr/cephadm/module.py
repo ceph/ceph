@@ -2198,6 +2198,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             deps = self._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
             last_deps, last_config = self.cache.get_daemon_last_config_deps(
                 dd.hostname, dd.name())
+            if last_deps is None:
+                last_deps = []
             if last_deps != deps:
                 self.log.debug('%s deps %s -> %s' % (dd.name(), last_deps,
                                                      deps))
