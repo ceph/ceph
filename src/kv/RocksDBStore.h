@@ -80,6 +80,7 @@ class RocksDBStore : public KeyValueDB {
   bool set_cache_flag = false;
 
   int do_open(ostream &out, bool create_if_missing);
+  int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -158,6 +159,7 @@ public:
 
   void close() override;
 
+  int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
 

@@ -549,6 +549,7 @@ add_dependencies(tests
   ceph-osd
   ceph-dencoder
   ceph-objectstore-tool
+  ceph-kvstore-tool
   ceph-monstore-tool
   osdmaptool
   ceph_example

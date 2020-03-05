@@ -61,10 +61,8 @@ int LevelDBStore::init(string option_str)
   return 0;
 }
 
-int LevelDBStore::do_open(ostream &out, bool create_if_missing)
+int LevelDBStore::load_leveldb_options(bool create_if_missing, leveldb::Options &ldoptions)
 {
-  leveldb::Options ldoptions;
-
   if (options.write_buffer_size)
     ldoptions.write_buffer_size = options.write_buffer_size;
   if (options.max_open_files)
@@ -105,6 +103,17 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
   if (options.log_file.length()) {
     leveldb::Env *env = leveldb::Env::Default();
     env->NewLogger(options.log_file, &ldoptions.info_log);
+  }
+  return 0;
+}
+
+int LevelDBStore::do_open(ostream &out, bool create_if_missing)
+{
+  leveldb::Options ldoptions;
+  int r = load_leveldb_options(create_if_missing, ldoptions);
+  if (r) {
+    dout(1) << "load leveldb options failed" << dendl;
+    return r;
   }
 
   leveldb::DB *_db;
@@ -171,6 +180,24 @@ void LevelDBStore::close()
 
   if (logger)
     cct->get_perfcounters_collection()->remove(logger);
+}
+
+int LevelDBStore::repair(std::ostream &out)
+{
+  leveldb::Options ldoptions;
+  int r = load_leveldb_options(false, ldoptions);
+  if (r) {
+    dout(1) << "load leveldb options failed" << dendl;
+    out << "load leveldb options failed" << std::endl;
+    return r;
+  }
+  leveldb::Status status = leveldb::RepairDB(path, ldoptions);
+  if (status.ok()) {
+    return 0;
+  } else {
+    out << "repair leveldb failed : " << status.ToString() << std::endl;
+    return 1;
+  }
 }
 
 int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
