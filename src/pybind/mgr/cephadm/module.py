@@ -185,6 +185,7 @@ class HostCache():
         self.daemon_refresh_queue = [] # type: List[str]
         self.device_refresh_queue = [] # type: List[str]
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
+        self.last_host_check = {}      # type: Dict[str, datetime.datetime]
 
     def load(self):
         # type: () -> None
@@ -220,6 +221,9 @@ class HostCache():
                         'last_config': datetime.datetime.strptime(
                             d['last_config'], DATEFMT),
                     }
+                if 'last_host_check' in j:
+                    self.last_host_check[host] = datetime.datetime.strptime(
+                        j['last_host_check'], DATEFMT)
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
                     '%d devices, %d networks' % (
@@ -246,6 +250,10 @@ class HostCache():
             'deps': deps,
             'last_config': stamp,
         }
+ 
+    def update_last_host_check(self, host):
+        # type: (str) -> None
+        self.last_host_check[host] = datetime.datetime.utcnow()
 
     def prime_empty_host(self, host):
         # type: (str) -> None
@@ -294,6 +302,8 @@ class HostCache():
                 'deps': depi.get('deps', []),
                 'last_config': depi['last_config'].strftime(DATEFMT),
             }
+        if host in self.last_host_check:
+            j['last_host_check']= self.last_host_check[host].strftime(DATEFMT)
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
 
     def rm_host(self, host):
@@ -372,6 +382,12 @@ class HostCache():
         if host not in self.last_device_update or self.last_device_update[host] < cutoff:
             return True
         return False
+
+    def host_needs_check(self, host):
+        # type: (str) -> bool
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+            seconds=self.mgr.host_check_interval)
+        return host not in self.last_host_check or self.last_host_check[host] < cutoff
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None
@@ -573,6 +589,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'desc': 'seconds to cache service (daemon) inventory',
         },
         {
+            'name': 'host_check_interval',
+            'type': 'secs',
+            'default': 10 * 60,
+            'desc': 'how frequently to perform a host check',
+        },
+        {
             'name': 'mode',
             'type': 'str',
             'enum_allowed': ['root', 'cephadm-package'],
@@ -631,6 +653,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.ssh_config_file = None  # type: Optional[str]
             self.device_cache_timeout = 0
             self.daemon_cache_timeout = 0
+            self.host_check_interval = 0
             self.mode = ''
             self.container_image_base = ''
             self.warn_on_stray_hosts = True
@@ -1010,6 +1033,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             }
         self.set_health_checks(self.health_checks)
 
+    def _check_host(self, host):
+        if host not in self.inventory:
+            return
+        self.log.debug(' checking %s' % host)
+        try:
+            out, err, code = self._run_cephadm(
+                host, 'client', 'check-host', [],
+                error_ok=True, no_fsid=True)
+            self.cache.update_last_host_check(host)
+            self.cache.save_host(host)
+            if code:
+                self.log.debug(' host %s failed check' % host)
+                if self.warn_on_failed_host_check:
+                    return 'host %s failed check: %s' % (host, err)
+            else:
+                self.log.debug(' host %s ok' % host)
+        except Exception as e:
+            self.log.debug(' host %s failed check' % host)
+            return 'host %s failed check: %s' % (host, e)
+
     def _check_for_strays(self):
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
@@ -1067,12 +1110,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: () -> None
         self.log.debug("serve starting")
         while self.run:
-            self._check_hosts()
 
             # refresh daemons
             self.log.debug('refreshing hosts')
+            bad_hosts = []
             failures = []
             for host in self.cache.get_hosts():
+                if self.cache.host_needs_check(host):
+                    r = self._check_host(host)
+                    if r is not None:
+                        bad_hosts.append(r)
                 if self.cache.host_needs_daemon_refresh(host):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
@@ -1083,6 +1130,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     r = self._refresh_host_devices(host)
                     if r:
                         failures.append(r)
+
+            health_changed = False
+            if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
+                del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
+                health_changed = True
+            if bad_hosts:
+                self.health_checks['CEPHADM_HOST_CHECK_FAILED'] = {
+                    'severity': 'warning',
+                    'summary': '%d hosts fail cephadm check' % len(bad_hosts),
+                    'count': len(bad_hosts),
+                    'detail': bad_hosts,
+                }
+                health_changed = True
             if failures:
                 self.health_checks['CEPHADM_REFRESH_FAILED'] = {
                     'severity': 'warning',
@@ -1090,10 +1150,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'count': len(failures),
                     'detail': failures,
                 }
-                self.set_health_checks(self.health_checks)
+                health_changed = True
             elif 'CEPHADM_REFRESH_FAILED' in self.health_checks:
                 del self.health_checks['CEPHADM_REFRESH_FAILED']
+                health_changed = True
+            if health_changed:
                 self.set_health_checks(self.health_checks)
+
+
 
             self._check_for_strays()
 
@@ -1391,7 +1455,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         'name=host,type=CephString '
         'name=addr,type=CephString,req=false',
         'Check whether we can access and manage a remote host')
-    def _check_host(self, host, addr=None):
+    def check_host(self, host, addr=None):
         out, err, code = self._run_cephadm(host, 'client', 'check-host',
                                            ['--expect-hostname', host],
                                            addr=addr,
