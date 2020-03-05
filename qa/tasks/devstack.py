@@ -4,6 +4,8 @@ import logging
 from cStringIO import StringIO
 import textwrap
 from configparser import ConfigParser
+
+import six
 import time
 
 from teuthology.orchestra import run
@@ -210,7 +212,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         parser.read_file(config_stream)
         for (key, value) in update_dict.items():
             parser.set(section, key, value)
-        out_stream = StringIO()
+        out_stream = six.StringIO()
         parser.write(out_stream)
         out_stream.seek(0)
         return out_stream
@@ -254,8 +256,8 @@ def update_devstack_config_files(devstack_node, secret_uuid):
     for update in updates:
         file_name = update['name']
         options = update['options']
-        config_str = misc.get_file(devstack_node, file_name, sudo=True)
-        config_stream = StringIO(config_str)
+        config_data = misc.get_file(devstack_node, file_name, sudo=True)
+        config_stream = six.StringIO(config_data)
         backup_config(devstack_node, file_name)
         new_config_stream = update_config(file_name, config_stream, options)
         misc.sudo_write_file(devstack_node, file_name, new_config_stream)
@@ -352,21 +354,17 @@ def create_volume(devstack_node, ceph_node, vol_name, size):
         size=size))
     args = ['source', 'devstack/openrc', run.Raw('&&'), 'cinder', 'create',
             '--display-name', vol_name, size]
-    out_stream = StringIO()
-    devstack_node.run(args=args, stdout=out_stream, wait=True)
-    vol_info = parse_os_table(out_stream.getvalue())
+    cinder_create = devstack_node.sh(args, wait=True)
+    vol_info = parse_os_table(cinder_create)
     log.debug("Volume info: %s", str(vol_info))
 
-    out_stream = StringIO()
     try:
-        ceph_node.run(args="rbd --id cinder ls -l volumes", stdout=out_stream,
-                      wait=True)
+        rbd_output = ceph_node.sh("rbd --id cinder ls -l volumes", wait=True)
     except run.CommandFailedError:
         log.debug("Original rbd call failed; retrying without '--id cinder'")
-        ceph_node.run(args="rbd ls -l volumes", stdout=out_stream,
-                      wait=True)
+        rbd_output = ceph_node.sh("rbd ls -l volumes", wait=True)
 
-    assert vol_info['id'] in out_stream.getvalue(), \
+    assert vol_info['id'] in rbd_output, \
         "Volume not found on Ceph cluster"
     assert vol_info['size'] == size, \
         "Volume size on Ceph cluster is different than specified"
