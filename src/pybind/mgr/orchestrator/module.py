@@ -25,6 +25,11 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     NoOrchestrator, ServiceSpec, PlacementSpec, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostPlacementSpec, HostSpec, CLICommandMeta
 
+def nice_delta(now, t, suffix=''):
+    if t:
+        return to_pretty_timedelta(now - t) + suffix
+    else:
+        return '-'
 
 @six.add_metaclass(CLICommandMeta)
 class OrchestratorCli(OrchestratorClientMixin, MgrModule):
@@ -351,16 +356,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(services, key=lambda s: s.service_name):
-                def nice_delta(t, suffix=''):
-                    if t:
-                        return to_pretty_timedelta(now - t) + suffix
-                    else:
-                        return '-'
                 table.add_row((
                     s.service_name,
                     '%d/%d' % (s.running, s.size),
-                    nice_delta(s.last_refresh, ' age'),
-                    nice_delta(s.created),
+                    nice_delta(now, s.last_refresh, ' age'),
+                    nice_delta(now, s.created),
                     'present' if s.spec else '-',
                     s.spec.placement.pretty_str() if s.spec else '-',
                     ukn(s.container_image_name),
@@ -415,17 +415,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 if s.status == 1 and s.started:
                     status += ' (%s)' % to_pretty_timedelta(now - s.started)
 
-                def nice_delta(t, suffix=''):
-                    if t:
-                        return to_pretty_timedelta(now - t) + suffix
-                    else:
-                        return '-'
                 table.add_row((
                     s.name(),
                     ukn(s.hostname),
                     status,
-                    nice_delta(s.last_refresh, ' ago'),
-                    nice_delta(s.created),
+                    nice_delta(now, s.last_refresh, ' ago'),
+                    nice_delta(now, s.created),
                     ukn(s.version),
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
