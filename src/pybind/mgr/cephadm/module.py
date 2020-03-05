@@ -768,7 +768,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         daemons = self.cache.get_daemons()
         done = 0
-        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds']:
+        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds', 'crash']:
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
