@@ -1024,11 +1024,13 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
 
-  if (next_map->is_down(peer) ||
-      next_map->get_info(peer).up_from > from_epoch) {
-    m->put();
-    release_map(next_map);
-    return;
+  if (from_epoch < next_map->get_epoch()) {
+    if (next_map->is_down(peer) ||
+	next_map->get_info(peer).up_from > from_epoch) {
+      m->put();
+      release_map(next_map);
+      return;
+    }
   }
   ConnectionRef peer_con;
   if (peer == whoami) {
@@ -1048,11 +1050,14 @@ void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>&
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
 
+  bool need_check_status = from_epoch < next_map->get_epoch();
   for (auto& iter : messages) {
-    if (next_map->is_down(iter.first) ||
-	next_map->get_info(iter.first).up_from > from_epoch) {
-      iter.second->put();
-      continue;
+    if (need_check_status) {
+      if (next_map->is_down(iter.first) ||
+	  next_map->get_info(iter.first).up_from > from_epoch) {
+	iter.second->put();
+	continue;
+      }
     }
     ConnectionRef peer_con;
     if (iter.first == whoami) {
