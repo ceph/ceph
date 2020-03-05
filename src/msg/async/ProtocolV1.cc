@@ -1276,7 +1276,7 @@ void ProtocolV1::reset_recv_state()
       std::lock_guard<std::mutex> l(connection->lock);
       std::lock_guard<std::mutex> wl(connection->write_lock);
       reset_security();
-    }, /* nowait = */true);
+    }, /* always_async = */true);
   } else {
     reset_security();
   }
