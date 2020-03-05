@@ -5,7 +5,7 @@ import logging
 from ceph.deployment.drive_group import DeviceSelection
 
 try:
-    from typing import Optional, Generator
+    from typing import Generator
 except ImportError:
     pass
 

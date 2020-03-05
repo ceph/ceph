@@ -2,12 +2,7 @@ import pytest
 
 from ceph.deployment.inventory import Devices, Device
 
-from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError, DeviceSelection
-
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch  # type: ignore
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 
 from ceph.deployment import drive_selection
 from ceph.tests.factories import InventoryFactory
