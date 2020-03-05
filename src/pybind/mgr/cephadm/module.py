@@ -768,7 +768,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         daemons = self.cache.get_daemons()
         done = 0
-        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds']:
+        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds', 'crash']:
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
@@ -1797,9 +1797,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     args.append(
                         (d.name(), d.hostname, True)
                     )
-                    self.spec_store.rm(d.service_name())
         self.log.info('Remove service %s (daemons %s)' % (
             service_name, [a[0] for a in args]))
+        self.spec_store.rm(d.service_name())
         return self._remove_daemons(args)
 
     def get_inventory(self, host_filter=None, refresh=False):
