@@ -344,7 +344,7 @@ class ServiceSpec(object):
     start the services.
 
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana mds mgr mon nfs ' \
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw'.split()
 
     @classmethod
@@ -354,7 +354,8 @@ class ServiceSpec(object):
         ret = {
             'rgw': RGWSpec,
             'nfs': NFSServiceSpec,
-            'osd': DriveGroupSpec
+            'osd': DriveGroupSpec,
+            'iscsi': IscsiServiceSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
@@ -472,7 +473,7 @@ def servicespec_validate_add(self: ServiceSpec):
     # This must not be a method of ServiceSpec, otherwise you'll hunt
     # sub-interpreter affinity bugs.
     ServiceSpec.validate(self)
-    if self.service_type in ['mds', 'rgw', 'nfs'] and not self.service_id:
+    if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
         raise ServiceSpecValidationError('Cannot add Service: id required')
 
 
@@ -542,3 +543,39 @@ class RGWSpec(ServiceSpec):
             return 443
         else:
             return 80
+
+
+class IscsiServiceSpec(ServiceSpec):
+    def __init__(self, service_id, pool=None,
+                 placement=None,
+                 trusted_ip_list=None,
+                 fqdn_enabled=None,
+                 api_port=None,
+                 api_user=None,
+                 api_password=None,
+                 api_secure=None,
+                 ssl_cert=None,
+                 ssl_key=None,
+                 service_type='iscsi',
+                 unmanaged=False):
+        assert service_type == 'iscsi'
+        super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
+                                               placement=placement, unmanaged=unmanaged)
+
+        #: RADOS pool where ceph-iscsi config data is stored.
+        self.pool = pool
+        self.trusted_ip_list = trusted_ip_list
+        self.fqdn_enabled = fqdn_enabled
+        self.api_port = api_port
+        self.api_user = api_user
+        self.api_password = api_password
+        self.api_secure = api_secure
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+
+    def validate_add(self):
+        servicespec_validate_add(self)
+
+        if not self.pool:
+            raise ServiceSpecValidationError(
+                'Cannot add ISCSI: No Pool specified')

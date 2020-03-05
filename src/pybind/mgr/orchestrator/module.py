@@ -25,7 +25,7 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription
+    ServiceDescription, IscsiServiceSpec
 
 def nice_delta(now, t, suffix=''):
     if t:
@@ -590,6 +590,8 @@ Usage:
             completion = self.add_node_exporter(spec)
         elif daemon_type == 'prometheus':
             completion = self.add_prometheus(spec)
+        elif daemon_type == 'iscsi':
+            completion = self.add_iscsi(spec)
         else:
             raise OrchestratorValidationError(f'unknown daemon type `{daemon_type}`')
 
@@ -637,6 +639,39 @@ Usage:
         )
 
         completion = self.add_rgw(rgw_spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch daemon add iscsi',
+        'name=pool,type=CephString '
+        'name=fqdn_enabled,type=CephString,req=false '
+        'name=trusted_ip_list,type=CephString,req=false '
+        'name=placement,type=CephString,req=false',
+        'Start iscsi daemon(s)')
+    def _iscsi_add(self, pool, fqdn_enabled=None, trusted_ip_list=None, placement=None, inbuf=None):
+        usage = """
+        Usage:
+          ceph orch daemon add iscsi -i <json_file>
+          ceph orch daemon add iscsi <pool>
+                """
+        if inbuf:
+            try:
+                iscsi_spec = IscsiServiceSpec.from_json(json.loads(inbuf))
+            except ValueError as e:
+                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+        else:
+            iscsi_spec = IscsiServiceSpec(
+                service_id='iscsi',
+                pool=pool,
+                fqdn_enabled=fqdn_enabled,
+                trusted_ip_list=trusted_ip_list,
+                placement=PlacementSpec.from_string(placement),
+            )
+
+        completion = self.add_iscsi(iscsi_spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
