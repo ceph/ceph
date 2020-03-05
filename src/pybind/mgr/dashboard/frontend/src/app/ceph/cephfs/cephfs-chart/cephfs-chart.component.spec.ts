@@ -9,7 +9,12 @@ describe('CephfsChartComponent', () => {
   let component: CephfsChartComponent;
   let fixture: ComponentFixture<CephfsChartComponent>;
 
-  const counter = [[0, 15], [5, 15], [10, 25], [15, 50]];
+  const counter = [
+    [0, 15],
+    [5, 15],
+    [10, 25],
+    [15, 50]
+  ];
 
   configureTestBed({
     imports: [ChartsModule],
