@@ -113,7 +113,7 @@ describe('RbdSnapshotListComponent', () => {
       };
     });
 
-    it('should call stopLoadingSpinner if the request fails', <any>fakeAsync(() => {
+    it('should call stopLoadingSpinner if the request fails', fakeAsync(() => {
       expect(called).toBe(false);
       component._asyncTask('deleteSnapshot', 'rbd/snap/delete', 'someName');
       tick(500);

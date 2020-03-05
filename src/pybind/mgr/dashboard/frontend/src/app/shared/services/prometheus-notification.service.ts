@@ -25,12 +25,10 @@ export class PrometheusNotificationService {
     if (this.backendFailure) {
       return;
     }
-    this.prometheusService
-      .getNotifications(_.last(this.notifications))
-      .subscribe(
-        (notifications) => this.handleNotifications(notifications),
-        () => (this.backendFailure = true)
-      );
+    this.prometheusService.getNotifications(_.last(this.notifications)).subscribe(
+      (notifications) => this.handleNotifications(notifications),
+      () => (this.backendFailure = true)
+    );
   }
 
   private handleNotifications(notifications: AlertmanagerNotification[]) {

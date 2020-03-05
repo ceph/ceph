@@ -27,7 +27,10 @@ describe('Manager modules page', () => {
     });
 
     it('should test editing on diskprediction_local module', async () => {
-      const diskpredLocalArr = [['11', 'predict_interval'], ['0122', 'sleep_interval']];
+      const diskpredLocalArr = [
+        ['11', 'predict_interval'],
+        ['0122', 'sleep_interval']
+      ];
       await mgrmodules.editMgrModule('diskprediction_local', diskpredLocalArr);
     });
 
@@ -37,7 +40,10 @@ describe('Manager modules page', () => {
     });
 
     it('should test editing on dashboard module', async () => {
-      const dashboardArr = [['rq', 'RGW_API_USER_ID'], ['rafa', 'GRAFANA_API_PASSWORD']];
+      const dashboardArr = [
+        ['rq', 'RGW_API_USER_ID'],
+        ['rafa', 'GRAFANA_API_PASSWORD']
+      ];
       await mgrmodules.editMgrModule('dashboard', dashboardArr);
     });
 
