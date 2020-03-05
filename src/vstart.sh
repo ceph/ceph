@@ -1099,7 +1099,7 @@ EOF
         prun ganesha-rados-grace -p nfs-ganesha -n tester add $name
         prun ganesha-rados-grace -p nfs-ganesha -n tester
 
-        prun /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
