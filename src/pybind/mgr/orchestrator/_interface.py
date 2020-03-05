@@ -1312,25 +1312,25 @@ class PlacementSpec(object):
             raise OrchestratorValidationError("num/count must be > 1")
 
     @classmethod
-    def from_strings(cls, arg):
+    def from_string(cls, arg):
         # type: (Optional[str]) -> PlacementSpec
         """
         A single integer is parsed as a count:
-        >>> PlacementSpec.from_strings('3'.split())
+        >>> PlacementSpec.from_string('3')
         PlacementSpec(count=3)
         A list of names is parsed as host specifications:
-        >>> PlacementSpec.from_strings('host1 host2'.split())
+        >>> PlacementSpec.from_string('host1 host2')
         PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')])
         You can also prefix the hosts with a count as follows:
-        >>> PlacementSpec.from_strings('2 host1 host2'.split())
+        >>> PlacementSpec.from_string('2 host1 host2')
         PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')], count=2)
         You can spefify labels using `label:<label>`
-        >>> PlacementSpec.from_strings('label:mon'.split())
+        >>> PlacementSpec.from_string('label:mon')
         PlacementSpec(label='label:mon')
         Labels als support a count:
-        >>> PlacementSpec.from_strings('3 label:mon'.split())
+        >>> PlacementSpec.from_string('3 label:mon')
         PlacementSpec(label='label:mon', count=3)
-        >>> PlacementSpec.from_strings(None)
+        >>> PlacementSpec.from_string(None)
         PlacementSpec()
         """
         if arg is None:
@@ -1348,8 +1348,6 @@ class PlacementSpec(object):
                 strings = arg.split(',')
             else:
                 strings = [arg]
-        elif isinstance(arg, list):
-            strings = arg
         else:
             raise OrchestratorValidationError('invalid placement %s' % arg)
 
