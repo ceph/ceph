@@ -830,9 +830,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
                 self._update_upgrade_progress(done / len(daemons))
 
-                if d.status <= 0:
+                if not d.container_image_id:
                     if d.container_image_name == target_name:
-                        self.log.debug('daemon %s is stopped but has correct image name' % (d.name()))
+                        self.log.debug('daemon %s has unknown container_image_id but has correct image name' % (d.name()))
                         continue
                 if not self._wait_for_ok_to_stop(d):
                     return
