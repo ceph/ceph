@@ -140,8 +140,14 @@ describe('OsdListComponent', () => {
           device_class: 'ssd'
         },
         stats_history: {
-          op_out_bytes: [[n, n], [n * 2, n * 2]],
-          op_in_bytes: [[n * 3, n * 3], [n * 4, n * 4]]
+          op_out_bytes: [
+            [n, n],
+            [n * 2, n * 2]
+          ],
+          op_in_bytes: [
+            [n * 3, n * 3],
+            [n * 4, n * 4]
+          ]
         },
         stats: {
           stat_bytes_used: n * n,

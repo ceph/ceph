@@ -29,13 +29,31 @@ describe('MonitorComponent', () => {
           stats: { num_sessions: [[1, 5]] }
         },
         {
-          stats: { num_sessions: [[1, 1], [2, 10], [3, 1]] }
+          stats: {
+            num_sessions: [
+              [1, 1],
+              [2, 10],
+              [3, 1]
+            ]
+          }
         },
         {
-          stats: { num_sessions: [[1, 0], [2, 3]] }
+          stats: {
+            num_sessions: [
+              [1, 0],
+              [2, 3]
+            ]
+          }
         },
         {
-          stats: { num_sessions: [[1, 2], [2, 1], [3, 7], [4, 5]] }
+          stats: {
+            num_sessions: [
+              [1, 2],
+              [2, 1],
+              [3, 7],
+              [4, 5]
+            ]
+          }
         }
       ],
       mon_status: null,
