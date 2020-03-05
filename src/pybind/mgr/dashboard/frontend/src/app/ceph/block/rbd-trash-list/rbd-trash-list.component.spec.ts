@@ -85,7 +85,7 @@ describe('RbdTrashListComponent', () => {
       component.images = images;
       summaryService['summaryDataSource'].next({ executingTasks: [] });
       spyOn(rbdService, 'listTrash').and.callFake(() =>
-        of([{ poool_name: 'rbd', status: 1, value: images }])
+        of([{ pool_name: 'rbd', status: 1, value: images }])
       );
       fixture.detectChanges();
     });
@@ -105,7 +105,34 @@ describe('RbdTrashListComponent', () => {
   });
 
   describe('display purge button', () => {
-    beforeEach(() => {});
+    let images: any[];
+    const addImage = (id: string) => {
+      images.push({
+        id: id,
+        pool_name: 'pl',
+        deferment_end_time: 'abc'
+      });
+    };
+
+    beforeEach(() => {
+      summaryService['summaryDataSource'].next({ executingTasks: [] });
+      spyOn(rbdService, 'listTrash').and.callFake(() => {
+        of([{ pool_name: 'rbd', status: 1, value: images }]);
+      });
+      fixture.detectChanges();
+    });
+
+    it('should show button disabled when no image is in trash', () => {
+      expect(component.disablePurgeBtn).toBeTruthy();
+    });
+
+    it('should show button enabled when an existing image is in trash', () => {
+      images = [];
+      addImage('1');
+      const payload = [{ pool_name: 'rbd', status: 1, value: images }];
+      component.prepareResponse(payload);
+      expect(component.disablePurgeBtn).toBeFalsy();
+    });
 
     it('should show button with delete permission', () => {
       component.permission = {
