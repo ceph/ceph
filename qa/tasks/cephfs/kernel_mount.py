@@ -74,6 +74,9 @@ class KernelMount(CephFSMount):
         self.mounted = True
 
     def umount(self, force=False):
+        if not self.is_mounted():
+            return
+
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
 
         cmd=['sudo', 'umount', self.mountpoint]
