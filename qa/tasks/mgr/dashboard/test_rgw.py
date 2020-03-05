@@ -116,7 +116,7 @@ class RgwBucketTest(RgwTestCase):
 
     _mfa_token_serial = '1'
     _mfa_token_seed = '23456723'
-    _mfa_token_time_step = 1
+    _mfa_token_time_step = 3
 
     AUTH_ROLES = ['rgw-manager']
 
@@ -128,7 +128,7 @@ class RgwBucketTest(RgwTestCase):
         cls._radosgw_admin_cmd([
             'mfa', 'create', '--uid', 'teuth-test-user', '--totp-serial', cls._mfa_token_serial,
             '--totp-seed', cls._mfa_token_seed, '--totp-seed-type', 'base32',
-            '--totp-seconds', str(cls._mfa_token_time_step), '--totp-window', '2'
+            '--totp-seconds', str(cls._mfa_token_time_step), '--totp-window', '1'
         ])
         # Create tenanted users.
         cls._radosgw_admin_cmd([
@@ -241,7 +241,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['mfa_delete'], 'Enabled')
 
         # Update bucket: disable versioning & MFA Delete.
-        time.sleep(self._mfa_token_time_step)  # Required to get new TOTP pin.
+        time.sleep(self._mfa_token_time_step + 2)  # Required to get new TOTP pin.
         self._put(
             '/api/rgw/bucket/teuth-test-bucket',
             params={
