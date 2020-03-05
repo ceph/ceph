@@ -441,12 +441,6 @@ void Inode::dump(Formatter *f) const
   f->dump_unsigned("flags", flags);
 
   if (is_dir()) {
-    if (!dir_contacts.empty()) {
-      f->open_object_section("dir_contants");
-      for (set<int>::iterator p = dir_contacts.begin(); p != dir_contacts.end(); ++p)
-	f->dump_int("mds", *p);
-      f->close_section();
-    }
     f->dump_int("dir_hashed", (int)dir_hashed);
     f->dump_int("dir_replicated", (int)dir_replicated);
   }
