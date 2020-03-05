@@ -29,6 +29,16 @@ Interval
 --------
 The module compiles and sends a new report every 24 hours by default.
 
+Manually sending telemetry
+--------------------------
+
+To ad hoc send telemetry data::
+
+  ceph telemetry send
+
+In case telemetry sending is not automated (with 'ceph telemetry on'), you need to add
+'sharing-1-0' to 'ceph telemetry send' command.
+
 Contact and Description
 -----------------------
 A contact and description can be added to the report, this is optional.
