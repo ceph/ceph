@@ -22,21 +22,14 @@
 #include <thread>
 #include <boost/intrusive/set.hpp>
 
+namespace bi = boost::intrusive;
 namespace ceph {
+
 /// Newly constructed timer should be suspended at point of
 /// construction.
 
 struct construct_suspended_t { };
 constexpr construct_suspended_t construct_suspended { };
-
-namespace timer_detail {
-using boost::intrusive::member_hook;
-using boost::intrusive::set_member_hook;
-using boost::intrusive::link_mode;
-using boost::intrusive::normal_link;
-using boost::intrusive::set;
-using boost::intrusive::constant_time_size;
-using boost::intrusive::compare;
 
 // Compared to the SafeTimer this does fewer allocations (you
 // don't have to allocate a new Context every time you
@@ -55,21 +48,21 @@ using boost::intrusive::compare;
 
 template <class TC>
 class timer {
-  using sh = set_member_hook<link_mode<normal_link> >;
+  using sh = bi::set_member_hook<bi::link_mode<bi::normal_link>>;
 
   struct event {
     typename TC::time_point t;
-    uint64_t id;
+    std::uint64_t id;
     std::function<void()> f;
 
     sh schedule_link;
     sh event_link;
 
     event() : t(TC::time_point::min()), id(0) {}
-    event(uint64_t _id) : t(TC::time_point::min()), id(_id) {}
-    event(typename TC::time_point _t, uint64_t _id,
+    event(std::uint64_t _id) : t(TC::time_point::min()), id(_id) {}
+    event(typename TC::time_point _t, std::uint64_t _id,
 	  std::function<void()>&& _f) : t(_t), id(_id), f(_f) {}
-    event(typename TC::time_point _t, uint64_t _id,
+    event(typename TC::time_point _t, std::uint64_t _id,
 	  const std::function<void()>& _f) : t(_t), id(_id), f(_f) {}
     bool operator <(const event& e) {
       return t == e.t ? id < e.id : t < e.t;
@@ -86,17 +79,18 @@ class timer {
     }
   };
 
-  using schedule_type = set<event,
-			    member_hook<event, sh, &event::schedule_link>,
-			    constant_time_size<false>,
-			    compare<SchedCompare> >;
+  using schedule_type = bi::set<event,
+				bi::member_hook<event, sh,
+						&event::schedule_link>,
+				bi::constant_time_size<false>,
+				bi::compare<SchedCompare>>;
 
   schedule_type schedule;
 
-  using event_set_type = set<event,
-			     member_hook<event, sh, &event::event_link>,
-			     constant_time_size<false>,
-			     compare<EventCompare> >;
+  using event_set_type = bi::set<event,
+				 bi::member_hook<event, sh, &event::event_link>,
+				 bi::constant_time_size<false>,
+				 bi::compare<EventCompare>>;
 
   event_set_type events;
 
@@ -106,7 +100,7 @@ class timer {
   std::condition_variable cond;
 
   event* running{ nullptr };
-  uint64_t next_id{ 0 };
+  std::uint64_t next_id{ 0 };
 
   bool suspended;
   std::thread thread;
@@ -198,8 +192,8 @@ public:
 
   // Schedule an event in the relative future
   template<typename Callable, typename... Args>
-  uint64_t add_event(typename TC::duration duration,
-		     Callable&& f, Args&&... args) {
+  std::uint64_t add_event(typename TC::duration duration,
+			  Callable&& f, Args&&... args) {
     typename TC::time_point when = TC::now();
     when += duration;
     return add_event(when,
@@ -209,12 +203,12 @@ public:
 
   // Schedule an event in the absolute future
   template<typename Callable, typename... Args>
-  uint64_t add_event(typename TC::time_point when,
-		     Callable&& f, Args&&... args) {
+  std::uint64_t add_event(typename TC::time_point when,
+			  Callable&& f, Args&&... args) {
     std::lock_guard l(lock);
     event& e = *(new event(
 		   when, ++next_id,
-		   std::forward<std::function<void()> >(
+		   std::forward<std::function<void()>>(
 		     std::bind(std::forward<Callable>(f),
 			       std::forward<Args>(args)...))));
     auto i = schedule.insert(e);
@@ -235,12 +229,12 @@ public:
   }
 
   // Adjust the timeout of a currently-scheduled event (relative)
-  bool adjust_event(uint64_t id, typename TC::duration duration) {
+  bool adjust_event(std::uint64_t id, typename TC::duration duration) {
     return adjust_event(id, TC::now() + duration);
   }
 
   // Adjust the timeout of a currently-scheduled event (absolute)
-  bool adjust_event(uint64_t id, typename TC::time_point when) {
+  bool adjust_event(std::uint64_t id, typename TC::time_point when) {
     std::lock_guard l(lock);
 
     event key(id);
@@ -261,7 +255,7 @@ public:
   // Cancel an event. If the event has already come and gone (or you
   // never submitted it) you will receive false. Otherwise you will
   // receive true and it is guaranteed the event will not execute.
-  bool cancel_event(const uint64_t id) {
+  bool cancel_event(const std::uint64_t id) {
     std::lock_guard l(lock);
     event dummy(id);
     auto p = events.find(dummy);
@@ -286,7 +280,7 @@ public:
   //
   // Returns an event id. If you had an event_id from the first
   // scheduling, replace it with this return value.
-  uint64_t reschedule_me(typename TC::duration duration) {
+  std::uint64_t reschedule_me(typename TC::duration duration) {
     return reschedule_me(TC::now() + duration);
   }
 
@@ -299,12 +293,12 @@ public:
   //
   // Returns an event id. If you had an event_id from the first
   // scheduling, replace it with this return value.
-  uint64_t reschedule_me(typename TC::time_point when) {
+  std::uint64_t reschedule_me(typename TC::time_point when) {
     if (std::this_thread::get_id() != thread.get_id())
       throw std::make_error_condition(std::errc::operation_not_permitted);
     std::lock_guard l(lock);
     running->t = when;
-    uint64_t id = ++next_id;
+    std::uint64_t id = ++next_id;
     running->id = id;
     schedule.insert(*running);
     events.insert(*running);
@@ -328,9 +322,6 @@ public:
     }
   }
 }; // timer
-}; // timer_detail
-
-using timer_detail::timer;
-}; // ceph
+} // namespace ceph
 
 #endif
