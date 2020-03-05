@@ -159,7 +159,8 @@ class Module(MgrModule):
         },
         {
             "cmd": "telemetry send "
-                   "name=endpoint,type=CephChoices,strings=ceph|device,n=N,req=false",
+                   "name=endpoint,type=CephChoices,strings=ceph|device,n=N,req=false "
+                   "name=license,type=CephString,req=false",
             "desc": "Force sending data to Ceph telemetry",
             "perm": "rw"
         },
@@ -748,9 +749,12 @@ class Module(MgrModule):
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
             self.set_module_option('enabled', False)
-            self.set_module_option('last_opt_revision', REVISION)
+            self.set_module_option('last_opt_revision', 1)
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
+            if self.last_opt_revision < LAST_REVISION_RE_OPT_IN and command.get('license') != LICENSE:
+                self.log.debug('A telemetry send attempt while opted-out. Asking for license agreement')
+                return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo manually send telemetry data, add '--license " + LICENSE + "' to the 'ceph telemetry send' command.\nPlease consider enabling the telemetry module with 'ceph telemetry on'."
             self.last_report = self.compile_report()
             return self.send(self.last_report, command.get('endpoint'))
 
