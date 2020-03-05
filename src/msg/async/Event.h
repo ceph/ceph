@@ -244,11 +244,11 @@ class EventCenter {
 
  public:
   template <typename func>
-  void submit_to(int i, func &&f, bool nowait = false) {
+  void submit_to(int i, func &&f, bool always_async = false) {
     ceph_assert(i < MAX_EVENTCENTER && global_centers);
     EventCenter *c = global_centers->centers[i];
     ceph_assert(c);
-    if (nowait) {
+    if (always_async) {
       C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
       c->dispatch_event_external(event);
     } else if (c->in_thread()) {
