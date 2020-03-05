@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <boost/intrusive/set.hpp>
@@ -46,69 +47,59 @@ constexpr construct_suspended_t construct_suspended { };
 // you want you can set up a timer that executes a function after
 // you use up ten seconds of CPU time.
 
-template <class TC>
+template<typename TC>
 class timer {
   using sh = bi::set_member_hook<bi::link_mode<bi::normal_link>>;
 
   struct event {
-    typename TC::time_point t;
-    std::uint64_t id;
+    typename TC::time_point t = typename TC::time_point::min();
+    std::uint64_t id = 0;
     std::function<void()> f;
 
     sh schedule_link;
     sh event_link;
 
-    event() : t(TC::time_point::min()), id(0) {}
-    event(std::uint64_t _id) : t(TC::time_point::min()), id(_id) {}
-    event(typename TC::time_point _t, std::uint64_t _id,
-	  std::function<void()>&& _f) : t(_t), id(_id), f(_f) {}
-    event(typename TC::time_point _t, std::uint64_t _id,
-	  const std::function<void()>& _f) : t(_t), id(_id), f(_f) {}
-    bool operator <(const event& e) {
+    event() = default;
+    event(typename TC::time_point t, std::uint64_t id,
+	  std::function<void()> f) : t(t), id(id), f(std::move(f)) {}
+
+    event(const event&) = delete;
+    event& operator =(const event&) = delete;
+
+    event(event&&) = delete;
+    event& operator =(event&&) = delete;
+
+    bool operator <(const event& e) const noexcept {
       return t == e.t ? id < e.id : t < e.t;
     }
   };
-  struct SchedCompare {
-    bool operator()(const event& e1, const event& e2) const {
-      return e1.t == e2.t ? e1.id < e2.id : e1.t < e2.t;
-    }
-  };
-  struct EventCompare {
-    bool operator()(const event& e1, const event& e2) const {
-      return e1.id < e2.id;
+  struct id_key {
+    using type = std::uint64_t;
+    const type& operator ()(const event& e) const noexcept {
+      return e.id;
     }
   };
 
-  using schedule_type = bi::set<event,
-				bi::member_hook<event, sh,
-						&event::schedule_link>,
-				bi::constant_time_size<false>,
-				bi::compare<SchedCompare>>;
+  bi::set<event, bi::member_hook<event, sh, &event::schedule_link>,
+	  bi::constant_time_size<false>> schedule;
 
-  schedule_type schedule;
-
-  using event_set_type = bi::set<event,
-				 bi::member_hook<event, sh, &event::event_link>,
-				 bi::constant_time_size<false>,
-				 bi::compare<EventCompare>>;
-
-  event_set_type events;
+  bi::set<event, bi::member_hook<event, sh, &event::event_link>,
+	  bi::constant_time_size<false>,
+	  bi::key_of_value<id_key>> events;
 
   std::mutex lock;
-  using lock_guard = std::lock_guard<std::mutex>;
-  using unique_lock = std::unique_lock<std::mutex>;
   std::condition_variable cond;
 
-  event* running{ nullptr };
-  std::uint64_t next_id{ 0 };
+  event* running = nullptr;
+  std::uint64_t next_id = 0;
 
   bool suspended;
   std::thread thread;
 
   void timer_thread() {
-    unique_lock l(lock);
+    std::unique_lock l(lock);
     while (!suspended) {
-      typename TC::time_point now = TC::now();
+      auto now = TC::now();
 
       while (!schedule.empty()) {
 	auto p = schedule.begin();
@@ -116,16 +107,16 @@ class timer {
 	if (p->t > now)
 	  break;
 
-	event& e = *p;
+	auto& e = *p;
 	schedule.erase(e);
-	events.erase(e);
+	events.erase(e.id);
 
 	// Since we have only one thread it is impossible to have more
 	// than one running event
 	running = &e;
 
 	l.unlock();
-	e.f();
+	p->f();
 	l.lock();
 
 	if (running) {
@@ -144,21 +135,16 @@ class timer {
   }
 
 public:
-  timer() {
-    lock_guard l(lock);
-    suspended = false;
+  timer() : suspended(false) {
     thread = std::thread(&timer::timer_thread, this);
   }
 
   // Create a suspended timer, jobs will be executed in order when
   // it is resumed.
-  timer(construct_suspended_t) {
-    lock_guard l(lock);
-    suspended = true;
-  }
+  timer(construct_suspended_t) : suspended(true) {}
 
-  timer(const timer &) = delete;
-  timer& operator=(const timer &) = delete;
+  timer(const timer&) = delete;
+  timer& operator =(const timer&) = delete;
 
   ~timer() {
     suspend();
@@ -167,7 +153,7 @@ public:
 
   // Suspend operation of the timer (and let its thread die).
   void suspend() {
-    unique_lock l(lock);
+    std::unique_lock l(lock);
     if (suspended)
       return;
 
@@ -177,11 +163,10 @@ public:
     thread.join();
   }
 
-
   // Resume operation of the timer. (Must have been previously
   // suspended.)
   void resume() {
-    unique_lock l(lock);
+    std::unique_lock l(lock);
     if (!suspended)
       return;
 
@@ -194,9 +179,7 @@ public:
   template<typename Callable, typename... Args>
   std::uint64_t add_event(typename TC::duration duration,
 			  Callable&& f, Args&&... args) {
-    typename TC::time_point when = TC::now();
-    when += duration;
-    return add_event(when,
+    return add_event(TC::now() + duration,
 		     std::forward<Callable>(f),
 		     std::forward<Args>(args)...);
   }
@@ -206,13 +189,12 @@ public:
   std::uint64_t add_event(typename TC::time_point when,
 			  Callable&& f, Args&&... args) {
     std::lock_guard l(lock);
-    event& e = *(new event(
-		   when, ++next_id,
-		   std::forward<std::function<void()>>(
-		     std::bind(std::forward<Callable>(f),
-			       std::forward<Args>(args)...))));
-    auto i = schedule.insert(e);
-    events.insert(e);
+    auto e = std::make_unique<event>(when, ++next_id,
+				     std::bind(std::forward<Callable>(f),
+					       std::forward<Args>(args)...));
+    auto id = e->id;
+    auto i = schedule.insert(*e);
+    events.insert(*(e.release()));
 
     /* If the event we have just inserted comes before everything
      * else, we need to adjust our timeout. */
@@ -225,7 +207,7 @@ public:
     // lambda, or functor up multiple times, identifying things by
     // function for the purposes of cancellation is no longer
     // suitable. Thus:
-    return e.id;
+    return id;
   }
 
   // Adjust the timeout of a currently-scheduled event (relative)
@@ -237,13 +219,12 @@ public:
   bool adjust_event(std::uint64_t id, typename TC::time_point when) {
     std::lock_guard l(lock);
 
-    event key(id);
-    typename event_set_type::iterator it = events.find(key);
+    auto it = events.find(id);
 
     if (it == events.end())
       return false;
 
-    event& e = *it;
+    auto& e = *it;
 
     schedule.erase(e);
     e.t = when;
@@ -257,14 +238,13 @@ public:
   // receive true and it is guaranteed the event will not execute.
   bool cancel_event(const std::uint64_t id) {
     std::lock_guard l(lock);
-    event dummy(id);
-    auto p = events.find(dummy);
+    auto p = events.find(id);
     if (p == events.end()) {
       return false;
     }
 
-    event& e = *p;
-    events.erase(e);
+    auto& e = *p;
+    events.erase(e.id);
     schedule.erase(e);
     delete &e;
 
@@ -294,8 +274,7 @@ public:
   // Returns an event id. If you had an event_id from the first
   // scheduling, replace it with this return value.
   std::uint64_t reschedule_me(typename TC::time_point when) {
-    if (std::this_thread::get_id() != thread.get_id())
-      throw std::make_error_condition(std::errc::operation_not_permitted);
+    ceph_assert(std::this_thread::get_id() == thread.get_id());
     std::lock_guard l(lock);
     running->t = when;
     std::uint64_t id = ++next_id;
@@ -317,7 +296,7 @@ public:
       auto p = events.begin();
       event& e = *p;
       schedule.erase(e);
-      events.erase(e);
+      events.erase(e.id);
       delete &e;
     }
   }
