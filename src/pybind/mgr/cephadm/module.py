@@ -1879,12 +1879,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         return blink(locs)
 
-    def get_osd_uuid_map(self):
+    def get_osd_uuid_map(self, only_up=False):
         # type: () -> Dict[str,str]
         osd_map = self.get('osd_map')
         r = {}
         for o in osd_map['osds']:
-            r[str(o['osd'])] = o['uuid']
+            # only include OSDs that have ever started in this map.  this way
+            # an interrupted osd create can be repeated and succeed the second
+            # time around.
+            if not only_up or o['up_from'] > 0:
+                r[str(o['osd'])] = o['uuid']
         return r
 
     def call_inventory(self, hosts, drive_groups):
@@ -1956,7 +1960,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'keyring': keyring,
         })
 
-        before_osd_uuid_map = self.get_osd_uuid_map()
+        before_osd_uuid_map = self.get_osd_uuid_map(only_up=True)
 
         split_cmd = cmd.split(' ')
         _cmd = ['--config-and-keyring', '-', '--']
@@ -1964,7 +1968,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         out, err, code = self._run_cephadm(
             host, 'osd', 'ceph-volume',
             _cmd,
-            stdin=j)
+            stdin=j,
+            error_ok=True)
+        if code == 1 and ', it is already prepared' in '\n'.join(err):
+            # HACK: when we create against an existing LV, ceph-volume
+            # returns an error and the above message.  To make this
+            # command idempotent, tolerate this "error" and continue.
+            self.log.debug('the device was already prepared; continuing')
+            code = 0
+        if code:
+            raise RuntimeError(
+                'cephadm exited with an error code: %d, stderr:%s' % (
+                    code, '\n'.join(err)))
 
         # check result
         out, err, code = self._run_cephadm(
@@ -1977,6 +1992,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         osds_elems = json.loads('\n'.join(out))
         fsid = self._cluster_fsid
         osd_uuid_map = self.get_osd_uuid_map()
+        created = []
         for osd_id, osds in osds_elems.items():
             for osd in osds:
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
@@ -1995,12 +2011,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                        osd['tags']['ceph.osd_fsid']))
                     continue
 
+                created.append(osd_id)
                 self._create_daemon(
                     'osd', osd_id, host,
                     osd_uuid_map=osd_uuid_map)
 
-        self.cache.invalidate_host_devices(host)
-        return "Created osd(s) on host '{}'".format(host)
+        if created:
+            self.cache.invalidate_host_devices(host)
+            return "Created osd(s) %s on host '%s'" % (','.join(created), host)
+        else:
+            return "Created no osd(s) on host %s; already created?" % host
 
     def _calc_daemon_deps(self, daemon_type, daemon_id):
         need = {

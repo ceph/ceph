@@ -120,7 +120,7 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec('test', data_devices=DeviceSelection(paths=['']))
             c = cephadm_module.create_osds([dg])
-            assert wait(cephadm_module, c) == ["Created osd(s) on host 'test'"]
+            assert wait(cephadm_module, c) == ["Created no osd(s) on host test; already created?"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
