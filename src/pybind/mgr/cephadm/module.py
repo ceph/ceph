@@ -131,14 +131,18 @@ class SpecStore():
         # type: (CephadmOrchestrator) -> None
         self.mgr = mgr
         self.specs = {} # type: Dict[str, orchestrator.ServiceSpec]
+        self.spec_created = {} # type: Dict[str, datetime.datetime]
 
     def load(self):
         # type: () -> None
         for k, v in six.iteritems(self.mgr.get_store_prefix(SPEC_STORE_PREFIX)):
             service_name = k[len(SPEC_STORE_PREFIX):]
             try:
-                spec = ServiceSpec.from_json(json.loads(v))
+                v = json.loads(v)
+                spec = ServiceSpec.from_json(v['spec'])
+                created = datetime.datetime.strptime(v['created'], DATEFMT)
                 self.specs[service_name] = spec
+                self.spec_created[service_name] = created
                 self.mgr.log.debug('SpecStore: loaded spec for %s' % (
                     service_name))
             except Exception as e:
@@ -149,13 +153,20 @@ class SpecStore():
     def save(self, spec):
         # type: (orchestrator.ServiceSpec) -> None
         self.specs[spec.service_name()] = spec
-        self.mgr.set_store(SPEC_STORE_PREFIX + spec.service_name(),
-                           spec.to_json())
+        self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
+        self.mgr.set_store(
+            SPEC_STORE_PREFIX + spec.service_name(),
+            json.dumps({
+                'spec': spec.to_json(),
+                'created': self.spec_created[spec.service_name()].strftime(DATEFMT),
+            }, sort_keys=True),
+        )
 
     def rm(self, service_name):
         # type: (str) -> None
         if service_name in self.specs:
             del self.specs[service_name]
+            del self.spec_created[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
     def find(self, service_name):
@@ -1600,6 +1611,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 continue
             sd = orchestrator.DaemonDescription()
             sd.last_refresh = datetime.datetime.utcnow()
+            for k in ['created', 'started', 'last_configured', 'last_deployed']:
+                v = d.get(k, None)
+                if v:
+                    setattr(sd, k, datetime.datetime.strptime(d[k], DATEFMT))
             sd.daemon_type = d['name'].split('.')[0]
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
             sd.hostname = host
@@ -1683,6 +1698,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     )
                 if spec:
                     sm[n].size = self._get_spec_size(spec)
+                    sm[n].created = self.spec_store.spec_created[dd.service_name()]
                 else:
                     sm[n].size += 1
                 if dd.status == 1:
