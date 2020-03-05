@@ -225,6 +225,19 @@ class NFSGanesha(object):
         ]
         return envs
 
+    @staticmethod
+    def get_version(container_id):
+        # type(str) -> Optional[str]
+        version = None
+        out, err, code = call(
+            [container_path, 'exec', container_id,
+             NFSGanesha.entrypoint, '-v'])
+        if code == 0:
+            match = re.search(r'NFS-Ganesha Release\s*=\s*[V]*([\d.]+)', out)
+            if match:
+                version = match.group(1)
+        return version
+
     def validate(self):
         # type () -> None
         if not is_fsid(self.fsid):
@@ -2676,7 +2689,9 @@ def list_daemons(detail=True, legacy_dir=None):
                             start_stamp = try_convert_datetime(start)
                             if not version or '.' not in version:
                                 version = seen_versions.get(image_id, None)
-                            if not version:
+                            if daemon_type == NFSGanesha.daemon_type:
+                                version = NFSGanesha.get_version(container_id)
+                            elif not version:
                                 if daemon_type in Ceph.daemons:
                                     out, err, code = call(
                                         [container_path, 'exec', container_id,
@@ -2705,8 +2720,7 @@ def list_daemons(detail=True, legacy_dir=None):
                                         version = err.split(' ')[2]
                                         seen_versions[image_id] = version
                                 else:
-                                    logging.warning('not fetching version for unknown daemon type %s' % daemon_type)
-                                    pass
+                                    logging.warning('version for unknown daemon type %s' % daemon_type)
                         else:
                             vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
                             try:
