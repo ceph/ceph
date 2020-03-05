@@ -194,6 +194,17 @@ TEST(util, test_random_class_interface)
     ceph::util::random_number_generator<int> rng(1234);   // seed
   }
  
+  // Test deduction guides:
+  {
+    { ceph::util::random_number_generator rng(1234); }
+    { ceph::util::random_number_generator rng(1234.1234); }
+
+    {
+    int x = 1234;
+    ceph::util::random_number_generator rng(x);
+    }
+  }
+
   {
     int a = rng_i();
     int b = rng_i();
