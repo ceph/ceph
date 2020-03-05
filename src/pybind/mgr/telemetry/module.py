@@ -132,7 +132,8 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
-            "cmd": "telemetry send",
+            "cmd": "telemetry send "
+                   "name=license,type=CephString,req=false",
             "desc": "Force sending data to Ceph telemetry",
             "perm": "rw"
         },
@@ -542,7 +543,7 @@ class Module(MgrModule):
             return 0, 'Configuration option {0} updated'.format(key), ''
         elif command['prefix'] == 'telemetry on':
             if command.get('license') != LICENSE:
-                return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '--license " + LICENSE + "' to the 'ceph telemetry on' command."
+                return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '" + LICENSE + "' to the 'ceph telemetry on' command."
             self.set_config('enabled', 'True')
             self.set_config_option('enabled', 'True')
             self.set_config('last_opt_revision', str(REVISION))
@@ -555,6 +556,10 @@ class Module(MgrModule):
             self.set_config_option('last_opt_revision', '1')
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
+            if int(self.config['last_opt_revision']) < LAST_REVISION_RE_OPT_IN:
+                if command.get('license') != LICENSE:
+                    self.log.debug('A telemetry send attempt while opted-out. Asking for license agreement')
+                    return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo manually send telemetry data, add '" + LICENSE + "' to the 'ceph telemetry send' command.\nPlease consider allowing telemetry module to share data with 'ceph telemetry on'."
             self.last_report = self.compile_report()
             return self.send(self.last_report)
         elif command['prefix'] == 'telemetry show':
