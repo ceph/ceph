@@ -15525,12 +15525,12 @@ void BlueStore::_record_allocation_stats()
   }
   dout(0) << "------------" << dendl;
 
-  auto prev = probe_count++;
-  auto mask = (1 << alloc_stats_history.size()) - 1;
-  probe_count &= mask;
+  ++ probe_count;
 
-  for (size_t i = cbits(prev ^ probe_count) - 1; i > 0 ; --i) {
-    alloc_stats_history[i] = alloc_stats_history[i - 1];
+  for (size_t i = alloc_stats_history.size() - 1 ; i > 0 ; --i) {
+    if ((probe_count % (1 << i)) == 0) {
+      alloc_stats_history[i] = alloc_stats_history[i - 1];
+    }
   }
   alloc_stats_history[0].swap(t0);
 }
