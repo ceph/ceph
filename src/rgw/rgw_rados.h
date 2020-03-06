@@ -737,6 +737,10 @@ public:
       return location;
     }
 
+    int get_cur_part_id() const {
+      return cur_part_id;
+    }
+
     /* start of current stripe */
     uint64_t get_stripe_ofs() const {
       if (manifest->explicit_objs) {
