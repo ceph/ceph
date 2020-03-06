@@ -93,6 +93,11 @@ public:
     MDSTable(m, get_mdstable_name(tab), false), table(tab), recovered(false) {}
   ~MDSTableServer() override {}
 
+  void reset_state() override {
+    pending_for_mds.clear();
+    ++version;
+  }
+
   void handle_request(MMDSTableRequest *m);
   void do_server_update(bufferlist& bl);
 

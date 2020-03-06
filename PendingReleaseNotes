@@ -46,6 +46,9 @@
   New admin command ``ceph daemon osd.# dump_osd_network [threshold]`` will
   do the same but only including heartbeats initiated by the specified OSD.
 
+13.2.9
+======
+
 * The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for upmap
   balancing has been removed. Instead use the mgr balancer config
   ``upmap_max_deviation`` which now is an integer number of PGs of deviation
@@ -55,3 +58,7 @@
   would not allow a pool to ever have completely balanced PGs.  For example, if
   crush requires 1 replica on each of 3 racks, but there are fewer OSDs in 1 of
   the racks.  In those cases, the configuration value can be increased.
+
+* The 'cephfs-data-scan scan_links' now automatically repair inotables and
+  snaptable.
+
