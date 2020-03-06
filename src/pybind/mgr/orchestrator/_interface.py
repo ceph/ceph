@@ -1690,14 +1690,20 @@ class RGWSpec(ServiceSpec):
 
     """
     def __init__(self,
-                 rgw_realm,  # type: str
-                 rgw_zone,  # type: str
+                 rgw_realm=None,  # type: Optional[str]
+                 rgw_zone=None,  # type: Optional[str]
+                 service_id=None, # type: Optional[str]
                  placement=None,
                  service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
                  ):
         assert service_type == 'rgw'
-        super(RGWSpec, self).__init__('rgw', service_id=rgw_realm+'.'+rgw_zone, placement=placement)
+        if service_id:
+            (rgw_realm, rgw_zone) = service_id.split('.', 1)
+        else:
+            service_id = '%s.%s' % (rgw_realm, rgw_zone)
+        super(RGWSpec, self).__init__('rgw', service_id=service_id, placement=placement)
+
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone

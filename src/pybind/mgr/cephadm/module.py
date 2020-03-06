@@ -104,14 +104,19 @@ class OSDRemoval(NamedTuple):
 #  - bring over some of the protections from ceph-deploy that guard against
 #    multiple bootstrapping / initialization
 
-def _name_to_entity_name(name):
+CEPH_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rbd-mirror', 'rgw', 'crash']
+
+def name_to_config_section(name):
     """
     Map from daemon names to ceph entity names (as seen in config)
     """
-    if name.startswith('rgw.') or name.startswith('rbd-mirror'):
+    daemon_type = name.split('.', 1)[0]
+    if daemon_type in ['rgw', 'rbd-mirror', 'crash']:
         return 'client.' + name
-    else:
+    elif daemon_type in ['mon', 'osd', 'mds', 'mgr', 'client']:
         return name
+    else:
+        return 'mon'
 
 def assert_valid_host(name):
     p = re.compile('^[a-zA-Z0-9-]+$')
@@ -779,7 +784,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         daemons = self.cache.get_daemons()
         done = 0
-        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds', 'crash']:
+        for daemon_type in CEPH_TYPES:
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
@@ -842,7 +847,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'prefix': 'config set',
                     'name': 'container_image',
                     'value': target_name,
-                    'who': daemon_type + '.' + d.daemon_id,
+                    'who': name_to_config_section(daemon_type + '.' + d.daemon_id),
                 })
                 self._daemon_action(
                     d.daemon_type,
@@ -917,6 +922,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         'name': 'container_image',
                         'who': section,
                     })
+
             self.log.info('Upgrade: All %s daemons are up to date.' %
                           daemon_type)
 
@@ -928,11 +934,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': target_name,
             'who': 'global',
         })
-        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds']:
+        for daemon_type in CEPH_TYPES:
             ret, image, err = self.mon_command({
                 'prefix': 'config rm',
                 'name': 'container_image',
-                'who': daemon_type,
+                'who': name_to_config_section(daemon_type),
             })
 
         self.log.info('Upgrade: Complete!')
@@ -1406,6 +1412,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                      no_fsid=False,
                      error_ok=False,
                      image=None):
+        # type: (str, Optional[str], str, List[str], Optional[str], Optional[str], bool, bool, Optional[str]) -> Tuple[List[str], List[str], int]
         """
         Run cephadm on the remote host with the given command + args
         """
@@ -1414,20 +1421,24 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         conn, connr = self._get_connection(addr)
 
         try:
+            assert image or entity
             if not image:
-                # get container image
-                ret, image, err = self.mon_command({
-                    'prefix': 'config get',
-                    'who': _name_to_entity_name(entity),
-                    'key': 'container_image',
-                })
-                image = image.strip()
+                daemon_type = entity.split('.', 1)[0] # type: ignore
+                if daemon_type in CEPH_TYPES:
+                    # get container image
+                    ret, image, err = self.mon_command({
+                        'prefix': 'config get',
+                        'who': name_to_config_section(entity),
+                        'key': 'container_image',
+                    })
+                    image = image.strip() # type: ignore
             self.log.debug('%s container image %s' % (entity, image))
 
-            final_args = [
-                '--image', image,
-                command
-            ]
+            final_args = []
+            if image:
+                final_args.extend(['--image', image])
+            final_args.append(command)
+
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
@@ -1453,7 +1464,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 except RuntimeError as e:
                     self._reset_con(host)
                     if error_ok:
-                        return '', str(e), 1
+                        return [], [str(e)], 1
                     raise
             elif self.mode == 'cephadm-package':
                 try:
@@ -1464,7 +1475,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 except RuntimeError as e:
                     self._reset_con(host)
                     if error_ok:
-                        return '', str(e), 1
+                        return [], [str(e)], 1
                     raise
             else:
                 assert False, 'unsupported mode'
@@ -1815,8 +1826,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     )
         self.log.info('Remove service %s (daemons %s)' % (
             service_name, [a[0] for a in args]))
-        self.spec_store.rm(d.service_name())
-        return self._remove_daemons(args)
+        self.spec_store.rm(service_name)
+        if args:
+            return self._remove_daemons(args)
+        return trivial_result(['Removed service %s' % service_name])
 
     def get_inventory(self, host_filter=None, refresh=False):
         """
