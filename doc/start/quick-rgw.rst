@@ -53,6 +53,11 @@ Configuring the Ceph Object Gateway Instance
    .. note:: Ensure that you leave no whitespace between ``port=<port-number>``
       in the ``rgw_frontends`` key/value pair.
 
+   .. note:: In a deployment with multiple Ceph Object Gateways, the default
+      port can be set for *all* gateway instances by putting the rgw_frontends
+      configuration into the ``[global]`` or section or a ``[client]`` section
+      to avoid specifying each instance-name.
+
    .. important:: If you intend to use port 80, make sure that the Apache
       server is not running otherwise it will conflict with Civetweb. We recommend
       to remove Apache in this case.
