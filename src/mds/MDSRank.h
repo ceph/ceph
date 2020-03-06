@@ -277,6 +277,8 @@ class MDSRank {
 				  waiting_for_reconnect, waiting_for_resolve;
     list<MDSInternalContextBase*> waiting_for_any_client_connection;
     list<MDSInternalContextBase*> replay_queue;
+    bool replaying_requests_done = false;
+
     map<mds_rank_t, list<MDSInternalContextBase*> > waiting_for_active_peer;
     map<epoch_t, list<MDSInternalContextBase*> > waiting_for_mdsmap;
 
@@ -431,6 +433,7 @@ class MDSRank {
     }
 
     bool queue_one_replay();
+    void maybe_clientreplay_done();
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
