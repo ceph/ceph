@@ -102,7 +102,7 @@ void RGWPutAccountPublicAccessBlock::execute()
                                 &attrs);
     return;
   } else {
-    ldpp_dout(this, 5) << __func__ << "ERROR: empty account name" << dendl;
+    ldpp_dout(this, 5) << __func__ << "ERROR: Invalid account name" << dendl;
     op_ret = -EINVAL;
     return;
   }
