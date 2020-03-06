@@ -762,6 +762,30 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     ret = -EACCES;
   }
 
+  {
+    bufferlist bl;
+    map <string, bufferlist> attrs;
+    ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().user_uid_pool,
+			     s->bucket_tenant, bl, nullptr, nullptr, null_yield, &attrs);
+
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(s, 20) << __func__ << " getting account sys obj. returned r=" << ret << dendl;
+      return ret;
+    }
+
+    if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+        aiter != attrs.end()) {
+      bufferlist::const_iterator iter{&aiter->second};
+      try {
+        s->account_access_conf->decode(iter);
+      } catch (const buffer::error& e) {
+        ldpp_dout(s, 0) << __func__ <<  "decode access_conf failed" << dendl;
+        return -EIO;
+      }
+    }
+
+  }
+
   bool success = store->svc()->zone->get_redirect_zone_endpoint(&s->redirect_zone_endpoint);
   if (success) {
     ldpp_dout(s, 20) << "redirect_zone_endpoint=" << s->redirect_zone_endpoint << dendl;
@@ -3634,7 +3658,8 @@ int RGWPutObj::verify_permission()
     }
   }
 
-  if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls()) {
+  if ((s->bucket_access_conf && s->bucket_access_conf->block_public_acls()) ||
+      (s->account_access_conf && s->account_access_conf->block_public_acls())) {
     if (s->canned_acl.compare("public-read") ||
         s->canned_acl.compare("public-read-write") ||
         s->canned_acl.compare("authenticated-read"))
@@ -5535,8 +5560,10 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  if (s->bucket_access_conf &&
-      s->bucket_access_conf->block_public_acls() &&
+  if (((s->bucket_access_conf &&
+        s->bucket_access_conf->block_public_acls()) ||
+       (s->account_access_conf &&
+        s->account_access_conf->block_public_acls())) &&
       new_policy.is_public()) {
     op_ret = -EACCES;
     return;
@@ -7696,8 +7723,10 @@ void RGWPutBucketPolicy::execute()
   try {
     const Policy p(s->cct, s->bucket_tenant, data);
     auto attrs = s->bucket_attrs;
-    if (s->bucket_access_conf &&
-        s->bucket_access_conf->block_public_policy() &&
+    if (((s->bucket_access_conf &&
+          s->bucket_access_conf->block_public_policy()) ||
+         (s->account_access_conf &&
+          s->account_access_conf->block_public_policy())) &&
         rgw::IAM::is_public(p)) {
       op_ret = -EACCES;
       return;

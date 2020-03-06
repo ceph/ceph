@@ -1707,6 +1707,7 @@ struct req_state : DoutPrefixProvider {
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  boost::optional<PublicAccessBlockConfiguration> account_access_conf;
   vector<rgw::IAM::Policy> iam_user_policies;
 
   /* Is the request made by an user marked as a system one?
@@ -2134,6 +2135,7 @@ struct perm_state_base {
   int perm_mask;
   bool defer_to_bucket_acls;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  boost::optional<PublicAccessBlockConfiguration> account_access_conf;
 
   perm_state_base(CephContext *_cct,
                   const rgw::IAM::Environment& _env,
