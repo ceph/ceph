@@ -120,7 +120,7 @@ class DriveSelection(object):
                         device_filter))
                 continue
 
-            for disk in self.disks.devices:
+            for disk in self.disks:
                 logger.debug("Processing disk {}".format(disk.path))
 
                 # continue criteria
@@ -155,7 +155,7 @@ class DriveSelection(object):
 
         # This disk is already taken and must not be re-assigned.
         for taken_device in devices:
-            if taken_device in self.disks.devices:
-                self.disks.devices.remove(taken_device)
+            if taken_device in self.disks:
+                self.disks.remove(taken_device)
 
         return sorted([x for x in devices], key=lambda dev: dev.path)

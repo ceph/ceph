@@ -3,23 +3,21 @@ import pytest
 from ceph.deployment import drive_selection, translate
 from ceph.deployment.inventory import Device
 from ceph.tests.utils import _mk_inventory, _mk_device
-from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
-                                        DeviceSelection, DriveGroupValidationError
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
+    DriveGroupValidationError
 
 
 def test_DriveGroup():
-    dg_json = {'testing_drivegroup':
-               {'host_pattern': 'hostname',
+    dg_json = {'host_pattern': 'hostname',
+                'name': 'testing_drivegroup',
                 'data_devices': {'paths': ['/dev/sda']}
-                }
-               }
+              }
 
-    dgs = DriveGroupSpecs(dg_json)
-    for dg in dgs.drive_groups:
-        assert dg.hosts(['hostname']) == ['hostname']
-        assert dg.name == 'testing_drivegroup'
-        assert all([isinstance(x, Device) for x in dg.data_devices.paths])
-        assert dg.data_devices.paths[0].path == '/dev/sda'
+    dg = DriveGroupSpec.from_json(dg_json)
+    assert dg.hosts(['hostname']) == ['hostname']
+    assert dg.name == 'testing_drivegroup'
+    assert all([isinstance(x, Device) for x in dg.data_devices.paths])
+    assert dg.data_devices.paths[0].path == '/dev/sda'
 
 
 def test_DriveGroup_fail():

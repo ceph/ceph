@@ -14,4 +14,4 @@ from ._interface import \
     DaemonDescription, \
     InventoryHost, DeviceLightLoc, \
     OutdatableData, OutdatablePersistentDict, \
-    UpgradeStatusSpec
+    UpgradeStatusSpec, OSDSpec

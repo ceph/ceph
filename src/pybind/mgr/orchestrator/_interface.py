@@ -976,8 +976,8 @@ class Orchestrator(object):
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def create_osds(self, drive_groups):
-        # type: (List[DriveGroupSpec]) -> Completion
+    def create_osds(self, spec=None, dg=None):
+        # type: (Optional[OSDSpec], Optional[DriveGroupSpec]) -> List[str]
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -1037,6 +1037,11 @@ class Orchestrator(object):
     def apply_mon(self, spec):
         # type: (ServiceSpec) -> Completion
         """Update mon cluster"""
+        raise NotImplementedError()
+
+    def apply_osds(self, spec):
+        # type: (ServiceSpec) -> Completion
+        """Update osd cluster"""
         raise NotImplementedError()
 
     def add_mgr(self, spec):
@@ -1591,6 +1596,8 @@ class ServiceSpec(object):
             _cls = RGWSpec  # type: ignore
         elif service_type == 'nfs':
             _cls = NFSServiceSpec  # type: ignore
+        elif service_type == 'osd':
+            _cls = OSDSpec  # type: ignore
         else:
             _cls = ServiceSpec  # type: ignore
         for k, v in json_spec.items():
@@ -1617,6 +1624,20 @@ class ServiceSpec(object):
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
+
+
+class OSDSpec(ServiceSpec):
+    def __init__(self,
+                 drivegroup: Dict[str, Dict[Any, Any]],
+                 service_type: str = 'osd',
+                 placement: Optional[PlacementSpec] = None,
+                 service_id: Optional[str] = None):
+        assert service_type == 'osd'
+        self.drivegroup = drivegroup
+        super(OSDSpec, self).__init__(service_type=service_type, service_id=drivegroup.get('name', 'default'))  # type: ignore
+
+        # A container for the dict representation of drivegroup(s)
+        logger.debug(f"The content of the drivegroup key is  is: {drivegroup}")
 
 
 def servicespec_validate_add(self: ServiceSpec):
@@ -1657,7 +1678,7 @@ class NFSServiceSpec(ServiceSpec):
 
     def validate_add(self):
         servicespec_validate_add(self)
-        
+
         if not self.pool:
             raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
 

@@ -107,24 +107,6 @@ class DriveGroupValidationError(Exception):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
 
 
-class DriveGroupSpecs(object):
-    """ Container class to parse drivegroups """
-
-    def __init__(self, drive_group_json):
-        # type: (dict) -> None
-        self.drive_group_json = drive_group_json
-        self.drive_groups = list()  # type: List[DriveGroupSpec]
-        self.build_drive_groups()
-
-    def build_drive_groups(self):
-        for drive_group_name, drive_group_spec in self.drive_group_json.items():
-            self.drive_groups.append(DriveGroupSpec.from_json
-                                     (drive_group_spec, name=drive_group_name))
-
-    def __repr__(self):
-        return ", ".join([repr(x) for x in self.drive_groups])
-
-
 class DriveGroupSpec(object):
     """
     Describe a drive group in the same form that ceph-volume
@@ -136,7 +118,7 @@ class DriveGroupSpec(object):
         "db_slots", "wal_slots", "block_db_size", "host_pattern",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size"
+        "journal_size", "name"
     ]
 
     def __init__(self,
@@ -214,8 +196,8 @@ class DriveGroupSpec(object):
         self.osd_id_claims = osd_id_claims
 
     @classmethod
-    def from_json(cls, json_drive_group, name=None):
-        # type: (dict, Optional[str]) -> DriveGroupSpec
+    def from_json(cls, json_drive_group):
+        # type: (dict) -> DriveGroupSpec
         """
         Initialize 'Drive group' structure
 
@@ -238,7 +220,7 @@ class DriveGroupSpec(object):
                     json_drive_group.items()}
             if not args:
                 raise DriveGroupValidationError("Didn't find Drivegroup specs")
-            return DriveGroupSpec(name=name, **args)
+            return DriveGroupSpec(**args)
         except (KeyError, TypeError) as e:
             raise DriveGroupValidationError(str(e))
 

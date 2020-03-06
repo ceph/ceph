@@ -11,7 +11,7 @@ except ImportError:
     pass
 
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
-    ServiceSpec, PlacementSpec, RGWSpec, HostSpec, OrchestratorError
+    ServiceSpec, PlacementSpec, RGWSpec, HostSpec, OrchestratorError, OSDSpec
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, mon_command, match_glob
 from cephadm.module import CephadmOrchestrator
@@ -114,13 +114,12 @@ class TestCephadm(object):
             r = cephadm_module._apply_service(ServiceSpec('mgr', placement=ps))
             assert r
 
-
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec('test', data_devices=DeviceSelection(paths=['']))
-            c = cephadm_module.create_osds([dg])
-            assert wait(cephadm_module, c) == ["Created no osd(s) on host test; already created?"]
+            c = cephadm_module.create_osds(dg=dg)
+            assert c == ['Created no osd(s) on host test; already created?']
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
@@ -263,6 +262,17 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.SpecStore.save")
+    def test_apply_osd_save(self, _save_spec, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            json_spec = {'service_type': 'osd', 'drivegroup': {'name': 'foo', 'data_devices': {'all': True}}}
+            spec = ServiceSpec.from_json(json_spec)
+            assert isinstance(spec, OSDSpec)
+            c = cephadm_module.apply_osds(spec)
+            _save_spec.assert_called_with(spec)
+            assert wait(cephadm_module, c) == 'Scheduled osd update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
