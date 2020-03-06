@@ -56,12 +56,11 @@ static std::string map_option_ip_cb(const char *value_char)
 
 static std::string map_option_int_cb(const char *value_char)
 {
-  std::string err;
-  int d = strict_strtol(value_char, 10, &err);
-  if (!err.empty() || d < 0)
+  auto d = ceph::parse<int>(value_char);
+  if (!d || d < 0)
     return "";
 
-  return stringify(d);
+  return stringify(*d);
 }
 
 static void put_map_option(const std::string &key, const std::string &val)

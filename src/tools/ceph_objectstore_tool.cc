@@ -3144,7 +3144,7 @@ int apply_layout_settings(ObjectStore *os, const OSDSuperblock &superblock,
 
   int64_t poolid = -1;
   if (pool_name.length()) {
-    poolid = curmap.lookup_pg_pool_name(pool_name);
+    poolid = curmap.lookup_pg_pool_name(pool_name).value_or(-ENOENT);
     if (poolid < 0) {
       cerr << "Couldn't find pool " << pool_name << ": " << cpp_strerror(poolid)
 	   << std::endl;

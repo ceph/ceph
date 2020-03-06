@@ -76,22 +76,22 @@ bool DataScan::parse_kwarg(
     driver = new LocalFileDriver(val, data_io);
     return true;
   } else if (arg == std::string("--worker_n")) {
-    std::string err;
-    n = strict_strtoll(val.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto mn = ceph::parse<long long>(val);
+    if (!mn) {
       std::cerr << "Invalid worker number '" << val << "'" << std::endl;
       *r = -EINVAL;
       return false;
     }
+    n = *mn;
     return true;
   } else if (arg == std::string("--worker_m")) {
-    std::string err;
-    m = strict_strtoll(val.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto mm = ceph::parse<long long>(val);
+    if (!mm) {
       std::cerr << "Invalid worker count '" << val << "'" << std::endl;
       *r = -EINVAL;
       return false;
     }
+    m = *mm;
     return true;
   } else if (arg == std::string("--filter-tag")) {
     filter_tag = val;
@@ -471,24 +471,25 @@ int MetadataDriver::check_roots(bool *result)
  */
 
 
-int parse_oid(const std::string &oid, uint64_t *inode_no, uint64_t *obj_id)
+int parse_oid(std::string_view oid, uint64_t *inode_no, uint64_t *obj_id)
 {
   if (oid.find(".") == std::string::npos || oid.find(".") == oid.size() - 1) {
     return -EINVAL;
   }
 
-  std::string err;
-  std::string inode_str = oid.substr(0, oid.find("."));
-  *inode_no = strict_strtoll(inode_str.c_str(), 16, &err);
-  if (!err.empty()) {
+  auto inode_str = oid.substr(0, oid.find("."));
+  auto in = ceph::parse<uint64_t>(inode_str);
+  if (!in) {
     return -EINVAL;
   }
+  *inode_no = *in;
 
-  std::string pos_string = oid.substr(oid.find(".") + 1);
-  *obj_id = strict_strtoll(pos_string.c_str(), 16, &err);
-  if (!err.empty()) {
+  auto pos_string = oid.substr(oid.find(".") + 1);
+  auto oi = ceph::parse<uint64_t>(pos_string);
+  if (!oi) {
     return -EINVAL;
   }
+  *obj_id = *oi;
 
   return 0;
 }

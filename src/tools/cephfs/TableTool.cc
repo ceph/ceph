@@ -395,14 +395,13 @@ int TableTool::main(std::vector<const char*> &argv)
     }
   } else if (mode == "take_inos") {
     const std::string ino_str = std::string(argv[2]);
-    std::string ino_err;
-    inodeno_t ino = strict_strtoll(ino_str.c_str(), 10, &ino_err);
-    if (!ino_err.empty()) {
+    auto ino = ceph::parse<int64_t>(ino_str);
+    if (!ino) {
       derr << "Bad ino '" << ino_str << "'" << dendl;
       return -EINVAL;
     }
     r = apply_role_fn([this, ino](mds_role_t rank, Formatter *f) -> int {
-      return InoTableHandler(rank).take_inos(&io, ino, f);
+      return InoTableHandler(rank).take_inos(&io, *ino, f);
     }, &jf);
   } else {
     cerr << "Invalid mode '" << mode << "'" << std::endl;

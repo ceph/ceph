@@ -119,12 +119,12 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--import-keyring", (char*)NULL)) {
       import_keyring = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--mode", (char*)NULL)) {
-      std::string err;
-      mode = strict_strtoll(val.c_str(), 8, &err);
-      if (!err.empty()) {
+      auto mmode = ceph::parse<int>(val, 8);
+      if (!mode) {
         cerr << "Option --mode requires an argument" << std::endl;
         exit(1);
       }
+      mode = *mmode;
     } else if (fn.empty()) {
       fn = *i++;
     } else {

@@ -16,15 +16,14 @@ int MDSRoleSelector::parse_rank(
 
     return 0;
   } else {
-    std::string rank_err;
-    mds_rank_t rank = strict_strtol(str.c_str(), 10, &rank_err);
-    if (!rank_err.empty()) {
+    auto rank = ceph::parse<mds_rank_t>(str);
+    if (!rank) {
       return -EINVAL;
     }
-    if (fsmap.get_filesystem(fscid)->mds_map.is_dne(rank)) {
+    if (fsmap.get_filesystem(fscid)->mds_map.is_dne(*rank)) {
       return -ENOENT;
     }
-    roles.push_back(mds_role_t(fscid, rank));
+    roles.push_back(mds_role_t(fscid, *rank));
     return 0;
   }
 }

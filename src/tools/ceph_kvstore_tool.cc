@@ -240,12 +240,12 @@ int main(int argc, const char *argv[])
     bufferlist val;
     string errstr;
     if (subcmd == "ver") {
-      version_t v = (version_t) strict_strtoll(argv[7], 10, &errstr);
+      auto v = ceph::parse<version_t>(argv[7], 10);
       if (!errstr.empty()) {
         std::cerr << "error reading version: " << errstr << std::endl;
         return 1;
       }
-      encode(v, val);
+      encode(*v, val);
     } else if (subcmd == "in") {
       int ret = val.read_file(argv[7], &errstr);
       if (ret < 0 || !errstr.empty()) {
