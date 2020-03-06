@@ -732,14 +732,10 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     try {
       map<string, bufferlist> uattrs;
       if (ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &uattrs, s->yield); ! ret) {
-        if (s->iam_user_policies.empty()) {
-          s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());
-        } else {
-          // This scenario can happen when a STS token has a policy, then we need to append other user policies
-          // to the existing ones. (e.g. token returned by GetSessionToken)
           auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());
-          s->iam_user_policies.insert(s->iam_user_policies.end(), user_policies.begin(), user_policies.end());
-        }
+          s->iam_user_policies.insert(s->iam_user_policies.end(),
+                                      std::make_move_iterator(user_policies.begin()),
+                                      std::make_move_iterator(user_policies.end()));
       } else {
         if (ret == -ENOENT)
           ret = 0;
