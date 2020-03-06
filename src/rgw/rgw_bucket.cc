@@ -185,11 +185,11 @@ int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *buck
   *bucket_name = first.substr(0, pos);
   *bucket_id = first.substr(pos + 1);
 
-  string err;
-  *shard_id = strict_strtol(second.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto si = ceph::parse<long>(second);
+  if (!si) {
     return -EINVAL;
   }
+  *shard_id = *si;
 
   return 0;
 }

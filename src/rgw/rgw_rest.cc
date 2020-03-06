@@ -1567,18 +1567,18 @@ int RGWListMultipart_ObjStore::get_params()
   if (upload_id.empty()) {
     op_ret = -ENOTSUP;
   }
-  string marker_str = s->info.args.get("part-number-marker");
+  std::string_view marker_str = s->info.args.get("part-number-marker");
 
   if (!marker_str.empty()) {
-    string err;
-    marker = strict_strtol(marker_str.c_str(), 10, &err);
-    if (!err.empty()) {
-      ldout(s->cct, 20) << "bad marker: "  << marker << dendl;
+    auto mm = ceph::parse<long>(marker_str);
+    if (!mm) {
+      ldout(s->cct, 20) << "bad marker: "  << marker_str << dendl;
       op_ret = -EINVAL;
       return op_ret;
     }
+    marker = *mm;
   }
-  
+
   string str = s->info.args.get("max-parts");
   op_ret = parse_value_and_bound(str, max_parts, 0,
 			g_conf().get_val<uint64_t>("rgw_max_listing_results"),
@@ -2001,10 +2001,7 @@ int64_t parse_content_length(const char *content_length)
     len = 0;
   } else {
     string err;
-    len = strict_strtoll(content_length, 10, &err);
-    if (!err.empty()) {
-      len = -1;
-    }
+    len = ceph::parse<std::int64_t>(content_length).value_or(-1);
   }
 
   return len;
@@ -2238,11 +2235,12 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       s->content_length = 0;
     } else {
       string err;
-      s->content_length = strict_strtoll(s->length, 10, &err);
-      if (!err.empty()) {
+      auto cl = ceph::parse<std::int64_t>(s->length);
+      if (!cl) {
 	ldout(s->cct, 10) << "bad content length, aborting" << dendl;
 	return -EINVAL;
       }
+      s->content_length = *cl;
     }
   }
 

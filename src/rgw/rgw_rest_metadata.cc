@@ -97,12 +97,11 @@ void RGWOp_Metadata_List::execute() {
 
   bool extended_response = (max_entries_specified); /* for backward compatibility, if max-entries is not specified
                                                     we will send the old response format */
-  uint64_t max_entries = 0;
+  std::optional<unsigned> max_entries;
 
   if (max_entries_specified) {
-    string err;
-    max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
-    if (!err.empty()) {
+    max_entries = ceph::parse<unsigned>(max_entries_str);
+    if (!max_entries) {
       dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
       http_ret = -EINVAL;
       return;
@@ -142,7 +141,7 @@ void RGWOp_Metadata_List::execute() {
   uint64_t left;
   do {
     list<string> keys;
-    left = (max_entries_specified ? max_entries - count : max);
+    left = (max_entries ? *max_entries - count : max);
     http_ret = meta_mgr->list_keys_next(handle, left, keys, &truncated);
     if (http_ret < 0) {
       dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(http_ret)

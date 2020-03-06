@@ -949,14 +949,9 @@ int RGWHTTPArgs::get_int(const char *name, int *val, int def_val)
     return 0;
   }
 
-  string err;
-
-  *val = (int)strict_strtol(val_str.c_str(), 10, &err);
-  if (!err.empty()) {
-    *val = def_val;
-    return -EINVAL;
-  }
-  return 0;
+  auto v = ceph::parse<int>(val_str);
+  *val = v.value_or(def_val);
+  return v ? 0 : -EINVAL;
 }
 
 string RGWHTTPArgs::sys_get(const string& name, bool * const exists) const

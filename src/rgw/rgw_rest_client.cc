@@ -27,14 +27,13 @@ int RGWHTTPSimpleRequest::get_status()
 int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val) 
 {
   if (name == "CONTENT_LENGTH") {
-    string err;
-    long len = strict_strtol(val.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto len = ceph::parse<long>(val);
+    if (!len) {
       ldout(cct, 0) << "ERROR: failed converting content length (" << val << ") to int " << dendl;
       return -EINVAL;
     }
 
-    max_response = len;
+    max_response = *len;
   }
 
   return 0;
@@ -644,22 +643,22 @@ static int parse_rgwx_mtime(CephContext *cct, const string& s, ceph::real_time *
     return -EINVAL;
   }
 
-  long secs = strict_strtol(vec[0].c_str(), 10, &err);
-  long nsecs = 0;
-  if (!err.empty()) {
+  auto secs = ceph::parse<long>(vec[0]);
+  if (!secs) {
     ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
     return -EINVAL;
   }
 
+  std::optional<long> nsecs = 0;
   if (vec.size() > 1) {
-    nsecs = strict_strtol(vec[1].c_str(), 10, &err);
-    if (!err.empty()) {
+    nsecs = ceph::parse<long>(vec[1]);
+    if (!nsecs) {
       ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
       return -EINVAL;
     }
   }
 
-  *rt = utime_t(secs, nsecs).to_real_time();
+  *rt = utime_t(*secs, *nsecs).to_real_time();
 
   return 0;
 }
@@ -827,9 +826,8 @@ int RGWRESTStreamRWRequest::complete_request(string *etag,
     if (psize) {
       string size_str;
       set_str_from_headers(out_headers, "RGWX_OBJECT_SIZE", size_str);
-      string err;
-      *psize = strict_strtoll(size_str.c_str(), 10, &err);
-      if (!err.empty()) {
+      auto size = ceph::parse<long long>(size_str);
+      if (!size) {
         ldout(cct, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
         return -EIO;
       }
@@ -866,14 +864,13 @@ int RGWRESTStreamRWRequest::complete_request(string *etag,
 int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
 {
   if (name == "RGWX_EMBEDDED_METADATA_LEN") {
-    string err;
-    long len = strict_strtol(val.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto len = ceph::parse<long>(val);
+    if (!len) {
       ldout(cct, 0) << "ERROR: failed converting embedded metadata len (" << val << ") to int " << dendl;
       return -EINVAL;
     }
 
-    cb->set_extra_data_len(len);
+    cb->set_extra_data_len(*len);
   }
   return 0;
 }

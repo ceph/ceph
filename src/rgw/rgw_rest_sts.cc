@@ -182,15 +182,14 @@ int RGWSTSGetSessionToken::get_params()
   serialNumber = s->info.args.get("SerialNumber");
   tokenCode = s->info.args.get("TokenCode");
 
-  if (! duration.empty()) {
-    string err;
-    uint64_t duration_in_secs = strict_strtoll(duration.c_str(), 10, &err);
-    if (!err.empty()) {
+  if (!duration.empty()) {
+    auto duration_in_secs = ceph::parse<std::uint64_t>(duration);
+    if (!duration_in_secs) {
       return -EINVAL;
     }
 
-    if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
-            duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
+    if (*duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
+	*duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
       return -EINVAL;
   }
 

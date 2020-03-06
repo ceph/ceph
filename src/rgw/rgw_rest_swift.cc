@@ -52,17 +52,16 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 
   std::string limit_str = s->info.args.get("limit");
   if (!limit_str.empty()) {
-    std::string err;
-    long l = strict_strtol(limit_str.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto l = ceph::parse<long>(limit_str);
+    if (!l) {
       return -EINVAL;
     }
 
-    if (l > (long)limit_max || l < 0) {
+    if (*l > (long)limit_max || l < 0) {
       return -ERR_PRECONDITION_FAILED;
     }
 
-    limit = (uint64_t)l;
+    limit = uint64_t(*l);
   }
 
   if (s->cct->_conf->rgw_swift_need_stats) {
@@ -793,14 +792,13 @@ static int get_delete_at_param(req_state *s, boost::optional<real_time> &delete_
     }
     return 0;
   }
-  string err;
-  long ts = strict_strtoll(x_delete.c_str(), 10, &err);
+  auto ts = ceph::parse<long long>(x_delete);
 
-  if (!err.empty()) {
+  if (!ts) {
     return -EINVAL;
   }
 
-  delat_proposal += make_timespan(ts);
+  delat_proposal += make_timespan(*ts);
   if (delat_proposal < real_clock::now()) {
     return -EINVAL;
   }

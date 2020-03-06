@@ -6983,9 +6983,12 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
   // decode current epoch and instance
   auto olh_ver = state.attrset.find(RGW_ATTR_OLH_VER);
   if (olh_ver != state.attrset.end()) {
+    // Since this directly comes 
     std::string str = olh_ver->second.to_str();
-    std::string err;
-    link_epoch = strict_strtoll(str.c_str(), 10, &err);
+    auto lo = ceph::parse<long long>(str);
+    if (!lo)
+      return -EINVAL;
+    link_epoch = *lo;
   }
   auto olh_info = state.attrset.find(RGW_ATTR_OLH_INFO);
   if (olh_info != state.attrset.end()) {

@@ -267,13 +267,12 @@ static int conf_to_uint64(CephContext *cct, const JSONFormattable& config, const
 {
   string sval;
   if (config.find(key, &sval)) {
-    string err;
-    uint64_t val = strict_strtoll(sval.c_str(), 10, &err);
-    if (!err.empty()) {
+    auto val = ceph::parse<std::uint64_t>(sval);
+    if (!val) {
       ldout(cct, 0) << "ERROR: could not parse configurable value for cloud sync module: " << key << ": " << sval << dendl;
       return -EINVAL;
     }
-    *pval = val;
+    *pval = *val;
   }
   return 0;
 }

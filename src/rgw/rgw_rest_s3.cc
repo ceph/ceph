@@ -1375,13 +1375,13 @@ int RGWListBucket_ObjStore_S3::get_common_params()
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
     const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
-    if (shard_id_str) {  
-      string err;
-      shard_id = strict_strtol(shard_id_str, 10, &err);
-      if (!err.empty()) {
+    if (shard_id_str) {
+      auto si = ceph::parse<unsigned>(shard_id_str);
+      if (!si) {
         ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
         return -EINVAL;
       }
+      shard_id = *si;
     } else {
      shard_id = s->bucket_instance_shard_id;
     }

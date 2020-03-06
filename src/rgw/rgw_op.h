@@ -1966,8 +1966,8 @@ extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
                         const string& tenant);
 
 static inline int get_system_versioning_params(req_state *s,
-					      uint64_t *olh_epoch,
-					      string *version_id)
+					       uint64_t *olh_epoch,
+					       string *version_id)
 {
   if (!s->system_request) {
     return 0;
@@ -1976,13 +1976,13 @@ static inline int get_system_versioning_params(req_state *s,
   if (olh_epoch) {
     string epoch_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "versioned-epoch");
     if (!epoch_str.empty()) {
-      string err;
-      *olh_epoch = strict_strtol(epoch_str.c_str(), 10, &err);
-      if (!err.empty()) {
+      auto oe = ceph::parse<std::uint64_t>(epoch_str);
+      if (!oe) {
         lsubdout(s->cct, rgw, 0) << "failed to parse versioned-epoch param"
 				 << dendl;
         return -EINVAL;
       }
+      *olh_epoch = *oe;
     }
   }
 

@@ -3107,13 +3107,12 @@ static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
 
   /* Put new limit on max objects. */
   auto iter = add_attrs.find(RGW_ATTR_QUOTA_NOBJS);
-  std::string err;
   if (std::end(add_attrs) != iter) {
-    quota.max_objects =
-      static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
-    if (!err.empty()) {
+    auto mo = ceph::parse<std::int64_t>(iter->second.c_str());
+    if (!mo) {
       return -EINVAL;
     }
+    quota.max_objects = *mo;
     add_attrs.erase(iter);
     extracted = true;
   }
@@ -3121,11 +3120,11 @@ static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
   /* Put new limit on bucket (container) size. */
   iter = add_attrs.find(RGW_ATTR_QUOTA_MSIZE);
   if (iter != add_attrs.end()) {
-    quota.max_size =
-      static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
-    if (!err.empty()) {
+    auto mo = ceph::parse<std::int64_t>(iter->second.c_str());
+    if (!mo) {
       return -EINVAL;
     }
+    quota.max_size = *mo;
     add_attrs.erase(iter);
     extracted = true;
   }
@@ -3502,15 +3501,13 @@ void RGWDeleteBucket::execute()
     string ver_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "ver");
     if (!tag.empty()) {
       ot.read_version.tag = tag;
-      uint64_t ver;
-      string err;
-      ver = strict_strtol(ver_str.c_str(), 10, &err);
-      if (!err.empty()) {
+      auto ver = ceph::parse<std::uint64_t>(ver_str);
+      if (!ver) {
         ldpp_dout(this, 0) << "failed to parse ver param" << dendl;
         op_ret = -EINVAL;
         return;
       }
-      ot.read_version.ver = ver;
+      ot.read_version.ver = *ver;
     }
   }
 

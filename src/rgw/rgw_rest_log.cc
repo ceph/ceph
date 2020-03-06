@@ -53,20 +53,17 @@ static int parse_date_str(string& in, real_time& out) {
 }
 
 void RGWOp_MDLog_List::execute() {
-  string   period = s->info.args.get("period");
-  string   shard = s->info.args.get("id");
-  string   max_entries_str = s->info.args.get("max-entries");
-  string   st = s->info.args.get("start-time"),
-           et = s->info.args.get("end-time"),
-           marker = s->info.args.get("marker"),
-           err;
-  real_time  ut_st, 
-             ut_et;
+  std::string period = s->info.args.get("period");
+  std::string_view shard = s->info.args.get("id");
+  std::string_view max_entries_str = s->info.args.get("max-entries");
+  std::string st = s->info.args.get("start-time");
+  std::string et = s->info.args.get("end-time");
+  std::string marker = s->info.args.get("marker");
+  real_time  ut_st, ut_et;
   void    *handle;
-  unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
-  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
     return;
@@ -82,9 +79,11 @@ void RGWOp_MDLog_List::execute() {
     return;
   }
 
+  std::optional max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+
   if (!max_entries_str.empty()) {
-    max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
-    if (!err.empty()) {
+    max_entries = ceph::parse<unsigned>(max_entries_str);
+    if (!max_entries) {
       dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
       http_ret = -EINVAL;
       return;
@@ -92,7 +91,7 @@ void RGWOp_MDLog_List::execute() {
     if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
       max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
     }
-  } 
+  }
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
@@ -106,9 +105,9 @@ void RGWOp_MDLog_List::execute() {
 
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
 
-  meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
+  meta_log.init_list_entries(*shard_id, ut_st, ut_et, marker, &handle);
 
-  http_ret = meta_log.list_entries(handle, max_entries, entries,
+  http_ret = meta_log.list_entries(handle, *max_entries, entries,
                                    &last_marker, &truncated);
 
   meta_log.complete_list_entries(handle);
@@ -162,11 +161,10 @@ void RGWOp_MDLog_Info::send_response() {
 
 void RGWOp_MDLog_ShardInfo::execute() {
   string period = s->info.args.get("period");
-  string shard = s->info.args.get("id");
-  string err;
+  string_view shard = s->info.args.get("id");
 
-  unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
     return;
@@ -184,7 +182,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
   }
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
 
-  http_ret = meta_log.get_info(shard_id, &info);
+  http_ret = meta_log.get_info(*shard_id, &info);
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
@@ -197,21 +195,19 @@ void RGWOp_MDLog_ShardInfo::send_response() {
 }
 
 void RGWOp_MDLog_Delete::execute() {
-  string   st = s->info.args.get("start-time"),
-           et = s->info.args.get("end-time"),
-           start_marker = s->info.args.get("start-marker"),
-           end_marker = s->info.args.get("end-marker"),
-           period = s->info.args.get("period"),
-           shard = s->info.args.get("id"),
-           err;
+  string st = s->info.args.get("start-time"),
+         et = s->info.args.get("end-time"),
+         start_marker = s->info.args.get("start-marker"),
+         end_marker = s->info.args.get("end-marker"),
+         period = s->info.args.get("period");
+  string_view shard = s->info.args.get("id");
   real_time  ut_st, 
              ut_et;
-  unsigned shard_id;
 
   http_ret = 0;
 
-  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
     return;
@@ -243,18 +239,17 @@ void RGWOp_MDLog_Delete::execute() {
   }
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
 
-  http_ret = meta_log.trim(shard_id, ut_st, ut_et, start_marker, end_marker);
+  http_ret = meta_log.trim(*shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 void RGWOp_MDLog_Lock::execute() {
-  string period, shard_id_str, duration_str, locker_id, zone_id;
-  unsigned shard_id;
+  string period, locker_id, zone_id;
 
   http_ret = 0;
 
   period       = s->info.args.get("period");
-  shard_id_str = s->info.args.get("id");
-  duration_str = s->info.args.get("length");
+  std::string_view shard_id_str = s->info.args.get("id");
+  std::string_view duration_str = s->info.args.get("length");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
 
@@ -273,36 +268,33 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
 
-  string err;
-  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard_id_str);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
     http_ret = -EINVAL;
     return;
   }
 
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
-  unsigned dur;
-  dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
-  if (!err.empty() || dur <= 0) {
+  auto dur = ceph::parse<unsigned>(duration_str);
+  if (!dur || dur <= 0) {
     dout(5) << "invalid length param " << duration_str << dendl;
     http_ret = -EINVAL;
     return;
   }
-  http_ret = meta_log.lock_exclusive(shard_id, make_timespan(dur), zone_id,
+  http_ret = meta_log.lock_exclusive(*shard_id, *dur * 1s, zone_id,
 				     locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
 
 void RGWOp_MDLog_Unlock::execute() {
-  string period, shard_id_str, locker_id, zone_id;
-  unsigned shard_id;
+  string period, locker_id, zone_id;
 
   http_ret = 0;
 
   period       = s->info.args.get("period");
-  shard_id_str = s->info.args.get("id");
+  std::string_view shard_id_str = s->info.args.get("id");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
 
@@ -320,20 +312,19 @@ void RGWOp_MDLog_Unlock::execute() {
     return;
   }
 
-  string err;
-  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard_id_str);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
     http_ret = -EINVAL;
     return;
   }
 
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
-  http_ret = meta_log.unlock(shard_id, zone_id, locker_id);
+  http_ret = meta_log.unlock(*shard_id, zone_id, locker_id);
 }
 
 void RGWOp_MDLog_Notify::execute() {
-#define LARGE_ENOUGH_BUF (128 * 1024)
+  static constexpr auto LARGE_ENOUGH_BUF = (128 * 1024);
 
   int r = 0;
   bufferlist data;
@@ -378,10 +369,9 @@ void RGWOp_BILog_List::execute() {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
-         max_entries_str = s->info.args.get("max-entries"),
          bucket_instance = s->info.args.get("bucket-instance");
   RGWBucketInfo bucket_info;
-  unsigned max_entries;
+  std::string_view max_entries_str = s->info.args.get("max-entries");
 
   if (bucket_name.empty() && bucket_instance.empty()) {
     dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
@@ -415,15 +405,14 @@ void RGWOp_BILog_List::execute() {
   unsigned count = 0;
   string err;
 
-  max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
-  if (!err.empty())
-    max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+  auto max_entries =
+    ceph::parse<unsigned>(max_entries_str).value_or(LOG_CLASS_LIST_MAX_ENTRIES);
 
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
     int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id,
-                                               marker, max_entries - count, 
+                                               marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {
       ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << dendl;
@@ -579,17 +568,15 @@ void RGWOp_DATALog_List::execute() {
 
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
-           max_entries_str = s->info.args.get("max-entries"),
-           marker = s->info.args.get("marker"),
-           err;
+           marker = s->info.args.get("marker");
   real_time  ut_st, 
              ut_et;
-  unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+  std::string_view max_entries_str = s->info.args.get("max-entries");
 
   s->info.args.get_bool("extra-info", &extra_info, false);
 
-  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
     return;
@@ -605,9 +592,10 @@ void RGWOp_DATALog_List::execute() {
     return;
   }
 
+  std::optional max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
   if (!max_entries_str.empty()) {
-    max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
-    if (!err.empty()) {
+    max_entries = ceph::parse<unsigned>(max_entries_str);
+    if (!max_entries) {
       dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
       http_ret = -EINVAL;
       return;
@@ -619,9 +607,10 @@ void RGWOp_DATALog_List::execute() {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  http_ret = store->svc()->datalog_rados->list_entries(shard_id, ut_st, ut_et,
-                                                    max_entries, entries, marker,
-                                                    &last_marker, &truncated);
+  http_ret = store->svc()->datalog_rados->list_entries(*shard_id, ut_st, ut_et,
+						       *max_entries, entries,
+						       marker, &last_marker,
+						       &truncated);
 }
 
 void RGWOp_DATALog_List::send_response() {
@@ -671,17 +660,16 @@ void RGWOp_DATALog_Info::send_response() {
 }
 
 void RGWOp_DATALog_ShardInfo::execute() {
-  string shard = s->info.args.get("id");
-  string err;
+  string_view shard = s->info.args.get("id");
 
-  unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
     return;
   }
 
-  http_ret = store->svc()->datalog_rados->get_info(shard_id, &info);
+  http_ret = store->svc()->datalog_rados->get_info(*shard_id, &info);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -745,16 +733,16 @@ void RGWOp_DATALog_Delete::execute() {
            et = s->info.args.get("end-time"),
            start_marker = s->info.args.get("start-marker"),
            end_marker = s->info.args.get("end-marker"),
-           shard = s->info.args.get("id"),
            err;
   real_time  ut_st, 
              ut_et;
-  unsigned shard_id;
+
+  string_view shard = s->info.args.get("id");
 
   http_ret = 0;
 
-  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto shard_id = ceph::parse<unsigned>(shard);
+  if (!shard_id) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
     return;
@@ -774,7 +762,9 @@ void RGWOp_DATALog_Delete::execute() {
     return;
   }
 
-  http_ret = store->svc()->datalog_rados->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
+  http_ret = store->svc()->datalog_rados->trim_entries(*shard_id, ut_st, ut_et,
+						       start_marker,
+						       end_marker);
 }
 
 // not in header to avoid pulling in rgw_sync.h

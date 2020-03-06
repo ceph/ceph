@@ -281,24 +281,25 @@ public:
     expression = s->info.args.get("query");
     bool exists;
     string max_keys_str = s->info.args.get("max-keys", &exists);
-#define MAX_KEYS_MAX 10000
+    static constexpr auto MAX_KEYS_MAX = 10000;
     if (exists) {
       string err;
-      max_keys = strict_strtoll(max_keys_str.c_str(), 10, &err);
-      if (!err.empty()) {
+      auto mmax_keys = ceph::parse<std::uint64_t>(max_keys_str);
+      if (!mmax_keys) {
         return -EINVAL;
       }
+      max_keys = *mmax_keys;
       if (max_keys > MAX_KEYS_MAX) {
         max_keys = MAX_KEYS_MAX;
       }
     }
     marker_str = s->info.args.get("marker", &exists);
     if (exists) {
-      string err;
-      marker = strict_strtoll(marker_str.c_str(), 10, &err);
-      if (!err.empty()) {
+      auto mmarker = ceph::parse<std::uint64_t>(marker_str);
+      if (!mmarker) {
         return -EINVAL;
       }
+      marker = *mmarker;
     }
     uint64_t nm = marker + max_keys;
     static constexpr int BUFSIZE = 32;
