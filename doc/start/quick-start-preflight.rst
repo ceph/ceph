@@ -278,14 +278,15 @@ strict. You may need to adjust your firewall settings allow inbound requests so
 that clients in your network can communicate with daemons on your Ceph nodes.
 
 For ``firewalld`` on RHEL 7, add the ``ceph-mon`` service for Ceph Monitor
-nodes and the ``ceph`` service for Ceph OSDs and MDSs to the public zone and
-ensure that you make the settings permanent so that they are enabled on reboot.
+nodes and the ``ceph`` service for Ceph OSDs, MDSs, and managers to the public
+zone and ensure that you make the settings permanent so that they are enabled
+on reboot.
 
 For example, on monitors::
 
 	sudo firewall-cmd --zone=public --add-service=ceph-mon --permanent
 
-and on OSDs and MDSs::
+and on OSDs, MDSs, and managers::
 
 	sudo firewall-cmd --zone=public --add-service=ceph --permanent
 
