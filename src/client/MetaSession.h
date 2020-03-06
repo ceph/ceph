@@ -44,7 +44,6 @@ struct MetaSession {
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
   std::set<ceph_tid_t> flushing_caps_tids;
-  std::set<Inode*> early_flushing_caps;
 
   boost::intrusive_ptr<MClientCapRelease> release;
 
