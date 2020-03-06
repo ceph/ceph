@@ -253,7 +253,7 @@ $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
     $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
-            ceph orch osd create \
+            ceph orch daemon add osd \
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
 
