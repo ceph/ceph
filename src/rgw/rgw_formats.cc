@@ -128,7 +128,7 @@ void RGWFormatter_Plain::dump_float(std::string_view name, double d)
 
 void RGWFormatter_Plain::dump_string(std::string_view name, std::string_view s)
 {
-  dump_format(name, "%s", s.data());
+  dump_format(name, "%.*s", s.size(), s.data());
 }
 
 std::ostream& RGWFormatter_Plain::dump_stream(std::string_view name)
@@ -166,7 +166,7 @@ void RGWFormatter_Plain::dump_format_va(std::string_view name, const char *ns, b
   wrote_something = true;
 
   if (use_kv && !entry.is_array)
-    write_data("%s%s: %s", eol, name, buf);
+    write_data("%s%.*s: %s", eol, name.size(), name.data(), buf);
   else
     write_data("%s%s", eol, buf);
 }
@@ -276,7 +276,7 @@ void RGWFormatter_Plain::dump_value_int(std::string_view name, const char *fmt, 
   wrote_something = true;
 
   if (use_kv && !entry.is_array)
-    write_data("%s%s: %s", eol, name, buf);
+    write_data("%s%.*s: %s", eol, name.size(), name.data(), buf);
   else
     write_data("%s%s", eol, buf);
 
