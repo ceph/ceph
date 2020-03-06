@@ -143,7 +143,7 @@ export PTW32_LIB=/usr/x86_64-w64-mingw32/lib
 # TODO: send this upstream and maybe use a fork until it merges.
 # Meanwhile, we might consider moving those to ceph/cmake/modules/BuildBoost.cmake.
 # This cmake module will first have to be updated to support Mingw though.
-cat | patch -N boost/thread/pthread/thread_data.hpp <<EOL
+patch -N boost/thread/pthread/thread_data.hpp <<EOL
 --- boost/thread/pthread/thread_data.hpp        2019-10-11 15:26:15.678703586 +0300
 +++ boost/thread/pthread/thread_data.hpp.new    2019-10-11 15:26:07.321463698 +0300
 @@ -32,6 +32,10 @@
@@ -171,7 +171,7 @@ cat | patch -N boost/thread/pthread/thread_data.hpp <<EOL
 EOL
 
 # Use pthread if requested
-cat | patch -N boost/asio/detail/thread.hpp <<EOL
+patch -N boost/asio/detail/thread.hpp <<EOL
 --- boost/asio/detail/thread.hpp        2019-10-11 16:26:11.191094656 +0300
 +++ boost/asio/detail/thread.hpp.new    2019-10-11 16:26:03.310542438 +0300
 @@ -19,6 +19,8 @@
@@ -214,7 +214,7 @@ EOL
 
 # Unix socket support for Windows is currently disabled by Boost.
 # https://github.com/huangqinjin/asio/commit/d27a8ad1870
-cat | patch -N boost/asio/detail/socket_types.hpp <<EOL
+patch -N boost/asio/detail/socket_types.hpp <<EOL
 --- boost/asio/detail/socket_types.hpp       2019-11-29 16:50:58.647125797 +0000
 +++ boost/asio/detail/socket_types.hpp.new   2020-01-13 11:45:05.015104678 +0000
 @@ -200,6 +200,8 @@
@@ -227,7 +227,7 @@ cat | patch -N boost/asio/detail/socket_types.hpp <<EOL
  # endif
  typedef ::linger linger_type;
 EOL
-cat | patch -N boost/asio/detail/config.hpp <<EOL
+patch -N boost/asio/detail/config.hpp <<EOL
 --- boost/asio/detail/config.hpp       2019-11-29 16:50:58.691126211 +0000
 +++ boost/asio/detail/config.hpp.new   2020-01-13 13:09:17.966771750 +0000
 @@ -1142,13 +1142,9 @@
