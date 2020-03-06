@@ -5611,6 +5611,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   le->metablob.add_primary_dentry(dn, newi, true, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+  mds->balancer->maybe_fragment(dn->get_dir(), false);
 }
 
 
@@ -5757,6 +5758,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   le->metablob.add_primary_dentry(dn, newi, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+  mds->balancer->maybe_fragment(dir, false);
 }
 
 
@@ -5825,6 +5827,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
     _link_local(mdr, dn, targeti);
   else 
     _link_remote(mdr, true, dn, targeti);
+  mds->balancer->maybe_fragment(dir, false);  
 }
 
 
