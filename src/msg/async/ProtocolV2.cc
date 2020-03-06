@@ -533,7 +533,10 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 			     m->get_payload(),
 			     m->get_middle(),
 			     m->get_data());
-  connection->outgoing_bl.append(message.get_buffer(session_stream_handlers));
+  if (!append_frame(message)) {
+    m->put();
+    return -EILSEQ;
+  }
 
   ldout(cct, 5) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
@@ -566,15 +569,17 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   return rc;
 }
 
-void ProtocolV2::append_keepalive() {
-  ldout(cct, 10) << __func__ << dendl;
-  auto keepalive_frame = KeepAliveFrame::Encode();
-  connection->outgoing_bl.append(keepalive_frame.get_buffer(session_stream_handlers));
-}
-
-void ProtocolV2::append_keepalive_ack(utime_t &timestamp) {
-  auto keepalive_ack_frame = KeepAliveFrameAck::Encode(timestamp);
-  connection->outgoing_bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
+template <class F>
+bool ProtocolV2::append_frame(F& frame) {
+  ceph::bufferlist bl;
+  try {
+    bl = frame.get_buffer(session_stream_handlers);
+  } catch (ceph::crypto::onwire::TxHandlerError &e) {
+    ldout(cct, 1) << __func__ << " " << e.what() << dendl;
+    return false;
+  }
+  connection->outgoing_bl.append(bl);
+  return true;
 }
 
 void ProtocolV2::handle_message_ack(uint64_t seq) {
@@ -612,7 +617,15 @@ void ProtocolV2::write_event() {
   connection->write_lock.lock();
   if (can_write) {
     if (keepalive) {
-      append_keepalive();
+      ldout(cct, 10) << __func__ << " appending keepalive" << dendl;
+      auto keepalive_frame = KeepAliveFrame::Encode();
+      if (!append_frame(keepalive_frame)) {
+        connection->write_lock.unlock();
+        connection->lock.lock();
+        fault();
+        connection->lock.unlock();
+        return;
+      }
       keepalive = false;
     }
 
@@ -663,13 +676,16 @@ void ProtocolV2::write_event() {
     if (r == 0) {
       uint64_t left = ack_left;
       if (left) {
-        auto ack = AckFrame::Encode(in_seq);
-        connection->outgoing_bl.append(ack.get_buffer(session_stream_handlers));
         ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
                        << " messages" << dendl;
-        ack_left -= left;
-        left = ack_left;
-        r = connection->_try_send(left);
+        auto ack_frame = AckFrame::Encode(in_seq);
+        if (append_frame(ack_frame)) {
+          ack_left -= left;
+          left = ack_left;
+          r = connection->_try_send(left);
+        } else {
+          r = -EILSEQ;
+        }
       } else if (is_queued()) {
         r = connection->_try_send();
       }
@@ -769,7 +785,13 @@ template <class F>
 CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         F &frame) {
-  ceph::bufferlist bl = frame.get_buffer(session_stream_handlers);
+  ceph::bufferlist bl;
+  try {
+    bl = frame.get_buffer(session_stream_handlers);
+  } catch (ceph::crypto::onwire::TxHandlerError &e) {
+    ldout(cct, 1) << __func__ << " " << e.what() << dendl;
+    return _fault();
+  }
   return write(desc, next, bl);
 }
 
@@ -1675,7 +1697,11 @@ CtPtr ProtocolV2::handle_keepalive2(ceph::bufferlist &payload)
   ldout(cct, 30) << __func__ << " got KEEPALIVE2 tag ..." << dendl;
 
   connection->write_lock.lock();
-  append_keepalive_ack(keepalive_frame.timestamp());
+  auto keepalive_ack_frame = KeepAliveFrameAck::Encode(keepalive_frame.timestamp());
+  if (!append_frame(keepalive_ack_frame)) {
+    connection->write_lock.unlock();
+    return _fault();
+  }
   connection->write_lock.unlock();
 
   ldout(cct, 20) << __func__ << " got KEEPALIVE2 "

@@ -45,6 +45,11 @@ struct MsgAuthError : public std::runtime_error {
   }
 };
 
+struct TxHandlerError : public std::runtime_error {
+  TxHandlerError(const char* what)
+    : std::runtime_error(std::string("tx handler error: ") + what) {}
+};
+
 struct TxHandler {
   virtual ~TxHandler() = default;
 
