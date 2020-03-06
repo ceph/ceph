@@ -1712,9 +1712,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         for n, spec in self.spec_store.specs.items():
             if n in sm:
                 continue
-            if n.startswith('osd.'):
-                self.log.debug("Not adding drivegroup specs  to the ServiceDescription map for now")
-                continue
             sm[n] = orchestrator.ServiceDescription(
                 service_name=n,
                 spec=spec,
