@@ -9634,10 +9634,12 @@ void OSD::dequeue_op(
 	   << " pg " << *pg << dendl;
 
   logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
-
-  service.maybe_share_map(m->get_connection().get(),
-			  pg->get_osdmap(),
-			  op->sent_epoch);
+  // in send_message_osd_cluster will call mabye_share_map.
+  if (!m->get_source().is_osd()) {
+    service.maybe_share_map(m->get_connection().get(),
+			    pg->get_osdmap(),
+			    op->sent_epoch);
+  }
 
   if (pg->is_deleting())
     return;
