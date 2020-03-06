@@ -678,6 +678,30 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug('_kick_serve_loop')
         self.event.set()
 
+    def _check_safe_to_destroy_mon(self, mon_id):
+        # type: (str) -> None
+        ret, out, err = self.mon_command({
+            'prefix': 'quorum_status',
+        })
+        if ret:
+            raise OrchestratorError('failed to check mon quorum status')
+        try:
+            j = json.loads(out)
+        except Exception as e:
+            raise OrchestratorError('failed to parse quorum status')
+
+        mons = [m['name'] for m in j['monmap']['mons']]
+        if mon_id not in mons:
+            self.log.info('Safe to remove mon.%s: not in monmap (%s)' % (
+                mon_id, mons))
+            return
+        new_mons = [m for m in mons if m != mon_id]
+        new_quorum = [m for m in j['quorum_names'] if m != mon_id]
+        if len(new_quorum) > len(new_mons) / 2:
+            self.log.info('Safe to remove mon.%s: new quorum should be %s (from %s)' % (mon_id, new_quorum, new_mons))
+            return
+        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
+
     def _wait_for_ok_to_stop(self, s):
         # only wait a little bit; the service might go away for something
         tries = 4
@@ -2121,6 +2145,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         Remove a daemon
         """
+        (daemon_type, daemon_id) = name.split('.', 1)
+        if daemon_type == 'mon':
+            self._check_safe_to_destroy_mon(daemon_id)
+
         args = ['--name', name]
         if force:
             args.extend(['--force'])
