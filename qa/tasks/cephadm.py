@@ -590,7 +590,7 @@ def ceph_osds(ctx, config):
             _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
             _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'osd', 'create',
+                'ceph', 'orch', 'daemon', 'add', 'osd',
                 remote.shortname + ':' + short_dev
             ])
             ctx.daemons.register_daemon(
