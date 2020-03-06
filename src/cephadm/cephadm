@@ -1355,7 +1355,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
     # type: (str, int, int, str, Union[int, str], CephContainer, bool, bool, Optional[str]) -> None
     # cmd
     data_dir = get_data_dir(fsid, daemon_type, daemon_id)
-    with open(data_dir + '/unit.run', 'w') as f:
+    with open(data_dir + '/unit.run.new', 'w') as f:
         if daemon_type == 'osd':
             # osds have a pre-start step
             assert osd_fsid
@@ -1374,7 +1374,9 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             f.write(' '.join(prestart.run_cmd()) + '\n')
         f.write(' '.join(c.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o600)
-    with open(data_dir + '/unit.poststop', 'w') as f:
+        os.rename(data_dir + '/unit.run.new',
+                  data_dir + '/unit.run')
+    with open(data_dir + '/unit.poststop.new', 'w') as f:
         if daemon_type == 'osd':
             assert osd_fsid
             poststop = CephContainer(
@@ -1391,10 +1393,14 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             )
             f.write(' '.join(poststop.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o600)
+        os.rename(data_dir + '/unit.poststop.new',
+                  data_dir + '/unit.poststop')
 
-    with open(data_dir + '/unit.image', 'w') as f:
+    with open(data_dir + '/unit.image.new', 'w') as f:
         f.write(c.image + '\n')
         os.fchmod(f.fileno(), 0o600)
+        os.rename(data_dir + '/unit.image.new',
+                  data_dir + '/unit.image')
 
     # systemd
     install_base_units(fsid)
