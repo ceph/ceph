@@ -54,6 +54,26 @@ class NodeAssignmentTest(NamedTuple):
             ],
             ['host1', 'host3']
         ),
+        # count + partial host list + existing (deterministic)
+        NodeAssignmentTest(
+            'mon',
+            PlacementSpec(count=2, hosts=['host1']),
+            'host1 host2'.split(),
+            [
+                DaemonDescription('mon', 'a', 'host1'),
+            ],
+            ['host1', 'host2']
+        ),
+        # count + partial host list + existing (deterministic)
+        NodeAssignmentTest(
+            'mon',
+            PlacementSpec(count=2, hosts=['host1']),
+            'host1 host2'.split(),
+            [
+                DaemonDescription('mon', 'a', 'host2'),
+            ],
+            ['host1', 'host2']
+        ),
         # label only
         NodeAssignmentTest(
             'mon',

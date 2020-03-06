@@ -3036,8 +3036,11 @@ class HostAssignment(object):
         # prefer hosts that already have services
         daemons = self.get_daemons_func(self.service_name)
         hosts_with_daemons = {d.hostname for d in daemons}
+        # calc existing daemons (that aren't already in chosen)
+        chosen_hosts = [hs.hostname for hs in chosen]
         existing = [hs for hs in hosts
-                    if hs.hostname in hosts_with_daemons]
+                    if hs.hostname in hosts_with_daemons and \
+                    hs.hostname not in chosen_hosts]
         if len(chosen + existing) >= self.spec.placement.count:
             chosen = chosen + self.scheduler.place(
                 existing,
