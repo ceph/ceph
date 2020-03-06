@@ -49,6 +49,17 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         return res
 
     @classmethod
+    def from_json(cls, data):
+        return cls(**data)
+
+    def to_json(self):
+        return {
+            'hostname': self.hostname,
+            'network': self.network,
+            'name': self.name
+        }
+
+    @classmethod
     def parse(cls, host, require_network=True):
         # type: (str, bool) -> HostPlacementSpec
         """
@@ -1277,10 +1288,21 @@ class PlacementSpec(object):
         return "PlacementSpec(%s)" % self.pretty_str()
 
     @classmethod
-    def from_dict(cls, data):
+    def from_json(cls, data):
+        hosts = data.get('hosts', [])
+        if hosts:
+            data['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
         _cls = cls(**data)
         _cls.validate()
         return _cls
+    
+    def to_json(self):
+        return {
+            'label': self.label,
+            'hosts': [host.to_json() for host in self.hosts] if self.hosts else [],
+            'count': self.count,
+            'all_hosts': self.all_hosts
+        }
 
     def validate(self):
         if self.hosts and self.label:
@@ -1539,6 +1561,7 @@ class ServiceDescription(object):
             'service_url': self.service_url,
             'size': self.size,
             'running': self.running,
+            'spec': self.spec.to_json() if self.spec is not None else None
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):
@@ -1595,7 +1618,7 @@ class ServiceSpec(object):
             _cls = ServiceSpec  # type: ignore
         for k, v in json_spec.items():
             if k == 'placement':
-                v = PlacementSpec.from_dict(v)
+                v = PlacementSpec.from_json(v)
             if k == 'spec':
                 args.update(v)
                 continue
@@ -1612,7 +1635,7 @@ class ServiceSpec(object):
         # type: () -> Dict[str, Any]
         c = self.__dict__.copy()
         if self.placement:
-            c['placement'] = self.placement.__dict__
+            c['placement'] = self.placement.to_json()
         return c
 
     def __repr__(self):
