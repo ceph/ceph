@@ -384,7 +384,7 @@ def to_pretty_timedelta(n):
     if n < datetime.timedelta(minutes=120):
         return str(n.seconds // 60) + 'm'
     if n < datetime.timedelta(hours=48):
-        return str(n.seconds // 360) + 'h'
+        return str(n.seconds // 3600) + 'h'
     if n < datetime.timedelta(days=14):
         return str(n.days) + 'd'
     if n < datetime.timedelta(days=7*12):
