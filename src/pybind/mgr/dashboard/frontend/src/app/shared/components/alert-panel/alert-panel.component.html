@@ -9,7 +9,8 @@
              class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>
-        <td class="alert-panel-title">{{ title }}</td>
+        <td *ngIf="showTitle"
+            class="alert-panel-title">{{ title }}</td>
       </tr>
       <tr>
         <td class="alert-panel-text">
@@ -24,7 +25,8 @@
           <i class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>
-        <td class="alert-panel-title">{{ title }}</td>
+        <td *ngIf="showTitle"
+            class="alert-panel-title">{{ title }}</td>
         <td class="alert-panel-text">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </td>
