@@ -15,6 +15,7 @@
 #ifndef COMMON_CEPH_TIMER_H
 #define COMMON_CEPH_TIMER_H
 
+#include <cassert>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -22,6 +23,8 @@
 #include <mutex>
 #include <thread>
 #include <boost/intrusive/set.hpp>
+
+#include "include/function2.hpp"
 
 namespace bi = boost::intrusive;
 namespace ceph {
@@ -54,14 +57,14 @@ class timer {
   struct event {
     typename TC::time_point t = typename TC::time_point::min();
     std::uint64_t id = 0;
-    std::function<void()> f;
+    fu2::unique_function<void()> f;
 
     sh schedule_link;
     sh event_link;
 
     event() = default;
     event(typename TC::time_point t, std::uint64_t id,
-	  std::function<void()> f) : t(t), id(id), f(std::move(f)) {}
+	  fu2::unique_function<void()> f) : t(t), id(id), f(std::move(f)) {}
 
     event(const event&) = delete;
     event& operator =(const event&) = delete;
@@ -171,7 +174,7 @@ public:
       return;
 
     suspended = false;
-    ceph_assert(!thread.joinable());
+    assert(!thread.joinable());
     thread = std::thread(&timer::timer_thread, this);
   }
 
@@ -274,7 +277,7 @@ public:
   // Returns an event id. If you had an event_id from the first
   // scheduling, replace it with this return value.
   std::uint64_t reschedule_me(typename TC::time_point when) {
-    ceph_assert(std::this_thread::get_id() == thread.get_id());
+    assert(std::this_thread::get_id() == thread.get_id());
     std::lock_guard l(lock);
     running->t = when;
     std::uint64_t id = ++next_id;
