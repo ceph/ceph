@@ -25,15 +25,12 @@ int CommandHandler::parse_bool(std::string_view str, bool* result, std::ostream&
 {
   ceph_assert(result != nullptr);
 
-  std::string interr;
-  int64_t n = strict_strtoll(str.data(), 10, &interr);
+  auto n = ceph::parse<int64_t>(str);
 
-  if (str == "false" || str == "no"
-      || (interr.length() == 0 && n == 0)) {
+  if (str == "false" || str == "no" || (n && *n == 0)) {
     *result = false;
     return 0;
-  } else if (str == "true" || str == "yes"
-      || (interr.length() == 0 && n == 1)) {
+  } else if (str == "true" || str == "yes" || (n && *n == 1)) {
     *result = true;
     return 0;
   } else {

@@ -101,9 +101,8 @@ bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
   } else if (boost::iequals(v, "true")) {
     ret = true;
   } else {
-    std::string err;
-    int b = strict_strtol(v.c_str(), 10, &err);
-    ret = (err.empty() && b == 1);
+    auto b = ceph::parse<long>(v);
+    ret = (b && *b == 1);
   }
 
   return ret;

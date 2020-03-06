@@ -1053,10 +1053,9 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     string who;
     cmd_getval(cmdmap, "who", who);
 
-    std::string err;
-    uint64_t gid = strict_strtol(who.c_str(), 10, &err);
+    auto gid = ceph::parse<std::uint64_t>(who);
     bool changed = false;
-    if (!err.empty()) {
+    if (!gid) {
       // Does not parse as a gid, treat it as a name
       if (pending_map.active_name == who) {
         if (!mon->osdmon()->is_writeable()) {
@@ -1066,15 +1065,15 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         drop_active();
         changed = true;
       } else {
-        gid = 0;
+        *gid = 0;
         for (const auto &i : pending_map.standbys) {
           if (i.second.name == who) {
-            gid = i.first;
+            *gid = i.first;
             break;
           }
         }
-        if (gid != 0) {
-          drop_standby(gid);
+        if (*gid != 0) {
+          drop_standby(*gid);
           changed = true;
         } else {
           ss << "Daemon not found '" << who << "', already failed?";
@@ -1088,8 +1087,8 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         }
         drop_active();
         changed = true;
-      } else if (pending_map.standbys.count(gid) > 0) {
-        drop_standby(gid);
+      } else if (pending_map.standbys.count(*gid) > 0) {
+        drop_standby(*gid);
         changed = true;
       } else {
         ss << "Daemon not found '" << gid << "', already failed?";

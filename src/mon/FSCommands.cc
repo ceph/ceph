@@ -665,9 +665,8 @@ class AddDataPoolHandler : public FileSystemCommandHandler
 
     auto poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
     if (!poolid) {
-      string err;
-      poolid = strict_strtol(poolname.c_str(), 10, &err);
-      if (err.length()) {
+      poolid = ceph::parse<std::int64_t>(poolname);
+      if (!poolid) {
 	ss << "pool '" << poolname << "' does not exist";
 	return -ENOENT;
       }
@@ -888,9 +887,8 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
 
     auto poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
     if (!poolid) {
-      string err;
-      poolid = strict_strtol(poolname.c_str(), 10, &err);
-      if (err.length()) {
+      poolid = ceph::parse<std::int64_t>(poolname);
+      if (!poolid) {
 	ss << "pool '" << poolname << "' does not exist";
         return -ENOENT;
       } else if (poolid < 0) {

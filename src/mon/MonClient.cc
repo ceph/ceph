@@ -1344,12 +1344,11 @@ void MonClient::start_mon_command(const string &mon_name,
   MonCommand *r = new MonCommand(++last_mon_command_tid);
 
   // detect/tolerate mon *rank* passed as a string
-  string err;
-  int rank = strict_strtoll(mon_name.c_str(), 10, &err);
-  if (err.size() == 0 && rank >= 0) {
+  auto rank = ceph::parse<long long>(mon_name);
+  if (rank && *rank >= 0) {
     ldout(cct,10) << __func__ << " interpreting name '" << mon_name
-		  << "' as rank " << rank << dendl;
-    r->target_rank = rank;
+		  << "' as rank " << *rank << dendl;
+    r->target_rank = *rank;
   } else {
     r->target_name = mon_name;
   }

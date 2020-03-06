@@ -1220,9 +1220,8 @@ mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const std::string &arg, s
   }
 
   // Try parsing as a gid
-  std::string err;
-  unsigned long long maybe_gid = strict_strtoll(arg.c_str(), 10, &err);
-  if (!err.empty()) {
+  auto maybe_gid = ceph::parse<std::uint64_t>(arg);
+  if (maybe_gid) {
     // Not a role or a GID, try as a daemon name
     const MDSMap::mds_info_t *mds_info = fsmap.find_by_name(arg);
     if (!mds_info) {
@@ -1236,10 +1235,10 @@ mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const std::string &arg, s
   } else {
     // Not a role, but parses as a an integer, might be a GID
     dout(10) << __func__ << ": treating MDS reference '" << arg
-	     << "' as an integer " << maybe_gid << dendl;
+	     << "' as an integer " << *maybe_gid << dendl;
 
-    if (fsmap.gid_exists(mds_gid_t(maybe_gid))) {
-      return mds_gid_t(maybe_gid);
+    if (fsmap.gid_exists(mds_gid_t(*maybe_gid))) {
+      return mds_gid_t(*maybe_gid);
     }
   }
 
@@ -1636,14 +1635,14 @@ void MDSMonitor::check_sub(Subscription *sub)
       if (sub->type.compare(0, 7, "mdsmap.") == 0) {
         auto namespace_id_str = sub->type.substr(std::string("mdsmap.").size());
         dout(10) << __func__ << ": namespace_id " << namespace_id_str << dendl;
-        std::string err;
-        fscid = strict_strtoll(namespace_id_str.c_str(), 10, &err);
-        if (!err.empty()) {
+        auto mfscid = ceph::parse<std::uint64_t>(namespace_id_str);
+        if (!mfscid) {
           // Client asked for a non-existent namespace, send them nothing
           dout(1) << "Invalid client subscription '" << sub->type
                   << "'" << dendl;
           return;
         }
+        fscid = *mfscid;
         if (fsmap.filesystems.count(fscid) == 0) {
           // Client asked for a non-existent namespace, send them nothing
           // TODO: something more graceful for when a client has a filesystem
