@@ -2149,6 +2149,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if daemon_type == 'mon':
             self._check_safe_to_destroy_mon(daemon_id)
 
+            # fail early, before we update the monmap
+            if not force:
+                raise OrchestratorError('Must pass --force to remove a monitor and DELETE potentially PRECIOUS CLUSTER DATA')
+
+            # remove mon from quorum before we destroy the daemon
+            self.log.info('Removing monitor %s from monmap...' % name)
+            ret, out, err = self.mon_command({
+                'prefix': 'mon rm',
+                'name': daemon_id,
+            })
+            if ret:
+                raise OrchestratorError('failed to remove mon %s from monmap' % (
+                    name))
+
         args = ['--name', name]
         if force:
             args.extend(['--force'])
