@@ -205,13 +205,14 @@ Odd numbers of monitors tend to be better, although this is not required.
    it now and then push it out to each node with
    ``ceph-deploy --overwrite-conf config push {ceph-nodes}``.
 
-Add two Ceph Monitors to your cluster::
+Add two Ceph Monitors to your cluster using the command::
 
-  ceph-deploy mon add {ceph-nodes}
+  ceph-deploy mon add {ceph-node}
 
 For example::
 
-  ceph-deploy mon add node2 node3
+  ceph-deploy mon add node2
+  ceph-deploy mon add node3
 
 Once you have added your new Ceph Monitors, Ceph will begin synchronizing
 the monitors and form a quorum. You can check the quorum status by executing
