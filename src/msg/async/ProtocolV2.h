@@ -129,6 +129,9 @@ private:
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         ceph::bufferlist &buffer);
 
+  template <class F>
+  bool append_frame(F& frame);
+
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
   void reset_recv_state();
@@ -140,8 +143,6 @@ private:
   void prepare_send_message(uint64_t features, Message *m);
   out_queue_entry_t _get_next_outgoing();
   ssize_t write_message(Message *m, bool more);
-  void append_keepalive();
-  void append_keepalive_ack(utime_t &timestamp);
   void handle_message_ack(uint64_t seq);
 
   CONTINUATION_DECL(ProtocolV2, _wait_for_peer_banner);
