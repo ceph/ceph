@@ -160,6 +160,12 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
+  r = config_key_rados->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start config_key service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
   r = zone_utils->start();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start zone_utils service (" << cpp_strerror(-r) << dendl;
