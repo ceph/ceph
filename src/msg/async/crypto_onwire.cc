@@ -20,8 +20,8 @@ static constexpr const std::size_t AESGCM_TAG_LEN{16};
 static constexpr const std::size_t AESGCM_BLOCK_LEN{16};
 
 struct nonce_t {
-  std::uint32_t random_seq;
-  std::uint64_t random_rest;
+  ceph_le32 random_seq;
+  ceph_le64 random_rest;
 
   bool operator==(const nonce_t& rhs) const {
     return !memcmp(this, &rhs, sizeof(*this));
@@ -99,7 +99,7 @@ void AES128GCM_OnWireTxHandler::reset_tx_handler(
   buffer.reserve(std::accumulate(std::begin(update_size_sequence),
     std::end(update_size_sequence), AESGCM_TAG_LEN));
 
-  ++nonce.random_seq;
+  nonce.random_seq = nonce.random_seq + 1;
 }
 
 void AES128GCM_OnWireTxHandler::authenticated_encrypt_update(
@@ -204,7 +204,7 @@ void AES128GCM_OnWireRxHandler::reset_rx_handler()
 	reinterpret_cast<const unsigned char*>(&nonce))) {
     throw std::runtime_error("EVP_DecryptInit_ex failed");
   }
-  ++nonce.random_seq;
+  nonce.random_seq = nonce.random_seq + 1;
 }
 
 ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update(
