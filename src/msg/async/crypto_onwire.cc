@@ -48,35 +48,47 @@ public:
   AES128GCM_OnWireTxHandler(CephContext* const cct,
 			    const key_t& key,
 			    const nonce_t& nonce,
-			    bool new_nonce_format)
-    : cct(cct),
-      ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
-      nonce(nonce), initial_nonce(nonce), used_initial_nonce(false),
-      new_nonce_format(new_nonce_format) {
-    ceph_assert_always(ectx);
-    ceph_assert_always(key.size() * CHAR_BIT == 128);
-
-    if (1 != EVP_EncryptInit_ex(ectx.get(), EVP_aes_128_gcm(),
-			        nullptr, nullptr, nullptr)) {
-      throw std::runtime_error("EVP_EncryptInit_ex failed");
-    }
-
-    if(1 != EVP_EncryptInit_ex(ectx.get(), nullptr, nullptr,
-			       key.data(), nullptr)) {
-      throw std::runtime_error("EVP_EncryptInit_ex failed");
-    }
-  }
-
-  ~AES128GCM_OnWireTxHandler() override {
-    ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
-    ::TOPNSPC::crypto::zeroize_for_security(&initial_nonce, sizeof(initial_nonce));
-  }
+                            bool new_nonce_format);
+  ~AES128GCM_OnWireTxHandler() override;
 
   void reset_tx_handler(const uint32_t* first, const uint32_t* last) override;
 
   void authenticated_encrypt_update(const ceph::bufferlist& plaintext) override;
   ceph::bufferlist authenticated_encrypt_final() override;
 };
+
+
+AES128GCM_OnWireTxHandler::AES128GCM_OnWireTxHandler(
+  CephContext* const cct,
+  const key_t& key,
+  const nonce_t& nonce,
+  bool new_nonce_format)
+  : cct(cct),
+    ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
+    nonce(nonce),
+    initial_nonce(nonce),
+    used_initial_nonce(false),
+    new_nonce_format(new_nonce_format)
+{
+  ceph_assert_always(ectx);
+  ceph_assert_always(key.size() * CHAR_BIT == 128);
+
+  if (1 != EVP_EncryptInit_ex(ectx.get(), EVP_aes_128_gcm(),
+      		        nullptr, nullptr, nullptr)) {
+    throw std::runtime_error("EVP_EncryptInit_ex failed");
+  }
+
+  if(1 != EVP_EncryptInit_ex(ectx.get(), nullptr, nullptr,
+      		       key.data(), nullptr)) {
+    throw std::runtime_error("EVP_EncryptInit_ex failed");
+  }
+}
+
+AES128GCM_OnWireTxHandler::~AES128GCM_OnWireTxHandler()
+{
+  ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
+  ::TOPNSPC::crypto::zeroize_for_security(&initial_nonce, sizeof(initial_nonce));
+}
 
 void AES128GCM_OnWireTxHandler::reset_tx_handler(const uint32_t* first,
                                                  const uint32_t* last)
@@ -171,26 +183,8 @@ public:
   AES128GCM_OnWireRxHandler(CephContext* const cct,
 			    const key_t& key,
 			    const nonce_t& nonce,
-			    bool new_nonce_format)
-    : ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
-      nonce(nonce), new_nonce_format(new_nonce_format) {
-    ceph_assert_always(ectx);
-    ceph_assert_always(key.size() * CHAR_BIT == 128);
-
-    if (1 != EVP_DecryptInit_ex(ectx.get(), EVP_aes_128_gcm(),
-			        nullptr, nullptr, nullptr)) {
-      throw std::runtime_error("EVP_DecryptInit_ex failed");
-    }
-
-    if(1 != EVP_DecryptInit_ex(ectx.get(), nullptr, nullptr,
-			       key.data(), nullptr)) {
-      throw std::runtime_error("EVP_DecryptInit_ex failed");
-    }
-  }
-
-  ~AES128GCM_OnWireRxHandler() override {
-    ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
-  }
+			    bool new_nonce_format);
+  ~AES128GCM_OnWireRxHandler() override;
 
   std::uint32_t get_extra_size_at_final() override {
     return AESGCM_TAG_LEN;
@@ -199,6 +193,35 @@ public:
   void authenticated_decrypt_update(ceph::bufferlist& bl) override;
   void authenticated_decrypt_update_final(ceph::bufferlist& bl) override;
 };
+
+
+AES128GCM_OnWireRxHandler::AES128GCM_OnWireRxHandler(
+  CephContext* const cct,
+  const key_t& key,
+  const nonce_t& nonce,
+  bool new_nonce_format)
+  : ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
+    nonce(nonce),
+    new_nonce_format(new_nonce_format)
+{
+  ceph_assert_always(ectx);
+  ceph_assert_always(key.size() * CHAR_BIT == 128);
+
+  if (1 != EVP_DecryptInit_ex(ectx.get(), EVP_aes_128_gcm(),
+      		        nullptr, nullptr, nullptr)) {
+    throw std::runtime_error("EVP_DecryptInit_ex failed");
+  }
+
+  if(1 != EVP_DecryptInit_ex(ectx.get(), nullptr, nullptr,
+      		       key.data(), nullptr)) {
+    throw std::runtime_error("EVP_DecryptInit_ex failed");
+  }
+}
+
+AES128GCM_OnWireRxHandler::~AES128GCM_OnWireRxHandler()
+{
+  ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
+}
 
 void AES128GCM_OnWireRxHandler::reset_rx_handler()
 {
