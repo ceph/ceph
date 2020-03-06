@@ -232,6 +232,9 @@ The Ceph Manager daemons operate in an active/standby pattern.  Deploying
 additional manager daemons ensures that if one daemon or host fails, another
 one can take over without interrupting service.
 
+It is recommended to run a Ceph Manager daemon on each node that runs a Ceph
+Monitor daemon.
+
 To deploy additional manager daemons::
 
   ceph-deploy mgr create node2 node3
