@@ -68,9 +68,9 @@ configuration details, perform the following steps using ``ceph-deploy``.
 
      [Ubuntu 18.04] $ sudo apt install python-minimal
 
-#. If you have more than one network interface, add the ``public network``
-   setting under the ``[global]`` section of your Ceph configuration file.
-   See the `Network Configuration Reference`_ for details. ::
+#. Add the ``public network`` setting under the ``[global]`` section of your
+   Ceph configuration file. See the `Network Configuration Reference`_ for
+   details. ::
 
      public network = {ip-address}/{bits}
 
