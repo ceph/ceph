@@ -314,10 +314,10 @@ def valgrind_post(ctx, config):
         for remote in ctx.cluster.remotes.keys():
             # look at valgrind logs for each node
             proc = remote.run(
-                args='sudo zgrep <kind> /var/log/ceph/valgrind/* '
+                args="sudo zgrep '<kind>' /var/log/ceph/valgrind/* "
                      # include a second file so that we always get
                      # a filename prefix on the output
-                     '/dev/null | sort | uniq',
+                     "/dev/null | sort | uniq",
                 wait=False,
                 check_status=False,
                 stdout=BytesIO(),
