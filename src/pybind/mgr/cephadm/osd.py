@@ -72,23 +72,8 @@ class RemoveUtil(object):
                     # also remove it from the remove_osd list and set a health_check warning?
                     raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
 
-            completion = self.mgr._remove_daemon([(osd.fullname, osd.nodename, True)])
-            completion.add_progress('Removing OSDs', self.mgr)
-            completion.update_progress = True
-            if completion:
-                while not completion.has_result:
-                    self.mgr.process([completion])
-                    if completion.needs_result:
-                        time.sleep(1)
-                    else:
-                        break
-                if completion.exception is not None:
-                    logger.error(str(completion.exception))
-            else:
-                raise orchestrator.OrchestratorError(
-                    "Did not receive a completion from _remove_daemon")
-
-            logger.info(f"Successfully removed removed OSD <{osd.osd_id}> on {osd.nodename}")
+            self.mgr._remove_daemon(osd.fullname, osd.nodename, True)
+            logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.nodename}")
             logger.debug(f"Removing {osd.osd_id} from the queue.")
             self.to_remove_osds.remove(osd)
 
