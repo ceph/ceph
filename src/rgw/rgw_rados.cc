@@ -3248,7 +3248,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
-  bufferlist extra_data_bl, full_obj;
+  bufferlist extra_data_bl, full_obj, manifest_bl;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   uint64_t data_len{0};
@@ -3285,7 +3285,8 @@ public:
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
       src_attrs.erase(RGW_ATTR_COMPRESSION);
-      src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+      /* We need the manifest to recompute the ETag for verification */
+      manifest_bl = src_attrs[RGW_ATTR_MANIFEST];
 
       // filter out olh attributes
       auto iter = src_attrs.lower_bound(RGW_ATTR_OLH_PREFIX);
@@ -3383,15 +3384,84 @@ public:
   }
 
   string get_calculated_etag() {
-    MD5 hash;
-    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    MD5 hash, mpu_etag_hash;
+    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE], mpu_m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    char calc_md5_part[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+    RGWObjManifest manifest;
+    std::string calculated_etag_part;
+    int prev_part_id = 1, cur_part_id = 1;
 
-    hash.Update((const unsigned char *)full_obj.c_str(), data_len);
+    auto miter = manifest_bl.cbegin();
+    try {
+      decode(manifest, miter);
+    } catch (buffer::error& err) {
+      ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
+      return std::string();
+    }
+    RGWObjManifest::obj_iterator mi;
+
+    RGWObjManifestRule rule;
+    bool found = manifest.get_rule(0, &rule);
+    if (!found) {
+      lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
+      return std::string();
+    }
+
+    /*
+     * Check if the object was created using multipart upload. This check is
+     * required as MPU objects' ETag != MD5sum.
+     */
+    if (rule.part_size == 0) {
+      hash.Update((const unsigned char *)full_obj.c_str(), data_len);
+      hash.Final(m);
+      buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+      calculated_etag = calc_md5;
+      ldout(cct, 20) << "Single part object: " << manifest.get_obj().get_oid() <<
+	      " size:" << manifest.get_obj_size() << " etag:" <<
+	      calculated_etag << dendl;
+      return calculated_etag;
+    }
+
+    for (mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
+      bufferlist obj_stripe;
+
+      cur_part_id = mi.get_cur_part_id();
+      if (cur_part_id != prev_part_id) {
+        hash.Final(m);
+        mpu_etag_hash.Update((const unsigned char *)m, sizeof(m));
+	hash.Restart();
+        buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5_part);
+        calculated_etag_part = calc_md5_part;
+        ldout(cct, 20) << "Part " << prev_part_id << " etag: " <<
+	       calculated_etag_part << dendl;
+	prev_part_id = cur_part_id;
+      }
+      full_obj.splice(0, mi.get_stripe_size(), &obj_stripe);
+      hash.Update((const unsigned char *)obj_stripe.c_str(), mi.get_stripe_size());
+    }
+
     hash.Final(m);
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-    calculated_etag = calc_md5;
+    mpu_etag_hash.Update((const unsigned char *)m, sizeof(m));
+
+    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5_part);
+    calculated_etag_part = calc_md5_part;
+    ldout(cct, 20) << "Part " << prev_part_id << " etag: " << calculated_etag_part << dendl;
+
+    /* Refer RGWCompleteMultipart::execute() for ETag calculation for MPU object */
+    mpu_etag_hash.Final(mpu_m);
+    buf_to_hex(mpu_m, CEPH_CRYPTO_MD5_DIGESTSIZE, final_etag_str);
+    snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
+	     sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
+             "-%lld", (long long)(mi.get_cur_part_id() - 1));
+    calculated_etag = final_etag_str;
+
+    ldout(cct, 20) << "MPU calculated ETag:"<< calculated_etag << " Object:" <<
+	   manifest.get_obj().get_oid() <<
+	   " size:" << manifest.get_obj_size() << dendl;
     return calculated_etag;
+
   }
 };
 
