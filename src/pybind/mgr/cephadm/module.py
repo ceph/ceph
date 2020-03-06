@@ -1453,7 +1453,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 except RuntimeError as e:
                     self._reset_con(host)
                     if error_ok:
-                        return '', str(e), 1
+                        return [], [str(e)], 1
                     raise
             elif self.mode == 'cephadm-package':
                 try:
@@ -1464,7 +1464,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 except RuntimeError as e:
                     self._reset_con(host)
                     if error_ok:
-                        return '', str(e), 1
+                        return [], [str(e)], 1
                     raise
             else:
                 assert False, 'unsupported mode'
