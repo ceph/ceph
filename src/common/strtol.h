@@ -15,10 +15,60 @@
 #ifndef CEPH_COMMON_STRTOL_H
 #define CEPH_COMMON_STRTOL_H
 
+#include <charconv>
+#include <cstdlib>
+#include <optional>
 #include <string>
-extern "C" {
-#include <stdint.h>
+#include <string_view>
+#include <system_error>
+#include <type_traits>
+
+
+namespace ceph {
+// Wrappers around std::from_chars.
+//
+// Why do we want this instead of strtol and friends? Because the
+// string doesn't have to be NUL-terminated! (Also, for a lot of
+// purposes, just putting a string_view in and getting an optional out
+// is friendly.)
+//
+// Returns the found number on success. Returns an empty optional on
+// failure OR on trailing characters.
+template<typename T>
+auto parse(std::string_view s, int base = 10)
+  -> std::enable_if_t<std::is_integral_v<T>, std::optional<T>>
+{
+  T t;
+  auto r = std::from_chars(s.data(), s.data() + s.size(), t, base);
+  if ((r.ec != std::errc{}) || (r.ptr != s.data() + s.size())) {
+    return std::nullopt;
+  }
+  return t;
 }
+
+// As above, but succeed on trailing characters and trim the supplied
+// string_view to remove the parsed number. Set the supplied
+// string_view to empty if it ends with the number.
+template<typename T>
+auto consume(std::string_view& s, int base = 10)
+  -> std::enable_if_t<std::is_integral_v<T>, std::optional<T>>
+{
+  T t;
+  auto r = std::from_chars(s.data(), s.data() + s.size(), t, base);
+  if (r.ec != std::errc{})
+    return std::nullopt;
+
+  if (r.ptr == s.data() + s.size()) {
+    s = std::string_view{};
+  } else {
+    s.remove_prefix(r.ptr - s.data());
+  }
+  return t;
+}
+
+// Sadly GCC is missing the floating point versions.
+} // namespace ceph
+
 
 long long strict_strtoll(const char *str, int base, std::string *err);
 
