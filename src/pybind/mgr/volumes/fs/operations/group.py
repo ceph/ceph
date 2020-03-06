@@ -37,13 +37,13 @@ class Group(GroupTemplate):
     def uid(self):
         return self.user_id
 
-    @property
-    def gid(self):
-        return self.group_id
-
     @uid.setter
     def uid(self, val):
         self.user_id = val
+
+    @property
+    def gid(self):
+        return self.group_id
 
     @gid.setter
     def gid(self, val):
@@ -132,7 +132,7 @@ def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
             log.debug("cleaning up subvolume group path: {0}".format(path))
             fs.rmdir(path)
         except cephfs.Error as ce:
-            log.debug("failed to clean up subvolume group {0} with path: {0} ({1})".format(groupname, path, ce))
+            log.debug("failed to clean up subvolume group {0} with path: {1} ({2})".format(groupname, path, ce))
         if isinstance(e, cephfs.Error):
             e = VolumeException(-e.args[0], e.args[1])
         raise e

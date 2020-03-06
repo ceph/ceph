@@ -1,3 +1,7 @@
+import errno
+
+from typing import Dict
+
 from ..exception import OpSmException
 
 class OpSm(object):
@@ -14,12 +18,12 @@ class OpSm(object):
         INIT_STATE_KEY : 'pending',
         'pending'           : ('in-progress', FAILED_STATE),
         'in-progress'       : (FINAL_STATE, FAILED_STATE),
-    }
+    } # type: Dict
 
     STATE_MACHINES_TYPES = {
         "subvolume" : OP_SM_SUBVOLUME,
         "clone"     : OP_SM_CLONE,
-    }
+    } # type: Dict
 
     @staticmethod
     def is_final_state(state):

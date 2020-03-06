@@ -25,6 +25,7 @@ class JobThread(threading.Thread):
     def run(self):
         retries = 0
         thread_id = threading.currentThread()
+        assert isinstance(thread_id, JobThread)
         thread_name = thread_id.getName()
 
         while retries < JobThread.MAX_RETRIES_ON_EXCEPTION:
@@ -66,7 +67,7 @@ class JobThread(threading.Thread):
         self.cancel_event.set()
 
     def should_cancel(self):
-        return self.cancel_event.isSet()
+        return self.cancel_event.is_set()
 
     def reset_cancel(self):
         self.cancel_event.clear()
@@ -93,7 +94,7 @@ class AsyncJobs(object):
     def __init__(self, volume_client, name_pfx, nr_concurrent_jobs):
         self.vc = volume_client
         # queue of volumes for starting async jobs
-        self.q = deque()
+        self.q = deque() # type: deque
         # volume => job tracking
         self.jobs = {}
         # lock, cv for kickstarting jobs
