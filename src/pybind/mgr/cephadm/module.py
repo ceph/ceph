@@ -2362,16 +2362,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'entity': 'mon.',
         })
 
-        # infer whether this is a CIDR network, addrvec, or plain IP
         extra_config = '[mon.%s]\n' % name
-        if '/' in network:
-            extra_config += 'public network = %s\n' % network
-        elif network.startswith('[v') and network.endswith(']'):
-            extra_config += 'public addrv = %s\n' % network
-        elif ':' not in network:
-            extra_config += 'public addr = %s\n' % network
+        if network:
+            # infer whether this is a CIDR network, addrvec, or plain IP
+            if '/' in network:
+                extra_config += 'public network = %s\n' % network
+            elif network.startswith('[v') and network.endswith(']'):
+                extra_config += 'public addrv = %s\n' % network
+            elif ':' not in network:
+                extra_config += 'public addr = %s\n' % network
+            else:
+                raise OrchestratorError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
         else:
-            raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
+            # try to get the public_network from the config
+            ret, network, err = self.mon_command({
+                'prefix': 'config get',
+                'who': 'mon',
+                'key': 'public_network',
+            })
+            network = network.strip() # type: ignore
+            if ret:
+                raise RuntimeError('Unable to fetch cluster_network config option')
+            if not network:
+                raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
+            if '/' not in network:
+                raise OrchestratorError('public_network is set but does not look like a CIDR network: \'%s\'' % network)
+            extra_config += 'public network = %s\n' % network
 
         return self._create_daemon('mon', name, host,
                                    keyring=keyring,
@@ -2379,8 +2395,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def add_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        # current support requires a network to be specified
-        orchestrator.servicespec_validate_hosts_have_network_spec(spec)
         return self._add_daemon('mon', spec, self._create_mon)
 
     def _create_mgr(self, mgr_id, host):
