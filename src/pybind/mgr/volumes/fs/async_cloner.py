@@ -34,9 +34,8 @@ def get_next_clone_entry(volume_client, volname, running_jobs):
                     return 0, None
                 raise ve
     except VolumeException as ve:
-        log.error("error fetching clone entry for volume '{0}' ({1})".format(volname), ve)
+        log.error("error fetching clone entry for volume '{0}' ({1})".format(volname, ve))
         return ve.errno, None
-    return ret
 
 @contextmanager
 def open_at_volume(volume_client, volname, groupname, subvolname, need_complete=False, expected_types=[]):
@@ -69,7 +68,7 @@ def handle_clone_pending(volume_client, volname, index, groupname, subvolname, s
     try:
         next_state = OpSm.get_next_state("clone", "pending", 0)
     except OpSmException as oe:
-        raise VolumeException(oe.error, oe.error_str)
+        raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
 
 def sync_attrs(fs_handle, target_path, source_statx):
@@ -160,7 +159,7 @@ def handle_clone_in_progress(volume_client, volname, index, groupname, subvolnam
         # jump to failed state
         next_state = OpSm.get_next_state("clone", "in-progress", -1)
     except OpSmException as oe:
-        raise VolumeException(oe.error, oe.error_str)
+        raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
 
 def handle_clone_failed(volume_client, volname, index, groupname, subvolname, should_cancel):

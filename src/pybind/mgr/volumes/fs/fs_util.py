@@ -127,6 +127,6 @@ def get_ancestor_xattr(fs, path, attr):
         return fs.getxattr(path, attr).decode('utf-8')
     except cephfs.NoData as e:
         if path == "/":
-            raise VolumeException(-e.args[0]. e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
         else:
             return get_ancestor_xattr(fs, os.path.split(path)[0], attr)

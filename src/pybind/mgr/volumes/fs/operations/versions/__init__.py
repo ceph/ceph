@@ -6,7 +6,7 @@ import cephfs
 
 from .subvolume_base import SubvolumeBase
 from ..op_sm import OpSm
-from ...exception import VolumeException, MetadataMgrException
+from ...exception import MetadataMgrException, OpSmException, VolumeException
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class SubvolumeLoader(object):
                 self.max_version = cls.version()
                 self.versions[cls.version()] = cls
         if self.max_version == SubvolumeLoader.INVALID_VERSION:
-            raise VolumeException("no subvolume version available")
+            raise VolumeException(-errno.EINVAL, "no subvolume version available")
         log.info("max subvolume version is v{0}".format(self.max_version))
 
     def _get_subvolume_version(self, version):
@@ -67,7 +67,6 @@ class SubvolumeLoader(object):
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT and upgrade:
                 self.upgrade_legacy_subvolume(fs, subvolume)
-                subvolume = None
                 return self.get_subvolume_object(fs, vol_spec, group, subvolname, upgrade=False)
             else:
                 # log the actual error and generalize error string returned to user
