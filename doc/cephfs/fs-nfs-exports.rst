@@ -44,9 +44,9 @@ Configuring NFS-Ganesha to export CephFS with vstart
 
 .. code:: bash
 
-    $ MDS=1 MON=1 OSD=3 GANESHA=1 ../src/vstart.sh -n -d
+    $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
 
-GANESHA: It denotes the number of ganesha clusters to be created.
+NFS: It denotes the number of NFS-Ganesha clusters to be created.
 
 Mount
 =====
