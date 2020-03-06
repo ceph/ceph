@@ -192,13 +192,36 @@ class NFSConfig(object):
                 return ret, out, err
 
     def create_common_config(self, nodeid):
-        result = "NFS_CORE_PARAM {\n Enable_NLM = false;\n Enable_RQUOTA = false;\n Protocols = 4;\n}\n\n"
-        result += "CACHEINODE {\n Dir_Chunk = 0;\n NParts = 1;\n Cache_Size = 1;\n}\n\n"
-        result += "NFSv4 {\n RecoveryBackend = rados_cluster;\n Minor_Versions = 1, 2;\n}\n\n"
-        result += "RADOS_URLS {{\n userid = {};\n}}\n\n".format(self.cluster_id)
-        #result += "%url rados://{}/{}/{}\n\n".format(self.pool_name, self.pool_ns, nodeid)
-        result += "%url rados://{}/{}/export-1\n\n".format(self.pool_name, self.pool_ns)
-        result += "RADOS_KV {{\n pool = {};\n namespace = {};\n UserId = {};\n nodeid = {};\n}}\n\n".format(self.pool_name, self.pool_ns, self.cluster_id, nodeid)
+        # TODO change rados url to "%url rados://{}/{}/{}".format(self.pool_name, self.pool_ns, nodeid)
+        result = """NFS_CORE_PARAM {{
+        Enable_NLM = false;
+        Enable_RQUOTA = false;
+        Protocols = 4;
+        }}
+
+        CACHEINODE {{
+        Dir_Chunk = 0;
+        NParts = 1;
+        Cache_Size = 1;
+        }}
+
+        NFSv4 {{
+        RecoveryBackend = rados_cluster;
+        Minor_Versions = 1, 2;
+        }}
+
+        RADOS_URLS {{
+        userid = {2};
+        }}
+
+        %url rados://{0}/{1}/export-1
+
+        RADOS_KV {{
+        pool = {0};
+        namespace = {1};
+        UserId = {2};
+        nodeid = {3};
+        }}""".format(self.pool_name, self.pool_ns, self.cluster_id, nodeid)
         #self.ganeshaconf._write_raw_config(result, nodeid)
 
         with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
