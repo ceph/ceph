@@ -733,6 +733,14 @@ add_executable(unittest_crypto_init
 add_ceph_unittest(unittest_crypto_init)
 target_link_libraries(unittest_crypto_init global)
 
+# unittest_crypto_onwire
+add_executable(unittest_crypto_onwire
+  crypto_onwire.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_crypto_onwire)
+target_link_libraries(unittest_crypto_onwire global)
+
 # unittest_perf_counters
 add_executable(unittest_perf_counters
   perf_counters.cc
