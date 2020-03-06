@@ -784,7 +784,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         daemons = self.cache.get_daemons()
         done = 0
-        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds', 'crash']:
+        for daemon_type in CEPH_TYPES:
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
@@ -922,6 +922,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         'name': 'container_image',
                         'who': section,
                     })
+
             self.log.info('Upgrade: All %s daemons are up to date.' %
                           daemon_type)
 
@@ -933,7 +934,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': target_name,
             'who': 'global',
         })
-        for daemon_type in ['mgr', 'mon', 'osd', 'rgw', 'mds']:
+        for daemon_type in CEPH_TYPES:
             ret, image, err = self.mon_command({
                 'prefix': 'config rm',
                 'name': 'container_image',
