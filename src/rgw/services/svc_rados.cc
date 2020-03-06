@@ -369,3 +369,17 @@ int RGWSI_RADOS::Pool::List::get_marker(string *marker)
   return 0;
 }
 
+int RGWSI_RADOS::clog_warn(const string& msg)
+{
+  string cmd =
+    "{"
+      "\"prefix\": \"log\", "
+      "\"level\": \"warn\", "
+      "\"logtext\": [\"" + msg + "\"]"
+    "}";
+
+  bufferlist inbl;
+  auto h = handle();
+  return h.mon_command(cmd, inbl, nullptr, nullptr);
+}
+

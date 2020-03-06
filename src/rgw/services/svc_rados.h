@@ -73,6 +73,8 @@ public:
     return async_processor.get();
   }
 
+  int clog_warn(const string& msg);
+
   class Handle;
 
   class Pool {
