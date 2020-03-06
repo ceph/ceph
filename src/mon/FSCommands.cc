@@ -152,16 +152,16 @@ class FsNewHandler : public FileSystemCommandHandler
 
     string metadata_name;
     cmd_getval(cmdmap, "metadata", metadata_name);
-    int64_t metadata = mon->osdmon()->osdmap.lookup_pg_pool_name(metadata_name);
-    if (metadata < 0) {
+    auto metadata = mon->osdmon()->osdmap.lookup_pg_pool_name(metadata_name);
+    if (!metadata) {
       ss << "pool '" << metadata_name << "' does not exist";
       return -ENOENT;
     }
 
     string data_name;
     cmd_getval(cmdmap, "data", data_name);
-    int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
-    if (data < 0) {
+    auto data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
+    if (!data) {
       ss << "pool '" << data_name << "' does not exist";
       return -ENOENT;
     }
@@ -195,7 +195,7 @@ class FsNewHandler : public FileSystemCommandHandler
     bool force = false;
     cmd_getval(cmdmap, "force", force);
 
-    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
+    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(*metadata);
     if (stat) {
       int64_t metadata_num_objects = stat->stats.sum.num_objects;
       if (!force && metadata_num_objects > 0) {
@@ -229,46 +229,47 @@ class FsNewHandler : public FileSystemCommandHandler
       }
     }
 
-    pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
+    pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(*data);
     ceph_assert(data_pool != NULL);  // Checked it existed above
-    pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
+    pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(*metadata);
     ceph_assert(metadata_pool != NULL);  // Checked it existed above
 
-    int r = _check_pool(mon->osdmon()->osdmap, data, POOL_DATA_DEFAULT, force, &ss);
+    int r = _check_pool(mon->osdmon()->osdmap, *data, POOL_DATA_DEFAULT,
+			force, &ss);
     if (r < 0) {
       return r;
     }
 
-    r = _check_pool(mon->osdmon()->osdmap, metadata, POOL_METADATA, force, &ss);
+    r = _check_pool(mon->osdmon()->osdmap, *metadata, POOL_METADATA, force, &ss);
     if (r < 0) {
       return r;
     }
-    
+
     if (!mon->osdmon()->is_writeable()) {
       // not allowed to write yet, so retry when we can
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
-    mon->osdmon()->do_application_enable(data,
+    mon->osdmon()->do_application_enable(*data,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
 					 "data", fs_name);
-    mon->osdmon()->do_application_enable(metadata,
+    mon->osdmon()->do_application_enable(*metadata,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
 					 "metadata", fs_name);
-    mon->osdmon()->do_set_pool_opt(metadata,
+    mon->osdmon()->do_set_pool_opt(*metadata,
 				   pool_opts_t::RECOVERY_PRIORITY,
 				   static_cast<int64_t>(5));
-    mon->osdmon()->do_set_pool_opt(metadata,
+    mon->osdmon()->do_set_pool_opt(*metadata,
 				   pool_opts_t::PG_NUM_MIN,
 				   static_cast<int64_t>(16));
-    mon->osdmon()->do_set_pool_opt(metadata,
+    mon->osdmon()->do_set_pool_opt(*metadata,
 				   pool_opts_t::PG_AUTOSCALE_BIAS,
 				   static_cast<double>(4.0));
     mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
-    auto&& fs = fsmap.create_filesystem(fs_name, metadata, data,
-        mon->get_quorum_con_features());
+    auto&& fs = fsmap.create_filesystem(fs_name, *metadata, *data,
+					mon->get_quorum_con_features());
 
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
 
@@ -277,7 +278,7 @@ class FsNewHandler : public FileSystemCommandHandler
 
     if (info) {
       mon->clog->info() << info->human_name() << " assigned to filesystem "
-          << fs_name << " as rank 0";
+			<< fs_name << " as rank 0";
       fsmap.promote(info->global_id, *fs, 0);
     }
 
@@ -662,8 +663,8 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       return -ENOENT;
     }
 
-    int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
-    if (poolid < 0) {
+    auto poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
+    if (!poolid) {
       string err;
       poolid = strict_strtol(poolname.c_str(), 10, &err);
       if (err.length()) {
@@ -672,13 +673,13 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       }
     }
 
-    int r = _check_pool(mon->osdmon()->osdmap, poolid, POOL_DATA_EXTRA, false, &ss);
+    int r = _check_pool(mon->osdmon()->osdmap, *poolid, POOL_DATA_EXTRA, false, &ss);
     if (r != 0) {
       return r;
     }
 
     // no-op when the data_pool already on fs
-    if (fs->mds_map.is_data_pool(poolid)) {
+    if (fs->mds_map.is_data_pool(*poolid)) {
       ss << "data pool " << poolid << " is already on fs " << fs_name;
       return 0;
     }
@@ -688,7 +689,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
-    mon->osdmon()->do_application_enable(poolid,
+    mon->osdmon()->do_application_enable(*poolid,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
 					 "data", fs_name);
     mon->osdmon()->propose_pending();
@@ -697,7 +698,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
         fs->fscid,
         [poolid](std::shared_ptr<Filesystem> fs)
     {
-      fs->mds_map.add_data_pool(poolid);
+      fs->mds_map.add_data_pool(*poolid);
     });
 
     ss << "added data pool " << poolid << " to fsmap";
@@ -885,8 +886,8 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       return -ENOENT;
     }
 
-    int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
-    if (poolid < 0) {
+    auto poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
+    if (!poolid) {
       string err;
       poolid = strict_strtol(poolname.c_str(), 10, &err);
       if (err.length()) {
@@ -910,7 +911,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
     fsmap.modify_filesystem(fs->fscid,
         [&r, poolid](std::shared_ptr<Filesystem> fs)
     {
-      r = fs->mds_map.remove_data_pool(poolid);
+      r = fs->mds_map.remove_data_pool(*poolid);
     });
     if (r == -ENOENT) {
       // It was already removed, succeed in silence
@@ -1048,4 +1049,3 @@ int FileSystemCommandHandler::_check_pool(
   // Nothing special about this pool, so it is permissible
   return 0;
 }
-

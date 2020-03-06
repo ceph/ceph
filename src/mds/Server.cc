@@ -5336,12 +5336,12 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
       try {
 	layout->pool_id = boost::lexical_cast<unsigned>(value);
       } catch (boost::bad_lexical_cast const&) {
-	int64_t pool = osdmap.lookup_pg_pool_name(value);
-	if (pool < 0) {
+	auto pool = osdmap.lookup_pg_pool_name(value);
+	if (!pool) {
 	  dout(10) << " unknown pool " << value << dendl;
 	  return -ENOENT;
 	}
-	layout->pool_id = pool;
+	layout->pool_id = *pool;
       }
     } else if (name == "layout.pool_namespace") {
       layout->pool_ns = value;

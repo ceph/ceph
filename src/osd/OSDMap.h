@@ -29,6 +29,7 @@
 #include <set>
 #include <map>
 #include <memory>
+#include <optional>
 
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include "include/btree_map.h"
@@ -1299,10 +1300,10 @@ public:
     return new_purged_snaps;
   }
 
-  int64_t lookup_pg_pool_name(const std::string& name) const {
+  std::optional<int64_t> lookup_pg_pool_name(const std::string& name) const {
     auto p = name_pool.find(name);
     if (p == name_pool.end())
-      return -ENOENT;
+      return nullopt;
     return p->second;
   }
 

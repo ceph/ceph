@@ -250,9 +250,9 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
   reply->per_pool = digest.use_per_pool_stats();
   for (const auto& pool_name : m->pools) {
     const auto pool_id = mon->osdmon()->osdmap.lookup_pg_pool_name(pool_name);
-    if (pool_id == -ENOENT)
+    if (!pool_id)
       continue;
-    auto pool_stat = get_pool_stat(pool_id);
+    auto pool_stat = get_pool_stat(*pool_id);
     if (!pool_stat)
       continue;
     reply->pool_stats[pool_name] = *pool_stat;

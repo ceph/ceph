@@ -3480,12 +3480,12 @@ int process_pg_map_command(
     prefix = "pg ls";
     string poolstr;
     cmd_getval(cmdmap, "poolstr", poolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-    if (pool < 0) {
+    auto pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (!pool) {
       *ss << "pool " << poolstr << " does not exist";
       return -ENOENT;
     }
-    cmd_putval(g_ceph_context, cmdmap, "pool", pool);
+    cmd_putval(g_ceph_context, cmdmap, "pool", *pool);
   }
 
   stringstream ds;

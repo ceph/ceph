@@ -11593,14 +11593,13 @@ int Client::_setxattr_check_data_pool(string& name, string& value, const OSDMap 
   }
 
   if (tmp.length()) {
-    int64_t pool;
     try {
-      pool = boost::lexical_cast<unsigned>(tmp);
+      auto pool = boost::lexical_cast<unsigned>(tmp);
       if (!osdmap->have_pg_pool(pool))
 	return -ENOENT;
     } catch (boost::bad_lexical_cast const&) {
-      pool = osdmap->lookup_pg_pool_name(tmp);
-      if (pool < 0) {
+      auto pool = osdmap->lookup_pg_pool_name(tmp);
+      if (!pool) {
 	return -ENOENT;
       }
     }
@@ -12153,13 +12152,13 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   int cmode = ceph_flags_to_mode(cflags);
 
-  int64_t pool_id = -1;
+  std::optional<int64_t> pool_id;
   if (data_pool && *data_pool) {
     pool_id = objecter->with_osdmap(
       std::mem_fn(&OSDMap::lookup_pg_pool_name), data_pool);
-    if (pool_id < 0)
+    if (!pool_id)
       return -EINVAL;
-    if (pool_id > 0xffffffffll)
+    if (*pool_id > 0xffffffffll)
       return -ERANGE;  // bummer!
   }
 
@@ -12179,7 +12178,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     req->head.args.open.mask = DEBUG_GETATTR_CAPS;
   else
     req->head.args.open.mask = 0;
-  req->head.args.open.pool = pool_id;
+  req->head.args.open.pool = *pool_id;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -13804,7 +13803,7 @@ int64_t Client::get_pool_id(const char *pool_name)
     return -ENOTCONN;
 
   return objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-			       pool_name);
+			       pool_name).value_or(-ENOENT);
 }
 
 string Client::get_pool_name(int64_t pool)

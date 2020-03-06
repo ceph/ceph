@@ -139,7 +139,7 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
            << "' does not exist" << dendl;
       return nullptr;
     }
-    pools.insert(pool_id);
+    pools.insert(*pool_id);
   }
 
   dout(10) << __func__ << " osdmap " << self->osdmap << " inc " << incobj->inc

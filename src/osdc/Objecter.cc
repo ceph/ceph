@@ -3994,11 +3994,11 @@ int Objecter::delete_pool(const string &pool_name, Context *onfinish)
   unique_lock wl(rwlock);
   ldout(cct, 10) << "delete_pool " << pool_name << dendl;
 
-  int64_t pool = osdmap->lookup_pg_pool_name(pool_name);
-  if (pool < 0)
-    return pool;
+  auto pool = osdmap->lookup_pg_pool_name(pool_name);
+  if (!pool)
+    return -ENOENT;
 
-  _do_delete_pool(pool, onfinish);
+  _do_delete_pool(*pool, onfinish);
   return 0;
 }
 

@@ -5928,18 +5928,17 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       command == "injectdataerr"
     ) {
     pg_t rawpg;
-    int64_t pool;
     OSDMapRef curmap = service->get_osdmap();
     int r = -1;
 
     string poolstr;
 
     cmd_getval(cmdmap, "pool", poolstr);
-    pool = curmap->lookup_pg_pool_name(poolstr);
+    auto pool = curmap->lookup_pg_pool_name(poolstr);
     //If we can't find it by name then maybe id specified
-    if (pool < 0 && isdigit(poolstr[0]))
-      pool = atoll(poolstr.c_str());
-    if (pool < 0) {
+    if (!pool && isdigit(poolstr[0]))
+      pool = ceph::parse<std::int64_t>(poolstr);
+    if (!pool) {
       ss << "Invalid pool '" << poolstr << "''";
       return;
     }
@@ -5951,7 +5950,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       nspace = objname.substr(0, found);
       objname = objname.substr(found+1);
     }
-    object_locator_t oloc(pool, nspace);
+    object_locator_t oloc(*pool, nspace);
     r = curmap->object_locator_to_pg(object_t(objname), oloc,  rawpg);
 
     if (r < 0) {
@@ -5961,7 +5960,8 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
     int64_t shardid;
     cmd_getval(cmdmap, "shardid", shardid, int64_t(shard_id_t::NO_SHARD));
-    hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
+    hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(),
+		  *pool, nspace);
     ghobject_t gobj(obj, ghobject_t::NO_GEN, shard_id_t(uint8_t(shardid)));
     spg_t pgid(curmap->raw_pg_to_pg(rawpg), shard_id_t(shardid));
     if (curmap->pg_is_ec(rawpg)) {

@@ -80,18 +80,18 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
     return r;
   }
 
-  int64_t ret = objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-                                 name);
-  if (-ENOENT == ret) {
+  auto ret = objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
+				   name);
+  if (!ret) {
     // Make sure we have the latest map
     int r = wait_for_latest_osdmap();
     if (r < 0)
       return r;
     ret = objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-                                 name);
+				name);
   }
 
-  return ret;
+  return ret.value_or(-ENOENT);
 }
 
 bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
@@ -649,10 +649,11 @@ bool librados::RadosClient::get_pool_is_selfmanaged_snaps_mode(
   const std::string& pool)
 {
   bool ret = false;
-  objecter->with_osdmap([&](const OSDMap& osdmap) {
-      int64_t poolid = osdmap.lookup_pg_pool_name(pool);
-      if (poolid >= 0)
-	ret = osdmap.get_pg_pool(poolid)->is_unmanaged_snaps_mode();
+  objecter->with_osdmap(
+    [&](const OSDMap& osdmap) {
+      auto poolid = osdmap.lookup_pg_pool_name(pool);
+      if (poolid)
+	ret = osdmap.get_pg_pool(*poolid)->is_unmanaged_snaps_mode();
     });
   return ret;
 }

@@ -233,7 +233,7 @@ TEST_F(OSDMapTest, Features) {
   // remove teh EC pool, but leave the rule.  add primary affinity.
   {
     OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
-    new_pool_inc.old_pools.insert(osdmap.lookup_pg_pool_name("ec"));
+    new_pool_inc.old_pools.insert(osdmap.lookup_pg_pool_name("ec").value_or(-ENOENT));
     new_pool_inc.new_primary_affinity[0] = 0x8000;
     osdmap.apply_incremental(new_pool_inc);
   }

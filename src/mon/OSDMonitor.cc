@@ -5692,13 +5692,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(cmdmap, "object", objstr);
     cmd_getval(cmdmap, "nspace", namespacestr);
 
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-    if (pool < 0) {
+    auto pool = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool) {
       ss << "pool " << poolstr << " does not exist";
       r = -ENOENT;
       goto reply;
     }
-    object_locator_t oloc(pool, namespacestr);
+    object_locator_t oloc(*pool, namespacestr);
     object_t oid(objstr);
     pg_t pgid = osdmap.object_locator_to_pg(oid, oloc);
     pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
@@ -5715,7 +5715,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->open_object_section("osd_map");
       f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_string("pool", poolstr);
-      f->dump_int("pool_id", pool);
+      f->dump_int("pool_id", *pool);
       f->dump_stream("objname") << fullobjname;
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
@@ -5892,14 +5892,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "osd pool get") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-    if (pool < 0) {
+    auto pool = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool) {
       ss << "unrecognized pool '" << poolstr << "'";
       r = -ENOENT;
       goto reply;
     }
 
-    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool);
     string var;
     cmd_getval(cmdmap, "var", var);
 
@@ -6016,7 +6016,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     if (f) {
       f->open_object_section("pool");
       f->dump_string("pool", poolstr);
-      f->dump_int("pool_id", pool);
+      f->dump_int("pool_id", *pool);
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
 	choices_map_t::const_iterator i;
@@ -6350,20 +6350,19 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     string pool_name;
     cmd_getval(cmdmap, "pool", pool_name);
 
-    int64_t poolid = osdmap.lookup_pg_pool_name(pool_name);
-    if (poolid < 0) {
-      ceph_assert(poolid == -ENOENT);
+    auto poolid = osdmap.lookup_pg_pool_name(pool_name);
+    if (!poolid) {
       ss << "unrecognized pool '" << pool_name << "'";
       r = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(poolid);
-    const pool_stat_t* pstat = mon->mgrstatmon()->get_pool_stat(poolid);
+    const pg_pool_t *p = osdmap.get_pg_pool(*poolid);
+    const pool_stat_t* pstat = mon->mgrstatmon()->get_pool_stat(*poolid);
     const object_stat_sum_t& sum = pstat->stats.sum;
     if (f) {
       f->open_object_section("pool_quotas");
       f->dump_string("pool_name", pool_name);
-      f->dump_unsigned("pool_id", poolid);
+      f->dump_unsigned("pool_id", *poolid);
       f->dump_unsigned("quota_max_objects", p->quota_max_objects);
       f->dump_int("current_num_objects", sum.num_objects);
       f->dump_unsigned("quota_max_bytes", p->quota_max_bytes);
@@ -6712,13 +6711,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section(); // pools
       f->flush(rdata);
     } else {
-      int64_t pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
-      if (pool < 0) {
+      auto pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
+      if (!pool) {
         ss << "unrecognized pool '" << pool_name << "'";
         r = -ENOENT;
         goto reply;
       }
-      auto p = osdmap.get_pg_pool(pool);
+      auto p = osdmap.get_pg_pool(*pool);
       // filter by pool
       if (app.empty()) {
         f->open_object_section(pool_name.c_str());
@@ -7854,17 +7853,17 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 {
   string poolstr;
   cmd_getval(cmdmap, "pool", poolstr);
-  int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-  if (pool < 0) {
+  auto pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+  if (!pool) {
     ss << "unrecognized pool '" << poolstr << "'";
     return -ENOENT;
   }
   string var;
   cmd_getval(cmdmap, "var", var);
 
-  pg_pool_t p = *osdmap.get_pg_pool(pool);
-  if (pending_inc.new_pools.count(pool))
-    p = pending_inc.new_pools[pool];
+  pg_pool_t p = *osdmap.get_pg_pool(*pool);
+  if (pending_inc.new_pools.count(*pool))
+    p = pending_inc.new_pools[*pool];
 
   // accept val as a json string in the normal case (current
   // generation monitor).  parse out int or float values from the
@@ -7932,7 +7931,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (!osdmap.crush->check_crush_rule(p.get_crush_rule(), p.type, n, ss)) {
       return -EINVAL;
     }
-    int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
+    int r = check_pg_num(*pool, p.get_pg_num(), n, &ss);
     if (r < 0) {
       return r;
     }
@@ -8039,7 +8038,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -ERANGE;
     }
     if (n > (int)p.get_pg_num_target()) {
-      int r = check_pg_num(pool, n, p.get_size(), &ss);
+      int r = check_pg_num(*pool, n, p.get_size(), &ss);
       if (r) {
 	return r;
       }
@@ -8245,7 +8244,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     stringstream err;
     if (!g_conf()->mon_debug_no_require_bluestore_for_ec_overwrites &&
-	!is_pool_currently_all_bluestore(pool, p, &err)) {
+	!is_pool_currently_all_bluestore(*pool, p, &err)) {
       ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
       return -EINVAL;
     }
@@ -8492,7 +8491,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     ss << "unset pool " << pool << " " << var;
   }
   p.last_change = pending_inc.epoch;
-  pending_inc.new_pools[pool] = p;
+  pending_inc.new_pools[*pool] = p;
   return 0;
 }
 
@@ -8526,16 +8525,16 @@ int OSDMonitor::_command_pool_application(const string &prefix,
 {
   string pool_name;
   cmd_getval(cmdmap, "pool", pool_name);
-  int64_t pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
-  if (pool < 0) {
+  auto pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
+  if (!pool) {
     ss << "unrecognized pool '" << pool_name << "'";
     return -ENOENT;
   }
 
-  pg_pool_t p = *osdmap.get_pg_pool(pool);
+  pg_pool_t p = *osdmap.get_pg_pool(*pool);
   if (preparing) {
-    if (pending_inc.new_pools.count(pool)) {
-      p = pending_inc.new_pools[pool];
+    if (pending_inc.new_pools.count(*pool)) {
+      p = pending_inc.new_pools[*pool];
     }
   }
 
@@ -8684,7 +8683,7 @@ int OSDMonitor::_command_pool_application(const string &prefix,
 
   if (preparing) {
     p.last_change = pending_inc.epoch;
-    pending_inc.new_pools[pool] = p;
+    pending_inc.new_pools[*pool] = p;
   }
 
   // Because we fell through this far, we didn't hit no-op cases,
@@ -9987,7 +9986,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       string poolname, mode;
       cmd_getval(cmdmap, "pool", poolname);
-      pool = osdmap.lookup_pg_pool_name(poolname.c_str());
+      pool = osdmap.lookup_pg_pool_name(poolname.c_str()).value_or(-ENOENT);
       if (pool < 0) {
 	ss << "pool '" << poolname << "' not found";
 	err = -ENOENT;
@@ -10025,7 +10024,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (prefix == "osd crush weight-set rm") {
       string poolname;
       cmd_getval(cmdmap, "pool", poolname);
-      pool = osdmap.lookup_pg_pool_name(poolname.c_str());
+      pool = osdmap.lookup_pg_pool_name(poolname.c_str()).value_or(-ENOENT);
       if (pool < 0) {
 	ss << "pool '" << poolname << "' not found";
 	err = -ENOENT;
@@ -10050,7 +10049,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     _get_pending_crush(newcrush);
     int64_t pool;
     if (prefix == "osd crush weight-set reweight") {
-      pool = osdmap.lookup_pg_pool_name(poolname.c_str());
+      pool = osdmap.lookup_pg_pool_name(poolname.c_str()).value_or(-ENOENT);
       if (pool < 0) {
 	ss << "pool '" << poolname << "' not found";
 	err = -ENOENT;
@@ -12314,15 +12313,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool mksnap") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-    if (pool < 0) {
+    auto pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (!pool) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
     string snapname;
     cmd_getval(cmdmap, "snap", snapname);
-    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool);
     if (p->is_unmanaged_snaps_mode()) {
       ss << "pool " << poolstr << " is in unmanaged snaps mode";
       err = -EINVAL;
@@ -12337,10 +12336,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     pg_pool_t *pp = 0;
-    if (pending_inc.new_pools.count(pool))
-      pp = &pending_inc.new_pools[pool];
+    if (pending_inc.new_pools.count(*pool))
+      pp = &pending_inc.new_pools[*pool];
     if (!pp) {
-      pp = &pending_inc.new_pools[pool];
+      pp = &pending_inc.new_pools[*pool];
       *pp = *p;
     }
     if (pp->snap_exists(snapname.c_str())) {
@@ -12357,15 +12356,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool rmsnap") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-    if (pool < 0) {
+    auto pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (!pool) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
     string snapname;
     cmd_getval(cmdmap, "snap", snapname);
-    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool);
     if (p->is_unmanaged_snaps_mode()) {
       ss << "pool " << poolstr << " is in unmanaged snaps mode";
       err = -EINVAL;
@@ -12376,10 +12375,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     pg_pool_t *pp = 0;
-    if (pending_inc.new_pools.count(pool))
-      pp = &pending_inc.new_pools[pool];
+    if (pending_inc.new_pools.count(*pool))
+      pp = &pending_inc.new_pools[*pool];
     if (!pp) {
-      pp = &pending_inc.new_pools[pool];
+      pp = &pending_inc.new_pools[*pool];
       *pp = *p;
     }
     snapid_t sn = pp->snap_exists(snapname.c_str());
@@ -12408,12 +12407,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id >= 0) {
-      const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+      const pg_pool_t *p = osdmap.get_pg_pool(*pool_id);
       if (pool_type_str != p->get_type_name()) {
 	ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
- 	err = -EINVAL;
+	err = -EINVAL;
       } else {
 	ss << "pool '" << poolstr << "' already exists";
 	err = 0;
@@ -12585,7 +12584,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string poolstr, poolstr2, sure;
     cmd_getval(cmdmap, "pool", poolstr);
     cmd_getval(cmdmap, "pool2", poolstr2);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    auto pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "pool '" << poolstr << "' does not exist";
       err = 0;
@@ -12604,7 +12603,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    err = _prepare_remove_pool(pool, &ss, force_no_fake);
+    err = _prepare_remove_pool(*pool, &ss, force_no_fake);
     if (err == -EAGAIN) {
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
@@ -12616,11 +12615,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string srcpoolstr, destpoolstr;
     cmd_getval(cmdmap, "srcpool", srcpoolstr);
     cmd_getval(cmdmap, "destpool", destpoolstr);
-    int64_t pool_src = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
-    int64_t pool_dst = osdmap.lookup_pg_pool_name(destpoolstr.c_str());
+    auto pool_src = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
+    auto pool_dst = osdmap.lookup_pg_pool_name(destpoolstr.c_str());
 
-    if (pool_src < 0) {
-      if (pool_dst >= 0) {
+    if (!pool_src) {
+      if (pool_dst) {
         // src pool doesn't exist, dst pool does exist: to ensure idempotency
         // of operations, assume this rename succeeded, as it is not changing
         // the current state.  Make sure we output something understandable
@@ -12628,21 +12627,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         // in case it was not intentional; or to avoid a "wtf?" and a bug
         // report in case it was intentional, while expecting a failure.
         ss << "pool '" << srcpoolstr << "' does not exist; pool '"
-          << destpoolstr << "' does -- assuming successful rename";
-        err = 0;
+	   << destpoolstr << "' does -- assuming successful rename";
+	err = 0;
       } else {
         ss << "unrecognized pool '" << srcpoolstr << "'";
         err = -ENOENT;
       }
       goto reply;
-    } else if (pool_dst >= 0) {
+    } else if (pool_dst) {
       // source pool exists and so does the destination pool
       ss << "pool '" << destpoolstr << "' already exists";
       err = -EEXIST;
       goto reply;
     }
 
-    int ret = _prepare_rename_pool(pool_src, destpoolstr);
+    int ret = _prepare_rename_pool(*pool_src, destpoolstr);
     if (ret == 0) {
       ss << "pool '" << srcpoolstr << "' renamed to '" << destpoolstr << "'";
     } else {
@@ -12673,33 +12672,33 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id < 0) {
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool_id) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
     string tierpoolstr;
     cmd_getval(cmdmap, "tierpool", tierpoolstr);
-    int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
-    if (tierpool_id < 0) {
+    auto tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
+    if (!tierpool_id) {
       ss << "unrecognized pool '" << tierpoolstr << "'";
       err = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool_id);
     ceph_assert(p);
-    const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
+    const pg_pool_t *tp = osdmap.get_pg_pool(*tierpool_id);
     ceph_assert(tp);
 
-    if (!_check_become_tier(tierpool_id, tp, pool_id, p, &err, &ss)) {
+    if (!_check_become_tier(*tierpool_id, tp, *pool_id, p, &err, &ss)) {
       goto reply;
     }
 
     // make sure new tier is empty
     string force_nonempty;
     cmd_getval(cmdmap, "force_nonempty", force_nonempty);
-    const pool_stat_t *pstats = mon->mgrstatmon()->get_pool_stat(tierpool_id);
+    const pool_stat_t *pstats = mon->mgrstatmon()->get_pool_stat(*tierpool_id);
     if (pstats && pstats->stats.sum.num_objects != 0 &&
 	force_nonempty != "--force-nonempty") {
       ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
@@ -12720,15 +12719,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     // go
-    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
-    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
-    if (np->tiers.count(tierpool_id) || ntp->is_tier()) {
+    pg_pool_t *np = pending_inc.get_new_pool(*pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(*tierpool_id, tp);
+    if (np->tiers.count(*tierpool_id) || ntp->is_tier()) {
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
-    np->tiers.insert(tierpool_id);
+    np->tiers.insert(*tierpool_id);
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
-    ntp->tier_of = pool_id;
+    ntp->tier_of = *pool_id;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -12737,30 +12736,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              prefix == "osd tier rm") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id < 0) {
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool_id) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
     string tierpoolstr;
     cmd_getval(cmdmap, "tierpool", tierpoolstr);
-    int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
-    if (tierpool_id < 0) {
+    auto tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
+    if (!tierpool_id) {
       ss << "unrecognized pool '" << tierpoolstr << "'";
       err = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool_id);
     ceph_assert(p);
-    const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
+    const pg_pool_t *tp = osdmap.get_pg_pool(*tierpool_id);
     ceph_assert(tp);
 
-    if (!_check_remove_tier(pool_id, p, tp, &err, &ss)) {
+    if (!_check_remove_tier(*pool_id, p, tp, &err, &ss)) {
       goto reply;
     }
 
-    if (p->tiers.count(tierpool_id) == 0) {
+    if (p->tiers.count(*tierpool_id) == 0) {
       ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
       err = 0;
       goto reply;
@@ -12779,15 +12778,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     // go
-    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
-    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
-    if (np->tiers.count(tierpool_id) == 0 ||
+    pg_pool_t *np = pending_inc.get_new_pool(*pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(*tierpool_id, tp);
+    if (np->tiers.count(*tierpool_id) == 0 ||
 	ntp->tier_of != pool_id ||
 	np->read_tier == tierpool_id) {
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
-    np->tiers.erase(tierpool_id);
+    np->tiers.erase(*tierpool_id);
     ntp->clear_tier();
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
@@ -12801,25 +12800,25 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id < 0) {
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool_id) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
     string overlaypoolstr;
     cmd_getval(cmdmap, "overlaypool", overlaypoolstr);
-    int64_t overlaypool_id = osdmap.lookup_pg_pool_name(overlaypoolstr);
-    if (overlaypool_id < 0) {
+    auto overlaypool_id = osdmap.lookup_pg_pool_name(overlaypoolstr);
+    if (!overlaypool_id) {
       ss << "unrecognized pool '" << overlaypoolstr << "'";
       err = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool_id);
     ceph_assert(p);
-    const pg_pool_t *overlay_p = osdmap.get_pg_pool(overlaypool_id);
+    const pg_pool_t *overlay_p = osdmap.get_pg_pool(*overlaypool_id);
     ceph_assert(overlay_p);
-    if (p->tiers.count(overlaypool_id) == 0) {
+    if (p->tiers.count(*overlaypool_id) == 0) {
       ss << "tier pool '" << overlaypoolstr << "' is not a tier of '" << poolstr << "'";
       err = -EINVAL;
       goto reply;
@@ -12838,11 +12837,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     // go
-    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
-    np->read_tier = overlaypool_id;
-    np->write_tier = overlaypool_id;
+    pg_pool_t *np = pending_inc.get_new_pool(*pool_id, p);
+    np->read_tier = *overlaypool_id;
+    np->write_tier = *overlaypool_id;
     np->set_last_force_op_resend(pending_inc.epoch);
-    pg_pool_t *noverlay_p = pending_inc.get_new_pool(overlaypool_id, overlay_p);
+    pg_pool_t *noverlay_p = pending_inc.get_new_pool(*overlaypool_id, overlay_p);
     noverlay_p->set_last_force_op_resend(pending_inc.epoch);
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
     if (overlay_p->cache_mode == pg_pool_t::CACHEMODE_NONE)
@@ -12854,13 +12853,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              prefix == "osd tier rm-overlay") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id < 0) {
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool_id) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool_id);
     ceph_assert(p);
     if (!p->has_read_tier()) {
       err = 0;
@@ -12868,12 +12867,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (!_check_remove_tier(pool_id, p, NULL, &err, &ss)) {
+    if (!_check_remove_tier(*pool_id, p, NULL, &err, &ss)) {
       goto reply;
     }
 
     // go
-    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *np = pending_inc.get_new_pool(*pool_id, p);
     if (np->has_read_tier()) {
       const pg_pool_t *op = osdmap.get_pg_pool(np->read_tier);
       pg_pool_t *nop = pending_inc.get_new_pool(np->read_tier,op);
@@ -12899,13 +12898,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id < 0) {
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool_id) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool_id);
     ceph_assert(p);
     if (!p->is_tier()) {
       ss << "pool '" << poolstr << "' is not a tier";
@@ -12943,8 +12942,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     // pool already has this cache-mode set and there are no pending changes
     if (p->cache_mode == mode &&
-	(pending_inc.new_pools.count(pool_id) == 0 ||
-	 pending_inc.new_pools[pool_id].cache_mode == p->cache_mode)) {
+	(pending_inc.new_pools.count(*pool_id) == 0 ||
+	 pending_inc.new_pools[*pool_id].cache_mode == p->cache_mode)) {
       ss << "set cache-mode for pool '" << poolstr << "'"
          << " to " << pg_pool_t::get_cache_mode_name(mode);
       err = 0;
@@ -13008,7 +13007,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
       const pool_stat_t* pstats =
-        mon->mgrstatmon()->get_pool_stat(pool_id);
+        mon->mgrstatmon()->get_pool_stat(*pool_id);
 
       if (pstats && pstats->stats.sum.num_objects_dirty > 0) {
         ss << "unable to set cache-mode '"
@@ -13019,7 +13018,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
     // go
-    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *np = pending_inc.get_new_pool(*pool_id, p);
     np->cache_mode = mode;
     // set this both when moving to and from cache_mode NONE.  this is to
     // capture legacy pools that were set up before this flag existed.
@@ -13044,26 +13043,26 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id < 0) {
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool_id) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
     }
     string tierpoolstr;
     cmd_getval(cmdmap, "tierpool", tierpoolstr);
-    int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
+    auto tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
     if (tierpool_id < 0) {
       ss << "unrecognized pool '" << tierpoolstr << "'";
       err = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    const pg_pool_t *p = osdmap.get_pg_pool(*pool_id);
     ceph_assert(p);
-    const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
+    const pg_pool_t *tp = osdmap.get_pg_pool(*tierpool_id);
     ceph_assert(tp);
 
-    if (!_check_become_tier(tierpool_id, tp, pool_id, p, &err, &ss)) {
+    if (!_check_become_tier(*tierpool_id, tp, *pool_id, p, &err, &ss)) {
       goto reply;
     }
 
@@ -13076,7 +13075,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     // make sure new tier is empty
     const pool_stat_t *pstats =
-      mon->mgrstatmon()->get_pool_stat(tierpool_id);
+      mon->mgrstatmon()->get_pool_stat(*tierpool_id);
     if (pstats && pstats->stats.sum.num_objects != 0) {
       ss << "tier pool '" << tierpoolstr << "' is not empty";
       err = -ENOTEMPTY;
@@ -13107,18 +13106,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     // go
-    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
-    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
-    if (np->tiers.count(tierpool_id) || ntp->is_tier()) {
+    pg_pool_t *np = pending_inc.get_new_pool(*pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(*tierpool_id, tp);
+    if (np->tiers.count(*tierpool_id) || ntp->is_tier()) {
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
-    np->tiers.insert(tierpool_id);
-    np->read_tier = np->write_tier = tierpool_id;
+    np->tiers.insert(*tierpool_id);
+    np->read_tier = np->write_tier = *tierpool_id;
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     np->set_last_force_op_resend(pending_inc.epoch);
     ntp->set_last_force_op_resend(pending_inc.epoch);
-    ntp->tier_of = pool_id;
+    ntp->tier_of = *pool_id;
     ntp->cache_mode = mode;
     ntp->hit_set_count = g_conf().get_val<uint64_t>("osd_tier_default_cache_hit_set_count");
     ntp->hit_set_period = g_conf().get_val<uint64_t>("osd_tier_default_cache_hit_set_period");
@@ -13135,8 +13134,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool set-quota") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id < 0) {
+    auto pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (!pool_id) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
       goto reply;
@@ -13168,7 +13167,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    pg_pool_t *pi = pending_inc.get_new_pool(pool_id, osdmap.get_pg_pool(pool_id));
+    pg_pool_t *pi = pending_inc.get_new_pool(*pool_id,
+					     osdmap.get_pg_pool(*pool_id));
     if (field == "max_objects") {
       pi->quota_max_objects = value;
     } else if (field == "max_bytes") {
@@ -13441,8 +13441,8 @@ bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   auto m = op->get_req<MPoolOp>();
-  int64_t pool = osdmap.lookup_pg_pool_name(m->name.c_str());
-  if (pool >= 0) {
+  auto pool = osdmap.lookup_pg_pool_name(m->name.c_str());
+  if (pool) {
     _pool_op_reply(op, 0, osdmap.get_epoch());
     return true;
   }

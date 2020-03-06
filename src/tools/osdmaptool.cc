@@ -387,13 +387,13 @@ int main(int argc, const char **argv)
     vector<int64_t> pools;
     set<int64_t> upmap_pool_nums;
     for (auto& s : upmap_pools) {
-      int64_t p = osdmap.lookup_pg_pool_name(s);
-      if (p < 0) {
+      auto p = osdmap.lookup_pg_pool_name(s);
+      if (!p) {
 	cerr << " pool " << s << " does not exist" << std::endl;
 	exit(1);
       }
-      pools.push_back(p);
-      upmap_pool_nums.insert(p);
+      pools.push_back(*p);
+      upmap_pool_nums.insert(*p);
     }
     if (!pools.empty()) {
       cout << " limiting to pools " << upmap_pools << " (" << pools << ")"

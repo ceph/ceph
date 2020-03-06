@@ -1187,9 +1187,9 @@ bool DaemonServer::_handle_command(
           r = -ENOENT;
           return;
         }
-        auto pool_pg_num = osdmap.get_pg_num(pool_id);
+        auto pool_pg_num = osdmap.get_pg_num(*pool_id);
         for (int i = 0; i < pool_pg_num; i++) {
-          pg_t pg(i, pool_id);
+          pg_t pg(i, *pool_id);
           int primary;
           spg_t spg;
           auto got = osdmap.get_primary_shard(pg, &primary, &spg);
@@ -1248,12 +1248,12 @@ bool DaemonServer::_handle_command(
     cmd_getval(cmdctx->cmdmap, "pools", poolnames);
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	for (const auto& poolname : poolnames) {
-	  int64_t pool = osdmap.lookup_pg_pool_name(poolname);
-	  if (pool < 0) {
+	  auto pool = osdmap.lookup_pg_pool_name(poolname);
+	  if (!pool) {
 	    ss << "pool '" << poolname << "' does not exist";
 	    r = -ENOENT;
 	  }
-	  pools.insert(pool);
+	  pools.insert(*pool);
 	}
       });
     if (r) {
@@ -1349,13 +1349,12 @@ bool DaemonServer::_handle_command(
   } else if (prefix == "osd pool stats") {
     string pool_name;
     cmd_getval(cmdctx->cmdmap, "pool_name", pool_name);
-    int64_t poolid = -ENOENT;
+    std::optional<std::int64_t> poolid;
     bool one_pool = false;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
         if (!pool_name.empty()) {
           poolid = osdmap.lookup_pg_pool_name(pool_name);
-          if (poolid < 0) {
-            ceph_assert(poolid == -ENOENT);
+          if (!poolid) {
             ss << "unrecognized pool '" << pool_name << "'";
             return -ENOENT;
           }
@@ -1374,7 +1373,7 @@ bool DaemonServer::_handle_command(
           if (!one_pool) {
             poolid = p.first;
           }
-          pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, f.get(), &rs); 
+          pg_map.dump_pool_stats_and_io_rate(*poolid, osdmap, f.get(), &rs); 
           if (one_pool) {
             break;
           }
@@ -1695,9 +1694,9 @@ bool DaemonServer::_handle_command(
             r = -ENOENT;
             return;
           }
-          auto pool_pg_num = osdmap.get_pg_num(pool_id);
+          auto pool_pg_num = osdmap.get_pg_num(*pool_id);
           for (int i = 0; i < pool_pg_num; i++)
-            candidates.insert({(unsigned int)i, (uint64_t)pool_id});
+            candidates.insert({(unsigned int)i, (uint64_t)*pool_id});
         }
       });
       if (r < 0) {
