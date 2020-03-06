@@ -9,6 +9,8 @@
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_cr_rados.h"
 
+#include "auth/AuthRegistry.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 RGWSI_RADOS::RGWSI_RADOS(CephContext *cct) : RGWServiceInstance(cct)
@@ -381,5 +383,34 @@ int RGWSI_RADOS::clog_warn(const string& msg)
   bufferlist inbl;
   auto h = handle();
   return h.mon_command(cmd, inbl, nullptr, nullptr);
+}
+
+bool RGWSI_RADOS::check_secure_mon_conn() const
+{
+  AuthRegistry reg(cct);
+
+  reg.refresh_config();
+
+  std::vector<uint32_t> methods;
+  std::vector<uint32_t> modes;
+
+  reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
+  ldout(cct, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+
+  for (auto method : methods) {
+    if (!reg.is_secure_method(method)) {
+      ldout(cct, 20) << __func__ << "(): method " << method << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  for (auto mode : modes) {
+    if (!reg.is_secure_mode(mode)) {
+      ldout(cct, 20) << __func__ << "(): mode " << mode << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  return true;
 }
 

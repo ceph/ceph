@@ -68,6 +68,7 @@ public:
   void shutdown() override;
 
   uint64_t instance_id();
+  bool check_secure_mon_conn() const;
 
   RGWAsyncRadosProcessor *get_async_processor() {
     return async_processor.get();

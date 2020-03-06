@@ -603,7 +603,7 @@ int AsioFrontend::get_config_key_val(string name,
   }
 
   auto svc = env.store->svc()->config_key;
-  int r = svc->get(name, pbl);
+  int r = svc->get(name, true, pbl);
   if (r < 0) {
     lderr(ctx()) << type << " was not found: " << name << dendl;
     return r;
