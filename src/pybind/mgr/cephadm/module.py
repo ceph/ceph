@@ -1880,7 +1880,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return blink(locs)
 
     def get_osd_uuid_map(self, only_up=False):
-        # type: () -> Dict[str,str]
+        # type: (bool) -> Dict[str,str]
         osd_map = self.get('osd_map')
         r = {}
         for o in osd_map['osds']:
