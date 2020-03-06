@@ -130,10 +130,15 @@ class timer {
 
       if (suspended)
 	break;
-      if (schedule.empty())
+      if (schedule.empty()) {
 	cond.wait(l);
-      else
-	cond.wait_until(l, schedule.begin()->t);
+      } else {
+	// Since wait_until takes its parameter by reference, passing
+	// the time /in the event/ is unsafe, as it might be canceled
+	// while we wait.
+	const auto t = schedule.begin()->t;
+	cond.wait_until(l, t);
+      }
     }
   }
 
