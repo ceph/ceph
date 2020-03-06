@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 DEFAULT_IMAGE='docker.io/ceph/daemon-base:latest-master-devel'  # FIXME when octopus is ready!!!
+CONFIG_FILE='/etc/ceph/cephadm.cfg'
 DATA_DIR='/var/lib/ceph'
 LOG_DIR='/var/log/ceph'
 LOCK_DIR='/run/cephadm'
@@ -2145,7 +2146,7 @@ def command_deploy():
             daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
             if any([port_in_use(port) for port in daemon_ports]):
                 raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
-            elif args.image == DEFAULT_IMAGE:
+            elif args.image == cephadm_config.default_image:
                 raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
         # make sure provided config-json is sufficient
@@ -3656,11 +3657,26 @@ def _parse_args(av):
             if type_ in Monitoring.components:
                 args.image = Monitoring.components[type_]['image']
         if not args.image:
-            args.image = os.environ.get('CEPHADM_IMAGE', DEFAULT_IMAGE)
+            args.image = os.environ.get('CEPHADM_IMAGE', cephadm_config.default_image)
 
     return args
 
+class CephadmConfig(object):
+    default_image = DEFAULT_IMAGE
+
+    def __init__(self):
+        try:
+            cp = read_config(CONFIG_FILE)
+        except FileNotFoundError:
+            return
+        if cp.has_section("config"):
+            for k, v in cp.items("config"):
+                if hasattr(self, k):
+                    self.__setattr__(k, v)
+
 if __name__ == "__main__":
+    cephadm_config = CephadmConfig()
+
     # allow argv to be injected
     try:
         av = injected_argv # type: ignore
