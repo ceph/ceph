@@ -2244,7 +2244,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         target_hosts = [h.hostname for h in hosts]
         for d in daemons:
             if d.hostname not in target_hosts:
-                self._remove_daemon(d.name(), d.hostname)
+                # NOTE: we are passing the 'force' flag here, which means
+                # we can delete a mon instances data.
+                self._remove_daemon(d.name(), d.hostname, True)
                 r = True
 
         return r
