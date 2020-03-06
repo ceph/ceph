@@ -1077,8 +1077,6 @@ start_ganesha() {
         ganesha=$(($ganesha + 1))
         ganesha_dir="$CEPH_DEV_DIR/ganesha.$name"
 
-        echo "Starting ganesha.$name on port: $port"
-
         prun rm -rf $ganesha_dir
         prun mkdir -p $ganesha_dir
         prun ceph_adm fs nfs cluster create tester
@@ -1109,11 +1107,15 @@ EOF
         if $with_mgr_dashboard; then
             $CEPH_BIN/rados -p nfs-ganesha put "conf-$name" "$ganesha_dir/ganesha.conf"
         fi
+
+        echo "ganesha.$name started on port: $port"
     done
 
     if $with_mgr_dashboard; then
         ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace nfs-ganesha
     fi
+
+    echo "Mount using: mount -t nfs -o port=<ganesha-port-num> <address>:<ganesha pseudo path>"
 }
 
 if [ "$debug" -eq 0 ]; then
