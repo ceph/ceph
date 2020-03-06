@@ -11,7 +11,6 @@ import {
 import { Mutex } from 'async-mutex';
 import * as _ from 'lodash';
 import * as moment from 'moment';
-import { LocalStorage } from 'ngx-store';
 import { Subscription } from 'rxjs';
 
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -46,7 +45,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   icons = Icons;
 
   // Tasks
-  @LocalStorage() last_task = '';
+  last_task = '';
   mutex = new Mutex();
 
   simplebar = {
@@ -78,6 +77,8 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.last_task = window.localStorage.getItem('last_task');
+
     const permissions = this.authStorageService.getPermissions();
     if (permissions.prometheus.read && permissions.configOpt.read) {
       this.triggerPrometheusAlerts();
@@ -128,6 +129,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
           if (!this.last_task || moment(task.end_time).isAfter(this.last_task)) {
             this.last_task = task.end_time;
+            window.localStorage.setItem('last_task', this.last_task);
           }
 
           this.notificationService.save(notification);
