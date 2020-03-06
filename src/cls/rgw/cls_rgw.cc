@@ -403,13 +403,17 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
     if (val[0] == 'i') {
       key->instance = val.substr(1);
     } else if (val[0] == 'v') {
-      string err;
-      const char *s = val.c_str() + 1;
-      *ver = strict_strtoll(s, 10, &err);
-      if (!err.empty()) {
-        CLS_LOG(0, "ERROR: %s(): bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+      auto s = std::string_view(val);
+      s.remove_prefix(1);
+      auto v = ceph::parse<uint64_t>(s);
+      if (!v) {
+        CLS_LOG(0,
+		"ERROR: %s(): bad index_key (%s): could not parse val (v=%s)",
+		__func__, escape_str(index_key).c_str(),
+		val.c_str() + 1);
         return -EIO;
       }
+      *ver = *v;
     }
   }
 

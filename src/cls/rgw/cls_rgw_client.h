@@ -214,13 +214,12 @@ public:
         }
         return 0;
       }
-      string shard_str = iter->substr(0, pos);
-      string err;
-      int shard = (int)strict_strtol(shard_str.c_str(), 10, &err);
-      if (!err.empty()) {
+      auto shard_str = std::string_view(*iter).substr(0, pos);
+      auto shard = ceph::parse<int>(shard_str);
+      if (!shard) {
         return -EINVAL;
       }
-      add(shard, iter->substr(pos + 1));
+      add(*shard, iter->substr(pos + 1));
     }
     return 0;
   }

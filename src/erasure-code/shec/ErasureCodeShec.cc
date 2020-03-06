@@ -289,20 +289,26 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profi
     dout(10) << "(k, m, c) must be chosen" << dendl;
     err = -EINVAL;
   } else {
-    std::string err_k, err_m, err_c, value_k, value_m, value_c;
-    value_k = profile.find("k")->second;
-    value_m = profile.find("m")->second;
-    value_c = profile.find("c")->second;
-    k = strict_strtol(value_k.c_str(), 10, &err_k);
-    m = strict_strtol(value_m.c_str(), 10, &err_m);
-    c = strict_strtol(value_c.c_str(), 10, &err_c);
+    std::string_view value_k = profile.find("k")->second;
+    std::string_view value_m = profile.find("m")->second;
+    std::string_view value_c = profile.find("c")->second;
+    auto mk = ceph::parse<int>(value_k);
+    auto mm = ceph::parse<int>(value_m);
+    auto mc = ceph::parse<int>(value_c);
 
-    if (!err_k.empty() || !err_m.empty() || !err_c.empty()){
-      if (!err_k.empty()){
+    if (mk)
+      k = *mk;
+    if (mm)
+      m = *mm;
+    if (mc)
+      c = *mc;
+
+    if (!mk || !mm || !mc) {
+      if (!mk) {
 	derr << "could not convert k=" << value_k << "to int" << dendl;
-      } else if (!err_m.empty()){
+      } else if (!mm) {
 	derr << "could not convert m=" << value_m << "to int" << dendl;
-      } else if (!err_c.empty()){
+      } else if (!mc) {
 	derr << "could not convert c=" << value_c << "to int" << dendl;
       }
       err = -EINVAL;
@@ -343,6 +349,7 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profi
     return err;
   }
 
+
   dout(10) << "(k, m, c) set to " << "(" << k << ", " << m << ", "
 	   << c << ")"<< dendl;
 
@@ -351,14 +358,13 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profi
     dout(10) << "w default to " << DEFAULT_W << dendl;
     w = DEFAULT_W;
   } else {
-    std::string err_w, value_w;
-    value_w = profile.find("w")->second;
-    w = strict_strtol(value_w.c_str(), 10, &err_w);
+    std::string_view value_w = profile.find("w")->second;
+    auto mw = ceph::parse<int>(value_w);
+    w = mw.value_or(DEFAULT_W);
 
-    if (!err_w.empty()){
+    if (!mw) {
       derr << "could not convert w=" << value_w << "to int" << dendl;
       dout(10) << "w default to " << DEFAULT_W << dendl;
-      w = DEFAULT_W;
 
     } else if (w != 8 && w != 16 && w != 32) {
       derr << "w=" << w

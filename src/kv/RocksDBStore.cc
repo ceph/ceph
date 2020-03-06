@@ -201,15 +201,14 @@ static int string2bool(const string &val, bool &b_val)
     b_val = true;
     return 0;
   } else {
-    std::string err;
-    int b = strict_strtol(val.c_str(), 10, &err);
-    if (!err.empty())
+    auto b = ceph::parse<unsigned>(val);
+    if (!b)
       return -EINVAL;
-    b_val = !!b;
+    b_val = !!*b;
     return 0;
   }
 }
-  
+
 int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Options &opt)
 {
   if (key == "compaction_threads") {

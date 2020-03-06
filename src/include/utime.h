@@ -444,12 +444,12 @@ public:
             buf[i] = '0';
           }
           buf[i] = '\0';
-	  std::string err;
-          *nsec = (uint64_t)strict_strtol(buf, 10, &err);
-          if (!err.empty()) {
+          auto mn = ceph::parse<uint32_t>(buf);
+          if (!mn) {
             return -EINVAL;
           }
-        }
+	  *nsec = *mn;
+	}
       }
     } else {
       int sec, usec;
