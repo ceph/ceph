@@ -704,10 +704,6 @@ void MonClient::_reopen_session(int rank)
   for (auto& c : pending_cons) {
     c.second.start(monmap.get_epoch(), entity_name);
   }
-
-  if (sub.reload()) {
-    _renew_subs();
-  }
 }
 
 MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
@@ -882,6 +878,9 @@ void MonClient::_finish_hunting(int auth_err)
 		   << " to " << active_con->get_global_id() << dendl;
       }
       global_id = active_con->get_global_id();
+    }
+    if (sub.reload()) {
+      _renew_subs();
     }
   }
 }
