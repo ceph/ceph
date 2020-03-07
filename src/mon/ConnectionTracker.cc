@@ -65,8 +65,9 @@ void ConnectionTracker::receive_peer_report(const ConnectionTracker& o)
 bool ConnectionTracker::increase_epoch(epoch_t e)
 {
   if (e > epoch) {
-    my_reports->epoch_version = version = 0;
-    my_reports->epoch = epoch = e;
+    my_reports.epoch_version = version = 0;
+    my_reports.epoch = epoch = e;
+    peer_reports[rank] = my_reports;
     encoding.clear();
     return true;
   }
@@ -77,7 +78,8 @@ void ConnectionTracker::increase_version()
 {
   encoding.clear();
   ++version;
-  my_reports->epoch_version = version;
+  my_reports.epoch_version = version;
+  peer_reports[rank] = my_reports;
   if ((version % persist_interval) == 0 ) {
     owner->persist_connectivity_scores();
   }
@@ -86,16 +88,16 @@ void ConnectionTracker::increase_version()
 void ConnectionTracker::report_live_connection(int peer_rank, double units_alive)
 {
   // we need to "auto-initialize" to 1, do shenanigans
-  auto i = my_reports->history.find(peer_rank);
-  if (i == my_reports->history.end()) {
-    auto[j,k] = my_reports->history.insert(std::pair<int,double>(peer_rank,1.0));
+  auto i = my_reports.history.find(peer_rank);
+  if (i == my_reports.history.end()) {
+    auto[j,k] = my_reports.history.insert(std::pair<int,double>(peer_rank,1.0));
     i = j;
   }
   double& pscore = i->second;
   pscore = pscore * (1 - units_alive / (2 * half_life)) +
     (units_alive / (2 * half_life));
   pscore = std::min(pscore, 1.0);
-  my_reports->current[peer_rank] = true;
+  my_reports.current[peer_rank] = true;
 
   increase_version();
 }
@@ -103,16 +105,16 @@ void ConnectionTracker::report_live_connection(int peer_rank, double units_alive
 void ConnectionTracker::report_dead_connection(int peer_rank, double units_dead)
 {
   // we need to "auto-initialize" to 1, do shenanigans
-  auto i = my_reports->history.find(peer_rank);
-  if (i == my_reports->history.end()) {
-    auto[j,k] = my_reports->history.insert(std::pair<int,double>(peer_rank,1.0));
+  auto i = my_reports.history.find(peer_rank);
+  if (i == my_reports.history.end()) {
+    auto[j,k] = my_reports.history.insert(std::pair<int,double>(peer_rank,1.0));
     i = j;
   }
   double& pscore = i->second;
   pscore = pscore * (1 - units_dead / (2 * half_life)) -
     (units_dead / (2*half_life));
   pscore = std::max(pscore, 0.0);
-  my_reports->current[peer_rank] = false;
+  my_reports.current[peer_rank] = false;
   
   increase_version();
 }
@@ -165,8 +167,8 @@ void ConnectionTracker::decode(bufferlist::const_iterator& bl) {
   decode(half_life, bl);
   decode(peer_reports, bl);
   DECODE_FINISH(bl);
-
-  my_reports = &peer_reports[rank];
+  if (rank >=0)
+    my_reports = peer_reports[rank];
 }
 
 const bufferlist& ConnectionTracker::get_encoded_bl()
@@ -230,5 +232,5 @@ void ConnectionTracker::generate_test_instances(std::list<ConnectionTracker*>& o
   e->version = 4;
   e->peer_reports[0];
   e->peer_reports[1];
-  e->my_reports = &e->peer_reports[2];
+  e->my_reports = e->peer_reports[2];
 }
