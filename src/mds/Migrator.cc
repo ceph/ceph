@@ -2236,11 +2236,6 @@ void Migrator::export_finish(CDir *dir)
     mut->cleanup();
   }
 
-  if (dir->get_inode()->is_export_ephemeral_distributed_migrating)
-    dir->get_inode()->finish_export_ephemeral_distributed_migration();
-  else if (dir->get_inode()->is_export_ephemeral_random_migrating)
-    dir->get_inode()->finish_export_ephemeral_random_migration();
-
   if (parent)
     child_export_finish(parent, true);
 
@@ -3140,29 +3135,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   MutationRef mut = it->second.mut;
   import_state.erase(it);
 
-  // start the journal entry
-  EImportFinish *le = new EImportFinish(dir, true);
-  mds->mdlog->start_entry(le);
-
-  CInode *in = dir->get_inode();
-
-  CDentry *pdn = in->get_parent_dn();
-
-  if (in->get_export_ephemeral_random_pin(false)) {    // Lazy checks. FIXME
-    le->metablob.add_primary_dentry(pdn, in, false, false, false, false,
-          false, true);
-    in->is_export_ephemeral_random_pinned = true;
-    cache->ephemeral_pins.push_back(&in->ephemeral_pin_inode);
-  } else if (pdn->get_dir()->get_inode()
-        && pdn->get_dir()->get_inode()->get_export_ephemeral_distributed_pin()) {
-      le->metablob.add_primary_dentry(pdn, in, false, false, false, false,
-          true, false);
-      in->is_export_ephemeral_distributed_pinned = true;
-      cache->ephemeral_pins.push_back(&in->ephemeral_pin_inode);
-  }
-
-  // log it
-  mds->mdlog->submit_entry(le);
+  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
 
   // process delayed expires
   cache->process_delayed_expire(dir);
@@ -3467,6 +3440,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
     dir->verify_fragstat();
 #endif
 
+  dir->inode->maybe_ephemeral_dist();
   dir->inode->maybe_export_pin();
 
   dout(7) << " done " << *dir << dendl;

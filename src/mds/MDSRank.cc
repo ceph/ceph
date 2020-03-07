@@ -2939,7 +2939,10 @@ void MDSRank::command_get_subtrees(Formatter *f)
       f->dump_bool("is_auth", dir->is_auth());
       f->dump_int("auth_first", dir->get_dir_auth().first);
       f->dump_int("auth_second", dir->get_dir_auth().second);
-      f->dump_int("export_pin", dir->inode->get_export_pin());
+      f->dump_int("export_pin", dir->inode->get_export_pin(false, false));
+      f->dump_bool("distributed_ephemeral_pin", dir->inode->is_ephemeral_dist());
+      f->dump_bool("random_ephemeral_pin", dir->inode->is_ephemeral_rand());
+      f->dump_int("ephemeral_pin", mdcache->hash_into_rank_bucket(dir->inode->ino()));
       f->open_object_section("dir");
       dir->dump(f);
       f->close_section();
@@ -3596,8 +3599,8 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_dump_cache_threshold_file",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
-    "mds_export_ephemeral_random"
-    "mds_export_ephemeral_distributed"
+    "mds_export_ephemeral_random",
+    "mds_export_ephemeral_distributed",
     "mds_health_cache_threshold",
     "mds_inject_migrator_session_race",
     "mds_log_pause",
@@ -3648,6 +3651,8 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
 
   finisher->queue(new LambdaContext([this, changed](int) {
     std::scoped_lock lock(mds_lock);
+
+    dout(10) << "flushing conf change to components: " << changed << dendl;
 
     if (changed.count("mds_log_pause") && !g_conf()->mds_log_pause) {
       mdlog->kick_submitter();
