@@ -901,18 +901,9 @@ void MonClient::tick()
     ldout(cct, 1) << "continuing hunt" << dendl;
     return _reopen_session();
   } else if (active_con) {
-    // just renew as needed
+    _maybe_renew_subs();
     utime_t now = ceph_clock_now();
     auto cur_con = active_con->get_con();
-    if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
-      const bool maybe_renew = sub.need_renew();
-      ldout(cct, 10) << "renew subs? -- " << (maybe_renew ? "yes" : "no")
-		     << dendl;
-      if (maybe_renew) {
-	_renew_subs();
-      }
-    }
-
     cur_con->send_keepalive();
 
     if (cct->_conf->mon_client_ping_timeout > 0 &&
@@ -956,6 +947,18 @@ void MonClient::schedule_tick()
 }
 
 // ---------
+void MonClient::_maybe_renew_subs()
+{
+  ceph_assert(ceph_mutex_is_locked(monc_lock));
+  ceph_assert(active_con);
+  if (active_con->get_con()->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
+    const bool maybe_renew = sub.need_renew();
+    ldout(cct, 10) << "renew subs? -- " << (maybe_renew ? "yes" : "no") << dendl;
+    if (maybe_renew) {
+      _renew_subs();
+    }
+  }
+}
 
 void MonClient::_renew_subs()
 {

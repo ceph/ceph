@@ -386,6 +386,7 @@ public:
 private:
   // mon subscriptions
   MonSub sub;
+  void _maybe_renew_subs();
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
