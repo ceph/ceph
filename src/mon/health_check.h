@@ -74,7 +74,7 @@ struct health_mute_t {
   std::string code;
   utime_t ttl;
   bool sticky = false;
-  string summary;
+  std::string summary;
   int64_t count;
 
   DENC(health_mute_t, v, p) {

@@ -110,7 +110,7 @@ struct MonSession : public RefCountedObject {
     return socket_addr;
   }
 
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->dump_stream("name") << name;
     f->dump_stream("entity_name") << entity_name;
     f->dump_object("addrs", addrs);
