@@ -142,19 +142,84 @@ For each new host you'd like to add to the cluster, you need to do two things:
 Deploying additional monitors
 =============================
 
-Normally a Ceph cluster has at least three (or, preferably, five)
-monitor daemons spread across different hosts.  Since we are deploying
-a monitor, we again need to specify what IP address it will use,
-either as a simple IP address or as a CIDR network name.
+Normally a Ceph cluster has three or five monitor daemons spread
+across different hosts.  As a rule of thumb, you should deploy five
+monitors if there are five or more nodes in your cluster.
 
-To deploy additional monitors,::
+.. _CIDR: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
 
-  [monitor 1] # ceph orch daemon add mon *<host1:network1> [<host1:network2>...]*
+If all of your monitors will exist on the same IP subnet, cephadm can
+automatically scale the number of monitors.  This subnet should be
+specified in `CIDR`_ format (e.g., ``10.1.2.0/24``).  (If you do not
+specify a subnet, you will need to manually specify an IP or subnet
+when creating each monitor.)::
 
-For example, to deploy a second monitor on ``newhost`` using an IP
-address in network ``10.1.2.0/24``,::
+  # ceph config set mon public_network *<mon-cidr-network>*
 
-  [monitor 1] # ceph orch daemon add mon newhost:10.1.2.0/24
+For example::
+
+  # ceph config set mon public_network 10.1.2.0/24
+
+There are several ways to add additional monitors:
+
+* You can simply tell cephadm how many monitors you want, and it will pick the
+  hosts (randomly)::
+
+    # ceph orch apply mon *<number-of-monitors>*
+
+  For example, if you have 5 or more hosts added to the cluster,::
+
+    # ceph orch apply mon 5
+
+* You can explicitly specify which hosts to deploy on.  Be sure to include
+  the first monitor host in this list.::
+
+    # ceph orch apply mon *<host1,host2,host3,...>*
+
+  For example,::
+
+    # ceph orch apply mon host1,host2,host3
+
+* You can control which hosts the monitors run on by adding the ``mon`` label
+  to the appropriate hosts::
+
+    # ceph orch host label add *<hostname>* mon
+
+  To view the current hosts and labels,::
+
+    # ceph orch host ls
+
+  For example::
+
+    # ceph orch host label add host1 mon
+    # ceph orch host label add host2 mon
+    # ceph orch host label add host3 mon
+    # ceph orch host ls
+    HOST   ADDR   LABELS  STATUS  
+    host1         mon             
+    host2         mon             
+    host3         mon             
+    host4
+    host5
+
+  Then tell cephadm to deploy monitors based on the label::
+
+    # ceph orch apply mon label:mon
+
+* You can explicitly specify the IP address or CIDR for each monitor
+  and control where it is placed.  This is the only supported method
+  if you did not specify the CIDR monitor network above.
+
+  To deploy additional monitors,::
+
+    # ceph orch daemon add mon *<host1:ip-or-network1> [<host1:ip-or-network-2>...]*
+
+  For example, to deploy a second monitor on ``newhost1`` using an IP
+  address ``10.1.2.123`` and a third monitor on ``newhost2`` in
+  network ``10.1.2.0/24``,::
+
+    # ceph orch daemon add mon newhost1:10.1.2.123
+    # ceph orch daemon add mon newhost2:10.1.2.0/24
 
 Deploying OSDs
 ==============
