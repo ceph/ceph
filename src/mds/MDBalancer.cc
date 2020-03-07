@@ -145,7 +145,12 @@ void MDBalancer::handle_export_pins(void)
 	  dir->state_set(CDir::STATE_AUXSUBTREE);
 	}
       } else {
-	mds->mdcache->migrator->export_dir(dir, export_pin);
+        /* Only export a directory if it's non-empty. An empty directory will
+         * be sent back by the importer.
+         */
+        if (dir->get_num_head_items() > 0) {
+	  mds->mdcache->migrator->export_dir(dir, export_pin);
+        }
 	remove = false;
       }
     }
