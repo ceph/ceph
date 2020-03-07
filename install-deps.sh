@@ -184,6 +184,16 @@ function install_boost_on_ubuntu {
 	ceph-libboost-timer$ver-dev
 }
 
+function check_for_curl {
+    name="curl"
+    dpkg -s $name &> /dev/null  
+
+    if [ $? -ne 0 ]
+        then
+            sudo apt-get install -y $name
+    fi
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -291,6 +301,7 @@ else
         case "$VERSION" in
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
+		check_for_curl
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *Disco*)
