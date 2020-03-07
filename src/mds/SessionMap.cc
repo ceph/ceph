@@ -1103,11 +1103,12 @@ int SessionFilter::parse(
       // allow this to be a bare id for compatibility with pre-octopus asok
       // 'session evict'.
       std::string err;
-      id = strict_strtoll(s.c_str(), 10, &err);
-      if (!err.empty()) {
+      auto mid = ceph::parse<long long>(s);
+      if (!mid) {
 	*ss << "Invalid filter '" << s << "'";
 	return -EINVAL;
       }
+      id = *mid;
       return 0;
     }
 

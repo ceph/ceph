@@ -710,19 +710,17 @@ int FSMap::parse_filesystem(
       Filesystem::const_ref* result
       ) const
 {
-  std::string ns_err;
-  std::string s(ns_str);
-  fs_cluster_id_t fscid = strict_strtol(s.c_str(), 10, &ns_err);
-  if (!ns_err.empty() || filesystems.count(fscid) == 0) {
+  auto fscid = ceph::parse<fs_cluster_id_t>(ns_str);
+  if (!fscid || filesystems.count(*fscid) == 0) {
     for (auto &fs : filesystems) {
-      if (fs.second->mds_map.fs_name == s) {
+      if (fs.second->mds_map.fs_name == ns_str) {
         *result = std::const_pointer_cast<const Filesystem>(fs.second);
         return 0;
       }
     }
     return -ENOENT;
   } else {
-    *result = get_filesystem(fscid);
+    *result = get_filesystem(*fscid);
     return 0;
   }
 }
@@ -1099,14 +1097,13 @@ int FSMap::parse_role(
   }
 
   mds_rank_t rank;
-  std::string err;
-  std::string rank_str(role_str.substr(rank_pos));
-  long rank_i = strict_strtol(rank_str.c_str(), 10, &err);
-  if (rank_i < 0 || !err.empty()) {
+  auto rank_str = std::string_view(role_str).substr(rank_pos);
+  auto rank_i = ceph::parse<long>(rank_str);
+  if (!rank_i || *rank_i < 0) {
     ss << "Invalid rank '" << rank_str << "'";
     return -EINVAL;
   } else {
-    rank = rank_i;
+    rank = *rank_i;
   }
 
   if (fs->mds_map.in.count(rank) == 0) {

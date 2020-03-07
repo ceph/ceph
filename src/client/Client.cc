@@ -5586,11 +5586,9 @@ int Client::resolve_mds(
     return 0;
   }
 
-  std::string strtol_err;
-  long long rank_or_gid = strict_strtoll(mds_spec.c_str(), 10, &strtol_err);
-  if (strtol_err.empty()) {
+  if (auto rank_or_gid = ceph::parse<long long>(mds_spec)) {
     // It is a possible GID
-    const mds_gid_t mds_gid = mds_gid_t(rank_or_gid);
+    const mds_gid_t mds_gid = mds_gid_t(*rank_or_gid);
     if (fsmap->gid_exists(mds_gid)) {
       ldout(cct, 10) << __func__ << ": validated GID " << mds_gid << dendl;
       targets->push_back(mds_gid);
