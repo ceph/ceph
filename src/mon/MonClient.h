@@ -265,8 +265,7 @@ private:
   bool stopping = false;
 
   LogClient *log_client;
-  bool more_log_pending;
-
+  Context* do_send_log = nullptr;
   void send_log(bool flush = false);
 
   bool ms_dispatch(Message *m) override;
@@ -280,8 +279,9 @@ private:
   void handle_auth(MAuthReply *m);
 
   // monitor session
+  Context* do_tick = nullptr;
   void tick();
-  void schedule_tick();
+  void _send_ping();
 
   // monclient
   bool want_monmap;
@@ -303,6 +303,7 @@ private:
   bool had_a_connection;
   double reopen_interval_multiplier;
 
+  Context* do_hunt = nullptr;
   Dispatcher *handle_authentication_dispatcher = nullptr;
   
   bool _opened() const;

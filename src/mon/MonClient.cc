@@ -68,7 +68,6 @@ MonClient::MonClient(CephContext *cct_) :
   finisher(cct_),
   initialized(false),
   log_client(NULL),
-  more_log_pending(false),
   want_monmap(true),
   had_a_connection(false),
   reopen_interval_multiplier(
@@ -347,7 +346,7 @@ bool MonClient::ms_dispatch(Message *m)
     if (log_client) {
       log_client->handle_log_ack(static_cast<MLogAck*>(m));
       m->put();
-      if (more_log_pending) {
+      if (log_client->are_pending()) {
 	send_log();
       }
     } else {
@@ -363,17 +362,23 @@ bool MonClient::ms_dispatch(Message *m)
 
 void MonClient::send_log(bool flush)
 {
-  if (log_client) {
-    auto lm = log_client->get_mon_log_message(flush);
-    if (lm)
-      _send_mon_message(std::move(lm));
-    more_log_pending = log_client->are_pending();
+  ceph_assert(log_client);
+  auto lm = log_client->get_mon_log_message(flush);
+  if (lm)
+    _send_mon_message(std::move(lm));
+  log_client->are_pending();
+
+  if (do_send_log) {
+    timer.cancel_event(do_send_log);
   }
+  do_send_log = make_lambda_context([this](int) { send_log(); });
+  timer.add_event_after(cct->_conf->mon_client_log_interval, do_send_log);
 }
 
 void MonClient::flush_log()
 {
   std::lock_guard l(monc_lock);
+  ceph_assert(log_client);
   send_log();
 }
 
@@ -479,8 +484,6 @@ int MonClient::init()
 
   timer.init();
   finisher.start();
-  schedule_tick();
-
   return 0;
 }
 
@@ -504,6 +507,7 @@ void MonClient::shutdown()
 		 << " pending message(s)" << dendl;
   waiting_for_session.clear();
 
+  timer.shutdown();
   active_con.reset();
   pending_cons.clear();
   auth.reset();
@@ -516,7 +520,6 @@ void MonClient::shutdown()
     initialized = false;
   }
   monc_lock.lock();
-  timer.shutdown();
   stopping = false;
   monc_lock.unlock();
 }
@@ -834,6 +837,20 @@ bool MonClient::_hunting() const
 void MonClient::_start_hunting()
 {
   ceph_assert(!_hunting());
+
+  timer.cancel_event(do_tick);
+  do_tick = nullptr;
+  timer.cancel_event(do_send_log);
+  do_send_log = nullptr;
+
+  const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
+			      reopen_interval_multiplier);
+  do_hunt = make_lambda_context([this](int) {
+    ldout(cct, 1) << "continuing hunt" << dendl;
+    _reopen_session();
+  });
+  timer.add_event_after(hunt_interval, do_hunt);
+
   // adjust timeouts if necessary
   if (!had_a_connection)
     return;
@@ -863,6 +880,9 @@ void MonClient::_finish_hunting(int auth_err)
   had_a_connection = true;
   _un_backoff();
 
+  timer.cancel_event(do_hunt);
+  do_hunt = nullptr;
+
   if (auth_err) {
     return;
   }
@@ -873,54 +893,49 @@ void MonClient::_finish_hunting(int auth_err)
     waiting_for_session.pop_front();
   }
   _resend_mon_commands();
-  send_log(true);
-  if (active_con) {
-    std::swap(auth, active_con->get_auth());
-    if (global_id && global_id != active_con->get_global_id()) {
-      lderr(cct) << __func__ << " global_id changed from " << global_id
-		 << " to " << active_con->get_global_id() << dendl;
-    }
-    global_id = active_con->get_global_id();
+  if (log_client) {
+    send_log(true);
   }
   if (sub.reload()) {
     _renew_subs();
   }
+  ceph_assert(active_con);
+  std::swap(auth, active_con->get_auth());
+  if (global_id && global_id != active_con->get_global_id()) {
+    lderr(cct) << __func__ << " global_id changed from " << global_id
+	       << " to " << active_con->get_global_id() << dendl;
+  }
+  global_id = active_con->get_global_id();
+  tick();
 }
 
 void MonClient::tick()
 {
-  ldout(cct, 10) << __func__ << dendl;
-
-  auto reschedule_tick = make_scope_guard([this] {
-      schedule_tick();
-    });
-
+  _send_ping();
+  _maybe_renew_subs();
   _check_auth_tickets();
-  _check_tell_commands();
-  
-  if (_hunting()) {
-    ldout(cct, 1) << "continuing hunt" << dendl;
-    return _reopen_session();
-  } else if (active_con) {
-    _maybe_renew_subs();
+
+  do_tick = make_lambda_context( [this](int) { tick(); });
+}
+
+void MonClient::_send_ping()
+{
+  ceph_assert(ceph_mutex_is_locked(monc_lock));
+  ceph_assert(active_con);
+
+  ldout(cct, 10) << __func__ << dendl;
+  auto cur_con = active_con->get_con();
+  cur_con->send_keepalive();
+  if (cct->_conf->mon_client_ping_timeout > 0 &&
+      cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
     utime_t now = ceph_clock_now();
-    auto cur_con = active_con->get_con();
-    cur_con->send_keepalive();
-
-    if (cct->_conf->mon_client_ping_timeout > 0 &&
-	cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
-      utime_t lk = cur_con->get_last_keepalive_ack();
-      utime_t interval = now - lk;
-      if (interval > cct->_conf->mon_client_ping_timeout) {
-	ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
-		      << " seconds), reconnecting" << dendl;
-	return _reopen_session();
-      }
+    utime_t lk = cur_con->get_last_keepalive_ack();
+    utime_t interval = now - lk;
+    if (interval > cct->_conf->mon_client_ping_timeout) {
+      ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
+		    << " seconds), reconnecting" << dendl;
+      return _reopen_session();
     }
-
-    _un_backoff();
-
-    send_log();
   }
 }
 
@@ -933,18 +948,6 @@ void MonClient::_un_backoff()
     cct->_conf.get_val<double>("mon_client_hunt_interval_backoff"));
   ldout(cct, 20) << __func__ << " reopen_interval_multipler now "
 		 << reopen_interval_multiplier << dendl;
-}
-
-void MonClient::schedule_tick()
-{
-  auto do_tick = make_lambda_context([this](int) { tick(); });
-  if (_hunting()) {
-    const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
-				reopen_interval_multiplier);
-    timer.add_event_after(hunt_interval, do_tick);
-  } else {
-    timer.add_event_after(cct->_conf->mon_client_ping_interval, do_tick);
-  }
 }
 
 // ---------
@@ -999,7 +1002,6 @@ int MonClient::_check_auth_tickets()
       auth->build_request(m->auth_payload);
       _send_mon_message(m);
     }
-
     _check_auth_rotating();
   }
   return 0;
@@ -1180,6 +1182,9 @@ void MonClient::_send_command(MonCommand *r)
 void MonClient::_check_tell_commands()
 {
   // resend any requests
+  if (mon_commands.empty()) {
+    return;
+  }
   auto now = ceph_clock_now();
   auto p = mon_commands.begin();
   while (p != mon_commands.end()) {
@@ -1192,6 +1197,9 @@ void MonClient::_check_tell_commands()
       _send_command(cmd); // might remove cmd from mon_commands
     }
   }
+  timer.add_event_after(
+    cct->_conf->mon_client_hunt_interval,
+    make_lambda_context([this](int) { _check_tell_commands(); }));
 }
 
 void MonClient::_resend_mon_commands()
@@ -1330,6 +1338,9 @@ void MonClient::start_mon_command(const std::vector<string>& cmd,
   }
   mon_commands[r->tid] = r;
   _send_command(r);
+  timer.add_event_after(
+    cct->_conf->mon_client_hunt_interval,
+    make_lambda_context([this](int) { _check_tell_commands(); }));
 }
 
 void MonClient::start_mon_command(const string &mon_name,
