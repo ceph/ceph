@@ -41,7 +41,7 @@ protected:
 public:  
   bool is_success() const { return success; }
   std::string_view get_type_name() const override { return "ExPAck"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export_prep_ack(" << dirfrag << (success ? " success)" : " fail)");
   }
 

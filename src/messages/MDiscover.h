@@ -68,12 +68,13 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "Dis"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "discover(" << header.tid << " " << base_ino << "." << base_dir_frag
 	<< " " << want << ")";
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(base_ino, p);
     decode(base_dir_frag, p);

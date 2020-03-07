@@ -22,7 +22,7 @@
 class MOSDPGTemp : public PaxosServiceMessage {
 public:
   epoch_t map_epoch = 0;
-  map<pg_t, vector<int32_t> > pg_temp;
+  std::map<pg_t, std::vector<int32_t> > pg_temp;
   bool forced = false;
 
   MOSDPGTemp(epoch_t e)
@@ -44,6 +44,7 @@ public:
     encode(forced, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(map_epoch, p);
@@ -54,7 +55,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "osd_pgtemp"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }
 private:

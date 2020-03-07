@@ -25,7 +25,7 @@ class MExportCapsAck : public SafeMessage {
 
 public:  
   inodeno_t ino;
-  bufferlist cap_bl;
+  ceph::buffer::list cap_bl;
 
 protected:
   MExportCapsAck() :
@@ -36,7 +36,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "export_caps_ack"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export_caps_ack(" << ino << ")";
   }
 
@@ -46,6 +46,7 @@ public:
     encode(cap_bl, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(ino, p);
     decode(cap_bl, p);

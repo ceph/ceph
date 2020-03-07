@@ -26,7 +26,7 @@ private:
   dirfrag_t get_base_dirfrag() const { return base_dirfrag; }
   int get_bits() const { return bits; }
 
-  bufferlist basebl;
+  ceph::buffer::list basebl;
 
 protected:
   MMDSFragmentNotifyAck() : SafeMessage{MSG_MDS_FRAGMENTNOTIFYACK} {}
@@ -39,7 +39,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "fragment_notify_ack"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "fragment_notify_ack(" << base_dirfrag << " " << (int)bits << ")";
   }
 
@@ -49,6 +49,7 @@ public:
     encode(bits, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(base_dirfrag, p);
     decode(bits, p);

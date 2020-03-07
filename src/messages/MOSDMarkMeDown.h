@@ -45,6 +45,7 @@ public:
   epoch_t get_epoch() const { return epoch; }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     if (header.version <= 2) {
@@ -88,7 +89,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "MOSDMarkMeDown"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "MOSDMarkMeDown("
 	<< "request_ack=" << request_ack
 	<< ", osd." << target_osd

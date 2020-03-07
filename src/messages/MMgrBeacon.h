@@ -43,7 +43,7 @@ protected:
   // Information about the modules found locally on this daemon
   std::vector<MgrMap::ModuleInfo> modules;
 
-  map<string,string> metadata; ///< misc metadata about this osd
+  std::map<std::string,std::string> metadata; ///< misc metadata about this osd
 
   std::vector<entity_addrvec_t> clients;
 
@@ -58,7 +58,7 @@ public:
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addrvec_t server_addrs_, bool available_,
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
-	     map<string,string>&& metadata_,
+	     std::map<std::string,std::string>&& metadata_,
              std::vector<entity_addrvec_t> clients,
 	     uint64_t feat)
     : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
@@ -114,7 +114,7 @@ public:
 
   std::string_view get_type_name() const override { return "mgrbeacon"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_type_name() << " mgr." << name << "(" << fsid << ","
 	<< gid << ", " << server_addrs << ", " << available
 	<< ")";
@@ -155,6 +155,7 @@ public:
     encode(clients, payload, features);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(server_addrs, p);  // entity_addr_t for version < 8

@@ -22,11 +22,11 @@ class MMDSOpenIno : public SafeMessage {
   static const int COMPAT_VERSION = 1;
 public:
   inodeno_t ino;
-  vector<inode_backpointer_t> ancestors;
+  std::vector<inode_backpointer_t> ancestors;
 
 protected:
   MMDSOpenIno() : SafeMessage{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION} {}
-  MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
+  MMDSOpenIno(ceph_tid_t t, inodeno_t i, std::vector<inode_backpointer_t>* pa) :
     SafeMessage{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION}, ino(i) {
     header.tid = t;
     if (pa)
@@ -36,7 +36,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "openino"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "openino(" << header.tid << " " << ino << " " << ancestors << ")";
   }
 
@@ -46,6 +46,7 @@ public:
     encode(ancestors, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(ino, p);
     decode(ancestors, p);

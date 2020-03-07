@@ -22,7 +22,7 @@ private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 2;
 
-  vector<PullOp> pulls;
+  std::vector<PullOp> pulls;
 
 public:
   pg_shard_t from;
@@ -40,10 +40,10 @@ public:
     return pgid;
   }
 
-  void take_pulls(vector<PullOp> *outpulls) {
+  void take_pulls(std::vector<PullOp> *outpulls) {
     outpulls->swap(pulls);
   }
-  void set_pulls(vector<PullOp> *inpulls) {
+  void set_pulls(std::vector<PullOp> *inpulls) {
     inpulls->swap(pulls);
   }
 
@@ -53,9 +53,7 @@ public:
 
   void compute_cost(CephContext *cct) {
     cost = 0;
-    for (vector<PullOp>::iterator i = pulls.begin();
-	 i != pulls.end();
-	 ++i) {
+    for (auto i = pulls.begin(); i != pulls.end(); ++i) {
       cost += i->cost(cct);
     }
   }
@@ -65,6 +63,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
@@ -92,7 +91,7 @@ public:
 
   std::string_view get_type_name() const override { return "MOSDPGPull"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "MOSDPGPull(" << pgid
 	<< " e" << map_epoch << "/" << min_epoch
 	<< " cost " << cost

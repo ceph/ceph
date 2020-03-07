@@ -55,7 +55,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "client_session"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_session(" << ceph_session_op_name(get_op());
     if (get_seq())
       out << " seq " << get_seq();
@@ -64,7 +64,8 @@ public:
     out << ")";
   }
 
-  void decode_payload() override { 
+  void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
     if (header.version >= 2)

@@ -31,7 +31,7 @@ private:
   entity_addrvec_t hb_back_addrs, hb_front_addrs;
   entity_addrvec_t cluster_addrs;
   epoch_t boot_epoch;  // last epoch this daemon was added to the map (if any)
-  map<string,string> metadata; ///< misc metadata about this osd
+  std::map<std::string,std::string> metadata; ///< misc metadata about this osd
   uint64_t osd_features;
 
   MOSDBoot()
@@ -57,12 +57,12 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "osd_boot"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch
 	<< " features " << osd_features
 	<< " v" << version << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
@@ -90,6 +90,7 @@ public:
   }
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     paxos_decode(p);
     if (header.version < 7) {
       entity_addr_t a;

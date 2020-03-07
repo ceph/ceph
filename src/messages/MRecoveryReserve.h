@@ -87,7 +87,7 @@ public:
     return "MRecoveryReserve";
   }
 
-  void inner_print(ostream& out) const override {
+  void inner_print(std::ostream& out) const override {
     switch (type) {
     case REQUEST:
       out << "REQUEST";
@@ -107,6 +107,7 @@ public:
 
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     decode(pgid.pgid, p);
     decode(query_epoch, p);
     decode(type, p);

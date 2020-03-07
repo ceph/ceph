@@ -26,23 +26,23 @@ class MMDSResolve : public SafeMessage {
   static const int COMPAT_VERSION = 1;
 
 public:
-  map<dirfrag_t, vector<dirfrag_t> > subtrees;
-  map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
+  std::map<dirfrag_t, std::vector<dirfrag_t>> subtrees;
+  std::map<dirfrag_t, std::vector<dirfrag_t>> ambiguous_imports;
 
   class slave_inode_cap {
   public:
     inodeno_t ino;
-    map<client_t,Capability::Export> cap_exports;
+    std::map<client_t,Capability::Export> cap_exports;
     slave_inode_cap() {}
     slave_inode_cap(inodeno_t a, map<client_t, Capability::Export> b) : ino(a), cap_exports(b) {}
-    void encode(bufferlist &bl) const 
+    void encode(ceph::buffer::list &bl) const 
     {
       ENCODE_START(1, 1, bl);
       encode(ino, bl);
       encode(cap_exports, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::const_iterator &blp)
+    void decode(ceph::buffer::list::const_iterator &blp)
     {
       DECODE_START(1, blp);
       decode(ino, blp);
@@ -53,16 +53,16 @@ public:
   WRITE_CLASS_ENCODER(slave_inode_cap)
 
   struct slave_request {
-    bufferlist inode_caps;
+    ceph::buffer::list inode_caps;
     bool committing;
     slave_request() : committing(false) {}
-    void encode(bufferlist &bl) const {
+    void encode(ceph::buffer::list &bl) const {
       ENCODE_START(1, 1, bl);
       encode(inode_caps, bl);
       encode(committing, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::const_iterator &blp) {
+    void decode(ceph::buffer::list::const_iterator &blp) {
       DECODE_START(1, blp);
       decode(inode_caps, blp);
       decode(committing, blp);
@@ -70,30 +70,30 @@ public:
     }
   };
 
-  map<metareqid_t, slave_request> slave_requests;
+  std::map<metareqid_t, slave_request> slave_requests;
 
   // table client information
   struct table_client {
     __u8 type;
-    set<version_t> pending_commits;
+    std::set<version_t> pending_commits;
 
     table_client() : type(0) {}
-    table_client(int _type, const set<version_t>& commits)
+    table_client(int _type, const std::set<version_t>& commits)
       : type(_type), pending_commits(commits) {}
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       encode(type, bl);
       encode(pending_commits, bl);
     }
-    void decode(bufferlist::const_iterator& bl) {
+    void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       decode(type, bl);
       decode(pending_commits, bl);
     }
   };
 
-  list<table_client> table_clients;
+  std::list<table_client> table_clients;
 
 protected:
   MMDSResolve() : SafeMessage{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
@@ -103,7 +103,7 @@ protected:
 public:
   std::string_view get_type_name() const override { return "mds_resolve"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mds_resolve(" << subtrees.size()
 	<< "+" << ambiguous_imports.size()
 	<< " subtrees +" << slave_requests.size() << " slave requests)";
@@ -116,7 +116,7 @@ public:
     subtrees[im].push_back(ex);
   }
 
-  void add_ambiguous_import(dirfrag_t im, const vector<dirfrag_t>& m) {
+  void add_ambiguous_import(dirfrag_t im, const std::vector<dirfrag_t>& m) {
     ambiguous_imports[im] = m;
   }
 
@@ -124,11 +124,11 @@ public:
     slave_requests[reqid].committing = committing;
   }
 
-  void add_slave_request(metareqid_t reqid, bufferlist& bl) {
+  void add_slave_request(metareqid_t reqid, ceph::buffer::list& bl) {
     slave_requests[reqid].inode_caps.claim(bl);
   }
 
-  void add_table_commits(int table, const set<version_t>& pending_commits) {
+  void add_table_commits(int table, const std::set<version_t>& pending_commits) {
     table_clients.push_back(table_client(table, pending_commits));
   }
 
@@ -152,7 +152,7 @@ private:
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
-inline ostream& operator<<(ostream& out, const MMDSResolve::slave_request&) {
+inline std::ostream& operator<<(std::ostream& out, const MMDSResolve::slave_request&) {
     return out;
 }
 

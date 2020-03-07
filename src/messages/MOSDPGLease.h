@@ -45,7 +45,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "pg_lease"; }
-  void inner_print(ostream& out) const override {
+  void inner_print(std::ostream& out) const override {
     out << lease;
   }
 
@@ -56,6 +56,7 @@ public:
     encode(lease, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(spgid, p);

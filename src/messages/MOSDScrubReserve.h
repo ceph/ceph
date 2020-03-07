@@ -55,7 +55,7 @@ public:
     return "MOSDScrubReserve";
   }
 
-  void print(ostream& out) const {
+  void print(std::ostream& out) const {
     out << "MOSDScrubReserve(" << pgid << " ";
     switch (type) {
     case REQUEST:
@@ -76,6 +76,7 @@ public:
   }
 
   void decode_payload() {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);

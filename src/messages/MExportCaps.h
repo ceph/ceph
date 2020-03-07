@@ -26,9 +26,9 @@ private:
 
 public:  
   inodeno_t ino;
-  bufferlist cap_bl;
-  map<client_t,entity_inst_t> client_map;
-  map<client_t,client_metadata_t> client_metadata_map;
+  ceph::buffer::list cap_bl;
+  std::map<client_t,entity_inst_t> client_map;
+  std::map<client_t,client_metadata_t> client_metadata_map;
 
 protected:
   MExportCaps() :
@@ -37,7 +37,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "export_caps"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export_caps(" << ino << ")";
   }
 
@@ -49,6 +49,7 @@ public:
     encode(client_metadata_map, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(ino, p);
     decode(cap_bl, p);

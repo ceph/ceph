@@ -31,7 +31,7 @@ public:
   std::string_view get_type_name() const override {
     return "pg_create2";
   }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_create2(e" << epoch << " " << pgs << ")";
   }
 

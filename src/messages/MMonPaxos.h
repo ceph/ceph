@@ -59,11 +59,11 @@ private:
   utime_t sent_timestamp;
 
   version_t latest_version = 0;
-  bufferlist latest_value;
+  ceph::buffer::list latest_value;
 
-  map<version_t,bufferlist> values;
+  std::map<version_t,ceph::buffer::list> values;
 
-  bufferlist feature_map;
+  ceph::buffer::list feature_map;
 
   MMonPaxos() : Message{MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION} { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
@@ -78,10 +78,10 @@ private:
 private:
   ~MMonPaxos() override {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "paxos"; }
-  
-  void print(ostream& out) const override {
+
+  void print(std::ostream& out) const override {
     out << "paxos(" << get_opname(op) 
 	<< " lc " << last_committed
 	<< " fc " << first_committed
@@ -109,6 +109,7 @@ public:
     encode(feature_map, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(op, p);

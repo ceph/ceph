@@ -53,6 +53,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(op, p);
     decode(map_epoch, p);
@@ -100,7 +101,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "pg_backfill"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_backfill(" << get_op_name(op)
 	<< " " << pgid
 	<< " e " << map_epoch << "/" << query_epoch

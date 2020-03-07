@@ -37,14 +37,14 @@ public:
   static constexpr int COMPAT_VERSION = 2;
 
   uuid_d fsid;
-  vector<spg_t> forced_pgs;
+  std::vector<spg_t> forced_pgs;
   uint8_t options = 0;
 
   MOSDForceRecovery() : Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDForceRecovery(const uuid_d& f, char opts) :
     Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), options(opts) {}
-  MOSDForceRecovery(const uuid_d& f, vector<spg_t>& pgs, char opts) :
+  MOSDForceRecovery(const uuid_d& f, std::vector<spg_t>& pgs, char opts) :
     Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
@@ -52,7 +52,7 @@ private:
 
 public:
   std::string_view get_type_name() const { return "force_recovery"; }
-  void print(ostream& out) const {
+  void print(std::ostream& out) const {
     out << "force_recovery(";
     if (forced_pgs.empty())
       out << "osd";
@@ -72,7 +72,7 @@ public:
     if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       header.version = 1;
       header.compat_version = 1;
-      vector<pg_t> pgs;
+      std::vector<pg_t> pgs;
       for (auto pgid : forced_pgs) {
 	pgs.push_back(pgid.pgid);
       }
@@ -88,9 +88,10 @@ public:
     encode(options, payload);
   }
   void decode_payload() {
+    using ceph::decode;
     auto p = payload.cbegin();
     if (header.version == 1) {
-      vector<pg_t> pgs;
+      std::vector<pg_t> pgs;
       decode(fsid, p);
       decode(pgs, p);
       decode(options, p);

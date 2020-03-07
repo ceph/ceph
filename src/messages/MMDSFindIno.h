@@ -32,7 +32,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "findino"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "findino(" << tid << " " << ino << ")";
   }
 
@@ -42,6 +42,7 @@ public:
     encode(ino, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(tid, p);
     decode(ino, p);

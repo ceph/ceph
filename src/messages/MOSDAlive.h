@@ -37,11 +37,12 @@ public:
   void decode_payload() override {
     auto p = payload.cbegin();
     paxos_decode(p);
+    using ceph::decode;
     decode(want, p);
   }
 
   std::string_view get_type_name() const override { return "osd_alive"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "osd_alive(want up_thru " << want << " have " << version << ")";
   }
 private:
