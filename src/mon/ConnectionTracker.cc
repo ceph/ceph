@@ -145,6 +145,44 @@ void ConnectionTracker::get_total_connection_score(int peer_rank, double *rating
   *live_count = live;
 }
 
+void ConnectionTracker::notify_rank_removed(int rank_removed)
+{
+  encoding.clear();
+  size_t starting_size = my_reports.current.size();
+  // erase the removed rank from everywhere
+  my_reports.current.erase(rank_removed);
+  my_reports.history.erase(rank_removed);
+  peer_reports.erase(rank_removed);
+  // Move ranks > rank_removed down by 1
+  // First in my_reports' history+current
+  auto ci = my_reports.current.upper_bound(rank_removed);
+  auto hi = my_reports.history.upper_bound(rank_removed);
+  while (ci != my_reports.current.end()) {
+    ceph_assert(ci->first == hi->first);
+    my_reports.current[ci->first - 1] = ci->second;
+    my_reports.history[hi->first - 1] = hi->second;
+    my_reports.current.erase(ci++);
+    my_reports.history.erase(hi++);
+  }
+  ceph_assert((my_reports.current.size() == starting_size) ||
+	      (my_reports.current.size() + 1 == starting_size));
+
+  // now move ranks down one in peer_reports
+  starting_size = peer_reports.size();
+  auto pi = peer_reports.upper_bound(rank_removed);
+  while (pi != peer_reports.end()) {
+    peer_reports[pi->first - 1] = pi->second;
+    peer_reports.erase(pi++);
+  }
+  ceph_assert((peer_reports.size() == starting_size) ||
+	      (peer_reports.size() + 1 == starting_size));
+
+  if (rank_removed < rank) {
+    --rank;
+    my_reports.rank = rank;
+  }
+}
+
 void ConnectionTracker::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
