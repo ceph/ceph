@@ -574,7 +574,7 @@ struct sha_digest_t {
     for (size_t i = 0; i < S; i++) {
       ::sprintf(&str[i * 2], "%02x", static_cast<int>(v[i]));
     }
-    return string(str);
+    return std::string(str);
   }
   sha_digest_t(const unsigned char *_v) { memcpy(v, _v, SIZE); };
   sha_digest_t() {}
