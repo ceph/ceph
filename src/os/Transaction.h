@@ -5,8 +5,10 @@
 
 #include <map>
 
+#include "include/Context.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
+
 #include "osd/osd_types.h"
 
 #define OPS_PER_PTR 32
@@ -362,7 +364,7 @@ public:
   }
   static Context *collect_all_contexts(
     Transaction& t) {
-    list<Context*> contexts;
+    std::list<Context*> contexts;
     contexts.splice(contexts.end(), t.on_applied);
     contexts.splice(contexts.end(), t.on_commit);
     contexts.splice(contexts.end(), t.on_applied_sync);
