@@ -2785,6 +2785,9 @@ receivers:
         return trivial_result(r)
 
     def upgrade_start(self, image, version):
+        if self.mode != 'root':
+            raise OrchestratorError('upgrade is not supported in %s mode' % (
+                self.mode))
         if version:
             target_name = self.container_image_base + ':v' + version
         elif image:
