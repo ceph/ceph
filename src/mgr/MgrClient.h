@@ -126,7 +126,7 @@ public:
   bool handle_mgr_close(ceph::ref_t<MMgrClose> m);
   bool handle_command_reply(
     uint64_t tid,
-    bufferlist& data,
+    ceph::buffer::list& data,
     const std::string& rs,
     int r);
 
@@ -151,7 +151,7 @@ public:
     ceph::buffer::list *outbl, std::string *outs,
     Context *onfinish);
   int start_tell_command(
-    const string& name,
+    const std::string& name,
     const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
     ceph::buffer::list *outbl, std::string *outs,
     Context *onfinish);
