@@ -8000,7 +8000,7 @@ std::vector<Option> get_mds_options() {
     .set_description("allow setting directory export pins to particular ranks"),
 
     Option("mds_export_ephemeral_random", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("allow ephemeral random pinning of the loaded subtrees")
     .set_long_description("probabilistically pin the loaded directory inode and the subtree beneath it to an MDS based on the consistent hash of the inode number. The higher this value the more likely the loaded subtrees get pinned"),
@@ -8013,7 +8013,7 @@ std::vector<Option> get_mds_options() {
     .add_see_also("mds_export_ephemeral_random"),
 
     Option("mds_export_ephemeral_distributed", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("allow ephemeral distributed pinning of the loaded subtrees")
     .set_long_description("pin the immediate child directories of the loaded directory inode based on the consistent hash of the child's inode number. "),
