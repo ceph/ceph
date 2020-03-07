@@ -4518,7 +4518,7 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
        p != s->ops.end();
        ++p) {
     Op *op = p->second;
-    auto age = std::chrono::duration<double>(coarse_mono_clock::now() - op->stamp);
+    auto age = std::chrono::duration<double>(ceph::coarse_mono_clock::now() - op->stamp);
     fmt->open_object_section("op");
     fmt->dump_unsigned("tid", op->tid);
     op->target.dump(fmt);

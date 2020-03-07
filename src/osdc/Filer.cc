@@ -34,6 +34,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".filer "
 
+using std::hex;
+using std::dec;
+using std::vector;
+
 class Filer::C_Probe : public Context {
 public:
   Filer *filer;
@@ -156,9 +160,7 @@ void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
 			   probe->probing_len, 0, probe->probing);
 
   std::vector<ObjectExtent> stat_extents;
-  for (vector<ObjectExtent>::iterator p = probe->probing.begin();
-       p != probe->probing.end();
-       ++p) {
+  for (auto p = probe->probing.begin(); p != probe->probing.end(); ++p) {
     ldout(cct, 10) << "_probe  probing " << p->oid << dendl;
     probe->ops.insert(p->oid);
     stat_extents.push_back(*p);
@@ -211,9 +213,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
     std::reverse(probe->probing.begin(), probe->probing.end());
   }
 
-  for (vector<ObjectExtent>::iterator p = probe->probing.begin();
-       p != probe->probing.end();
-       ++p) {
+  for (auto p = probe->probing.begin(); p != probe->probing.end(); ++p) {
     uint64_t shouldbe = p->length + p->offset;
     ldout(cct, 10) << "_probed  " << probe->ino << " object " << hex
 		   << p->oid << dec << " should be " << shouldbe
@@ -231,8 +231,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
       // aha, we found the end!
       // calc offset into buffer_extent to get distance from probe->from.
       uint64_t oleft = probe->known_size[p->oid] - p->offset;
-      for (vector<pair<uint64_t, uint64_t> >::iterator i
-	     = p->buffer_extents.begin();
+      for (auto i = p->buffer_extents.begin();
 	   i != p->buffer_extents.end();
 	   ++i) {
 	if (oleft <= (uint64_t)i->second) {

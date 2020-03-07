@@ -122,7 +122,7 @@
 
     private:
       void add_partial_sparse_result(
-          CephContext *cct, bufferlist& bl,
+          CephContext *cct, ceph::buffer::list& bl,
           std::map<uint64_t, uint64_t>::const_iterator* it,
           const std::map<uint64_t, uint64_t>::const_iterator& end_it,
           uint64_t* bl_off, uint64_t tofs, uint64_t tlen);
