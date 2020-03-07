@@ -225,6 +225,7 @@ Further Reading
     :maxdepth: 2
 
     Cephadm administration <administration>
+    Cephadm monitoring <monitoring>
     Cephadm CLI <../mgr/orchestrator>
     DriveGroups <drivegroups>
     OS recommendations <../start/os-recommendations>
