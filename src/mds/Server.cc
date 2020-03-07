@@ -5638,7 +5638,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
 
     client_t exclude_ct = mdr->get_client();
     mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
-  } else if (name.find("ceph.dir.pin") == 0) {
+  } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
       return;
@@ -5660,7 +5660,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     auto &pi = cur->project_inode();
     cur->set_export_pin(rank);
     pip = &pi.inode;
-  }  else if (name.find("ceph.dir.pin.random") == 0) {
+  } else if (name == "ceph.dir.pin.random"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
       return;
@@ -5681,7 +5681,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     auto &pi = cur->project_inode();
     cur->set_export_ephemeral_random_pin(val);
     pip = &pi.inode;
-  } else if (name.find("ceph.dir.pin.distributed") == 0) {
+  } else if (name == "ceph.dir.pin.distributed"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
       return;
