@@ -12,7 +12,7 @@
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_OSD_TYPES_H
@@ -2372,7 +2372,7 @@ struct osd_stat_t {
     uint32_t front_max[3];
     uint32_t front_last;
   };
-  map<int, Interfaces> hb_pingtime;  ///< map of osd id to Interfaces
+  std::map<int, Interfaces> hb_pingtime;  ///< map of osd id to Interfaces
 
   osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
        num_shards_repaired(0)	{}
@@ -3686,7 +3686,7 @@ struct pg_lease_t {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<pg_lease_t*>& o);
 
-  friend ostream& operator<<(ostream& out, const pg_lease_t& l) {
+  friend std::ostream& operator<<(std::ostream& out, const pg_lease_t& l) {
     return out << "pg_lease(ru " << l.readable_until
 	       << " ub " << l.readable_until_ub
 	       << " int " << l.interval << ")";
@@ -3713,7 +3713,7 @@ struct pg_lease_ack_t {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<pg_lease_ack_t*>& o);
 
-  friend ostream& operator<<(ostream& out, const pg_lease_ack_t& l) {
+  friend std::ostream& operator<<(std::ostream& out, const pg_lease_ack_t& l) {
     return out << "pg_lease_ack(ruub " << l.readable_until_ub << ")";
   }
 };
@@ -3905,7 +3905,7 @@ private:
    * finally, clean_offsets becomes {[5~10], [30~10]}
    */
   void trim();
-  friend ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
+  friend std::ostream& operator<<(std::ostream& out, const ObjectCleanRegions& ocr);
 public:
   ObjectCleanRegions() : new_object(false), clean_omap(true) {
     clean_offsets.insert(0, (uint64_t)-1);
@@ -3927,13 +3927,13 @@ public:
   bool omap_is_dirty() const;
   bool object_is_exist() const;
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ObjectCleanRegions*>& o);
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<ObjectCleanRegions*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectCleanRegions)
-ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
+std::ostream& operator<<(std::ostream& out, const ObjectCleanRegions& ocr);
 
 
 struct OSDOp {
@@ -4001,18 +4001,18 @@ std::ostream& operator<<(std::ostream& out, const OSDOp& op);
 
 struct pg_log_op_return_item_t {
   int32_t rval;
-  bufferlist bl;
-  void encode(bufferlist& p) const {
+  ceph::buffer::list bl;
+  void encode(ceph::buffer::list& p) const {
     using ceph::encode;
     encode(rval, p);
     encode(bl, p);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     using ceph::decode;
     decode(rval, p);
     decode(bl, p);
   }
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->dump_int("rval", rval);
     f->dump_unsigned("bl_length", bl.length());
   }
@@ -4025,7 +4025,7 @@ struct pg_log_op_return_item_t {
 			 const pg_log_op_return_item_t& rhs) {
     return !(lhs == rhs);
   }
-  friend ostream& operator<<(ostream& out, const pg_log_op_return_item_t& i) {
+  friend std::ostream& operator<<(std::ostream& out, const pg_log_op_return_item_t& i) {
     return out << "r=" << i.rval << "+" << i.bl.length() << "b";
   }
 };
@@ -4091,7 +4091,7 @@ struct pg_log_entry_t {
   utime_t     mtime;  // this is the _user_ mtime, mind you
   int32_t return_code; // only stored for ERRORs for dup detection
 
-  vector<pg_log_op_return_item_t> op_returns;
+  std::vector<pg_log_op_return_item_t> op_returns;
 
   __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
@@ -4185,7 +4185,7 @@ struct pg_log_dup_t {
   version_t user_version; // the user version for this entry
   int32_t return_code; // only stored for ERRORs for dup detection
 
-  vector<pg_log_op_return_item_t> op_returns;
+  std::vector<pg_log_op_return_item_t> op_returns;
 
   pg_log_dup_t()
     : user_version(0), return_code(0)
@@ -6220,11 +6220,11 @@ WRITE_CLASS_ENCODER(pool_pg_num_history_t)
 
 // prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
-static const string_view infover_key = "_infover"sv;
-static const string_view info_key = "_info"sv;
-static const string_view biginfo_key = "_biginfo"sv;
-static const string_view epoch_key = "_epoch"sv;
-static const string_view fastinfo_key = "_fastinfo"sv;
+static const std::string_view infover_key = "_infover";
+static const std::string_view info_key = "_info";
+static const std::string_view biginfo_key = "_biginfo";
+static const std::string_view epoch_key = "_epoch";
+static const std::string_view fastinfo_key = "_fastinfo";
 
 static const __u8 pg_latest_struct_v = 10;
 // v10 is the new past_intervals encoding
@@ -6236,8 +6236,8 @@ static const __u8 pg_compat_struct_v = 10;
 
 int prepare_info_keymap(
   CephContext* cct,
-  map<string,bufferlist> *km,
-  string *key_to_remove,
+  std::map<std::string,ceph::buffer::list> *km,
+  std::string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,
   pg_info_t &last_written_info,
@@ -6299,10 +6299,10 @@ public:
 class PGLSPlainFilter : public PGLSFilter {
   std::string val;
 public:
-  int init(ceph::bufferlist::const_iterator &params) override;
+  int init(ceph::buffer::list::const_iterator &params) override;
   ~PGLSPlainFilter() override {}
   bool filter(const hobject_t& obj,
-              const ceph::bufferlist& xattr_data) const override;
+              const ceph::buffer::list& xattr_data) const override;
 };
 
 
