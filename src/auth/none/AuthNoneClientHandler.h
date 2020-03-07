@@ -29,11 +29,11 @@ public:
   void reset() override { }
 
   void prepare_build_request() override {}
-  int build_request(bufferlist& bl) const override { return 0; }
-  int handle_response(int ret, bufferlist::const_iterator& iter,
+  int build_request(ceph::buffer::list& bl) const override { return 0; }
+  int handle_response(int ret, ceph::buffer::list::const_iterator& iter,
 		      CryptoKey *session_key,
 		      std::string *connection_secret) override { return 0; }
-  bool build_rotating_request(bufferlist& bl) const override { return false; }
+  bool build_rotating_request(ceph::buffer::list& bl) const override { return false; }
 
   int get_protocol() const override { return CEPH_AUTH_NONE; }
   

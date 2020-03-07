@@ -20,9 +20,9 @@
 bool AuthNoneAuthorizeHandler::verify_authorizer(
   CephContext *cct,
   const KeyStore& keys,
-  const bufferlist& authorizer_data,
+  const ceph::buffer::list& authorizer_data,
   size_t connection_secret_required_len,
-  bufferlist *authorizer_reply,
+  ceph::buffer::list *authorizer_reply,
   EntityName *entity_name,
   uint64_t *global_id,
   AuthCapsInfo *caps_info,
@@ -30,6 +30,7 @@ bool AuthNoneAuthorizeHandler::verify_authorizer(
   std::string *connection_secret,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
+  using ceph::decode;
   auto iter = authorizer_data.cbegin();
 
   try {
@@ -37,7 +38,7 @@ bool AuthNoneAuthorizeHandler::verify_authorizer(
     decode(struct_v, iter);
     decode(*entity_name, iter);
     decode(*global_id, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     ldout(cct, 0) << "AuthNoneAuthorizeHandle::verify_authorizer() failed to decode" << dendl;
     return false;
   }
