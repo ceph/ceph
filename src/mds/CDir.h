@@ -41,7 +41,7 @@ class MDCache;
 
 struct ObjectOperation;
 
-ostream& operator<<(ostream& out, const class CDir& dir);
+std::ostream& operator<<(std::ostream& out, const class CDir& dir);
 
 class CDir : public MDSCacheObject, public Counter<CDir> {
 public:
@@ -428,9 +428,9 @@ public:
     }
   }
 
-  static void encode_dirstat(bufferlist& bl, const session_info_t& info, const DirStat& ds);
+  static void encode_dirstat(ceph::buffer::list& bl, const session_info_t& info, const DirStat& ds);
 
-  void _encode_base(bufferlist& bl) {
+  void _encode_base(ceph::buffer::list& bl) {
     ENCODE_START(1, 1, bl);
     encode(first, bl);
     encode(fnode, bl);
@@ -438,7 +438,7 @@ public:
     encode(dir_rep_by, bl);
     ENCODE_FINISH(bl);
   }
-  void _decode_base(bufferlist::const_iterator& p) {
+  void _decode_base(ceph::buffer::list::const_iterator& p) {
     DECODE_START(1, p);
     decode(first, p);
     decode(fnode, p);
@@ -497,12 +497,12 @@ public:
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
 
   // -- import/export --
-  void encode_export(bufferlist& bl);
+  void encode_export(ceph::buffer::list& bl);
   void finish_export();
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::const_iterator& blp, LogSegment *ls);
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls);
   void abort_import();
 
   // -- auth pins --
@@ -528,13 +528,13 @@ public:
 
   void maybe_finish_freeze();
 
-  pair<bool,bool> is_freezing_or_frozen_tree() const {
+  std::pair<bool,bool> is_freezing_or_frozen_tree() const {
     if (freeze_tree_state) {
       if (freeze_tree_state->frozen)
-	return make_pair(false, true);
-      return make_pair(true, false);
+	return std::make_pair(false, true);
+      return std::make_pair(true, false);
     }
-    return make_pair(false, false);
+    return std::make_pair(false, false);
   }
 
   bool is_freezing() const override { return is_freezing_dir() || is_freezing_tree(); }
@@ -591,10 +591,10 @@ public:
   }
   void enable_frozen_inode();
 
-  ostream& print_db_line_prefix(ostream& out) override;
-  void print(ostream& out) override;
-  void dump(Formatter *f, int flags = DUMP_DEFAULT) const;
-  void dump_load(Formatter *f);
+  std::ostream& print_db_line_prefix(std::ostream& out) override;
+  void print(std::ostream& out) override;
+  void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;
+  void dump_load(ceph::Formatter *f);
 
   // context
   MDCache *cache;
@@ -635,13 +635,13 @@ protected:
 
   void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
   void _omap_fetch_more(
-    bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
+    ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
     MDSContext *fin);
   CDentry *_load_dentry(
       std::string_view key,
       std::string_view dname,
       snapid_t last,
-      bufferlist &bl,
+      ceph::buffer::list &bl,
       int pos,
       const std::set<snapid_t> *snaps,
       bool *force_dirty);
@@ -661,13 +661,13 @@ protected:
    */
   void go_bad(bool complete);
 
-  void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
+  void _omap_fetched(ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
 		     bool complete, int r);
 
   // -- commit --
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
-  void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
+  void _encode_dentry(CDentry *dn, ceph::buffer::list& bl, const std::set<snapid_t> *snaps);
   void _committed(int r, version_t v);
 
   version_t projected_version = 0;
@@ -730,7 +730,7 @@ protected:
   mempool::mds_co::compact_map< string_snap_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 private:
-  friend ostream& operator<<(ostream& out, const class CDir& dir);
+  friend std::ostream& operator<<(std::ostream& out, const class CDir& dir);
 
   void log_mark_dirty();
 
@@ -755,7 +755,7 @@ private:
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
   void prepare_new_fragment(bool replay);
-  void prepare_old_fragment(map<string_snap_t, MDSContext::vec >& dentry_waiters, bool replay);
+  void prepare_old_fragment(std::map<string_snap_t, MDSContext::vec >& dentry_waiters, bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
   void finish_old_fragment(MDSContext::vec& waiters, bool replay);
   void init_fragment_pins();

@@ -8,6 +8,10 @@
 
 #define dout_subsys ceph_subsys_mds
 
+using std::list;
+using std::pair;
+using std::multimap;
+
 static multimap<ceph_filelock, ceph_lock_state_t*> global_waiting_locks;
 
 static void remove_global_waiting(ceph_filelock &fl, ceph_lock_state_t *lock_state)
@@ -35,7 +39,7 @@ ceph_lock_state_t::~ceph_lock_state_t()
 
 bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl) const
 {
-  multimap<uint64_t, ceph_filelock>::const_iterator p = waiting_locks.find(fl.start);
+  auto p = waiting_locks.find(fl.start);
   while (p != waiting_locks.end()) {
     if (p->second.start > fl.start)
       return false;
@@ -81,7 +85,7 @@ bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
     return false;
 
   // find conflict locks' owners
-  set<ceph_filelock> lock_owners;
+  std::set<ceph_filelock> lock_owners;
   for (auto p = overlapping_locks.begin();
        p != overlapping_locks.end();
        ++p) {

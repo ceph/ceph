@@ -28,7 +28,7 @@ void MDSCacheObject::finish_waiting(uint64_t mask, int result) {
   finish_contexts(g_ceph_context, finished, result);
 }
 
-void MDSCacheObject::dump(Formatter *f) const
+void MDSCacheObject::dump(ceph::Formatter *f) const
 {
   f->dump_bool("is_auth", is_auth());
 
@@ -74,7 +74,7 @@ void MDSCacheObject::dump(Formatter *f) const
  * Use this in subclasses when printing their specialized
  * states too.
  */
-void MDSCacheObject::dump_states(Formatter *f) const
+void MDSCacheObject::dump_states(ceph::Formatter *f) const
 {
   if (state_test(STATE_AUTH)) f->dump_string("state", "auth");
   if (state_test(STATE_DIRTY)) f->dump_string("state", "dirty");

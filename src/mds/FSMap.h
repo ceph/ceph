@@ -52,10 +52,10 @@ public:
     return std::make_shared<Filesystem>(std::forward<Args>(args)...);
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
 
   /**
@@ -365,8 +365,8 @@ public:
 
   const mds_info_t* find_replacement_for(mds_role_t role) const;
 
-  void get_health(list<pair<health_status_t,std::string> >& summary,
-		  list<pair<health_status_t,std::string> > *detail) const;
+  void get_health(std::list<std::pair<health_status_t,std::string> >& summary,
+		  std::list<std::pair<health_status_t,std::string> > *detail) const;
 
   void get_health_checks(health_check_map_t *checks) const;
 
@@ -378,18 +378,18 @@ public:
    */
   void sanity() const;
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
-  void decode(bufferlist& bl) {
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void decode(ceph::buffer::list& bl) {
     auto p = bl.cbegin();
     decode(p);
   }
   void sanitize(const std::function<bool(int64_t pool)>& pool_exists);
 
-  void print(ostream& out) const;
-  void print_summary(Formatter *f, ostream *out) const;
+  void print(std::ostream& out) const;
+  void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<FSMap*>& ls);
 
 protected:
@@ -412,7 +412,7 @@ protected:
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 
-inline ostream& operator<<(ostream& out, const FSMap& m) {
+inline std::ostream& operator<<(std::ostream& out, const FSMap& m) {
   m.print_summary(NULL, &out);
   return out;
 }
