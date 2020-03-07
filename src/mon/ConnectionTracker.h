@@ -137,7 +137,7 @@ class ConnectionTracker {
   epoch_t epoch;
   uint64_t version;
   map<int,ConnectionReport> peer_reports;
-  mutable ConnectionReport *my_reports;
+  mutable ConnectionReport my_reports;
   double half_life;
   RankProvider *owner;
   int rank;
@@ -150,20 +150,18 @@ class ConnectionTracker {
   void clear_peer_reports() {
     encoding.clear();
     peer_reports.clear();
-    my_reports = &peer_reports[rank];
+    my_reports = ConnectionReport();
   }
 
  public:
   ConnectionTracker() : epoch(0), version(0), half_life(12*60*60),
 			owner(NULL), rank(-1), persist_interval(10) {
-    my_reports = &peer_reports[rank];
   }
   ConnectionTracker(RankProvider *o, int rank, double hl,
 		    int persist_i) :
     epoch(0), version(0),
     half_life(hl), owner(o), rank(rank), persist_interval(persist_i) {
-    my_reports = &peer_reports[rank];
-    my_reports->rank = rank;
+    my_reports.rank = rank;
   }
   ConnectionTracker(const bufferlist& bl) :
     epoch(0), version(0),
@@ -178,15 +176,14 @@ class ConnectionTracker {
     persist_interval(o.persist_interval)
   {
     peer_reports = o.peer_reports;
-    my_reports = &peer_reports[rank];
+    my_reports = o.my_reports;
   }
   void notify_reset() { clear_peer_reports(); }
   void notify_rank_changed(int new_rank) {
     if (new_rank == rank) return;
-    peer_reports[new_rank] = *my_reports;
     peer_reports.erase(rank);
-    my_reports = &peer_reports[new_rank];
-    my_reports->rank = new_rank;
+    peer_reports.erase(new_rank);
+    my_reports.rank = new_rank;
     rank = new_rank;
     encoding.clear();
   }
