@@ -129,17 +129,18 @@ void MDBalancer::handle_export_pins(void)
 	  mds->mdcache->try_subtree_merge(dir);
 	}
       } else if (export_pin == mds->get_nodeid()) {
-	if (dir->state_test(CDir::STATE_CREATING) ||
-	    dir->is_frozen() || dir->is_freezing()) {
+        if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
+          ceph_assert(dir->is_subtree_root());
+        } else if (dir->state_test(CDir::STATE_CREATING) ||
+	           dir->is_frozen() || dir->is_freezing()) {
 	  // try again later
 	  remove = false;
 	  continue;
-	}
-	if (!dir->is_subtree_root()) {
+	} else if (!dir->is_subtree_root()) {
 	  dir->state_set(CDir::STATE_AUXSUBTREE);
 	  mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
 	  dout(10) << " create aux subtree on " << *dir << dendl;
-	} else if (!dir->state_test(CDir::STATE_AUXSUBTREE)) {
+	} else {
 	  dout(10) << " set auxsubtree bit on " << *dir << dendl;
 	  dir->state_set(CDir::STATE_AUXSUBTREE);
 	}
