@@ -131,6 +131,15 @@ struct ciphertext_generator_t {
     tx->authenticated_encrypt_update(std::move(plainchunk));
     return tx->authenticated_encrypt_final();
   }
+
+  ceph::bufferlist from_4k_zeros() {
+    ceph::bufferlist plainchunk;
+    plainchunk.append_zero(4096);
+    auto lengths = { plainchunk.length() };
+    tx->reset_tx_handler(std::begin(lengths), std::end(lengths));
+    tx->authenticated_encrypt_update(std::move(plainchunk));
+    return tx->authenticated_encrypt_final();
+  }
 };
 
 TEST(AESGCMTxHandler, fits_recording)
@@ -240,6 +249,30 @@ TEST(AESGCMRxHandler, mismatched_tag)
     ceph::crypto::onwire::MsgAuthError);
 }
 
+static ceph::bufferlist decrypt_multi_chunk(
+  AES128GCM_OnWireRxHandler& rx,
+  ceph::bufferlist&& ciphertext,
+  const std::size_t chunk_size)
+{
+  ceph::bufferlist plaintext;
+
+  while (ciphertext.length() >= chunk_size) {
+    ceph::bufferlist cipherchunk;
+    ciphertext.splice(0, chunk_size, &cipherchunk);
+
+    ceph::bufferlist plainchunk = authenticated_decrypt_update(
+      rx, std::move(cipherchunk));
+    plaintext.claim_append(plainchunk);
+  }
+
+  if (ciphertext.length() > 0) {
+    ceph::bufferlist last_plainchunk = authenticated_decrypt_update(
+      rx, std::move(ciphertext));
+    plaintext.claim_append(last_plainchunk);
+  }
+  return plaintext;
+}
+
 TEST(AESGCMRxHandler, multi_chunked_fits_recording)
 {
   // verify whether the ciphertext matches plaintext over the entire
@@ -253,23 +286,8 @@ TEST(AESGCMRxHandler, multi_chunked_fits_recording)
 
     rx->reset_rx_handler();
 
-    ceph::bufferlist plaintext;
-    ceph::bufferlist ciphertext = to_bl(aes_gcm_sample_t::ciphertext);
-    while (ciphertext.length() >= chunk_size) {
-      ceph::bufferlist cipherchunk;
-      ciphertext.splice(0, chunk_size, &cipherchunk);
-
-      ceph::bufferlist plainchunk = authenticated_decrypt_update(
-        *rx, std::move(cipherchunk));
-      plaintext.claim_append(plainchunk);
-    }
-
-    if (ciphertext.length() > 0) {
-      ceph::bufferlist last_plainchunk = authenticated_decrypt_update(
-        *rx, std::move(ciphertext));
-      plaintext.claim_append(last_plainchunk);
-    }
-
+    auto plaintext = \
+      decrypt_multi_chunk(*rx, to_bl(aes_gcm_sample_t::ciphertext), chunk_size);
     // if tag doesn't match, exception will be thrown.
     auto final_plainchunk = \
       authenticated_decrypt_update_final(*rx, to_bl(aes_gcm_sample_t::tag));
@@ -322,5 +340,33 @@ TEST(AESGCMRxHandler, reset_with_cipertext_and_tag_separated)
     EXPECT_NO_THROW({
       final_plaintext = authenticated_decrypt_update_final(*rx, std::move(tag));
     });
+  }
+}
+
+TEST(AESGCMRxHandler, reset_in_multi_chunked)
+{
+  // main intention behind this test is to isolate an uninitialized condition
+  // reported by Valgrind (https://tracker.ceph.com/issues/44430).
+  ciphertext_generator_t ctg;
+  auto rx = create_crypto_handler<AES128GCM_OnWireRxHandler>(g_ceph_context);
+
+  for (std::size_t chunk_size = 1;
+       chunk_size <= std::size(aes_gcm_sample_t::ciphertext);
+       chunk_size++) {
+    for (std::size_t i = 0; i < 5; i++) {
+      rx->reset_rx_handler();
+
+      auto [ ciphertext, tag ] = \
+        split2ciphertext_and_tag(ctg.from_4k_zeros());
+      auto plaintext = \
+        decrypt_multi_chunk(*rx, std::move(ciphertext), chunk_size);
+
+      // If tag doesn't match, exception will be thrown.
+      ceph::bufferlist final_plaintext;
+      EXPECT_NO_THROW({
+        final_plaintext = authenticated_decrypt_update_final(
+          *rx, std::move(tag));
+      });
+    }
   }
 }
