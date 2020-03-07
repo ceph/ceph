@@ -579,7 +579,7 @@ int Infiniband::CompletionChannel::init()
                           << cpp_strerror(errno) << dendl;
     return -1;
   }
-  int rc = NetHandler(cct).set_nonblock(channel->fd);
+  int rc = ceph::NetHandler(cct).set_nonblock(channel->fd);
   if (rc < 0) {
     ibv_destroy_comp_channel(channel);
     return -1;
@@ -1062,7 +1062,7 @@ void Infiniband::init()
   device->binding_port(cct, port_num);
   ib_physical_port = device->active_port->get_port_num();
   pd = new ProtectionDomain(cct, device);
-  ceph_assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
+  ceph_assert(ceph::NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
 
   support_srq = cct->_conf->ms_async_rdma_support_srq;
   if (support_srq) {

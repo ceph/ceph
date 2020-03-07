@@ -40,7 +40,7 @@ RDMADispatcher::~RDMADispatcher()
   ceph_assert(dead_queue_pairs.empty());
 }
 
-RDMADispatcher::RDMADispatcher(CephContext* c, shared_ptr<Infiniband>& ib)
+RDMADispatcher::RDMADispatcher(CephContext* c, std::shared_ptr<Infiniband>& ib)
   : cct(c), ib(ib)
 {
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
@@ -772,9 +772,9 @@ void RDMAWorker::handle_pending_message()
   dispatcher->notify_pending_workers();
 }
 
-RDMAStack::RDMAStack(CephContext *cct, const string &t)
-  : NetworkStack(cct, t), ib(make_shared<Infiniband>(cct)),
-    rdma_dispatcher(make_shared<RDMADispatcher>(cct, ib))
+RDMAStack::RDMAStack(CephContext *cct, const std::string &t)
+  : NetworkStack(cct, t), ib(std::make_shared<Infiniband>(cct)),
+    rdma_dispatcher(std::make_shared<RDMADispatcher>(cct, ib))
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
 

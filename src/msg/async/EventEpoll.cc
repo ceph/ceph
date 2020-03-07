@@ -116,7 +116,7 @@ int EpollDriver::resize_events(int newsize)
   return 0;
 }
 
-int EpollDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tvp)
+int EpollDriver::event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tvp)
 {
   int retval, numevents = 0;
 

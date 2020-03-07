@@ -69,7 +69,7 @@ class C_handle_notify : public EventCallback {
  *      about the poller. The name of the superclass is probably sufficient
  *      for most cases.
  */
-EventCenter::Poller::Poller(EventCenter* center, const string& name)
+EventCenter::Poller::Poller(EventCenter* center, const std::string& name)
     : owner(center), poller_name(name), slot(owner->pollers.size())
 {
   owner->pollers.push_back(this);
@@ -94,7 +94,7 @@ EventCenter::Poller::~Poller()
   slot = -1;
 }
 
-ostream& EventCenter::_event_prefix(std::ostream *_dout)
+std::ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
   return *_dout << "Event(" << this << " nevent=" << nevent
                 << " time_id=" << time_event_next_id << ").";
@@ -340,6 +340,7 @@ int EventCenter::process_time_events()
 {
   int processed = 0;
   clock_type::time_point now = clock_type::now();
+  using ceph::operator <<;
   ldout(cct, 30) << __func__ << " cur time is " << now << dendl;
 
   while (!time_events.empty()) {
@@ -388,7 +389,7 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
   tv.tv_usec = timeout_microseconds % 1000000;
 
   ldout(cct, 30) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
-  vector<FiredFileEvent> fired_events;
+  std::vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
   auto working_start = ceph::mono_clock::now();
   for (int event_id = 0; event_id < numevents; event_id++) {
@@ -422,7 +423,7 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
 
   if (external_num_events.load()) {
     external_lock.lock();
-    deque<EventCallbackRef> cur_process;
+    std::deque<EventCallbackRef> cur_process;
     cur_process.swap(external_events);
     external_num_events.store(0);
     external_lock.unlock();

@@ -63,7 +63,8 @@ std::function<void ()> NetworkStack::add_thread(unsigned worker_id)
   };
 }
 
-std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t)
+std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
+						   const std::string &t)
 {
   if (t == "posix")
     return std::make_shared<PosixNetworkStack>(c, t);
@@ -82,7 +83,7 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string 
   return nullptr;
 }
 
-Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned worker_id)
+Worker* NetworkStack::create_worker(CephContext *c, const std::string &type, unsigned worker_id)
 {
   if (type == "posix")
     return new PosixWorker(c, worker_id);
@@ -101,7 +102,7 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
   return nullptr;
 }
 
-NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(false), cct(c)
+NetworkStack::NetworkStack(CephContext *c, const std:: string &t): type(t), started(false), cct(c)
 {
   ceph_assert(cct->_conf->ms_async_op_threads > 0);
 

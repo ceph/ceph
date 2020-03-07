@@ -104,9 +104,9 @@ protected:
 
   enum class WriteStatus { NOWRITE, REPLACING, CANWRITE, CLOSED };
   std::atomic<WriteStatus> can_write;
-  std::list<Message *> sent;  // the first bufferlist need to inject seq
+  std::list<Message *> sent;  // the first ceph::buffer::list need to inject seq
   // priority queue for outbound msgs
-  std::map<int, std::list<std::pair<bufferlist, Message *>>> out_q;
+  std::map<int, std::list<std::pair<ceph::buffer::list, Message *>>> out_q;
   bool keepalive;
   bool write_in_progress = false;
 
@@ -120,8 +120,8 @@ protected:
   // Open state
   ceph_msg_connect connect_msg;
   ceph_msg_connect_reply connect_reply;
-  bufferlist authorizer_buf;  // auth(orizer) payload read off the wire
-  bufferlist authorizer_more;  // connect-side auth retry (we added challenge)
+  ceph::buffer::list authorizer_buf;  // auth(orizer) payload read off the wire
+  ceph::buffer::list authorizer_more;  // connect-side auth retry (we added challenge)
 
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
@@ -129,9 +129,9 @@ protected:
   unsigned msg_left;
   uint64_t cur_msg_size;
   ceph_msg_header current_header;
-  bufferlist data_buf;
-  bufferlist::iterator data_blp;
-  bufferlist front, middle, data;
+  ceph::buffer::list data_buf;
+  ceph::buffer::list::iterator data_blp;
+  ceph::buffer::list front, middle, data;
 
   bool replacing;  // when replacing process happened, we will reply connect
                    // side with RETRY tag and accept side will clear replaced
@@ -147,7 +147,7 @@ protected:
   void run_continuation(CtPtr pcontinuation);
   CtPtr read(CONTINUATION_RX_TYPE<ProtocolV1> &next, int len,
              char *buffer = nullptr);
-  CtPtr write(CONTINUATION_TX_TYPE<ProtocolV1> &next,bufferlist &bl);
+  CtPtr write(CONTINUATION_TX_TYPE<ProtocolV1> &next,ceph::buffer::list &bl);
   inline CtPtr _fault() {  // helper fault method that stops continuation
     fault();
     return nullptr;
@@ -194,10 +194,10 @@ protected:
   void session_reset();
   void randomize_out_seq();
 
-  Message *_get_next_outgoing(bufferlist *bl);
+  Message *_get_next_outgoing(ceph::buffer::list *bl);
 
-  void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
-  ssize_t write_message(Message *m, bufferlist &bl, bool more);
+  void prepare_send_message(uint64_t features, Message *m, ceph::buffer::list &bl);
+  ssize_t write_message(Message *m, ceph::buffer::list &bl, bool more);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
@@ -205,7 +205,7 @@ protected:
 
   void reset_recv_state();
 
-  ostream &_conn_prefix(std::ostream *_dout);
+  std::ostream& _conn_prefix(std::ostream *_dout);
 
 public:
   ProtocolV1(AsyncConnection *connection);
@@ -281,11 +281,11 @@ protected:
   CtPtr handle_connect_message_auth(char *buffer, int r);
   CtPtr handle_connect_message_2();
   CtPtr send_connect_message_reply(char tag, ceph_msg_connect_reply &reply,
-                                   bufferlist &authorizer_reply);
+                                   ceph::buffer::list &authorizer_reply);
   CtPtr handle_connect_message_reply_write(int r);
   CtPtr replace(const AsyncConnectionRef& existing, ceph_msg_connect_reply &reply,
-                bufferlist &authorizer_reply);
-  CtPtr open(ceph_msg_connect_reply &reply, bufferlist &authorizer_reply);
+                ceph::buffer::list &authorizer_reply);
+  CtPtr open(ceph_msg_connect_reply &reply, ceph::buffer::list &authorizer_reply);
   CtPtr handle_ready_connect_message_reply_write(int r);
   CtPtr wait_seq();
   CtPtr handle_seq(char *buffer, int r);

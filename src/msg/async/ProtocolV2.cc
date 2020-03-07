@@ -16,7 +16,7 @@
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
-ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
+std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
   return *_dout << "--2- " << messenger->get_myaddrs() << " >> "
                 << *connection->peer_addrs << " conn(" << connection << " "
                 << this
@@ -43,7 +43,7 @@ void ProtocolV2::run_continuation(CtPtr pcontinuation) {
 void ProtocolV2::run_continuation(CtRef continuation) {
   try {
     CONTINUATION_RUN(continuation)
-  } catch (const buffer::error &e) {
+  } catch (const ceph::buffer::error &e) {
     lderr(cct) << __func__ << " failed decoding of frame header: " << e
                << dendl;
     _fault();
@@ -57,7 +57,7 @@ void ProtocolV2::run_continuation(CtRef continuation) {
 
 #define WRITE(B, D, C) write(D, CONTINUATION(C), B)
 
-#define READ(L, C) read(CONTINUATION(C), buffer::ptr_node::create(buffer::create(L)))
+#define READ(L, C) read(CONTINUATION(C), ceph::buffer::ptr_node::create(ceph::buffer::create(L)))
 
 #define READ_RXBUF(B, C) read(CONTINUATION(C), B)
 
@@ -119,7 +119,7 @@ bool ProtocolV2::is_connected() { return can_write; }
 void ProtocolV2::discard_out_queue() {
   ldout(cct, 10) << __func__ << " started" << dendl;
 
-  for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
+  for (auto p = sent.begin(); p != sent.end(); ++p) {
     ldout(cct, 20) << __func__ << " discard " << *p << dendl;
     (*p)->put();
   }
@@ -766,7 +766,7 @@ CtPtr ProtocolV2::write(const std::string &desc,
 
 CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
-                        bufferlist &buffer) {
+                        ceph::bufferlist &buffer) {
   if (unlikely(pre_auth.enabled)) {
     pre_auth.txbuf.append(buffer);
     ceph_assert(!cct->_conf->ms_die_on_bug ||
@@ -800,11 +800,12 @@ CtPtr ProtocolV2::_banner_exchange(CtRef callback) {
   ldout(cct, 20) << __func__ << dendl;
   bannerExchangeCallback = &callback;
 
-  bufferlist banner_payload;
+  ceph::bufferlist banner_payload;
+  using ceph::encode;
   encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
   encode((uint64_t)CEPH_MSGR2_REQUIRED_FEATURES, banner_payload, 0);
 
-  bufferlist bl;
+  ceph::bufferlist bl;
   bl.append(CEPH_BANNER_V2_PREFIX, strlen(CEPH_BANNER_V2_PREFIX));
   encode((uint16_t)banner_payload.length(), bl, 0);
   bl.claim_append(banner_payload);
@@ -841,14 +842,15 @@ CtPtr ProtocolV2::_handle_peer_banner(rx_buffer_t &&buffer, int r) {
   }
 
   uint16_t payload_len;
-  bufferlist bl;
+  ceph::bufferlist bl;
   buffer->set_offset(banner_prefix_len);
   buffer->set_length(sizeof(ceph_le16));
   bl.push_back(std::move(buffer));
   auto ti = bl.cbegin();
+  using ceph::decode;
   try {
     decode(payload_len, ti);
-  } catch (const buffer::error &e) {
+  } catch (const ceph::buffer::error &e) {
     lderr(cct) << __func__ << " decode banner payload len failed " << dendl;
     return _fault();
   }
@@ -870,13 +872,14 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(rx_buffer_t &&buffer, int r) {
   uint64_t peer_supported_features;
   uint64_t peer_required_features;
 
-  bufferlist bl;
+  ceph::bufferlist bl;
+  using ceph::decode;
   bl.push_back(std::move(buffer));
   auto ti = bl.cbegin();
   try {
     decode(peer_supported_features, ti);
     decode(peer_required_features, ti);
-  } catch (const buffer::error &e) {
+  } catch (const ceph::buffer::error &e) {
     lderr(cct) << __func__ << " decode banner payload failed " << dendl;
     return _fault();
   }
@@ -1169,7 +1172,7 @@ CtPtr ProtocolV2::read_frame_segment() {
   const auto& cur_rx_desc = rx_segments_desc.at(rx_segments_data.size());
   rx_buffer_t rx_buffer;
   try {
-    rx_buffer = buffer::ptr_node::create(buffer::create_aligned(
+    rx_buffer = ceph::buffer::ptr_node::create(ceph::buffer::create_aligned(
       get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment));
   } catch (std::bad_alloc&) {
     // Catching because of potential issues with satisfying alignment.
@@ -1736,8 +1739,8 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
   ldout(cct, 20) << __func__ << " peer_type " << (int)connection->peer_type
 		 << " auth_client " << messenger->auth_client << dendl;
 
-  bufferlist bl;
-  vector<uint32_t> preferred_modes;
+  ceph::bufferlist bl;
+  std::vector<uint32_t> preferred_modes;
   auto am = auth_meta;
   connection->lock.unlock();
   int r = messenger->auth_client->get_auth_request(
@@ -2194,12 +2197,12 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
   return WRITE(bad_method, "bad auth method", read_frame);
 }
 
-CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
+CtPtr ProtocolV2::_handle_auth_request(ceph::bufferlist& auth_payload, bool more)
 {
   if (!messenger->auth_server) {
     return _fault();
   }
-  bufferlist reply;
+  ceph::bufferlist reply;
   auto am = auth_meta;
   connection->lock.unlock();
   int r = messenger->auth_server->handle_auth_request(
