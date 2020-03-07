@@ -51,11 +51,14 @@ using std::stringstream;
 using std::unique_ptr;
 using std::vector;
 
+using ceph::bufferlist;
 using ceph::decode;
 using ceph::decode_nohead;
 using ceph::encode;
 using ceph::encode_nohead;
 using ceph::Formatter;
+using ceph::make_timespan;
+using ceph::JSONFormatter;
 
 using namespace std::literals;
 
@@ -3715,7 +3718,7 @@ public:
   pair<epoch_t, epoch_t> get_bounds() const override {
     return make_pair(first, last + 1);
   }
-  void adjust_start_backwards(epoch_t last_epoch_clean) {
+  void adjust_start_backwards(epoch_t last_epoch_clean) override {
     first = last_epoch_clean;
   }
 
@@ -6961,7 +6964,7 @@ int PGLSPlainFilter::init(ceph::bufferlist::const_iterator &params)
   try {
     decode(xattr, params);
     decode(val, params);
-  } catch (buffer::error &e) {
+  } catch (ceph::buffer::error &e) {
     return -EINVAL;
   }
   return 0;
