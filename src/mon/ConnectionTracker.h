@@ -137,7 +137,7 @@ class ConnectionTracker {
   epoch_t epoch;
   uint64_t version;
   map<int,ConnectionReport> peer_reports;
-  mutable ConnectionReport my_reports;
+  ConnectionReport my_reports;
   double half_life;
   RankProvider *owner;
   int rank;
@@ -187,18 +187,7 @@ class ConnectionTracker {
     rank = new_rank;
     encoding.clear();
   }
-  int notify_rank_removed(int rank_removed) {
-    // this must match what we do in MonMap::remove
-    auto i = peer_reports.find(rank_removed);
-    ++i;
-    for (; i != peer_reports.end(); ++i) {
-      peer_reports[i->first - 1] = i->second;
-    }
-    auto last = --peer_reports.end();
-    int killed_rank = last->first;
-    peer_reports.erase(last);
-    return killed_rank;
-  }
+  void notify_rank_removed(int rank_removed);
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
   friend map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);
