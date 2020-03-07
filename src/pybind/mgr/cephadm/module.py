@@ -1767,7 +1767,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 host, name, 'unit',
                 ['--name', name, a],
                 error_ok=True)
-            self.cache.invalidate_host_daemons(host)
+        self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
     def daemon_action(self, action, daemon_type, daemon_id):
