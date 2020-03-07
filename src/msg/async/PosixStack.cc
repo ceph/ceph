@@ -38,13 +38,14 @@
 #define dout_prefix *_dout << "PosixStack "
 
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
-  NetHandler &handler;
+  ceph::NetHandler &handler;
   int _fd;
   entity_addr_t sa;
   bool connected;
 
  public:
-  explicit PosixConnectedSocketImpl(NetHandler &h, const entity_addr_t &sa, int f, bool connected)
+  explicit PosixConnectedSocketImpl(ceph::NetHandler &h, const entity_addr_t &sa,
+				    int f, bool connected)
       : handler(h), _fd(f), sa(sa), connected(connected) {}
 
   int is_connected() override {
@@ -106,7 +107,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     return (ssize_t)sent;
   }
 
-  ssize_t send(bufferlist &bl, bool more) override {
+  ssize_t send(ceph::buffer::list &bl, bool more) override {
     size_t sent_bytes = 0;
     auto pb = std::cbegin(bl.buffers());
     uint64_t left_pbrs = bl.get_num_buffers();
@@ -138,7 +139,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
 
     if (sent_bytes) {
-      bufferlist swapped;
+      ceph::buffer::list swapped;
       if (sent_bytes < bl.length()) {
         bl.splice(sent_bytes, bl.length()-sent_bytes, &swapped);
         bl.swap(swapped);
@@ -163,11 +164,11 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 };
 
 class PosixServerSocketImpl : public ServerSocketImpl {
-  NetHandler &handler;
+  ceph::NetHandler &handler;
   int _fd;
 
  public:
-  explicit PosixServerSocketImpl(NetHandler &h, int f,
+  explicit PosixServerSocketImpl(ceph::NetHandler &h, int f,
 				 const entity_addr_t& listen_addr, unsigned slot)
     : ServerSocketImpl(listen_addr.get_type(), slot),
       handler(h), _fd(f) {}
@@ -281,7 +282,7 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   return 0;
 }
 
-PosixNetworkStack::PosixNetworkStack(CephContext *c, const string &t)
+PosixNetworkStack::PosixNetworkStack(CephContext *c, const std::string &t)
     : NetworkStack(c, t)
 {
 }

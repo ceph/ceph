@@ -115,7 +115,7 @@ private:
   bool keepalive;
   bool write_in_progress = false;
 
-  ostream &_conn_prefix(std::ostream *_dout);
+  std::ostream& _conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *pcontinuation);
   void run_continuation(Ct<ProtocolV2> &continuation);
 
@@ -127,7 +127,7 @@ private:
 			F &frame);
   Ct<ProtocolV2> *write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
-                        bufferlist &buffer);
+                        ceph::bufferlist &buffer);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
@@ -238,7 +238,7 @@ private:
   Ct<ProtocolV2> *post_server_banner_exchange();
   Ct<ProtocolV2> *handle_auth_request(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_auth_request_more(ceph::bufferlist &payload);
-  Ct<ProtocolV2> *_handle_auth_request(bufferlist& auth_payload, bool more);
+  Ct<ProtocolV2> *_handle_auth_request(ceph::bufferlist& auth_payload, bool more);
   Ct<ProtocolV2> *_auth_bad_method(int r);
   Ct<ProtocolV2> *handle_client_ident(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
