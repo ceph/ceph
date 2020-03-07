@@ -53,10 +53,9 @@ private:
 
 public:  
   std::string_view get_type_name() const override { return "pg_query"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_query(";
-    for (map<spg_t,pg_query_t>::const_iterator p = pg_list.begin();
-	 p != pg_list.end(); ++p) {
+    for (auto p = pg_list.begin(); p != pg_list.end(); ++p) {
       if (p != pg_list.begin())
 	out << ",";
       out << p->first;
@@ -70,6 +69,7 @@ public:
     encode(pg_list, payload, features);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(pg_list, p);

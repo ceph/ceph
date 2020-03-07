@@ -75,7 +75,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "PGUpdateLogMissingReply"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_update_log_missing_reply(" << pgid << " epoch " << map_epoch
 	<< "/" << min_epoch
 	<< " rep_tid " << rep_tid
@@ -92,6 +92,7 @@ public:
     encode(last_complete_ondisk, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(map_epoch, p);
     decode(pgid, p);

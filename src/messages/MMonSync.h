@@ -56,8 +56,8 @@ public:
   uint32_t op = 0;
   uint64_t cookie = 0;
   version_t last_committed = 0;
-  pair<string,string> last_key;
-  bufferlist chunk_bl;
+  std::pair<std::string,std::string> last_key;
+  ceph::buffer::list chunk_bl;
   entity_inst_t reply_to;
 
   MMonSync()
@@ -73,7 +73,7 @@ public:
 
   std::string_view get_type_name() const override { return "mon_sync"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mon_sync(" << get_opname(op);
     if (cookie)
       out << " cookie " << cookie;
@@ -98,6 +98,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(op, p);
     decode(cookie, p);

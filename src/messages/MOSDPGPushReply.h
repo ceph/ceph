@@ -26,7 +26,7 @@ public:
   pg_shard_t from;
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
-  vector<PushReplyOp> replies;
+  std::vector<PushReplyOp> replies;
   uint64_t cost = 0;
 
   epoch_t get_map_epoch() const override {
@@ -45,9 +45,7 @@ public:
 
   void compute_cost(CephContext *cct) {
     cost = 0;
-    for (vector<PushReplyOp>::iterator i = replies.begin();
-	 i != replies.end();
-	 ++i) {
+    for (auto i = replies.begin(); i != replies.end(); ++i) {
       cost += i->cost(cct);
     }
   }
@@ -57,6 +55,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
@@ -82,7 +81,7 @@ public:
     encode(min_epoch, payload);
   }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "MOSDPGPushReply(" << pgid
 	<< " " << map_epoch << "/" << min_epoch
 	<< " " << replies;

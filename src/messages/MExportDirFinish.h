@@ -40,7 +40,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "ExFin"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export_finish(" << dirfrag << (last ? " last" : "") << ")";
   }
   
@@ -50,6 +50,7 @@ public:
     encode(last, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(last, p);

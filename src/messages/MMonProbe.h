@@ -49,9 +49,9 @@ public:
   
   uuid_d fsid;
   int32_t op = 0;
-  string name;
-  set<int32_t> quorum;
-  bufferlist monmap_bl;
+  std::string name;
+  std::set<int32_t> quorum;
+  ceph::buffer::list monmap_bl;
   version_t paxos_first_version = 0;
   version_t paxos_last_version = 0;
   bool has_ever_joined = 0;
@@ -60,7 +60,7 @@ public:
 
   MMonProbe()
     : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION} {}
-  MMonProbe(const uuid_d& f, int o, const string& n, bool hej, ceph_release_t mr)
+  MMonProbe(const uuid_d& f, int o, const std::string& n, bool hej, ceph_release_t mr)
     : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION},
       fsid(f),
       op(o),
@@ -73,9 +73,9 @@ public:
 private:
   ~MMonProbe() override {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "mon_probe"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;
@@ -93,7 +93,7 @@ public:
       out << " mon_release " << mon_release;
     out << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     if (monmap_bl.length() &&
@@ -118,6 +118,7 @@ public:
     encode(mon_release, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(op, p);

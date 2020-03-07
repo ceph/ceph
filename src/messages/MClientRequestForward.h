@@ -42,7 +42,7 @@ public:
   bool must_resend() const { return client_must_resend; }
 
   std::string_view get_type_name() const override { return "client_request_forward"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "client_request_forward(" << get_tid()
       << " to mds." << dest_mds
       << " num_fwd=" << num_fwd
@@ -58,6 +58,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(dest_mds, p);
     decode(num_fwd, p);

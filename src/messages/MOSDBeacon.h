@@ -33,6 +33,7 @@ public:
   }
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     paxos_decode(p);
     decode(pgs, p);
     decode(min_last_epoch_clean, p);
@@ -41,7 +42,7 @@ public:
     }
   }
   std::string_view get_type_name() const override { return "osd_beacon"; }
-  void print(ostream &out) const {
+  void print(std::ostream &out) const {
     out << get_type_name()
         << "(pgs " << pgs
         << " lec " << min_last_epoch_clean

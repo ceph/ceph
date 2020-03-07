@@ -32,16 +32,17 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "findinoreply"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "findinoreply(" << tid << " " << path << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(tid, payload);
     encode(path, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(tid, p);
     decode(path, p);

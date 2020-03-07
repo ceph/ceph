@@ -19,12 +19,12 @@
 
 class MRemoveSnaps : public PaxosServiceMessage {
 public:
-  map<int32_t, vector<snapid_t> > snaps;
-  
+  std::map<int32_t, std::vector<snapid_t>> snaps;
+
 protected:
-  MRemoveSnaps() : 
+  MRemoveSnaps() :
     PaxosServiceMessage{MSG_REMOVE_SNAPS, 0} { }
-  MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
+  MRemoveSnaps(std::map<int, std::vector<snapid_t>>& s) : 
     PaxosServiceMessage{MSG_REMOVE_SNAPS, 0} {
     snaps.swap(s);
   }
@@ -32,7 +32,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "remove_snaps"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "remove_snaps(" << snaps << " v" << version << ")";
   }
 
@@ -42,6 +42,7 @@ public:
     encode(snaps, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(snaps, p);

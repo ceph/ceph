@@ -17,20 +17,17 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-#include <vector>
-using std::vector;
-
 class MMonJoin : public PaxosServiceMessage {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
 
   uuid_d fsid;
-  string name;
+  std::string name;
   entity_addrvec_t addrs;
 
   MMonJoin() : PaxosServiceMessage{MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION} {}
-  MMonJoin(uuid_d &f, string n, const entity_addrvec_t& av)
+  MMonJoin(uuid_d &f, std::string n, const entity_addrvec_t& av)
     : PaxosServiceMessage{MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), name(n), addrs(av)
   { }
@@ -38,12 +35,12 @@ public:
 private:
   ~MMonJoin() override {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "mon_join"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_join(" << name << " " << addrs << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     paxos_encode();
@@ -60,6 +57,7 @@ public:
     }
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
