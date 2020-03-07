@@ -1043,6 +1043,8 @@ def task(ctx, config):
             lambda: ceph_rgw(ctx=ctx, config=config),
             lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),
             lambda: ceph_monitoring('node-exporter', ctx=ctx, config=config),
+            lambda: ceph_monitoring('alertmanager', ctx=ctx, config=config),
+            lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):
