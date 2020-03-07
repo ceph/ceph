@@ -34,17 +34,18 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
     "test_input,expected",
     [
         ('', "PlacementSpec()"),
-        ("3", "PlacementSpec(count=3)"),
-        ("host1 host2", "PlacementSpec(hosts=host1,host2)"),
-        ("host1=a host2=b", "PlacementSpec(hosts=host1=a,host2=b)"),
-        ("host1:1.2.3.4=a host2:1.2.3.5=b", "PlacementSpec(hosts=host1:1.2.3.4=a,host2:1.2.3.5=b)"),
-        ('2 host1 host2', "PlacementSpec(count=2 hosts=host1,host2)"),
-        ('label:foo', "PlacementSpec(label=foo)"),
-        ('3 label:foo', "PlacementSpec(count=3 label=foo)"),
-        ('*', 'PlacementSpec(all=true)'),
+        ("count:2", "PlacementSpec(count:2)"),
+        ("3", "PlacementSpec(count:3)"),
+        ("host1 host2", "PlacementSpec(host1,host2)"),
+        ("host1=a host2=b", "PlacementSpec(host1=a,host2=b)"),
+        ("host1:1.2.3.4=a host2:1.2.3.5=b", "PlacementSpec(host1:1.2.3.4=a,host2:1.2.3.5=b)"),
+        ('2 host1 host2', "PlacementSpec(count:2 host1,host2)"),
+        ('label:foo', "PlacementSpec(label:foo)"),
+        ('3 label:foo', "PlacementSpec(count:3 label:foo)"),
+        ('*', 'PlacementSpec(all:true)'),
     ])
 def test_parse_placement_specs(test_input, expected):
-    ret = PlacementSpec.from_strings(test_input.split())
+    ret = PlacementSpec.from_string(test_input)
     assert str(ret) == expected
 
 @pytest.mark.parametrize("test_input",
