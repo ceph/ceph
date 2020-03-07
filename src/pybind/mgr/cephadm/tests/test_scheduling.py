@@ -209,7 +209,7 @@ def test_node_assignment3(service_type, placement, hosts,
     ])
 def test_bad_placements(placement):
     try:
-        s = PlacementSpec.from_strings(placement.split(' '))
+        s = PlacementSpec.from_string(placement.split(' '))
         assert False
     except OrchestratorValidationError as e:
         pass

@@ -538,7 +538,7 @@ def ceph_mgrs(ctx, config):
         if nodes:
             _shell(ctx, cluster_name, remote, [
                 'ceph', 'orch', 'apply', 'mgr',
-                str(len(nodes) + 1)] + nodes
+                str(len(nodes) + 1) + ';' + ';'.join(nodes)]
             )
         for mgr, i in daemons.items():
             remote, id_ = i
@@ -628,7 +628,7 @@ def ceph_mdss(ctx, config):
         _shell(ctx, cluster_name, remote, [
             'ceph', 'orch', 'apply', 'mds',
             'all',
-            str(len(nodes))] + nodes
+            str(len(nodes)) + ';' + ';'.join(nodes)]
         )
     for role, i in daemons.items():
         remote, id_ = i
@@ -663,7 +663,7 @@ def ceph_monitoring(daemon_type, ctx, config):
     if nodes:
         _shell(ctx, cluster_name, remote, [
             'ceph', 'orch', 'apply', daemon_type,
-            str(len(nodes))] + nodes
+            str(len(nodes)) + ';' + ';'.join(nodes)]
         )
     for role, i in daemons.items():
         remote, id_ = i
@@ -703,7 +703,7 @@ def ceph_rgw(ctx, config):
         _shell(ctx, cluster_name, remote, [
             'ceph', 'orch', 'apply', 'rgw',
             realm, zone,
-            str(len(nodes))] + nodes
+            str(len(nodes)) + ';' + ';'.join(nodes)]
         )
     for role, i in daemons.items():
         remote, id_ = i

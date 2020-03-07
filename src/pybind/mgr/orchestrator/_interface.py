@@ -1275,13 +1275,13 @@ class PlacementSpec(object):
     def pretty_str(self):
         kv = []
         if self.count:
-            kv.append('count=%d' % self.count)
+            kv.append('count:%d' % self.count)
         if self.label:
-            kv.append('label=%s' % self.label)
+            kv.append('label:%s' % self.label)
         if self.hosts:
-            kv.append('hosts=%s' % ','.join([str(h) for h in self.hosts]))
+            kv.append('%s' % ','.join([str(h) for h in self.hosts]))
         if self.all_hosts:
-            kv.append('all=true')
+            kv.append('all:true')
         return ' '.join(kv)
 
     def __repr__(self):
@@ -1312,28 +1312,44 @@ class PlacementSpec(object):
             raise OrchestratorValidationError("num/count must be > 1")
 
     @classmethod
-    def from_strings(cls, strings):
-        # type: (Optional[List[str]]) -> PlacementSpec
+    def from_string(cls, arg):
+        # type: (Optional[str]) -> PlacementSpec
         """
         A single integer is parsed as a count:
-        >>> PlacementSpec.from_strings('3'.split())
+        >>> PlacementSpec.from_string('3')
         PlacementSpec(count=3)
         A list of names is parsed as host specifications:
-        >>> PlacementSpec.from_strings('host1 host2'.split())
+        >>> PlacementSpec.from_string('host1 host2')
         PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')])
         You can also prefix the hosts with a count as follows:
-        >>> PlacementSpec.from_strings('2 host1 host2'.split())
+        >>> PlacementSpec.from_string('2 host1 host2')
         PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')], count=2)
         You can spefify labels using `label:<label>`
-        >>> PlacementSpec.from_strings('label:mon'.split())
+        >>> PlacementSpec.from_string('label:mon')
         PlacementSpec(label='label:mon')
         Labels als support a count:
-        >>> PlacementSpec.from_strings('3 label:mon'.split())
+        >>> PlacementSpec.from_string('3 label:mon')
         PlacementSpec(label='label:mon', count=3)
-        >>> PlacementSpec.from_strings(None)
+        >>> PlacementSpec.from_string(None)
         PlacementSpec()
         """
-        strings = strings or []
+        if arg is None:
+            strings = []
+        elif isinstance(arg, str):
+            if ' ' in arg:
+                strings = arg.split(' ')
+            elif ';' in arg:
+                strings = arg.split(';')
+            elif ',' in arg and '[' not in arg:
+                # FIXME: this isn't quite right.  we want to avoid breaking
+                # a list of mons with addrvecs... so we're basically allowing
+                # , most of the time, except when addrvecs are used.  maybe
+                # ok?
+                strings = arg.split(',')
+            else:
+                strings = [arg]
+        else:
+            raise OrchestratorValidationError('invalid placement %s' % arg)
 
         count = None
         if strings:
@@ -1342,6 +1358,14 @@ class PlacementSpec(object):
                 strings = strings[1:]
             except ValueError:
                 pass
+        for s in strings:
+            if s.startswith('count:'):
+                try:
+                    count = int(s[6:])
+                    strings.remove(s)
+                    break
+                except ValueError:
+                    pass
 
         all_hosts = False
         if '*' in strings:
