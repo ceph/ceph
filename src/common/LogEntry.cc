@@ -8,6 +8,17 @@
 #include "Formatter.h"
 #include "include/stringify.h"
 
+using std::list;
+using std::map;
+using std::make_pair;
+using std::pair;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+
 // ----
 // LogEntryKey
 
@@ -372,4 +383,3 @@ void LogSummary::generate_test_instances(list<LogSummary*>& o)
   o.push_back(new LogSummary);
   // more!
 }
-

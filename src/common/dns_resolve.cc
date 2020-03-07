@@ -20,6 +20,8 @@
 
 #define dout_subsys ceph_subsys_
 
+using std::map;
+using std::string;
 
 namespace ceph {
 
@@ -52,8 +54,7 @@ int ResolvHWrapper::res_search(const char *hostname, int cls,
 DNSResolver::~DNSResolver()
 {
 #ifdef HAVE_RES_NQUERY
-  list<res_state>::iterator iter;
-  for (iter = states.begin(); iter != states.end(); ++iter) {
+  for (auto iter = states.begin(); iter != states.end(); ++iter) {
     struct __res_state *s = *iter;
     delete s;
   }

@@ -39,6 +39,13 @@
 
 #include <stdio.h>
 
+using std::list;
+using std::map;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 int get_fs_stats(ceph_data_stats_t &stats, const char *path)
 {
   if (!path)
@@ -72,7 +79,7 @@ static char* value_sanitize(char *value)
 }
 
 static bool value_set(char *buf, const char *prefix,
-			    map<string, string> *pm, const char *key)
+		      map<string, string> *pm, const char *key)
 {
   if (strncmp(buf, prefix, strlen(prefix))) {
     return false;
@@ -287,12 +294,12 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   ceph_assert(f);
 
   f->open_object_section(type);
-  for (map<string, list<int> >::const_iterator host = services.begin();
+  for (auto host = services.begin();
        host != services.end(); ++host) {
     f->open_array_section(host->first.c_str());
     const list<int>& hosted = host->second;
-    for (list<int>::const_iterator s = hosted.begin();
-	 s != hosted.end(); ++s) {
+    for (auto s = hosted.cbegin();
+	 s != hosted.cend(); ++s) {
       f->dump_int(type, *s);
     }
     f->close_section();

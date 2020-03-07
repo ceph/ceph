@@ -15,6 +15,8 @@
 #include "include/compat.h"
 #include "common/debug.h"
 
+using std::ostringstream;
+
 namespace ceph {
   static CephContext *g_assert_context = NULL;
 
@@ -156,7 +158,7 @@ namespace ceph {
   }
 
   [[gnu::cold]] void __ceph_abort(const char *file, int line,
-				  const char *func, const string& msg)
+				  const char *func, const std::string& msg)
   {
     ostringstream tss;
     tss << ceph_clock_now();
