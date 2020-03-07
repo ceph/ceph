@@ -19,6 +19,8 @@
 #include "include/common_fwd.h"
 
 using std::ostringstream;
+using std::make_pair;
+using std::pair;
 
 namespace TOPNSPC::common {
 PerfCountersCollectionImpl::PerfCountersCollectionImpl()
@@ -544,13 +546,13 @@ void PerfCountersBuilder::add_u64_counter_histogram(
 {
   add_impl(idx, name, description, nick, prio,
 	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER, unit,
-           unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
+           std::unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
 }
 
 void PerfCountersBuilder::add_impl(
   int idx, const char *name,
   const char *description, const char *nick, int prio, int ty, int unit,
-  unique_ptr<PerfHistogram<>> histogram)
+  std::unique_ptr<PerfHistogram<>> histogram)
 {
   ceph_assert(idx > m_perf_counters->m_lower_bound);
   ceph_assert(idx < m_perf_counters->m_upper_bound);

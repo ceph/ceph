@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -13,6 +15,8 @@
 #include "include/ipaddr.h"
 #include "msg/msg_types.h"
 #include "common/pick_address.h"
+
+using std::string;
 
 void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,

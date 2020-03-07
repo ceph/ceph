@@ -34,6 +34,9 @@
 
 #define dout_subsys ceph_subsys_
 
+using std::string;
+using std::vector;
+
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,
   const struct ifaddrs *ifa,
@@ -465,7 +468,7 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
     return {};
   }
 
-  const unsigned int prefix_len = max(sizeof(in_addr::s_addr), sizeof(in6_addr::s6_addr)) * CHAR_BIT;
+  const unsigned int prefix_len = std::max(sizeof(in_addr::s_addr), sizeof(in6_addr::s6_addr)) * CHAR_BIT;
   const struct ifaddrs *found = find_ip_in_subnet(
     ifa,
     (const struct sockaddr *) &network, prefix_len);
@@ -481,7 +484,7 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
 }
 
 
-bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_addr_t *match)
+bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entity_addr_t *match)
 {
   struct ifaddrs *ifa;
   int r = getifaddrs(&ifa);
@@ -518,7 +521,7 @@ int get_iface_numa_node(
     PHY_PORT,
     BOND_PORT
   } ifatype = iface_t::PHY_PORT;
-  string_view ifa{iface};
+  std::string_view ifa{iface};
   if (auto pos = ifa.find(":"); pos != ifa.npos) {
     ifa.remove_suffix(ifa.size() - pos);
   }

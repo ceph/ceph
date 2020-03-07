@@ -17,6 +17,16 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
+using std::list;
+using std::make_pair;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+
+using ceph::Formatter;
+
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "-- op tracker -- ";

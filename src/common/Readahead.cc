@@ -4,6 +4,8 @@
 #include "common/Readahead.h"
 #include "common/Cond.h"
 
+using std::vector;
+
 Readahead::Readahead()
   : m_trigger_requests(10),
     m_readahead_min_bytes(0),
@@ -30,7 +32,7 @@ Readahead::extent_t Readahead::update(const vector<extent_t>& extents, uint64_t 
     m_lock.unlock();
     return extent_t(0, 0);
   }
-  pair<uint64_t, uint64_t> extent = _compute_readahead(limit);
+  std::pair<uint64_t, uint64_t> extent = _compute_readahead(limit);
   m_lock.unlock();
   return extent;
 }

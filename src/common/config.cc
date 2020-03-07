@@ -37,11 +37,22 @@
 // set set_mon_vals()
 #define dout_subsys ceph_subsys_monc
 
+using std::cerr;
+using std::cout;
 using std::map;
+using std::less;
 using std::list;
+using std::ostream;
 using std::ostringstream;
 using std::pair;
 using std::string;
+using std::string_view;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
 
 static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, $home/.ceph/$cluster.conf, $cluster.conf"
 #if defined(__FreeBSD__)

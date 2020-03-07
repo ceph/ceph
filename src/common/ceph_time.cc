@@ -52,6 +52,8 @@ int clock_gettime(int clk_id, struct timespec *tp)
 }
 #endif
 
+using namespace std::literals;
+
 namespace ceph {
   namespace time_detail {
     void real_clock::to_ceph_timespec(const time_point& t,
@@ -155,7 +157,7 @@ namespace ceph {
     // FIXME: somebody pretty please make a version of this function
     // that isn't as lame as this one!
     uint64_t nsec = std::chrono::nanoseconds(t).count();
-    ostringstream ss;
+    std::ostringstream ss;
     if (nsec < 2000000000) {
       ss << ((float)nsec / 1000000000) << "s";
       return ss.str();
@@ -201,7 +203,7 @@ namespace ceph {
     uint64_t sec = nsec / 1000000000;
     nsec %= 1000000000;
     uint64_t yr = sec / (60 * 60 * 24 * 365);
-    ostringstream ss;
+    std::ostringstream ss;
     if (yr) {
       ss << yr << "y";
       sec -= yr * (60 * 60 * 24 * 365);
@@ -245,7 +247,7 @@ namespace ceph {
 
   std::chrono::seconds parse_timespan(const std::string& s)
   {
-    static std::map<string,int> units = {
+    static std::map<std::string,int> units = {
       { "s", 1 },
       { "sec", 1 },
       { "second", 1 },
@@ -291,13 +293,13 @@ namespace ceph {
 	++pos;
       }
       if (val_start == pos) {
-	throw invalid_argument("expected digit");
+	throw std::invalid_argument("expected digit");
       }
-      string n = s.substr(val_start, pos - val_start);
-      string err;
+      auto n = s.substr(val_start, pos - val_start);
+      std::string err;
       auto val = strict_strtoll(n.c_str(), 10, &err);
       if (err.size()) {
-	throw invalid_argument(err);
+	throw std::invalid_argument(err);
       }
 
       // skip whitespace
@@ -311,16 +313,16 @@ namespace ceph {
 	++pos;
       }
       if (unit_start != pos) {
-	string unit = s.substr(unit_start, pos - unit_start);
+	auto unit = s.substr(unit_start, pos - unit_start);
 	auto p = units.find(unit);
 	if (p == units.end()) {
-	  throw invalid_argument("unrecogized unit '"s + unit + "'");
+	  throw std::invalid_argument("unrecogized unit '"s + unit + "'");
 	}
 	val *= p->second;
       } else if (pos < s.size()) {
-	throw invalid_argument("unexpected trailing '"s + s.substr(pos) + "'");
+	throw std::invalid_argument("unexpected trailing '"s + s.substr(pos) + "'");
       }
-      r += chrono::seconds(val);
+      r += std::chrono::seconds(val);
     }
     return r;
   }

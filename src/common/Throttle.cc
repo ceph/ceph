@@ -16,8 +16,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "throttle(" << name << " " << (void*)this << ") "
 
+using std::list;
+using std::ostream;
+using std::string;
+
 using ceph::mono_clock;
 using ceph::mono_time;
+using ceph::timespan;
 
 enum {
   l_throttle_first = 532430,

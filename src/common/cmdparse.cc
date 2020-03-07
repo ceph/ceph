@@ -19,6 +19,13 @@
 #include "common/strtol.h"
 #include "json_spirit/json_spirit.h"
 
+using std::is_same_v;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::string_view;
+using std::vector;
+
 /**
  * Given a cmddesc like "foo baz name=bar,type=CephString",
  * return the prefix "foo baz".
@@ -293,15 +300,14 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
 
   try {
     if (!json_spirit::read(fullcmd, v))
-      throw runtime_error("unparseable JSON " + fullcmd);
+      throw std::runtime_error("unparseable JSON " + fullcmd);
     if (v.type() != json_spirit::obj_type)
-      throw(runtime_error("not JSON object " + fullcmd));
+      throw std::runtime_error("not JSON object " + fullcmd);
 
     // allocate new mObject (map) to return
     // make sure all contents are simple types (not arrays or objects)
     json_spirit::mObject o = v.get_obj();
-    for (map<string, json_spirit::mValue>::iterator it = o.begin();
-	 it != o.end(); ++it) {
+    for (auto it = o.begin(); it != o.end(); ++it) {
 
       // ok, marshal it into our string->cmd_vartype map, or throw an
       // exception if it's not a simple datatype.  This is kind of
@@ -312,7 +318,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
 
       case json_spirit::obj_type:
       default:
-	throw(runtime_error("JSON array/object not allowed " + fullcmd));
+	throw std::runtime_error("JSON array/object not allowed " + fullcmd);
         break;
 
       case json_spirit::array_type:
@@ -329,7 +335,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
 	    vector<string> outv;
 	    for (const auto& sv : spvals) {
 	      if (sv.type() != json_spirit::str_type) {
-		throw(runtime_error("Can't handle arrays of multiple types"));
+		throw std::runtime_error("Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_str());
 	    }
@@ -338,7 +344,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
 	    vector<int64_t> outv;
 	    for (const auto& sv : spvals) {
 	      if (spvals.front().type() != json_spirit::int_type) {
-		throw(runtime_error("Can't handle arrays of multiple types"));
+		throw std::runtime_error("Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_int64());
 	    }
@@ -347,14 +353,14 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
 	    vector<double> outv;
 	    for (const auto& sv : spvals) {
 	      if (spvals.front().type() != json_spirit::real_type) {
-		throw(runtime_error("Can't handle arrays of multiple types"));
+		throw std::runtime_error("Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_real());
 	    }
 	    (*mapp)[it->first] = std::move(outv);
 	  } else {
-	    throw(runtime_error("Can't handle arrays of types other than "
-				"int, string, or double"));
+	    throw std::runtime_error("Can't handle arrays of types other than "
+				     "int, string, or double");
 	  }
 	}
 	break;
@@ -376,7 +382,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
       }
     }
     return true;
-  } catch (runtime_error &e) {
+  } catch (const std::runtime_error &e) {
     ss << e.what();
     return false;
   }
@@ -502,7 +508,7 @@ bool arg_in_range(T value, const arg_desc_t& desc, std::ostream& os) {
   }
   auto min_max = get_str_list(string(range->second), "|");
   auto min = str_to_num<T>(min_max.front());
-  auto max = numeric_limits<T>::max();
+  auto max = std::numeric_limits<T>::max();
   if (min_max.size() > 1) {
     max = str_to_num<T>(min_max.back());
   }
@@ -546,9 +552,9 @@ bool validate_str_arg(std::string_view value,
 
 template<bool is_vector,
 	 typename T,
-	 typename Value = conditional_t<is_vector,
-					vector<T>,
-					T>>
+	 typename Value = std::conditional_t<is_vector,
+					     vector<T>,
+					     T>>
 bool validate_arg(CephContext* cct,
 		  const cmdmap_t& cmdmap,
 		  const arg_desc_t& desc,
