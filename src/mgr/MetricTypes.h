@@ -47,7 +47,7 @@ typedef boost::variant<OSDMetricPayload,
 
 class EncodeMetricPayloadVisitor : public boost::static_visitor<void> {
 public:
-  explicit EncodeMetricPayloadVisitor(bufferlist &bl) : m_bl(bl) {
+  explicit EncodeMetricPayloadVisitor(ceph::buffer::list &bl) : m_bl(bl) {
   }
 
   template <typename MetricPayload>
@@ -58,12 +58,12 @@ public:
   }
 
 private:
-  bufferlist &m_bl;
+  ceph::buffer::list &m_bl;
 };
 
 class DecodeMetricPayloadVisitor : public boost::static_visitor<void> {
 public:
-  DecodeMetricPayloadVisitor(bufferlist::const_iterator &iter) : m_iter(iter) {
+  DecodeMetricPayloadVisitor(ceph::buffer::list::const_iterator &iter) : m_iter(iter) {
   }
 
   template <typename MetricPayload>
@@ -73,7 +73,7 @@ public:
   }
 
 private:
-  bufferlist::const_iterator &m_iter;
+  ceph::buffer::list::const_iterator &m_iter;
 };
 
 struct MetricReportMessage {
@@ -83,11 +83,11 @@ struct MetricReportMessage {
     : payload(payload) {
   }
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     boost::apply_visitor(EncodeMetricPayloadVisitor(bl), payload);
   }
 
-  void decode(bufferlist::const_iterator &iter) {
+  void decode(ceph::buffer::list::const_iterator &iter) {
     using ceph::decode;
 
     uint32_t metric_report_type;
@@ -149,7 +149,7 @@ typedef boost::variant<OSDConfigPayload,
 
 class EncodeConfigPayloadVisitor : public boost::static_visitor<void> {
 public:
-  explicit EncodeConfigPayloadVisitor(bufferlist &bl) : m_bl(bl) {
+  explicit EncodeConfigPayloadVisitor(ceph::buffer::list &bl) : m_bl(bl) {
   }
 
   template <typename ConfigPayload>
@@ -160,12 +160,12 @@ public:
   }
 
 private:
-  bufferlist &m_bl;
+  ceph::buffer::list &m_bl;
 };
 
 class DecodeConfigPayloadVisitor : public boost::static_visitor<void> {
 public:
-  DecodeConfigPayloadVisitor(bufferlist::const_iterator &iter) : m_iter(iter) {
+  DecodeConfigPayloadVisitor(ceph::buffer::list::const_iterator &iter) : m_iter(iter) {
   }
 
   template <typename ConfigPayload>
@@ -175,7 +175,7 @@ public:
   }
 
 private:
-  bufferlist::const_iterator &m_iter;
+  ceph::buffer::list::const_iterator &m_iter;
 };
 
 struct MetricConfigMessage {
@@ -185,11 +185,11 @@ struct MetricConfigMessage {
     : payload(payload) {
   }
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     boost::apply_visitor(EncodeConfigPayloadVisitor(bl), payload);
   }
 
-  void decode(bufferlist::const_iterator &iter) {
+  void decode(ceph::buffer::list::const_iterator &iter) {
     using ceph::decode;
 
     uint32_t metric_config_type;
