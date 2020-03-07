@@ -2427,9 +2427,9 @@ def list_daemons(detail=True, legacy_dir=None):
                             image_id = normalize_container_id(image_id)
                             daemon_type = name.split('.', 1)[0]
                             start_stamp = try_convert_datetime(start)
+                            if not version or '.' not in version:
+                                version = seen_versions.get(image_id, None)
                             if daemon_type in Ceph.daemons:
-                                if not version or '.' not in version:
-                                    version = seen_versions.get(image_id, None)
                                 if not version:
                                     out, err, code = call(
                                         [container_path, 'exec', container_id,
