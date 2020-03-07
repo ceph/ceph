@@ -38,14 +38,14 @@
 
 class filepath {
   inodeno_t ino;   // base inode.  ino=0 implies pure relative path.
-  string path;     // relative path.
+  std::string path;     // relative path.
 
   /** bits - path segments
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
    *
    * NOTE: this value is LAZILY maintained... i.e. it's a cache
    */
-  mutable vector<string> bits;
+  mutable std::vector<std::string> bits;
   bool encoded;
 
   void rebuild_path() {
@@ -74,7 +74,7 @@ class filepath {
  public:
   filepath() : ino(0), encoded(false) { }
   filepath(std::string_view s, inodeno_t i) : ino(i), path(s), encoded(false) { }
-  filepath(const string& s, inodeno_t i) : ino(i), path(s), encoded(false) { }
+  filepath(const std::string& s, inodeno_t i) : ino(i), path(s), encoded(false) { }
   filepath(const char* s, inodeno_t i) : ino(i), path(s), encoded(false) { }
   filepath(const filepath& o) {
     ino = o.ino;
@@ -83,7 +83,7 @@ class filepath {
     encoded = o.encoded;
   }
   filepath(inodeno_t i) : ino(i), encoded(false) { }
-  
+
   /*
    * if we are fed a relative path as a string, either set ino=0 (strictly
    * relative) or 1 (absolute).  throw out any leading '/'.
@@ -113,7 +113,7 @@ class filepath {
 
   // accessors
   inodeno_t get_ino() const { return ino; }
-  const string& get_path() const { return path; }
+  const std::string& get_path() const { return path; }
   const char *c_str() const { return path.c_str(); }
 
   int length() const { return path.length(); }
@@ -126,13 +126,13 @@ class filepath {
   bool absolute() const { return ino == 1; }
   bool pure_relative() const { return ino == 0; }
   bool ino_relative() const { return ino > 0; }
-  
-  const string& operator[](int i) const {
+
+  const std::string& operator[](int i) const {
     if (bits.empty() && path.length() > 0) parse_bits();
     return bits[i];
   }
 
-  const string& last_dentry() const {
+  const std::string& last_dentry() const {
     if (bits.empty() && path.length() > 0) parse_bits();
     ceph_assert(!bits.empty());
     return bits[ bits.size()-1 ];
@@ -166,7 +166,7 @@ class filepath {
       parse_bits();
     bits.pop_back();
     rebuild_path();
-  }    
+  }
   void push_dentry(std::string_view s) {
     if (bits.empty() && path.length() > 0) 
       parse_bits();
@@ -175,13 +175,13 @@ class filepath {
     path += s;
     bits.emplace_back(s);
   }
-  void push_dentry(const string& s) {
+  void push_dentry(const std::string& s) {
     push_dentry(std::string_view(s));
   }
   void push_dentry(const char *cs) {
     push_dentry(std::string_view(cs, strlen(cs)));
   }
-  void push_front_dentry(const string& s) {
+  void push_front_dentry(const std::string& s) {
     bits.insert(bits.begin(), s);
     rebuild_path();
   }
@@ -192,14 +192,14 @@ class filepath {
   }
 
   // encoding
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(ino, bl);
     encode(path, bl);
   }
-  void decode(bufferlist::const_iterator& blp) {
+  void decode(ceph::buffer::list::const_iterator& blp) {
     using ceph::decode;
     bits.clear();
     __u8 struct_v;
@@ -208,11 +208,11 @@ class filepath {
     decode(path, blp);
     encoded = true;
   }
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->dump_unsigned("base_ino", ino);
     f->dump_string("relative_path", path);
   }
-  static void generate_test_instances(list<filepath*>& o) {
+  static void generate_test_instances(std::list<filepath*>& o) {
     o.push_back(new filepath);
     o.push_back(new filepath("/usr/bin", 0));
     o.push_back(new filepath("/usr/sbin", 1));
@@ -239,7 +239,7 @@ class filepath {
 
 WRITE_CLASS_ENCODER(filepath)
 
-inline ostream& operator<<(ostream& out, const filepath& path)
+inline std::ostream& operator<<(std::ostream& out, const filepath& path)
 {
   if (path.get_ino()) {
     out << '#' << path.get_ino();
