@@ -8,6 +8,7 @@
 #include <boost/smart_ptr/make_local_shared.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <sys/utsname.h>
 #include "common/pick_address.h"
 
 #include "messages/MOSDAlive.h"
@@ -40,6 +41,7 @@
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
+#include "include/util.h"
 
 namespace {
   seastar::logger& logger() {
@@ -343,6 +345,7 @@ seastar::future<> OSD::_send_boot()
                                   heartbeat->get_front_addrs(),
                                   cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
+  collect_sys_info(&m->metadata, NULL);
   return monc->send_message(m);
 }
 
