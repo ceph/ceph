@@ -45,15 +45,15 @@ private:
   seastar::future<> handle_mgr_conf(crimson::net::Connection* conn,
 				    Ref<MMgrConfigure> m);
   seastar::future<> reconnect();
-  void report();
+  void tick();
 
 private:
   MgrMap mgrmap;
   crimson::net::Messenger& msgr;
   WithStats& with_stats;
   crimson::net::ConnectionRef conn;
-  std::chrono::seconds report_period{0};
-  seastar::timer<seastar::lowres_clock> report_timer;
+  std::chrono::seconds tick_period{0};
+  seastar::timer<seastar::lowres_clock> tick_timer;
   seastar::gate gate;
 };
 

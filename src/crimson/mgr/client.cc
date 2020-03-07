@@ -26,7 +26,7 @@ Client::Client(crimson::net::Messenger& msgr,
                  WithStats& with_stats)
   : msgr{msgr},
     with_stats{with_stats},
-    report_timer{[this] {report();}}
+    tick_timer{[this] {tick();}}
 {}
 
 seastar::future<> Client::start()
@@ -61,10 +61,9 @@ seastar::future<> Client::ms_dispatch(crimson::net::Connection* conn,
 seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 {
   if (conn == c) {
-    return reconnect();
-  } else {
-    return seastar::now();
+    conn = nullptr;
   }
+  return seastar::now();
 }
 
 seastar::future<> Client::reconnect()
@@ -101,22 +100,30 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
                                           Ref<MMgrConfigure> m)
 {
   logger().info("{} {}", __func__, *m);
-  report_period = std::chrono::seconds{m->stats_period};
-  if (report_period.count() && !report_timer.armed() ) {
-    report();
+  tick_period = std::chrono::seconds{m->stats_period};
+  if (tick_period.count() && !tick_timer.armed() ) {
+    tick();
   }
   return seastar::now();
 }
 
-void Client::report()
+void Client::tick()
 {
-  (void) seastar::with_gate(gate, [this] {
-    auto pg_stats = with_stats.get_stats();
-    return conn->send(std::move(pg_stats)).finally([this] {
-      if (report_period.count()) {
-        report_timer.arm(report_period);
-      }
-    });
+  (void) seastar::with_gate(gate, [=] {
+    if (conn) {
+      auto pg_stats = with_stats.get_stats();
+      return conn->send(std::move(pg_stats)).finally([this] {
+	if (tick_period.count()) {
+	  tick_timer.arm(tick_period);
+	}
+      });
+    } else {
+      return reconnect().finally([this] {
+	if (tick_period.count()) {
+	  tick_timer.arm(tick_period);
+	}
+      });;
+    }
   });
 }
 
