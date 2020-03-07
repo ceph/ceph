@@ -113,8 +113,7 @@ void MDBalancer::handle_export_pins(void)
     }
 
     bool remove = true;
-    auto&& dfls = in->get_dirfrags();
-    for (auto dir : dfls) {
+    for (auto&& dir : in->get_dirfrags()) {
       if (!dir->is_auth())
 	continue;
 
