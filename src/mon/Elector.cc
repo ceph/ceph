@@ -688,11 +688,9 @@ void Elector::notify_rank_changed(int new_rank)
 
 void Elector::notify_rank_removed(int rank_removed)
 {
-  int rank_actually_gone; // if we remove rank 1 of 3, they shift
   // over so we have ranks 0,1 rather than 0,3 left.
-  rank_actually_gone = peer_tracker.notify_rank_removed(rank_removed);
-  live_pinging.erase(rank_actually_gone);
-  dead_pinging.erase(rank_actually_gone);
+  peer_tracker.notify_rank_removed(rank_removed);
+  #warning Need to fix up the pinging data structures+contexts!
 }
 
 void Elector::notify_strategy_maybe_changed(int strategy)
