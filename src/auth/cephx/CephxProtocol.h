@@ -43,13 +43,13 @@
 struct CephXServerChallenge {
   uint64_t server_challenge;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(server_challenge, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -64,11 +64,11 @@ WRITE_CLASS_ENCODER(CephXServerChallenge)
 struct CephXRequestHeader {
   __u16 request_type;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(request_type, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(request_type, bl);
   }
@@ -79,12 +79,12 @@ struct CephXResponseHeader {
   uint16_t request_type;
   int32_t status;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(request_type, bl);
     encode(status, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(request_type, bl);
     decode(status, bl);
@@ -94,11 +94,11 @@ WRITE_CLASS_ENCODER(CephXResponseHeader)
 
 struct CephXTicketBlob {
   uint64_t secret_id;
-  bufferlist blob;
+  ceph::buffer::list blob;
 
   CephXTicketBlob() : secret_id(0) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
      using ceph::encode;
      __u8 struct_v = 1;
      encode(struct_v, bl);
@@ -106,7 +106,7 @@ struct CephXTicketBlob {
      encode(blob, bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
      using ceph::decode;
      __u8 struct_v;
      decode(struct_v, bl);
@@ -123,7 +123,7 @@ struct CephXAuthenticate {
   CephXTicketBlob old_ticket;
   uint32_t other_keys = 0;  // replaces CephXServiceTicketRequest
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 2;
     encode(struct_v, bl);
@@ -132,7 +132,7 @@ struct CephXAuthenticate {
     encode(old_ticket, bl);
     encode(other_keys, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -149,12 +149,12 @@ WRITE_CLASS_ENCODER(CephXAuthenticate)
 struct CephXChallengeBlob {
   uint64_t server_challenge, client_challenge;
   
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
      using ceph::encode;
     encode(server_challenge, bl);
     encode(client_challenge, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(server_challenge, bl);
     decode(client_challenge, bl);
@@ -185,25 +185,25 @@ extern bool cephx_build_service_ticket_blob(CephContext *cct,
 
 extern void cephx_build_service_ticket_request(CephContext *cct, 
 					       uint32_t keys,
-					       bufferlist& request);
+					       ceph::buffer::list& request);
 
 extern bool cephx_build_service_ticket_reply(CephContext *cct,
 					     CryptoKey& principal_secret,
-					     vector<CephXSessionAuthInfo> ticket_info,
+					     std::vector<CephXSessionAuthInfo> ticket_info,
                                              bool should_encrypt_ticket,
                                              CryptoKey& ticket_enc_key,
-					     bufferlist& reply);
+					     ceph::buffer::list& reply);
 
 struct CephXServiceTicketRequest {
   uint32_t keys;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(keys, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -220,7 +220,7 @@ WRITE_CLASS_ENCODER(CephXServiceTicketRequest)
 struct CephXAuthorizeReply {
   uint64_t nonce_plus_one;
   std::string connection_secret;
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     if (connection_secret.size()) {
@@ -233,7 +233,7 @@ struct CephXAuthorizeReply {
       encode(connection_secret, bl);
     }
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -251,15 +251,15 @@ private:
   CephContext *cct;
 public:
   uint64_t nonce;
-  bufferlist base_bl;
+  ceph::buffer::list base_bl;
 
   explicit CephXAuthorizer(CephContext *cct_)
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
 
   bool build_authorizer();
-  bool verify_reply(bufferlist::const_iterator& reply,
+  bool verify_reply(ceph::buffer::list::const_iterator& reply,
 		    std::string *connection_secret) override;
-  bool add_challenge(CephContext *cct, const bufferlist& challenge) override;
+  bool add_challenge(CephContext *cct, const ceph::buffer::list& challenge) override;
 };
 
 
@@ -279,7 +279,7 @@ struct CephXTicketHandler {
 
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
-				 bufferlist::const_iterator& indata);
+				 ceph::buffer::list::const_iterator& indata);
   // to access the service
   CephXAuthorizer *build_authorizer(uint64_t global_id) const;
 
@@ -294,14 +294,14 @@ private:
 };
 
 struct CephXTicketManager {
-  typedef map<uint32_t, CephXTicketHandler> tickets_map_t;
+  typedef std::map<uint32_t, CephXTicketHandler> tickets_map_t;
   tickets_map_t tickets_map;
   uint64_t global_id;
 
   explicit CephXTicketManager(CephContext *cct_) : global_id(0), cct(cct_) {}
 
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
-				 bufferlist::const_iterator& indata);
+				 ceph::buffer::list::const_iterator& indata);
 
   CephXTicketHandler& get_handler(uint32_t type) {
     tickets_map_t::iterator i = tickets_map.find(type);
@@ -330,14 +330,14 @@ struct CephXServiceTicket {
   CryptoKey session_key;
   utime_t validity;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(session_key, bl);
     encode(validity, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -352,14 +352,14 @@ struct CephXServiceTicketInfo {
   AuthTicket ticket;
   CryptoKey session_key;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(ticket, bl);
     encode(session_key, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -371,13 +371,13 @@ WRITE_CLASS_ENCODER(CephXServiceTicketInfo)
 
 struct CephXAuthorizeChallenge : public AuthAuthorizerChallenge {
   uint64_t server_challenge;
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(server_challenge, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -390,7 +390,7 @@ struct CephXAuthorize {
   uint64_t nonce;
   bool have_challenge = false;
   uint64_t server_challenge_plus_one = 0;
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 2;
     encode(struct_v, bl);
@@ -398,7 +398,7 @@ struct CephXAuthorize {
     encode(have_challenge, bl);
     encode(server_challenge_plus_one, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -424,12 +424,12 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
 extern bool cephx_verify_authorizer(
   CephContext *cct,
   const KeyStore& keys,
-  bufferlist::const_iterator& indata,
+  ceph::buffer::list::const_iterator& indata,
   size_t connection_secret_required_len,
   CephXServiceTicketInfo& ticket_info,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge,
   std::string *connection_secret,
-  bufferlist *reply_bl);
+  ceph::buffer::list *reply_bl);
 
 
 
@@ -443,21 +443,22 @@ static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
 template <typename T>
 void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key,
-			   const bufferlist& bl_enc,
+			   const ceph::buffer::list& bl_enc,
 			   std::string &error)
 {
   uint64_t magic;
-  bufferlist bl;
+  ceph::buffer::list bl;
 
   if (key.decrypt(cct, bl_enc, bl, &error) < 0)
     return;
 
   auto iter2 = bl.cbegin();
   __u8 struct_v;
+  using ceph::decode;
   decode(struct_v, iter2);
   decode(magic, iter2);
   if (magic != AUTH_ENC_MAGIC) {
-    ostringstream oss;
+    std::ostringstream oss;
     oss << "bad magic in decode_decrypt, " << magic << " != " << AUTH_ENC_MAGIC;
     error = oss.str();
     return;
@@ -468,10 +469,11 @@ void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key,
 
 template <typename T>
 void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
-			   bufferlist& out, std::string &error)
+			   ceph::buffer::list& out, std::string &error)
 {
-  bufferlist bl;
+  ceph::buffer::list bl;
   __u8 struct_v = 1;
+  using ceph::encode;
   encode(struct_v, bl);
   uint64_t magic = AUTH_ENC_MAGIC;
   encode(magic, bl);
@@ -482,14 +484,15 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
 
 template <typename T>
 int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
-		    bufferlist::const_iterator& iter, std::string &error)
+		    ceph::buffer::list::const_iterator& iter, std::string &error)
 {
-  bufferlist bl_enc;
+  ceph::buffer::list bl_enc;
+  using ceph::decode;
   try {
     decode(bl_enc, iter);
     decode_decrypt_enc_bl(cct, t, key, bl_enc, error);
   }
-  catch (buffer::error &e) {
+  catch (ceph::buffer::error &e) {
     error = "error decoding block for decryption";
   }
   if (!error.empty())
@@ -499,9 +502,10 @@ int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
 
 template <typename T>
 int encode_encrypt(CephContext *cct, const T& t, const CryptoKey& key,
-		    bufferlist& out, std::string &error)
+		    ceph::buffer::list& out, std::string &error)
 {
-  bufferlist bl_enc;
+  using ceph::encode;
+  ceph::buffer::list bl_enc;
   encode_encrypt_enc_bl(cct, t, key, bl_enc, error);
   if (!error.empty()){
     return CEPHX_CRYPT_ERR;

@@ -31,7 +31,7 @@ void RotatingKeyRing::set_secrets(RotatingSecrets&& s)
 void RotatingKeyRing::dump_rotating() const
 {
   ldout(cct, 10) << "dump_rotating:" << dendl;
-  for (map<uint64_t, ExpiringCryptoKey>::const_iterator iter = secrets.secrets.begin();
+  for (auto iter = secrets.secrets.begin();
        iter != secrets.secrets.end();
        ++iter)
     ldout(cct, 10) << " id " << iter->first << " " << iter->second << dendl;
@@ -54,8 +54,7 @@ bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_i
     return false;
   }
 
-  map<uint64_t, ExpiringCryptoKey>::const_iterator iter =
-    secrets.secrets.find(secret_id);
+  auto iter = secrets.secrets.find(secret_id);
   if (iter == secrets.secrets.end()) {
     ldout(cct, 0) << "could not find secret_id=" << secret_id << dendl;
     dump_rotating();
