@@ -781,8 +781,12 @@ void handles_singly_connected_peon(ElectionLogic::election_strategy strategy)
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
-ConnectionReport *get_connection_reports(ConnectionTracker& ct) { return ct.my_reports; }
-map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct) { return &ct.peer_reports; }
+ConnectionReport *get_connection_reports(ConnectionTracker& ct) {
+  return &ct.my_reports;
+}
+map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct) {
+  return &ct.peer_reports;
+}
 void handles_outdated_scoring(ElectionLogic::election_strategy strategy)
 {
   Election election(3, strategy, 5); // ping every 5 timesteps so they start elections before settling scores!
