@@ -140,7 +140,6 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   filer(m->objecter, m->finisher),
   stray_manager(m, purge_queue_),
   recovery_queue(m),
-  ephemeral_pins(member_offset(CInode, ephemeral_pin_inode)),
   trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate"))
 {
   migrator.reset(new Migrator(mds, this));
@@ -217,14 +216,33 @@ MDCache::~MDCache()
 
 void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
+  dout(20) << "config changes: " << changed << dendl;
   if (changed.count("mds_cache_memory_limit"))
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
-  if (changed.count("mds_export_ephemeral_distributed"))
+  if (changed.count("mds_export_ephemeral_distributed")) {
     export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
-  if (changed.count("mds_export_ephemeral_random"))
+    dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
+    mds->balancer->handle_export_pins();
+  }
+  if (changed.count("mds_export_ephemeral_random")) {
     export_ephemeral_random_config = g_conf().get_val<bool>("mds_export_ephemeral_random");
+    dout(10) << "Migrating any ephemeral random pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    mds->balancer->handle_export_pins();
+  }
   if (changed.count("mds_health_cache_threshold"))
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
@@ -309,6 +327,8 @@ void MDCache::add_inode(CInode *in)
   if (cache_toofull()) {
     exceeded_size_limit = true;
   }
+
+  in->maybe_ephemeral_dist(false);
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -331,13 +351,14 @@ void MDCache::remove_inode(CInode *o)
 
   o->item_open_file.remove_myself();
 
-  o->ephemeral_pin_inode.remove_myself();
-
   if (o->state_test(CInode::STATE_QUEUEDEXPORTPIN))
     export_pin_queue.erase(o);
 
   if (o->state_test(CInode::STATE_DELAYEDEXPORTPIN))
     export_pin_delayed_queue.erase(o);
+
+  o->set_ephemeral_dist(false);
+  o->set_ephemeral_rand(false);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -872,8 +893,9 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 /*
  * hashing implementation based on Lamping and Veach's Jump Consistent Hash: https://arxiv.org/pdf/1406.2294.pdf
 */
-mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, mds_rank_t max_mds)
+mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino)
 {
+  const mds_rank_t max_mds = mds->mdsmap->get_max_mds();
   uint64_t hash = rjhash64(ino);
   int64_t b = -1, j = 0;
   while (j < max_mds) {
@@ -7837,46 +7859,43 @@ bool MDCache::shutdown_pass()
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
+
+  {
+    dout(10) << "Migrating any ephemerally pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
+    mds->balancer->handle_export_pins();
+  }
+
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
-  if (!subtrees.empty() &&
-      mds->get_nodeid() != 0) {
-    dout(7) << "looking for subtrees to export to mds0" << dendl;
+  if (!subtrees.empty() && mds->get_nodeid() != 0) {
+    dout(7) << "looking for subtrees to export" << dendl;
     std::vector<CDir*> ls;
-    for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
-         it != subtrees.end();
-         ++it) {
-      CDir *dir = it->first;
-      if (dir->get_inode()->is_mdsdir())
+    for (auto& [dir, bounds] : subtrees) {
+      dout(10) << "  examining " << *dir << " bounds " << bounds << dendl;
+      if (dir->get_inode()->is_mdsdir() || !dir->is_auth())
 	continue;
-      if (dir->is_auth()) {
-	num_auth_subtree++;
-	if (dir->is_frozen() ||
-	    dir->is_freezing() ||
-	    dir->is_ambiguous_dir_auth() ||
-	    dir->state_test(CDir::STATE_EXPORTING))
-	  continue;
-	ls.push_back(dir);
+      num_auth_subtree++;
+      if (dir->is_frozen() ||
+          dir->is_freezing() ||
+          dir->is_ambiguous_dir_auth() ||
+          dir->state_test(CDir::STATE_EXPORTING) ||
+          dir->get_inode()->is_ephemerally_pinned()) {
+        continue;
       }
+      ls.push_back(dir);
     }
 
     migrator->clear_export_queue();
-
-    if (export_ephemeral_random_config ||
-        export_ephemeral_distributed_config) {
-       dout(10) << "Migrating ephemerally pinned inodes due to shutdown" << dendl;
-       elist<CInode*>::iterator it = ephemeral_pins.begin(member_offset(CInode, ephemeral_pin_inode));
-       while (!it.end()) {
-         if ((*it) == NULL || !((*it)->is_auth()))
-           dout(10) << "Inode is not auth to this rank" << dendl;
-         else {
-           dout(10) << "adding inode to export queue" << dendl;
-           (*it)->maybe_export_ephemeral_distributed_pin(true);
-	   (*it)->maybe_export_ephemeral_random_pin(true);
-         }
-         ++it;
-       }
-    }
 
     for (const auto& dir : ls) {
       mds_rank_t dest = dir->get_inode()->authority().first;
@@ -13360,6 +13379,9 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   for (auto it = q.begin(); it != q.end(); ) {
     auto *in = *it;
     mds_rank_t export_pin = in->get_export_pin(false);
+    if (in->is_ephemerally_pinned()) {
+      dout(10) << "ephemeral export pin to " << export_pin << " for " << *in << dendl;
+    }
     dout(10) << " delayed export_pin=" << export_pin << " on " << *in 
       << " max_mds=" << mdsmap.get_max_mds() << dendl;
     if (export_pin >= mdsmap.get_max_mds()) {
@@ -13369,28 +13391,20 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
 
     in->state_clear(CInode::STATE_DELAYEDEXPORTPIN);
     it = q.erase(it);
-    in->maybe_export_pin();
+    in->queue_export_pin(export_pin);
   }
 
-  /* Handle consistent hash ring during cluster resizes */
   if (mdsmap.get_max_mds() != oldmap.get_max_mds()) {
-    dout(10) << "Checking ephemerally pinned directories for re-export due to max_mds change." << dendl;
-    auto it = ephemeral_pins.begin(member_offset(CInode, ephemeral_pin_inode));
-    while (!it.end()) {
-      auto in = *it;
-      ++it;
-      // Migrate if the inodes hash elsewhere
-      if (hash_into_rank_bucket(in->ino(), mdsmap.get_max_mds()) != mds->get_nodeid()) {
-        if (in == NULL || !in->is_auth()) {
-          dout(10) << "Inode is not auth to this rank" << dendl;
-          // ++it; ??? - batrick
-        }
-      } else {
-        dout(10) << "adding inode to export queue" << dendl;
-        in->maybe_export_ephemeral_distributed_pin(true);
-        in->maybe_export_ephemeral_random_pin(true);
-        in->ephemeral_pin_inode.remove_myself();
-      }
+    dout(10) << "Checking ephemerally pinned directories for redistribute due to max_mds change." << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
     }
   }
 }

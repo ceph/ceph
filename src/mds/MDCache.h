@@ -235,7 +235,7 @@ class MDCache {
     stray_manager.eval_stray(dn);
   }
 
-  mds_rank_t hash_into_rank_bucket(inodeno_t ino, mds_rank_t max_mds);
+  mds_rank_t hash_into_rank_bucket(inodeno_t ino);
 
   void maybe_eval_stray(CInode *in, bool delay=false);
   void clear_dirty_bits_for_stray(CInode* diri);
@@ -996,6 +996,8 @@ class MDCache {
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
   std::set<CInode *> export_pin_delayed_queue;
+  std::set<CInode *> rand_ephemeral_pins;
+  std::set<CInode *> dist_ephemeral_pins;
 
   OpenFileTable open_file_table;
 
@@ -1328,8 +1330,6 @@ class MDCache {
   map<dirfrag_t, ufragment> uncommitted_fragments;
 
   map<dirfrag_t,fragment_info_t> fragments;
-
-  elist<CInode*> ephemeral_pins;
 
   DecayCounter trim_counter;
 

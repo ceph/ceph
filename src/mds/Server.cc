@@ -5679,7 +5679,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       return;
 
     auto &pi = cur->project_inode();
-    cur->set_export_ephemeral_random_pin(val);
+    cur->setxattr_ephemeral_rand(val);
     pip = &pi.inode;
   } else if (name == "ceph.dir.pin.distributed"sv) {
     if (!cur->is_dir() || cur->is_root()) {
@@ -5700,9 +5700,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       return;
 
     auto &pi = cur->project_inode();
-    cur->set_export_ephemeral_distributed_pin(val);
+    cur->setxattr_ephemeral_dist(val);
     pip = &pi.inode;
-    dout(10) << "Here is the distrib pin value" << pip->export_ephemeral_distributed_pin << dendl;
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);
@@ -6007,8 +6006,13 @@ public:
     MDRequestRef null_ref;
     get_mds()->mdcache->send_dentry_link(dn, null_ref);
 
-    if (newi->inode.is_file())
+    if (newi->inode.is_file()) {
       get_mds()->locker->share_inode_max_size(newi);
+    } else if (newi->inode.is_dir()) {
+      // We do this now so that the linkages on the new directory are stable.
+      newi->maybe_ephemeral_dist();
+      newi->maybe_ephemeral_rand();
+    }
 
     // hit pop
     get_mds()->balancer->hit_inode(newi, META_POP_IWR);

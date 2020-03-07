@@ -65,8 +65,7 @@ public:
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
     static const int STATE_NEED_SNAPFLUSH = (1<<3);
-    static const int STATE_EPHEMERAL_DISTRIBUTED = (1<<4);
-    static const int STATE_EPHEMERAL_RANDOM = (1<<5);
+    static const int STATE_EPHEMERAL_RANDOM = (1<<4);
     std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
@@ -113,7 +112,6 @@ public:
     bool is_dirty_parent() const { return (state & STATE_DIRTYPARENT); }
     bool is_dirty_pool() const { return (state & STATE_DIRTYPOOL); }
     bool need_snapflush() const { return (state & STATE_NEED_SNAPFLUSH); }
-    bool is_export_ephemeral_distributed() const { return (state & STATE_EPHEMERAL_DISTRIBUTED); }
     bool is_export_ephemeral_random() const { return (state & STATE_EPHEMERAL_RANDOM); }
 
     void print(ostream& out) const {
@@ -438,20 +436,21 @@ private:
   // return remote pointer to to-be-journaled inode
   void add_primary_dentry(CDentry *dn, CInode *in, bool dirty,
 			  bool dirty_parent=false, bool dirty_pool=false,
-			  bool need_snapflush=false, bool export_ephemeral_distributed=false,
-			  bool export_ephemeral_random=false) {
+			  bool need_snapflush=false) {
     __u8 state = 0;
     if (dirty) state |= fullbit::STATE_DIRTY;
     if (dirty_parent) state |= fullbit::STATE_DIRTYPARENT;
     if (dirty_pool) state |= fullbit::STATE_DIRTYPOOL;
     if (need_snapflush) state |= fullbit::STATE_NEED_SNAPFLUSH;
-    if (export_ephemeral_distributed) state |= fullbit::STATE_EPHEMERAL_DISTRIBUTED;
-    if (export_ephemeral_random) state |= fullbit::STATE_EPHEMERAL_RANDOM;
     add_primary_dentry(add_dir(dn->get_dir(), false), dn, in, state);
   }
   void add_primary_dentry(dirlump& lump, CDentry *dn, CInode *in, __u8 state) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
+
+    if (in->is_ephemeral_rand()) {
+      state |= fullbit::STATE_EPHEMERAL_RANDOM;
+    }
 
     // make note of where this inode was last journaled
     in->last_journaled = event_seq;
