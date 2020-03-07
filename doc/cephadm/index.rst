@@ -225,21 +225,22 @@ Deploying OSDs
 ==============
 
 To add OSDs to the cluster, you have two options:
-1) You need to know the device name for the block device (hard disk or SSD)
-that will be used.  Then,::
 
-  # ceph orch osd create *<host>*:*<path-to-device>*
+#. You need to know the device name for the block device (hard disk or
+SSD) that will be used.  Then,::
 
-For example, to deploy an OSD on host *newhost*'s SSD,::
+     # ceph orch osd create *<host>*:*<path-to-device>*
 
-  # ceph orch osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
+   For example, to deploy an OSD on host *newhost*'s SSD,::
+
+     # ceph orch osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
 
 
-2) You need to describe your disk setup by it's properties (Drive Groups)
+#. You need to describe your disk setup by it's properties (Drive Groups)
 
-Link to DriveGroup docs.::
+   Link to DriveGroup docs.::
 
-  # ceph orchestrator osd create -i my_drivegroups.yml
+    # ceph orch osd create -i my_drivegroups.yml
 
 
 .. _drivegroups: drivegroups::
