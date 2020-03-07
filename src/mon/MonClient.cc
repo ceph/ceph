@@ -863,25 +863,27 @@ void MonClient::_finish_hunting(int auth_err)
   had_a_connection = true;
   _un_backoff();
 
-  if (!auth_err) {
-    last_rotating_renew_sent = utime_t();
-    while (!waiting_for_session.empty()) {
-      _send_mon_message(std::move(waiting_for_session.front()));
-      waiting_for_session.pop_front();
+  if (auth_err) {
+    return;
+  }
+
+  last_rotating_renew_sent = utime_t();
+  while (!waiting_for_session.empty()) {
+    _send_mon_message(std::move(waiting_for_session.front()));
+    waiting_for_session.pop_front();
+  }
+  _resend_mon_commands();
+  send_log(true);
+  if (active_con) {
+    std::swap(auth, active_con->get_auth());
+    if (global_id && global_id != active_con->get_global_id()) {
+      lderr(cct) << __func__ << " global_id changed from " << global_id
+		 << " to " << active_con->get_global_id() << dendl;
     }
-    _resend_mon_commands();
-    send_log(true);
-    if (active_con) {
-      std::swap(auth, active_con->get_auth());
-      if (global_id && global_id != active_con->get_global_id()) {
-	lderr(cct) << __func__ << " global_id changed from " << global_id
-		   << " to " << active_con->get_global_id() << dendl;
-      }
-      global_id = active_con->get_global_id();
-    }
-    if (sub.reload()) {
-      _renew_subs();
-    }
+    global_id = active_con->get_global_id();
+  }
+  if (sub.reload()) {
+    _renew_subs();
   }
 }
 
