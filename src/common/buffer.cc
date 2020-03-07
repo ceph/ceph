@@ -469,8 +469,8 @@ static ceph::spinlock debug_lock;
         const auto* delete_raw = _raw;
         _raw = nullptr;
 	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-        ANNOTATE_HAPPENS_AFTER(&_raw->nref);
-        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&_raw->nref);
+        ANNOTATE_HAPPENS_AFTER(&delete_raw->nref);
+        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&delete_raw->nref);
 	delete delete_raw;  // dealloc old (if any)
       } else {
         ANNOTATE_HAPPENS_BEFORE(&_raw->nref);
