@@ -503,6 +503,8 @@ To enable SSO::
 
   $ ceph dashboard sso enable saml2
 
+.. _dashboard-alerting:
+
 Enabling Prometheus Alerting
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
