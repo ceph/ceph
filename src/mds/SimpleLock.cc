@@ -16,7 +16,7 @@
 #include "SimpleLock.h"
 #include "Mutation.h"
 
-void SimpleLock::dump(Formatter *f) const {
+void SimpleLock::dump(ceph::Formatter *f) const {
   ceph_assert(f != NULL);
   if (is_sync_and_unlocked()) {
     return;

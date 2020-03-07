@@ -9,10 +9,8 @@
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
- * 
+ *
  */
-
-
 
 #ifndef CEPH_CDENTRY_H
 #define CEPH_CDENTRY_H
@@ -249,7 +247,7 @@ public:
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
-  void encode_export(bufferlist& bl) {
+  void encode_export(ceph::buffer::list& bl) {
     ENCODE_START(1, 1, bl);
     encode(first, bl);
     encode(state, bl);
@@ -272,7 +270,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::const_iterator& blp, LogSegment *ls) {
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls) {
     DECODE_START(1, blp);
     decode(first, blp);
     __u32 nstate;
@@ -299,8 +297,8 @@ public:
     return &lock;
   }
   void set_object_info(MDSCacheObjectInfo &info) override;
-  void encode_lock_state(int type, bufferlist& bl) override;
-  void decode_lock_state(int type, const bufferlist& bl) override;
+  void encode_lock_state(int type, ceph::buffer::list& bl) override;
+  void decode_lock_state(int type, const ceph::buffer::list& bl) override;
 
   // ---------------------------------------------
   // replicas (on clients)
@@ -330,9 +328,9 @@ public:
   void remove_client_lease(ClientLease *r, Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   void remove_client_leases(Locker *locker);
 
-  ostream& print_db_line_prefix(ostream& out) override;
-  void print(ostream& out) override;
-  void dump(Formatter *f) const;
+  std::ostream& print_db_line_prefix(std::ostream& out) override;
+  void print(std::ostream& out) override;
+  void dump(ceph::Formatter *f) const;
 
 
   __u32 hash;
@@ -371,7 +369,7 @@ private:
   mempool::mds_co::string name;
 };
 
-ostream& operator<<(ostream& out, const CDentry& dn);
+std::ostream& operator<<(std::ostream& out, const CDentry& dn);
 
 
 #endif

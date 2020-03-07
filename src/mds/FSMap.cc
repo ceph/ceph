@@ -26,7 +26,15 @@
 #include "global/global_context.h"
 #include "mon/health_check.h"
 
+using std::list;
+using std::pair;
+using std::ostream;
+using std::ostringstream;
+using std::string;
 using std::stringstream;
+
+using ceph::bufferlist;
+using ceph::Formatter;
 
 void Filesystem::dump(Formatter *f) const
 {

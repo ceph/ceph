@@ -16,7 +16,15 @@
 #ifndef SCRUB_HEADER_H_
 #define SCRUB_HEADER_H_
 
+#include <memory>
+#include <string>
 #include <string_view>
+
+#include "include/ceph_assert.h"
+
+namespace ceph {
+class Formatter;
+};
 
 class CInode;
 
@@ -27,7 +35,7 @@ class CInode;
 class ScrubHeader {
 public:
   ScrubHeader(std::string_view tag_, bool is_tag_internal_, bool force_,
-              bool recursive_, bool repair_, Formatter *f_)
+              bool recursive_, bool repair_, ceph::Formatter *f_)
     : tag(tag_), is_tag_internal(is_tag_internal_), force(force_),
       recursive(recursive_), repair(repair_), formatter(f_)
   {
@@ -44,7 +52,7 @@ public:
   bool is_internal_tag() const { return is_tag_internal; }
   CInode *get_origin() const { return origin; }
   std::string_view get_tag() const { return tag; }
-  Formatter &get_formatter() const { return *formatter; }
+  ceph::Formatter& get_formatter() const { return *formatter; }
 
   bool get_repaired() const { return repaired; }
   void set_repaired() { repaired = true; }
@@ -55,7 +63,7 @@ protected:
   const bool force;
   const bool recursive;
   const bool repair;
-  Formatter * const formatter;
+  ceph::Formatter* const formatter;
   CInode *origin = nullptr;
 
   bool repaired = false;  // May be set during scrub if repairs happened
@@ -65,4 +73,3 @@ typedef std::shared_ptr<ScrubHeader> ScrubHeaderRef;
 typedef std::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
 
 #endif // SCRUB_HEADER_H_
-

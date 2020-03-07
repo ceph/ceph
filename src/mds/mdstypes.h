@@ -109,9 +109,9 @@ inline std::ostream& operator<<(std::ostream& out, const mds_role_t& role) {
 }
 
 // CAPS
-inline string gcap_string(int cap)
+inline std::string gcap_string(int cap)
 {
-  string s;
+  std::string s;
   if (cap & CEPH_CAP_GSHARED) s += "s";  
   if (cap & CEPH_CAP_GEXCL) s += "x";
   if (cap & CEPH_CAP_GCACHE) s += "c";
@@ -122,9 +122,9 @@ inline string gcap_string(int cap)
   if (cap & CEPH_CAP_GLAZYIO) s += "l";
   return s;
 }
-inline string ccap_string(int cap)
+inline std::string ccap_string(int cap)
 {
-  string s;
+  std::string s;
   if (cap & CEPH_CAP_PIN) s += "p";
 
   int a = (cap >> CEPH_CAP_SAUTH) & 3;
@@ -186,9 +186,9 @@ struct frag_info_t : public scatter_info_t {
 	nsubdirs == o.nsubdirs;
   }
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<frag_info_t*>& ls);
 
   // this frag
@@ -246,9 +246,9 @@ struct nest_info_t : public scatter_info_t {
         rsnaps == o.rsnaps;
   }
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<nest_info_t*>& ls);
 
   // this frag + children
@@ -273,12 +273,12 @@ struct vinodeno_t {
   vinodeno_t() {}
   vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(ino, bl);
     encode(snapid, bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     using ceph::decode;
     decode(ino, p);
     decode(snapid, p);
@@ -303,20 +303,20 @@ inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
 
 struct quota_info_t
 {
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(max_bytes, bl);
     encode(max_files, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
     decode(max_bytes, p);
     decode(max_files, p);
     DECODE_FINISH(p);
   }
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<quota_info_t *>& ls);
 
   bool is_valid() const {
@@ -335,7 +335,7 @@ inline bool operator==(const quota_info_t &l, const quota_info_t &r) {
   return memcmp(&l, &r, sizeof(l)) == 0;
 }
 
-ostream& operator<<(ostream &out, const quota_info_t &n);
+std::ostream& operator<<(std::ostream &out, const quota_info_t &n);
 
 namespace std {
   template<> struct hash<vinodeno_t> {
@@ -361,16 +361,17 @@ struct client_writeable_range_t {
     uint64_t first = 0, last = 0;    // interval client can write to
   };
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<client_writeable_range_t*>& ls);
 
   byte_range_t range;
   snapid_t follows = 0;     // aka "data+metadata flushed thru"
 };
 
-inline void decode(client_writeable_range_t::byte_range_t& range, bufferlist::const_iterator& bl) {
+inline void decode(client_writeable_range_t::byte_range_t& range, ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
   decode(range.first, bl);
   decode(range.last, bl);
 }
@@ -404,9 +405,9 @@ public:
   void free_data() {
     blp.reset();
   }
-  bufferlist& get_data() {
+  ceph::buffer::list& get_data() {
     if (!blp)
-      blp.reset(new bufferlist);
+      blp.reset(new ceph::buffer::list);
     return *blp;
   }
   size_t length() const { return blp ? blp->length() : 0; }
@@ -414,18 +415,18 @@ public:
   bool operator==(const inline_data_t& o) const {
    return length() == o.length() &&
 	  (length() == 0 ||
-	   (*const_cast<bufferlist*>(blp.get()) == *const_cast<bufferlist*>(o.blp.get())));
+	   (*const_cast<ceph::buffer::list*>(blp.get()) == *const_cast<ceph::buffer::list*>(o.blp.get())));
   }
   bool operator!=(const inline_data_t& o) const {
     return !(*this == o);
   }
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator& bl);
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 
   version_t version = 1;
 
 private:
-  std::unique_ptr<bufferlist> blp;
+  std::unique_ptr<ceph::buffer::list> blp;
 };
 WRITE_CLASS_ENCODER(inline_data_t)
 
@@ -524,9 +525,9 @@ struct inode_t {
     old_pools.insert(l);
   }
 
-  void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<inode_t*>& ls);
   /**
    * Compare this inode_t with another that represent *the same inode*
@@ -606,7 +607,7 @@ private:
 
 // These methods may be moved back to mdstypes.cc when we have pmr
 template<template<typename> class Allocator>
-void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
+void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
   ENCODE_START(15, 6, bl);
 
@@ -664,7 +665,7 @@ void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
 }
 
 template<template<typename> class Allocator>
-void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
+void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
 
@@ -703,10 +704,9 @@ void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
   if (struct_v >= 3) {
     decode(client_ranges, p);
   } else {
-    map<client_t, client_writeable_range_t::byte_range_t> m;
+    std::map<client_t, client_writeable_range_t::byte_range_t> m;
     decode(m, p);
-    for (map<client_t, client_writeable_range_t::byte_range_t>::iterator
-	q = m.begin(); q != m.end(); ++q)
+    for (auto q = m.begin(); q != m.end(); ++q)
       client_ranges[q->first].range = q->second;
   }
 
@@ -761,7 +761,7 @@ void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
 }
 
 template<template<typename> class Allocator>
-void inode_t<Allocator>::dump(Formatter *f) const
+void inode_t<Allocator>::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("ino", ino);
   f->dump_unsigned("rdev", rdev);
@@ -907,14 +907,14 @@ bool inode_t<Allocator>::older_is_consistent(const inode_t<Allocator> &other) co
 }
 
 template<template<typename> class Allocator>
-inline void encode(const inode_t<Allocator> &c, ::ceph::bufferlist &bl, uint64_t features)
+inline void encode(const inode_t<Allocator> &c, ::ceph::buffer::list &bl, uint64_t features)
 {
   ENCODE_DUMP_PRE();
   c.encode(bl, features);
   ENCODE_DUMP_POST(cl);
 }
 template<template<typename> class Allocator>
-inline void decode(inode_t<Allocator> &c, ::ceph::bufferlist::const_iterator &p)
+inline void decode(inode_t<Allocator> &c, ::ceph::buffer::list::const_iterator &p)
 {
   c.decode(p);
 }
@@ -923,7 +923,11 @@ template<template<typename> class Allocator>
 using alloc_string = std::basic_string<char,std::char_traits<char>,Allocator<char>>;
 
 template<template<typename> class Allocator>
-using xattr_map = compact_map<alloc_string<Allocator>, bufferptr, std::less<alloc_string<Allocator>>, Allocator<std::pair<const alloc_string<Allocator>, bufferptr>>>; // FIXME bufferptr not in mempool
+using xattr_map = compact_map<alloc_string<Allocator>,
+			      ceph::bufferptr,
+			      std::less<alloc_string<Allocator>>,
+			      Allocator<std::pair<const alloc_string<Allocator>,
+						  ceph::bufferptr>>>; // FIXME bufferptr not in mempool
 
 template<template<typename> class Allocator = std::allocator>
 struct old_inode_t {
@@ -931,15 +935,15 @@ struct old_inode_t {
   inode_t<Allocator> inode;
   xattr_map<Allocator> xattrs;
 
-  void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<old_inode_t*>& ls);
 };
 
 // These methods may be moved back to mdstypes.cc when we have pmr
 template<template<typename> class Allocator>
-void old_inode_t<Allocator>::encode(bufferlist& bl, uint64_t features) const
+void old_inode_t<Allocator>::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
   encode(first, bl);
@@ -949,7 +953,7 @@ void old_inode_t<Allocator>::encode(bufferlist& bl, uint64_t features) const
 }
 
 template<template<typename> class Allocator>
-void old_inode_t<Allocator>::decode(bufferlist::const_iterator& bl)
+void old_inode_t<Allocator>::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(first, bl);
@@ -959,7 +963,7 @@ void old_inode_t<Allocator>::decode(bufferlist::const_iterator& bl)
 }
 
 template<template<typename> class Allocator>
-void old_inode_t<Allocator>::dump(Formatter *f) const
+void old_inode_t<Allocator>::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("first", first);
   inode.dump(f);
@@ -980,19 +984,19 @@ void old_inode_t<Allocator>::generate_test_instances(std::list<old_inode_t<Alloc
   std::list<inode_t<Allocator>*> ils;
   inode_t<Allocator>::generate_test_instances(ils);
   ls.back()->inode = *ils.back();
-  ls.back()->xattrs["user.foo"] = buffer::copy("asdf", 4);
-  ls.back()->xattrs["user.unprintable"] = buffer::copy("\000\001\002", 3);
+  ls.back()->xattrs["user.foo"] = ceph::buffer::copy("asdf", 4);
+  ls.back()->xattrs["user.unprintable"] = ceph::buffer::copy("\000\001\002", 3);
 }
 
 template<template<typename> class Allocator>
-inline void encode(const old_inode_t<Allocator> &c, ::ceph::bufferlist &bl, uint64_t features)
+inline void encode(const old_inode_t<Allocator> &c, ::ceph::buffer::list &bl, uint64_t features)
 {
   ENCODE_DUMP_PRE();
   c.encode(bl, features);
   ENCODE_DUMP_POST(cl);
 }
 template<template<typename> class Allocator>
-inline void decode(old_inode_t<Allocator> &c, ::ceph::bufferlist::const_iterator &p)
+inline void decode(old_inode_t<Allocator> &c, ::ceph::buffer::list::const_iterator &p)
 {
   c.decode(p);
 }
@@ -1001,9 +1005,9 @@ inline void decode(old_inode_t<Allocator> &c, ::ceph::bufferlist::const_iterator
  * like an inode, but for a dir frag 
  */
 struct fnode_t {
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<fnode_t*>& ls);
 
   version_t version = 0;
@@ -1023,9 +1027,9 @@ WRITE_CLASS_ENCODER(fnode_t)
 
 
 struct old_rstat_t {
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<old_rstat_t*>& ls);
 
   snapid_t first;
@@ -1045,7 +1049,7 @@ public:
   feature_bitset_t(const feature_bitset_t& other) : _vec(other._vec) {}
   feature_bitset_t(feature_bitset_t&& other) : _vec(std::move(other._vec)) {}
   feature_bitset_t(unsigned long value = 0);
-  feature_bitset_t(const vector<size_t>& array);
+  feature_bitset_t(const std::vector<size_t>& array);
   feature_bitset_t& operator=(const feature_bitset_t& other) {
     _vec = other._vec;
     return *this;
@@ -1071,12 +1075,12 @@ public:
   void clear() {
     _vec.clear();
   }
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator &p);
-  void dump(Formatter *f) const;
-  void print(ostream& out) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator &p);
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream& out) const;
 private:
-  vector<block_type> _vec;
+  std::vector<block_type> _vec;
 };
 WRITE_CLASS_ENCODER(feature_bitset_t)
 
@@ -1113,10 +1117,10 @@ struct metric_spec_t {
     metric_flags.clear();
   }
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
-  void print(ostream& out) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream& out) const;
 
   // set of metrics that a client is capable of forwarding
   feature_bitset_t metric_flags;
@@ -1164,9 +1168,9 @@ struct client_metadata_t {
     metric_spec.clear();
   }
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
 
   kv_map_t kv_map;
   feature_bitset_t features;
@@ -1190,9 +1194,9 @@ struct session_info_t {
     client_metadata.clear();
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<session_info_t*>& ls);
 
   entity_inst_t inst;
@@ -1215,13 +1219,13 @@ struct dentry_key_t {
 
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)
-  void encode(bufferlist& bl) const {
-    string key;
+  void encode(ceph::buffer::list& bl) const {
+    std::string key;
     encode(key);
     using ceph::encode;
     encode(key, bl);
   }
-  void encode(string& key) const {
+  void encode(std::string& key) const {
     char b[20];
     if (snapid != CEPH_NOSNAP) {
       uint64_t val(snapid);
@@ -1229,18 +1233,20 @@ struct dentry_key_t {
     } else {
       snprintf(b, sizeof(b), "%s", "head");
     }
-    ostringstream oss;
+    std::ostringstream oss;
     oss << name << "_" << b;
     key = oss.str();
   }
-  static void decode_helper(bufferlist::const_iterator& bl, string& nm, snapid_t& sn) {
-    string key;
+  static void decode_helper(ceph::buffer::list::const_iterator& bl, std::string& nm,
+			    snapid_t& sn) {
+    std::string key;
+    using ceph::decode;
     decode(key, bl);
     decode_helper(key, nm, sn);
   }
-  static void decode_helper(std::string_view key, string& nm, snapid_t& sn) {
+  static void decode_helper(std::string_view key, std::string& nm, snapid_t& sn) {
     size_t i = key.find_last_of('_');
-    ceph_assert(i != string::npos);
+    ceph_assert(i != std::string::npos);
     if (key.compare(i+1, std::string_view::npos, "head") == 0) {
       // name_head
       sn = CEPH_NOSNAP;
@@ -1285,12 +1291,12 @@ struct string_snap_t {
   string_snap_t() {}
   string_snap_t(std::string_view n, snapid_t s) : name(n), snapid(s) {}
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<string_snap_t*>& ls);
 
-  string name;
+  std::string name;
   snapid_t snapid;
 };
 WRITE_CLASS_ENCODER(string_snap_t)
@@ -1312,9 +1318,9 @@ inline std::ostream& operator<<(std::ostream& out, const string_snap_t &k)
  * pending mutation state in the table.
  */
 struct mds_table_pending_t {
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<mds_table_pending_t*>& ls);
 
   uint64_t reqid = 0;
@@ -1327,12 +1333,12 @@ WRITE_CLASS_ENCODER(mds_table_pending_t)
 struct metareqid_t {
   metareqid_t() {}
   metareqid_t(entity_name_t n, ceph_tid_t t) : name(n), tid(t) {}
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(name, bl);
     encode(tid, bl);
   }
-  void decode(bufferlist::const_iterator &p) {
+  void decode(ceph::buffer::list::const_iterator &p) {
     using ceph::decode;
     decode(name, p);
     decode(tid, p);
@@ -1377,7 +1383,7 @@ namespace std {
 struct cap_reconnect_t {
   cap_reconnect_t() {}
   cap_reconnect_t(uint64_t cap_id, inodeno_t pino, std::string_view p, int w, int i,
-		  inodeno_t sr, snapid_t sf, bufferlist& lb) :
+		  inodeno_t sr, snapid_t sf, ceph::buffer::list& lb) :
     path(p) {
     capinfo.cap_id = cap_id;
     capinfo.wanted = w;
@@ -1388,18 +1394,18 @@ struct cap_reconnect_t {
     snap_follows = sf;
     flockbl.claim(lb);
   }
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void encode_old(bufferlist& bl) const;
-  void decode_old(bufferlist::const_iterator& bl);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void encode_old(ceph::buffer::list& bl) const;
+  void decode_old(ceph::buffer::list::const_iterator& bl);
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<cap_reconnect_t*>& ls);
 
-  string path;
+  std::string path;
   mutable ceph_mds_cap_reconnect capinfo = {};
   snapid_t snap_follows = 0;
-  bufferlist flockbl;
+  ceph::buffer::list flockbl;
 };
 WRITE_CLASS_ENCODER(cap_reconnect_t)
 
@@ -1410,12 +1416,12 @@ struct snaprealm_reconnect_t {
     realm.seq = seq;
     realm.parent = parent;
   }
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void encode_old(bufferlist& bl) const;
-  void decode_old(bufferlist::const_iterator& bl);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void encode_old(ceph::buffer::list& bl) const;
+  void decode_old(ceph::buffer::list::const_iterator& bl);
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<snaprealm_reconnect_t*>& ls);
 
   mutable ceph_mds_snaprealm_reconnect realm = {};
@@ -1455,18 +1461,18 @@ struct old_cap_reconnect_t {
     return n;
   }
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(path, bl);
     encode(capinfo, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(path, bl);
     decode(capinfo, bl);
   }
 
-  string path;
+  std::string path;
   old_ceph_mds_cap_reconnect capinfo;
 };
 WRITE_CLASS_ENCODER(old_cap_reconnect_t)
@@ -1476,12 +1482,12 @@ struct dirfrag_t {
   dirfrag_t() {}
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(ino, bl);
     encode(frag, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(ino, bl);
     decode(frag, bl);
@@ -1533,26 +1539,26 @@ public:
   inode_load_vec_t() : vec{DecayCounter(DecayRate()), DecayCounter(DecayRate())} {}
   inode_load_vec_t(const DecayRate &rate) : vec{DecayCounter(rate), DecayCounter(rate)} {}
 
-  DecayCounter &get(int t) { 
-    return vec[t]; 
+  DecayCounter &get(int t) {
+    return vec[t];
   }
   void zero() {
     for (auto &d : vec) {
       d.reset();
     }
   }
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<inode_load_vec_t*>& ls);
 
 private:
   std::array<DecayCounter, NUM> vec;
 };
-inline void encode(const inode_load_vec_t &c, bufferlist &bl) {
+inline void encode(const inode_load_vec_t &c, ceph::buffer::list &bl) {
   c.encode(bl);
 }
-inline void decode(inode_load_vec_t & c, bufferlist::const_iterator &p) {
+inline void decode(inode_load_vec_t & c, ceph::buffer::list::const_iterator &p) {
   c.decode(p);
 }
 
@@ -1574,22 +1580,22 @@ public:
       vec{DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate)}
   {}
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     ENCODE_START(2, 2, bl);
     for (const auto &i : vec) {
       encode(i, bl);
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator &p) {
+  void decode(ceph::buffer::list::const_iterator &p) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
     for (auto &i : vec) {
       decode(i, p);
     }
     DECODE_FINISH(p);
   }
-  void dump(Formatter *f) const;
-  void dump(Formatter *f, const DecayRate& rate) const;
+  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, const DecayRate& rate) const;
   static void generate_test_instances(std::list<dirfrag_load_vec_t*>& ls);
 
   const DecayCounter &get(int t) const {
@@ -1635,10 +1641,10 @@ private:
   std::array<DecayCounter, NUM> vec;
 };
 
-inline void encode(const dirfrag_load_vec_t &c, bufferlist &bl) {
+inline void encode(const dirfrag_load_vec_t &c, ceph::buffer::list &bl) {
   c.encode(bl);
 }
-inline void decode(dirfrag_load_vec_t& c, bufferlist::const_iterator &p) {
+inline void decode(dirfrag_load_vec_t& c, ceph::buffer::list::const_iterator &p) {
   c.decode(p);
 }
 
@@ -1673,15 +1679,15 @@ struct mds_load_t {
   double cpu_load_avg = 0.0;
 
   double mds_load() const;  // defiend in MDBalancer.cc
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<mds_load_t*>& ls);
 };
-inline void encode(const mds_load_t &c, bufferlist &bl) {
+inline void encode(const mds_load_t &c, ceph::buffer::list &bl) {
   c.encode(bl);
 }
-inline void decode(mds_load_t &c, bufferlist::const_iterator &p) {
+inline void decode(mds_load_t &c, ceph::buffer::list::const_iterator &p) {
   c.decode(p);
 }
 
@@ -1743,14 +1749,14 @@ typedef std::pair<mds_rank_t, mds_rank_t> mds_authority_t;
 
 class MDSCacheObjectInfo {
 public:
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<MDSCacheObjectInfo*>& ls);
 
   inodeno_t ino = 0;
   dirfrag_t dirfrag;
-  string dname;
+  std::string dname;
   snapid_t snapid;
 };
 
@@ -1774,7 +1780,7 @@ namespace qi = boost::spirit::qi;
 
 template <typename Iterator>
 struct keys_and_values
-  : qi::grammar<Iterator, std::map<string, string>()>
+  : qi::grammar<Iterator, std::map<std::string, std::string>()>
 {
     keys_and_values()
       : keys_and_values::base_type(query)
@@ -1784,9 +1790,9 @@ struct keys_and_values
       key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
       value = +qi::char_("a-zA-Z_0-9");
     }
-    qi::rule<Iterator, std::map<string, string>()> query;
-    qi::rule<Iterator, std::pair<string, string>()> pair;
-    qi::rule<Iterator, string()> key, value;
+  qi::rule<Iterator, std::map<std::string, std::string>()> query;
+  qi::rule<Iterator, std::pair<std::string, std::string>()> pair;
+  qi::rule<Iterator, std::string()> key, value;
 };
 
 #endif

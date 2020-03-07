@@ -29,9 +29,7 @@ public:
   SnapRealm(MDCache *c, CInode *in);
 
   bool exists(std::string_view name) const {
-    for (map<snapid_t,SnapInfo>::const_iterator p = srnode.snaps.begin();
-	 p != srnode.snaps.end();
-	 ++p) {
+    for (auto p = srnode.snaps.begin(); p != srnode.snaps.end(); ++p) {
       if (p->second.name == name)
 	return true;
     }
@@ -53,15 +51,15 @@ public:
   }
 
   void build_snap_set() const;
-  void get_snap_info(map<snapid_t, const SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  void get_snap_info(std::map<snapid_t, const SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  const bufferlist& get_snap_trace() const;
+  const ceph::buffer::list& get_snap_trace() const;
   void build_snap_trace() const;
 
   std::string_view get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(std::string_view name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  const set<snapid_t>& get_snaps() const;
+  const std::set<snapid_t>& get_snaps() const;
   const SnapContext& get_snap_context() const;
   void invalidate_cached_snaps() {
     cached_seq = 0;
@@ -88,8 +86,8 @@ public:
 
   snapid_t get_snap_following(snapid_t follows) {
     check_cache();
-    const set<snapid_t>& s = get_snaps();
-    set<snapid_t>::const_iterator p = s.upper_bound(follows);
+    const std::set<snapid_t>& s = get_snaps();
+    auto p = s.upper_bound(follows);
     if (p != s.end())
       return *p;
     return CEPH_NOSNAP;
@@ -97,8 +95,8 @@ public:
 
   bool has_snaps_in_range(snapid_t first, snapid_t last) {
     check_cache();
-    const set<snapid_t>& s = get_snaps();
-    set<snapid_t>::const_iterator p = s.lower_bound(first);
+    const auto& s = get_snaps();
+    auto p = s.lower_bound(first);
     return (p != s.end() && *p <= last);
   }
 
@@ -133,11 +131,11 @@ public:
   bool past_parents_dirty = false;
 
   SnapRealm *parent = nullptr;
-  set<SnapRealm*> open_children;    // active children that are currently open
-  set<SnapRealm*> open_past_children;  // past children who has pinned me
+  std::set<SnapRealm*> open_children;    // active children that are currently open
+  std::set<SnapRealm*> open_past_children;  // past children who has pinned me
 
   elist<CInode*> inodes_with_caps = 0;             // for efficient realm splits
-  map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
+  std::map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
 
 protected:
   void check_cache() const;
@@ -146,17 +144,17 @@ private:
   mutable bool open = false;                        // set to true once all past_parents are opened
   bool global;
 
-  map<inodeno_t, pair<SnapRealm*, set<snapid_t> > > open_past_parents;  // these are explicitly pinned.
+  std::map<inodeno_t, std::pair<SnapRealm*, std::set<snapid_t>>> open_past_parents;  // these are explicitly pinned.
   unsigned num_open_past_parents = 0;
 
   // cache
   mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
   mutable snapid_t cached_last_created;  // max last_created over all past+present parents
   mutable snapid_t cached_last_destroyed;
-  mutable set<snapid_t> cached_snaps;
+  mutable std::set<snapid_t> cached_snaps;
   mutable SnapContext cached_snap_context;
-  mutable bufferlist cached_snap_trace;
+  mutable ceph::buffer::list cached_snap_trace;
 };
 
-ostream& operator<<(ostream& out, const SnapRealm &realm);
+std::ostream& operator<<(std::ostream& out, const SnapRealm &realm);
 #endif
