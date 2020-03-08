@@ -1767,7 +1767,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 host, name, 'unit',
                 ['--name', name, a],
                 error_ok=True)
-            self.cache.invalidate_host_daemons(host)
+        self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
     def daemon_action(self, action, daemon_type, daemon_id):
@@ -2781,7 +2781,18 @@ receivers:
         return trivial_result(r)
 
     def upgrade_start(self, image, version):
+        if self.mode != 'root':
+            raise OrchestratorError('upgrade is not supported in %s mode' % (
+                self.mode))
         if version:
+            try:
+                (major, minor, patch) = version.split('.')
+                assert int(minor) >= 0
+                assert int(patch) >= 0
+            except:
+                raise OrchestratorError('version must be in the form X.Y.Z (e.g., 15.2.3)')
+            if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
+                raise OrchestratorError('cephadm only supports octopus (15.2.0) or later')
             target_name = self.container_image_base + ':v' + version
         elif image:
             target_name = image
