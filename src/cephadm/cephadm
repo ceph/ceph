@@ -2458,6 +2458,7 @@ def list_daemons(detail=True, legacy_dir=None):
                                         version = err.split(' ')[2]
                                         seen_versions[image_id] = version
                                 else:
+                                    logging.warning('not fetching version for unknown daemon type %s' % daemon_type)
                                     pass
                         else:
                             vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
