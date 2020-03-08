@@ -134,7 +134,7 @@ function TEST_interval_changes() {
     local week="$(expr $day \* 7)"
     local min_interval=$day
     local max_interval=$week
-    local WAIT_FOR_UPDATE=3
+    local WAIT_FOR_UPDATE=15
 
     TESTDATA="testdata.$$"
 
