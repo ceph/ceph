@@ -341,7 +341,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             now = datetime.datetime.utcnow()
             table = PrettyTable(
                 ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
-                 'SPEC', 'PLACEMENT',
+                 'SPEC',
                  'IMAGE NAME', 'IMAGE ID',
                 ],
                 border=False)
@@ -352,7 +352,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align['IMAGE NAME'] = 'l'
             table.align['IMAGE ID'] = 'l'
             table.align['SPEC'] = 'l'
-            table.align['PLACEMENT'] = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(services, key=lambda s: s.service_name):
@@ -361,7 +360,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     '%d/%d' % (s.running, s.size),
                     nice_delta(now, s.last_refresh, ' age'),
                     nice_delta(now, s.created),
-                    'present' if s.spec else '-',
                     s.spec.placement.pretty_str() if s.spec else '-',
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
