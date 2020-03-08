@@ -99,7 +99,7 @@ class TestVolumes(CephFSTestCase):
             time.sleep(1)
         self.assertTrue(check < timo)
 
-        self._verify_clone_attrs(subvolume, clone)
+        self._verify_clone_attrs(subvolume, clone, source_group=source_group, clone_group=clone_group)
 
     def _generate_random_volume_name(self, count=1):
         r = random.sample(range(10000), count)
