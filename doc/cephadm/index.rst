@@ -55,12 +55,11 @@ your Linux distribution::
 Bootstrap a new cluster
 =======================
 
-To create a new cluster, you need to know:
-
-* Which *IP address* to use for the cluster's first monitor.  This is
-  normally just the IP for the first cluster node.  If there are
-  multiple networks and interfaces, be sure to choose one that will be
-  accessible by any hosts accessing the Ceph cluster.
+To create a new cluster, you need to know which *IP address* to use
+for the cluster's first monitor.  This is normally just the IP for the
+first cluster node.  If there are multiple networks and interfaces, be
+sure to choose one that will be accessible by any hosts accessing the
+Ceph cluster.
 
 To bootstrap the cluster run the following command::
 
@@ -109,19 +108,19 @@ Watching cephadm log messages
 
 Cephadm logs to the ``cephadm`` cluster log channel, which means you can monitor progress in realtime with::
 
-  ceph -W cephadm
+  # ceph -W cephadm
 
 By default it will show info-level events and above.  To see
-debug-level messages too,::
+debug-level messages too::
 
-  ceph config set mgr mgr/cephadm/log_to_cluster_level debug
-  ceph -W cephadm --watch-debug
+  # ceph config set mgr mgr/cephadm/log_to_cluster_level debug
+  # ceph -W cephadm --watch-debug
 
-Be careful: the debug messagse are very verbose!
+Be careful: the debug messages are very verbose!
 
 You can see recent events with::
 
-  ceph log last cephadm
+  # ceph log last cephadm
 
 These events are also logged to the ``ceph.cephadm.log`` file on
 monitor hosts and/or to the monitor-daemon stderr.
@@ -138,44 +137,110 @@ For each new host you'd like to add to the cluster, you need to do two things:
 
 #. Tell Ceph that the new node is part of the cluster::
 
-     [monitor 1] # ceph orch host add *newhost*
+     # ceph orch host add *newhost*
 
 Deploying additional monitors
 =============================
 
-Normally a Ceph cluster has at least three (or, preferably, five)
-monitor daemons spread across different hosts.  Since we are deploying
-a monitor, we again need to specify what IP address it will use,
-either as a simple IP address or as a CIDR network name.
+Normally a Ceph cluster has three or five monitor daemons spread
+across different hosts.  As a rule of thumb, you should deploy five
+monitors if there are five or more nodes in your cluster.
 
-To deploy additional monitors,::
+.. _CIDR: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
 
-  [monitor 1] # ceph orch daemon add mon *<host1:network1> [<host1:network2>...]*
+If all of your monitors will exist on the same IP subnet, cephadm can
+automatically scale the number of monitors.  This subnet should be
+specified in `CIDR`_ format (e.g., ``10.1.2.0/24``).  (If you do not
+specify a subnet, you will need to manually specify an IP or subnet
+when creating each monitor.)::
 
-For example, to deploy a second monitor on ``newhost`` using an IP
-address in network ``10.1.2.0/24``,::
+  # ceph config set mon public_network *<mon-cidr-network>*
 
-  [monitor 1] # ceph orch daemon add mon newhost:10.1.2.0/24
+For example::
+
+  # ceph config set mon public_network 10.1.2.0/24
+
+There are several ways to add additional monitors:
+
+* You can simply tell cephadm how many monitors you want, and it will pick the
+  hosts (randomly)::
+
+    # ceph orch apply mon *<number-of-monitors>*
+
+  For example, if you have 5 or more hosts added to the cluster,::
+
+    # ceph orch apply mon 5
+
+* You can explicitly specify which hosts to deploy on.  Be sure to include
+  the first monitor host in this list.::
+
+    # ceph orch apply mon *<host1,host2,host3,...>*
+
+  For example,::
+
+    # ceph orch apply mon host1,host2,host3
+
+* You can control which hosts the monitors run on by adding the ``mon`` label
+  to the appropriate hosts::
+
+    # ceph orch host label add *<hostname>* mon
+
+  To view the current hosts and labels,::
+
+    # ceph orch host ls
+
+  For example::
+
+    # ceph orch host label add host1 mon
+    # ceph orch host label add host2 mon
+    # ceph orch host label add host3 mon
+    # ceph orch host ls
+    HOST   ADDR   LABELS  STATUS  
+    host1         mon             
+    host2         mon             
+    host3         mon             
+    host4
+    host5
+
+  Then tell cephadm to deploy monitors based on the label::
+
+    # ceph orch apply mon label:mon
+
+* You can explicitly specify the IP address or CIDR for each monitor
+  and control where it is placed.  This is the only supported method
+  if you did not specify the CIDR monitor network above.
+
+  To deploy additional monitors,::
+
+    # ceph orch daemon add mon *<host1:ip-or-network1> [<host1:ip-or-network-2>...]*
+
+  For example, to deploy a second monitor on ``newhost1`` using an IP
+  address ``10.1.2.123`` and a third monitor on ``newhost2`` in
+  network ``10.1.2.0/24``,::
+
+    # ceph orch daemon add mon newhost1:10.1.2.123
+    # ceph orch daemon add mon newhost2:10.1.2.0/24
 
 Deploying OSDs
 ==============
 
 To add OSDs to the cluster, you have two options:
-1) You need to know the device name for the block device (hard disk or SSD)
-that will be used.  Then,::
 
-  [monitor 1] # ceph orch osd create *<host>*:*<path-to-device>*
+#. You need to know the device name for the block device (hard disk or
+SSD) that will be used.  Then,::
 
-For example, to deploy an OSD on host *newhost*'s SSD,::
+     # ceph orch osd create *<host>*:*<path-to-device>*
 
-  [monitor 1] # ceph orch osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
+   For example, to deploy an OSD on host *newhost*'s SSD,::
+
+     # ceph orch osd create newhost:/dev/disk/by-id/ata-WDC_WDS200T2B0A-00SM50_182294800028
 
 
-2) You need to describe your disk setup by it's properties (Drive Groups)
+#. You need to describe your disk setup by it's properties (Drive Groups)
 
-Link to DriveGroup docs.::
+   Link to DriveGroup docs.::
 
-  [monitor 1] # ceph orchestrator osd create -i my_drivegroups.yml
+    # ceph orch osd create -i my_drivegroups.yml
 
 
 .. _drivegroups: drivegroups::
@@ -186,7 +251,7 @@ Deploying manager daemons
 It is a good idea to have at least one backup manager daemon.  To
 deploy one or more new manager daemons,::
 
-  [monitor 1] # ceph orch apply mgr *<new-num-mgrs>* [*<host1>* ...]
+  # ceph orch apply mgr *<new-num-mgrs>* [*<host1>* ...]
 
 Deploying MDSs
 ==============

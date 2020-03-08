@@ -1675,20 +1675,6 @@ def servicespec_validate_add(self: ServiceSpec):
         raise OrchestratorValidationError('Cannot add Service: id required')
 
 
-def servicespec_validate_hosts_have_network_spec(self: ServiceSpec):
-    # This must not be a method of ServiceSpec, otherwise you'll hunt
-    # sub-interpreter affinity bugs.
-    if not self.placement.hosts:
-        raise OrchestratorValidationError('Service specification: no hosts provided')
-
-    for host, network, _ in self.placement.hosts:
-        if not network:
-            m = "Host '{host}' is missing a network spec\nE.g. {host}:1.2.3.0/24".format(
-                host=host)
-            logger.error(
-                f'validate_hosts_have_network_spec: id(OrchestratorValidationError)={id(OrchestratorValidationError)}')
-            raise OrchestratorValidationError(m)
-
 
 class NFSServiceSpec(ServiceSpec):
     def __init__(self, service_id, pool=None, namespace=None, placement=None,
