@@ -2998,7 +2998,6 @@ class HostAssignment(object):
             logger.debug('All hosts: {}'.format(candidates))
             return candidates
 
-
         count = 0
         if self.spec.placement.hosts and \
            self.spec.placement.count and \
@@ -3028,9 +3027,11 @@ class HostAssignment(object):
             else:
                 # this should be a totally empty spec given all of the
                 # alternative paths above.
-                raise OrchestratorValidationError(
-                    "Cannot place service %s without any placement information" % (
-                        self.service_name))
+                assert self.spec.placement.count is None
+                assert not self.spec.placement.hosts
+                assert not self.spec.placement.label
+                assert not self.spec.placement.all_hosts
+                count = 1
             logger.debug('place %d over all hosts: %s' % (count, hosts))
 
         # we need to select a subset of the candidates
