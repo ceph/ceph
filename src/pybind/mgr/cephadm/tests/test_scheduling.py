@@ -100,6 +100,16 @@ class NodeAssignmentTest2(NamedTuple):
 
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,in_set",
     [
+        # empty
+        NodeAssignmentTest2(
+            'mon',
+            PlacementSpec(),
+            'host1 host2 host3'.split(),
+            [],
+            1,
+            ['host1', 'host2', 'host3'],
+        ),
+
         # just count
         NodeAssignmentTest2(
             'mon',
