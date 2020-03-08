@@ -13,6 +13,7 @@ import logging
 import threading
 import traceback
 import os
+import six
 
 from io import BytesIO, StringIO
 from teuthology import misc as teuthology
@@ -305,7 +306,7 @@ class OSDThrasher(Thrasher):
                     if proc.exitstatus == 0:
                         break
                     elif (proc.exitstatus == 1 and
-                          six.ensure_str(proc.stderr.getvalue()) == "OSD has the store locked"):
+                          proc.stderr.getvalue() == "OSD has the store locked"):
                         continue
                     else:
                         raise Exception("ceph-objectstore-tool: "
@@ -417,7 +418,7 @@ class OSDThrasher(Thrasher):
                 ])
             if proc.exitstatus == 1:
                 bogosity = "The OSD you are using is older than the exported PG"
-                if bogosity in six.ensure_str(proc.stderr.getvalue()):
+                if bogosity in proc.stderr.getvalue():
                     self.log("OSD older than exported PG"
                              "...ignored")
             elif proc.exitstatus == 10:
@@ -454,8 +455,8 @@ class OSDThrasher(Thrasher):
                            + " --op apply-layout-settings --pool " + pool).format(id=osd)
                     proc = imp_remote.run(args=cmd,
                                           wait=True, check_status=False,
-                                          stderr=BytesIO)
-                    if 'Couldn\'t find pool' in six.ensure_str(proc.stderr.getvalue()):
+                                          stderr=StringIO())
+                    if 'Couldn\'t find pool' in proc.stderr.getvalue():
                         continue
                     if proc.exitstatus:
                         raise Exception("ceph-objectstore-tool apply-layout-settings"
