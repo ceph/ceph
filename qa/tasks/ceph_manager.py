@@ -258,7 +258,8 @@ class Thrasher:
                                           stdout=BytesIO(), stderr=BytesIO())
                     if proc.exitstatus == 0:
                         break
-                    elif proc.exitstatus == 1 and proc.stderr == b"OSD has the store locked":
+                    elif (proc.exitstatus == 1 and
+                          six.ensure_str(proc.stderr.getvalue()) == "OSD has the store locked"):
                         continue
                     else:
                         raise Exception("ceph-objectstore-tool: "
@@ -324,8 +325,8 @@ class Thrasher:
             proc = imp_remote.run(args=cmd, wait=True, check_status=False,
                                   stderr=BytesIO())
             if proc.exitstatus == 1:
-                bogosity = b"The OSD you are using is older than the exported PG"
-                if bogosity in proc.stderr.getvalue():
+                bogosity = "The OSD you are using is older than the exported PG"
+                if bogosity in six.ensure_str(proc.stderr.getvalue()):
                     self.log("OSD older than exported PG"
                              "...ignored")
             elif proc.exitstatus == 10:
