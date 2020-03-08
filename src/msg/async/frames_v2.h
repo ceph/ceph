@@ -232,7 +232,8 @@ private:
     ceph::crypto::onwire::rxtx_t &session_stream_handlers,
     std::index_sequence<Is...>)
   {
-    session_stream_handlers.tx->reset_tx_handler({ segments[Is].length()... });
+    session_stream_handlers.tx->reset_tx_handler({ segments[Is].length()...,
+                                                   sizeof(epilogue_secure_block_t) });
   }
 
 public:
