@@ -2467,24 +2467,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 continue
             if dd.daemon_id == self.get_mgr_id():
                 continue
-            hi = self.inventory.get(dd.hostname, None)
-            if hi:
-                addr = hi.get('addr', dd.hostname)
+            hi = self.inventory.get(dd.hostname, {})
+            addr = hi.get('addr', dd.hostname)
             mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
 
         # scrape node exporters
         node_configs = ''
         for dd in self.cache.get_daemons_by_service('node-exporter'):
-            hi = self.inventory.get(dd.hostname, None)
-            if hi:
-                deps.append(dd.name())
-                addr = hi.get('addr', dd.hostname)
-                if not node_configs:
-                    node_configs = """
+            deps.append(dd.name())
+            hi = self.inventory.get(dd.hostname, {})
+            addr = hi.get('addr', dd.hostname)
+            if not node_configs:
+                node_configs = """
   - job_name: 'node'
     static_configs:
 """
-                node_configs += """    - targets: {}
+            node_configs += """    - targets: {}
       labels:
         instance: '{}'
 """.format([addr.split(':')[0] + ':9100'],
@@ -2494,10 +2492,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         alertmgr_configs = ""
         alertmgr_targets = []
         for dd in self.cache.get_daemons_by_service('alertmanager'):
-            hi = self.inventory.get(dd.hostname, None)
-            if hi is None:
-                continue
             deps.append(dd.name())
+            hi = self.inventory.get(dd.hostname, {})
             addr = hi.get('addr', dd.hostname)
             alertmgr_targets.append("'{}:9093'".format(addr.split(':')[0]))
         if alertmgr_targets:
@@ -2649,8 +2645,8 @@ receivers:
         port = '9094'
         for dd in self.cache.get_daemons_by_service('alertmanager'):
             deps.append(dd.name())
-            hi = self.inventory.get(dd.hostname, None)
-            addr = hi.get('addr', dd.hostname) if hi else ""
+            hi = self.inventory.get(dd.hostname, {})
+            addr = hi.get('addr', dd.hostname)
             peers.append(addr.split(':')[0] + ':' + port)
         return {
             "files": {
