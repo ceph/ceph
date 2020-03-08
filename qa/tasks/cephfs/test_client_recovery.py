@@ -238,7 +238,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.wait_for_visible()
 
         # Simulate client death
-        self.mount_a.kill()
+        self.mount_a.suspend_netns()
 
         # wait for it to die so it doesn't voluntarily release buffer cap
         time.sleep(5)
@@ -275,10 +275,7 @@ class TestClientRecovery(CephFSTestCase):
                 pass
         finally:
             # teardown() doesn't quite handle this case cleanly, so help it out
-            self.mount_a.kill_cleanup()
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+            self.mount_a.resume_netns()
 
     def test_stale_read_caps(self):
         self._test_stale_caps(False)
@@ -302,7 +299,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.wait_for_visible()
 
         # Simulate client death
-        self.mount_a.kill()
+        self.mount_a.suspend_netns()
 
         # wait for it to die so it doesn't voluntarily release buffer cap
         time.sleep(5)
@@ -336,10 +333,7 @@ class TestClientRecovery(CephFSTestCase):
                 # We killed it (and possibly its node), so it raises an error
                 pass
         finally:
-            self.mount_a.kill_cleanup()
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+            self.mount_a.resume_netns()
 
     def test_trim_caps(self):
         # Trim capability when reconnecting MDS
