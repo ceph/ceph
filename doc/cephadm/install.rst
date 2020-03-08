@@ -341,3 +341,13 @@ zone on *myhost1* and *myhost2*::
   # radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
   # radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=us-east-1 --master --default
   # ceph orch apply rgw myorg us-east-1 2 myhost1 myhost2
+
+Deploying NFS ganesha
+=====================
+
+Cephadm deploys NFS Ganesha using a pre-defined RADOS *pool*
+and optional *namespace*
+
+To deploy a NFS Ganesha gateway,::
+
+  # ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* *<num-daemons>* [*<host1>* ...]
