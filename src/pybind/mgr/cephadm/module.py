@@ -2980,6 +2980,10 @@ class HostAssignment(object):
         """
         Load hosts into the spec.placement.hosts container.
         """
+        # count == 0
+        if self.spec.placement.count == 0:
+            return []
+
         # respect any explicit host list
         if self.spec.placement.hosts and not self.spec.placement.count:
             logger.debug('Provided hosts: %s' % self.spec.placement.hosts)
@@ -2993,6 +2997,7 @@ class HostAssignment(object):
             ]
             logger.debug('All hosts: {}'.format(candidates))
             return candidates
+
 
         count = 0
         if self.spec.placement.hosts and \
