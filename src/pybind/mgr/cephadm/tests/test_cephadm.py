@@ -99,13 +99,13 @@ class TestCephadm(object):
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
 
 
-    def test_mon_update(self, cephadm_module):
+    def test_mon_add(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
             assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
-            with pytest.raises(OrchestratorError, match="is missing a network spec"):
+            with pytest.raises(OrchestratorError, match="Must set public_network config option or specify a CIDR network,"):
                 ps = PlacementSpec(hosts=['test'], count=1)
                 c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
                 wait(cephadm_module, c)

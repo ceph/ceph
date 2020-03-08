@@ -678,6 +678,30 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug('_kick_serve_loop')
         self.event.set()
 
+    def _check_safe_to_destroy_mon(self, mon_id):
+        # type: (str) -> None
+        ret, out, err = self.mon_command({
+            'prefix': 'quorum_status',
+        })
+        if ret:
+            raise OrchestratorError('failed to check mon quorum status')
+        try:
+            j = json.loads(out)
+        except Exception as e:
+            raise OrchestratorError('failed to parse quorum status')
+
+        mons = [m['name'] for m in j['monmap']['mons']]
+        if mon_id not in mons:
+            self.log.info('Safe to remove mon.%s: not in monmap (%s)' % (
+                mon_id, mons))
+            return
+        new_mons = [m for m in mons if m != mon_id]
+        new_quorum = [m for m in j['quorum_names'] if m != mon_id]
+        if len(new_quorum) > len(new_mons) / 2:
+            self.log.info('Safe to remove mon.%s: new quorum should be %s (from %s)' % (mon_id, new_quorum, new_mons))
+            return
+        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
+
     def _wait_for_ok_to_stop(self, s):
         # only wait a little bit; the service might go away for something
         tries = 4
@@ -2121,6 +2145,24 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         Remove a daemon
         """
+        (daemon_type, daemon_id) = name.split('.', 1)
+        if daemon_type == 'mon':
+            self._check_safe_to_destroy_mon(daemon_id)
+
+            # fail early, before we update the monmap
+            if not force:
+                raise OrchestratorError('Must pass --force to remove a monitor and DELETE potentially PRECIOUS CLUSTER DATA')
+
+            # remove mon from quorum before we destroy the daemon
+            self.log.info('Removing monitor %s from monmap...' % name)
+            ret, out, err = self.mon_command({
+                'prefix': 'mon rm',
+                'name': daemon_id,
+            })
+            if ret:
+                raise OrchestratorError('failed to remove mon %s from monmap' % (
+                    name))
+
         args = ['--name', name]
         if force:
             args.extend(['--force'])
@@ -2202,7 +2244,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         target_hosts = [h.hostname for h in hosts]
         for d in daemons:
             if d.hostname not in target_hosts:
-                self._remove_daemon(d.name(), d.hostname)
+                # NOTE: we are passing the 'force' flag here, which means
+                # we can delete a mon instances data.
+                self._remove_daemon(d.name(), d.hostname, True)
                 r = True
 
         return r
@@ -2308,6 +2352,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         return create_func_map(args)
 
+    def apply_mon(self, spec):
+        return self._apply(spec)
+
     def _create_mon(self, name, host, network):
         """
         Create a new monitor on the given host.
@@ -2318,16 +2365,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'entity': 'mon.',
         })
 
-        # infer whether this is a CIDR network, addrvec, or plain IP
         extra_config = '[mon.%s]\n' % name
-        if '/' in network:
-            extra_config += 'public network = %s\n' % network
-        elif network.startswith('[v') and network.endswith(']'):
-            extra_config += 'public addrv = %s\n' % network
-        elif ':' not in network:
-            extra_config += 'public addr = %s\n' % network
+        if network:
+            # infer whether this is a CIDR network, addrvec, or plain IP
+            if '/' in network:
+                extra_config += 'public network = %s\n' % network
+            elif network.startswith('[v') and network.endswith(']'):
+                extra_config += 'public addrv = %s\n' % network
+            elif ':' not in network:
+                extra_config += 'public addr = %s\n' % network
+            else:
+                raise OrchestratorError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
         else:
-            raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
+            # try to get the public_network from the config
+            ret, network, err = self.mon_command({
+                'prefix': 'config get',
+                'who': 'mon',
+                'key': 'public_network',
+            })
+            network = network.strip() # type: ignore
+            if ret:
+                raise RuntimeError('Unable to fetch cluster_network config option')
+            if not network:
+                raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
+            if '/' not in network:
+                raise OrchestratorError('public_network is set but does not look like a CIDR network: \'%s\'' % network)
+            extra_config += 'public network = %s\n' % network
 
         return self._create_daemon('mon', name, host,
                                    keyring=keyring,
@@ -2335,8 +2398,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def add_mon(self, spec):
         # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
-        # current support requires a network to be specified
-        orchestrator.servicespec_validate_hosts_have_network_spec(spec)
         return self._add_daemon('mon', spec, self._create_mon)
 
     def _create_mgr(self, mgr_id, host):
