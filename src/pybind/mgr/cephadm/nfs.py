@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Optional
 
 import cephadm
+from orchestrator import OrchestratorError
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class NFSGanesha(object):
 
     def get_rados_user(self):
         # type: () -> str
-        return 'admin' # TODO: 'nfs.' + self.daemon_id
+        return self.get_daemon_name()
 
     def get_rados_config_name(self):
         # type: () -> str
@@ -44,11 +45,24 @@ class NFSGanesha(object):
 
     def create_keyring(self):
         # type: () -> str
-        logger.info('Create keyring for user: %s' % self.get_rados_user())
+        entity = 'client.' + self.get_rados_user() 
+
+        osd_caps='allow rw pool=%s' % (self.pool)
+        if self.namespace:
+            osd_caps='%s namespace=%s' % (osd_caps, self.namespace)
+
+        logger.info('Create keyring: %s' % entity)
         ret, keyring, err = self.mgr.mon_command({
-            'prefix': 'auth get',
-            'entity': 'client.' + self.get_rados_user(),
+            'prefix': 'auth get-or-create',
+            'entity': entity,
+            'caps': ['mon', 'allow r',
+                     'osd', osd_caps,
+                     'mds', 'allow rw'],
         })
+
+        if ret != 0:
+            raise OrchestratorError('Unable to create keyring: %s' % (entity))
+
         return keyring
 
     def create_rados_config_obj(self):
