@@ -13,6 +13,7 @@ import logging
 import threading
 import traceback
 import os
+import six
 
 from io import BytesIO
 from six import StringIO
@@ -24,7 +25,8 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
-import six
+from tasks.thrasher import Thrasher
+from six import StringIO
 
 try:
     from subprocess import DEVNULL # py3k
@@ -193,6 +195,22 @@ class Thrasher:
                 return False;
         return True;
 
+    def run_ceph_objectstore_tool(self, remote, osd, cmd):
+        if self.ceph_manager.cephadm:
+            return shell(
+                self.ceph_manager.ctx, self.ceph_manager.cluster, remote,
+                args=['ceph-objectstore-tool'] + cmd,
+                name=osd,
+                wait=True, check_status=False,
+                stdout=StringIO(),
+                stderr=StringIO())
+        else:
+            return remote.run(
+                args=['sudo', 'adjust-ulimits', 'ceph-objectstore-tool'] + cmd,
+                wait=True, check_status=False,
+                stdout=StringIO(),
+                stderr=StringIO())
+
     def kill_osd(self, osd=None, mark_down=False, mark_out=False):
         """
         :param osd: Osd to be killed.
@@ -258,7 +276,8 @@ class Thrasher:
                                           stdout=BytesIO(), stderr=BytesIO())
                     if proc.exitstatus == 0:
                         break
-                    elif proc.exitstatus == 1 and proc.stderr == b"OSD has the store locked":
+                    elif (proc.exitstatus == 1 and
+                          proc.stderr.getvalue() == "OSD has the store locked"):
                         continue
                     else:
                         raise Exception("ceph-objectstore-tool: "
@@ -324,7 +343,7 @@ class Thrasher:
             proc = imp_remote.run(args=cmd, wait=True, check_status=False,
                                   stderr=BytesIO())
             if proc.exitstatus == 1:
-                bogosity = b"The OSD you are using is older than the exported PG"
+                bogosity = "The OSD you are using is older than the exported PG"
                 if bogosity in proc.stderr.getvalue():
                     self.log("OSD older than exported PG"
                              "...ignored")
@@ -350,19 +369,24 @@ class Thrasher:
                 imp_remote.run(args=cmd)
 
             # apply low split settings to each pool
-            for pool in self.ceph_manager.list_pools():
-                no_sudo_prefix = prefix[5:]
-                cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
-                       "--filestore-split-multiple 1' sudo -E "
-                       + no_sudo_prefix + "--op apply-layout-settings --pool " + pool).format(id=osd)
-                proc = remote.run(args=cmd, wait=True, check_status=False,
-                                  stderr=BytesIO())
-                output = proc.stderr.getvalue()
-                if b'Couldn\'t find pool' in output:
-                    continue
-                if proc.exitstatus:
-                    raise Exception("ceph-objectstore-tool apply-layout-settings"
-                                    " failed with {status}".format(status=proc.exitstatus))
+            if not self.ceph_manager.cephadm:
+                for pool in self.ceph_manager.list_pools():
+                    cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
+                           "--filestore-split-multiple 1' sudo -E "
+                           + 'ceph-objectstore-tool '
+                           + ' '.join(prefix + [
+                               '--data-path', FSPATH.format(id=imp_osd),
+                               '--journal-path', JPATH.format(id=imp_osd),
+                           ])
+                           + " --op apply-layout-settings --pool " + pool).format(id=osd)
+                    proc = imp_remote.run(args=cmd,
+                                          wait=True, check_status=False,
+                                          stderr=StringIO())
+                    if 'Couldn\'t find pool' in proc.stderr.getvalue():
+                        continue
+                    if proc.exitstatus:
+                        raise Exception("ceph-objectstore-tool apply-layout-settings"
+                                        " failed with {status}".format(status=proc.exitstatus))
 
     def blackhole_kill_osd(self, osd=None):
         """
