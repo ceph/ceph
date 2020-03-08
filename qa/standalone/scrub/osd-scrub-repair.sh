@@ -5758,6 +5758,7 @@ function TEST_periodic_scrub_replicated() {
     # Can't upgrade with this set
     ceph osd set nodeep-scrub
     # Let map change propagate to OSDs
+    ceph tell osd.0 get_latest_osdmap
     flush_pg_stats
     sleep 5
 
