@@ -47,7 +47,8 @@ class rgw_ios:
         log.info('test_version: %s' % self.config.get('test_version', 'v2'))
         log.info('test: %s' % self.config['test'])
         log.info('script: %s' % self.config.get('script', self.config['test'] + ".py"))
-        test_root_dir = self.config['test'] + "_%d" % int(time.time())
+        time.sleep(2)
+        test_root_dir = self.config['test'] + "_%d" % "_".join(str(time.time()).split("."))
         test_venv = os.path.join(test_root_dir, "venv")
         script = os.path.join(cephqe_scripts['REPO_NAME'],
                               cephqe_scripts['DIR'][self.config.get('test_version', 'v2')]['script'],
@@ -111,7 +112,7 @@ class rgw_ios:
                     'source',
                     '{}/bin/activate'.format(test_venv),
                     run.Raw(';'),
-                    run.Raw('pip3 install boto boto3 names PyYaml ConfigParser'),
+                    run.Raw('pip3 install boto boto3 names PyYaml ConfigParser python-swiftclient'),
                     run.Raw(';'),
                     'deactivate'])
 
