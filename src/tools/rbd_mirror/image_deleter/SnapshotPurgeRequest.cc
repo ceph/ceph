@@ -34,6 +34,9 @@ void SnapshotPurgeRequest<I>::open_image() {
   dout(10) << dendl;
   m_image_ctx = I::create("", m_image_id, nullptr, m_io_ctx, false);
 
+  // ensure non-primary images can be modified
+  m_image_ctx->read_only_mask &= ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
   {
     std::unique_lock image_locker{m_image_ctx->image_lock};
     m_image_ctx->set_journal_policy(new JournalPolicy());

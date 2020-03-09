@@ -161,6 +161,9 @@ void TrashMoveRequest<I>::open_image() {
 
   m_image_ctx = I::create("", m_image_id, nullptr, m_io_ctx, false);
 
+  // ensure non-primary images can be modified
+  m_image_ctx->read_only_mask &= ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
   {
     // don't attempt to open the journal
     std::unique_lock image_locker{m_image_ctx->image_lock};

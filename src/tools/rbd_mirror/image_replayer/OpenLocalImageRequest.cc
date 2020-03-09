@@ -116,6 +116,11 @@ void OpenLocalImageRequest<I>::send_open_image() {
 
   *m_local_image_ctx = I::create("", m_local_image_id, nullptr,
                                  m_local_io_ctx, false);
+
+  // ensure non-primary images can be modified
+  (*m_local_image_ctx)->read_only_mask =
+    ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
   {
     std::scoped_lock locker{(*m_local_image_ctx)->owner_lock,
 			    (*m_local_image_ctx)->image_lock};
