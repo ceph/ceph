@@ -766,17 +766,13 @@ def get_last_local_ceph_image():
     :return: The most recent local ceph image (already pulled)
     """
     out, _, _ = call_throws(
-        [container_path, 'images', '--format', '{{ .ID }} {{.Repository}} {{.Tag}}'])
+        [container_path, 'images',
+         '--filter', 'label=ceph=True',
+         '--format', '{{.Repository}} {{.Tag}}'])
     out_lines = out.splitlines()
-    for out_line in out_lines:
-        id, repository, tag = out_line.split()
-        out, _, _ = call_throws([container_path, 'inspect', str(id)])
-        images_details = json.loads(out)
-        for image_details in images_details:
-            image_labels = image_details['Labels']
-            git_repo = image_labels.get('GIT_REPO', "")
-            if git_repo.endswith("/ceph-container.git"):
-                return '{}:{}'.format(repository, tag)
+    if len(out_lines) > 0:
+        repository, tag = out_lines[0].split()
+        return '{}:{}'.format(repository, tag)
     return None
 
 def write_tmp(s, uid, gid):
