@@ -114,11 +114,17 @@ class DriveGroupSpecs(object):
     def __init__(self, drive_group_json):
         # type: (list) -> None
         self.drive_group_json = drive_group_json
-        self.drive_groups = list()  # type: List[DriveGroupSpec]
-        self.build_drive_groups()
 
-    def build_drive_groups(self):
-        self.drive_groups = list(map(DriveGroupSpec.from_json, self.drive_group_json))
+        if isinstance(self.drive_group_json, dict):
+            # from legacy representation (till Octopus)
+            self.drive_group_json = [
+                dict(service_id=name, service_type='osd', **dg)
+                for name, dg in self.drive_group_json.items()
+            ]
+        if not isinstance(self.drive_group_json, list):
+            raise ServiceSpecValidationError('Specs needs to be a list of specs')
+        dgs = list(map(DriveGroupSpec.from_json, self.drive_group_json))  # type: ignore
+        self.drive_groups = dgs  # type: List[DriveGroupSpec]
 
     def __repr__(self):
         return ", ".join([repr(x) for x in self.drive_groups])
@@ -214,6 +220,11 @@ class DriveGroupSpec(ServiceSpec):
         :param json_drive_group: A valid json string with a Drive Group
                specification
         """
+        # legacy json (pre Octopus)
+        if 'host_pattern' in json_drive_group and 'placement' not in json_drive_group:
+            json_drive_group['placement'] = {'host_pattern': json_drive_group['host_pattern']}
+            del json_drive_group['host_pattern']
+
         for applied_filter in list(json_drive_group.keys()):
             if applied_filter not in cls._supported_features:
                 raise DriveGroupValidationError(

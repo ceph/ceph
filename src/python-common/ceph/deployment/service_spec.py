@@ -317,24 +317,28 @@ class ServiceSpec(object):
         self.service_type = service_type
         self.service_id = service_id
 
-    @staticmethod
-    def from_json(json_spec):
-        # type: (dict) -> "ServiceSpec"
+    @classmethod
+    def from_json(cls, json_spec):
+        # type: (dict) -> Any
+        # Python 3:
+        # >>> ServiceSpecs = TypeVar('Base', bound=ServiceSpec)
+        # then, the real type is: (dict) -> ServiceSpecs
         """
         Initialize 'ServiceSpec' object data from a json structure
         :param json_spec: A valid dict with ServiceSpec
         """
         from ceph.deployment.drive_group import DriveGroupSpec
 
-        if 'service_type' not in json_spec:
-            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
-        service_type = json_spec.get('service_type')
-        assert service_type
+        service_type = json_spec.get('service_type', '')
         _cls = {
             'rgw': RGWSpec,
             'nfs': NFSServiceSpec,
             'osd': DriveGroupSpec
-        }.get(service_type, ServiceSpec)
+        }.get(service_type, cls)
+
+        if _cls == ServiceSpec and not service_type:
+            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+
         return _cls._from_json_impl(json_spec)  # type: ignore
 
     @classmethod
