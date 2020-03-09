@@ -2,6 +2,8 @@ import os
 import errno
 import logging
 
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+
 import cephfs
 import orchestrator
 
@@ -34,9 +36,9 @@ def remove_filesystem(mgr, fs_name):
     return mgr.mon_command(command)
 
 def create_mds(mgr, fs_name, placement):
-    spec = orchestrator.ServiceSpec(service_type='mds',
+    spec = ServiceSpec(service_type='mds',
                                     service_id=fs_name,
-                                    placement=orchestrator.PlacementSpec.from_string(placement))
+                                    placement=PlacementSpec.from_string(placement))
     try:
         completion = mgr.apply_mds(spec)
         mgr._orchestrator_wait([completion])

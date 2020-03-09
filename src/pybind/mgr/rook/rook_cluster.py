@@ -19,6 +19,7 @@ from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.service_spec import ServiceSpec
 from mgr_util import merge_dicts
 
 try:
@@ -343,7 +344,7 @@ class RookCluster(object):
                 raise
 
     def add_filesystem(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.

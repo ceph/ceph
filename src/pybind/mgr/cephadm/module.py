@@ -30,7 +30,7 @@ import uuid
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
-from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec
 
 from mgr_module import MgrModule
 import orchestrator
@@ -2424,16 +2424,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
-                'mon': orchestrator.PlacementSpec(count=5),
-                'mgr': orchestrator.PlacementSpec(count=2),
-                'mds': orchestrator.PlacementSpec(count=2),
-                'rgw': orchestrator.PlacementSpec(count=2),
-                'rbd-mirror': orchestrator.PlacementSpec(count=2),
-                'grafana': orchestrator.PlacementSpec(count=1),
-                'alertmanager': orchestrator.PlacementSpec(count=1),
-                'prometheus': orchestrator.PlacementSpec(count=1),
-                'node-exporter': orchestrator.PlacementSpec(all_hosts=True),
-                'crash': orchestrator.PlacementSpec(all_hosts=True),
+                'mon': PlacementSpec(count=5),
+                'mgr': PlacementSpec(count=2),
+                'mds': PlacementSpec(count=2),
+                'rgw': PlacementSpec(count=2),
+                'rbd-mirror': PlacementSpec(count=2),
+                'grafana': PlacementSpec(count=1),
+                'alertmanager': PlacementSpec(count=1),
+                'prometheus': PlacementSpec(count=1),
+                'node-exporter': PlacementSpec(all_hosts=True),
+                'crash': PlacementSpec(all_hosts=True),
             }
             spec.placement = defaults[spec.service_type]
         self.log.info('Saving service %s spec with placement %s' % (
@@ -3008,7 +3008,7 @@ class BaseScheduler(object):
     """
 
     def __init__(self, placement_spec):
-        # type: (orchestrator.PlacementSpec) -> None
+        # type: (PlacementSpec) -> None
         self.placement_spec = placement_spec
 
     def place(self, host_pool, count=None):
@@ -3061,7 +3061,7 @@ class HostAssignment(object):
         self.service_name = spec.service_name()
 
     def place(self):
-        # type: () -> List[orchestrator.HostPlacementSpec]
+        # type: () -> List[HostPlacementSpec]
         """
         Load hosts into the spec.placement.hosts container.
         """

@@ -3,6 +3,7 @@ import functools
 import os
 
 from ceph.deployment import inventory
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
 
 try:
     from typing import List, Dict, Optional, Callable, Any
@@ -297,17 +298,17 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def add_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
+        # type: (ServiceSpec) -> RookCompletion
         return self._service_add_decorate('MDS', spec,
                                        self.rook_cluster.add_filesystem)
 
     def add_rgw(self, spec):
-        # type: (orchestrator.RGWSpec) -> RookCompletion
+        # type: (RGWSpec) -> RookCompletion
         return self._service_add_decorate('RGW', spec,
                                        self.rook_cluster.add_objectstore)
 
     def add_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
+        # type: (NFSServiceSpec) -> RookCompletion
         return self._service_add_decorate("NFS", spec,
                                           self.rook_cluster.add_nfsgw)
 
@@ -334,7 +335,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             )
 
     def apply_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
+        # type: (ServiceSpec) -> RookCompletion
         if spec.placement.hosts or spec.placement.label:
             raise RuntimeError("Host list or label is not supported by rook.")
 
@@ -345,7 +346,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def apply_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
+        # type: (ServiceSpec) -> RookCompletion
         num = spec.placement.count
         return write_completion(
             lambda: self.rook_cluster.update_mds_count(spec.service_id, num),
@@ -354,7 +355,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def apply_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
+        # type: (NFSServiceSpec) -> RookCompletion
         num = spec.placement.count
         return write_completion(
             lambda: self.rook_cluster.update_nfs_count(spec.service_id, num),
