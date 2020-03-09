@@ -55,6 +55,9 @@ private:
    *    v (skip if not needed)    *
    * CREATE_PRIMARY_SNAPSHOT  * * *
    *    |                         *
+   *    v (skip if not needed)    *
+   * ENABLE_NON_PRIMARY_FEATURE   *
+   *    |                         *
    *    v                         *
    * IMAGE_STATE_UPDATE * * * * * *
    *    |                         *
@@ -92,6 +95,9 @@ private:
 
   void create_primary_snapshot();
   void handle_create_primary_snapshot(int r);
+
+  void enable_non_primary_feature();
+  void handle_enable_non_primary_feature(int r);
 
   void image_state_update();
   void handle_image_state_update(int r);

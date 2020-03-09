@@ -42,6 +42,9 @@ private:
    * <start>
    *    |
    *    v
+   * ENABLE_NON_PRIMARY_FEATURE
+   *    |
+   *    v
    * CREATE_SNAPSHOT
    *    |
    *    v
@@ -53,6 +56,9 @@ private:
   ImageCtxT *m_image_ctx;
   std::string m_global_image_id;
   Context *m_on_finish;
+
+  void enable_non_primary_feature();
+  void handle_enable_non_primary_feature(int r);
 
   void create_snapshot();
   void handle_create_snapshot(int r);
