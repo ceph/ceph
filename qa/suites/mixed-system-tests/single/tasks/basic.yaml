@@ -1,13 +1,56 @@
 tasks:
 - parallel:
     - mixed_system_test.rgw_ios:
+        test: test_acls
+        test_version: v1
+        clients: ['client.0']
+    - mixed_system_test.rgw_ios:
+        test: test_acls_all_usrs
+        test_version: v1
+        clients: ['client.1']
+    - mixed_system_test.rgw_ios:
+        test: test_acls_copy_obj
+        test_version: v1
+        clients: ['client.0']
+    - mixed_system_test.rgw_ios:
+        test: test_acls_reset
+        test_version: v1
+        clients: ['client.1']
+    - mixed_system_test.rgw_ios:
+        test: test_multipart_upload_cancel
+        test_version: v1
+        clients: ['client.0']
+    - mixed_system_test.rgw_ios:
+        test: Mbuckets_with_Nobjects_Sharding
+        script: test_Mbuckets_with_Nobjects.py
+        clients: ['client.1']
+        config:
+            user_count: 2
+            bucket_count: 5
+            objects_count: 100
+            objects_size_range:
+                min: 100
+                max: 200
+            test_ops:
+                create_bucket: true
+                create_object: true
+                download_object: true
+                delete_bucket_object: true
+                sharding:
+                    enable: true
+                    max_shards: 32
+                compression:
+                    enable: false
+                    type: zlib
+- parallel:
+    - mixed_system_test.rgw_ios:
         test: Mbuckets_with_Nobjects
         script: test_Mbuckets_with_Nobjects.py
         clients: ['client.0']
         config:
             user_count: 5
             bucket_count: 5
-            objects_count: 10
+            objects_count: 100
             objects_size_range:
                 min: 100
                 max: 200
@@ -25,11 +68,11 @@ tasks:
     - mixed_system_test.rgw_ios:
         test: Mbuckets_with_Nobjects_multipart
         script: test_Mbuckets_with_Nobjects.py
-        clients: ['client.0']
+        clients: ['client.1']
         config:
             user_count: 2
             bucket_count: 5
-            objects_count: 10
+            objects_count: 100
             objects_size_range:
                 min: 1000
                 max: 1500
@@ -52,7 +95,7 @@ tasks:
         config:
             user_count: 2
             bucket_count: 2
-            objects_count: 10
+            objects_count: 100
             version_count: 5
             objects_size_range:
                 min: 50
@@ -66,11 +109,11 @@ tasks:
     - mixed_system_test.rgw_ios:
         test: versioning_ops_delete
         script: test_versioning_with_objects.py
-        clients: ['client.0']
+        clients: ['client.1']
         config:
             user_count: 2
             bucket_count: 2
-            objects_count: 10
+            objects_count: 100
             version_count: 5
             objects_size_range:
                 min: 50
@@ -85,6 +128,7 @@ tasks:
         client.0:
             fio-io-size: 100%
             formats: [2]
+            fio-version: "3.16"
             features: [[layering],[layering,exclusive-lock,object-map]]
             io-engine: rbd
             test-clone-io: 1
