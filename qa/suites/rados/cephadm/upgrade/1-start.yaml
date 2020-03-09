@@ -1,4 +1,4 @@
 tasks:
 - cephadm:
-    image: quay.io/ceph-ci/ceph:wip-sage-testing-2020-03-07-0931
-    cephadm_branch: wip-sage-testing-2020-03-07-0931
+    image: quay.io/ceph-ci/ceph:wip-sage2-testing-2020-03-10-1354
+    cephadm_branch: wip-sage2-testing-2020-03-10-1354
