@@ -237,16 +237,24 @@ functionality to choose a location in this way. Optionally, you can
 specify a location when creating a stateless service.
 
 
+.. py:currentmodule:: ceph.deployment.service_spec
+
 .. autoclass:: PlacementSpec
    :members:
 
-   
+.. py:currentmodule:: orchestrator
+
+
 Services
 --------
 
 .. autoclass:: ServiceDescription
 
+.. py:currentmodule:: ceph.deployment.service_spec
+
 .. autoclass:: ServiceSpec
+
+.. py:currentmodule:: orchestrator
 
 .. automethod:: Orchestrator.describe_service
 
@@ -307,12 +315,20 @@ Stateless Services
 .. automethod:: Orchestrator.add_rbd_mirror
 .. automethod:: Orchestrator.apply_rbd_mirror
 
+.. py:currentmodule:: ceph.deployment.service_spec
+
 .. autoclass:: RGWSpec
+
+.. py:currentmodule:: orchestrator
 
 .. automethod:: Orchestrator.add_rgw
 .. automethod:: Orchestrator.apply_rgw
 
+.. py:currentmodule:: ceph.deployment.service_spec
+
 .. autoclass:: NFSServiceSpec
+
+.. py:currentmodule:: orchestrator
 
 .. automethod:: Orchestrator.add_nfs
 .. automethod:: Orchestrator.apply_nfs
