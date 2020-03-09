@@ -86,6 +86,7 @@ struct Election {
   void unblock_messages(int from, int to);
   void unblock_bidirectional_messages(int a, int b);
   void add_disallowed_leader(int disallowed) { disallowed_leaders.insert(disallowed); }
+  void remove_elector(int rank);
   const char* prefix_name() const { return "Election:      "; }
   int timestep_count() const { return timesteps_run; }
 };
@@ -100,6 +101,7 @@ struct Owner : public ElectionOwner, RankProvider {
   int victory_accepters;
   int timer_steps; // timesteps until we trigger timeout
   bool timer_election; // the timeout is for normal election, or victory
+  bool rank_deleted = false;
   string prefix_str;
  Owner(int r, ElectionLogic::election_strategy es, double tracker_halflife,
        Election *p) : parent(p), rank(r), persisted_epoch(0),
@@ -121,18 +123,26 @@ struct Owner : public ElectionOwner, RankProvider {
   void validate_store() { return; }
   // don't need to do anything with our state right now
   void notify_bump_epoch() {}
+  void notify_rank_removed(int removed_rank) {
+    peer_tracker.notify_rank_removed(removed_rank);
+    if (rank > removed_rank)
+      --rank;
+  }
+  void notify_deleted() { rank_deleted = true; rank = -1; cancel_timer(); }
   // pass back to ElectionLogic; we don't need this redirect ourselves
-  void trigger_new_election() { logic.start(); }
+  void trigger_new_election() {     ceph_assert (!rank_deleted); logic.start(); }
   int get_my_rank() const { return rank; }
   // we don't need to persist scores as we don't reset and lose memory state
   void persist_connectivity_scores() {}
   void propose_to_peers(epoch_t e, bufferlist& bl) {
+    ceph_assert (!rank_deleted);
     for (int i = 0; i < parent->get_paxos_size(); ++i) {
       if (i == rank) continue;
       parent->propose_to(rank, i, e, bl);
     }
   }
   void reset_election() {
+    ceph_assert (!rank_deleted);
     _start();
     logic.start();
   }
@@ -159,10 +169,12 @@ struct Owner : public ElectionOwner, RankProvider {
     quorum.clear();
   }
   void _defer_to(int who) {
+    ceph_assert (!rank_deleted);
     parent->defer_to(rank, who, logic.get_epoch());
     reset_timer(0); // wtf does changing this 0->1 cause breakage?
   }
   void message_victory(const std::set<int>& members) {
+    ceph_assert (!rank_deleted);
     for (auto i : members) {
       if (i == rank) continue;
       parent->claim_victory(rank, i, logic.get_epoch(), members);
@@ -173,15 +185,18 @@ struct Owner : public ElectionOwner, RankProvider {
   }
   bool is_current_member(int r) const { return quorum.count(r) != 0; }
   void receive_propose(int from, epoch_t e, ConnectionTracker *oct) {
+    if (rank_deleted) return;
     logic.receive_propose(from, e, oct);
     delete oct;
   }
   void receive_ack(int from, epoch_t e) {
+    if (rank_deleted) return;
     if (e < logic.get_epoch())
       return;
     logic.receive_ack(from, e);
   }
   void receive_victory_claim(int from, epoch_t e, const set<int>& members) {
+    if (rank_deleted) return;
     if (e < logic.get_epoch())
       return;
     if (logic.receive_victory_claim(from, e)) {
@@ -191,6 +206,7 @@ struct Owner : public ElectionOwner, RankProvider {
     }
   }
   void receive_victory_ack(int from, epoch_t e) {
+    if (rank_deleted) return;
     if (e < logic.get_epoch())
       return;
     ++victory_accepters;
@@ -218,6 +234,7 @@ struct Owner : public ElectionOwner, RankProvider {
 	 << " timed out for " << rank
 	 << ", electing me:" << logic.electing_me
 	 << ", acked_me:" << logic.acked_me << dendl;
+    ceph_assert (!rank_deleted);
     logic.end_election_period();
   }
   void victory_timeout() {
@@ -225,12 +242,14 @@ struct Owner : public ElectionOwner, RankProvider {
 	 << " timed out for " << rank
 	 << ", electing me:" << logic.electing_me
 	 << ", acked_me:" << logic.acked_me << dendl;
+    ceph_assert (!rank_deleted);
     reset_election();
   }
   void encode_scores(bufferlist& bl) {
     encode(peer_tracker, bl);
   }
   void send_pings() {
+    ceph_assert (!rank_deleted);
     if (!parent->ping_interval ||
 	parent->timesteps_run % parent->ping_interval != 0) {
       return;
@@ -249,6 +268,7 @@ struct Owner : public ElectionOwner, RankProvider {
     }
   }
   void notify_timestep() {
+    ceph_assert (!rank_deleted);
     assert(timer_steps != 0);
     if (timer_steps > 0) {
       --timer_steps;
@@ -303,9 +323,10 @@ void Election::queue_election_message(int from, int to, function<void()> m)
   if (!blocked_messages[from].count(to)) {
     bufferlist bl;
     electors[from]->encode_scores(bl);
-    messages.push_back([this,m,to,bl] {
+    Owner *o = electors[to];
+    messages.push_back([this,m,o,bl] {
 	--this->pending_election_messages;
-	electors[to]->receive_scores(bl);
+	o->receive_scores(bl);
 	m();
       });
     ++pending_election_messages;
@@ -490,6 +511,37 @@ void Election::unblock_bidirectional_messages(int a, int b)
   unblock_messages(b, a);
 }
 
+void Election::remove_elector(int rank)
+{
+  for (auto ei = electors.begin(); ei != electors.end(); ) {
+    if (ei->first == rank) {
+      ei->second->notify_deleted();
+      electors.erase(ei++);
+      continue;
+    }
+    ei->second->notify_rank_removed(rank);
+    if (ei->first > rank) {
+      electors[ei->first - 1] = ei->second;
+      electors.erase(ei++);
+      continue;
+    }
+    ++ei;
+  }
+  for (auto bi = blocked_messages.begin(); bi != blocked_messages.end(); ) {
+    if (bi->first == rank) {
+      blocked_messages.erase(bi++);
+      continue;
+    }
+    bi->second.erase(rank);
+    for (auto i = bi->second.upper_bound(rank);
+	 i != bi->second.end();) {
+      bi->second.insert(*i - 1);
+      bi->second.erase(*(i++));
+    }
+    ++bi;
+  }
+  --count;
+}
 
 void single_startup_election_completes(ElectionLogic::election_strategy strategy)
 {
@@ -868,6 +920,42 @@ void handles_disagreeing_connectivity(ElectionLogic::election_strategy strategy)
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
+void handles_removing_ranks(ElectionLogic::election_strategy strategy)
+{
+  ceph_assert(strategy == ElectionLogic::CONNECTIVITY);
+  for (int deletee = 0; deletee < 5; ++deletee) {
+    Election election(5, strategy);
+    election.start_all();
+    int steps = election.run_timesteps(0);
+    ldout(g_ceph_context, 10) << "ran in " << steps << " timesteps" << dendl;
+    ASSERT_TRUE(election.election_stable());
+    ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
+    ASSERT_TRUE(election.all_agree_on_leader());
+    ASSERT_TRUE(election.check_epoch_agreement());
+    election.remove_elector(deletee);
+    ldout(g_ceph_context, 1) << "removed rank " << deletee << " from set" << dendl;
+    election.start_all();
+    steps = election.run_timesteps(0);
+    ASSERT_TRUE(election.election_stable());
+    ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
+    ASSERT_TRUE(election.all_agree_on_leader());
+    ASSERT_TRUE(election.check_epoch_agreement());
+  }
+  {
+    Election election(7, strategy);
+    for (int i = 0; i < (7 - 3); ++i) {
+      election.start_all();
+      election.remove_elector(0);
+      int steps = election.run_timesteps(0);
+      ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
+      ASSERT_TRUE(election.election_stable());
+      ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
+      ASSERT_TRUE(election.all_agree_on_leader());
+      ASSERT_TRUE(election.check_epoch_agreement());
+    }
+  }
+}
+
 // TODO: write a test with more complicated connectivity graphs and make sure
 // they are stable with multiple disconnected ranks pinging peons
 
@@ -908,3 +996,4 @@ test_connectivity(netsplit_with_disallowed_tiebreaker_converges)
 test_connectivity(handles_singly_connected_peon)
 test_connectivity(handles_disagreeing_connectivity)
 test_connectivity(handles_outdated_scoring)
+test_connectivity(handles_removing_ranks)
