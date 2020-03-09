@@ -104,6 +104,14 @@ class NodeAssignmentTest(NamedTuple):
             [],
             ['host1', 'host2', 'host3']
         ),
+        # host_pattern
+        NodeAssignmentTest(
+            'mon',
+            PlacementSpec(host_pattern='mon*'),
+            'monhost1 monhost2 datahost'.split(),
+            [],
+            ['monhost1', 'monhost2']
+        ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
     hosts = HostAssignment(

@@ -3083,6 +3083,15 @@ class HostAssignment(object):
             logger.debug('All hosts: {}'.format(candidates))
             return candidates
 
+        # respect host_pattern
+        if self.spec.placement.host_pattern:
+            candidates = [
+                HostPlacementSpec(x, '', '')
+                for x in self.spec.placement.pattern_matches_hosts(self.get_hosts_func(None))
+            ]
+            logger.debug('All hosts: {}'.format(candidates))
+            return candidates
+
         count = 0
         if self.spec.placement.hosts and \
            self.spec.placement.count and \
