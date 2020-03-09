@@ -607,6 +607,7 @@ function TEST_repair_stats() {
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'
@@ -680,6 +681,7 @@ function TEST_repair_stats_ec() {
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'
