@@ -8,9 +8,7 @@ from ._interface import \
     CLICommand, _cli_write_command, _cli_read_command, CLICommandMeta, \
     Orchestrator, OrchestratorClientMixin, \
     OrchestratorValidationError, OrchestratorError, NoOrchestrator, \
-    ServiceSpec, NFSServiceSpec, RGWSpec, HostPlacementSpec, \
-    servicespec_validate_add, \
-    ServiceDescription, InventoryFilter, PlacementSpec,  HostSpec, \
+    ServiceDescription, InventoryFilter, HostSpec, \
     DaemonDescription, \
     InventoryHost, DeviceLightLoc, \
     OutdatableData, OutdatablePersistentDict, \

@@ -12,8 +12,9 @@ try:
 except ImportError:
     pass
 
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
-    ServiceSpec, PlacementSpec, RGWSpec, HostSpec, OrchestratorError
+    HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, mon_command, match_glob
 from cephadm.module import CephadmOrchestrator
