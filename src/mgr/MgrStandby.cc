@@ -155,6 +155,7 @@ int MgrStandby::init()
   mgrc.init();
   client_messenger->add_dispatcher_tail(&mgrc);
 
+  monc.set_log_client(&log_client);
   r = monc.authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify a mgr ID with a valid keyring?" << dendl;
@@ -171,7 +172,6 @@ int MgrStandby::init()
 
   client_t whoami = monc.get_global_id();
   client_messenger->set_myname(entity_name_t::MGR(whoami.v));
-  monc.set_log_client(&log_client);
   _update_log_config();
   objecter.set_client_incarnation(0);
   objecter.init();
