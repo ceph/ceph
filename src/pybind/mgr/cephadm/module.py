@@ -3037,7 +3037,7 @@ class SimpleScheduler(BaseScheduler):
     def place(self, host_pool, count=None):
         # type: (List, Optional[int]) -> List[HostPlacementSpec]
         if not host_pool:
-            raise Exception('List of host candidates is empty')
+            return []
         host_pool = [x for x in host_pool]
         # shuffle for pseudo random selection
         random.shuffle(host_pool)
