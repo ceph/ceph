@@ -231,7 +231,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual bool pg_is_repair() const = 0;
 
      virtual void log_operation(
-       const vector<pg_log_entry_t> &logv,
+       vector<pg_log_entry_t>&& logv,
        const std::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
@@ -451,7 +451,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const eversion_t &trim_to,           ///< [in] trim log to here
      const eversion_t &min_last_complete_ondisk, ///< [in] lower bound on
                                                  ///  committed version
-     const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
+     vector<pg_log_entry_t>&& log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      std::optional<pg_hit_set_history_t> &hset_history,
      Context *on_all_commit,              ///< [in] called when all commit

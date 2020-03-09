@@ -30,6 +30,8 @@ class OSDMap;
 class MQuery;
 class PGBackend;
 class PGPeeringEvent;
+class osd_op_params_t;
+
 namespace recovery {
   class Context;
 }
@@ -96,6 +98,18 @@ public:
   // EpochSource
   epoch_t get_osdmap_epoch() const final {
     return peering_state.get_osdmap_epoch();
+  }
+
+  eversion_t get_pg_trim_to() const {
+    return peering_state.get_pg_trim_to();
+  }
+
+  eversion_t get_min_last_complete_ondisk() const {
+    return peering_state.get_min_last_complete_ondisk();
+  }
+
+  const pg_info_t& get_info() const {
+    return peering_state.get_info();
   }
 
   // DoutPrefixProvider
@@ -478,7 +492,7 @@ private:
 					     uint64_t limit);
   seastar::future<> submit_transaction(ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
-				       const MOSDOp& req);
+				       const osd_op_params_t& oop);
 
 private:
   OSDMapGate osdmap_gate;
@@ -488,6 +502,10 @@ private:
 
 public:
   cached_map_t get_osdmap() { return osdmap; }
+  eversion_t next_version() {
+    return eversion_t(projected_last_update.epoch,
+		      ++projected_last_update.version);
+  }
 
 private:
   std::unique_ptr<PGBackend> backend;

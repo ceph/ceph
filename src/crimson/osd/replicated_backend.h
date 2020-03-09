@@ -31,9 +31,9 @@ private:
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
 		      const hobject_t& hoid,
 		      ceph::os::Transaction&& txn,
-		      osd_reqid_t req_id,
+		      const osd_op_params_t& osd_op_p,
 		      epoch_t min_epoch, epoch_t max_epoch,
-		      eversion_t ver) final;
+		      std::vector<pg_log_entry_t>&& log_entries) final;
   const pg_t pgid;
   const pg_shard_t whoami;
   crimson::osd::ShardServices& shard_services;

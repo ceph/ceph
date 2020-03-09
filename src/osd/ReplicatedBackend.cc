@@ -451,7 +451,7 @@ void ReplicatedBackend::submit_transaction(
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
   const eversion_t &min_last_complete_ondisk,
-  const vector<pg_log_entry_t> &_log_entries,
+  vector<pg_log_entry_t>&& _log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
   ceph_tid_t tid,
@@ -510,7 +510,7 @@ void ReplicatedBackend::submit_transaction(
   clear_temp_objs(removed);
 
   parent->log_operation(
-    log_entries,
+    std::move(log_entries),
     hset_history,
     trim_to,
     at_version,
@@ -1108,7 +1108,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   parent->update_stats(m->pg_stats);
   parent->log_operation(
-    log,
+    std::move(log),
     m->updated_hit_set_history,
     m->pg_trim_to,
     m->version, /* Replicated PGs don't have rollback info */

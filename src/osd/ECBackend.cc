@@ -956,7 +956,7 @@ void ECBackend::handle_sub_write(
     }
   }
   get_parent()->log_operation(
-    op.log_entries,
+    std::move(op.log_entries),
     op.updated_hit_set_history,
     op.trim_to,
     op.roll_forward_to,
@@ -1487,7 +1487,7 @@ void ECBackend::submit_transaction(
   PGTransactionUPtr &&t,
   const eversion_t &trim_to,
   const eversion_t &min_last_complete_ondisk,
-  const vector<pg_log_entry_t> &log_entries,
+  vector<pg_log_entry_t>&& log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
   ceph_tid_t tid,
