@@ -2048,7 +2048,7 @@ def command_bootstrap():
         def is_dashboard_available():
             # type: () -> bool
             timeout=args.timeout if args.timeout else 30 # seconds
-            out = cli(['-h'], timeout=timeout)
+            out = cli(['-h', '--cluster-timeout', '30'], timeout=timeout)
             return 'dashboard' in out
         is_available('Dashboard', is_dashboard_available)
 
