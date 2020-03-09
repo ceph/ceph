@@ -3,13 +3,16 @@
 
 #include "osd.h"
 
+#include <sys/utsname.h>
+
 #include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <sys/utsname.h>
+
 #include "common/pick_address.h"
+#include "include/util.h"
 
 #include "messages/MOSDAlive.h"
 #include "messages/MOSDBeacon.h"
@@ -41,7 +44,6 @@
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
-#include "include/util.h"
 
 namespace {
   seastar::logger& logger() {
