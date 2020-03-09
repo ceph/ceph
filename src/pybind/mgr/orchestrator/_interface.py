@@ -1267,6 +1267,12 @@ class PlacementSpec(object):
         self.count = count  # type: Optional[int]
         self.all_hosts = all_hosts  # type: bool
 
+    def is_empty(self):
+        return not self.all_hosts and \
+            self.label is None and \
+            not self.hosts and \
+            self.count is None
+
     def set_hosts(self, hosts):
         # To backpopulate the .hosts attribute when using labels or count
         # in the orchestrator backend.
