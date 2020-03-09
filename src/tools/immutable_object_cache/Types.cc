@@ -61,11 +61,12 @@ ObjectCacheReadData::ObjectCacheReadData(uint16_t t, uint64_t s,
                                          uint64_t read_offset,
                                          uint64_t read_len,
                                          uint64_t pool_id, uint64_t snap_id,
+                                         uint64_t object_size,
                                          std::string oid,
                                          std::string pool_namespace)
   : ObjectCacheRequest(t, s), read_offset(read_offset),
     read_len(read_len), pool_id(pool_id), snap_id(snap_id),
-    oid(oid), pool_namespace(pool_namespace)
+    object_size(object_size), oid(oid), pool_namespace(pool_namespace)
 {}
 
 ObjectCacheReadData::ObjectCacheReadData(uint16_t t, uint64_t s)
@@ -78,6 +79,7 @@ void ObjectCacheReadData::encode_payload() {
   ceph::encode(read_len, payload);
   ceph::encode(pool_id, payload);
   ceph::encode(snap_id, payload);
+  ceph::encode(object_size, payload);
   ceph::encode(oid, payload);
   ceph::encode(pool_namespace, payload);
 }
@@ -87,6 +89,7 @@ void ObjectCacheReadData::decode_payload(bufferlist::const_iterator i) {
   ceph::decode(read_len, i);
   ceph::decode(pool_id, i);
   ceph::decode(snap_id, i);
+  ceph::decode(object_size, i);
   ceph::decode(oid, i);
   ceph::decode(pool_namespace, i);
 }

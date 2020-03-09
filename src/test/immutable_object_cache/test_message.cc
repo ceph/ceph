@@ -16,10 +16,11 @@ TEST(test_for_message, test_1)
   uint64_t read_len = 333333UL;
   uint64_t pool_id = 444444UL;
   uint64_t snap_id = 555555UL;
+  uint64_t object_size = 666666UL;
 
   // ObjectRequest --> bufferlist
   ObjectCacheRequest* req = new ObjectCacheReadData(type, seq, read_offset, read_len,
-                                    pool_id, snap_id, oid_name, pool_nspace);
+                                    pool_id, snap_id, object_size, oid_name, pool_nspace);
   req->encode();
   auto payload_bl = req->get_payload_bufferlist();
 
@@ -40,6 +41,7 @@ TEST(test_for_message, test_1)
   ASSERT_EQ(((ObjectCacheReadData*)req_decode)->read_len, 333333UL);
   ASSERT_EQ(((ObjectCacheReadData*)req_decode)->pool_id, 444444UL);
   ASSERT_EQ(((ObjectCacheReadData*)req_decode)->snap_id, 555555UL);
+  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->object_size, 666666UL);
   ASSERT_EQ(((ObjectCacheReadData*)req_decode)->pool_namespace, pool_nspace);
   ASSERT_EQ(((ObjectCacheReadData*)req_decode)->oid, oid_name);
 

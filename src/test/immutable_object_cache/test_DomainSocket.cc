@@ -122,7 +122,7 @@ public:
         usleep(1);
       }
 
-      m_cache_client->lookup_object("pool_nspace", 1, 2, "object_name", std::move(ctx));
+      m_cache_client->lookup_object("pool_nspace", 1, 2, 3, "object_name", std::move(ctx));
       m_send_request_index++;
     }
     m_wait_event.wait();
@@ -135,7 +135,7 @@ public:
        hit = ack->type == RBDSC_READ_REPLY;
        m_wait_event.signal();
     });
-    m_cache_client->lookup_object(pool_nspace, 1, 2, object_id, std::move(ctx));
+    m_cache_client->lookup_object(pool_nspace, 1, 2, 3, object_id, std::move(ctx));
     m_wait_event.wait();
     return hit;
   }
@@ -156,7 +156,6 @@ TEST_F(TestCommunication, test_pingpong) {
 }
 
 TEST_F(TestCommunication, test_lookup_object) {
-
   m_hit_entry_set.clear();
 
   srand(time(0));

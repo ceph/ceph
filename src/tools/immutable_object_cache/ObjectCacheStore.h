@@ -6,6 +6,8 @@
 
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/Throttle.h"
+#include "common/Cond.h"
 #include "include/rados/librados.hpp"
 
 #include "SimplePolicy.h"
@@ -30,22 +32,34 @@ class ObjectCacheStore {
   int init_cache();
   int lookup_object(std::string pool_nspace,
                     uint64_t pool_id, uint64_t snap_id,
-                    std::string object_name,
+                    uint64_t object_size, std::string object_name,
                     std::string& target_cache_file_path);
 
  private:
+  enum ThrottleTypeCode {
+    THROTTLE_CODE_BYTE,
+    THROTTLE_CODE_OBJECT
+  };
+  #define ROC_QOS_IOPS_THROTTLE 1 << 0
+  #define ROC_QOS_BPS_THROTTLE 1 << 1
+
   std::string get_cache_file_name(std::string pool_nspace, uint64_t pool_id,
                                   uint64_t snap_id, std::string oid);
   std::string get_cache_file_path(std::string cache_file_name,
                                   bool mkdir = false);
   int evict_objects();
   int do_promote(std::string pool_nspace, uint64_t pool_id,
-                 uint64_t snap_id, std::string object_name);
+                 uint64_t snap_id, uint64_t object_size, std::string object_name);
   int promote_object(librados::IoCtx*, std::string object_name,
                      librados::bufferlist* read_buf,
                      Context* on_finish);
   int handle_promote_callback(int, bufferlist*, std::string);
   int do_evict(std::string cache_file);
+
+  bool take_token_from_throttle(uint64_t object_size, uint64_t object_num);
+  void handle_throttle_ready(int r, void* ctx, uint64_t f);
+  void apply_qos_tick_and_limit(const uint64_t flag, uint64_t min_tick,
+                       uint64_t limit, uint64_t burst);
 
   CephContext *m_cct;
   RadosRef m_rados;
@@ -54,6 +68,10 @@ class ObjectCacheStore {
     ceph::make_mutex("ceph::cache::ObjectCacheStore::m_ioctx_map_lock");
   Policy* m_policy;
   std::string m_cache_root_dir;
+  // throttle mechanism
+  uint64_t m_qos_enabled_flag{0};
+  std::map<uint64_t, TokenBucketThrottle*> m_throttles;
+  std::atomic<bool> m_io_throttled{false};
 };
 
 }  // namespace immutable_obj_cache

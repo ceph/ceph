@@ -103,7 +103,8 @@ void CacheController::handle_request(CacheSession* session,
         reinterpret_cast <ObjectCacheReadData*> (req);
       int ret = m_object_cache_store->lookup_object(
         req_read_data->pool_namespace, req_read_data->pool_id,
-        req_read_data->snap_id, req_read_data->oid, cache_path);
+        req_read_data->snap_id, req_read_data->object_size,
+        req_read_data->oid, cache_path);
       ObjectCacheRequest* reply = nullptr;
       if (ret != OBJ_CACHE_PROMOTED) {
         reply = new ObjectCacheReadRadosData(RBDSC_READ_RADOS, req->seq);

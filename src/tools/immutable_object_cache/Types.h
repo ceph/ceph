@@ -83,12 +83,13 @@ class ObjectCacheReadData : public ObjectCacheRequest {
   uint64_t read_len;
   uint64_t pool_id;
   uint64_t snap_id;
+  uint64_t object_size;
   std::string oid;
   std::string pool_namespace;
   ObjectCacheReadData(uint16_t t, uint64_t s, uint64_t read_offset,
                       uint64_t read_len, uint64_t pool_id,
-                      uint64_t snap_id, std::string oid,
-                      std::string pool_namespace);
+                      uint64_t snap_id, uint64_t object_size,
+                      std::string oid, std::string pool_namespace);
   ObjectCacheReadData(uint16_t t, uint64_t s);
   ~ObjectCacheReadData() override;
   void encode_payload() override;

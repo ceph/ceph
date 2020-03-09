@@ -126,7 +126,7 @@ public:
       });
       m_send_request_index++;
       // here just for concurrently testing register + lookup, so fix object id.
-      m_cache_client_vec[index]->lookup_object(pool_nspace, 1, 2, "1234", std::move(ctx));
+      m_cache_client_vec[index]->lookup_object(pool_nspace, 1, 2, 3, "1234", std::move(ctx));
     }
 
     if (is_last) {

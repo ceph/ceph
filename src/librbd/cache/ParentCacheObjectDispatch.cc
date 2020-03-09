@@ -115,7 +115,8 @@ bool ParentCacheObjectDispatch<I>::read(
 
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
                                 m_image_ctx->data_ctx.get_id(),
-                                (uint64_t)snap_id, oid, std::move(ctx));
+                                (uint64_t)snap_id, m_image_ctx->get_object_size(),
+                                oid, std::move(ctx));
   return true;
 }
 

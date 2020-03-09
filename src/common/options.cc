@@ -7576,6 +7576,27 @@ static std::vector<Option> get_immutable_object_cache_options() {
     Option("immutable_object_cache_watermark", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.1)
     .set_description("immutable object cache water mark"),
+
+    Option("immutable_object_cache_qos_schedule_tick_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_min(1)
+    .set_description("immutable object cache qos schedule tick min"),
+
+    Option("immutable_object_cache_qos_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("immutable object cache qos iops limit"),
+
+    Option("immutable_object_cache_qos_iops_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("immutable object cache qos iops burst"),
+
+    Option("immutable_object_cache_qos_bps_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("immutable object cache qos bps limit"),
+
+    Option("immutable_object_cache_qos_bps_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("immutable object cache qos bps burst"),
   });
 }
 

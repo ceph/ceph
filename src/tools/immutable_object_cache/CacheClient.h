@@ -33,7 +33,7 @@ class CacheClient {
   int connect();
   void connect(Context* on_finish);
   void lookup_object(std::string pool_nspace, uint64_t pool_id,
-                     uint64_t snap_id, std::string oid,
+                     uint64_t snap_id, uint64_t object_size, std::string oid,
                      CacheGenContextURef&& on_finish);
   int register_client(Context* on_finish);
 
