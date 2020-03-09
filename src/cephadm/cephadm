@@ -12,6 +12,8 @@ CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1=r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT=None # in seconds
 DEFAULT_RETRY=10
+SHELL_DEFAULT_CONF='/etc/ceph/ceph.conf'
+SHELL_DEFAULT_KEYRING='/etc/ceph/ceph.client.admin.keyring'
 
 """
 You can invoke cephadm in two ways:
@@ -2197,6 +2199,14 @@ def command_shell():
 
     if daemon_id and not args.fsid:
         raise Error('must pass --fsid to specify cluster')
+
+    # use /etc/ceph files by default, if present.  we do this instead of
+    # making these defaults in the arg parser because we don't want an error
+    # if they don't exist.
+    if not args.config and os.path.exists(SHELL_DEFAULT_CONF):
+        args.config = SHELL_DEFAULT_CONF
+    if not args.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
+        args.keyring = SHELL_DEFAULT_KEYRING
 
     container_args = [] # type: List[str]
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,

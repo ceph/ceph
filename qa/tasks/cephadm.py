@@ -36,8 +36,8 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
             ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
             'shell',
-            '-c', '{}/{}.conf'.format(testdir, cluster_name),
-            '-k', '{}/{}.keyring'.format(testdir, cluster_name),
+            '-c', '/etc/ceph/{}.conf'.format(cluster_name),
+            '-k', '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             '--fsid', ctx.ceph[cluster_name].fsid,
             ] + extra_cephadm_args + [
             '--',
@@ -310,6 +310,12 @@ def ceph_bootstrap(ctx, config):
     log.info('First mgr is %s' % (first_mgr))
     ctx.ceph[cluster_name].first_mgr = first_mgr
 
+    ctx.cluster.run(args=[
+        'sudo', 'mkdir', '-p', '/etc/ceph',
+        ]);
+    ctx.cluster.run(args=[
+        'sudo', 'chmod', '777', '/etc/ceph',
+        ]);
     try:
         # write seed config
         log.info('Writing seed config...')
@@ -352,8 +358,9 @@ def ceph_bootstrap(ctx, config):
             '--mon-id', first_mon,
             '--mgr-id', first_mgr,
             '--config', '{}/seed.{}.conf'.format(testdir, cluster_name),
-            '--output-config', '{}/{}.conf'.format(testdir, cluster_name),
-            '--output-keyring', '{}/{}.keyring'.format(testdir, cluster_name),
+            '--output-config', '/etc/ceph/{}.conf'.format(cluster_name),
+            '--output-keyring',
+            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             '--output-pub-ssh-key', '{}/{}.pub'.format(testdir, cluster_name),
         ]
         if mons[first_mon_role].startswith('['):
@@ -365,7 +372,8 @@ def ceph_bootstrap(ctx, config):
         # bootstrap makes the keyring root 0600, so +r it for our purposes
         cmd += [
             run.Raw('&&'),
-            'sudo', 'chmod', '+r', '{}/{}.keyring'.format(testdir, cluster_name),
+            'sudo', 'chmod', '+r',
+            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
         ]
         bootstrap_remote.run(args=cmd)
 
@@ -373,11 +381,11 @@ def ceph_bootstrap(ctx, config):
         log.info('Fetching config...')
         ctx.ceph[cluster_name].config_file = teuthology.get_file(
             remote=bootstrap_remote,
-            path='{}/{}.conf'.format(testdir, cluster_name))
+            path='/etc/ceph/{}.conf'.format(cluster_name))
         log.info('Fetching client.admin keyring...')
         ctx.ceph[cluster_name].admin_keyring = teuthology.get_file(
             remote=bootstrap_remote,
-            path='{}/{}.keyring'.format(testdir, cluster_name))
+            path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name))
         log.info('Fetching mon keyring...')
         ctx.ceph[cluster_name].mon_keyring = teuthology.get_file(
             remote=bootstrap_remote,
@@ -409,11 +417,11 @@ def ceph_bootstrap(ctx, config):
             log.info('Writing conf and keyring to %s' % remote.shortname)
             teuthology.write_file(
                 remote=remote,
-                path='{}/{}.conf'.format(testdir, cluster_name),
+                path='/etc/ceph/{}.conf'.format(cluster_name),
                 data=ctx.ceph[cluster_name].config_file)
             teuthology.write_file(
                 remote=remote,
-                path='{}/{}.keyring'.format(testdir, cluster_name),
+                path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
                 data=ctx.ceph[cluster_name].admin_keyring)
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
@@ -435,8 +443,6 @@ def ceph_bootstrap(ctx, config):
             'rm', '-f',
             '{}/seed.{}.conf'.format(testdir, cluster_name),
             '{}/{}.pub'.format(testdir, cluster_name),
-            '{}/{}.conf'.format(testdir, cluster_name),
-            '{}/{}.keyring'.format(testdir, cluster_name),
         ])
 
         log.info('Stopping all daemons...')
@@ -448,6 +454,13 @@ def ceph_bootstrap(ctx, config):
         for role in ctx.daemons.resolve_role_list(None, CEPH_ROLE_TYPES):
             cluster, type_, id_ = teuthology.split_role(role)
             ctx.daemons.get_daemon(type_, id_, cluster).stop()
+
+        # clean up /etc/ceph
+        ctx.cluster.run(args=[
+            'sudo', 'rm', '-f',
+            '/etc/ceph/{}.conf'.format(cluster_name),
+            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+        ])
 
 @contextlib.contextmanager
 def ceph_mons(ctx, config):
@@ -727,9 +740,6 @@ def ceph_clients(ctx, config):
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     testdir = teuthology.get_testdir(ctx)
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
-    ctx.cluster.run(args=[
-        'sudo', 'mkdir', '-p', '/etc/ceph',
-        ]);
     for remote, roles_for_host in clients.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
                                                      cluster_name):
@@ -915,32 +925,6 @@ def restart(ctx, config):
     yield
 
 @contextlib.contextmanager
-def distribute_config_and_admin_keyring(ctx, config):
-    """
-    Distribute a sufficient config and keyring for clients
-    """
-    cluster_name = config['cluster']
-    log.info('Distributing config and client.admin keyring...')
-    for remote, roles in ctx.cluster.remotes.items():
-        remote.run(args=['sudo', 'mkdir', '-p', '/etc/ceph'])
-        teuthology.sudo_write_file(
-            remote=remote,
-            path='/etc/ceph/{}.conf'.format(cluster_name),
-            data=ctx.ceph[cluster_name].config_file)
-        teuthology.sudo_write_file(
-            remote=remote,
-            path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-            data=ctx.ceph[cluster_name].admin_keyring)
-    try:
-        yield
-    finally:
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
-
-@contextlib.contextmanager
 def crush_setup(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
@@ -1046,7 +1030,6 @@ def task(ctx, config):
             lambda: ceph_monitoring('alertmanager', ctx=ctx, config=config),
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
-            lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):
         ctx.managers[cluster_name] = CephManager(
             ctx.ceph[cluster_name].bootstrap_remote,
