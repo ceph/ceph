@@ -7,18 +7,32 @@ from ceph.tests.utils import _mk_inventory, _mk_device
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
                                         DeviceSelection, DriveGroupValidationError
 
+@pytest.mark.parametrize("test_input",
+[
+    (
+        [  # new style json
+            {
+                'service_type': 'osd',
+                'service_id': 'testing_drivegroup',
+                'placement': {'host_pattern': 'hostname'},
+                'data_devices': {'paths': ['/dev/sda']}
+            }
+        ]
+    ),
+    (
+        {  # old style json
+            'testing_drivegroup':
+                {
+                    'host_pattern': 'hostname',
+                    'data_devices': {'paths': ['/dev/sda']}
+                }
+       }
+    )
 
-def test_DriveGroup():
-    dg_json = [
-        {
-            'service_type': 'osd',
-            'service_id': 'testing_drivegroup',
-            'placement': {'host_pattern': 'hostname'},
-            'data_devices': {'paths': ['/dev/sda']}
-        }
-    ]
+])
 
-    dgs = DriveGroupSpecs(dg_json)
+def test_DriveGroup(test_input):
+    dgs = DriveGroupSpecs(test_input)
     for dg in dgs.drive_groups:
         assert dg.placement.pattern_matches_hosts(['hostname']) == ['hostname']
         assert dg.service_id == 'testing_drivegroup'
