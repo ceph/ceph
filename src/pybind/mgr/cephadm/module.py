@@ -1079,7 +1079,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if self._apply_all_services():
                 continue  # did something, refresh
 
-            self._refresh_configs()
+            self._check_daemons()
 
             if self.upgrade_state and not self.upgrade_state.get('paused'):
                 self._do_upgrade()
@@ -2261,10 +2261,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     spec.service_name(), spec, e))
         return r
 
-    def _refresh_configs(self):
+    def _check_daemons(self):
         daemons = self.cache.get_daemons()
         grafanas = []  # type: List[orchestrator.DaemonDescription]
         for dd in daemons:
+            # orphan?
+            if dd.service_name() not in self.spec_store.specs and \
+               dd.daemon_type not in ['mon', 'mgr', 'osd']:
+                # (mon and mgr specs should always exist; osds aren't matched
+                # to a service spec)
+                self.log.info('Removing orphan daemon %s...' % dd.name())
+                self._remove_daemon(dd.name(), dd.hostname, True)
+
+            # dependencies?
             if dd.daemon_type == 'grafana':
                 # put running instances at the front of the list
                 grafanas.insert(0, dd)
