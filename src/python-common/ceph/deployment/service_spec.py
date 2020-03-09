@@ -5,6 +5,16 @@ from typing import Optional, Dict, Any, List
 import six
 
 
+class ServiceSpecValidationError(Exception):
+    """
+    Defining an exception here is a bit problematic, cause you cannot properly catch it,
+    if it was raised in a different mgr module.
+    """
+
+    def __init__(self, msg):
+        super(ServiceSpecValidationError, self).__init__(msg)
+
+
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
         res = ''
@@ -100,7 +110,7 @@ class PlacementSpec(object):
     def __init__(self, label=None, hosts=None, count=None, all_hosts=False):
         # type: (Optional[str], Optional[List], Optional[int], bool) -> None
         if all_hosts and (count or hosts or label):
-            raise ValueError('cannot combine all:true and count|hosts|label')
+            raise ServiceSpecValidationError('cannot combine all:true and count|hosts|label')
         self.label = label
         self.hosts = []  # type: List[HostPlacementSpec]
         if hosts:
@@ -158,9 +168,9 @@ class PlacementSpec(object):
     def validate(self):
         if self.hosts and self.label:
             # TODO: a less generic Exception
-            raise ValueError('Host and label are mutually exclusive')
+            raise ServiceSpecValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
-            raise ValueError("num/count must be > 1")
+            raise ServiceSpecValidationError("num/count must be > 1")
 
     @classmethod
     def from_string(cls, arg):
@@ -200,7 +210,7 @@ class PlacementSpec(object):
             else:
                 strings = [arg]
         else:
-            raise ValueError('invalid placement %s' % arg)
+            raise ServiceSpecValidationError('invalid placement %s' % arg)
 
         count = None
         if strings:
@@ -229,7 +239,7 @@ class PlacementSpec(object):
         hosts = [x for x in strings if x != '*' and 'label:' not in x]
         labels = [x[6:] for x in strings if 'label:' in x]
         if len(labels) > 1:
-            raise ValueError('more than one label provided: {}'.format(labels))
+            raise ServiceSpecValidationError('more than one label provided: {}'.format(labels))
 
         ps = PlacementSpec(count=count,
                            hosts=hosts,
@@ -307,9 +317,9 @@ def servicespec_validate_add(self: ServiceSpec):
     # This must not be a method of ServiceSpec, otherwise you'll hunt
     # sub-interpreter affinity bugs.
     if not self.service_type:
-        raise ValueError('Cannot add Service: type required')
+        raise ServiceSpecValidationError('Cannot add Service: type required')
     if self.service_type in ['mds', 'rgw', 'nfs'] and not self.service_id:
-        raise ValueError('Cannot add Service: id required')
+        raise ServiceSpecValidationError('Cannot add Service: id required')
 
 
 class NFSServiceSpec(ServiceSpec):
@@ -328,7 +338,7 @@ class NFSServiceSpec(ServiceSpec):
         servicespec_validate_add(self)
 
         if not self.pool:
-            raise ValueError('Cannot add NFS: No Pool specified')
+            raise ServiceSpecValidationError('Cannot add NFS: No Pool specified')
 
 
 class RGWSpec(ServiceSpec):

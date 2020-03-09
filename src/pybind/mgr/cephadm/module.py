@@ -30,11 +30,12 @@ import uuid
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
+from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec
 
 from mgr_module import MgrModule
 import orchestrator
-from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, ServiceSpec
+from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
+    CLICommandMeta
 
 from . import remotes
 from .osd import RemoveUtil, OSDRemoval
@@ -121,7 +122,7 @@ class SpecStore():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr = mgr
-        self.specs = {} # type: Dict[str, orchestrator.ServiceSpec]
+        self.specs = {} # type: Dict[str, ServiceSpec]
         self.spec_created = {} # type: Dict[str, datetime.datetime]
 
     def load(self):
@@ -142,7 +143,7 @@ class SpecStore():
                 pass
 
     def save(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
         self.specs[spec.service_name()] = spec
         self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
         self.mgr.set_store(
@@ -161,7 +162,7 @@ class SpecStore():
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
     def find(self, service_name):
-        # type: (str) -> List[orchestrator.ServiceSpec]
+        # type: (str) -> List[ServiceSpec]
         specs = []
         for sn, spec in self.specs.items():
             if sn == service_name or sn.startswith(service_name + '.'):
@@ -2253,7 +2254,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _apply_all_services(self):
         r = False
-        specs = [] # type: List[orchestrator.ServiceSpec]
+        specs = [] # type: List[ServiceSpec]
         for sn, spec in self.spec_store.specs.items():
             specs.append(spec)
         for spec in specs:
@@ -2397,7 +2398,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                    extra_config=extra_config)
 
     def add_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('mon', spec, self._create_mon)
 
     def _create_mgr(self, mgr_id, host):
@@ -2416,7 +2417,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._create_daemon('mgr', mgr_id, host, keyring=keyring)
 
     def add_mgr(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('mgr', spec, self._create_mgr)
 
     def _apply(self, spec):
@@ -2445,10 +2446,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._apply(spec)
 
     def add_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('mds', spec, self._create_mds, self._config_mds)
 
-    def apply_mds(self, spec: orchestrator.ServiceSpec) -> orchestrator.Completion:
+    def apply_mds(self, spec: ServiceSpec) -> orchestrator.Completion:
         return self._apply(spec)
 
     def _config_mds(self, spec):
@@ -2742,7 +2743,7 @@ receivers:
         return self._apply(spec)
 
     def add_node_exporter(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('node-exporter', spec,
                                 self._create_node_exporter)
 
@@ -2753,7 +2754,7 @@ receivers:
         return self._create_daemon('node-exporter', daemon_id, host)
 
     def add_crash(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('crash', spec,
                                 self._create_crash)
 
@@ -2770,11 +2771,11 @@ receivers:
         return self._create_daemon('crash', daemon_id, host, keyring=keyring)
 
     def add_grafana(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('grafana', spec, self._create_grafana)
 
     def apply_grafana(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
     def _create_grafana(self, daemon_id, host):
@@ -2782,11 +2783,11 @@ receivers:
         return self._create_daemon('grafana', daemon_id, host)
 
     def add_alertmanager(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('alertmanager', spec, self._create_alertmanager)
 
     def apply_alertmanager(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
     def _create_alertmanager(self, daemon_id, host):
@@ -3046,14 +3047,14 @@ class HostAssignment(object):
     """
 
     def __init__(self,
-                 spec,  # type: orchestrator.ServiceSpec
+                 spec,  # type: ServiceSpec
                  get_hosts_func,  # type: Callable[[Optional[str]],List[str]]
                  get_daemons_func, # type: Callable[[str],List[orchestrator.DaemonDescription]]
 
                  scheduler=None,  # type: Optional[BaseScheduler]
                  ):
         assert spec and get_hosts_func and get_daemons_func
-        self.spec = spec  # type: orchestrator.ServiceSpec
+        self.spec = spec  # type: ServiceSpec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
         self.get_daemons_func = get_daemons_func

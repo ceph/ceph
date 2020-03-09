@@ -1,8 +1,10 @@
 from typing import NamedTuple, List
 import pytest
 
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
+
 from cephadm.module import HostAssignment
-from orchestrator import ServiceSpec, PlacementSpec, DaemonDescription, OrchestratorValidationError
+from orchestrator import DaemonDescription, OrchestratorValidationError
 
 
 class NodeAssignmentTest(NamedTuple):
@@ -241,5 +243,5 @@ def test_bad_placements(placement):
     try:
         s = PlacementSpec.from_string(placement.split(' '))
         assert False
-    except OrchestratorValidationError as e:
+    except ServiceSpecValidationError as e:
         pass

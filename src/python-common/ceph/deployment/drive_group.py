@@ -1,5 +1,7 @@
 import fnmatch
 from ceph.deployment.inventory import Device
+from ceph.deployment.service_spec import ServiceSpecValidationError
+
 try:
     from typing import Optional, List, Dict, Any
 except ImportError:
@@ -97,7 +99,7 @@ class DeviceSelection(object):
         return repr(self) == repr(other)
 
 
-class DriveGroupValidationError(Exception):
+class DriveGroupValidationError(ServiceSpecValidationError):
     """
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
     if it was raised in a different mgr module.
