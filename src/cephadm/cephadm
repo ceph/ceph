@@ -2260,7 +2260,7 @@ def command_enter():
     if args.command:
         command = args.command
     else:
-        command = ['bash']
+        command = ['sh']
         container_args += [
             '-it',
             '-e', 'LANG=C',
