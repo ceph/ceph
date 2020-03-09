@@ -2359,7 +2359,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._add_daemon('mgr', spec, self._create_mgr)
 
     def _apply(self, spec):
-        self.log.info('Saving service %s spec' % spec.service_name())
+        if spec.placement.is_empty():
+            # fill in default placement
+            defaults = {
+                'mon': orchestrator.PlacementSpec(count=5),
+                'mgr': orchestrator.PlacementSpec(count=2),
+                'mds': orchestrator.PlacementSpec(count=2),
+                'rgw': orchestrator.PlacementSpec(count=2),
+                'rbd-mirror': orchestrator.PlacementSpec(count=2),
+                'grafana': orchestrator.PlacementSpec(count=1),
+                'alertmanager': orchestrator.PlacementSpec(count=1),
+                'prometheus': orchestrator.PlacementSpec(count=1),
+                'node-exporter': orchestrator.PlacementSpec(all_hosts=True),
+                'crash': orchestrator.PlacementSpec(all_hosts=True),
+            }
+            spec.placement = defaults[spec.service_type]
+        self.log.info('Saving service %s spec with placement %s' % (
+            spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
         return trivial_result("Scheduled %s update..." % spec.service_type)
