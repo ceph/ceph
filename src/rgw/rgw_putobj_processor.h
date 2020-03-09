@@ -164,7 +164,6 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   void set_tail_placement(const rgw_placement_rule&& tpr) {
     tail_placement_rule = tpr;
   }
-
 };
 
 
@@ -214,6 +213,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   const int part_num;
   const std::string part_num_str;
   RGWMPObj mp;
+  rgw_placement_rule meta_placement_rule;
 
   // write the first chunk and wait on aio->drain() for its completion.
   // on EEXIST, retry with random prefix
@@ -224,6 +224,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   MultipartObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                            const RGWBucketInfo& bucket_info,
                            const rgw_placement_rule *ptail_placement_rule,
+                           const rgw_placement_rule& meta_placement_rule,
                            const rgw_user& owner, RGWObjectCtx& obj_ctx,
                            const rgw_obj& head_obj,
                            const std::string& upload_id, uint64_t part_num,
@@ -233,7 +234,8 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                               owner, obj_ctx, head_obj, dpp, y),
       target_obj(head_obj), upload_id(upload_id),
       part_num(part_num), part_num_str(part_num_str),
-      mp(head_obj.key.name, upload_id) 
+      mp(head_obj.key.name, upload_id),
+      meta_placement_rule(meta_placement_rule)
   {}
 
   // prepare a multipart manifest

@@ -316,6 +316,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.user_data = user_data;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.meta_placement_rule = bucket_info.placement_rule;
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, y);
   if (r < 0) {
@@ -439,6 +440,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.meta_placement_rule = meta_placement_rule;
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, y);
   if (r < 0)
@@ -632,6 +634,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
   obj_op.meta.appendable = true;
+  obj_op.meta.meta_placement_rule = bucket_info.placement_rule;
   //Add the append part number
   bufferlist cur_part_num_bl;
   encode(cur_part_num, cur_part_num_bl);

@@ -461,7 +461,7 @@ class RGWRados
   uint32_t bucket_index_max_shards;
 
   int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
-  int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
+  int get_obj_head_ref(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
   uint64_t max_bucket_id;
 
@@ -810,6 +810,7 @@ public:
         bool modify_tail;
         bool completeMultipart;
         bool appendable;
+        rgw_placement_rule meta_placement_rule;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),

@@ -3937,10 +3937,9 @@ void RGWPutObj::execute()
     pdest_placement = &upload_info.dest_placement;
     ldpp_dout(this, 20) << "dest_placement for part=" << upload_info.dest_placement << dendl;
     processor.emplace<MultipartObjectProcessor>(
-        &*aio, store, s->bucket_info, pdest_placement,
-        s->owner.get_id(), obj_ctx, obj,
-        multipart_upload_id, multipart_part_num, multipart_part_str,
-        this, s->yield);
+        &*aio, store, s->bucket_info, pdest_placement, upload_info.dest_placement,
+        s->owner.get_id(), obj_ctx, obj, multipart_upload_id, multipart_part_num,
+        multipart_part_str, this, s->yield);
   } else if(append) {
     if (s->bucket_info.versioned()) {
       op_ret = -ERR_INVALID_BUCKET_STATE;
@@ -5960,6 +5959,7 @@ void RGWInitMultipart::execute()
     bufferlist bl;
     encode(upload_info, bl);
     obj_op.meta.data = &bl;
+    obj_op.meta.meta_placement_rule = s->bucket_info.placement_rule;
 
     op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield);
   } while (op_ret == -EEXIST);
@@ -6264,6 +6264,7 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.modify_tail = true;
   obj_op.meta.completeMultipart = true;
   obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.meta_placement_rule = s->bucket_info.placement_rule;
   op_ret = obj_op.write_meta(ofs, accounted_size, attrs, s->yield);
   if (op_ret < 0)
     return;
