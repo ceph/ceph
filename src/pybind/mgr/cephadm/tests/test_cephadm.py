@@ -226,7 +226,7 @@ class TestCephadm(object):
             wait(cephadm_module, c)
             c = cephadm_module.remove_service('rgw.myrgw')
             out = wait(cephadm_module, c)
-            assert out == ["Removed rgw.myrgw.foobar from host 'test'"]
+            assert out == ["Removed service rgw.myrgw"]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_rbd_mirror(self, cephadm_module):
