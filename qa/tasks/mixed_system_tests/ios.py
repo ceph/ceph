@@ -48,7 +48,7 @@ class rgw_ios:
         log.info('test: %s' % self.config['test'])
         log.info('script: %s' % self.config.get('script', self.config['test'] + ".py"))
         time.sleep(2)
-        test_root_dir = self.config['test'] + "_%d" % "_".join(str(time.time()).split("."))
+        test_root_dir = self.config['test'] + "_%s" % "_".join(str(time.time()).split("."))
         test_venv = os.path.join(test_root_dir, "venv")
         script = os.path.join(cephqe_scripts['REPO_NAME'],
                               cephqe_scripts['DIR'][self.config.get('test_version', 'v2')]['script'],
