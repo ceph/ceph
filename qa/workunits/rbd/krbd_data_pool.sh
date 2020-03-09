@@ -98,7 +98,7 @@ function get_num_clones() {
     local pool=$1
 
     rados -p $pool --format=json df |
-        python -c 'import sys, json; print json.load(sys.stdin)["pools"][0]["num_object_clones"]'
+        python3 -c 'import sys, json; print( json.load(sys.stdin)["pools"][0]["num_object_clones"])'
 }
 
 ceph osd pool create repdata 24 24
@@ -114,13 +114,13 @@ rbd pool init clonesonly
 
 for pool in rbd rbdnonzero; do
     rbd create --size 200 --image-format 1 $pool/img0
-    rbd create --size 200 $pool/img1
-    rbd create --size 200 --data-pool repdata $pool/img2
-    rbd create --size 200 --data-pool ecdata $pool/img3
+    rbd create --size 200 $pool/img1 --image-feature layering
+    rbd create --size 200 --data-pool repdata $pool/img2 --image-feature layering
+    rbd create --size 200 --data-pool ecdata $pool/img3 --image-feature layering
 done
 
-IMAGE_SIZE=$(rbd info --format=json img1 | python -c 'import sys, json; print json.load(sys.stdin)["size"]')
-OBJECT_SIZE=$(rbd info --format=json img1 | python -c 'import sys, json; print json.load(sys.stdin)["object_size"]')
+IMAGE_SIZE=$(rbd info --format=json img1 | python3 -c 'import sys, json; print( json.load(sys.stdin)["size"])')
+OBJECT_SIZE=$(rbd info --format=json img1 | python3 -c 'import sys, json; print( json.load(sys.stdin)["object_size"])')
 NUM_OBJECTS=$((IMAGE_SIZE / OBJECT_SIZE))
 [[ $((IMAGE_SIZE % OBJECT_SIZE)) -eq 0 ]]
 

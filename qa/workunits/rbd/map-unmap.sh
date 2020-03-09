@@ -29,7 +29,7 @@ function map_unmap() {
 
 #### Start
 
-rbd create "${IMAGE_NAME}" --size="${IMAGE_SIZE}"
+rbd create "${IMAGE_NAME}" --size="${IMAGE_SIZE}" --image-feature layering
 
 COUNT=0
 START_TIME=$(get_time)
