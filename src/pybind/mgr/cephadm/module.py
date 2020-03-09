@@ -2426,6 +2426,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'crash': orchestrator.PlacementSpec(all_hosts=True),
             }
             spec.placement = defaults[spec.service_type]
+        elif spec.service_type in ['mon', 'mgr'] and \
+             spec.placement.count is not None and \
+             spec.placement.count < 1:
+            raise OrchestratorError('cannot scale %s service below 1' % (
+                spec.service_type))
         self.log.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
