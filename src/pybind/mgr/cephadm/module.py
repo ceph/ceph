@@ -1931,7 +1931,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         for drive_group in drive_groups:
             self.log.info("Processing DriveGroup {}".format(drive_group))
             # 1) use fn_filter to determine matching_hosts
-            matching_hosts = drive_group.hosts([x.hostname for x in all_hosts])
+            matching_hosts = drive_group.placement.pattern_matches_hosts([x.hostname for x in all_hosts])
             # 2) Map the inventory to the InventoryHost object
             # FIXME: lazy-load the inventory from a InventoryHost object;
             #        this would save one call to the inventory(at least externally)
@@ -1950,7 +1950,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 drive_selection = selector.DriveSelection(drive_group, inventory_for_host.devices)
                 cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
                 if not cmd:
-                    self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.name))
+                    self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
                     continue
                 cmds.append((host, cmd))
 

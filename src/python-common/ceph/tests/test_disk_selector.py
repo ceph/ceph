@@ -5,6 +5,7 @@ from ceph.deployment.inventory import Devices, Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 
 from ceph.deployment import drive_selection
+from ceph.deployment.service_spec import PlacementSpec
 from ceph.tests.factories import InventoryFactory
 from ceph.tests.utils import _mk_inventory, _mk_device
 
@@ -274,7 +275,7 @@ class TestDriveGroup(object):
                              osds_per_device='',
                              disk_format='bluestore'):
             raw_sample_bluestore = {
-                'host_pattern': 'data*',
+                'placement': {'host_pattern': 'data*'},
                 'data_devices': {
                     'size': '30G:50G',
                     'model': '42-RGB',
@@ -298,7 +299,7 @@ class TestDriveGroup(object):
                 'encrypted': True,
             }
             raw_sample_filestore = {
-                'host_pattern': 'data*',
+                'placement': {'host_pattern': 'data*'},
                 'objectstore': 'filestore',
                 'data_devices': {
                     'size': '30G:50G',
@@ -319,7 +320,7 @@ class TestDriveGroup(object):
                 raw_sample = raw_sample_bluestore
 
             if empty:
-                raw_sample = {'host_pattern': 'data*'}
+                raw_sample = {'placement': {'host_pattern': 'data*'}}
 
             dgo = DriveGroupSpec.from_json(raw_sample)
             return dgo
@@ -479,13 +480,13 @@ class TestDriveSelection(object):
 
     testdata = [
         (
-            DriveGroupSpec(host_pattern='*', data_devices=DeviceSelection(all=True)),
+            DriveGroupSpec(placement=PlacementSpec(host_pattern='*'), data_devices=DeviceSelection(all=True)),
             _mk_inventory(_mk_device() * 5),
             ['/dev/sda', '/dev/sdb', '/dev/sdc', '/dev/sdd', '/dev/sde'], []
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(all=True, limit=3),
                 db_devices=DeviceSelection(all=True)
             ),
@@ -494,7 +495,7 @@ class TestDriveSelection(object):
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),
@@ -503,7 +504,7 @@ class TestDriveSelection(object):
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),
@@ -512,7 +513,7 @@ class TestDriveSelection(object):
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),

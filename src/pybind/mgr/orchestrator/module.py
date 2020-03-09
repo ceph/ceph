@@ -458,7 +458,7 @@ Usage:
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
             devs = DeviceSelection(paths=block_devices)
-            drive_groups = [DriveGroupSpec(host_name, data_devices=devs)]
+            drive_groups = [DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)]
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
