@@ -41,8 +41,6 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
     extra_args = []
     if name:
         extra_args = ['-n', name]
-    else:
-        extra_args = ['-c', '{}/{}.conf'.format(testdir, cluster_name)]
     return remote.run(
         args=[
             'sudo',
@@ -50,7 +48,6 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
             '--image', ctx.ceph[cluster_name].image,
             'shell',
         ] + extra_args + [
-            '-k', '{}/{}.keyring'.format(testdir, cluster_name),
             '--fsid', ctx.ceph[cluster_name].fsid,
             '--',
         ] + args,
