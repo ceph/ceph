@@ -159,7 +159,18 @@ class PlacementSpec(object):
         return ' '.join(kv)
 
     def __repr__(self):
-        return "PlacementSpec(%s)" % self.pretty_str()
+        kv = []
+        if self.count:
+            kv.append('count=%d' % self.count)
+        if self.label:
+            kv.append('label=%s' % repr(self.label))
+        if self.hosts:
+            kv.append('hosts={!r}'.format(self.hosts))
+        if self.all_hosts:
+            kv.append('all_hosts=True')
+        if self.host_pattern:
+            kv.append('host_pattern={!r}'.format(self.host_pattern))
+        return "PlacementSpec(%s)" % ', '.join(kv)
 
     @classmethod
     def from_json(cls, data):
@@ -196,18 +207,29 @@ class PlacementSpec(object):
         A single integer is parsed as a count:
         >>> PlacementSpec.from_string('3')
         PlacementSpec(count=3)
+
         A list of names is parsed as host specifications:
         >>> PlacementSpec.from_string('host1 host2')
-        PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')])
+        PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacemen\
+tSpec(hostname='host2', network='', name='')])
+
         You can also prefix the hosts with a count as follows:
         >>> PlacementSpec.from_string('2 host1 host2')
-        PlacementSpec(label=[HostSpec(hostname='host1', network='', name=''), HostSpec(hostname='host2', network='', name='')], count=2)
+        PlacementSpec(count=2, hosts=[HostPlacementSpec(hostname='host1', network='', name=''), Hos\
+tPlacementSpec(hostname='host2', network='', name='')])
+
         You can spefify labels using `label:<label>`
         >>> PlacementSpec.from_string('label:mon')
-        PlacementSpec(label='label:mon')
+        PlacementSpec(label='mon')
+
         Labels als support a count:
         >>> PlacementSpec.from_string('3 label:mon')
-        PlacementSpec(label='label:mon', count=3)
+        PlacementSpec(count=3, label='mon')
+
+        fnmatch is also supported:
+        >>> PlacementSpec.from_string('host_pattern:data[1-3]')
+        PlacementSpec(host_pattern='data[1-3]')
+
         >>> PlacementSpec.from_string(None)
         PlacementSpec()
         """
@@ -253,15 +275,21 @@ class PlacementSpec(object):
             all_hosts = True
             strings.remove('all:true')
 
-        hosts = [x for x in strings if x != '*' and 'label:' not in x]
+        hosts = [x for x in strings
+                 if x != '*' and 'label:' not in x and not x.startswith('host_pattern:')]
         labels = [x[6:] for x in strings if 'label:' in x]
         if len(labels) > 1:
             raise ServiceSpecValidationError('more than one label provided: {}'.format(labels))
+        host_patterns = [x[13:] for x in strings if x.startswith('host_pattern:')]
+        if len(host_patterns) > 1:
+            raise ServiceSpecValidationError('more than one host_patterns provided: {}'.format(
+                host_patterns))
 
         ps = PlacementSpec(count=count,
                            hosts=hosts,
                            label=labels[0] if labels else None,
-                           all_hosts=all_hosts)
+                           all_hosts=all_hosts,
+                           host_pattern=host_patterns[0] if host_patterns else None)
         ps.validate()
         return ps
 
