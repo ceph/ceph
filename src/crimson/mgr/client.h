@@ -52,7 +52,6 @@ private:
   crimson::net::Messenger& msgr;
   WithStats& with_stats;
   crimson::net::ConnectionRef conn;
-  std::chrono::seconds tick_period{0};
   seastar::timer<seastar::lowres_clock> tick_timer;
   seastar::gate gate;
 };
