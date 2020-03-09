@@ -6,6 +6,9 @@ import threading
 import functools
 import itertools
 from subprocess import check_output, CalledProcessError
+
+from ceph.deployment.service_spec import NFSServiceSpec, ServiceSpec
+
 try:
     from typing import Callable, List, Tuple
 except ImportError:
@@ -286,7 +289,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("Adding NFS service")
     def add_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> None
+        # type: (NFSServiceSpec) -> None
         assert isinstance(spec.pool, str)
 
     @deferred_write("apply_nfs")
@@ -329,14 +332,14 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("apply_mgr")
     def apply_mgr(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h, str) for h in spec.placement.hosts])
 
     @deferred_write("apply_mon")
     def apply_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h[0], str) for h in spec.placement.hosts])
