@@ -1047,6 +1047,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug("serve starting")
         while self.run:
             self._check_hosts()
+            self.rm_util._remove_osds_bg()
 
             # refresh daemons
             self.log.debug('refreshing hosts')
