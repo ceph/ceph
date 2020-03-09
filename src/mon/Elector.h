@@ -195,6 +195,11 @@ class Elector : public ElectionOwner, RankProvider {
    */
   void ping_check(int peer);
   /**
+   * Move the peer out of live_pinging into dead_pinging set
+   * and schedule dead_ping()ing on it.
+   */
+  void begin_dead_ping(int peer);
+  /**
    * Checks that the peer is still marked for dead pinging,
    * and then marks it as dead for the appropriate interval.
    */

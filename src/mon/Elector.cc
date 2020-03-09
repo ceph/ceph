@@ -501,12 +501,7 @@ void Elector::ping_check(int peer)
   if (!acked_ping.is_zero() && acked_ping < now - ping_timeout) {
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
-    live_pinging.erase(peer);
-    dead_pinging.insert(peer);
-    mon->timer.add_event_after(ping_timeout,
-			       new C_MonContext{mon, [this, peer](int) {
-				   dead_ping(peer);
-				 }});
+    begin_dead_ping(peer);
     return;
   }
 
@@ -517,6 +512,20 @@ void Elector::ping_check(int peer)
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
 			     new C_MonContext{mon, [this, peer](int) {
 				 ping_check(peer);
+			       }});
+}
+
+void Elector::begin_dead_ping(int peer)
+{
+  if (dead_pinging.count(peer)) {
+    return;
+  }
+  
+  live_pinging.erase(peer);
+  dead_pinging.insert(peer);
+  mon->timer.add_event_after(ping_timeout,
+			     new C_MonContext{mon, [this, peer](int) {
+				 dead_ping(peer);
 			       }});
 }
 
@@ -688,9 +697,50 @@ void Elector::notify_rank_changed(int new_rank)
 
 void Elector::notify_rank_removed(int rank_removed)
 {
-  // over so we have ranks 0,1 rather than 0,3 left.
   peer_tracker.notify_rank_removed(rank_removed);
-  #warning Need to fix up the pinging data structures+contexts!
+  /* we have to clean up the pinging state, which is annoying
+     because it's not indexed anywhere (and adding indexing
+     would also be annoying). So what we do is start with the
+     remoed rank and examine the state of the surrounding ranks.
+     Everybody who remains with larger rank gets a new rank one lower
+     than before, and we have to figure out the remaining scheduled
+     ping contexts. So, starting one past with the removed rank, we:
+     * check if the current rank is alive or dead
+     * examine our new rank (one less than before, initially the removed
+     rank)
+     * * erase it if it's in the wrong set
+     * * start pinging it if we're not already
+     * check if the next rank is in the same pinging set, and delete
+     * ourselves if not.
+   */
+  for (unsigned i = rank_removed + 1; i <= paxos_size() ; ++i) {
+    if (live_pinging.count(i)) {
+      dead_pinging.erase(i-1);
+      if (!live_pinging.count(i-1)) {
+	begin_peer_ping(i-1);
+      }
+      if (!live_pinging.count(i+1)) {
+	live_pinging.erase(i);
+      }
+    }
+    else if (dead_pinging.count(i)) {
+      live_pinging.erase(i-1);
+      if (!dead_pinging.count(i-1)) {
+	begin_dead_ping(i-1);
+      }
+      if (!dead_pinging.count(i+1)) {
+	dead_pinging.erase(i);
+      }
+    } else {
+      // we aren't pinging rank i at all
+      if (i-1 == (unsigned)rank_removed) {
+	// so we special case to make sure we
+	// actually nuke the removed rank
+	dead_pinging.erase(rank_removed);
+	live_pinging.erase(rank_removed);
+      }
+    }
+  }
 }
 
 void Elector::notify_strategy_maybe_changed(int strategy)
