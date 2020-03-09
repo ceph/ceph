@@ -1516,27 +1516,7 @@ void Server::infer_supported_features(Session *session, client_metadata_t& clien
 
 void Server::update_required_client_features()
 {
-  vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
-
-  /* If this blows up on you, you added a release without adding a new release bit to cephfs_features.h */
-  static_assert(CEPHFS_CURRENT_RELEASE == CEPH_RELEASE_MAX-1);
-
-  ceph_release_t min_compat = mds->mdsmap->get_min_compat_client();
-  if (min_compat >= ceph_release_t::octopus)
-    bits.push_back(CEPHFS_FEATURE_OCTOPUS);
-  else if (min_compat >= ceph_release_t::nautilus)
-    bits.push_back(CEPHFS_FEATURE_NAUTILUS);
-  else if (min_compat >= ceph_release_t::mimic)
-    bits.push_back(CEPHFS_FEATURE_MIMIC);
-  else if (min_compat >= ceph_release_t::luminous)
-    bits.push_back(CEPHFS_FEATURE_LUMINOUS);
-  else if (min_compat >= ceph_release_t::kraken)
-    bits.push_back(CEPHFS_FEATURE_KRAKEN);
-  else if (min_compat >= ceph_release_t::jewel)
-    bits.push_back(CEPHFS_FEATURE_JEWEL);
-
-  std::sort(bits.begin(), bits.end());
-  required_client_features = feature_bitset_t(bits);
+  required_client_features = mds->mdsmap->get_required_client_features();
   dout(7) << "required_client_features: " << required_client_features << dendl;
 
   if (mds->get_state() >= MDSMap::STATE_RECONNECT) {

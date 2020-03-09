@@ -6,5 +6,5 @@ tasks:
 - exec:
     mon.a:
       - ceph fs dump --format=json-pretty
-      - ceph fs set cephfs min_compat_client pacific
+      - ceph fs required_client_features cephfs add metric_collect
 - fs.clients_evicted:
