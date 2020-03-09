@@ -1823,18 +1823,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._remove_daemons(args)
 
     def remove_service(self, service_name):
-        args = []
-        for host, dm in self.cache.daemons.items():
-            for name, d in dm.items():
-                if d.matches_service(service_name):
-                    args.append(
-                        (d.name(), d.hostname, True)
-                    )
-        self.log.info('Remove service %s (daemons %s)' % (
-            service_name, [a[0] for a in args]))
+        self.log.info('Remove service %s' % service_name)
         self.spec_store.rm(service_name)
-        if args:
-            return self._remove_daemons(args)
+        self._kick_serve_loop()
         return trivial_result(['Removed service %s' % service_name])
 
     def get_inventory(self, host_filter=None, refresh=False):
