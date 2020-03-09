@@ -1281,7 +1281,7 @@ class DaemonDescription(object):
             return 'rgw.%s' % s_name
         if self.daemon_type in ['mds', 'nfs']:
             _s_name = self.daemon_id.split('.')[0]
-            return 'mds.%s' % _s_name
+            return '%s.%s' % (self.daemon_type, _s_name)
         return self.daemon_type
 
     def __repr__(self):
