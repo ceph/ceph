@@ -158,13 +158,13 @@ def check_service_status(ctx, dstate, **args):
         ctx: ceph context obj
         dstate: daemon state obj
         args: arguments
-                (ex., timeout: 120(default)
+                (ex., timeout: 180(default)
                  state: Health states list (ex., [HEALTH_ERR, HEALTH_WARN])
                  exit_status: exit status
                  check: true)
     """
-    timeout = 120
-    interval = 5
+    timeout = 180
+    interval = 6
     mark = __mark(dstate)
 
     try:
@@ -182,7 +182,15 @@ def check_service_status(ctx, dstate, **args):
             iterations -= 1
             try:
                 if dstate.check_status() is not exit_status:
-                    log.warn("{} is still not {}".format(mark, exit_status))
+                    log.warn("{} Exit status is still not {},"
+                             " Iterations left: {}".format(mark, exit_status,
+                                                           iterations))
+                    if iterations >= interval and iterations % interval == 0:
+                        log.warn("{} Iteration: {}, "
+                                 "Retrying systemd action: {}".format(mark,
+                                                                      iterations,
+                                                                      action))
+                        daemon_service(dstate, action)
                     continue
             except CommandFailedError:
                 daemon_service(dstate, action)

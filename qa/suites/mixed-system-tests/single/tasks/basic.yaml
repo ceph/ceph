@@ -1,7 +1,4 @@
 tasks:
-- exec:
-    client.0:
-      - sudo yum install python3 -y
 - parallel:
     - mixed_system_test.rgw_ios:
         test: test_acls
@@ -127,15 +124,5 @@ tasks:
                 copy_to_version: false
                 delete_object_versions: true
                 upload_after_suspend: false
-    - rbd_fio:
-        client.0:
-            fio-io-size: 100%
-            formats: [2]
-            fio-version: "3.16"
-            features: [[layering],[layering,exclusive-lock,object-map]]
-            io-engine: rbd
-            test-clone-io: 1
-            rw: randrw
-            runtime: 900
     - mixed_system_test.restart_tests:
         daemons: ["mgr", "mon", "mds", "osd"]
