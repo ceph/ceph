@@ -9,6 +9,8 @@
 #include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/shard_services.h"
+#include "crimson/osd/pg.h"
+#include "osd/PeeringState.h"
 
 namespace {
   seastar::logger& logger() {
@@ -39,11 +41,12 @@ seastar::future<crimson::osd::acked_peers_t>
 ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        const hobject_t& hoid,
                                        ceph::os::Transaction&& txn,
-                                       osd_reqid_t req_id,
+                                       const osd_op_params_t& osd_op_p,
                                        epoch_t min_epoch, epoch_t map_epoch,
-                                       eversion_t ver)
+				       std::vector<pg_log_entry_t>&& log_entries)
 {
   const ceph_tid_t tid = next_txn_id++;
+  auto req_id = osd_op_p.req->get_reqid();
   auto pending_txn =
     pending_trans.emplace(tid, pending_on_t{pg_shards.size()}).first;
   bufferlist encoded_txn;
@@ -59,9 +62,13 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                          spg_t{pgid, pg_shard.shard}, hoid,
                                          CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
                                          map_epoch, min_epoch,
-                                         tid, ver);
+                                         tid, osd_op_p.at_version);
         m->set_data(encoded_txn);
         pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
+	encode(log_entries, m->logbl);
+	m->pg_trim_to = osd_op_p.pg_trim_to;
+	m->min_last_complete_ondisk = osd_op_p.min_last_complete_ondisk;
+	m->set_rollback_to(osd_op_p.at_version);
         // TODO: set more stuff. e.g., pg_states
         return shard_services.send_to_osd(pg_shard.osd, std::move(m), map_epoch);
       }

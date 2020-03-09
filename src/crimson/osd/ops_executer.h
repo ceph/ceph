@@ -82,6 +82,7 @@ private:
   PG& pg;
   PGBackend& backend;
   Ref<MOSDOp> msg;
+  bool user_modify = false;
   ceph::os::Transaction txn;
 
   size_t num_read = 0;    ///< count read ops
@@ -144,8 +145,9 @@ private:
   }
 
   template <class Func>
-  auto do_write_op(Func&& f) {
+  auto do_write_op(Func&& f, bool um) {
     ++num_write;
+    user_modify = um;
     return std::forward<Func>(f)(backend, obc->obs, txn);
   }
 
@@ -219,10 +221,21 @@ auto OpsExecuter::with_effect_on_obc(
 
 template <typename Func>
 OpsExecuter::osd_op_errorator::future<> OpsExecuter::submit_changes(Func&& f) && {
+  assert(obc);
+  osd_op_params_t osd_op_params(std::move(msg));
+  eversion_t at_version = pg.next_version();
+
+  osd_op_params.at_version = at_version;
+  osd_op_params.pg_trim_to = pg.get_pg_trim_to();
+  osd_op_params.min_last_complete_ondisk = pg.get_min_last_complete_ondisk();
+  osd_op_params.last_complete = pg.get_info().last_complete;
+  if (user_modify)
+    osd_op_params.user_at_version = at_version.version;
+
   if (__builtin_expect(op_effects.empty(), true)) {
-    return std::forward<Func>(f)(std::move(txn), std::move(obc));
+    return std::forward<Func>(f)(std::move(txn), std::move(obc), std::move(osd_op_params));
   }
-  return std::forward<Func>(f)(std::move(txn), std::move(obc)).safe_then([this] {
+  return std::forward<Func>(f)(std::move(txn), std::move(obc), std::move(osd_op_params)).safe_then([this] {
     // let's do the cleaning of `op_effects` in destructor
     return crimson::do_for_each(op_effects, [] (auto& op_effect) {
       return op_effect->execute();

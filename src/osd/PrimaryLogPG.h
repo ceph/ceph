@@ -455,7 +455,7 @@ public:
   }
 
   void log_operation(
-    const vector<pg_log_entry_t> &logv,
+    vector<pg_log_entry_t>&& logv,
     const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
@@ -478,7 +478,7 @@ public:
       replica_clear_repop_obc(logv, t);
     }
     recovery_state.append_log(
-      logv, trim_to, roll_forward_to, min_last_complete_ondisk,
+      std::move(logv), trim_to, roll_forward_to, min_last_complete_ondisk,
       t, transaction_applied, async);
   }
 

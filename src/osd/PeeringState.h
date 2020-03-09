@@ -1772,11 +1772,22 @@ public:
     std::optional<eversion_t> trim_to,
     std::optional<eversion_t> roll_forward_to);
 
+  void append_log_with_trim_to_updated(
+    std::vector<pg_log_entry_t>&& log_entries,
+    eversion_t roll_forward_to,
+    ObjectStore::Transaction &t,
+    bool transaction_applied,
+    bool async) {
+    update_trim_to();
+    append_log(std::move(log_entries), pg_trim_to, roll_forward_to,
+	min_last_complete_ondisk, t, transaction_applied, async);
+  }
+
   /**
    * Updates local log to reflect new write from primary.
    */
   void append_log(
-    const vector<pg_log_entry_t>& logv,
+    vector<pg_log_entry_t>&& logv,
     eversion_t trim_to,
     eversion_t roll_forward_to,
     eversion_t min_last_complete_ondisk,
