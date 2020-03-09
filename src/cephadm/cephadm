@@ -2427,10 +2427,10 @@ def list_daemons(detail=True, legacy_dir=None):
                             image_id = normalize_container_id(image_id)
                             daemon_type = name.split('.', 1)[0]
                             start_stamp = try_convert_datetime(start)
-                            if daemon_type in Ceph.daemons:
-                                if not version or '.' not in version:
-                                    version = seen_versions.get(image_id, None)
-                                if not version:
+                            if not version or '.' not in version:
+                                version = seen_versions.get(image_id, None)
+                            if not version:
+                                if daemon_type in Ceph.daemons:
                                     out, err, code = call(
                                         [container_path, 'exec', container_id,
                                          'ceph', '-v'])
@@ -2438,9 +2438,28 @@ def list_daemons(detail=True, legacy_dir=None):
                                        out.startswith('ceph version '):
                                         version = out.split(' ')[2]
                                         seen_versions[image_id] = version
-                            else:
-                                # FIXME: monitoring component version?
-                                pass
+                                elif daemon_type == 'grafana':
+                                    out, err, code = call(
+                                        [container_path, 'exec', container_id,
+                                         'grafana-server', '-v'])
+                                    if not code and \
+                                       out.startswith('Version '):
+                                        version = out.split(' ')[1]
+                                        seen_versions[image_id] = version
+                                elif daemon_type in ['prometheus',
+                                                     'alertmanager',
+                                                     'node-exporter']:
+                                    cmd = daemon_type.replace('-', '_')
+                                    out, err, code = call(
+                                        [container_path, 'exec', container_id,
+                                         cmd, '--version'])
+                                    if not code and \
+                                       err.startswith('%s, version ' % cmd):
+                                        version = err.split(' ')[2]
+                                        seen_versions[image_id] = version
+                                else:
+                                    logging.warning('not fetching version for unknown daemon type %s' % daemon_type)
+                                    pass
                         else:
                             vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
                             try:
