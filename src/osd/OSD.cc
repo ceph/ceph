@@ -6461,23 +6461,11 @@ void OSD::_collect_metadata(map<string,string> *pm)
 
   set<string> devnames;
   store->get_devices(&devnames);
-  (*pm)["devices"] = stringify(devnames);
-  string devids;
-  for (auto& dev : devnames) {
-    string err;
-    string id = get_device_id(dev, &err);
-    if (id.size()) {
-      if (!devids.empty()) {
-	devids += ",";
-      }
-      devids += dev + "=" + id;
-    } else {
-      dout(10) << __func__ << " no unique device id for " << dev << ": "
-	       << err << dendl;
-    }
+  map<string,string> errs;
+  get_device_metadata(devnames, pm, &errs);
+  for (auto& i : errs) {
+    dout(1) << __func__ << " " << i.first << ": " << i.second << dendl;
   }
-  (*pm)["device_ids"] = devids;
-
   dout(10) << __func__ << " " << *pm << dendl;
 }
 

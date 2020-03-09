@@ -5,6 +5,7 @@
 #define __CEPH_COMMON_BLKDEV_H
 
 #include <set>
+#include <map>
 #include <string>
 #include "json_spirit/json_spirit_value.h"
 
@@ -24,8 +25,20 @@ extern int get_device_by_path(const char *path, char* partition, char* device, s
 
 extern std::string _decode_model_enc(const std::string& in);  // helper, exported only so we can unit test
 
+// get $vendor_$model_$serial style device id
 extern std::string get_device_id(const std::string& devname,
 				 std::string *err=0);
+
+// get /dev/disk/by-path/... style device id that is stable for a disk slot across reboots etc
+extern std::string get_device_path(const std::string& devname,
+				   std::string *err=0);
+
+// populate daemon metadata map with device info
+extern void get_device_metadata(
+  const std::set<std::string>& devnames,
+  std::map<std::string,std::string> *pm,
+  std::map<std::string,std::string> *errs);
+
 extern void get_dm_parents(const std::string& dev, std::set<std::string> *ls);
 extern int block_device_get_metrics(const std::string& devname, int timeout,
 				    json_spirit::mValue *result);
