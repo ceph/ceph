@@ -255,7 +255,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
-            drive_group.validate([h.hostname for h in all_hosts])
+            drive_group.validate()
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
                 message='create_osds',

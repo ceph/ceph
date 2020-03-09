@@ -287,21 +287,29 @@ class ServiceSpec(object):
         self.service_type = service_type
         self.service_id = service_id
 
-    @classmethod
-    def from_json(cls, json_spec: dict) -> "ServiceSpec":
+    @staticmethod
+    def from_json(json_spec):
+        # type: (dict) -> "ServiceSpec"
         """
         Initialize 'ServiceSpec' object data from a json structure
         :param json_spec: A valid dict with ServiceSpec
         """
-        args = {}  # type: Dict[str, Dict[Any, Any]]
-        service_type = json_spec.get('service_type', '')
+        from ceph.deployment.drive_group import DriveGroupSpec
+
+        if 'service_type' not in json_spec:
+            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+        service_type = json_spec.get('service_type')
         assert service_type
-        if service_type == 'rgw':
-            _cls = RGWSpec  # type: ignore
-        elif service_type == 'nfs':
-            _cls = NFSServiceSpec  # type: ignore
-        else:
-            _cls = ServiceSpec  # type: ignore
+        _cls = {
+            'rgw': RGWSpec,
+            'nfs': NFSServiceSpec,
+            'osd': DriveGroupSpec
+        }.get(service_type, ServiceSpec)
+        return _cls._from_json_impl(json_spec)  # type: ignore
+
+    @classmethod
+    def _from_json_impl(cls, json_spec):
+        args = {}  # type: Dict[str, Dict[Any, Any]]
         for k, v in json_spec.items():
             if k == 'placement':
                 v = PlacementSpec.from_json(v)
@@ -309,7 +317,7 @@ class ServiceSpec(object):
                 args.update(v)
                 continue
             args.update({k: v})
-        return _cls(**args)  # type: ignore
+        return cls(**args)
 
     def service_name(self):
         n = self.service_type
@@ -324,6 +332,13 @@ class ServiceSpec(object):
             c['placement'] = self.placement.to_json()
         return c
 
+    def validate(self):
+        if not self.service_type:
+            raise ServiceSpecValidationError('Cannot add Service: type required')
+
+        if self.placement is not None:
+            self.placement.validate()
+
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
 
@@ -331,8 +346,7 @@ class ServiceSpec(object):
 def servicespec_validate_add(self: ServiceSpec):
     # This must not be a method of ServiceSpec, otherwise you'll hunt
     # sub-interpreter affinity bugs.
-    if not self.service_type:
-        raise ServiceSpecValidationError('Cannot add Service: type required')
+    ServiceSpec.validate(self)
     if self.service_type in ['mds', 'rgw', 'nfs'] and not self.service_id:
         raise ServiceSpecValidationError('Cannot add Service: id required')
 

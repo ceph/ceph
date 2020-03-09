@@ -2,7 +2,7 @@ import pytest
 
 from ceph.deployment import drive_selection, translate
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import PlacementSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpecValidationError
 from ceph.tests.utils import _mk_inventory, _mk_device
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
                                         DeviceSelection, DriveGroupValidationError
@@ -11,6 +11,7 @@ from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
 def test_DriveGroup():
     dg_json = [
         {
+            'service_type': 'osd',
             'service_id': 'testing_drivegroup',
             'placement': {'host_pattern': 'hostname'},
             'data_devices': {'paths': ['/dev/sda']}
@@ -26,7 +27,7 @@ def test_DriveGroup():
 
 
 def test_DriveGroup_fail():
-    with pytest.raises(DriveGroupValidationError):
+    with pytest.raises(ServiceSpecValidationError):
         DriveGroupSpec.from_json({})
 
 
