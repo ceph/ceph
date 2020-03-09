@@ -132,7 +132,7 @@ class DriveGroupSpec(ServiceSpec):
 
     _supported_features = [
         "encrypted", "block_wal_size", "osds_per_device",
-        "db_slots", "wal_slots", "block_db_size", "placement", "service_id",
+        "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size"
@@ -155,8 +155,9 @@ class DriveGroupSpec(ServiceSpec):
                  block_db_size=None,  # type: Optional[int]
                  block_wal_size=None,  # type: Optional[int]
                  journal_size=None,  # type: Optional[int]
+                 service_type=None,  # type: Optional[str]
                  ):
-
+        assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id, placement=placement)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
@@ -205,7 +206,7 @@ class DriveGroupSpec(ServiceSpec):
         self.osd_id_claims = osd_id_claims
 
     @classmethod
-    def from_json(cls, json_drive_group):
+    def _from_json_impl(cls, json_drive_group):
         # type: (dict) -> DriveGroupSpec
         """
         Initialize 'Drive group' structure
@@ -236,8 +237,10 @@ class DriveGroupSpec(ServiceSpec):
         except (KeyError, TypeError) as e:
             raise DriveGroupValidationError(str(e))
 
-    def validate(self, all_hosts):
-        # type: (List[str]) -> None
+    def validate(self):
+        # type: () -> None
+        super(DriveGroupSpec, self).validate()
+
         if not isinstance(self.placement.host_pattern, six.string_types):
             raise DriveGroupValidationError('host_pattern must be of type string')
 
@@ -250,9 +253,6 @@ class DriveGroupSpec(ServiceSpec):
 
         if self.objectstore not in ('filestore', 'bluestore'):
             raise DriveGroupValidationError("objectstore not in ('filestore', 'bluestore')")
-        if not self.placement.pattern_matches_hosts(all_hosts):
-            raise DriveGroupValidationError(
-                "host_pattern '{}' does not match any hosts".format(self.placement.host_pattern))
 
         if self.block_wal_size is not None and type(self.block_wal_size) != int:
             raise DriveGroupValidationError('block_wal_size must be of type int')

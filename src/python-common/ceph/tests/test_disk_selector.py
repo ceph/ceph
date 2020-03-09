@@ -275,6 +275,7 @@ class TestDriveGroup(object):
                              osds_per_device='',
                              disk_format='bluestore'):
             raw_sample_bluestore = {
+                'service_type': 'osd',
                 'placement': {'host_pattern': 'data*'},
                 'data_devices': {
                     'size': '30G:50G',
@@ -299,6 +300,7 @@ class TestDriveGroup(object):
                 'encrypted': True,
             }
             raw_sample_filestore = {
+                'service_type': 'osd',
                 'placement': {'host_pattern': 'data*'},
                 'objectstore': 'filestore',
                 'data_devices': {
@@ -320,7 +322,10 @@ class TestDriveGroup(object):
                 raw_sample = raw_sample_bluestore
 
             if empty:
-                raw_sample = {'placement': {'host_pattern': 'data*'}}
+                raw_sample = {
+                    'service_type': 'osd',
+                    'placement': {'host_pattern': 'data*'}
+                }
 
             dgo = DriveGroupSpec.from_json(raw_sample)
             return dgo
