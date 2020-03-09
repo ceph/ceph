@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService, ModalOptions } from 'ngx-bootstrap/modal';
+import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';
@@ -13,6 +13,7 @@ import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../../shared/services/summary.service';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
@@ -20,6 +21,7 @@ import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/dev
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
 import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
 import { DriveGroup } from './drive-group.model';
+import { DriveGroups } from './drive-groups.interface';
 import { OsdFeature } from './osd-feature.interface';
 
 @Component({
@@ -67,6 +69,7 @@ export class OsdFormComponent implements OnInit {
 
   constructor(
     public actionLabels: ActionLabelsI18n,
+    private authStorageService: AuthStorageService,
     private i18n: I18n,
     private orchService: OrchestratorService,
     private router: Router,
@@ -223,12 +226,14 @@ export class OsdFormComponent implements OnInit {
   }
 
   submit() {
-    const options: ModalOptions = {
-      initialState: {
-        driveGroup: this.driveGroup
-      }
+    // use user name and timestamp for drive group name
+    const user = this.authStorageService.getUsername();
+    const driveGroups: DriveGroups = {
+      [`dashboard-${user}-${_.now()}`]: this.driveGroup.spec
     };
-    const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, options);
+    const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, {
+      initialState: { driveGroups: driveGroups }
+    });
     modalRef.content.submitAction.subscribe(() => {
       this.router.navigate(['/osd']);
     });
