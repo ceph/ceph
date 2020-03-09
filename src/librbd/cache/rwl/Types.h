@@ -234,7 +234,7 @@ struct WriteBufferAllocation {
 
 static inline io::Extent image_extent(const BlockExtent& block_extent) {
   return io::Extent(block_extent.block_start,
-                    block_extent.block_end - block_extent.block_start + 1);
+                    block_extent.block_end - block_extent.block_start);
 }
 
 template <typename ExtentsType>

@@ -38,7 +38,7 @@ void DeferredContexts::add(Context* ctx) {
 BlockExtent convert_to_block_extent(const uint64_t offset_bytes, const uint64_t length_bytes)
 {
   return BlockExtent(offset_bytes,
-                     offset_bytes + length_bytes - 1);
+                     offset_bytes + length_bytes);
 }
 
 BlockExtent WriteLogPmemEntry::block_extent() {
