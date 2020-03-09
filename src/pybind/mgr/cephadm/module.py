@@ -2204,6 +2204,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         r = False
 
+        # sanity check
+        if daemon_type in ['mon', 'mgr'] and len(hosts) < 1:
+            self.log.debug('cannot scale mon|mgr below 1 (hosts=%s)' % hosts)
+            return False
+
         # add any?
         did_config = False
         hosts_with_daemons = {d.hostname for d in daemons}
