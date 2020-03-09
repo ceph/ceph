@@ -1717,7 +1717,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     sm[n].size = self._get_spec_size(spec)
                     sm[n].created = self.spec_store.spec_created[dd.service_name()]
                 else:
-                    sm[n].size += 1
+                    sm[n].size = 0
                 if dd.status == 1:
                     sm[n].running += 1
                 if not sm[n].last_refresh or not dd.last_refresh or dd.last_refresh < sm[n].last_refresh:  # type: ignore
