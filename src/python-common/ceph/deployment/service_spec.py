@@ -140,7 +140,9 @@ class PlacementSpec(object):
 
     def pattern_matches_hosts(self, all_hosts):
         # type: (List[str]) -> List[str]
-        return fnmatch.filter(all_hosts, self.host_pattern)  # type: ignore
+        if not self.host_pattern:
+            return []
+        return fnmatch.filter(all_hosts, self.host_pattern)
 
     def pretty_str(self):
         kv = []
