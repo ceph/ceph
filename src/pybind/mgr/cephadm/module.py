@@ -1232,7 +1232,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Generate a unique random service name
         """
         suffix = daemon_type not in [
-            'mon', 'crash',
+            'mon', 'crash', 'nfs',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
         ]
         if forcename:
