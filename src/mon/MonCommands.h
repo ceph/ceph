@@ -405,6 +405,17 @@ COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"Set a global CephFS flag",
 	"fs", "rw")
+
+COMMAND("fs feature ls",
+        "list available cephfs features to be set/unset",
+	"mds", "r")
+
+COMMAND("fs required_client_features "
+        "name=fs_name,type=CephString "
+        "name=subop,type=CephChoices,strings=add|rm "
+        "name=val,type=CephString ",
+        "add/remove required features of clients", "mds", "rw")
+
 COMMAND("fs add_data_pool name=fs_name,type=CephString "
 	"name=pool,type=CephString",
 	"add data pool <pool>", "mds", "rw")
