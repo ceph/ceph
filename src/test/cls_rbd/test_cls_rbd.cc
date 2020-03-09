@@ -1811,7 +1811,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
 
   map<std::string, cls::rbd::MirrorImage> images;
   map<std::string, cls::rbd::MirrorImageStatus> statuses;
-  std::map<cls::rbd::MirrorImageStatusState, int> states;
+  std::map<cls::rbd::MirrorImageStatusState, int32_t> states;
   std::map<std::string, entity_inst_t> instances;
   cls::rbd::MirrorImageStatus read_status;
   entity_inst_t read_instance;

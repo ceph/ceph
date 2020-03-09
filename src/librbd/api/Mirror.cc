@@ -1830,7 +1830,7 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
     return r;
   }
 
-  std::map<cls::rbd::MirrorImageStatusState, int> states_;
+  std::map<cls::rbd::MirrorImageStatusState, int32_t> states_;
   r = cls_client::mirror_image_status_get_summary(&io_ctx, mirror_peers,
                                                   &states_);
   if (r < 0 && r != -ENOENT) {

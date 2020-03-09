@@ -470,13 +470,13 @@ int mirror_image_status_list_finish(bufferlist::const_iterator *iter,
 int mirror_image_status_get_summary(
     librados::IoCtx *ioctx,
     const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites,
-    std::map<cls::rbd::MirrorImageStatusState, int> *states);
+    std::map<cls::rbd::MirrorImageStatusState, int32_t> *states);
 void mirror_image_status_get_summary_start(
     librados::ObjectReadOperation *op,
     const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites);
 int mirror_image_status_get_summary_finish(
     bufferlist::const_iterator *iter,
-    std::map<cls::rbd::MirrorImageStatusState, int> *states);
+    std::map<cls::rbd::MirrorImageStatusState, int32_t> *states);
 int mirror_image_status_remove_down(librados::IoCtx *ioctx);
 void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 
