@@ -69,18 +69,20 @@ seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 
 seastar::future<> Client::reconnect()
 {
-  return (conn ? conn->close() : seastar::now()).then([this] {
-    if (!mgrmap.get_available()) {
-      logger().warn("No active mgr available yet");
-      return seastar::now();
-    }
-    auto peer = mgrmap.get_active_addrs().front();
-    conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MGR);
-    // ask for the mgrconfigure message
-    auto m = ceph::make_message<MMgrOpen>();
-    m->daemon_name = local_conf()->name.get_id();
-    return conn->send(std::move(m));
-  });
+  if (conn) {
+    // crimson::net::Protocol::close() is able to close() in background
+    (void)conn->close();
+  }
+  if (!mgrmap.get_available()) {
+    logger().warn("No active mgr available yet");
+    return seastar::now();
+  }
+  auto peer = mgrmap.get_active_addrs().front();
+  conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MGR);
+  // ask for the mgrconfigure message
+  auto m = ceph::make_message<MMgrOpen>();
+  m->daemon_name = local_conf()->name.get_id();
+  return conn->send(std::move(m));
 }
 
 seastar::future<> Client::handle_mgr_map(crimson::net::Connection*,
