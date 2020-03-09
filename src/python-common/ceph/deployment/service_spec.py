@@ -1,3 +1,4 @@
+import fnmatch
 import re
 from collections import namedtuple
 from typing import Optional, Dict, Any, List
@@ -107,8 +108,8 @@ class PlacementSpec(object):
     For APIs that need to specify a host subset
     """
 
-    def __init__(self, label=None, hosts=None, count=None, all_hosts=False):
-        # type: (Optional[str], Optional[List], Optional[int], bool) -> None
+    def __init__(self, label=None, hosts=None, count=None, all_hosts=False, host_pattern=None):
+        # type: (Optional[str], Optional[List], Optional[int], bool, Optional[str]) -> None
         if all_hosts and (count or hosts or label):
             raise ServiceSpecValidationError('cannot combine all:true and count|hosts|label')
         self.label = label
@@ -122,16 +123,24 @@ class PlacementSpec(object):
         self.count = count  # type: Optional[int]
         self.all_hosts = all_hosts  # type: bool
 
+        #: An fnmatch pattern to select hosts. Can also be a single host.
+        self.host_pattern = host_pattern
+
     def is_empty(self):
         return not self.all_hosts and \
             self.label is None and \
             not self.hosts and \
+            not self.host_pattern and \
             self.count is None
-    
+
     def set_hosts(self, hosts):
         # To backpopulate the .hosts attribute when using labels or count
         # in the orchestrator backend.
         self.hosts = hosts
+
+    def pattern_matches_hosts(self, all_hosts):
+        # type: (List[str]) -> List[str]
+        return fnmatch.filter(all_hosts, self.host_pattern)  # type: ignore
 
     def pretty_str(self):
         kv = []
@@ -143,6 +152,8 @@ class PlacementSpec(object):
             kv.append('%s' % ','.join([str(h) for h in self.hosts]))
         if self.all_hosts:
             kv.append('all:true')
+        if self.host_pattern:
+            kv.append('host_pattern:{}'.format(self.host_pattern))
         return ' '.join(kv)
 
     def __repr__(self):
@@ -162,7 +173,8 @@ class PlacementSpec(object):
             'label': self.label,
             'hosts': [host.to_json() for host in self.hosts] if self.hosts else [],
             'count': self.count,
-            'all_hosts': self.all_hosts
+            'all_hosts': self.all_hosts,
+            'host_pattern': self.host_pattern,
         }
 
     def validate(self):
@@ -171,6 +183,9 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
             raise ServiceSpecValidationError("num/count must be > 1")
+        if self.host_pattern and (self.hosts or self.label or self.all_hosts):
+            raise ServiceSpecValidationError('Host pattern is mutually exclusive to everything else'
+                                             '.')
 
     @classmethod
     def from_string(cls, arg):

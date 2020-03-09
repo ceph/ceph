@@ -2,22 +2,25 @@ import pytest
 
 from ceph.deployment import drive_selection, translate
 from ceph.deployment.inventory import Device
+from ceph.deployment.service_spec import PlacementSpec
 from ceph.tests.utils import _mk_inventory, _mk_device
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
                                         DeviceSelection, DriveGroupValidationError
 
 
 def test_DriveGroup():
-    dg_json = {'testing_drivegroup':
-               {'host_pattern': 'hostname',
-                'data_devices': {'paths': ['/dev/sda']}
-                }
-               }
+    dg_json = [
+        {
+            'service_id': 'testing_drivegroup',
+            'placement': {'host_pattern': 'hostname'},
+            'data_devices': {'paths': ['/dev/sda']}
+        }
+    ]
 
     dgs = DriveGroupSpecs(dg_json)
     for dg in dgs.drive_groups:
-        assert dg.hosts(['hostname']) == ['hostname']
-        assert dg.name == 'testing_drivegroup'
+        assert dg.placement.pattern_matches_hosts(['hostname']) == ['hostname']
+        assert dg.service_id == 'testing_drivegroup'
         assert all([isinstance(x, Device) for x in dg.data_devices.paths])
         assert dg.data_devices.paths[0].path == '/dev/sda'
 
@@ -28,13 +31,13 @@ def test_DriveGroup_fail():
 
 
 def test_drivegroup_pattern():
-    dg = DriveGroupSpec('node[1-3]', DeviceSelection(all=True))
-    assert dg.hosts(['node{}'.format(i) for i in range(10)]) == ['node1', 'node2', 'node3']
+    dg = DriveGroupSpec(PlacementSpec(host_pattern='node[1-3]'), data_devices=DeviceSelection(all=True))
+    assert dg.placement.pattern_matches_hosts(['node{}'.format(i) for i in range(10)]) == ['node1', 'node2', 'node3']
 
 
 def test_drive_selection():
     devs = DeviceSelection(paths=['/dev/sda'])
-    spec = DriveGroupSpec('node_name', data_devices=devs)
+    spec = DriveGroupSpec(PlacementSpec('node_name'), data_devices=devs)
     assert all([isinstance(x, Device) for x in spec.data_devices.paths])
     assert spec.data_devices.paths[0].path == '/dev/sda'
 
@@ -43,7 +46,7 @@ def test_drive_selection():
 
 
 def test_ceph_volume_command_0():
-    spec = DriveGroupSpec(host_pattern='*',
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(all=True)
                           )
     inventory = _mk_inventory(_mk_device()*2)
@@ -53,7 +56,7 @@ def test_ceph_volume_command_0():
 
 
 def test_ceph_volume_command_1():
-    spec = DriveGroupSpec(host_pattern='*',
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(rotational=True),
                           db_devices=DeviceSelection(rotational=False)
                           )
@@ -65,7 +68,7 @@ def test_ceph_volume_command_1():
 
 
 def test_ceph_volume_command_2():
-    spec = DriveGroupSpec(host_pattern='*',
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(size='200GB:350GB', rotational=True),
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G')
@@ -82,7 +85,7 @@ def test_ceph_volume_command_2():
 
 
 def test_ceph_volume_command_3():
-    spec = DriveGroupSpec(host_pattern='*',
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(size='200GB:350GB', rotational=True),
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G'),
@@ -101,7 +104,7 @@ def test_ceph_volume_command_3():
 
 
 def test_ceph_volume_command_4():
-    spec = DriveGroupSpec(host_pattern='*',
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(size='200GB:350GB', rotational=True),
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G'),
@@ -123,7 +126,7 @@ def test_ceph_volume_command_4():
 
 
 def test_ceph_volume_command_5():
-    spec = DriveGroupSpec(host_pattern='*',
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(rotational=True),
                           objectstore='filestore'
                           )
@@ -134,7 +137,7 @@ def test_ceph_volume_command_5():
 
 
 def test_ceph_volume_command_6():
-    spec = DriveGroupSpec(host_pattern='*',
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(rotational=False),
                           journal_devices=DeviceSelection(rotational=True),
                           journal_size='500M',

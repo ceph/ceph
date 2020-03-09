@@ -389,12 +389,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         def execute(all_hosts_):
             # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
             all_hosts = [h.hostname for h in all_hosts_]
+            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
 
-            assert len(drive_group.hosts(all_hosts)) == 1
+            assert len(matching_hosts) == 1
 
-            if not self.rook_cluster.node_exists(drive_group.hosts(all_hosts)[0]):
+            if not self.rook_cluster.node_exists(matching_hosts[0]):
                 raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                                   "cluster".format(drive_group.hosts(all_hosts)))
+                                   "cluster".format(matching_hosts))
 
             # Validate whether cluster CRD can accept individual OSD
             # creations (i.e. not useAllDevices)
@@ -404,7 +405,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return orchestrator.Completion.with_progress(
                 message="Creating OSD on {0}:{1}".format(
-                        drive_group.hosts(all_hosts),
+                        matching_hosts,
                         targets),
                 mgr=self,
                 on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),
@@ -413,12 +414,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         @deferred_read
         def has_osds(all_hosts):
+            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+
             # Find OSD pods on this host
             pod_osd_ids = set()
             pods = self.k8s.list_namespaced_pod(self._rook_env.namespace,
                                                  label_selector="rook_cluster={},app=rook-ceph-osd".format(self._rook_env.cluster_name),
                                                  field_selector="spec.nodeName={0}".format(
-                                                     drive_group.hosts(all_hosts)[0]
+                                                     matching_hosts[0]
                                                  )).items
             for p in pods:
                 pod_osd_ids.add(int(p.metadata.labels['ceph-osd-id']))
