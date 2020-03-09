@@ -2332,6 +2332,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'mds': self._create_mds,
             'rgw': self._create_rgw,
             'rbd-mirror': self._create_rbd_mirror,
+            'nfs': self._create_nfs,
             'grafana': self._create_grafana,
             'alertmanager': self._create_alertmanager,
             'prometheus': self._create_prometheus,
@@ -2401,6 +2402,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     daemon_type, daemon_id, host))
                 if daemon_type == 'mon':
                     create_func(daemon_id, host, network)  # type: ignore
+                elif daemon_type == 'nfs':
+                    create_func(daemon_id, host, spec)  # type: ignore
                 else:
                     create_func(daemon_id, host)           # type: ignore
 
@@ -2636,6 +2639,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'mds': PlacementSpec(count=2),
                 'rgw': PlacementSpec(count=2),
                 'rbd-mirror': PlacementSpec(count=2),
+                'nfs': PlacementSpec(count=1),
                 'grafana': PlacementSpec(count=1),
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
@@ -2767,6 +2771,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._create_daemon('nfs', daemon_id, host,
                                    keyring=keyring,
                                    cephadm_config=cephadm_config)
+
+    @trivial_completion
+    def apply_nfs(self, spec):
+        return self._apply(spec)
 
     def _generate_prometheus_config(self):
         # type: () -> Tuple[Dict[str, Any], List[str]]
