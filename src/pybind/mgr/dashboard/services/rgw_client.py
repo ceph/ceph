@@ -11,14 +11,14 @@ from ..awsauth import S3Auth
 from ..exceptions import DashboardException
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
-from ..tools import build_url, dict_contains_path, json_str_to_object, partial_dict
+from ..tools import build_url, dict_contains_path, json_str_to_object,\
+                    partial_dict, dict_get
 from .. import mgr
 
 try:
     from typing import Dict, List, Optional  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
-
 
 logger = logging.getLogger('rgw_client')
 
@@ -399,21 +399,23 @@ class RgwClient(RestClient):
         return self._admin_get_user_keys(self.admin_path, userid)
 
     @RestClient.api('/{admin_path}/{path}')
-    def _proxy_request(self,  # pylint: disable=too-many-arguments
-                       admin_path,
-                       path,
-                       method,
-                       params,
-                       data,
-                       request=None):
+    def _proxy_request(
+            self,  # pylint: disable=too-many-arguments
+            admin_path,
+            path,
+            method,
+            params,
+            data,
+            request=None):
         # pylint: disable=unused-argument
-        return request(
-            method=method, params=params, data=data, raw_content=True)
+        return request(method=method, params=params, data=data,
+                       raw_content=True)
 
     def proxy(self, method, path, params, data):
-        logger.debug("proxying method=%s path=%s params=%s data=%s", method,
-                     path, params, data)
-        return self._proxy_request(self.admin_path, path, method, params, data)
+        logger.debug("proxying method=%s path=%s params=%s data=%s",
+                     method, path, params, data)
+        return self._proxy_request(self.admin_path, path, method,
+                                   params, data)
 
     @RestClient.api_get('/', resp_structure='[1][*] > Name')
     def get_buckets(self, request=None):
@@ -447,7 +449,9 @@ class RgwClient(RestClient):
             raise e
 
     @RestClient.api_put('/{bucket_name}')
-    def create_bucket(self, bucket_name, zonegroup=None, placement_target=None, request=None):
+    def create_bucket(self, bucket_name, zonegroup=None,
+                      placement_target=None, lock_enabled=False,
+                      request=None):
         logger.info("Creating bucket: %s, zonegroup: %s, placement_target: %s",
                     bucket_name, zonegroup, placement_target)
         data = None
@@ -455,9 +459,13 @@ class RgwClient(RestClient):
             create_bucket_configuration = ET.Element('CreateBucketConfiguration')
             location_constraint = ET.SubElement(create_bucket_configuration, 'LocationConstraint')
             location_constraint.text = '{}:{}'.format(zonegroup, placement_target)
-            data = ET.tostring(create_bucket_configuration, encoding='utf-8')
+            data = ET.tostring(create_bucket_configuration, encoding='unicode')
 
-        return request(data=data)
+        headers = None  # type: Optional[dict]
+        if lock_enabled:
+            headers = {'x-amz-bucket-object-lock-enabled': 'true'}
+
+        return request(data=data, headers=headers)
 
     def get_placement_targets(self):  # type: () -> dict
         zone = self._get_daemon_zone_info()
@@ -523,7 +531,7 @@ class RgwClient(RestClient):
             mfa_delete_element = ET.SubElement(versioning_configuration, 'MfaDelete')
             mfa_delete_element.text = mfa_delete
 
-        data = ET.tostring(versioning_configuration, encoding='utf-8')
+        data = ET.tostring(versioning_configuration, encoding='unicode')
 
         try:
             request(data=data, headers=headers)
@@ -536,3 +544,109 @@ class RgwClient(RestClient):
             raise DashboardException(msg=msg,
                                      http_status_code=http_status_code,
                                      component='rgw')
+
+    @RestClient.api_get('/{bucket_name}?object-lock')
+    def get_bucket_locking(self, bucket_name, request=None):
+        # type: (str, Optional[object]) -> dict
+        """
+        Gets the locking configuration for a bucket. The locking
+        configuration will be applied by default to every new object
+        placed in the specified bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :return: The locking configuration.
+        :rtype: Dict
+        """
+        # pylint: disable=unused-argument
+
+        # Try to get the Object Lock configuration. If there is none,
+        # then return default values.
+        try:
+            result = request()  # type: ignore
+            return {
+                'lock_enabled': dict_get(result, 'ObjectLockEnabled') == 'Enabled',
+                'lock_mode': dict_get(result, 'Rule.DefaultRetention.Mode'),
+                'lock_retention_period_days': dict_get(result, 'Rule.DefaultRetention.Days', 0),
+                'lock_retention_period_years': dict_get(result, 'Rule.DefaultRetention.Years', 0)
+            }
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get(
+                        'Code') == 'ObjectLockConfigurationNotFoundError':
+                    return {
+                        'lock_enabled': False,
+                        'lock_mode': 'compliance',
+                        'lock_retention_period_days': None,
+                        'lock_retention_period_years': None
+                    }
+            raise e
+
+    @RestClient.api_put('/{bucket_name}?object-lock')
+    def set_bucket_locking(self,
+                           bucket_name,
+                           mode,
+                           retention_period_days,
+                           retention_period_years,
+                           request=None):
+        # type: (str, str, int, int, Optional[object]) -> None
+        """
+        Places the locking configuration on the specified bucket. The
+        locking configuration will be applied by default to every new
+        object placed in the specified bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :param mode: The lock mode, e.g. `COMPLIANCE` or `GOVERNANCE`.
+        :type mode: str
+        :param retention_period_days:
+        :type retention_period_days: int
+        :param retention_period_years:
+        :type retention_period_years: int
+        :rtype: None
+        """
+        # pylint: disable=unused-argument
+
+        # Do some validations.
+        if retention_period_days and retention_period_years:
+            # https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTBucketPUTObjectLockConfiguration.html
+            msg = "Retention period requires either Days or Years. "\
+                "You can't specify both at the same time."
+            raise DashboardException(msg=msg, component='rgw')
+        if not retention_period_days and not retention_period_years:
+            msg = "Retention period requires either Days or Years. "\
+                "You must specify at least one."
+            raise DashboardException(msg=msg, component='rgw')
+
+        # Generate the XML data like this:
+        # <ObjectLockConfiguration>
+        #    <ObjectLockEnabled>string</ObjectLockEnabled>
+        #    <Rule>
+        #       <DefaultRetention>
+        #          <Days>integer</Days>
+        #          <Mode>string</Mode>
+        #          <Years>integer</Years>
+        #       </DefaultRetention>
+        #    </Rule>
+        # </ObjectLockConfiguration>
+        locking_configuration = ET.Element('ObjectLockConfiguration')
+        enabled_element = ET.SubElement(locking_configuration,
+                                        'ObjectLockEnabled')
+        enabled_element.text = 'Enabled'  # Locking can't be disabled.
+        rule_element = ET.SubElement(locking_configuration, 'Rule')
+        default_retention_element = ET.SubElement(rule_element,
+                                                  'DefaultRetention')
+        mode_element = ET.SubElement(default_retention_element, 'Mode')
+        mode_element.text = mode.upper()
+        if retention_period_days:
+            days_element = ET.SubElement(default_retention_element, 'Days')
+            days_element.text = str(retention_period_days)
+        if retention_period_years:
+            years_element = ET.SubElement(default_retention_element, 'Years')
+            years_element.text = str(retention_period_years)
+
+        data = ET.tostring(locking_configuration, encoding='unicode')
+
+        try:
+            _ = request(data=data)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
