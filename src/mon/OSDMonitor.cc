@@ -7929,6 +7929,19 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool size must be between 1 and 10";
       return -EINVAL;
     }
+    if (n == 1) {
+      if (!g_conf().get_val<bool>("mon_allow_pool_size_one")) {
+	ss << "configuring pool size as 1 is disabled by default.";
+	return -EPERM;
+      }
+      bool sure = false;
+      cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+      if (!sure) { ss << "WARNING: setting pool size 1 could lead to data loss "
+	"without recovery. If you are *ABSOLUTELY CERTAIN* that is what you want, "
+	  "pass the flag --yes-i-really-mean-it.";
+	return -EPERM;
+      }
+    }
     if (!osdmap.crush->check_crush_rule(p.get_crush_rule(), p.type, n, ss)) {
       return -EINVAL;
     }

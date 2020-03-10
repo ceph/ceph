@@ -316,3 +316,8 @@
   If the zonegroup is part of a realm, the change must be committed with
   'radosgw-admin period update --commit' - otherwise the change will take
   effect after radosgws are restarted.
+
+* Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
+  by default. However, if enabled, user now have to pass the
+  ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really
+  sure of configuring pool size 1.
