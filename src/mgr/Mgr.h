@@ -37,7 +37,7 @@ class MServiceMap;
 class Objecter;
 class Client;
 
-class Mgr {
+class Mgr : public AdminSocketHook {
 protected:
   MonClient *monc;
   Objecter  *objecter;
@@ -97,6 +97,13 @@ public:
   void handle_signal(int signum);
 
   std::map<std::string, std::string> get_services() const;
+
+  int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out) override;
 };
 
 /**
