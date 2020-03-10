@@ -124,7 +124,7 @@ function TEST_backfill_test_simple() {
     for p in $(seq 1 $pools)
     do
       create_pool "${poolprefix}$p" 1 1
-      ceph osd pool set "${poolprefix}$p" size 1
+      ceph osd pool set "${poolprefix}$p" size 1 --yes-i-really-mean-it
     done
 
     wait_for_clean || return 1
@@ -206,7 +206,7 @@ function TEST_backfill_test_multi() {
     for p in $(seq 1 $pools)
     do
       create_pool "${poolprefix}$p" 1 1
-      ceph osd pool set "${poolprefix}$p" size 1
+      ceph osd pool set "${poolprefix}$p" size 1 --yes-i-really-mean-it
     done
 
     wait_for_clean || return 1
@@ -364,8 +364,8 @@ function TEST_backfill_test_sametarget() {
       fi
     done
 
-    ceph osd pool set $pool1 size 1
-    ceph osd pool set $pool2 size 1
+    ceph osd pool set $pool1 size 1 --yes-i-really-mean-it
+    ceph osd pool set $pool2 size 1 --yes-i-really-mean-it
 
     wait_for_clean || return 1
 
@@ -444,7 +444,7 @@ function TEST_backfill_multi_partial() {
 
     ceph osd set-require-min-compat-client luminous
     create_pool fillpool 1 1
-    ceph osd pool set fillpool size 1
+    ceph osd pool set fillpool size 1 --yes-i-really-mean-it
     for p in $(seq 1 $pools)
     do
       create_pool "${poolprefix}$p" 1 1
@@ -639,7 +639,7 @@ function TEST_ec_backfill_simple() {
 
     ceph osd set-backfillfull-ratio .85
     create_pool fillpool 1 1
-    ceph osd pool set fillpool size 1
+    ceph osd pool set fillpool size 1 --yes-i-really-mean-it
 
     # Partially fill an osd
     # We have room for 200 18K replicated objects, if we create 13K objects
@@ -770,7 +770,7 @@ function TEST_ec_backfill_multi() {
 
     ceph osd set-require-min-compat-client luminous
     create_pool fillpool 1 1
-    ceph osd pool set fillpool size 1
+    ceph osd pool set fillpool size 1 --yes-i-really-mean-it
 
     # Partially fill an osd
     # We have room for 200 18K replicated objects, if we create 9K objects
@@ -888,7 +888,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
 
     ceph osd set-require-min-compat-client luminous
     create_pool fillpool 1 1
-    ceph osd pool set fillpool size 1
+    ceph osd pool set fillpool size 1 --yes-i-really-mean-it
     # last osd
     ceph osd pg-upmap 1.0 $lastosd
 
@@ -1010,7 +1010,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
 
     ceph osd set-require-min-compat-client luminous
     create_pool fillpool 1 1
-    ceph osd pool set fillpool size 1
+    ceph osd pool set fillpool size 1 --yes-i-really-mean-it
 
     # Partially fill an osd
     # We have room for 200 48K ec objects, if we create 4k replicated objects
