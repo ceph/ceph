@@ -146,11 +146,11 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
   seastar::gate stop_gate;
 
   /**
-   *  parse the incoming command line into the sequence of words that identifies
+   *  parse the incoming command into the sequence of words that identifies
    *  the API, and into its arguments. Locate the command string in the
    *  registered blocks.
    */
-  maybe_parsed_t parse_cmd(std::string command_text, bufferlist& out);
+  maybe_parsed_t parse_cmd(const std::vector<std::string>& cmd, bufferlist& out);
 
   /**
    *  The servers table is protected by a rw-lock, to be acquired exclusively

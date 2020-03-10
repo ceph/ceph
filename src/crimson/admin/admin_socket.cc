@@ -51,8 +51,8 @@ AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
 /*
  * Note: parse_cmd() is executed with servers_tbl_rwlock held as shared
  */
-AdminSocket::maybe_parsed_t AdminSocket::parse_cmd(std::string cmd,
-						   ceph::bufferlist& out)
+AdminSocket::maybe_parsed_t
+AdminSocket::parse_cmd(const std::vector<std::string>& cmd, ceph::bufferlist& out)
 {
   // preliminaries:
   //   - create the formatter specified by the cmd parameters
@@ -63,7 +63,7 @@ AdminSocket::maybe_parsed_t AdminSocket::parse_cmd(std::string cmd,
   try {
     stringstream errss;
     //  note that cmdmap_from_json() may throw on syntax issues
-    if (!cmdmap_from_json({cmd}, &cmdmap, errss)) {
+    if (!cmdmap_from_json(cmd, &cmdmap, errss)) {
       logger().error("{}: incoming command error: {}", __func__, errss.str());
       out.append("error:"s);
       out.append(errss.str());
@@ -142,7 +142,7 @@ seastar::future<> AdminSocket::execute_line(std::string cmdline,
   return seastar::with_shared(servers_tbl_rwlock,
 			      [this, cmdline, &out]() mutable {
     ceph::bufferlist err;
-    auto parsed = parse_cmd(cmdline, err);
+    auto parsed = parse_cmd({cmdline}, err);
     if (!parsed.has_value() ||
 	!validate_command(*parsed, cmdline, err)) {
       return finalize_response(out, std::move(err));
