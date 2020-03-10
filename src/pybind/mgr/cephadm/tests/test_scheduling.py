@@ -42,6 +42,15 @@ class NodeAssignmentTest(NamedTuple):
             ],
             ['host1', 'host2', 'host3']
         ),
+        # count that is bigger than the amount of hosts. Truncate to len(hosts)
+        # RGWs should not be co-located to each other.
+        NodeAssignmentTest(
+            'rgw',
+            PlacementSpec(count=4),
+            'host1 host2 host3'.split(),
+            [],
+            ['host1', 'host2', 'host3']
+        ),
         # count + partial host list
         NodeAssignmentTest(
             'mon',
