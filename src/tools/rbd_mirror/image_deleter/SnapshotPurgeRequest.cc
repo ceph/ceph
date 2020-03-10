@@ -73,9 +73,7 @@ void SnapshotPurgeRequest<I>::acquire_lock() {
   if (m_image_ctx->exclusive_lock == nullptr) {
     m_image_ctx->owner_lock.unlock_shared();
 
-    derr << "exclusive lock not enabled" << dendl;
-    m_ret_val = -EINVAL;
-    close_image();
+    start_snap_unprotect();
     return;
   }
 
@@ -95,6 +93,13 @@ void SnapshotPurgeRequest<I>::handle_acquire_lock(int r) {
     close_image();
     return;
   }
+
+  start_snap_unprotect();
+}
+
+template <typename I>
+void SnapshotPurgeRequest<I>::start_snap_unprotect() {
+  dout(10) << dendl;
 
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
@@ -283,6 +288,9 @@ void SnapshotPurgeRequest<I>::finish(int r) {
 template <typename I>
 Context *SnapshotPurgeRequest<I>::start_lock_op(int* r) {
   std::shared_lock owner_locker{m_image_ctx->owner_lock};
+  if (m_image_ctx->exclusive_lock == nullptr) {
+    return new LambdaContext([](int r) {});
+  }
   return m_image_ctx->exclusive_lock->start_op(r);
 }
 
