@@ -1639,6 +1639,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
             sd.hostname = host
             sd.container_id = d.get('container_id')
+            if sd.container_id:
+                # shorten the hash
+                sd.container_id = sd.container_id[0:12]
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
             sd.version = d.get('version')
