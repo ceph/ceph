@@ -22,11 +22,11 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { Pool } from '../../pool/pool';
 
 @Component({
-  selector: 'cd-rbd-namespace-form',
-  templateUrl: './rbd-namespace-form.component.html',
-  styleUrls: ['./rbd-namespace-form.component.scss']
+  selector: 'cd-rbd-namespace-form-modal',
+  templateUrl: './rbd-namespace-form-modal.component.html',
+  styleUrls: ['./rbd-namespace-form-modal.component.scss']
 })
-export class RbdNamespaceFormComponent implements OnInit {
+export class RbdNamespaceFormModalComponent implements OnInit {
   poolPermission: Permission;
   pools: Array<Pool> = null;
   pool: string;
