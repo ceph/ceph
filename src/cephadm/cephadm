@@ -2048,8 +2048,13 @@ def command_bootstrap():
         def is_dashboard_available():
             # type: () -> bool
             timeout=args.timeout if args.timeout else 30 # seconds
-            out = cli(['-h'], timeout=timeout)
-            return 'dashboard' in out
+            try:
+                out = cli(['-h'], timeout=timeout)
+                return 'dashboard' in out
+            except RuntimeError as e:
+                # sometimes -h command times out/errors out
+                logger.debug('Command errored out: %s' % e)
+                return False
         is_available('Dashboard', is_dashboard_available)
 
 
