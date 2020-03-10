@@ -286,6 +286,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 # Unknown type -- skip it
                 continue
 
+            sd.container_image_name = p['container_image_name']
             result.append(sd)
 
         return result
