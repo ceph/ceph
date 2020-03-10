@@ -9,6 +9,7 @@ try:
 except ImportError:
     from unittest import mock
 from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec
+from ceph.deployment.service_spec import PlacementSpec
 
 from . import ControllerTestCase
 from ..controllers.osd import Osd
@@ -301,11 +302,11 @@ class OsdTest(ControllerTestCase):
         self._task_post('/api/osd', data)
         self.assertStatus(201)
         fake_client.osds.create.assert_called_with(
-            [DriveGroupSpec(host_pattern='*',
-                            name='all_hdd',
+            [DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                            service_id='all_hdd',
                             data_devices=DeviceSelection(rotational=True)),
-             DriveGroupSpec(host_pattern='b',
-                            name='b_ssd',
+             DriveGroupSpec(placement=PlacementSpec(host_pattern='b'),
+                            service_id='b_ssd',
                             data_devices=DeviceSelection(rotational=False))])
 
         # Invalid DriveGroups
