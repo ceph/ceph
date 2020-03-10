@@ -377,13 +377,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
     @_cli_read_command(
         'orch ps',
         "name=hostname,type=CephString,req=false "
+        "name=service_name,type=CephString,req=false "
         "name=daemon_type,type=CephString,req=false "
         "name=daemon_id,type=CephString,req=false "
         "name=format,type=CephChoices,strings=json|plain,req=false "
         "name=refresh,type=CephBool,req=false",
         'List daemons known to orchestrator')
-    def _list_daemons(self, hostname=None, daemon_type=None, daemon_id=None, format='plain', refresh=False):
-        completion = self.list_daemons(daemon_type,
+    def _list_daemons(self, hostname=None, service_name=None, daemon_type=None, daemon_id=None, format='plain', refresh=False):
+        completion = self.list_daemons(service_name,
+                                       daemon_type,
                                        daemon_id=daemon_id,
                                        host=hostname,
                                        refresh=refresh)
