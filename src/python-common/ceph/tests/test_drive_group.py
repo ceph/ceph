@@ -1,3 +1,4 @@
+# flake8: noqa
 import pytest
 
 from ceph.deployment import drive_selection, translate

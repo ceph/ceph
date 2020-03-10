@@ -1,3 +1,4 @@
+# flake8: noqa
 import pytest
 
 from ceph.deployment.inventory import Devices, Device
