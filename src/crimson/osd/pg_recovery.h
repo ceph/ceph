@@ -77,4 +77,5 @@ private:
   seastar::future<> handle_recovery_delete_reply(
       Ref<MOSDPGRecoveryDeleteReply> m);
   seastar::future<> handle_pull_response(Ref<MOSDPGPush> m);
+  seastar::future<> handle_scan(MOSDPGScan& m);
 };
