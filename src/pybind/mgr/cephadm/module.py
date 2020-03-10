@@ -1729,6 +1729,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         for n, spec in self.spec_store.specs.items():
             if n in sm:
                 continue
+            if service_type is not None and service_type != spec.service_type:
+                continue
+            if service_name is not None and service_name != n:
+                continue
             sm[n] = orchestrator.ServiceDescription(
                 service_name=n,
                 spec=spec,
