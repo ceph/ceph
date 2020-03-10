@@ -14,7 +14,7 @@ import { SharedModule } from '../../shared/shared.module';
 import { BlockModule } from '../block/block.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { CrushRuleFormModalComponent } from './crush-rule-form-modal/crush-rule-form-modal.component';
-import { ErasureCodeProfileFormComponent } from './erasure-code-profile-form/erasure-code-profile-form.component';
+import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-form/erasure-code-profile-form-modal.component';
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
@@ -37,11 +37,11 @@ import { PoolListComponent } from './pool-list/pool-list.component';
   declarations: [
     PoolListComponent,
     PoolFormComponent,
-    ErasureCodeProfileFormComponent,
+    ErasureCodeProfileFormModalComponent,
     CrushRuleFormModalComponent,
     PoolDetailsComponent
   ],
-  entryComponents: [CrushRuleFormModalComponent, ErasureCodeProfileFormComponent]
+  entryComponents: [CrushRuleFormModalComponent, ErasureCodeProfileFormModalComponent]
 })
 export class PoolModule {}
 

@@ -18,7 +18,7 @@ import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
-import { RbdNamespaceFormComponent } from '../rbd-namespace-form/rbd-namespace-form.component';
+import { RbdNamespaceFormModalComponent } from '../rbd-namespace-form/rbd-namespace-form-modal.component';
 
 @Component({
   selector: 'cd-rbd-namespace-list',
@@ -119,7 +119,7 @@ export class RbdNamespaceListComponent implements OnInit {
   }
 
   createModal() {
-    this.modalRef = this.modalService.show(RbdNamespaceFormComponent);
+    this.modalRef = this.modalService.show(RbdNamespaceFormModalComponent);
     this.modalRef.content.onSubmit.subscribe(() => {
       this.refresh();
     });

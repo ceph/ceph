@@ -26,7 +26,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
-import { RbdSnapshotFormComponent } from '../rbd-snapshot-form/rbd-snapshot-form.component';
+import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
@@ -187,7 +187,7 @@ describe('RbdSnapshotListComponent', () => {
       component.rbdName = 'image01';
       spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
         const ref = new BsModalRef();
-        ref.content = new RbdSnapshotFormComponent(
+        ref.content = new RbdSnapshotFormModalComponent(
           null,
           null,
           null,
