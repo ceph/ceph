@@ -61,6 +61,7 @@ DEFAULT_SSH_CONFIG = ('Host *\n'
                       'UserKnownHostsFile /dev/null\n')
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
+CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
@@ -2267,6 +2268,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return r
 
     def _check_daemons(self):
+        # get monmap mtime so we can refresh configs when mons change
+        monmap = self.get('mon_map')
+        last_monmap: Optional[datetime.datetime] = datetime.datetime.strptime(
+            monmap['modified'], CEPH_DATEFMT)
+        if last_monmap and last_monmap > datetime.datetime.utcnow():
+            last_monmap = None   # just in case clocks are skewed
+
         daemons = self.cache.get_daemons()
         grafanas = []  # type: List[orchestrator.DaemonDescription]
         for dd in daemons:
@@ -2287,11 +2295,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 dd.hostname, dd.name())
             if last_deps is None:
                 last_deps = []
-            if last_deps != deps:
+            reconfig = False
+            if not last_config:
+                self.log.info('Reconfiguring %s (unknown last config time)...'% (
+                    dd.name()))
+                reconfig = True
+            elif last_deps != deps:
                 self.log.debug('%s deps %s -> %s' % (dd.name(), last_deps,
                                                      deps))
                 self.log.info('Reconfiguring %s (dependencies changed)...' % (
                     dd.name()))
+                reconfig = True
+            elif last_monmap and \
+               last_monmap > last_config and \
+               dd.daemon_type in CEPH_TYPES:
+                self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
+                reconfig = True
+            if reconfig:
                 self._create_daemon(dd.daemon_type, dd.daemon_id,
                                     dd.hostname, reconfig=True)
 
