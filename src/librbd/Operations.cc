@@ -1337,7 +1337,8 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
   uint64_t disable_mask = (RBD_FEATURES_MUTABLE |
                            RBD_FEATURES_DISABLE_ONLY);
   if ((enabled && (features & RBD_FEATURES_MUTABLE) != features) ||
-      (!enabled && (features & disable_mask) != features)) {
+      (!enabled && (features & disable_mask) != features) ||
+      ((features & ~RBD_FEATURES_MUTABLE_INTERNAL) != features)) {
     lderr(cct) << "cannot update immutable features" << dendl;
     return -EINVAL;
   }

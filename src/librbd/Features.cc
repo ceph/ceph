@@ -74,12 +74,14 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
              << std::hex << unsupported_features << std::dec;
       }
     }
-    uint64_t internal_features = (features & RBD_FEATURES_INTERNAL);
-    if (internal_features != 0ULL) {
-      features &= ~RBD_FEATURES_INTERNAL;
+
+    uint64_t ignore_features_mask = (
+      RBD_FEATURES_INTERNAL | RBD_FEATURES_MUTABLE_INTERNAL);
+    uint64_t ignored_features = (features & ignore_features_mask);
+    if (ignored_features != 0ULL) {
+      features &= ~ignore_features_mask;
       if (err) {
-	*err << "ignoring internal feature mask 0x"
-	     << std::hex << internal_features;
+	*err << "ignoring feature mask 0x" << std::hex << ignored_features;
       }
     }
   } catch (boost::bad_lexical_cast&) {
