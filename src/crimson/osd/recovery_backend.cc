@@ -1,10 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <fmt/format.h>
+
 #include "crimson/common/exception.h"
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/osd/pg.h"
 
+#include "messages/MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
 
 namespace {
@@ -53,5 +56,16 @@ void RecoveryBackend::WaitForObjectRecovery::stop() {
   for (auto& [pg_shard, pr] : pushes) {
     pr.set_exception(
 	crimson::common::system_shutdown_exception());
+  }
+}
+
+seastar::future<> RecoveryBackend::handle_recovery_op(
+  Ref<MOSDFastDispatchOp> m)
+{
+  switch (m->get_header().type) {
+  default:
+    return seastar::make_exception_future<>(
+	std::invalid_argument(fmt::format("invalid request type: {}",
+					  m->get_header().type)));
   }
 }

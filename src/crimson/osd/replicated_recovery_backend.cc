@@ -1082,9 +1082,8 @@ seastar::future<> ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDisp
     return handle_recovery_delete_reply(
 	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   default:
-    return seastar::make_exception_future<>(
-	std::invalid_argument(fmt::format("invalid request type: {}",
-					  m->get_header().type)));
+    // delegate to parent class for handling backend-agnostic recovery ops.
+    return RecoveryBackend::handle_recovery_op(std::move(m));
   }
 }
 

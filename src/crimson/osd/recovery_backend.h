@@ -47,7 +47,7 @@ public:
   }
 
   virtual seastar::future<> handle_recovery_op(
-    Ref<MOSDFastDispatchOp> m) = 0;
+    Ref<MOSDFastDispatchOp> m);
 
   virtual seastar::future<> recover_object(
     const hobject_t& soid,
