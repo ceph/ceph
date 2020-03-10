@@ -6,6 +6,7 @@
 #include "crimson/common/exception.h"
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/pg_backend.h"
 
 #include "messages/MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
@@ -59,10 +60,128 @@ void RecoveryBackend::WaitForObjectRecovery::stop() {
   }
 }
 
+seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
+  const hobject_t& start,
+  [[maybe_unused]] const std::int64_t min,
+  const std::int64_t max)
+{
+  logger().debug("{} starting from {}", __func__, start);
+  return seastar::do_with(
+    std::map<hobject_t, eversion_t>{},
+    [this, &start, max] (auto& version_map) {
+      return backend->list_objects(start, max).then(
+        [this, &start, &version_map] (auto&& ret) {
+          auto& [objects, next] = ret;
+          return seastar::do_for_each(
+            objects,
+            [this, &version_map] (const hobject_t& object) {
+              crimson::osd::ObjectContextRef obc;
+              if (pg.is_primary()) {
+                obc = shard_services.obc_registry.maybe_get_cached_obc(object);
+              }
+              if (obc) {
+                if (obc->obs.exists) {
+                  logger().debug("scan_for_backfill found (primary): {}  {}",
+                                 object, obc->obs.oi.version);
+                  version_map[object] = obc->obs.oi.version;
+                } else {
+                  // if the object does not exist here, it must have been removed
+                  // between the collection_list_partial and here.  This can happen
+                  // for the first item in the range, which is usually last_backfill.
+                }
+                return seastar::now();
+              } else {
+                return backend->load_metadata(object).safe_then(
+                  [&version_map, object] (auto md) {
+                    if (md->os.exists) {
+                      logger().debug("scan_for_backfill found: {}  {}",
+                                     object, md->os.oi.version);
+                      version_map[object] = md->os.oi.version;
+                    }
+                    return seastar::now();
+                  }, PGBackend::load_metadata_ertr::assert_all{});
+              }
+          }).then(
+            [&version_map, &start, next=std::move(next), this] {
+              BackfillInterval bi;
+              bi.begin = start;
+              bi.end = std::move(next);
+              bi.version = pg.get_info().last_update;
+              bi.objects = std::move(version_map);
+              logger().debug("{} BackfillInterval filled, leaving",
+                             "scan_for_backfill");
+              return seastar::make_ready_future<BackfillInterval>(std::move(bi));
+            });
+        });
+    });
+}
+
+seastar::future<> RecoveryBackend::handle_scan_get_digest(
+  MOSDPGScan& m)
+{
+  logger().debug("{}", __func__);
+  if (false /* FIXME: check for backfill too full */) {
+    std::ignore = shard_services.start_operation<crimson::osd::LocalPeeringEvent>(
+      // TODO: abstract start_background_recovery
+      static_cast<crimson::osd::PG*>(&pg),
+      shard_services,
+      pg.get_pg_whoami(),
+      pg.get_pgid(),
+      pg.get_osdmap_epoch(),
+      pg.get_osdmap_epoch(),
+      PeeringState::BackfillTooFull());
+    return seastar::now();
+  }
+  return scan_for_backfill(
+    std::move(m.begin),
+    crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_min"),
+    crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_max")
+  ).then([this,
+          query_epoch=m.query_epoch,
+          conn=m.get_connection()] (auto backfill_interval) {
+    auto reply = make_message<MOSDPGScan>(
+      MOSDPGScan::OP_SCAN_DIGEST,
+      pg.get_pg_whoami(),
+      pg.get_osdmap_epoch(),
+      query_epoch,
+      spg_t(pg.get_info().pgid.pgid, pg.get_primary().shard),
+      backfill_interval.begin,
+      backfill_interval.end);
+    encode(backfill_interval.objects, reply->get_data());
+    return conn->send(std::move(reply));
+  });
+}
+
+seastar::future<> RecoveryBackend::handle_scan_digest(
+  MOSDPGScan& m)
+{
+  logger().debug("{}", __func__);
+  ceph_assert("Not implemented" == nullptr);
+  return seastar::now();
+}
+
+seastar::future<> RecoveryBackend::handle_scan(
+  MOSDPGScan& m)
+{
+  logger().debug("{}", __func__);
+  switch (m.op) {
+    case MOSDPGScan::OP_SCAN_GET_DIGEST:
+      return handle_scan_get_digest(m);
+    case MOSDPGScan::OP_SCAN_DIGEST:
+      return handle_scan_digest(m);
+    default:
+      // FIXME: move to errorator
+      ceph_assert("unknown op type for pg scan");
+      return seastar::now();
+  }
+}
+
 seastar::future<> RecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m)
 {
   switch (m->get_header().type) {
+  case MSG_OSD_PG_SCAN:
+    return handle_scan(*boost::static_pointer_cast<MOSDPGScan>(m));
   default:
     return seastar::make_exception_future<>(
 	std::invalid_argument(fmt::format("invalid request type: {}",

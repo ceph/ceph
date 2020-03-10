@@ -11,6 +11,8 @@
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/shard_services.h"
 
+#include "messages/MOSDPGScan.h"
+#include "osd/recovery_types.h"
 #include "osd/osd_types.h"
 
 namespace crimson::osd{
@@ -20,6 +22,12 @@ namespace crimson::osd{
 class PGBackend;
 
 class RecoveryBackend {
+  seastar::future<> handle_scan_get_digest(
+    MOSDPGScan& m);
+  seastar::future<> handle_scan_digest(
+    MOSDPGScan& m);
+  seastar::future<> handle_scan(
+    MOSDPGScan& m);
 protected:
   class WaitForObjectRecovery;
 public:
@@ -58,6 +66,11 @@ public:
   virtual seastar::future<> push_delete(
     const hobject_t& soid,
     eversion_t need) = 0;
+
+  seastar::future<BackfillInterval> scan_for_backfill(
+    const hobject_t& from,
+    std::int64_t min,
+    std::int64_t max);
 
   void on_peering_interval_change(ceph::os::Transaction& t) {
     clean_up(t, "new peering interval");

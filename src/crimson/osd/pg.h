@@ -453,6 +453,9 @@ public:
   const auto& get_pool() const {
     return peering_state.get_pool();
   }
+  pg_shard_t get_primary() const {
+    return peering_state.get_primary();
+  }
 
   /// initialize created PG
   void init(
