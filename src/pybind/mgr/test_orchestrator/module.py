@@ -220,7 +220,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return list(filter(_filter_func, services))
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
+    def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None, refresh=False):
         """
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.
@@ -232,6 +232,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         daemons = self._daemons if self._daemons else self._get_ceph_daemons()
 
         def _filter_func(d):
+            if service_name is not None and service_name != d.service_name():
+                return False
             if daemon_type is not None and daemon_type != d.daemon_type:
                 return False
             if daemon_id is not None and daemon_id != d.daemon_id:
