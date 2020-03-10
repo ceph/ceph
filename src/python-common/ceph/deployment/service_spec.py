@@ -253,7 +253,7 @@ class ServiceSpec(object):
 
     def __init__(self,
                  service_type,  # type: str
-                 service_id = None,  # type: Optional[str]
+                 service_id=None,  # type: Optional[str]
                  placement: Optional[PlacementSpec] = None,
                  count: Optional[int] = None):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
