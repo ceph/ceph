@@ -19,13 +19,6 @@
 using crimson::osd::OSD;
 using namespace crimson::common;
 
-namespace {
-seastar::logger& logger()
-{
-  return crimson::get_logger(ceph_subsys_osd);
-}
-}  // namespace
-
 namespace crimson::admin {
 
 using crimson::common::local_conf;
