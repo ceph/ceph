@@ -917,5 +917,48 @@ TEST_F(TestMockImageCloneRequest, CloseParentError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
+TEST_F(TestMockImageCloneRequest, SnapshotMirrorEnableNonPrimary) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  MockTestImageCtx mock_image_ctx(*image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
+  expect_is_snap_protected(mock_image_ctx, true, 0);
+
+  MockCreateRequest mock_create_request;
+  expect_create(mock_create_request, 0);
+
+  expect_open(mock_image_ctx, 0);
+
+  MockAttachParentRequest mock_attach_parent_request;
+  expect_attach_parent(mock_attach_parent_request, 0);
+
+  MockAttachChildRequest mock_attach_child_request;
+  expect_attach_child(mock_attach_child_request, 2, 0);
+
+  MockMetadataCopyRequest mock_request;
+  expect_metadata_copy(mock_request, 0);
+
+  MockMirrorEnableRequest mock_mirror_enable_request;
+  expect_mirror_enable(mock_mirror_enable_request, 0);
+
+  expect_close(mock_image_ctx, 0);
+  expect_close(mock_image_ctx, 0);
+
+  C_SaferCond ctx;
+  ImageOptions clone_opts;
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", {}, 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                                  "global image id", "primary mirror uuid",
+                                  image_ctx->op_work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
 } // namespace image
 } // namespace librbd
