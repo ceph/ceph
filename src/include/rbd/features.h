@@ -66,6 +66,7 @@
                                          RBD_FEATURE_FAST_DIFF      | \
                                          RBD_FEATURE_JOURNALING     | \
                                          RBD_FEATURE_NON_PRIMARY)
+#define RBD_FEATURES_MUTABLE_INTERNAL   (RBD_FEATURE_NON_PRIMARY)
 
 /// features that may be dynamically disabled
 #define RBD_FEATURES_DISABLE_ONLY       (RBD_FEATURE_DEEP_FLATTEN)
