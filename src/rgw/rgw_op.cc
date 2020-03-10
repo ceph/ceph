@@ -2928,6 +2928,7 @@ void RGWListBucket::execute()
   list_op.params.end_marker = end_marker;
   list_op.params.list_versions = list_versions;
   list_op.params.allow_unordered = allow_unordered;
+  list_op.params.enforce_max = enforce_max;
 
   op_ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated, s->yield);
   if (op_ret >= 0) {

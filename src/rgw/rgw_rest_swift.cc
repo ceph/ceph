@@ -299,6 +299,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
   marker = s->info.args.get("marker");
   end_marker = s->info.args.get("end_marker");
   max_keys = s->info.args.get("limit");
+  enforce_max = true;
 
   // non-standard
   s->info.args.get_bool("allow_unordered", &allow_unordered, false);
