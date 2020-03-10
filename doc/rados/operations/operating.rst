@@ -93,9 +93,10 @@ For example::
 	sudo systemctl stop ceph-mds@ceph-server
 
 
-.. index:: Ceph service; Upstart; operating a cluster
+.. index:: Upstart; operating a cluster
 
-
+Running Ceph with Upstart
+==========================
 
 Starting all Daemons
 --------------------
@@ -171,11 +172,10 @@ For example::
 	sudo start ceph-mds id=ceph-server
 
 
-.. index:: Ceph service; sysvinit; operating a cluster
+.. index:: sysvinit; operating a cluster
 
-
-Running Ceph
-============
+Running Ceph with sysvinit
+==========================
 
 Each time you to **start**, **restart**, and  **stop** Ceph daemons (or your
 entire cluster) you must specify at least one option and one command. You may
