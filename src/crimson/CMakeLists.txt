@@ -14,10 +14,11 @@ set_target_properties(crimson::cflags PROPERTIES
 set(crimson_common_srcs
   admin/admin_socket.cc
   admin/osd_admin.cc
+  common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
+  common/formatter.cc
   common/perf_counters_collection.cc
-  common/assert.cc
   common/log.cc)
 
 # the specialized version of ceph-common, where
