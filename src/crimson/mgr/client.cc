@@ -26,7 +26,7 @@ Client::Client(crimson::net::Messenger& msgr,
                  WithStats& with_stats)
   : msgr{msgr},
     with_stats{with_stats},
-    tick_timer{[this] {tick();}}
+    report_timer{[this] {report();}}
 {}
 
 seastar::future<> Client::start()
@@ -62,7 +62,7 @@ seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 {
   if (conn == c) {
     conn = nullptr;
-    tick_timer.cancel();
+    report_timer.cancel();
   }
   return seastar::now();
 }
@@ -104,20 +104,20 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
 {
   logger().info("{} {}", __func__, *m);
 
-  auto tick_period = std::chrono::seconds{m->stats_period};
-  if (tick_period.count()) {
-    if (tick_timer.armed()) {
-      tick_timer.rearm(tick_timer.get_timeout(), tick_period);
+  auto report_period = std::chrono::seconds{m->stats_period};
+  if (report_period.count()) {
+    if (report_timer.armed()) {
+      report_timer.rearm(report_timer.get_timeout(), report_period);
     } else {
-      tick_timer.arm_periodic(tick_period);
+      report_timer.arm_periodic(report_period);
     }
   } else {
-    tick_timer.cancel();
+    report_timer.cancel();
   }
   return seastar::now();
 }
 
-void Client::tick()
+void Client::report()
 {
   (void) seastar::with_gate(gate, [this] {
     if (conn) {
