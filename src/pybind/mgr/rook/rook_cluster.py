@@ -320,11 +320,19 @@ class RookCluster(object):
         for p in pods:
             d = p.to_dict()
             # p['metadata']['creationTimestamp']
+
+            image_name = None
+            for c in d['spec']['containers']:
+                # look at the first listed container in the pod...
+                image_name = c['image']
+                break
+
             pods_summary.append({
                 "name": d['metadata']['name'],
                 "hostname": d['spec']['node_name'],
                 "labels": d['metadata']['labels'],
-                'phase': d['status']['phase']
+                'phase': d['status']['phase'],
+                'container_image_name': image_name,
             })
 
         return pods_summary
