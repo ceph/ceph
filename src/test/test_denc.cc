@@ -180,28 +180,6 @@ TEST(denc, string)
   test_denc(c);
 }
 
-TEST(denc, enum_class)
-{
-  enum class enum_class_8 : int8_t { value };
-  test_denc(enum_class_8::value);
-  enum class enum_class_u8 : uint8_t { value };
-  test_denc(enum_class_u8::value);
-  enum class enum_class_16 : int16_t { value };
-  test_denc(enum_class_16::value);
-  enum class enum_class_u16 : uint16_t { value };
-  test_denc(enum_class_u16::value);
-  enum class enum_class_32 : int32_t { value };
-  test_denc(enum_class_32::value);
-  enum class enum_class_u32 : uint32_t { value };
-  test_denc(enum_class_u32::value);
-  enum class enum_class_64 : int64_t { value };
-  test_denc(enum_class_64::value);
-  enum class enum_class_u64 : uint64_t { value };
-  test_denc(enum_class_u64::value);
-  enum class enum_class { value };
-  test_denc(enum_class::value);
-}
-
 struct legacy_t {
   int32_t a = 1;
   void encode(bufferlist& bl) const {
