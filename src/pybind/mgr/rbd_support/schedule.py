@@ -52,9 +52,34 @@ class LevelSpec:
             return False
         return True
 
+    def intersects(self, level_spec):
+        if self.pool_id is None or level_spec.pool_id is None:
+            return True
+        if self.pool_id != level_spec.pool_id:
+            return False
+        if self.namespace is None or level_spec.namespace is None:
+            return True
+        if self.namespace != level_spec.namespace:
+            return False
+        if self.image_id is None or level_spec.image_id is None:
+            return True
+        if self.image_id != level_spec.image_id:
+            return False
+        return True
+
     @classmethod
     def make_global(cls):
         return LevelSpec("", "", None, None, None)
+
+    @classmethod
+    def from_pool_spec(cls, pool_id, pool_name, namespace=None):
+        if namespace is None:
+            id = "{}".format(pool_id)
+            name = "{}/".format(pool_name)
+        else:
+            id = "{}/{}".format(pool_id, namespace)
+            name = "{}/{}/".format(pool_name, namespace)
+        return LevelSpec(name, id, str(pool_id), namespace, None)
 
     @classmethod
     def from_name(cls, handler, name, namespace_validator=None,
@@ -444,6 +469,12 @@ class Schedules:
                 return self.schedules[level_spec_id]
             del levels[-1]
         return None
+
+    def intersects(self, level_spec):
+        for ls in self.level_specs.values():
+            if ls.intersects(level_spec):
+                return True
+        return False
 
     def to_list(self, level_spec):
         if level_spec.id in self.schedules:
