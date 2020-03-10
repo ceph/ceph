@@ -121,6 +121,7 @@ set(librbd_internal_srcs
   mirror/snapshot/Utils.cc
   mirror/snapshot/WriteImageStateRequest.cc
   object_map/CreateRequest.cc
+  object_map/DiffRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc
   object_map/RefreshRequest.cc
