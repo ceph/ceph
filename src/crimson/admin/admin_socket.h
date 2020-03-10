@@ -19,12 +19,26 @@
 #include <seastar/net/api.hh>
 
 #include "common/cmdparse.h"
+#include "include/buffer.h"
+#include "crimson/net/Fwd.h"
 
 using namespace std::literals;
+
+class MCommand;
 
 namespace crimson::admin {
 
 class AdminSocket;
+
+struct tell_result_t {
+  int ret = 0;
+  std::string err;
+  ceph::bufferlist out;
+  tell_result_t() = default;
+  tell_result_t(int ret, std::string&& err);
+  tell_result_t(int ret, std::string&& err, ceph::bufferlist&& out);
+  tell_result_t(Formatter* formatter);
+};
 
 /**
  * A specific hook must implement exactly one of the two interfaces:
@@ -46,13 +60,9 @@ class AdminSocketHook {
 		  std::string_view help) :
     prefix{prefix}, desc{desc}, help{help}
   {}
-  /**
-   * \retval 'false' for hook execution errors
-   */
-  virtual seastar::future<ceph::bufferlist>
-  call(std::string_view command,
-       std::string_view format,
-       const cmdmap_t& cmdmap) const = 0;
+  virtual seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+					      std::string_view format,
+					      ceph::bufferlist&& input) const = 0;
   virtual ~AdminSocketHook() {}
   const std::string_view prefix;
   const std::string_view desc;
@@ -110,20 +120,26 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    * Registering the APIs that are served directly by the admin_socket server.
    */
   seastar::future<> register_admin_commands();
+  /**
+   * handle a command message by replying an MCommandReply with the same tid
+   *
+   * \param conn connection over which the incoming command message is received
+   * \param m message carrying the command vector and optional input buffer
+   */
+  seastar::future<> handle_command(crimson::net::Connection* conn,
+				   boost::intrusive_ptr<MCommand> m);
 
- private:
+private:
   /**
    * the result of analyzing an incoming command, and locating it in
    * the registered APIs collection.
    */
   struct parsed_command_t {
-    cmdmap_t parameters;
+    cmdmap_t params;
     std::string format;
     const AdminSocketHook& hook;
   };
   // and the shorthand:
-  using maybe_parsed_t = std::optional<AdminSocket::parsed_command_t>;
-
   seastar::future<> handle_client(seastar::input_stream<char>& inp,
                                   seastar::output_stream<char>& out);
 
@@ -133,9 +149,8 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
   seastar::future<> finalize_response(seastar::output_stream<char>& out,
                                       ceph::bufferlist&& msgs);
 
-  bool validate_command(const parsed_command_t& parsed,
-                        const std::string& command_text,
-                        ceph::bufferlist& out) const;
+  seastar::future<tell_result_t> execute_command(const std::vector<std::string>& cmd,
+						 ceph::bufferlist&& buf);
 
   std::optional<seastar::server_socket> server_sock;
   std::optional<seastar::connected_socket> connected_sock;
@@ -150,7 +165,8 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    *  the API, and into its arguments. Locate the command string in the
    *  registered blocks.
    */
-  maybe_parsed_t parse_cmd(const std::vector<std::string>& cmd, bufferlist& out);
+  std::variant<parsed_command_t, tell_result_t>
+  parse_cmd(const std::vector<std::string>& cmd);
 
   /**
    *  The servers table is protected by a rw-lock, to be acquired exclusively
