@@ -15,7 +15,8 @@ import copy
 import errno
 
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
+    ServiceSpecValidationError
 from ceph.deployment.drive_group import DriveGroupSpec
 
 from mgr_module import MgrModule, PersistentStoreDict, CLICommand, HandleCommandResult
@@ -60,7 +61,7 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (OrchestratorError, ImportError) as e:
+        except (OrchestratorError, ImportError, ServiceSpecValidationError) as e:
             # Do not print Traceback for expected errors.
             return HandleCommandResult(-errno.ENOENT, stderr=str(e))
         except NotImplementedError:
