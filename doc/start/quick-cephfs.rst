@@ -206,7 +206,7 @@ encounter trouble.
 .. _OS Recommendations: ../os-recommendations
 .. _Placement Group: ../../rados/operations/placement-groups
 .. _mount.ceph man page: ../../man/8/mount.ceph
-.. _Mount CephFS using Kernel Driver: ../cephfs/kernel
+.. _Mount CephFS using Kernel Driver: ../../cephfs/mount-using-kernel-driver
 .. _ceph-fuse man page: ../../man/8/ceph-fuse
-.. _Mount CephFS using FUSE: ../../cephfs/fuse
+.. _Mount CephFS using FUSE: ../../cephfs/mount-using-fuse
 .. _Erasure Code: ../../rados/operations/erasure-code
