@@ -65,6 +65,12 @@ DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 
+# ceph daemon types that use the ceph container image.
+# NOTE: listed in upgrade order!
+CEPH_UPGRADE_ORDER = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror']
+CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
+
+
 # for py2 compat
 try:
     from tempfile import TemporaryDirectory # py3
@@ -85,12 +91,6 @@ except ImportError:
         def __exit__(self, exc_type, exc_value, traceback):
             self.cleanup()
 
-
-# high-level TODO:
-#  - bring over some of the protections from ceph-deploy that guard against
-#    multiple bootstrapping / initialization
-
-CEPH_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rbd-mirror', 'rgw', 'crash']
 
 def name_to_config_section(name):
     """
@@ -792,7 +792,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         daemons = self.cache.get_daemons()
         done = 0
-        for daemon_type in CEPH_TYPES:
+        for daemon_type in CEPH_UPGRADE_ORDER:
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
@@ -942,7 +942,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': target_name,
             'who': 'global',
         })
-        for daemon_type in CEPH_TYPES:
+        for daemon_type in CEPH_UPGRADE_ORDER:
             ret, image, err = self.mon_command({
                 'prefix': 'config rm',
                 'name': 'container_image',
