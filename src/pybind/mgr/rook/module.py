@@ -249,9 +249,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [orchestrator.HostSpec(n) for n in self.rook_cluster.get_node_names()]
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, host_name=None, refresh=False):
+    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
 
-        pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host_name)
+        pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host)
 
         result = []
         for p in pods:
