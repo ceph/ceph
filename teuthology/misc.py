@@ -1068,6 +1068,7 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
+            '--vgdb=yes',
         ]
     else:
         extra_args = [
@@ -1077,6 +1078,7 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
+            '--vgdb=yes',
         ]
     args = [
         'cd', testdir,
