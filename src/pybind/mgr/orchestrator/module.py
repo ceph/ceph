@@ -423,7 +423,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     ukn(s.version),
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
-                    ukn(s.container_id)[0:12]))
+                    ukn(s.container_id)))
 
             return HandleCommandResult(stdout=table.get_string())
 
