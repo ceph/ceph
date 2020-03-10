@@ -35,7 +35,8 @@ class DashboardTestCase(MgrTestCase):
     AUTH_ROLES = ['administrator']
 
     @classmethod
-    def create_user(cls, username, password, roles=None, force_password=True):
+    def create_user(cls, username, password, roles=None,
+                    force_password=True, cmd_args=None):
         """
         :param username: The name of the user.
         :type username: str
@@ -46,6 +47,9 @@ class DashboardTestCase(MgrTestCase):
         :param force_password: Force the use of the specified password. This
           will bypass the password complexity check. Defaults to 'True'.
         :type force_password: bool
+        :param cmd_args: Additional command line arguments for the
+          'ac-user-create' command.
+        :type cmd_args: None | list[str]
         """
         try:
             cls._ceph_cmd(['dashboard', 'ac-user-show', username])
@@ -54,9 +58,13 @@ class DashboardTestCase(MgrTestCase):
             if ex.exitstatus != 2:
                 raise ex
 
-        user_create_args = ['dashboard', 'ac-user-create', username, password]
+        user_create_args = [
+            'dashboard', 'ac-user-create', username, password
+        ]
         if force_password:
             user_create_args.append('--force-password')
+        if cmd_args:
+            user_create_args.extend(cmd_args)
         cls._ceph_cmd(user_create_args)
 
         if roles:
@@ -86,6 +94,7 @@ class DashboardTestCase(MgrTestCase):
         if cls._loggedin:
             cls.logout()
         cls._post('/api/auth', {'username': username, 'password': password})
+        cls._assertEq(cls._resp.status_code, 201)
         cls._token = cls.jsonBody()['token']
         cls._loggedin = True
 
@@ -93,6 +102,7 @@ class DashboardTestCase(MgrTestCase):
     def logout(cls):
         if cls._loggedin:
             cls._post('/api/auth/logout')
+            cls._assertEq(cls._resp.status_code, 200)
             cls._token = None
             cls._loggedin = False
 
@@ -106,16 +116,22 @@ class DashboardTestCase(MgrTestCase):
                 cls._ceph_cmd(['dashboard', 'ac-role-delete', 'test_role_{}'.format(idx)])
 
     @classmethod
-    def RunAs(cls, username, password, roles):
+    def RunAs(cls, username, password, roles=None, force_password=True,
+              cmd_args=None, login=True):
         def wrapper(func):
             def execute(self, *args, **kwargs):
-                self.create_user(username, password, roles)
-                self.login(username, password)
+                self.create_user(username, password, roles,
+                                 force_password, cmd_args)
+                if login:
+                    self.login(username, password)
                 res = func(self, *args, **kwargs)
-                self.logout()
+                if login:
+                    self.logout()
                 self.delete_user(username, roles)
                 return res
+
             return execute
+
         return wrapper
 
     @classmethod
