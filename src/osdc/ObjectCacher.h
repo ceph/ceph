@@ -287,9 +287,7 @@ class ObjectCacher {
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() const {
-      if (lru_is_expireable()) {
-	ceph_assert(data.empty());
-	ceph_assert(waitfor_commit.empty());
+      if (lru_is_expireable() && data.empty() && waitfor_commit.empty()) {
 	return true;
       }
       return false;
