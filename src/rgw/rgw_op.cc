@@ -2398,17 +2398,19 @@ void RGWStatAccount::execute()
   string marker;
   bool is_truncated = false;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  const string *lastmarker;
 
   do {
     RGWUserBuckets buckets;
 
+    lastmarker = nullptr;
     op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets, marker,
 				   string(), max_buckets, true, &is_truncated);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
-      ldpp_dout(this, 10) << "WARNING: failed on rgw_get_user_buckets uid="
-			<< s->user->user_id << dendl;
+      ldpp_dout(this, 10) << "WARNING: failed on rgw_read_user_buckets uid="
+			<< s->user->user_id << " ret=" << op_ret << dendl;
       break;
     } else {
       /* We need to have stats for all our policies - even if a given policy
@@ -2422,6 +2424,7 @@ void RGWStatAccount::execute()
       std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
       for (const auto& kv : m) {
         const auto& bucket = kv.second;
+	lastmarker = &kv.first;
 
         global_stats.bytes_used += bucket.size;
         global_stats.bytes_used_rounded += bucket.size_rounded;
@@ -2438,6 +2441,12 @@ void RGWStatAccount::execute()
       global_stats.buckets_count += m.size();
 
     }
+    if (!lastmarker) {
+	lderr(s->cct) << "ERROR: rgw_read_user_buckets, stasis at marker="
+	      << marker << " uid=" << s->user->user_id << dendl;
+	break;
+    }
+    marker = *lastmarker;
   } while (is_truncated);
 }
 
