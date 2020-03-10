@@ -62,7 +62,6 @@ seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 {
   if (conn == c) {
     conn = nullptr;
-    tick_timer.cancel();
   }
   return seastar::now();
 }
