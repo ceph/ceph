@@ -6,6 +6,7 @@ call methods.
 
 This module is runnable outside of ceph-mgr, useful for testing.
 """
+import datetime
 import threading
 import logging
 import json
@@ -313,13 +314,13 @@ class RookCluster(object):
                     return False
             return True
 
+        refreshed = datetime.datetime.utcnow()
         pods = [i for i in self.rook_pods.items if predicate(i)]
 
         pods_summary = []
 
         for p in pods:
             d = p.to_dict()
-            # p['metadata']['creationTimestamp']
 
             image_name = None
             for c in d['spec']['containers']:
@@ -327,13 +328,24 @@ class RookCluster(object):
                 image_name = c['image']
                 break
 
-            pods_summary.append({
+            s = {
                 "name": d['metadata']['name'],
                 "hostname": d['spec']['node_name'],
                 "labels": d['metadata']['labels'],
                 'phase': d['status']['phase'],
                 'container_image_name': image_name,
-            })
+                'refreshed': refreshed,
+            }
+
+            # note: we want UTC but no tzinfo
+            if 'creation_timestamp' in d['metadata']:
+                s['created'] = d['metadata']['creation_timestamp'].astimezone(
+                    tz=datetime.timezone.utc).replace(tzinfo=None)
+            if 'start_time' in d['status']:
+                s['started'] = d['status']['start_time'].astimezone(
+                    tz=datetime.timezone.utc).replace(tzinfo=None)
+
+            pods_summary.append(s)
 
         return pods_summary
 

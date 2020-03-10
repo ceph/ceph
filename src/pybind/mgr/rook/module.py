@@ -287,6 +287,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 continue
 
             sd.container_image_name = p['container_image_name']
+
+            sd.created = p['created']
+            sd.last_configured = p['created']
+            sd.last_deployed = p['created']
+            sd.started = p['started']
+            sd.last_refresh = p['refreshed']
             result.append(sd)
 
         return result
