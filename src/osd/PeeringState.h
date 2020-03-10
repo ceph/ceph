@@ -245,7 +245,7 @@ struct PeeringCtxWrapper {
   }
 };
 
-  /* Encapsulates PG recovery process */
+/* Encapsulates PG recovery process */
 class PeeringState : public MissingLoc::MappingInfo {
 public:
   struct PeeringListener : public EpochSource {
