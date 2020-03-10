@@ -6,6 +6,11 @@
 #include "rgw_op.h"
 #include "rgw_pubsub.h"
 
+// make sure that endpoint is a valid URL
+// make sure that if user/password are passed inside URL, it is over secure connection
+// update rgw_pubsub_sub_dest to indicate that a password is stored in the URL
+bool validate_and_update_endpoint_secret(rgw_pubsub_sub_dest& dest, CephContext *cct, const RGWEnv& env);
+
 // create a topic
 class RGWPSCreateTopicOp : public RGWDefaultResponseOp {
 protected:
