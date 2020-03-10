@@ -1544,6 +1544,8 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
       // TODO: optimize.
 
       I *img_ctx = I::create("", image_id, nullptr, ns_io_ctx, false);
+      img_ctx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
       r = img_ctx->state->open(0);
       if (r == -ENOENT) {
         continue;
