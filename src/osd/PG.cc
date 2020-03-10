@@ -3926,16 +3926,6 @@ int PG::pg_stat_adjust(osd_stat_t *ns)
   return 0;
 }
 
-ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
-{
-  out << "BackfillInfo(" << bi.begin << "-" << bi.end
-      << " " << bi.objects.size() << " objects";
-  if (!bi.objects.empty())
-    out << " " << bi.objects;
-  out << ")";
-  return out;
-}
-
 void PG::dump_pgstate_history(Formatter *f)
 {
   std::scoped_lock l{*this};
