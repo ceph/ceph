@@ -1999,10 +1999,31 @@ def command_bootstrap():
         return j.get('mgrmap', {}).get('available', False)
     is_available('mgr', is_mgr_available)
 
+    # wait for mgr to restart (after enabling a module)
+    def wait_for_mgr_restart():
+        # first get latest mgrmap epoch from the mon
+        out = cli(['mgr', 'dump'])
+        j = json.loads(out)
+        epoch = j['epoch']
+        # wait for mgr to have it
+        logger.info('Waiting for the mgr to restart...')
+        def mgr_has_latest_epoch():
+            # type: () -> bool
+            try:
+                out = cli(['tell', 'mgr', 'mgr_status'])
+                j = json.loads(out)
+                return j['mgrmap_epoch'] >= epoch
+            except Exception as e:
+                logger.debug('tell mgr mgr_status failed: %s' % e)
+                return False
+        is_available('Mgr epoch %d' % epoch, mgr_has_latest_epoch)
+
     # ssh
     if not args.skip_ssh:
         logger.info('Enabling cephadm module...')
         cli(['mgr', 'module', 'enable', 'cephadm'])
+        wait_for_mgr_restart()
+
         logger.info('Setting orchestrator backend to cephadm...')
         cli(['orch', 'set', 'backend', 'cephadm'])
 
@@ -2042,22 +2063,7 @@ def command_bootstrap():
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
-
-        # wait for the service to become available
-        logger.info('Waiting for the dashboard to start...')
-        def is_dashboard_available():
-            # type: () -> bool
-            timeout=args.timeout if args.timeout else 30 # seconds
-            try:
-                out = cli(['-h'], timeout=timeout)
-                return 'dashboard' in out
-            except RuntimeError as e:
-                # sometimes -h command times out/errors out
-                logger.debug('Command errored out: %s' % e)
-                return False
-        is_available('Dashboard', is_dashboard_available)
-
-
+        wait_for_mgr_restart()
 
         # dashboard crt and key
         if args.dashboard_key and args.dashboard_crt:
