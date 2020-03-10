@@ -420,6 +420,9 @@ Base is the package that includes all the files shared amongst ceph servers
 %package -n cephadm
 Summary:        Utility to bootstrap Ceph clusters
 Requires:       lvm2
+%if 0%{?suse_version}
+Requires:       apparmor-abstractions
+%endif
 Requires:       python%{python3_pkgversion}
 %if 0%{?weak_deps}
 Recommends:     podman
