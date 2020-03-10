@@ -58,13 +58,26 @@ seastar::future<> Client::ms_dispatch(crimson::net::Connection* conn,
   }
 }
 
+seastar::future<> Client::ms_handle_connect(crimson::net::ConnectionRef c)
+{
+  if (conn == c) {
+    // ask for the mgrconfigure message
+    auto m = ceph::make_message<MMgrOpen>();
+    m->daemon_name = local_conf()->name.get_id();
+    return conn->send(std::move(m));
+  } else {
+    return seastar::now();
+  }
+}
+
 seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 {
   if (conn == c) {
-    conn = nullptr;
     report_timer.cancel();
+    return reconnect();
+  } else {
+    return seastar::now();
   }
-  return seastar::now();
 }
 
 seastar::future<> Client::reconnect()
@@ -72,17 +85,20 @@ seastar::future<> Client::reconnect()
   if (conn) {
     // crimson::net::Protocol::close() is able to close() in background
     (void)conn->close();
+    conn = {};
   }
   if (!mgrmap.get_available()) {
     logger().warn("No active mgr available yet");
     return seastar::now();
   }
-  auto peer = mgrmap.get_active_addrs().front();
-  conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MGR);
-  // ask for the mgrconfigure message
-  auto m = ceph::make_message<MMgrOpen>();
-  m->daemon_name = local_conf()->name.get_id();
-  return conn->send(std::move(m));
+  auto retry_interval = std::chrono::duration<double>(
+    local_conf().get_val<double>("mgr_connect_retry_interval"));
+  auto a_while = std::chrono::duration_cast<seastar::steady_clock_type::duration>(
+    retry_interval);
+  return seastar::sleep(a_while).then([this] {
+    auto peer = mgrmap.get_active_addrs().front();
+    conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MGR);
+  });
 }
 
 seastar::future<> Client::handle_mgr_map(crimson::net::Connection*,
@@ -120,12 +136,9 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
 void Client::report()
 {
   (void) seastar::with_gate(gate, [this] {
-    if (conn) {
-      auto pg_stats = with_stats.get_stats();
-      return conn->send(std::move(pg_stats));
-    } else {
-      return reconnect();
-    }
+    assert(conn);
+    auto pg_stats = with_stats.get_stats();
+    return conn->send(std::move(pg_stats));
   });
 }
 
