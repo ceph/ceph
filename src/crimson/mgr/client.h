@@ -39,7 +39,8 @@ public:
 private:
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				Ref<Message> m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) final;
+  seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) final;
   seastar::future<> handle_mgr_map(crimson::net::Connection* conn,
 				   Ref<MMgrMap> m);
   seastar::future<> handle_mgr_conf(crimson::net::Connection* conn,
