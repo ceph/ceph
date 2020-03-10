@@ -330,9 +330,7 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 
 int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
 {
-  uint64_t count = t->len / data_buffer_size;
-  if (t->len % data_buffer_size)
-    ++count;
+  uint64_t count = t->io_request.nseg;
   void **segs;
   if (count > data_buf_mempool.size())
     return -ENOMEM;
@@ -346,8 +344,6 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
     segs[i] = data_buf_mempool.back();
     data_buf_mempool.pop_back();
   }
-  t->io_request.nseg = count;
-  t->ctx->total_nseg += count;
   if (write) {
     auto blp = t->bl.begin();
     uint32_t len = 0;
@@ -781,6 +777,7 @@ void NVMEDevice::aio_submit(IOContext *ioc)
 static void ioc_append_task(IOContext *ioc, Task *t)
 {
   Task *first, *last;
+  uint64_t count = t->len / data_buffer_size;
 
   first = static_cast<Task*>(ioc->nvme_task_first);
   last = static_cast<Task*>(ioc->nvme_task_last);
@@ -790,6 +787,11 @@ static void ioc_append_task(IOContext *ioc, Task *t)
     ioc->nvme_task_first = t;
   ioc->nvme_task_last = t;
   ++ioc->num_pending;
+
+  if (t->len % data_buffer_size)
+    ++count;
+  t->io_request.nseg = count;
+  ioc->total_nseg += count;
 }
 
 static void write_split(
