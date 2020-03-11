@@ -37,12 +37,14 @@ struct cls_2pc_urgent_data
   uint64_t reserved_size{0};   // pending reservations size in bytes
   cls_2pc_reservation::id_t last_id{cls_2pc_reservation::NO_ID}; // last allocated id
   cls_2pc_reservations reservations; // reservation list (keyed by id)
+  bool has_xattrs{false};
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(reserved_size, bl);
     encode(last_id, bl);
     encode(reservations, bl);
+    encode(has_xattrs, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -51,6 +53,7 @@ struct cls_2pc_urgent_data
     decode(reserved_size, bl);
     decode(last_id, bl);
     decode(reservations, bl);
+    decode(has_xattrs, bl);
     DECODE_FINISH(bl);
   }
 };
