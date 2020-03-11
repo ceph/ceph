@@ -162,6 +162,9 @@ class MirrorSnapshotScheduleHandler:
         self.thread = Thread(target=self.run)
         self.thread.start()
 
+    def _cleanup(self):
+        self.watchers.unregister_all()
+
     def run(self):
         try:
             self.log.info("MirrorSnapshotScheduleHandler: starting")
