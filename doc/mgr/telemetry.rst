@@ -15,10 +15,19 @@ The *telemetry* module is enabled with::
 
   ceph mgr module enable telemetry
 
+To allow the telemetry module to start sharing data::
+
+  ceph telemetry on
+
+Please note: Telemetry data is licensed under the Community Data License Agreement - Sharing - Version 1.0 (https://cdla.io/sharing-1-0/). Hence, telemetry module can start sharing data only after you add 'sharing-1-0' to the 'ceph telemetry on' command.
+
+Telemetry can be disabled at any time with::
+
+  ceph telemetry off
 
 Interval
 --------
-The module compiles and sends a new report every 72 hours by default.
+The module compiles and sends a new report every 24 hours by default.
 
 Contact and Description
 -----------------------
