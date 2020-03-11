@@ -37,21 +37,18 @@ struct tell_result_t {
   tell_result_t() = default;
   tell_result_t(int ret, std::string&& err);
   tell_result_t(int ret, std::string&& err, ceph::bufferlist&& out);
+  /**
+   * create a \c tell_result_t indicating the successful completion
+   * of command
+   *
+   * \param formatter the content of formatter will be flushed to the
+   *        output buffer
+   */
   tell_result_t(Formatter* formatter);
 };
 
 /**
- * A specific hook must implement exactly one of the two interfaces:
- * (1) call(command, cmdmap, format, out)
- * or
- * (2) exec_command(formatter, command, cmdmap, format, out)
- *
- * The default implementation of (1) above calls exec_command() after handling
- * most of the boiler-plate choirs:
- * - setting up the formatter, with an appropiate 'section' already opened;
- * - handling possible failures (exceptions or future_exceptions) returned
- *   by (2)
- * - flushing the output to the outgoing bufferlist.
+ * An abstract class to be inherited by implementations of asock hooks
  */
 class AdminSocketHook {
  public:
@@ -60,6 +57,19 @@ class AdminSocketHook {
 		  std::string_view help) :
     prefix{prefix}, desc{desc}, help{help}
   {}
+  /**
+   * handle command defined by cmdmap
+   *
+   * \param cmdmap dictionary holding the named parameters
+   * \param format the expected format of the output
+   * \param input the binary input of the command
+   * \pre \c cmdmap should be validated with \c desc
+   * \retval an instance of \c tell_result_t
+   * \note a negative \c ret should be set to indicate that the hook fails to
+   *       fulfill the command either because of an invalid input or other
+   *       failures. in that case, a brief reason of the failure should
+   *       noted in \c err in the returned value
+   */
   virtual seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
 					      std::string_view format,
 					      ceph::bufferlist&& input) const = 0;
@@ -90,9 +100,7 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
   seastar::future<> stop();
 
   /**
-   * register an admin socket hooks server
-   *
-   * The server registers a set of APIs under a common hook_server_tag.
+   * register an admin socket hook
    *
    * Commands (APIs) are registered under a command string. Incoming
    * commands are split by spaces and matched against the longest
@@ -100,19 +108,11 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    * registered, and an incoming command is 'foo bar baz', it is
    * matched with 'foo bar', while 'foo fud' will match 'foo'.
    *
-   * The entire incoming command string is passed to the registered
-   * hook.
-   *
-   * \param server_tag  a tag identifying the server registering the hook
-   * \param apis_served a vector of the commands served by this server. Each
-   *        command registration includes its identifying command string, the
+   * \param hook a hook which includes its identifying command string, the
    *        expected call syntax, and some help text.
    *
    * A note regarding the help text: if empty, command will not be
    * included in 'help' output.
-   *
-   * \retval a shared ptr to the asok server itself, or nullopt if
-   *         a block with same tag is already registered.
    */
   seastar::future<> register_command(std::unique_ptr<AdminSocketHook>&& hook);
 
@@ -161,9 +161,13 @@ private:
   seastar::gate stop_gate;
 
   /**
-   *  parse the incoming command into the sequence of words that identifies
-   *  the API, and into its arguments. Locate the command string in the
-   *  registered blocks.
+   * parse the incoming command vector, find a registered hook by looking up by
+   * its prefix, perform sanity checks on the parsed parameters with the hook's
+   * command description
+   *
+   * \param cmd a vector of string which presents a command
+   * \retval on success, a \c parsed_command_t is returned, tell_result_t with
+   *         detailed error messages is returned otherwise
    */
   std::variant<parsed_command_t, tell_result_t>
   parse_cmd(const std::vector<std::string>& cmd);
