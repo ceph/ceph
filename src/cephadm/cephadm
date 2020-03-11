@@ -1125,15 +1125,7 @@ def get_parm(option):
 def get_config_and_keyring():
     # type: () -> Tuple[str, str]
     if 'config_json' in args and args.config_json:
-        if args.config_json == '-':
-            try:
-                j = injected_stdin # type: ignore
-            except NameError:
-                j = sys.stdin.read()
-        else:
-            with open(args.config_json, 'r') as f:
-                j = f.read()
-        d = json.loads(j)
+        d = get_parm(args.config_json)
         config = d.get('config')
         keyring = d.get('keyring')
     else:
