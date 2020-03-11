@@ -1,6 +1,6 @@
+from io import BytesIO
 import six
 import logging
-from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 logger = logging.getLogger(__name__)
@@ -28,11 +28,11 @@ class XFSTestsDev(CephFSTestCase):
         # NOTE: On teuthology machines it's necessary to run "make" as
         # superuser since the repo is cloned somewhere in /tmp.
         self.mount_a.client_remote.run(args=['sudo', 'make'],
-                                       cwd=self.repo_path, stdout=StringIO(),
-                                       stderr=StringIO())
+                                       cwd=self.repo_path, stdout=BytesIO(),
+                                       stderr=BytesIO())
         self.mount_a.client_remote.run(args=['sudo', 'make', 'install'],
                                        cwd=self.repo_path, omit_sudo=False,
-                                       stdout=StringIO(), stderr=StringIO())
+                                       stdout=BytesIO(), stderr=BytesIO())
 
     def get_repo(self):
         """

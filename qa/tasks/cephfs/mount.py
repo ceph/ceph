@@ -1,11 +1,12 @@
 from contextlib import contextmanager
+from io import BytesIO
 import json
 import logging
 import datetime
+import six
 import time
 from textwrap import dedent
 import os
-from StringIO import StringIO
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import Filesystem
@@ -184,12 +185,12 @@ class CephFSMount(object):
         return self.client_remote.run(
                args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',
                      py_version, '-c', pyscript], wait=False, stdin=run.PIPE,
-               stdout=StringIO())
+               stdout=BytesIO())
 
     def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
         p.wait()
-        return p.stdout.getvalue().strip()
+        return six.ensure_str(p.stdout.getvalue().strip())
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
                   omit_sudo=True):
@@ -197,8 +198,8 @@ class CephFSMount(object):
             args = args.split()
 
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
-        return self.client_remote.run(args=args, stdout=StringIO(),
-                                      stderr=StringIO(), wait=wait,
+        return self.client_remote.run(args=args, stdout=BytesIO(),
+                                      stderr=BytesIO(), wait=wait,
                                       stdin=stdin, check_status=check_status,
                                       omit_sudo=omit_sudo)
 

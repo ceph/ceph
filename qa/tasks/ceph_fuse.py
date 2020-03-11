@@ -6,7 +6,7 @@ import contextlib
 import logging
 
 from teuthology import misc as teuthology
-from cephfs.fuse_mount import FuseMount
+from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
 
