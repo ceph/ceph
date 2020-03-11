@@ -1128,14 +1128,16 @@ def get_config_and_keyring():
         d = get_parm(args.config_json)
         config = d.get('config')
         keyring = d.get('keyring')
-    else:
-        if args.key:
-            keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
-        elif args.keyring:
-            with open(args.keyring, 'r') as f:
-                keyring = f.read()
+
+    if 'config' in args and args.config:
         with open(args.config, 'r') as f:
             config = f.read()
+
+    if 'key' in args and args.key:
+        keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
+    elif 'keyring' in args and args.keyring:
+        with open(args.keyring, 'r') as f:
+            keyring = f.read()
 
     if not config:
         raise Error('no config provided')
