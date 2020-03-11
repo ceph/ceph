@@ -7,8 +7,6 @@ import math
 from functools import partial
 from datetime import datetime
 
-import cherrypy
-
 import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
@@ -17,8 +15,8 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
-from ..services.rbd import RbdConfiguration, RbdService, format_bitmask, format_features,\
-    parse_image_spec
+from ..services.rbd import RbdConfiguration, RbdService, RbdSnapshotService, \
+    format_bitmask, format_features, parse_image_spec, rbd_call, rbd_image_call
 from ..tools import ViewCache, str_to_bool
 from ..services.exception import handle_rados_error, handle_rbd_error, \
     serialize_dashboard_exception
@@ -32,20 +30,6 @@ def RbdTask(name, metadata, wait_for):  # noqa: N802
         return Task("rbd/{}".format(name), metadata, wait_for,
                     partial(serialize_dashboard_exception, include_http_status=True))(func)
     return composed_decorator
-
-
-def _rbd_call(pool_name, namespace, func, *args, **kwargs):
-    with mgr.rados.open_ioctx(pool_name) as ioctx:
-        ioctx.set_namespace(namespace if namespace is not None else '')
-        func(ioctx, *args, **kwargs)
-
-
-def _rbd_image_call(pool_name, namespace, image_name, func, *args, **kwargs):
-    def _ioctx_func(ioctx, image_name, func, *args, **kwargs):
-        with rbd.Image(ioctx, image_name) as img:
-            func(ioctx, img, *args, **kwargs)
-
-    return _rbd_call(pool_name, namespace, _ioctx_func, image_name, func, *args, **kwargs)
 
 
 def _sort_features(features, enable=True):
@@ -101,14 +85,7 @@ class Rbd(RESTController):
     @handle_rbd_error()
     @handle_rados_error('pool')
     def get(self, image_spec):
-        pool_name, namespace, image_name = parse_image_spec(image_spec)
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        if namespace:
-            ioctx.set_namespace(namespace)
-        try:
-            return RbdService.rbd_image(ioctx, pool_name, namespace, image_name)
-        except rbd.ImageNotFound:
-            raise cherrypy.HTTPError(404)
+        return RbdService.get_image(image_spec)
 
     @RbdTask('create',
              {'pool_name': '{pool_name}', 'namespace': '{namespace}', 'image_name': '{name}'}, 2.0)
@@ -134,13 +111,19 @@ class Rbd(RESTController):
             RbdConfiguration(pool_ioctx=ioctx, namespace=namespace,
                              image_name=name).set_configuration(configuration)
 
-        _rbd_call(pool_name, namespace, _create)
+        rbd_call(pool_name, namespace, _create)
 
     @RbdTask('delete', ['{image_spec}'], 2.0)
     def delete(self, image_spec):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
+
+        image = RbdService.get_image(image_spec)
+        snapshots = image['snapshots']
+        for snap in snapshots:
+            RbdSnapshotService.remove_snapshot(image_spec, snap['name'], snap['is_protected'])
+
         rbd_inst = rbd.RBD()
-        return _rbd_call(pool_name, namespace, rbd_inst.remove, image_name)
+        return rbd_call(pool_name, namespace, rbd_inst.remove, image_name)
 
     @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
     def set(self, image_spec, name=None, size=None, features=None, configuration=None):
@@ -179,7 +162,7 @@ class Rbd(RESTController):
             RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).set_configuration(
                 configuration)
 
-        return _rbd_image_call(pool_name, namespace, image_name, _edit)
+        return rbd_image_call(pool_name, namespace, image_name, _edit)
 
     @RbdTask('copy',
              {'src_image_spec': '{image_spec}',
@@ -210,9 +193,9 @@ class Rbd(RESTController):
                 RbdConfiguration(pool_ioctx=d_ioctx, image_name=dest_image_name).set_configuration(
                     configuration)
 
-            return _rbd_call(dest_pool_name, dest_namespace, _copy)
+            return rbd_call(dest_pool_name, dest_namespace, _copy)
 
-        return _rbd_image_call(pool_name, namespace, image_name, _src_copy)
+        return rbd_image_call(pool_name, namespace, image_name, _src_copy)
 
     @RbdTask('flatten', ['{image_spec}'], 2.0)
     @RESTController.Resource('POST')
@@ -223,7 +206,7 @@ class Rbd(RESTController):
             image.flatten()
 
         pool_name, namespace, image_name = parse_image_spec(image_spec)
-        return _rbd_image_call(pool_name, namespace, image_name, _flatten)
+        return rbd_image_call(pool_name, namespace, image_name, _flatten)
 
     @RESTController.Collection('GET')
     def default_features(self):
@@ -239,7 +222,7 @@ class Rbd(RESTController):
         """
         pool_name, namespace, image_name = parse_image_spec(image_spec)
         rbd_inst = rbd.RBD()
-        return _rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
+        return rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
 
 
 @ApiController('/block/image/{image_spec}/snap', Scope.RBD_IMAGE)
@@ -255,18 +238,13 @@ class RbdSnapshot(RESTController):
         def _create_snapshot(ioctx, img, snapshot_name):
             img.create_snap(snapshot_name)
 
-        return _rbd_image_call(pool_name, namespace, image_name, _create_snapshot,
-                               snapshot_name)
+        return rbd_image_call(pool_name, namespace, image_name, _create_snapshot,
+                              snapshot_name)
 
     @RbdTask('snap/delete',
              ['{image_spec}', '{snapshot_name}'], 2.0)
     def delete(self, image_spec, snapshot_name):
-        def _remove_snapshot(ioctx, img, snapshot_name):
-            img.remove_snap(snapshot_name)
-
-        pool_name, namespace, image_name = parse_image_spec(image_spec)
-        return _rbd_image_call(pool_name, namespace, image_name, _remove_snapshot,
-                               snapshot_name)
+        return RbdSnapshotService.remove_snapshot(image_spec, snapshot_name)
 
     @RbdTask('snap/edit',
              ['{image_spec}', '{snapshot_name}'], 4.0)
@@ -284,7 +262,7 @@ class RbdSnapshot(RESTController):
                     img.unprotect_snap(snapshot_name)
 
         pool_name, namespace, image_name = parse_image_spec(image_spec)
-        return _rbd_image_call(pool_name, namespace, image_name, _edit, snapshot_name)
+        return rbd_image_call(pool_name, namespace, image_name, _edit, snapshot_name)
 
     @RbdTask('snap/rollback',
              ['{image_spec}', '{snapshot_name}'], 5.0)
@@ -295,7 +273,7 @@ class RbdSnapshot(RESTController):
             img.rollback_to_snap(snapshot_name)
 
         pool_name, namespace, image_name = parse_image_spec(image_spec)
-        return _rbd_image_call(pool_name, namespace, image_name, _rollback, snapshot_name)
+        return rbd_image_call(pool_name, namespace, image_name, _rollback, snapshot_name)
 
     @RbdTask('clone',
              {'parent_image_spec': '{image_spec}',
@@ -330,9 +308,9 @@ class RbdSnapshot(RESTController):
                 RbdConfiguration(pool_ioctx=ioctx, image_name=child_image_name).set_configuration(
                     configuration)
 
-            return _rbd_call(child_pool_name, child_namespace, _clone)
+            return rbd_call(child_pool_name, child_namespace, _clone)
 
-        _rbd_call(pool_name, namespace, _parent_clone)
+        rbd_call(pool_name, namespace, _parent_clone)
 
 
 @ApiController('/block/image/trash', Scope.RBD_IMAGE)
@@ -391,8 +369,8 @@ class RbdTrash(RESTController):
         for pool in pools:
             for image in pool['value']:
                 if image['deferment_end_time'] < now:
-                    _rbd_call(pool['pool_name'], image['namespace'],
-                              self.rbd_inst.trash_remove, image['id'], 0)
+                    rbd_call(pool['pool_name'], image['namespace'],
+                             self.rbd_inst.trash_remove, image['id'], 0)
 
     @RbdTask('trash/restore', ['{image_id_spec}', '{new_image_name}'], 2.0)
     @RESTController.Resource('POST')
@@ -400,8 +378,8 @@ class RbdTrash(RESTController):
     def restore(self, image_id_spec, new_image_name):
         """Restore an image from trash."""
         pool_name, namespace, image_id = parse_image_spec(image_id_spec)
-        return _rbd_call(pool_name, namespace, self.rbd_inst.trash_restore, image_id,
-                         new_image_name)
+        return rbd_call(pool_name, namespace, self.rbd_inst.trash_restore, image_id,
+                        new_image_name)
 
     @RbdTask('trash/remove', ['{image_id_spec}'], 2.0)
     def delete(self, image_id_spec, force=False):
@@ -410,8 +388,8 @@ class RbdTrash(RESTController):
         But an actively in-use by clones or has snapshots can not be removed.
         """
         pool_name, namespace, image_id = parse_image_spec(image_id_spec)
-        return _rbd_call(pool_name, namespace, self.rbd_inst.trash_remove, image_id,
-                         int(str_to_bool(force)))
+        return rbd_call(pool_name, namespace, self.rbd_inst.trash_remove, image_id,
+                        int(str_to_bool(force)))
 
 
 @ApiController('/block/pool/{pool_name}/namespace', Scope.RBD_IMAGE)
