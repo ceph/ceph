@@ -426,6 +426,8 @@ def call(command,  # type: List[str]
         **kwargs
     )
     # get current p.stdout flags, add O_NONBLOCK
+    assert process.stdout is not None
+    assert process.stderr is not None
     stdout_flags = fcntl.fcntl(process.stdout, fcntl.F_GETFL)
     stderr_flags = fcntl.fcntl(process.stderr, fcntl.F_GETFL)
     fcntl.fcntl(process.stdout, fcntl.F_SETFL, stdout_flags | os.O_NONBLOCK)
