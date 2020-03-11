@@ -85,7 +85,7 @@ for bind in rados rbd cephfs rgw; do
     BUILD_DOC=1 \
         CFLAGS="-iquote$TOPDIR/src/include" \
         CPPFLAGS="-iquote$TOPDIR/src/include" \
-        LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+        LDFLAGS="-L$vdir/lib -Wl,--no-as-needed,-rpath=$vdir/lib" \
         $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
     # rgwfile_version(), librgw_create(), rgw_mount()
     # since py3.5, distutils adds postfix in between ${bind} and so
@@ -93,7 +93,12 @@ for bind in rados rbd cephfs rgw; do
     if [ ! -e $lib_fn ]; then
        lib_fn=$vdir/lib/python*/*-packages/${bind}.so
     fi
-    nm $lib_fn | grep -E "U (lib)?${bind}" | \
+    if [ ${bind} = "cephfs" ]; then
+        func_prefix="ceph"
+    else
+        func_prefix="(lib)?${bind}"
+    fi
+    nm $lib_fn | grep -E "U ${func_prefix}" | \
         awk '{ print "void "$2"(void) {}" }' | \
         gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc -
     if [ ${bind} != rados ]; then
