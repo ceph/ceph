@@ -1080,7 +1080,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if self._apply_all_services():
                 continue  # did something, refresh
 
-            self._refresh_configs()
+            self._check_daemons()
 
             if self.upgrade_state and not self.upgrade_state.get('paused'):
                 self._do_upgrade()
@@ -1718,7 +1718,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     sm[n].size = self._get_spec_size(spec)
                     sm[n].created = self.spec_store.spec_created[dd.service_name()]
                 else:
-                    sm[n].size += 1
+                    sm[n].size = 0
                 if dd.status == 1:
                     sm[n].running += 1
                 if not sm[n].last_refresh or not dd.last_refresh or dd.last_refresh < sm[n].last_refresh:  # type: ignore
@@ -1828,18 +1828,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._remove_daemons(args)
 
     def remove_service(self, service_name):
-        args = []
-        for host, dm in self.cache.daemons.items():
-            for name, d in dm.items():
-                if d.matches_service(service_name):
-                    args.append(
-                        (d.name(), d.hostname, True)
-                    )
-        self.log.info('Remove service %s (daemons %s)' % (
-            service_name, [a[0] for a in args]))
+        self.log.info('Remove service %s' % service_name)
         self.spec_store.rm(service_name)
-        if args:
-            return self._remove_daemons(args)
+        self._kick_serve_loop()
         return trivial_result(['Removed service %s' % service_name])
 
     def get_inventory(self, host_filter=None, refresh=False):
@@ -2218,6 +2209,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         r = False
 
+        # sanity check
+        if daemon_type in ['mon', 'mgr'] and len(hosts) < 1:
+            self.log.debug('cannot scale mon|mgr below 1 (hosts=%s)' % hosts)
+            return False
+
         # add any?
         did_config = False
         hosts_with_daemons = {d.hostname for d in daemons}
@@ -2270,10 +2266,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     spec.service_name(), spec, e))
         return r
 
-    def _refresh_configs(self):
+    def _check_daemons(self):
         daemons = self.cache.get_daemons()
         grafanas = []  # type: List[orchestrator.DaemonDescription]
         for dd in daemons:
+            # orphan?
+            if dd.service_name() not in self.spec_store.specs and \
+               dd.daemon_type not in ['mon', 'mgr', 'osd']:
+                # (mon and mgr specs should always exist; osds aren't matched
+                # to a service spec)
+                self.log.info('Removing orphan daemon %s...' % dd.name())
+                self._remove_daemon(dd.name(), dd.hostname, True)
+
+            # dependencies?
             if dd.daemon_type == 'grafana':
                 # put running instances at the front of the list
                 grafanas.insert(0, dd)
@@ -2440,6 +2445,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'crash': orchestrator.PlacementSpec(all_hosts=True),
             }
             spec.placement = defaults[spec.service_type]
+        elif spec.service_type in ['mon', 'mgr'] and \
+             spec.placement.count is not None and \
+             spec.placement.count < 1:
+            raise OrchestratorError('cannot scale %s service below 1' % (
+                spec.service_type))
         self.log.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
@@ -3032,7 +3042,7 @@ class SimpleScheduler(BaseScheduler):
     def place(self, host_pool, count=None):
         # type: (List, Optional[int]) -> List[HostPlacementSpec]
         if not host_pool:
-            raise Exception('List of host candidates is empty')
+            return []
         host_pool = [x for x in host_pool]
         # shuffle for pseudo random selection
         random.shuffle(host_pool)
