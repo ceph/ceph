@@ -4,7 +4,7 @@
 # Ceph - scalable distributed file system
 #
 # Copyright (C) 2017 OVH
-# Copyright (C) 2019 Marc Schöchlin <ms-github@256bit.org>
+# Copyright (C) 2020 Marc Schöchlin <ms-github@256bit.org>
 #
 # This is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public
