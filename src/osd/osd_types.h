@@ -4363,6 +4363,13 @@ public:
     if (rollback_info_trimmed_to > newhead)
       rollback_info_trimmed_to = newhead;
 
+    if (log.empty()) {
+      // hmm, the whole log list is divergent, reset everything
+      head = tail = eversion_t();
+      can_rollback_to = eversion_t();
+      rollback_info_trimmed_to = eversion_t();
+    }
+
     return divergent;
   }
 

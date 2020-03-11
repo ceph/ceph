@@ -1388,6 +1388,68 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(dirty_big_info);
   }
 
+  // https://tracker.ceph.com/issues/44532
+  {
+    clear();
+
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_shard_t fromosd;
+    pg_info_t info;
+    list<hobject_t> remove_snap;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+
+    {
+      // construct my log
+      // (19'5300,19'5379], oldest(19'5301)
+      log.tail = eversion_t(19, 5300);
+
+      pg_log_entry_t e;
+      e.mark_unrollbackable();
+
+      for (uint64_t v = 5301; v <= 5379; v++) {
+        e.version = eversion_t(19, v);
+        e.soid.set_hash(v & 0xFFFFFFFF);
+        e.op = pg_log_entry_t::MODIFY;
+        log.log.push_back(e);
+        log.head = e.version;
+        info.last_update = e.version;
+      }
+
+      log.index();
+    }
+    {
+      // construct incoming log
+      // (19'4620,34'6006], oldest(33'4621)
+      olog.tail = eversion_t(19, 4620);
+
+      // add oldest log entry
+      pg_log_entry_t e;
+      e.mark_unrollbackable();
+      e.version = eversion_t(33, 4621);
+      e.soid.set_hash(0x1);
+      e.op = pg_log_entry_t::MODIFY;
+      olog.log.push_back(e);
+
+      // add newest log entry
+      e.version = eversion_t(34, 6006);
+      e.soid.set_hash(0x2);
+      e.op = pg_log_entry_t::MODIFY;
+      olog.log.push_back(e);
+
+      // reset cursors
+      olog.head = e.version;
+
+      oinfo.last_update = e.version;
+    }
+
+    TestHandler h(remove_snap);
+    missing.may_include_deletes = true;
+    merge_log(oinfo, olog, fromosd, info, &h,
+              dirty_info, dirty_big_info);
+  }
+
 }
 
 TEST_F(PGLogTest, proc_replica_log) {
