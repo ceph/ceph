@@ -543,12 +543,16 @@ class Module(MgrModule):
         elif command['prefix'] == 'telemetry on':
             if command.get('license') != LICENSE:
                 return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '--license " + LICENSE + "' to the 'ceph telemetry on' command."
-            self.set_config('enabled', True)
-            self.set_config('last_opt_revision', REVISION)
+            self.set_config('enabled', 'True')
+            self.set_config_option('enabled', 'True')
+            self.set_config('last_opt_revision', str(REVISION))
+            self.set_config_option('last_opt_revision', str(REVISION))
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
-            self.set_config('enabled', False)
-            self.set_config('last_opt_revision', REVISION)
+            self.set_config('enabled', 'False')
+            self.set_config_option('enabled', 'False')
+            self.set_config('last_opt_revision', '1')
+            self.set_config_option('last_opt_revision', '1')
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
@@ -579,7 +583,7 @@ class Module(MgrModule):
 
     def refresh_health_checks(self):
         health_checks = {}
-        if self.enabled and self.last_opt_revision < LAST_REVISION_RE_OPT_IN:
+        if self.config['enabled'] and int(self.config['last_opt_revision']) < LAST_REVISION_RE_OPT_IN:
             health_checks['TELEMETRY_CHANGED'] = {
                 'severity': 'warning',
                 'summary': 'Telemetry requires re-opt-in',
@@ -601,7 +605,7 @@ class Module(MgrModule):
 
             self.refresh_health_checks()
 
-            if self.last_opt_revision < LAST_REVISION_RE_OPT_IN:
+            if int(self.config['last_opt_revision']) < LAST_REVISION_RE_OPT_IN:
                 self.log.debug('Not sending report until user re-opts-in')
                 self.event.wait(1800)
                 continue
