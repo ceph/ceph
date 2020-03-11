@@ -5,16 +5,12 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
-#if FMT_VERSION >= 60000
-#include <fmt/chrono.h>
-#else
-#include <fmt/time.h>
-#endif
 #include "include/msgr.h"
 #include "include/random.h"
 
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
+#include "crimson/common/formatter.h"
 
 #include "Config.h"
 #include "Dispatcher.h"
@@ -98,32 +94,6 @@ inline uint64_t generate_client_cookie() {
 }
 
 } // namespace anonymous
-
-template <>
-struct fmt::formatter<seastar::lowres_system_clock::time_point> {
-  // ignore the format string
-  template <typename ParseContext>
-  constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const seastar::lowres_system_clock::time_point& t,
-	      FormatContext& ctx) {
-    std::time_t tt = std::chrono::duration_cast<std::chrono::seconds>(
-      t.time_since_epoch()).count();
-    auto milliseconds = (t.time_since_epoch() %
-			 std::chrono::seconds(1)).count();
-    return fmt::format_to(ctx.out(), "{:%Y-%m-%d %H:%M:%S} {:03d}",
-			  fmt::localtime(tt), milliseconds);
-  }
-};
-
-namespace std {
-inline ostream& operator<<(
-  ostream& out, const seastar::lowres_system_clock::time_point& t)
-{
-  return out << fmt::format("{}", t);
-}
-}
 
 namespace crimson::net {
 
