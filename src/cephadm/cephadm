@@ -2600,19 +2600,16 @@ def command_ceph_volume():
     tmp_config = None
     tmp_keyring = None
 
-    if args.config_json:
-        # note: this will always pull from args.config_json (we
-        # require it) and never args.config or args.keyring.
-        (config, keyring) = get_config_and_keyring()
+    (config, keyring) = get_config_and_keyring()
 
-        # tmp keyring file
-        tmp_keyring = write_tmp(keyring, uid, gid)
+    # tmp keyring file
+    tmp_keyring = write_tmp(keyring, uid, gid)
 
-        # tmp config file
-        tmp_config = write_tmp(config, uid, gid)
+    # tmp config file
+    tmp_config = write_tmp(config, uid, gid)
 
-        mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
-        mounts[tmp_keyring.name] = '/var/lib/ceph/bootstrap-osd/ceph.keyring:z'
+    mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
+    mounts[tmp_keyring.name] = '/var/lib/ceph/bootstrap-osd/ceph.keyring:z'
 
     c = CephContainer(
         image=args.image,
@@ -3949,6 +3946,12 @@ def _get_parser():
     parser_ceph_volume.add_argument(
         '--config-json',
         help='JSON file with config and (client.bootrap-osd) key')
+    parser_ceph_volume.add_argument(
+        '--config', '-c',
+        help='ceph conf file')
+    parser_ceph_volume.add_argument(
+        '--keyring', '-k',
+        help='ceph.keyring to pass through to the container')
     parser_ceph_volume.add_argument(
         'command', nargs='+',
         help='command')
