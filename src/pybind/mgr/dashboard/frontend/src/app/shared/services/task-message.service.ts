@@ -166,6 +166,12 @@ export class TaskMessageService {
     'host/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.host(metadata)
     ),
+    // OSD tasks
+    'osd/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.i18n(`OSDs (DriveGroups: {{tracking_id}})`, {
+        tracking_id: metadata.tracking_id
+      })
+    ),
     // Pool tasks
     'pool/create': this.newTaskMessage(
       this.commonOperations.create,
@@ -201,6 +207,19 @@ export class TaskMessageService {
     'ecp/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.ecp(metadata)
     ),
+    // Crush rule tasks
+    'crushRule/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) => this.crushRule(metadata),
+      (metadata) => ({
+        '17': this.i18n('Name is already used by {{name}}.', {
+          name: this.crushRule(metadata)
+        })
+      })
+    ),
+    'crushRule/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.crushRule(metadata)
+    ),
     // RBD tasks
     'rbd/create': this.newTaskMessage(
       this.commonOperations.create,
@@ -220,6 +239,9 @@ export class TaskMessageService {
       this.commonOperations.delete,
       this.rbd.default,
       (metadata) => ({
+        '16': this.i18n('{{rbd_name}} is busy.', {
+          rbd_name: this.rbd.default(metadata)
+        }),
         '39': this.i18n('{{rbd_name}} contains snapshots.', {
           rbd_name: this.rbd.default(metadata)
         })
@@ -427,6 +449,10 @@ export class TaskMessageService {
 
   ecp(metadata: any) {
     return this.i18n(`erasure code profile '{{name}}'`, { name: metadata.name });
+  }
+
+  crushRule(metadata: any) {
+    return this.i18n(`crush rule '{{name}}'`, { name: metadata.name });
   }
 
   iscsiTarget(metadata: any) {

@@ -268,7 +268,17 @@ template<typename T> int DencDumper<T>::i = 0;
 namespace _denc {
 template<typename T, typename... Us>
 inline constexpr bool is_any_of = (... || std::is_same_v<T, Us>);
-} // namespace _denc
+
+template<typename T, typename=void> struct underlying_type {
+  using type = T;
+};
+template<typename T>
+struct underlying_type<T, std::enable_if_t<std::is_enum_v<T>>> {
+  using type = std::underlying_type_t<T>;
+};
+template<typename T>
+using underlying_type_t = typename underlying_type<T>::type;
+}
 
 template<class It>
 struct is_const_iterator
@@ -297,12 +307,11 @@ get_pos_add(It& i) {
   return *reinterpret_cast<T*>(i.get_pos_add(sizeof(T)));
 }
 
-// network-order integer encoding
 template<typename T>
 struct denc_traits<
   T,
   std::enable_if_t<
-    _denc::is_any_of<T,
+    _denc::is_any_of<_denc::underlying_type_t<T>,
 		     ceph_le64, ceph_le32, ceph_le16, uint8_t
 #ifndef _CHAR_IS_SIGNED
 		       , int8_t
@@ -401,44 +410,6 @@ struct denc_traits<T, std::enable_if_t<!std::is_void_v<_denc::ExtType_t<T>>>>
     o = e;
   }
 };
-
-
-// enum
-//
-template<typename T>
-struct denc_traits<T, std::enable_if_t<std::is_enum_v<T>>>
-{
-  static constexpr bool supported = true;
-  static constexpr bool featured = false;
-  static constexpr bool bounded = true;
-  static constexpr bool need_contiguous = false;
-
-  using enum_type = T;
-  using underlying_type = std::underlying_type_t<enum_type>;
-  using base_traits = denc_traits<underlying_type>;
-
-  static void bound_encode(const T &o, size_t& p, uint64_t f=0) {
-    base_traits::bound_encode(static_cast<underlying_type>(o), p, f);
-  }
-  template<class It>
-  static std::enable_if_t<!is_const_iterator_v<It>>
-  encode(const T &o, It& p, uint64_t f=0) {
-    base_traits::encode(static_cast<underlying_type>(o), p, f);
-  }
-  template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode(T& o, It& p, uint64_t f=0) {
-    underlying_type v;
-    base_traits::decode(v, p, f);
-    o = static_cast<enum_type>(v);
-  }
-  static void decode(T& o, ceph::buffer::list::const_iterator &p) {
-    underlying_type v;
-    base_traits::decode(v, p);
-    o = static_cast<enum_type>(v);
-  }
-};
-
 
 // varint
 //

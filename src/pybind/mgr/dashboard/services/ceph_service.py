@@ -119,6 +119,24 @@ class CephService(object):
         return pools_w_stats
 
     @classmethod
+    def get_erasure_code_profiles(cls):
+        def _serialize_ecp(name, ecp):
+            def serialize_numbers(key):
+                value = ecp.get(key)
+                if value is not None:
+                    ecp[key] = int(value)
+
+            ecp['name'] = name
+            serialize_numbers('k')
+            serialize_numbers('m')
+            return ecp
+
+        ret = []
+        for name, ecp in mgr.get('osd_map').get('erasure_code_profiles', {}).items():
+            ret.append(_serialize_ecp(name, ecp))
+        return ret
+
+    @classmethod
     def get_pool_name_from_id(cls, pool_id):
         pool_list = cls.get_pool_list()
         for pool in pool_list:

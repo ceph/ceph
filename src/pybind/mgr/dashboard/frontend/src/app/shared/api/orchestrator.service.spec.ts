@@ -45,16 +45,4 @@ describe('OrchestratorService', () => {
     const req = httpTesting.expectOne(`${apiPath}/inventory?hostname=${host}`);
     expect(req.request.method).toBe('GET');
   });
-
-  it('should call osdCreate', () => {
-    const data = {
-      drive_group: {
-        host_pattern: '*'
-      }
-    };
-    service.osdCreate(data['drive_group']).subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/osd`);
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual(data);
-  });
 });

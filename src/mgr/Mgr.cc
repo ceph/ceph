@@ -324,6 +324,12 @@ void Mgr::init()
 
   cluster_state.final_init();
 
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  r = admin_socket->register_command(
+    "mgr_status", this,
+    "Dump mgr status");
+  ceph_assert(r == 0);
+
   dout(4) << "Complete." << dendl;
   initializing = false;
   initialized = true;
@@ -687,3 +693,29 @@ std::map<std::string, std::string> Mgr::get_services() const
   return py_module_registry->get_services();
 }
 
+int Mgr::call(
+  std::string_view admin_command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  std::ostream& errss,
+  bufferlist& out)
+{
+  try {
+    if (admin_command == "mgr_status") {
+      f->open_object_section("mgr_status");
+      cluster_state.with_mgrmap(
+	[f](const MgrMap& mm) {
+	  f->dump_unsigned("mgrmap_epoch", mm.get_epoch());
+	});
+      f->dump_bool("initialized", initialized);
+      f->close_section();
+      return 0;
+    } else {
+      return -ENOSYS;
+    }
+  } catch (const TOPNSPC::common::bad_cmd_get& e) {
+    errss << e.what();
+    return -EINVAL;
+  }
+  return 0;
+}

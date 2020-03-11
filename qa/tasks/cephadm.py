@@ -357,6 +357,7 @@ def ceph_bootstrap(ctx, config):
             '--fsid', fsid,
             '--mon-id', first_mon,
             '--mgr-id', first_mgr,
+            '--orphan-initial-daemons',   # we will do it explicitly!
             '--config', '{}/seed.{}.conf'.format(testdir, cluster_name),
             '--output-config', '/etc/ceph/{}.conf'.format(cluster_name),
             '--output-keyring',

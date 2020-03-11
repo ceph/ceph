@@ -59,8 +59,8 @@ export class PoolService {
     );
   }
 
-  getInfo(pool_name?: string) {
-    return this.http.get(`${this.apiPath}/_info` + (pool_name ? `?pool_name=${pool_name}` : ''));
+  getInfo() {
+    return this.http.get(`ui-${this.apiPath}/info`);
   }
 
   list(attrs: string[] = []) {
