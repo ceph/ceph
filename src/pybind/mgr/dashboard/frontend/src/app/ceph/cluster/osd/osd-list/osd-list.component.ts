@@ -10,7 +10,7 @@ import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
-import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
@@ -18,11 +18,13 @@ import { NotificationType } from '../../../../shared/enum/notification-type.enum
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { FinishedTask } from '../../../../shared/models/finished-task';
 import { Permissions } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { DepCheckerService } from '../../../../shared/services/dep-checker.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
+import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
 import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
 import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
@@ -83,6 +85,7 @@ export class OsdListComponent implements OnInit {
     private urlBuilder: URLBuilderService,
     private router: Router,
     private depCheckerService: DepCheckerService,
+    private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService
   ) {
@@ -227,8 +230,14 @@ export class OsdListComponent implements OnInit {
                 'is_safe_to_delete',
                 (id: number) => {
                   this.selection = new CdTableSelection();
-                  return this.osdService.delete(id, true);
-                }
+                  return this.taskWrapper.wrapTaskAroundCall({
+                    task: new FinishedTask('osd/' + URLVerbs.DELETE, {
+                      svc_id: id
+                    }),
+                    call: this.osdService.delete(id, true)
+                  });
+                },
+                true
               );
             }
           );
@@ -480,7 +489,8 @@ export class OsdListComponent implements OnInit {
     templateItemDescription: string,
     check: (ids: number[]) => Observable<any>,
     checkKey: string,
-    action: (id: number | number[]) => Observable<any>
+    action: (id: number | number[]) => Observable<any>,
+    taskWrapped: boolean = false
   ): void {
     check(this.getSelectedOsdIds()).subscribe((result) => {
       const modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
@@ -494,15 +504,27 @@ export class OsdListComponent implements OnInit {
             actionDescription: templateItemDescription
           },
           submitAction: () => {
-            observableForkJoin(
+            const observable = observableForkJoin(
               this.getSelectedOsdIds().map((osd: any) => action.call(this.osdService, osd))
-            ).subscribe(
-              () => {
-                this.getOsdList();
-                modalRef.hide();
-              },
-              () => modalRef.hide()
             );
+            if (taskWrapped) {
+              observable.subscribe(
+                undefined,
+                () => {
+                  this.getOsdList();
+                  modalRef.hide();
+                },
+                () => modalRef.hide()
+              );
+            } else {
+              observable.subscribe(
+                () => {
+                  this.getOsdList();
+                  modalRef.hide();
+                },
+                () => modalRef.hide()
+              );
+            }
           }
         }
       });
