@@ -4,7 +4,6 @@ Deploy and configure Keystone for Teuthology
 import argparse
 import contextlib
 import logging
-from cStringIO import StringIO
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -28,11 +27,9 @@ def run_in_keystone_dir(ctx, client, args, **kwargs):
 def get_toxvenv_dir(ctx):
     return ctx.tox.venv_path
 
-def run_in_tox_venv(ctx, remote, args, **kwargs):
-    return remote.run(
-        args=[ 'source', '{}/bin/activate'.format(get_toxvenv_dir(ctx)), run.Raw('&&') ] + args,
-        **kwargs
-    )
+def toxvenv_sh(ctx, remote, args, **kwargs):
+    activate = get_toxvenv_dir(ctx) + '/bin/activate'
+    return remote.sh(['source', activate, run.Raw('&&')] + args, **kwargs)
 
 def run_in_keystone_venv(ctx, client, args):
     run_in_keystone_dir(ctx, client,
@@ -107,12 +104,10 @@ def install_packages(ctx, config):
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         # use bindep to read which dependencies we need from keystone/bindep.txt
-        run_in_tox_venv(ctx, remote, ['pip', 'install', 'bindep'])
-        r = run_in_tox_venv(ctx, remote,
+        toxvenv_sh(ctx, remote, ['pip', 'install', 'bindep'])
+        packages[client] = toxvenv_sh(ctx, remote,
                 ['bindep', '--brief', '--file', '{}/bindep.txt'.format(get_keystone_dir(ctx))],
-                stdout=StringIO(),
-                check_status=False) # returns 1 on success?
-        packages[client] = r.stdout.getvalue().splitlines()
+                check_status=False).splitlines() # returns 1 on success?
         for dep in packages[client]:
             install_package(dep, remote)
     try:
