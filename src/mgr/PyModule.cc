@@ -371,6 +371,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       return r;
     }
 
+    register_options(pClass);
     r = load_options();
     if (r != 0) {
       derr << "Missing or invalid MODULE_OPTIONS attribute in module '"
@@ -388,6 +389,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
     if (!r) {
       dout(4) << "Standby mode available in module '" << module_name
               << "'" << dendl;
+      register_options(pStandbyClass);
     } else {
       dout(4) << "Standby mode not provided by module '" << module_name
               << "'" << dendl;
@@ -471,6 +473,22 @@ int PyModule::walk_dict_list(
   Py_DECREF(command_list);
 
   return r;
+}
+
+int PyModule::register_options(PyObject *cls)
+{
+  PyObject *pRegCmd = PyObject_CallMethod(
+    cls,
+    const_cast<char*>("_register_options"), const_cast<char*>("(s)"),
+      module_name.c_str());
+  if (pRegCmd != nullptr) {
+    Py_DECREF(pRegCmd);
+  } else {
+    derr << "Exception calling _register_options on " << get_name()
+         << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+  return 0;
 }
 
 int PyModule::load_commands()
