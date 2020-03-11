@@ -1308,7 +1308,7 @@ Rados object in state %s." % self.state)
             ret = rados_ioctx_create(self.cluster, _ioctx_name, &ioctx)
         if ret < 0:
             raise make_ex(ret, "error opening pool '%s'" % ioctx_name)
-        io = Ioctx(ioctx_name)
+        io = Ioctx(self, ioctx_name)
         io.io = ioctx
         return io
 
@@ -1334,7 +1334,7 @@ Rados object in state %s." % self.state)
             ret = rados_ioctx_create2(self.cluster, _pool_id, &ioctx)
         if ret < 0:
             raise make_ex(ret, "error opening pool id '%s'" % pool_id)
-        io = Ioctx(str(pool_id))
+        io = Ioctx(self, str(pool_id))
         io.io = ioctx
         return io
 
@@ -2291,7 +2291,8 @@ cdef class Ioctx(object):
     """rados.Ioctx object"""
     # NOTE(sileht): attributes declared in .pyd
 
-    def __init__(self, name):
+    def __init__(self, rados, name):
+        self.rados = rados
         self.name = name
         self.state = "open"
 
@@ -2352,6 +2353,15 @@ cdef class Ioctx(object):
 
         completion_obj.rados_comp = completion
         return completion_obj
+
+    def dup(self):
+        """
+        Duplicate IoCtx
+        """
+
+        ioctx = self.rados.open_ioctx2(self.get_pool_id())
+        ioctx.set_namespace(self.get_namespace())
+        return ioctx
 
     @requires(('object_name', str_type), ('oncomplete', opt(Callable)))
     def aio_stat(self, object_name, oncomplete):
