@@ -1,7 +1,0 @@
-tasks:
-- install:
-- ceph:
-overrides:
-  ceph:
-    log-whitelist:
-      - \(POOL_APP_NOT_ENABLED\)
