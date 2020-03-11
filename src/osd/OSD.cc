@@ -8449,7 +8449,6 @@ bool OSD::advance_pg(
   }
   ceph_assert(pg->is_locked());
   OSDMapRef lastmap = pg->get_osdmap();
-  ceph_assert(lastmap->get_epoch() < osd_epoch);
   set<PGRef> new_pgs;  // any split children
   bool ret = true;
 
