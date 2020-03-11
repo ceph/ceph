@@ -65,7 +65,7 @@
           </div>
         </div>
 
-        <div *ngIf="form.getValue('poolType')">
+        <div *ngIf="isReplicated || isErasure">
           <!-- PG Autoscale Mode -->
           <div class="form-group row">
             <label i18n
@@ -123,7 +123,7 @@
 
           <!-- Replica Size -->
           <div class="form-group row"
-               *ngIf="form.getValue('poolType') === 'replicated'">
+               *ngIf="isReplicated">
             <label class="cd-col-form-label required"
                    for="size"
                    i18n>Replicated size</label>
@@ -151,7 +151,7 @@
 
           <!-- Flags -->
           <div class="form-group row"
-               *ngIf="info.is_all_bluestore && form.getValue('poolType') === 'erasure'">
+               *ngIf="info.is_all_bluestore && isErasure">
             <label i18n
                    class="cd-col-form-label">Flags</label>
             <div class="cd-col-form-input">
@@ -187,13 +187,13 @@
         </div>
 
         <!-- CRUSH -->
-        <div *ngIf="form.getValue('poolType')">
+        <div *ngIf="isErasure || isReplicated">
 
           <legend i18n>CRUSH</legend>
 
           <!-- Erasure Profile select -->
           <div class="form-group row"
-               *ngIf="form.getValue('poolType') === 'erasure'">
+               *ngIf="isErasure">
             <label i18n
                    class="cd-col-form-label"
                    for="erasureProfile">Erasure code profile</label>
@@ -228,15 +228,15 @@
                   </button>
                   <button class="btn btn-light"
                           type="button"
-                          [disabled]="editing"
+                          *ngIf="!editing"
                           (click)="addErasureCodeProfile()">
                     <i [ngClass]="[icons.add]"
                        aria-hidden="true"></i>
                   </button>
                   <button class="btn btn-light"
                           type="button"
-                          (click)="deleteErasureCodeProfile()"
-                          [disabled]="editing || ecProfiles.length < 1">
+                          *ngIf="!editing"
+                          (click)="deleteErasureCodeProfile()">
                     <i [ngClass]="[icons.trash]"
                        aria-hidden="true"></i>
                   </button>
@@ -254,7 +254,18 @@
           </div>
 
           <!-- Crush ruleset selection -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="isErasure && !editing">
+            <label class="cd-col-form-label"
+                   for="crushRule"
+                   i18n>Crush ruleset</label>
+            <div class="cd-col-form-input">
+              <span class="form-text text-muted"
+                    i18n>A new crush ruleset will be implicitly created.</span>
+            </div>
+          </div>
+          <div class="form-group row"
+               *ngIf="isReplicated || editing">
             <label class="cd-col-form-label"
                    for="crushRule"
                    i18n>Crush ruleset</label>
@@ -262,8 +273,6 @@
               <ng-template #noRules>
                 <span class="form-text text-muted">
                   <span i18n>There are no rules.</span>&nbsp;
-                  <span *ngIf="form.getValue('poolType') === 'erasure'"
-                        i18n>A new crush ruleset will be implicitly created.</span>
                 </span>
               </ng-template>
               <div *ngIf="current.rules.length > 0; else noRules">
@@ -288,12 +297,30 @@
                       <i [ngClass]="[icons.questionCircle]"
                          aria-hidden="true"></i>
                     </button>
+                    <button class="btn btn-light"
+                            type="button"
+                            *ngIf="isReplicated && !editing"
+                            (click)="addCrushRule()">
+                      <i [ngClass]="[icons.add]"
+                         aria-hidden="true"></i>
+                    </button>
+                    <button class="btn btn-light"
+                            *ngIf="isReplicated && !editing"
+                            type="button"
+                            tooltip="This rule can't be deleted as it is in use."
+                            i18n-tooltip
+                            triggers=""
+                            #crushDeletionBtn="bs-tooltip"
+                            (click)="deleteCrushRule()">
+                      <i [ngClass]="[icons.trash]"
+                         aria-hidden="true"></i>
+                    </button>
                   </span>
                 </div>
                 <span class="form-text text-muted"
                       id="crush-info-block"
                       *ngIf="data.crushInfo && form.getValue('crushRule')">
-                  <tabset>
+                  <tabset #crushInfoTabs>
                     <tab i18n-heading
                          heading="Crush rule"
                          class="crush-rule-info">
@@ -311,8 +338,23 @@
                         </li>
                       </ol>
                     </tab>
+                    <tab i18n-heading
+                         heading="Used by pools"
+                         class="used-by-pools">
+                      <ng-template #ruleIsNotUsed>
+                        <span i18n>Rule is not in use.</span>
+                      </ng-template>
+                      <ul *ngIf="crushUsage; else ruleIsNotUsed">
+                        <li *ngFor="let pool of crushUsage">
+                          {{ pool }}
+                        </li>
+                      </ul>
+                    </tab>
                   </tabset>
                 </span>
+                <span class="invalid-feedback"
+                      *ngIf="form.showError('crushRule', formDir, 'required')"
+                      i18n>This field is required!</span>
                 <span class="invalid-feedback"
                       *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')"
                       i18n>The rule can't be used in the current cluster as it has
@@ -498,7 +540,7 @@
         </div>
 
         <!-- Pool configuration -->
-        <div [hidden]="form.get('poolType').value !== 'replicated' || data.applications.selected.indexOf('rbd') === -1">
+        <div [hidden]="isErasure || data.applications.selected.indexOf('rbd') === -1">
           <cd-rbd-configuration-form [form]="form"
                                      [initializeData]="initializeConfigData"
                                      (changes)="currentConfigurationValues = $event()">

@@ -14,7 +14,7 @@ export class ErasureCodeProfileService {
   apiPath = 'api/erasure_code_profile';
 
   formTooltips = {
-    // Copied from /srv/cephmgr/ceph-dev/doc/rados/operations/erasure-code.*.rst
+    // Copied from /doc/rados/operations/erasure-code.*.rst
     k: this.i18n(`Each object is split in data-chunks parts, each stored on a different OSD.`),
 
     m: this.i18n(`Compute coding chunks for each object and store them on different OSDs.
@@ -89,19 +89,11 @@ export class ErasureCodeProfileService {
     return this.http.post(this.apiPath, ecp, { observe: 'response' });
   }
 
-  update(ecp: ErasureCodeProfile) {
-    return this.http.put(`${this.apiPath}/${ecp.name}`, ecp, { observe: 'response' });
-  }
-
   delete(name: string) {
     return this.http.delete(`${this.apiPath}/${name}`, { observe: 'response' });
   }
 
-  get(name: string) {
-    return this.http.get(`${this.apiPath}/${name}`);
-  }
-
   getInfo() {
-    return this.http.get(`${this.apiPath}/_info`);
+    return this.http.get(`ui-${this.apiPath}/info`);
   }
 }
