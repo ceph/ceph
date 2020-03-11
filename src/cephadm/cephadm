@@ -1266,12 +1266,16 @@ def extract_uid_gid(img='', file_path='/var/lib/ceph'):
     if not img:
         img = args.image
 
-    out = CephContainer(
+    uid = CephContainer(
         image=img,
         entrypoint='stat',
-        args=['-c', '%u %g', file_path]
+        args=['-c', '%u', file_path]
     ).run()
-    (uid, gid) = out.split(' ')
+    gid = CephContainer(
+        image=img,
+        entrypoint='stat',
+        args=['-c', '%g', file_path]
+    ).run()
     return (int(uid), int(gid))
 
 def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
