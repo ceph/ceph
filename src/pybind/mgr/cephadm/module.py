@@ -65,6 +65,12 @@ DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 
+# ceph daemon types that use the ceph container image.
+# NOTE: listed in upgrade order!
+CEPH_UPGRADE_ORDER = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror']
+CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
+
+
 # for py2 compat
 try:
     from tempfile import TemporaryDirectory # py3
@@ -85,12 +91,6 @@ except ImportError:
         def __exit__(self, exc_type, exc_value, traceback):
             self.cleanup()
 
-
-# high-level TODO:
-#  - bring over some of the protections from ceph-deploy that guard against
-#    multiple bootstrapping / initialization
-
-CEPH_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rbd-mirror', 'rgw', 'crash']
 
 def name_to_config_section(name):
     """
@@ -792,7 +792,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         daemons = self.cache.get_daemons()
         done = 0
-        for daemon_type in CEPH_TYPES:
+        for daemon_type in CEPH_UPGRADE_ORDER:
             self.log.info('Upgrade: Checking %s daemons...' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
@@ -942,7 +942,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'value': target_name,
             'who': 'global',
         })
-        for daemon_type in CEPH_TYPES:
+        for daemon_type in CEPH_UPGRADE_ORDER:
             ret, image, err = self.mon_command({
                 'prefix': 'config rm',
                 'name': 'container_image',
@@ -1047,6 +1047,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug("serve starting")
         while self.run:
             self._check_hosts()
+            self.rm_util._remove_osds_bg()
 
             # refresh daemons
             self.log.debug('refreshing hosts')
@@ -1079,7 +1080,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if self._apply_all_services():
                 continue  # did something, refresh
 
-            self._refresh_configs()
+            self._check_daemons()
 
             if self.upgrade_state and not self.upgrade_state.get('paused'):
                 self._do_upgrade()
@@ -1717,7 +1718,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     sm[n].size = self._get_spec_size(spec)
                     sm[n].created = self.spec_store.spec_created[dd.service_name()]
                 else:
-                    sm[n].size += 1
+                    sm[n].size = 0
                 if dd.status == 1:
                     sm[n].running += 1
                 if not sm[n].last_refresh or not dd.last_refresh or dd.last_refresh < sm[n].last_refresh:  # type: ignore
@@ -1728,6 +1729,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     sm[n].container_image_name = 'mix'
         for n, spec in self.spec_store.specs.items():
             if n in sm:
+                continue
+            if service_type is not None and service_type != spec.service_type:
+                continue
+            if service_name is not None and service_name != n:
                 continue
             sm[n] = orchestrator.ServiceDescription(
                 service_name=n,
@@ -1823,18 +1828,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._remove_daemons(args)
 
     def remove_service(self, service_name):
-        args = []
-        for host, dm in self.cache.daemons.items():
-            for name, d in dm.items():
-                if d.matches_service(service_name):
-                    args.append(
-                        (d.name(), d.hostname, True)
-                    )
-        self.log.info('Remove service %s (daemons %s)' % (
-            service_name, [a[0] for a in args]))
+        self.log.info('Remove service %s' % service_name)
         self.spec_store.rm(service_name)
-        if args:
-            return self._remove_daemons(args)
+        self._kick_serve_loop()
         return trivial_result(['Removed service %s' % service_name])
 
     def get_inventory(self, host_filter=None, refresh=False):
@@ -2213,6 +2209,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         r = False
 
+        # sanity check
+        if daemon_type in ['mon', 'mgr'] and len(hosts) < 1:
+            self.log.debug('cannot scale mon|mgr below 1 (hosts=%s)' % hosts)
+            return False
+
         # add any?
         did_config = False
         hosts_with_daemons = {d.hostname for d in daemons}
@@ -2265,10 +2266,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     spec.service_name(), spec, e))
         return r
 
-    def _refresh_configs(self):
+    def _check_daemons(self):
         daemons = self.cache.get_daemons()
         grafanas = []  # type: List[orchestrator.DaemonDescription]
         for dd in daemons:
+            # orphan?
+            if dd.service_name() not in self.spec_store.specs and \
+               dd.daemon_type not in ['mon', 'mgr', 'osd']:
+                # (mon and mgr specs should always exist; osds aren't matched
+                # to a service spec)
+                self.log.info('Removing orphan daemon %s...' % dd.name())
+                self._remove_daemon(dd.name(), dd.hostname, True)
+
+            # dependencies?
             if dd.daemon_type == 'grafana':
                 # put running instances at the front of the list
                 grafanas.insert(0, dd)
@@ -2435,6 +2445,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'crash': orchestrator.PlacementSpec(all_hosts=True),
             }
             spec.placement = defaults[spec.service_type]
+        elif spec.service_type in ['mon', 'mgr'] and \
+             spec.placement.count is not None and \
+             spec.placement.count < 1:
+            raise OrchestratorError('cannot scale %s service below 1' % (
+                spec.service_type))
         self.log.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
@@ -2949,15 +2964,15 @@ receivers:
                 continue
             found.add(OSDRemoval(daemon.daemon_id, replace, force,
                                  daemon.hostname, daemon.name(),
-                                 datetime.datetime.utcnow()))
+                                 datetime.datetime.utcnow(), -1))
 
         not_found = {osd_id for osd_id in osd_ids if osd_id not in [x.osd_id for x in found]}
         if not_found:
             raise OrchestratorError('Unable to find OSD: %s' % not_found)
 
-        for osd in found:
-            self.rm_util.to_remove_osds.add(osd)
-            # trigger the serve loop to initiate the removal
+        self.rm_util.queue_osds_for_removal(found)
+
+        # trigger the serve loop to initiate the removal
         self._kick_serve_loop()
         return trivial_result(f"Scheduled OSD(s) for removal")
 
@@ -2965,7 +2980,7 @@ receivers:
         """
         The CLI call to retrieve an osd removal report
         """
-        return trivial_result(self.rm_util.osd_removal_report)
+        return trivial_result(self.rm_util.report)
 
     def list_specs(self) -> orchestrator.Completion:
         """
@@ -3027,7 +3042,7 @@ class SimpleScheduler(BaseScheduler):
     def place(self, host_pool, count=None):
         # type: (List, Optional[int]) -> List[HostPlacementSpec]
         if not host_pool:
-            raise Exception('List of host candidates is empty')
+            return []
         host_pool = [x for x in host_pool]
         # shuffle for pseudo random selection
         random.shuffle(host_pool)

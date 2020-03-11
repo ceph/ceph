@@ -11,6 +11,13 @@ class OsdTest(DashboardTestCase):
 
     AUTH_ROLES = ['cluster-manager']
 
+    @classmethod
+    def setUpClass(cls):
+        super(OsdTest, cls).setUpClass()
+        cls._load_module('test_orchestrator')
+        cmd = ['orch', 'set', 'backend', 'test_orchestrator']
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
+
     def tearDown(self):
         self._post('/api/osd/0/mark_in')
 
@@ -82,9 +89,13 @@ class OsdTest(DashboardTestCase):
 
     def test_create_lost_destroy_remove(self):
         # Create
-        self._post('/api/osd', {
-            'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
-            'svc_id': 5
+        self._task_post('/api/osd', {
+            'method': 'bare',
+            'data': {
+                'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
+                'svc_id': 5
+            },
+            'tracking_id': 'bare-5'
         })
         self.assertStatus(201)
         # Lost
@@ -96,6 +107,40 @@ class OsdTest(DashboardTestCase):
         # Purge
         self._post('/api/osd/5/purge')
         self.assertStatus(200)
+
+    def test_create_with_drive_group(self):
+        data = {
+            'method': 'drive_groups',
+            'data': {
+                'test': {
+                    'host_pattern': '*',
+                    'data_devices': {
+                        'vendor': 'abc',
+                        'model': 'cba',
+                        'rotational': True,
+                        'size': '4 TB'
+                    },
+                    'wal_devices': {
+                        'vendor': 'def',
+                        'model': 'fed',
+                        'rotational': False,
+                        'size': '1 TB'
+                    },
+                    'db_devices': {
+                        'vendor': 'ghi',
+                        'model': 'ihg',
+                        'rotational': False,
+                        'size': '512 GB'
+                    },
+                    'wal_slots': 5,
+                    'db_slots': 5,
+                    'encrypted': True
+                }
+            },
+            'tracking_id': 'test'
+        }
+        self._post('/api/osd', data)
+        self.assertStatus(201)
 
     def test_safe_to_destroy(self):
         osd_dump = json.loads(self._ceph_cmd(['osd', 'dump', '-f', 'json']))

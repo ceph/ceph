@@ -5,9 +5,10 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import * as _ from 'lodash';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -18,6 +19,7 @@ import {
   i18nProviders
 } from '../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../core/not-found/not-found.component';
+import { CrushRuleService } from '../../../shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -26,6 +28,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CrushRule } from '../../../shared/models/crush-rule';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { Permission } from '../../../shared/models/permissions';
+import { PoolFormInfo } from '../../../shared/models/pool-form-info';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../pool';
@@ -42,6 +45,7 @@ describe('PoolFormComponent', () => {
   let form: CdFormGroup;
   let router: Router;
   let ecpService: ErasureCodeProfileService;
+  let crushRuleService: CrushRuleService;
 
   const setPgNum = (pgs: number): AbstractControl => {
     const control = formHelper.setValue('pgNum', pgs);
@@ -94,14 +98,13 @@ describe('PoolFormComponent', () => {
         op: 'emit'
       }
     ];
-    component.info['crush_rules_' + type].push(rule);
     return rule;
   };
 
   const expectValidSubmit = (
     pool: any,
-    taskName: string,
-    poolServiceMethod: 'create' | 'update'
+    taskName = 'pool/create',
+    poolServiceMethod: 'create' | 'update' = 'create'
   ) => {
     spyOn(poolService, poolServiceMethod).and.stub();
     const taskWrapper = TestBed.get(TaskWrapperService);
@@ -119,25 +122,40 @@ describe('PoolFormComponent', () => {
     });
   };
 
-  const setUpPoolComponent = () => {
-    fixture = TestBed.createComponent(PoolFormComponent);
-    fixtureHelper = new FixtureHelper(fixture);
-    component = fixture.componentInstance;
-    component.info = {
-      pool_names: [],
+  let infoReturn: PoolFormInfo;
+  const setInfo = () => {
+    const ecp1 = new ErasureCodeProfile();
+    ecp1.name = 'ecp1';
+    infoReturn = {
+      pool_names: ['someExistingPoolName'],
       osd_count: OSDS,
       is_all_bluestore: true,
       bluestore_compression_algorithm: 'snappy',
       compression_algorithms: ['snappy'],
       compression_modes: ['none', 'passive'],
-      crush_rules_replicated: [],
-      crush_rules_erasure: [],
+      crush_rules_replicated: [
+        createCrushRule({ id: 0, min: 2, max: 4, name: 'rep1', type: 'replicated' }),
+        createCrushRule({ id: 1, min: 3, max: 18, name: 'rep2', type: 'replicated' }),
+        createCrushRule({ id: 2, min: 1, max: 9, name: 'used_rule', type: 'replicated' })
+      ],
+      crush_rules_erasure: [
+        createCrushRule({ id: 3, min: 1, max: 1, name: 'ecp1', type: 'erasure' })
+      ],
+      erasure_code_profiles: [ecp1],
       pg_autoscale_default_mode: 'off',
-      pg_autoscale_modes: ['off', 'warn', 'on']
+      pg_autoscale_modes: ['off', 'warn', 'on'],
+      used_rules: {
+        used_rule: ['some.pool.uses.it']
+      }
     };
-    const ecp1 = new ErasureCodeProfile();
-    ecp1.name = 'ecp1';
-    component.ecProfiles = [ecp1];
+  };
+
+  const setUpPoolComponent = () => {
+    fixture = TestBed.createComponent(PoolFormComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    fixtureHelper = new FixtureHelper(fixture);
     form = component.form;
     formHelper = new FormHelper(form);
   };
@@ -162,14 +180,20 @@ describe('PoolFormComponent', () => {
     ]
   });
 
+  let navigationSpy: jasmine.Spy;
+
   beforeEach(() => {
-    setUpPoolComponent();
     poolService = TestBed.get(PoolService);
-    spyOn(poolService, 'getInfo').and.callFake(() => [component.info]);
+    setInfo();
+    spyOn(poolService, 'getInfo').and.callFake(() => of(infoReturn));
+
     ecpService = TestBed.get(ErasureCodeProfileService);
-    spyOn(ecpService, 'list').and.callFake(() => [component.ecProfiles]);
+    crushRuleService = TestBed.get(CrushRuleService);
+
     router = TestBed.get(Router);
-    spyOn(router, 'navigate').and.stub();
+    navigationSpy = spyOn(router, 'navigate').and.stub();
+
+    setUpPoolComponent();
   });
 
   it('should create', () => {
@@ -180,9 +204,10 @@ describe('PoolFormComponent', () => {
     let poolPermissions: Permission;
     let authStorageService: AuthStorageService;
 
-    const testForRedirect = (times: number) => {
+    const expectRedirect = (redirected = true) => {
+      navigationSpy.calls.reset();
       component.authenticate();
-      expect(router.navigate).toHaveBeenCalledTimes(times);
+      expect(navigationSpy).toHaveBeenCalledTimes(redirected ? 1 : 0);
     };
 
     beforeEach(() => {
@@ -204,28 +229,28 @@ describe('PoolFormComponent', () => {
     });
 
     it('navigates if user is not allowed', () => {
-      testForRedirect(1);
+      expectRedirect();
       poolPermissions.read = true;
-      testForRedirect(2);
+      expectRedirect();
       poolPermissions.delete = true;
-      testForRedirect(3);
+      expectRedirect();
       poolPermissions.update = true;
-      testForRedirect(4);
+      expectRedirect();
       component.editing = true;
       poolPermissions.update = false;
       poolPermissions.create = true;
-      testForRedirect(5);
+      expectRedirect();
     });
 
     it('does not navigate users with right permissions', () => {
       poolPermissions.read = true;
       poolPermissions.create = true;
-      testForRedirect(0);
+      expectRedirect(false);
       component.editing = true;
       poolPermissions.update = true;
-      testForRedirect(0);
+      expectRedirect(false);
       poolPermissions.create = false;
-      testForRedirect(0);
+      expectRedirect(false);
     });
   });
 
@@ -237,7 +262,7 @@ describe('PoolFormComponent', () => {
     it('is invalid at the beginning all sub forms are valid', () => {
       expect(form.valid).toBeFalsy();
       ['name', 'poolType', 'pgNum'].forEach((name) => formHelper.expectError(name, 'required'));
-      ['crushRule', 'size', 'erasureProfile', 'ecOverwrites'].forEach((name) =>
+      ['size', 'crushRule', 'erasureProfile', 'ecOverwrites'].forEach((name) =>
         formHelper.expectValid(name)
       );
       expect(component.form.get('compression').valid).toBeTruthy();
@@ -248,7 +273,6 @@ describe('PoolFormComponent', () => {
       formHelper.expectError('name', 'required');
       formHelper.expectValidChange('name', 'some-name');
       formHelper.expectValidChange('name', 'name/with/slash');
-      component.info.pool_names.push('someExistingPoolName');
       formHelper.expectErrorChange('name', 'someExistingPoolName', 'uniqueName');
       formHelper.expectErrorChange('name', 'wrong format with spaces', 'pattern');
     });
@@ -285,9 +309,18 @@ describe('PoolFormComponent', () => {
       expect(form.valid).toBeTruthy();
     });
 
-    it('validates crushRule', () => {
-      formHelper.expectValid('crushRule');
+    it('validates crushRule with multiple crush rules', () => {
+      formHelper.expectValidChange('poolType', 'replicated');
+      form.get('crushRule').updateValueAndValidity();
+      formHelper.expectError('crushRule', 'required'); // As multiple rules exist
       formHelper.expectErrorChange('crushRule', { min_size: 20 }, 'tooFewOsds');
+    });
+
+    it('validates crushRule with no crush rules', () => {
+      infoReturn.crush_rules_replicated = [];
+      setUpPoolComponent();
+      formHelper.expectValidChange('poolType', 'replicated');
+      formHelper.expectValid('crushRule');
     });
 
     it('validates size', () => {
@@ -456,14 +489,14 @@ describe('PoolFormComponent', () => {
       });
 
       it('has no effect if pool type is not set', () => {
-        component['rulesChange']();
+        component['poolTypeChange']('');
         expect(component.current.rules).toEqual([]);
       });
 
       it('shows all replicated rules when pool type is "replicated"', () => {
         formHelper.setValue('poolType', 'replicated');
         expect(component.current.rules).toEqual(component.info.crush_rules_replicated);
-        expect(component.current.rules.length).toBe(2);
+        expect(component.current.rules.length).toBe(3);
       });
 
       it('shows all erasure code rules when pool type is "erasure"', () => {
@@ -473,9 +506,13 @@ describe('PoolFormComponent', () => {
       });
 
       it('disables rule field if only one rule exists which is used in the disabled field', () => {
-        formHelper.setValue('poolType', 'erasure');
+        infoReturn.crush_rules_replicated = [
+          createCrushRule({ id: 0, min: 2, max: 4, name: 'rep1', type: 'replicated' })
+        ];
+        setUpPoolComponent();
+        formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(component.info.crush_rules_erasure[0]);
+        expect(control.value).toEqual(component.info.crush_rules_replicated[0]);
         expect(control.disabled).toBe(true);
       });
 
@@ -486,15 +523,14 @@ describe('PoolFormComponent', () => {
         expect(control.disabled).toBe(false);
       });
 
-      it('changing between both types will not leave crushRule in a bad state', () => {
-        formHelper.setValue('poolType', 'erasure');
+      it('changing between both pool types will not forget the crush rule selection', () => {
         formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(null);
-        expect(control.disabled).toBe(false);
+        const currentRule = component.info.crush_rules_replicated[0];
+        control.setValue(currentRule);
         formHelper.setValue('poolType', 'erasure');
-        expect(control.value).toEqual(component.info.crush_rules_erasure[0]);
-        expect(control.disabled).toBe(true);
+        formHelper.setValue('poolType', 'replicated');
+        expect(control.value).toEqual(currentRule);
       });
     });
   });
@@ -507,16 +543,16 @@ describe('PoolFormComponent', () => {
       });
     };
 
-    it('returns nothing if osd count is 0', () => {
+    it('returns 0 if osd count is 0', () => {
       component.info.osd_count = 0;
-      expect(component.getMinSize()).toBe(undefined);
-      expect(component.getMaxSize()).toBe(undefined);
+      expect(component.getMinSize()).toBe(0);
+      expect(component.getMaxSize()).toBe(0);
     });
 
-    it('returns nothing if info is not there', () => {
+    it('returns 0 if info is not there', () => {
       delete component.info;
-      expect(component.getMinSize()).toBe(undefined);
-      expect(component.getMaxSize()).toBe(undefined);
+      expect(component.getMinSize()).toBe(0);
+      expect(component.getMaxSize()).toBe(0);
     });
 
     it('returns minimum and maximum of rule', () => {
@@ -753,10 +789,13 @@ describe('PoolFormComponent', () => {
   });
 
   describe('crushRule', () => {
+    const selectRuleByIndex = (n: number) => {
+      formHelper.setValue('crushRule', component.info.crush_rules_replicated[n]);
+    };
+
     beforeEach(() => {
-      createCrushRule({ name: 'replicatedRule' });
-      fixture.detectChanges();
       formHelper.setValue('poolType', 'replicated');
+      selectRuleByIndex(0);
       fixture.detectChanges();
     });
 
@@ -766,13 +805,130 @@ describe('PoolFormComponent', () => {
     });
 
     it('should show info if the info button is clicked', () => {
-      fixture.detectChanges();
       const infoButton = fixture.debugElement.query(By.css('#crush-info-button'));
       infoButton.triggerEventHandler('click', null);
       expect(component.data.crushInfo).toBeTruthy();
       fixture.detectChanges();
       expect(infoButton.classes['active']).toBeTruthy();
       fixtureHelper.expectIdElementsVisible(['crushRule', 'crush-info-block'], true);
+    });
+
+    it('should know which rules are in use', () => {
+      selectRuleByIndex(2);
+      expect(component.crushUsage).toEqual(['some.pool.uses.it']);
+    });
+
+    describe('crush rule deletion', () => {
+      let taskWrapper: TaskWrapperService;
+      let deletion: CriticalConfirmationModalComponent;
+      let deleteSpy: jasmine.Spy;
+      let modalSpy: jasmine.Spy;
+
+      const callDeletion = () => {
+        component.deleteCrushRule();
+        deletion.submitActionObservable();
+      };
+
+      const callDeletionWithRuleByIndex = (index: number) => {
+        deleteSpy.calls.reset();
+        selectRuleByIndex(index);
+        callDeletion();
+      };
+
+      const expectSuccessfulDeletion = (name: string) => {
+        expect(crushRuleService.delete).toHaveBeenCalledWith(name);
+        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith({
+          task: {
+            name: 'crushRule/delete',
+            metadata: {
+              name: name
+            }
+          },
+          call: undefined // because of stub
+        });
+      };
+
+      beforeEach(() => {
+        modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
+          (deletionClass, config) => {
+            deletion = Object.assign(new deletionClass(), config.initialState);
+            return {
+              content: deletion
+            };
+          }
+        );
+        deleteSpy = spyOn(crushRuleService, 'delete').and.callFake((name) => {
+          const rules = infoReturn.crush_rules_replicated;
+          const index = _.findIndex(rules, (rule) => rule.rule_name === name);
+          rules.splice(index, 1);
+        });
+        taskWrapper = TestBed.get(TaskWrapperService);
+        spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
+      });
+
+      describe('with unused rule', () => {
+        beforeEach(() => {
+          callDeletionWithRuleByIndex(0);
+        });
+
+        it('should have called delete', () => {
+          expectSuccessfulDeletion('rep1');
+        });
+
+        it('should not open the tooltip nor the crush info', () => {
+          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.data.crushInfo).toBe(false);
+        });
+
+        it('should reload the rules after deletion', () => {
+          const expected = infoReturn.crush_rules_replicated;
+          const currentRules = component.current.rules;
+          expect(currentRules.length).toBe(expected.length);
+          expect(currentRules).toEqual(expected);
+        });
+      });
+
+      describe('rule in use', () => {
+        beforeEach(() => {
+          spyOn(global, 'setTimeout').and.callFake((fn: Function) => fn());
+          component.crushInfoTabs = { tabs: [{}, {}, {}] } as TabsetComponent; // Mock it
+          deleteSpy.calls.reset();
+          selectRuleByIndex(2);
+          component.deleteCrushRule();
+        });
+
+        it('should not have called delete and opened the tooltip', () => {
+          expect(crushRuleService.delete).not.toHaveBeenCalled();
+          expect(component.crushDeletionBtn.isOpen).toBe(true);
+          expect(component.data.crushInfo).toBe(true);
+        });
+
+        it('should open the third crush info tab', () => {
+          expect(component.crushInfoTabs).toEqual({
+            tabs: [{}, {}, { active: true }]
+          } as TabsetComponent);
+        });
+
+        it('should hide the tooltip when clicking on delete again', () => {
+          component.deleteCrushRule();
+          expect(component.crushDeletionBtn.isOpen).toBe(false);
+        });
+
+        it('should hide the tooltip when clicking on add', () => {
+          modalSpy.and.callFake((): any => ({
+            content: {
+              submitAction: of('someRule')
+            }
+          }));
+          component.addCrushRule();
+          expect(component.crushDeletionBtn.isOpen).toBe(false);
+        });
+
+        it('should hide the tooltip when changing the crush rule', () => {
+          selectRuleByIndex(0);
+          expect(component.crushDeletionBtn.isOpen).toBe(false);
+        });
+      });
     });
   });
 
@@ -849,154 +1005,178 @@ describe('PoolFormComponent', () => {
         formHelper.setValue(name, settings[name]);
       });
     };
-    const testCreate = (pool: object) => {
-      expectValidSubmit(pool, 'pool/create', 'create');
-    };
-
-    beforeEach(() => {
-      createCrushRule({ name: 'replicatedRule' });
-      createCrushRule({ name: 'erasureRule', type: 'erasure', id: 1 });
-    });
 
     describe('erasure coded pool', () => {
-      it('minimum requirements', () => {
+      const expectEcSubmit = (o: any) =>
+        expectValidSubmit(
+          Object.assign(
+            {
+              pool: 'ecPool',
+              pool_type: 'erasure',
+              pg_autoscale_mode: 'off',
+              erasure_code_profile: 'ecp1',
+              pg_num: 4
+            },
+            o
+          )
+        );
+
+      beforeEach(() => {
+        setMultipleValues({
+          name: 'ecPool',
+          poolType: 'erasure',
+          pgNum: 4
+        });
+      });
+
+      it('minimum requirements without ECP to create ec pool', () => {
+        // Mock that no ec profiles exist
+        infoReturn.erasure_code_profiles = [];
+        setUpPoolComponent();
         setMultipleValues({
           name: 'minECPool',
           poolType: 'erasure',
           pgNum: 4
         });
-        testCreate({
+        expectValidSubmit({
           pool: 'minECPool',
           pool_type: 'erasure',
+          pg_autoscale_mode: 'off',
           pg_num: 4
         });
       });
 
-      it('with erasure coded profile', () => {
+      it('creates ec pool with erasure coded profile', () => {
         const ecp = { name: 'ecpMinimalMock' };
         setMultipleValues({
-          name: 'ecpPool',
-          poolType: 'erasure',
-          pgNum: 16,
-          size: 2, // Will be ignored
           erasureProfile: ecp
         });
-        testCreate({
-          pool: 'ecpPool',
-          pool_type: 'erasure',
-          pg_num: 16,
+        expectEcSubmit({
           erasure_code_profile: ecp.name
         });
       });
 
-      it('with ec_overwrite flag', () => {
+      it('creates ec pool with ec_overwrite flag', () => {
         setMultipleValues({
-          name: 'ecOverwrites',
-          poolType: 'erasure',
-          pgNum: 32,
           ecOverwrites: true
         });
-        testCreate({
-          pool: 'ecOverwrites',
-          pool_type: 'erasure',
-          pg_num: 32,
+        expectEcSubmit({
           flags: ['ec_overwrites']
         });
       });
 
-      it('with rbd qos settings', () => {
+      it('should ignore replicated set settings for ec pools', () => {
         setMultipleValues({
-          name: 'replicatedRbdQos',
-          poolType: 'replicated',
-          size: 2,
-          pgNum: 32
+          size: 2 // will be ignored
         });
-        component.currentConfigurationValues = {
-          rbd_qos_bps_limit: 55
-        };
-        testCreate({
-          pool: 'replicatedRbdQos',
-          pool_type: 'replicated',
-          size: 2,
-          pg_num: 32,
-          configuration: {
-            rbd_qos_bps_limit: 55
-          }
+        expectEcSubmit({});
+      });
+
+      it('creates a pool with compression', () => {
+        setMultipleValues({
+          mode: 'passive',
+          algorithm: 'lz4',
+          minBlobSize: '4 K',
+          maxBlobSize: '4 M',
+          ratio: 0.7
+        });
+        expectEcSubmit({
+          compression_mode: 'passive',
+          compression_algorithm: 'lz4',
+          compression_min_blob_size: 4096,
+          compression_max_blob_size: 4194304,
+          compression_required_ratio: 0.7
+        });
+      });
+
+      it('creates a pool with application metadata', () => {
+        component.data.applications.selected = ['cephfs', 'rgw'];
+        expectEcSubmit({
+          application_metadata: ['cephfs', 'rgw']
         });
       });
     });
 
-    describe('replicated coded pool', () => {
-      it('minimum requirements', () => {
-        const ecp = { name: 'ecpMinimalMock' };
+    describe('with replicated pool', () => {
+      const expectReplicatedSubmit = (o: any) =>
+        expectValidSubmit(
+          Object.assign(
+            {
+              pool: 'repPool',
+              pool_type: 'replicated',
+              pg_autoscale_mode: 'off',
+              pg_num: 16,
+              rule_name: 'rep1',
+              size: 3
+            },
+            o
+          )
+        );
+      beforeEach(() => {
+        setMultipleValues({
+          name: 'repPool',
+          poolType: 'replicated',
+          crushRule: infoReturn.crush_rules_replicated[0],
+          size: 3,
+          pgNum: 16
+        });
+      });
+
+      it('uses the minimum requirements for replicated pools', () => {
+        // Mock that no replicated rules exist
+        infoReturn.crush_rules_replicated = [];
+        setUpPoolComponent();
+
         setMultipleValues({
           name: 'minRepPool',
           poolType: 'replicated',
           size: 2,
-          erasureProfile: ecp, // Will be ignored
-          pgNum: 8
+          pgNum: 32
         });
-        testCreate({
+        expectValidSubmit({
           pool: 'minRepPool',
           pool_type: 'replicated',
-          pg_num: 8,
+          pg_num: 32,
+          pg_autoscale_mode: 'off',
           size: 2
         });
       });
 
-      it('with quotas', () => {
+      it('ignores erasure only set settings for replicated pools', () => {
         setMultipleValues({
-          name: 'RepPoolWithQuotas',
-          poolType: 'replicated',
+          erasureProfile: { name: 'ecpMinimalMock' }, // Will be ignored
+          ecOverwrites: true // Will be ignored
+        });
+        /**
+         *  As pgCalc is triggered through profile changes, which is normally not possible,
+         *  if type `replicated` is set, pgNum will be set to 256 with the current rule for
+         *  a replicated pool.
+         */
+        expectReplicatedSubmit({
+          pg_num: 256
+        });
+      });
+
+      it('creates a pool with quotas', () => {
+        setMultipleValues({
           max_bytes: 1024 * 1024,
-          max_objects: 3000,
-          pgNum: 8
+          max_objects: 3000
         });
-        testCreate({
-          pool: 'RepPoolWithQuotas',
-          pool_type: 'replicated',
+        expectReplicatedSubmit({
           quota_max_bytes: 1024 * 1024,
-          quota_max_objects: 3000,
-          pg_num: 8
+          quota_max_objects: 3000
         });
       });
-    });
 
-    it('pool with compression', () => {
-      setMultipleValues({
-        name: 'compression',
-        poolType: 'erasure',
-        pgNum: 64,
-        mode: 'passive',
-        algorithm: 'lz4',
-        minBlobSize: '4 K',
-        maxBlobSize: '4 M',
-        ratio: 0.7
-      });
-      testCreate({
-        pool: 'compression',
-        pool_type: 'erasure',
-        pg_num: 64,
-        compression_mode: 'passive',
-        compression_algorithm: 'lz4',
-        compression_min_blob_size: 4096,
-        compression_max_blob_size: 4194304,
-        compression_required_ratio: 0.7
-      });
-    });
-
-    it('pool with application metadata', () => {
-      setMultipleValues({
-        name: 'apps',
-        poolType: 'erasure',
-        pgNum: 128
-      });
-      component.data.applications.selected = ['cephfs', 'rgw'];
-      testCreate({
-        pool: 'apps',
-        pool_type: 'erasure',
-        pg_num: 128,
-        application_metadata: ['cephfs', 'rgw']
+      it('creates a pool with rbd qos settings', () => {
+        component.currentConfigurationValues = {
+          rbd_qos_bps_limit: 55
+        };
+        expectReplicatedSubmit({
+          configuration: {
+            rbd_qos_bps_limit: 55
+          }
+        });
       });
     });
   });
@@ -1012,7 +1192,7 @@ describe('PoolFormComponent', () => {
       pool = new Pool('somePoolName');
       pool.type = 'replicated';
       pool.size = 3;
-      pool.crush_rule = 'someRule';
+      pool.crush_rule = 'rep1';
       pool.pg_num = 32;
       pool.options = {};
       pool.options.compression_mode = 'passive';
@@ -1041,11 +1221,12 @@ describe('PoolFormComponent', () => {
 
     describe('after ngOnInit', () => {
       beforeEach(() => {
-        component.editing = true;
+        setUrl('/pool/edit/somePoolName');
         fixture.detectChanges();
       });
 
       it('disabled inputs', () => {
+        fixture.detectChanges();
         const disabled = ['poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'];
         disabled.forEach((controlName) => {
           return expect(form.get(controlName).disabled).toBeTruthy();

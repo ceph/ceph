@@ -2,22 +2,20 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
-import { ErasureCodeProfile } from '../models/erasure-code-profile';
-import { ErasureCodeProfileService } from './erasure-code-profile.service';
+import { CrushRuleService } from './crush-rule.service';
 
-describe('ErasureCodeProfileService', () => {
-  let service: ErasureCodeProfileService;
+describe('CrushRuleService', () => {
+  let service: CrushRuleService;
   let httpTesting: HttpTestingController;
-  const apiPath = 'api/erasure_code_profile';
-  const testProfile: ErasureCodeProfile = { name: 'test', plugin: 'jerasure', k: 2, m: 1 };
+  const apiPath = 'api/crush_rule';
 
   configureTestBed({
     imports: [HttpClientTestingModule],
-    providers: [ErasureCodeProfileService, i18nProviders]
+    providers: [CrushRuleService, i18nProviders]
   });
 
   beforeEach(() => {
-    service = TestBed.get(ErasureCodeProfileService);
+    service = TestBed.get(CrushRuleService);
     httpTesting = TestBed.get(HttpTestingController);
   });
 
@@ -29,14 +27,8 @@ describe('ErasureCodeProfileService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call list', () => {
-    service.list().subscribe();
-    const req = httpTesting.expectOne(apiPath);
-    expect(req.request.method).toBe('GET');
-  });
-
   it('should call create', () => {
-    service.create(testProfile).subscribe();
+    service.create({ root: 'default', name: 'someRule', failure_domain: 'osd' }).subscribe();
     const req = httpTesting.expectOne(apiPath);
     expect(req.request.method).toBe('POST');
   });

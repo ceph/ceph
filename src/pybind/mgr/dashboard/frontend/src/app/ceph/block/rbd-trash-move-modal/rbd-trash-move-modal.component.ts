@@ -18,9 +18,12 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   styleUrls: ['./rbd-trash-move-modal.component.scss']
 })
 export class RbdTrashMoveModalComponent implements OnInit {
+  // initial state
   poolName: string;
   namespace: string;
   imageName: string;
+  hasSnapshots: boolean;
+
   imageSpec: ImageSpec;
   imageSpecStr: string;
   executingTasks: ExecutingTask[];

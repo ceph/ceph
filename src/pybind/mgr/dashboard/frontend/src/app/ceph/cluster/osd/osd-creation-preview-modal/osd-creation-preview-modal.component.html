@@ -7,8 +7,8 @@
           [formGroup]="formGroup"
           novalidate>
       <div class="modal-body">
-        <h3>Drive Group</h3>
-        <pre>{{ driveGroup.spec | json}}</pre>
+        <h3 i18n>DriveGroups</h3>
+        <pre>{{ driveGroups | json}}</pre>
       </div>
       <div class="modal-footer">
         <cd-submit-button (submitAction)="onSubmit()"

@@ -488,7 +488,7 @@ Usage:
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         report = completion.result
-        if len(report) == 0:
+        if not report:
             return HandleCommandResult(stdout="No OSD remove/replace operations reported")
         table = PrettyTable(
             ['NAME', 'HOST', 'PGS', 'STARTED_AT'],
@@ -497,8 +497,8 @@ Usage:
         table.left_padding_width = 0
         table.right_padding_width = 1
         # TODO: re-add sorted and sort by pg_count
-        for osd, status in report.items():
-            table.add_row((osd.fullname, osd.nodename, status, osd.started_at))
+        for osd in report:
+            table.add_row((osd.fullname, osd.nodename, osd.pg_count_str, osd.started_at))
 
         return HandleCommandResult(stdout=table.get_string())
 

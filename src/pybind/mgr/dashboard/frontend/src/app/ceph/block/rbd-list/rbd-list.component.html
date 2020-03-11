@@ -28,7 +28,8 @@
 
 <ng-template #parentTpl
              let-value="value">
-  <span *ngIf="value">{{ value.pool_name }}<span *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
+  <span *ngIf="value">{{ value.pool_name }}<span
+          *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
   <span *ngIf="!value">-</span>
 </ng-template>
 
@@ -40,4 +41,21 @@
   <br> All blocks will be copied from parent
   <strong>{{ value.parent }}</strong> to child
   <strong>{{ value.child }}</strong>.
+</ng-template>
+
+<ng-template #deleteTpl
+             let-hasSnapshots="hasSnapshots"
+             let-snapshots="snapshots">
+  <div class="alert alert-warning"
+       *ngIf="hasSnapshots"
+       role="alert">
+    <span i18n>Deleting this image will also delete all its snapshots.</span>
+    <br>
+    <ng-container *ngIf="snapshots.length > 0">
+      <span i18n>The following snapshots are currently protected and will be removed:</span>
+      <ul>
+        <li *ngFor="let snapshot of snapshots">{{ snapshot }}</li>
+      </ul>
+    </ng-container>
+  </div>
 </ng-template>

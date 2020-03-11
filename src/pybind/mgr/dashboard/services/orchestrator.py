@@ -105,8 +105,8 @@ class ServiceManager(ResourceManager):
 
 class OsdManager(ResourceManager):
     @wait_api_result
-    def create(self, drive_group):
-        return self.api.create_osds([drive_group])
+    def create(self, drive_groups):
+        return self.api.create_osds(drive_groups)
 
 
 class OrchClient(object):

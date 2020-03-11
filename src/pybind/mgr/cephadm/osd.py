@@ -3,7 +3,7 @@ import json
 import logging
 import time
 
-from typing import List, NamedTuple, Dict, Any, Set, Union
+from typing import List, Dict, Any, Set, Union
 
 import orchestrator
 from orchestrator import OrchestratorError
@@ -11,13 +11,22 @@ from orchestrator import OrchestratorError
 logger = logging.getLogger(__name__)
 
 
-class OSDRemoval(NamedTuple):
-    osd_id: int
-    replace: bool
-    force: bool
-    nodename: str
-    fullname: str
-    started_at: datetime.datetime
+class OSDRemoval(object):
+    def __init__(self,
+                 osd_id: str,
+                 replace: bool,
+                 force: bool,
+                 nodename: str,
+                 fullname: str,
+                 start_at: datetime.datetime,
+                 pg_count: int):
+        self.osd_id = osd_id
+        self.replace = replace
+        self.force = force
+        self.nodename = nodename
+        self.fullname = fullname
+        self.started_at = start_at
+        self.pg_count = pg_count
 
     # needed due to changing 'started_at' attr
     def __eq__(self, other):
@@ -26,6 +35,16 @@ class OSDRemoval(NamedTuple):
     def __hash__(self):
         return hash(self.osd_id)
 
+    def __repr__(self):
+        return ('<OSDRemoval>(osd_id={}, replace={}, force={}, nodename={}'
+                ', fullname={}, started_at={}, pg_count={})').format(
+            self.osd_id, self.replace, self.force, self.nodename,
+            self.fullname, self.started_at, self.pg_count)
+
+    @property
+    def pg_count_str(self) -> str:
+        return 'n/a' if self.pg_count < 0 else str(self.pg_count)
+
 
 class RemoveUtil(object):
     def __init__(self, mgr):
@@ -33,6 +52,12 @@ class RemoveUtil(object):
         self.to_remove_osds: Set[OSDRemoval] = set()
         self.osd_removal_report: Dict[OSDRemoval, Union[int,str]] = dict()
 
+    @property
+    def report(self) -> Set[OSDRemoval]:
+        return self.to_remove_osds.copy()
+
+    def queue_osds_for_removal(self, osds: Set[OSDRemoval]):
+        self.to_remove_osds.update(osds)
 
     def _remove_osds_bg(self) -> None:
         """
@@ -41,7 +66,7 @@ class RemoveUtil(object):
         """
         logger.debug(
             f"{len(self.to_remove_osds)} OSDs are scheduled for removal: {list(self.to_remove_osds)}")
-        self.osd_removal_report = self._generate_osd_removal_status()
+        self._update_osd_removal_status()
         remove_osds: set = self.to_remove_osds.copy()
         for osd in remove_osds:
             if not osd.force:
@@ -77,17 +102,14 @@ class RemoveUtil(object):
             logger.debug(f"Removing {osd.osd_id} from the queue.")
             self.to_remove_osds.remove(osd)
 
-    def _generate_osd_removal_status(self) -> Dict[OSDRemoval, Union[int,str]]:
+    def _update_osd_removal_status(self):
         """
         Generate a OSD report that can be printed to the CLI
         """
-        logger.debug("Assembling report for osd rm status")
-        report: Dict[OSDRemoval, Union[int,str]] = {}
+        logger.debug("Update OSD removal status")
         for osd in self.to_remove_osds:
-            pg_count = self.get_pg_count(str(osd.osd_id))
-            report[osd] = pg_count if pg_count != -1 else 'n/a'
-        logger.debug(f"Reporting: {report}")
-        return report
+            osd.pg_count = self.get_pg_count(str(osd.osd_id))
+        logger.debug(f"OSD removal status: {self.to_remove_osds}")
 
     def drain_osd(self, osd_id: str) -> bool:
         """
