@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 import json
 import logging
+import time
 
 from ceph.deployment.drive_group import DriveGroupSpecs, DriveGroupValidationError
 from mgr_util import get_most_recent_rate
@@ -129,19 +130,51 @@ class Osd(RESTController):
                     'ids': [svc_id]
                 })
 
+    def _check_delete(self, osd_ids):
+        # type: (List[str]) -> Dict[str, Any]
+        """
+        Check if it's safe to remove OSD(s).
+
+        :param osd_ids: list of OSD IDs
+        :return: a dictionary contains the following attributes:
+            `safe`: bool, indicate if it's safe to remove OSDs.
+            `message`: str, help message if it's not safe to remove OSDs.
+        """
+        _ = osd_ids
+        health_data = mgr.get('health')  # type: ignore
+        health = json.loads(health_data['json'])
+        checks = health['checks'].keys()
+        unsafe_checks = set(['OSD_FULL', 'OSD_BACKFILLFULL', 'OSD_NEARFULL'])
+        failed_checks = checks & unsafe_checks
+        msg = 'Removing OSD(s) is not recommended because of these failed health check(s): {}.'.\
+            format(', '.join(failed_checks)) if failed_checks else ''
+        return {
+            'safe': not bool(failed_checks),
+            'message': msg
+        }
+
     @DeletePermission
     @raise_if_no_orchestrator
     @handle_orchestrator_error('osd')
+    @osd_task('delete', {'svc_id': '{svc_id}'})
     def delete(self, svc_id, force=None):
         orch = OrchClient.instance()
         if not force:
             logger.info('Check for removing osd.%s...', svc_id)
-            check = orch.osds.check_remove([svc_id])
+            check = self._check_delete([svc_id])
             if not check['safe']:
                 logger.error('Unable to remove osd.%s: %s', svc_id, check['message'])
                 raise DashboardException(component='osd', msg=check['message'])
         logger.info('Start removing osd.%s...', svc_id)
         orch.osds.remove([svc_id])
+        while True:
+            removal_osds = orch.osds.removing_status()
+            logger.info('Current removing OSDs %s', removal_osds)
+            pending = [osd for osd in removal_osds if osd.osd_id == svc_id]
+            if not pending:
+                break
+            logger.info('Wait until osd.%s is removed...', svc_id)
+            time.sleep(60)
 
     @RESTController.Resource('POST', query_params=['deep'])
     @UpdatePermission
@@ -287,8 +320,7 @@ class Osd(RESTController):
         """
         :type ids: int|[int]
         """
-        orch = OrchClient.instance()
-        check = orch.osds.check_remove([svc_ids])
+        check = self._check_delete(svc_ids)
         return {
             'is_safe_to_delete': check.get('safe', False),
             'message': check.get('message', '')
