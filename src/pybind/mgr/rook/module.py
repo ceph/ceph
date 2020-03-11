@@ -1,3 +1,4 @@
+import datetime
 import threading
 import functools
 import os
@@ -249,8 +250,68 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [orchestrator.HostSpec(n) for n in self.rook_cluster.get_node_names()]
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
+    def describe_service(self, service_type=None, service_name=None,
+                         refresh=False):
+        now = datetime.datetime.utcnow()
 
+        # CephCluster
+        cl = self.rook_cluster.rook_api_get(
+            "cephclusters/{0}".format(self.rook_cluster.rook_env.cluster_name))
+        self.log.debug('CephCluster %s' % cl)
+        image_name = cl['spec'].get('cephVersion', {}).get('image', None)
+        num_nodes = len(self.rook_cluster.get_node_names())
+
+        spec = {}
+        spec['mon'] = orchestrator.ServiceDescription(
+            service_name='mon',
+            spec=orchestrator.ServiceSpec(
+                'mon',
+                placement=orchestrator.PlacementSpec(
+                    count=cl['spec'].get('mon', {}).get('count', 1),
+                ),
+            ),
+            size=cl['spec'].get('mon', {}).get('count', 1),
+            container_image_name=image_name,
+            last_refresh=now,
+        )
+        spec['mgr'] = orchestrator.ServiceDescription(
+            service_name='mgr',
+            spec=orchestrator.ServiceSpec(
+                'mgr',
+                placement=orchestrator.PlacementSpec.from_string('count:1'),
+            ),
+            size=1,
+            container_image_name=image_name,
+            last_refresh=now,
+        )
+        if not cl['spec'].get('crashCollector', {}).get('disable', False):
+            spec['crash'] = orchestrator.ServiceDescription(
+                service_name='crash',
+                spec=orchestrator.ServiceSpec(
+                    'crash',
+                    placement=orchestrator.PlacementSpec.from_string('all:true'),
+                ),
+                size=num_nodes,
+                container_image_name=image_name,
+                last_refresh=now,
+            )
+
+        # FIXME: CephFilesystems
+        # FIXME: CephObjectstores
+
+        for dd in self._list_daemons():
+            if dd.service_name() not in spec:
+                continue
+            spec[dd.service_name()].running += 1
+        return [v for k, v in spec.items()]
+
+    @deferred_read
+    def list_daemons(self, daemon_type=None, daemon_id=None, host=None,
+                     refresh=False):
+        return self._list_daemons(daemon_type, daemon_id, host, refresh)
+
+    def _list_daemons(self, daemon_type=None, daemon_id=None, host=None,
+                      refresh=False):
         pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host)
 
         result = []
