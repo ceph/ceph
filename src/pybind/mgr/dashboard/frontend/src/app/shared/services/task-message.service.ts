@@ -207,6 +207,19 @@ export class TaskMessageService {
     'ecp/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.ecp(metadata)
     ),
+    // Crush rule tasks
+    'crushRule/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) => this.crushRule(metadata),
+      (metadata) => ({
+        '17': this.i18n('Name is already used by {{name}}.', {
+          name: this.crushRule(metadata)
+        })
+      })
+    ),
+    'crushRule/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.crushRule(metadata)
+    ),
     // RBD tasks
     'rbd/create': this.newTaskMessage(
       this.commonOperations.create,
@@ -436,6 +449,10 @@ export class TaskMessageService {
 
   ecp(metadata: any) {
     return this.i18n(`erasure code profile '{{name}}'`, { name: metadata.name });
+  }
+
+  crushRule(metadata: any) {
+    return this.i18n(`crush rule '{{name}}'`, { name: metadata.name });
   }
 
   iscsiTarget(metadata: any) {
