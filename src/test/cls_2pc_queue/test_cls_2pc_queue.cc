@@ -702,3 +702,95 @@ TEST_F(TestCls2PCQueue, MultiProducerConsumer)
   ASSERT_EQ(entries.size(), 0);
 }
 
+TEST_F(TestCls2PCQueue, ReserveSpillover)
+{
+  const std::string queue_name = "my-queue";
+  const auto max_size = 1024U*1024U;
+  const auto number_of_ops = 1024U;
+  const auto number_of_elements = 8U;
+  const auto size_to_reserve = 64U;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_2pc_queue_init(op, queue_name, max_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  for (auto i = 0U; i < number_of_ops; ++i) {
+    cls_2pc_reservation::id_t res_id;
+    ASSERT_EQ(cls_2pc_queue_reserve(ioctx, queue_name, op, size_to_reserve, number_of_elements, res_id), 0);
+    ASSERT_NE(res_id, cls_2pc_reservation::NO_ID);
+  }
+  cls_2pc_reservations reservations;
+  ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
+  ASSERT_EQ(reservations.size(), number_of_ops);
+  for (const auto& r : reservations) {
+      ASSERT_NE(r.first, cls_2pc_reservation::NO_ID);
+      ASSERT_GT(r.second.timestamp.time_since_epoch().count(), 0);
+  }
+}
+
+TEST_F(TestCls2PCQueue, CommitSpillover)
+{
+  const std::string queue_name = "my-queue";
+  const auto max_size = 1024U*1024U;
+  const auto number_of_ops = 1024U;
+  const auto number_of_elements = 4U;
+  const auto size_to_reserve = 128U;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_2pc_queue_init(op, queue_name, max_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  for (auto i = 0U; i < number_of_ops; ++i) {
+    cls_2pc_reservation::id_t res_id;
+    ASSERT_EQ(cls_2pc_queue_reserve(ioctx, queue_name, op, size_to_reserve, number_of_elements, res_id), 0);
+    ASSERT_NE(res_id, cls_2pc_reservation::NO_ID);
+  }
+  cls_2pc_reservations reservations;
+  ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
+  for (const auto& r : reservations) {
+    const std::string element_prefix("foo");
+        std::vector<bufferlist> data(number_of_elements);
+        auto total_size = 0UL;
+        // create vector of buffer lists
+        std::generate(data.begin(), data.end(), [j = 0, &element_prefix, &total_size] () mutable {
+            bufferlist bl;
+            bl.append(element_prefix + to_string(j++));
+            total_size += bl.length();
+            return bl;
+          });
+      ASSERT_NE(r.first, cls_2pc_reservation::NO_ID);
+      cls_2pc_queue_commit(op, data, r.first);
+      ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+  }
+  ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
+  ASSERT_EQ(reservations.size(), 0);
+}
+
+TEST_F(TestCls2PCQueue, AbortSpillover)
+{
+  const std::string queue_name = "my-queue";
+  const auto max_size = 1024U*1024U;
+  const auto number_of_ops = 1024U;
+  const auto number_of_elements = 4U;
+  const auto size_to_reserve = 128U;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_2pc_queue_init(op, queue_name, max_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  for (auto i = 0U; i < number_of_ops; ++i) {
+    cls_2pc_reservation::id_t res_id;
+    ASSERT_EQ(cls_2pc_queue_reserve(ioctx, queue_name, op, size_to_reserve, number_of_elements, res_id), 0);
+    ASSERT_NE(res_id, cls_2pc_reservation::NO_ID);
+  }
+  cls_2pc_reservations reservations;
+  ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
+  for (const auto& r : reservations) {
+      ASSERT_NE(r.first, cls_2pc_reservation::NO_ID);
+      cls_2pc_queue_abort(op, r.first);
+      ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+  }
+  ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
+  ASSERT_EQ(reservations.size(), 0);
+}
+
