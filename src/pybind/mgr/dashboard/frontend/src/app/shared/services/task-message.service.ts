@@ -226,6 +226,9 @@ export class TaskMessageService {
       this.commonOperations.delete,
       this.rbd.default,
       (metadata) => ({
+        '16': this.i18n('{{rbd_name}} is busy.', {
+          rbd_name: this.rbd.default(metadata)
+        }),
         '39': this.i18n('{{rbd_name}} contains snapshots.', {
           rbd_name: this.rbd.default(metadata)
         })

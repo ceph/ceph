@@ -99,6 +99,67 @@ describe('RbdListComponent', () => {
     });
   });
 
+  describe('handling of deletion', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+    });
+
+    it('should check if there are no snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd'
+      });
+      expect(component.hasSnapshots()).toBeFalsy();
+    });
+
+    it('should check if there are snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [{}, {}]
+      });
+      expect(component.hasSnapshots()).toBeTruthy();
+    });
+
+    it('should get delete disable description', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [
+          {
+            children: [{}]
+          }
+        ]
+      });
+      expect(component.getDeleteDisableDesc()).toBe(
+        'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.'
+      );
+    });
+
+    it('should list all protected snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [
+          {
+            name: 'snap1',
+            is_protected: false
+          },
+          {
+            name: 'snap2',
+            is_protected: true
+          }
+        ]
+      });
+
+      expect(component.listProtectedSnapshots()).toEqual(['snap2']);
+    });
+  });
+
   describe('handling of executing tasks', () => {
     let images: RbdModel[];
 
