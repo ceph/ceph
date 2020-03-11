@@ -13270,6 +13270,115 @@ void BlueStore::_do_write_small(
   return;
 }
 
+bool BlueStore::BigDeferredWriteContext::can_defer(
+    BlueStore::extent_map_t::iterator ep,
+    uint64_t prefer_deferred_size,
+    uint64_t block_size,
+    uint64_t offset,
+    uint64_t l)
+{
+  bool res = false;
+  auto& blob = ep->blob->get_blob();
+  if (offset >= ep->blob_start() &&
+    blob.is_mutable()) {
+    off = offset;
+    b_off = offset - ep->blob_start();
+    uint64_t chunk_size = blob.get_chunk_size(block_size);
+    uint64_t ondisk = blob.get_ondisk_length();
+    used = std::min(l, ondisk - b_off);
+
+    // will read some data to fill out the chunk?
+    head_read = p2phase<uint64_t>(b_off, chunk_size);
+    tail_read = p2nphase<uint64_t>(b_off + used, chunk_size);
+    b_off -= head_read;
+
+    ceph_assert(b_off % chunk_size == 0);
+    ceph_assert(blob_aligned_len() % chunk_size == 0);
+
+    res = blob_aligned_len() <= prefer_deferred_size &&
+      blob_aligned_len() <= ondisk &&
+      blob.is_allocated(b_off, blob_aligned_len());
+  }
+  return res;
+}
+
+bool BlueStore::BigDeferredWriteContext::apply_defer(
+    BlueStore::extent_map_t::iterator ep)
+{
+  int r = ep->blob->get_blob().map(
+    b_off, blob_aligned_len(),
+    [&](const bluestore_pextent_t& pext,
+      uint64_t offset,
+      uint64_t length) {
+        // apply deferred if overwrite breaks blob continuity only.
+        // if it totally overlaps some pextent - fallback to regular write
+        if (pext.offset < offset ||
+          pext.end() > offset + length) {
+          res_extents.emplace_back(bluestore_pextent_t(offset, length));
+          return 0;
+        }
+        return -1;
+    });
+  return r >= 0;
+}
+
+void BlueStore::_do_write_big_apply_deferred(
+    TransContext* txc,
+    CollectionRef& c,
+    OnodeRef o,
+    BlueStore::extent_map_t::iterator ep,
+    BlueStore::BigDeferredWriteContext& dctx,
+    bufferlist::iterator& blp,
+    WriteContext* wctx)
+{
+  bluestore_deferred_op_t* op = _get_deferred_op(txc);
+  op->op = bluestore_deferred_op_t::OP_WRITE;
+  op->extents.swap(dctx.res_extents);
+
+  dout(20) << __func__ << "  reading head 0x" << std::hex << dctx.head_read
+    << " and tail 0x" << dctx.tail_read << std::dec << dendl;
+  if (dctx.head_read) {
+    int r = _do_read(c.get(), o,
+      dctx.off - dctx.head_read,
+      dctx.head_read,
+      op->data,
+      0);
+    ceph_assert(r >= 0 && r <= (int)dctx.head_read);
+    size_t zlen = dctx.head_read - r;
+    if (zlen) {
+      op->data.append_zero(zlen);
+      logger->inc(l_bluestore_write_pad_bytes, zlen);
+    }
+    logger->inc(l_bluestore_write_penalty_read_ops);
+  }
+  blp.copy(dctx.used, op->data);
+
+  if (dctx.tail_read) {
+    bufferlist tail_bl;
+    int r = _do_read(c.get(), o,
+      dctx.off + dctx.used, dctx.tail_read,
+      tail_bl, 0);
+    ceph_assert(r >= 0 && r <= (int)dctx.tail_read);
+    size_t zlen = dctx.tail_read - r;
+    if (zlen) {
+      tail_bl.append_zero(zlen);
+      logger->inc(l_bluestore_write_pad_bytes, zlen);
+    }
+    op->data.claim_append(tail_bl);
+    logger->inc(l_bluestore_write_penalty_read_ops);
+  }
+  auto b0 = ep->blob;
+  _buffer_cache_write(txc, b0, dctx.b_off, op->data,
+    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+
+  if (b0->get_blob().csum_type) {
+    b0->dirty_blob().calc_csum(dctx.b_off, op->data);
+  }
+  Extent* le = o->extent_map.set_lextent(c, dctx.off,
+    dctx.off - ep->blob_start(), dctx.used, b0, &wctx->old_extents);
+  txc->statfs_delta.stored() += le->length;
+}
+
 void BlueStore::_do_write_big(
     TransContext *txc,
     CollectionRef &c,
@@ -13294,116 +13403,96 @@ void BlueStore::_do_write_big(
 
     //attempting to reuse existing blob
     if (!wctx->compress) {
-      // look for an existing mutable blob we can write into
-      auto ep = o->extent_map.seek_lextent(offset);
       auto end = o->extent_map.extent_map.end();
-      // First try if we can apply deferred write
-      if (prefer_deferred_size_snapshot && ep != end &&
-            offset >= ep->blob_start() &&
-            ep->blob->get_blob().is_mutable()) {
-        auto b0 = ep->blob;
-        auto b_off = offset - ep->blob_start();
-        uint64_t chunk_size = b0->get_blob().get_chunk_size(block_size);
-        auto l_aligned = l;
 
-        // read some data to fill out the chunk?
-        uint64_t head_read = p2phase<uint64_t>(b_off, chunk_size);
-        uint64_t tail_read = p2nphase<uint64_t>(b_off + l, chunk_size);
-        if ((head_read || tail_read) &&
-          (b0->get_blob().get_ondisk_length() >=
-            b_off + l + tail_read)) {
-          b_off = head_read;
-          l_aligned += head_read + tail_read;
-        } else {
-          head_read = tail_read = 0;
-        }
+      if (prefer_deferred_size_snapshot &&
+          l <= prefer_deferred_size_snapshot * 2) {
+        // Single write that spans two adjusted existing blobs can result
+        // in up to two deferred blocks of 'prefer_deferred_size'
+        // So we're trying to minimize the amount of resulting blobs
+        // and preserve 2 blobs rather than inserting one more in between
+        // E.g. write 0x10000~20000 over existing blobs
+        // (0x0~20000 and 0x20000~20000) is better (from subsequent reading
+        // performance point of view) to result in two deferred writes to
+        // existing blobs than having 3 blobs: 0x0~10000, 0x10000~20000, 0x30000~10000
 
-        if (l_aligned <= prefer_deferred_size_snapshot &&
-            b_off % chunk_size == 0 &&
-            l_aligned % chunk_size == 0 &&
-            b0->get_blob().is_allocated(b_off, l_aligned)) {
-          dout(20) << __func__ << " " << *b0
-            << " deferring big " << std::hex
-            << " (0x" << b_off << "~" << l_aligned << ")"
-            << std::dec << " write via deferred"
-            << dendl;
+        // look for an existing mutable blob we can write into
+        auto ep = o->extent_map.seek_lextent(offset);
+        auto ep_next = end;
+        BigDeferredWriteContext head_info, tail_info;
 
-          PExtentVector extents;
-          int r = b0->get_blob().map(
-            b_off, l_aligned,
-            [&](const bluestore_pextent_t& pext,
-                uint64_t offset,
-                uint64_t length) {
-              // apply deferred if overwrite breaks blob continuity only.
-              // if it totally overlaps some pextent - fallback to regular write
-              if (pext.offset < offset ||
-                pext.end() > offset + length) {
-                extents.emplace_back(bluestore_pextent_t(offset, length));
-                return 0;
-              }
-              return -1;
-            });
-          if (r < 0) {
-            dout(20) << __func__
-              << " deferring big fell back"
-              << dendl;
-          } else {
-            bluestore_deferred_op_t *op = _get_deferred_op(txc);
-            op->op = bluestore_deferred_op_t::OP_WRITE;
-            op->extents.swap(extents);
+        bool will_defer = ep != end ?
+          head_info.can_defer(ep,
+            prefer_deferred_size_snapshot,
+            block_size,
+            offset,
+            l) :
+          false;
+        auto offset_next = offset + head_info.used;
+        auto remaining = l - head_info.used;
 
-            dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
-              << " and tail 0x" << tail_read << std::dec << dendl;
-            if (head_read) {
-              int r = _do_read(c.get(), o, offset - head_read, head_read,
-                op->data, 0);
-              ceph_assert(r >= 0 && r <= (int)head_read);
-              size_t zlen = head_read - r;
-              if (zlen) {
-                op->data.append_zero(zlen);
-                logger->inc(l_bluestore_write_pad_bytes, zlen);
-              }
-              logger->inc(l_bluestore_write_penalty_read_ops);
-            }
-            blp.copy(l, op->data);
+        if (will_defer && remaining) {
+          will_defer = false;
+          if (remaining <= prefer_deferred_size_snapshot) {
+            ep_next = o->extent_map.seek_lextent(offset_next);
+            // check if we can defer remaining totally
+            will_defer = ep_next == end ?
+              false :
+              tail_info.can_defer(ep_next,
+                prefer_deferred_size_snapshot,
+                block_size,
+                offset_next,
+                remaining);
 
-            if (tail_read) {
-              bufferlist tail_bl;
-              int r = _do_read(c.get(), o, offset + l, tail_read,
-                tail_bl, 0);
-              ceph_assert(r >= 0 && r <= (int)tail_read);
-              size_t zlen = tail_read - r;
-              if (zlen) {
-                tail_bl.append_zero(zlen);
-                logger->inc(l_bluestore_write_pad_bytes, zlen);
-              }
-              op->data.claim_append(tail_bl);
-              logger->inc(l_bluestore_write_penalty_read_ops);
-            }
-
-            _buffer_cache_write(txc, b0, b_off, op->data,
-              wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-
-            if (b0->get_blob().csum_type) {
-              b0->dirty_blob().calc_csum(b_off, op->data);
-            }
-            Extent *le = o->extent_map.set_lextent(c, offset,
-              offset - ep->blob_start(), l, b0, &wctx->old_extents);
-            txc->statfs_delta.stored() += le->length;
-
-            offset += l;
-            length -= l;
-            logger->inc(l_bluestore_write_big_blobs);
-            logger->inc(l_bluestore_write_big_deferred);
-
-            continue;
+            will_defer = will_defer && remaining == tail_info.used;
           }
         }
+        if (will_defer) {
+          dout(20) << __func__ << " " << *(ep->blob)
+            << " deferring big " << std::hex
+            << " (0x" << head_info.b_off << "~" << head_info.blob_aligned_len() << ")"
+            << std::dec << " write via deferred"
+            << dendl;
+          if (remaining) {
+            dout(20) << __func__ << " " << *(ep_next->blob)
+              << " deferring big " << std::hex
+              << " (0x" << tail_info.b_off << "~" << tail_info.blob_aligned_len() << ")"
+              << std::dec << " write via deferred"
+              << dendl;
+          }
+
+          will_defer = head_info.apply_defer(ep);
+          if (!will_defer) {
+            dout(20) << __func__
+              << " deferring big fell back, head isn't continuous"
+              << dendl;
+          } else if (remaining) {
+            will_defer = tail_info.apply_defer(ep_next);
+            if (!will_defer) {
+              dout(20) << __func__
+                << " deferring big fell back, tail isn't continuous"
+                << dendl;
+            }
+          }
+        }
+        if (will_defer) {
+          _do_write_big_apply_deferred(txc, c, o, ep, head_info, blp, wctx);
+          if (remaining) {
+            _do_write_big_apply_deferred(txc, c, o, ep_next, tail_info,
+              blp, wctx);
+          }
+          offset += l;
+          length -= l;
+          logger->inc(l_bluestore_write_big_blobs, remaining ? 2 : 1);
+          logger->inc(l_bluestore_write_big_deferred, remaining ? 2 : 1);
+          continue;
+        }
       }
+
       o->extent_map.punch_hole(c, offset, l, &wctx->old_extents);
 
       // seek again as punch_hole could invalidate ep
-      ep = o->extent_map.seek_lextent(offset);
+      auto ep = o->extent_map.seek_lextent(offset);
       auto begin = o->extent_map.extent_map.begin();
       auto prev_ep = end;
       if (ep != begin) {
@@ -13880,9 +13969,7 @@ void BlueStore::_do_write_data(
       _do_write_small(txc, c, o, head_offset, head_length, p, wctx);
     }
 
-    if (middle_length) {
-      _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
-    }
+    _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
 
     if (tail_length) {
       _do_write_small(txc, c, o, tail_offset, tail_length, p, wctx);
