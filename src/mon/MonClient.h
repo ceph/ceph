@@ -280,6 +280,9 @@ private:
   void handle_auth(MAuthReply *m);
 
   // monitor session
+  utime_t last_keepalive;
+  utime_t last_send_log;
+
   void tick();
   void schedule_tick();
 
