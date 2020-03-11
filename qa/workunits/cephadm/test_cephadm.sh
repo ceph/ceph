@@ -276,11 +276,33 @@ loop_dev=$($SUDO losetup -f)
 $SUDO vgremove -f $OSD_VG_NAME || true
 $SUDO losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
 $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
+
+# osd boostrap keyring
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+      ceph auth get client.bootstrap-osd > $TMPDIR/keyring.bootstrap.osd
+
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
-    $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
-            ceph orch daemon add osd \
-                $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
+    device_name=/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
+
+    # prepare the osd
+    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
+            lvm prepare --bluestore --data $device_name --no-systemd
+    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
+            lvm batch --no-auto $device_name --yes --no-systemd
+
+    # osd id and osd fsid
+    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
+            lvm list --format json $device_name > $TMPDIR/osd.map
+    osd_id=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_id"? | select(.)')
+    osd_fsid=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_fsid"? | select(.)')
+
+    # deploy the osd
+    $CEPHADM deploy --name osd.$osd_id \
+          --fsid $FSID \
+          --keyring $TMPDIR/keyring.bootstrap.osd \
+          --config $CONFIG \
+          --osd-fsid $osd_fsid
 done
 
 # add node-exporter
