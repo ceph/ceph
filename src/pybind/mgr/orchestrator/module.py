@@ -359,7 +359,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 table.add_row((
                     s.service_name,
                     '%d/%d' % (s.running, s.size),
-                    nice_delta(now, s.last_refresh, ' age'),
+                    nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
                     s.spec.placement.pretty_str() if s.spec else '-',
                     ukn(s.container_image_name),
