@@ -396,7 +396,9 @@ class LocalRemote(object):
 
         return proc
 
-    def sh(self, command, log_limit=1024, cwd=None, env=None):
+    def sh(self, command, log_limit=1024, cwd=None, env=None, **kwargs):
+        if isinstance(command, list):
+            command=' '.join(command)
 
         return misc.sh(command=command, log_limit=log_limit, cwd=cwd,
                         env=env)
