@@ -85,7 +85,7 @@ for bind in rados rbd cephfs rgw; do
     BUILD_DOC=1 \
         CFLAGS="-iquote$TOPDIR/src/include" \
         CPPFLAGS="-iquote$TOPDIR/src/include" \
-        LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+        LDFLAGS="-L$vdir/lib -Wl,--no-as-needed,-rpath=$vdir/lib" \
         $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
     # rgwfile_version(), librgw_create(), rgw_mount()
     # since py3.5, distutils adds postfix in between ${bind} and so
