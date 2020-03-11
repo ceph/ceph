@@ -76,6 +76,12 @@ export class OsdFlagsModalComponent implements OnInit {
       value: false,
       description: this.i18n('Backfilling of PGs is suspended')
     },
+    norebalance: {
+      code: 'norebalance',
+      name: this.i18n('No Rebalance'),
+      value: false,
+      description: this.i18n('OSD will choose not to backfill unless PG is also degraded')
+    },
     norecover: {
       code: 'norecover',
       name: this.i18n('No Recover'),
