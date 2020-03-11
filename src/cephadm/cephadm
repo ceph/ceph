@@ -1134,10 +1134,14 @@ def get_config_and_keyring():
         elif args.keyring:
             with open(args.keyring, 'r') as f:
                 keyring = f.read()
-        else:
-            raise Error('no keyring provided')
         with open(args.config, 'r') as f:
             config = f.read()
+
+    if not config:
+        raise Error('no config provided')
+    elif not keyring:
+        raise Error('no keyring provided')
+
     return (config, keyring)
 
 def get_container_mounts(fsid, daemon_type, daemon_id,
