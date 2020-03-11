@@ -2085,7 +2085,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if daemon_type == 'mon':
                     ename = 'mon.'
                 else:
-                    ename = '%s.%s' % (daemon_type, daemon_id)
+                    ename = name_to_config_section(daemon_type + '.' + daemon_id)
                 ret, keyring, err = self.mon_command({
                     'prefix': 'auth get',
                     'entity': ename,
