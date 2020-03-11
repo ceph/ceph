@@ -41,8 +41,11 @@ The dashboard provides the following features:
 
 * **Multi-User and Role Management**: The dashboard supports multiple user
   accounts with different permissions (roles). The user accounts and roles
-  can be modified on both the command line and via the WebUI.
-  See :ref:`dashboard-user-role-management` for details.
+  can be modified on both the command line and via the WebUI. The dashboard
+  supports various methods to enhance password security, e.g. by enforcing
+  configurable password complexity rules, forcing users to change their password
+  after the first login or after a configurable time period. See
+  :ref:`dashboard-user-role-management` for details.
 * **Single Sign-On (SSO)**: the dashboard supports authentication
   via an external identity provider using the SAML 2.0 protocol. See
   :ref:`dashboard-sso-support` for details.
@@ -69,29 +72,36 @@ aspects of your Ceph cluster:
 * **Cluster logs**: Display the latest updates to the cluster's event and
   audit log files. Log entries can be filtered by priority, date or keyword.
 * **Hosts**: Display a list of all hosts associated to the cluster, which
-  services are running and which version of Ceph is installed.
+  disk are attached, which services are running and which version of Ceph is
+  installed.
 * **Performance counters**: Display detailed service-specific statistics for
   each running service.
 * **Monitors**: List all MONs, their quorum status, open sessions.
-* **Monitoring**: Enables creation, re-creation, editing and expiration of
-  Prometheus' Silences, lists the alerting configuration of Prometheus and
-  currently firing alerts. Also shows notifications for firing alerts. Needs
-  configuration.
+* **Monitoring**: Enable creation, re-creation, editing and expiration of
+  Prometheus' Silences, list the alerting configuration of Prometheus and all
+  configured and firing alerts. Show notifications for firing alerts.
 * **Configuration Editor**: Display all available configuration options,
   their description, type and default values and edit the current values.
 * **Pools**: List all Ceph pools and their details (e.g. applications,
-  placement groups, replication size, EC profile, CRUSH ruleset, etc.)
+  autoscaling, placement groups, replication size, EC profile, CRUSH rulesets,
+  quotas etc.)
 * **OSDs**: List all OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance
   counters and usage histograms for read/write operations. Mark OSDs
   up/down/out, purge and reweight OSDs, perform scrub operations, modify
   various scrub-related configuration options, select different profiles to
-  adjust the level of backfilling activity.
+  adjust the level of backfilling activity. List all disk associated with an
+  OSD. Set and change the device class of an OSD, display and sort OSDs by
+  device class. Deploy new OSDs on new disks/hosts.
+* **Device management**: List all hosts known by the orchestrator. List all
+  disks and their properties attached to a node. Display disk health information
+  (health prediction and SMART data). Blink enclosure LEDs.
 * **iSCSI**: List all hosts that run the TCMU runner service, display all
   images and their performance characteristics (read/write ops, traffic).
-  Create, modify and delete iSCSI targets (via ``ceph-iscsi``). See
-  :ref:`dashboard-iscsi-management` for instructions on how to configure this
-  feature.
+  Create, modify and delete iSCSI targets (via ``ceph-iscsi``). Display the
+  iSCSI gateway status on the landing page and info about active initiators.
+  See :ref:`dashboard-iscsi-management` for instructions on how to configure
+  this feature.
 * **RBD**: List all RBD images and their properties (size, objects, features).
   Create, copy, modify and delete RBD images. Define various I/O or bandwidth
   limitation settings on a global, per-pool or per-image level. Create, delete
@@ -101,12 +111,13 @@ aspects of your Ceph cluster:
   Lists all active sync daemons and their status, pools and RBD images including
   their synchronization state.
 * **CephFS**: List all active file system clients and associated pools,
-  including their usage statistics.
+  including their usage statistics. Evict active CephFS clients. Manage CephFS
+  quotas and snapshots. Browse a CephFS directory structure.
 * **Object Gateway**: List all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
-  owner, quotas). See :ref:`dashboard-enabling-object-gateway` for configuration
-  instructions.
+  placement targets, owner, quotas, versioning, multi-factor authentication).
+  See :ref:`dashboard-enabling-object-gateway` for configuration instructions.
 * **NFS**: Manage NFS exports of CephFS file systems and RGW S3 buckets via NFS
   Ganesha. See :ref:`dashboard-nfs-ganesha-management` for details on how to
   enable this functionality.
@@ -193,7 +204,7 @@ SSL can also be disabled by setting this configuration value::
 
 This might be useful if the dashboard will be running behind a proxy which does
 not support SSL for its upstream servers or other situations where SSL is not
-wanted or required.
+wanted or required. See :ref:`dashboard-proxy-configuration` for more details.
 
 .. warning::
 
@@ -857,6 +868,7 @@ view and create Ceph pools, and have read-only access to any other scopes.
 
    $ ceph dashboard ac-user-set-roles bob rbd/pool-manager read-only
 
+.. _dashboard-proxy-configuration:
 
 Proxy Configuration
 -------------------
