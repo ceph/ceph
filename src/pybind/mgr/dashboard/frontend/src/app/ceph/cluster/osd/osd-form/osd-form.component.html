@@ -1,13 +1,6 @@
-<cd-loading-panel *ngIf="loading"
-                  i18n>Loading...</cd-loading-panel>
-<cd-alert-panel type="info"
-                *ngIf="!orchestratorExist && !checkingOrchestrator"
-                i18n>Please consult the
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  configure and enable the orchestrator functionality.</cd-alert-panel>
+<cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
 <div class="cd-col-form"
-     *ngIf="!loading && orchestratorExist">
+     *ngIf="!loading && hasOrchestrator">
   <form name="form"
         #formDir="ngForm"
         [formGroup]="form"
