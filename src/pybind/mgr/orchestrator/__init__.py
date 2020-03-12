@@ -11,5 +11,4 @@ from ._interface import \
     ServiceDescription, InventoryFilter, HostSpec, \
     DaemonDescription, \
     InventoryHost, DeviceLightLoc, \
-    OutdatableData, OutdatablePersistentDict, \
     UpgradeStatusSpec

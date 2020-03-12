@@ -8,7 +8,7 @@ import logging
 import pickle
 import time
 from collections import namedtuple
-from functools import wraps, partialmethod
+from functools import wraps
 import uuid
 import datetime
 import copy
@@ -19,7 +19,7 @@ from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     ServiceSpecValidationError
 from ceph.deployment.drive_group import DriveGroupSpec
 
-from mgr_module import MgrModule, PersistentStoreDict, CLICommand, HandleCommandResult
+from mgr_module import MgrModule, CLICommand, HandleCommandResult
 
 try:
     from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
@@ -744,7 +744,6 @@ class Orchestrator(object):
                     }
         return features
 
-    @_hide_in_features
     def cancel_completions(self):
         # type: () -> None
         """
@@ -1542,7 +1541,15 @@ class OrchestratorClientMixin(Orchestrator):
             raise NoOrchestrator()
 
         mgr.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(mgr.module_name, o, meth, args, kwargs))
-        return mgr.remote(o, meth, *args, **kwargs)
+        try:
+            return mgr.remote(o, meth, *args, **kwargs)
+        except Exception as e:
+            if meth == 'get_feature_set':
+                raise  # self.get_feature_set() calls self._oremote()
+            f_set = self.get_feature_set()
+            if meth not in f_set or not f_set[meth]['available']:
+                raise NotImplementedError(f'{o} does not implement {meth}') from e
+            raise
 
     def _orchestrator_wait(self, completions):
         # type: (List[Completion]) -> None
@@ -1565,108 +1572,3 @@ class OrchestratorClientMixin(Orchestrator):
                 time.sleep(1)
             else:
                 break
-
-
-class OutdatableData(object):
-    DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
-
-    def __init__(self, data=None, last_refresh=None):
-        # type: (Optional[dict], Optional[datetime.datetime]) -> None
-        self._data = data
-        if data is not None and last_refresh is None:
-            self.last_refresh = datetime.datetime.utcnow()  # type: Optional[datetime.datetime]
-        else:
-            self.last_refresh = last_refresh
-
-    def json(self):
-        if self.last_refresh is not None:
-            timestr = self.last_refresh.strftime(self.DATEFMT)  # type: Optional[str]
-        else:
-            timestr = None
-
-        return {
-            "data": self._data,
-            "last_refresh": timestr,
-        }
-
-    @property
-    def data(self):
-        return self._data
-
-    # @data.setter
-    # No setter, as it doesn't work as expected: It's not saved in store automatically
-
-    @classmethod
-    def time_from_string(cls, timestr):
-        if timestr is None:
-            return None
-        # drop the 'Z' timezone indication, it's always UTC
-        timestr = timestr.rstrip('Z')
-        return datetime.datetime.strptime(timestr, cls.DATEFMT)
-
-    @classmethod
-    def from_json(cls, data):
-        return cls(data['data'], cls.time_from_string(data['last_refresh']))
-
-    def outdated(self, timeout=None):
-        if timeout is None:
-            timeout = 600
-        if self.last_refresh is None:
-            return True
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-            seconds=timeout)
-        return self.last_refresh < cutoff
-
-    def __repr__(self):
-        return 'OutdatableData(data={}, last_refresh={})'.format(self._data, self.last_refresh)
-
-
-class OutdatableDictMixin(object):
-    """
-    Toolbox for implementing a cache. As every orchestrator has
-    different needs, we cannot implement any logic here.
-    """
-
-    def __getitem__(self, item):
-        # type: (str) -> OutdatableData
-        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))  # type: ignore
-
-    def __setitem__(self, key, value):
-        # type: (str, OutdatableData) -> None
-        val = None if value is None else value.json()
-        super(OutdatableDictMixin, self).__setitem__(key, val)  # type: ignore
-
-    def items(self):
-        ## type: () -> Iterator[Tuple[str, OutdatableData]]
-        for item in super(OutdatableDictMixin, self).items():  # type: ignore
-            k, v = item
-            yield k, OutdatableData.from_json(v)
-
-    def items_filtered(self, keys=None):
-        if keys:
-            return [(host, self[host]) for host in keys]
-        else:
-            return list(self.items())
-
-    def any_outdated(self, timeout=None):
-        items = self.items()
-        if not list(items):
-            return True
-        return any([i[1].outdated(timeout) for i in items])
-
-    def remove_outdated(self):
-        outdated = [item[0] for item in self.items() if item[1].outdated()]
-        for o in outdated:
-            del self[o]  # type: ignore
-
-    def invalidate(self, key):
-        self[key] = OutdatableData(self[key].data,
-                                   datetime.datetime.fromtimestamp(0))
-
-
-class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
-    pass
-
-
-class OutdatableDict(OutdatableDictMixin, dict):
-    pass
