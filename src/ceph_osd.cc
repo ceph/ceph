@@ -575,7 +575,7 @@ flushjournal_out:
     g_conf().get_val<Option::size_t>("osd_client_message_size_cap");
   boost::scoped_ptr<Throttle> client_byte_throttler(
     new Throttle(g_ceph_context, "osd_client_bytes", message_size));
-  uint64_t message_cap = g_conf().get_val<Option::size_t>("osd_client_message_cap");
+  uint64_t message_cap = g_conf().get_val<uint64_t>("osd_client_message_cap");
   boost::scoped_ptr<Throttle> client_msg_throttler(
     new Throttle(g_ceph_context, "osd_client_messages", message_cap));
 
