@@ -173,7 +173,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> finish_auth();
 
   // ESTABLISHING
-  void execute_establishing();
+  void execute_establishing(SocketConnectionRef existing_conn, bool dispatch_reset);
 
   // ESTABLISHING/REPLACING (server)
   seastar::future<> send_server_ident();
