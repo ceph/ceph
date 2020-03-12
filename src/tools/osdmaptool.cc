@@ -148,13 +148,16 @@ int main(int argc, const char **argv)
   std::string upmap_file = "-";
   int upmap_max = 10;
   int upmap_deviation = 5;
+  unsigned int upmap_max_pgs = 256;
   bool upmap_active = false;
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
+  bool debug = false;
 
   std::string val;
   std::ostringstream err;
+  int ump;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -181,6 +184,8 @@ int main(int argc, const char **argv)
       upmap = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_max, err, "--upmap-max", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_deviation, err, "--upmap-deviation", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &ump, err, "--upmap-max-pgs", (char*)NULL)) {
+      upmap_max_pgs = static_cast<unsigned int>(ump);
     } else if (ceph_argparse_witharg(args, i, &val, "--upmap-pool", (char*)NULL)) {
       upmap_pools.insert(val);
     } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)NULL)) {
@@ -215,6 +220,8 @@ int main(int argc, const char **argv)
       test_random = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
+    } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
+      debug = true;
     } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--pg_bits", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -431,6 +438,80 @@ int main(int argc, const char **argv)
       for (auto& i: pools)
         cout << osdmap.get_pool_name(i) << " ";
       cout << std::endl;
+
+// XXX: old rules based code
+      unordered_map< int, vector<int64_t> > pools_by_rule;
+      for (auto&i: pools) {
+        const string& pool_name = osdmap.get_pool_name(i);
+        const pg_pool_t *p = osdmap.get_pg_pool(i);
+        const int rule = p->get_crush_rule();
+        if (!osdmap.crush->rule_exists(rule)) {
+         cout << " pool " << pool_name << " does not exist" << std::endl;
+         continue;
+        }
+        if (p->get_pg_num() > p->get_pg_num_target()) {
+         cout << "pool " << pool_name << " has pending PG(s) for merging, skipping for now" << std::endl;
+         continue;
+        }
+        if (debug) {
+          cout << "pool " << i << " rule " << rule << " pgs " << p->get_pg_num() << std::endl;
+        }
+        pools_by_rule[rule].push_back(i);
+      }
+      vector< set<int64_t> > new_pools;
+      unsigned int limit_pgs = 0;
+      int rule_pgs = 0;
+      int cur_rule = -1;
+      new_pools.resize(new_pools.size() + 1);
+      for (auto& r: pools_by_rule) {
+	if (r.second.empty())
+	  continue;
+	if (!new_pools.rbegin()->empty()) {
+          new_pools.resize(new_pools.size() + 1);
+          if (debug) cout << "rule: " << r.first << " pools:";
+	} else if (cur_rule != r.first) {
+          if (debug) cout << "rule: " << r.first << " pools:";
+	}
+	cur_rule = r.first;
+	limit_pgs = 0;
+	for (auto& i: r.second) {
+          const pg_pool_t *p = osdmap.get_pg_pool(i);
+	  if (limit_pgs > upmap_max_pgs) {
+	    if (debug) cout << " limit pgs " << limit_pgs << std::endl;
+	    new_pools.resize(new_pools.size() + 1);
+	    limit_pgs = 0;
+            if (debug) cout << "rule: " << r.first << " pools:";
+	  }
+	  rule_pgs += p->get_pg_num();
+	  if (p->get_pg_num() > upmap_max_pgs && !new_pools.rbegin()->empty()) {
+	    if (debug) cout << " NOT EMPTY limit pgs " << limit_pgs << std::endl;
+	    new_pools.resize(new_pools.size() + 1);
+	    limit_pgs = 0;
+            if (debug) cout << "rule: " << r.first << " pools:";
+	  }
+	  limit_pgs += p->get_pg_num();
+	  if (debug) cout << " " << i;
+	  new_pools.rbegin()->insert(i);
+	}
+	if (limit_pgs > 0) {
+	    if (debug) cout << " limit pgs " << limit_pgs << std::endl;
+	}
+	if (debug) cout << "rule " << r.first << " total pgs " << rule_pgs << std::endl;
+	rule_pgs = 0;
+      }
+
+      if (debug) {
+	   cout << "final pools" << std::endl;
+        for (auto& i: new_pools) {
+	  if (i.empty()) abort();
+          for (auto& j: i) {
+	    if (debug) cout << " (" << j << ")";
+	  }
+	  if (debug) cout << std::endl;
+        }
+	cout << "DONE" << std::endl;
+      }
+
       OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
       pending_inc.fsid = osdmap.get_fsid();
       int total_did = 0;
@@ -438,12 +519,10 @@ int main(int argc, const char **argv)
       struct timespec begin, end;
       r = clock_gettime(CLOCK_MONOTONIC, &begin);
       assert(r == 0);
-      for (auto& i: pools) {
-        set<int64_t> one_pool;
-        one_pool.insert(i);
+      for (auto& i: new_pools) {
         int did = osdmap.calc_pg_upmaps(
           g_ceph_context, upmap_deviation,
-          left, one_pool,
+          left, i,
           &pending_inc);
         total_did += did;
         left -= did;
