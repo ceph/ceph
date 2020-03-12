@@ -954,6 +954,20 @@ Usage:
         return HandleCommandResult(-errno.EINVAL, stderr="Module '{0}' not found".format(module_name))
 
     @_cli_write_command(
+        'orch pause',
+        desc='Pause orchestrator background work')
+    def _pause(self):
+        self.pause()
+        return HandleCommandResult()
+
+    @_cli_write_command(
+        'orch resume',
+        desc='Resume orchestrator background work (if paused)')
+    def _resume(self):
+        self.resume()
+        return HandleCommandResult()
+
+    @_cli_write_command(
         'orch cancel',
         desc='cancels ongoing operations')
     def _cancel(self):
