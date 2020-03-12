@@ -30,7 +30,7 @@ except ImportError:
 
 try:
     from kubernetes.client.rest import ApiException
-    from kubernetes.client import V1ListMeta, CoreV1Api, V1Pod
+    from kubernetes.client import V1ListMeta, CoreV1Api, V1Pod, V1DeleteOptions
     from kubernetes import watch
 except ImportError:
     class ApiException(Exception):  # type: ignore
@@ -348,6 +348,23 @@ class RookCluster(object):
             pods_summary.append(s)
 
         return pods_summary
+
+    def remove_pods(self, names):
+        pods = [i for i in self.rook_pods.items]
+        num = 0
+        for p in pods:
+            d = p.to_dict()
+            daemon_type = d['metadata']['labels']['app'].replace('rook-ceph-','')
+            daemon_id = d['metadata']['labels']['ceph_daemon_id']
+            name = daemon_type + '.' + daemon_id
+            if name in names:
+                self.k8s.delete_namespaced_pod(
+                    d['metadata']['name'],
+                    self.rook_env.namespace,
+                    body=V1DeleteOptions()
+                )
+                num += 1
+        return "Removed %d pods" % num
 
     def get_node_names(self):
         return [i.metadata.name for i in self.nodes.items]
