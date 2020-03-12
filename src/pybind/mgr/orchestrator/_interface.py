@@ -752,6 +752,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def pause(self):
+        # type: () -> None
+        raise NotImplementedError()
+
+    def resume(self):
+        # type: () -> None
+        raise NotImplementedError()
+
     def add_host(self, host_spec):
         # type: (HostSpec) -> Completion
         """
