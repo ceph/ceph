@@ -104,16 +104,12 @@ class MirrorSnapshotScheduleHandler:
 
         self.load_schedules()
 
-        with self.lock:
-            if not self.schedules:
-                self.images = {}
-                self.queue = {}
-                self.last_refresh_images = datetime.now()
-                return
-
         images = {}
 
         for pool_id, pool_name in get_rbd_pools(self.module).items():
+            if not self.schedules.intersects(
+                    LevelSpec.from_pool_spec(pool_id, pool_name)):
+                continue
             with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                 self.load_pool_images(ioctx, images)
 
@@ -128,9 +124,16 @@ class MirrorSnapshotScheduleHandler:
         pool_name = ioctx.get_pool_name()
         images[pool_id] = {}
 
+        self.log.debug("load_pool_images: pool={}".format(pool_name))
+
         try:
             namespaces = [''] + rbd.RBD().namespace_list(ioctx)
             for namespace in namespaces:
+                if not self.schedules.intersects(
+                        LevelSpec.from_pool_spec(pool_id, pool_name, namespace)):
+                    continue
+                self.log.debug("load_pool_images: pool={}, namespace={}".format(
+                    pool_name, namespace))
                 images[pool_id][namespace] = {}
                 ioctx.set_namespace(namespace)
                 mirror_images = dict(rbd.RBD().mirror_image_info_list(
