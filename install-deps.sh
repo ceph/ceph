@@ -341,9 +341,6 @@ else
             centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO $yumdnf install -y $yumdnf-utils
-                if test $ID = rhel ; then
-                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
-                fi
                 rpm --quiet --query epel-release || \
 		    $SUDO $yumdnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
@@ -364,6 +361,7 @@ else
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager \
 			  --enable rhel-server-rhscl-7-rpms \
+			  --enable rhel-7-server-optional-rpms \
 			  --enable rhel-7-server-devtools-rpms
                     dts_ver=8
                 elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
