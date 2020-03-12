@@ -20,10 +20,13 @@ Major Changes from Nautilus
     existing external monitoring infrastructure.
   * Health alerts are now raised for recent Ceph daemons crashes.
 
+|
 
 - *Dashboard*:
 
   The :ref:`mgr-dashboard` has gained a lot of new features and functionality:
+
+|
 
   * UI Enhancements
 
@@ -31,6 +34,8 @@ Major Changes from Nautilus
     - New unified sidebar: better background task and events notification
     - Shows all progress mgr module notifications
     - Multi-select on tables to perform bulk operations
+
+|
 
   * Dashboard user account security enhancements
 
@@ -42,7 +47,10 @@ Major Changes from Nautilus
     - Configurable password expiration
     - Change password after first login
 
+|
+|
   New and enhanced management of Ceph features/services:
+
 
   * OSD/device management
 
@@ -57,16 +65,22 @@ Major Changes from Nautilus
     - Explicitly set/change the device class of an OSD, display and sort OSDs by
       device class
 
+|
+
   * Pool management
 
     - Viewing and setting pool quotas
     - Define and change per-pool PG autoscaling mode
+
+|
 
   * RGW management enhancements
 
     - Enable bucket versioning
     - Enable MFA support
     - Select placement target on bucket creation
+
+|
 
   * CephFS management enhancements
 
@@ -75,16 +89,21 @@ Major Changes from Nautilus
     - CephFS quota management
     - Browse CephFS directory
 
+|
+
   * iSCSI management enhancements
 
     - Show iSCSI GW status on landing page
     - Prevent deletion of IQNs with open sessions
     - Display iSCSI "logged in" info
+     
+|
 
   * Prometheus alert management
 
     - List configured Prometheus alerts
 
+|
 
 - *RADOS*:
   
@@ -106,6 +125,7 @@ Major Changes from Nautilus
   * Snapshot trimming metadata is now managed in a more efficient and
     scalable fashion.
 
+|
 
 - *RBD* block storage:
   
@@ -116,12 +136,16 @@ Major Changes from Nautilus
   * The ``rbd-nbd`` tool has been improved to use more modern kernel interfaces.
   * Caching has been improved to be more efficient and performant.
 
+|
+
 
 - *RGW* object storage:
   
   * Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
   * WORM?
   * bucket tagging?
+
+|
 
 - *CephFS* distributed file system:
   
@@ -134,6 +158,8 @@ Major Changes from Nautilus
   * The mgr volumes plugin has received numerous improvements to support CephFS
     via CSI, including snapshots and cloning.
   * cephfs-shell has had numerous incremental improvements and bug fixes.
+
+|
 
 
 Upgrading from Mimic or Nautilus
