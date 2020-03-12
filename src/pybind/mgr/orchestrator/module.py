@@ -16,8 +16,8 @@ except ImportError:
     pass  # just for type checking.
 
 
-from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
-    DriveGroupSpecs
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from mgr_module import MgrModule, HandleCommandResult
 
@@ -428,45 +428,58 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout=table.get_string())
 
     @_cli_write_command(
-        'orch osd create',
+        'orch apply osd',
+        desc='Create an OSD daemons using drive_groups')
+    def _apply_osd(self, inbuf=None):
+        # type: (Optional[str]) -> HandleCommandResult
+        """Apply DriveGroupSpecs to create OSDs"""
+        usage = """
+Usage:
+  ceph orch apply osd -i <json_file/yaml_file>
+"""
+        if not inbuf:
+            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+        try:
+            drivegroups = yaml.load_all(inbuf)
+            dg_specs = [ServiceSpec.from_json(dg) for dg in drivegroups]
+        except ValueError as e:
+            msg = 'Failed to read JSON/YAML input: {}'.format(str(e)) + usage
+            return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
+        completions = self.apply_drivegroups(dg_specs)
+        [self._orchestrator_wait([completion]) for completion in completions]  # type: ignore
+        [raise_if_exception(completion) for completion in completions]  # type: ignore
+        result_strings = [completion.result_str() for completion in completions]
+        return HandleCommandResult(stdout=" ".join(result_strings))
+
+    @_cli_write_command(
+        'orch daemon add osd',
         "name=svc_arg,type=CephString,req=false",
-        'Create an OSD service. Either --svc_arg=host:drives or -i <drive_group>')
-    def _create_osd(self, svc_arg=None, inbuf=None):
-        # type: (Optional[str], Optional[str]) -> HandleCommandResult
+        'Create an OSD service. Either --svc_arg=host:drives')
+    def _daemon_add_osd(self, svc_arg=None):
+        # type: (Optional[str]) -> HandleCommandResult
         """Create one or more OSDs"""
 
         usage = """
 Usage:
-  ceph orch osd create -i <json_file/yaml_file>
-  ceph orch osd create host:device1,device2,...
+  ceph orch daemon add osd host:device1,device2,...
 """
-
-        if inbuf:
-            try:
-                dgs = DriveGroupSpecs(yaml.load(inbuf))
-                drive_groups = dgs.drive_groups
-            except ValueError as e:
-                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
-
-        elif svc_arg:
-            try:
-                host_name, block_device = svc_arg.split(":")
-                block_devices = block_device.split(',')
-            except (TypeError, KeyError, ValueError):
-                msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
-
-            devs = DeviceSelection(paths=block_devices)
-            drive_groups = [DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)]
-        else:
+        if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
+        try:
+            host_name, block_device = svc_arg.split(":")
+            block_devices = block_device.split(',')
+            devs = DeviceSelection(paths=block_devices)
+            drive_group = DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)
+        except (TypeError, KeyError, ValueError):
+            msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
+            return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-        completion = self.create_osds(drive_groups)
+        completion = self.create_osds(drive_group)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
-    
+
     @_cli_write_command(
         'orch osd rm',
         "name=svc_id,type=CephString,n=N "

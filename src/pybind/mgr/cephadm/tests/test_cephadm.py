@@ -117,13 +117,35 @@ class TestCephadm(object):
             r = cephadm_module._apply_service(ServiceSpec('mgr', placement=ps))
             assert r
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.SpecStore.save")
+    def test_apply_osd_save(self, _save_spec, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            json_spec = {'service_type': 'osd', 'host_pattern': 'test', 'service_id': 'foo', 'data_devices': {'all': True}}
+            spec = ServiceSpec.from_json(json_spec)
+            assert isinstance(spec, DriveGroupSpec)
+            c = cephadm_module.apply_drivegroups([spec])
+            _save_spec.assert_called_with(spec)
+            assert wait(cephadm_module, c[0]) == 'Scheduled osd update...'
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.SpecStore.save")
+    def test_apply_osd_save_placement(self, _save_spec, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            json_spec = {'service_type': 'osd', 'placement': {'host_pattern': 'test'}, 'service_id': 'foo', 'data_devices': {'all': True}}
+            spec = ServiceSpec.from_json(json_spec)
+            assert isinstance(spec, DriveGroupSpec)
+            c = cephadm_module.apply_drivegroups([spec])
+            _save_spec.assert_called_with(spec)
+            assert wait(cephadm_module, c[0]) == 'Scheduled osd update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=['']))
-            c = cephadm_module.create_osds([dg])
-            assert wait(cephadm_module, c) == ["Created no osd(s) on host test; already created?"]
+            c = cephadm_module.create_osds(dg)
+            out = wait(cephadm_module, c)
+            assert out == "Created no osd(s) on host test; already created?"
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
