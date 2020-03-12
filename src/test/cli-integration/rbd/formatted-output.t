@@ -689,15 +689,15 @@ For now, use a more inclusive regex.
     <name>quuy</name>
   </images>
   $ rbd list -l
-  NAME      SIZE    PARENT FMT PROT LOCK 
-  foo         1 GiB          1           
-  foo@snap    1 GiB          1           
-  quux        1 MiB          1      excl 
-  bar         1 GiB          2           
-  bar@snap  512 MiB          2 yes       
-  bar@snap2   1 GiB          2           
-  baz         2 GiB          2      shr  
-  quuy        2 GiB          2           
+  NAME       SIZE     PARENT  FMT  PROT  LOCK
+  foo          1 GiB            1            
+  foo@snap     1 GiB            1            
+  quux         1 MiB            1        excl
+  bar          1 GiB            2            
+  bar@snap   512 MiB            2  yes       
+  bar@snap2    1 GiB            2            
+  baz          2 GiB            2        shr 
+  quuy         2 GiB            2            
   $ rbd list -l --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
@@ -836,11 +836,11 @@ For now, use a more inclusive regex.
     <name>deep-flatten-child</name>
   </images>
   $ rbd list rbd_other -l
-  NAME                    SIZE    PARENT       FMT PROT LOCK 
-  child                   512 MiB                2           
-  child@snap              512 MiB rbd/bar@snap   2           
-  deep-flatten-child      512 MiB                2           
-  deep-flatten-child@snap 512 MiB                2           
+  NAME                     SIZE     PARENT        FMT  PROT  LOCK
+  child                    512 MiB                  2            
+  child@snap               512 MiB  rbd/bar@snap    2            
+  deep-flatten-child       512 MiB                  2            
+  deep-flatten-child@snap  512 MiB                  2            
   $ rbd list rbd_other -l --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   [
       {
@@ -1077,12 +1077,12 @@ For now, use a more inclusive regex.
     </snapshot>
   </snapshots>
   $ rbd disk-usage --pool rbd_other 2>/dev/null
-  NAME                    PROVISIONED USED  
-  child@snap                  512 MiB   0 B 
-  child                       512 MiB 4 MiB 
-  deep-flatten-child@snap     512 MiB   0 B 
-  deep-flatten-child          512 MiB   0 B 
-  <TOTAL>                       1 GiB 4 MiB 
+  NAME                     PROVISIONED  USED 
+  child@snap                   512 MiB    0 B
+  child                        512 MiB  4 MiB
+  deep-flatten-child@snap      512 MiB    0 B
+  deep-flatten-child           512 MiB    0 B
+  <TOTAL>                        1 GiB  4 MiB
   $ rbd disk-usage --pool rbd_other --format json | python3 -mjson.tool --sort-keys | sed 's/,$/, /'
   {
       "images": [
