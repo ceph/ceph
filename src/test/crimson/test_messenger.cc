@@ -932,7 +932,7 @@ class FailoverSuite : public Dispatcher {
     unsigned pending_establish = 0;
     unsigned replaced_conns = 0;
     for (auto& result : interceptor.results) {
-      if (result.conn->is_closed()) {
+      if (result.conn->is_closed_clean()) {
         if (result.state == conn_state_t::replaced) {
           ++replaced_conns;
         }

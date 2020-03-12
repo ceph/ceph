@@ -24,10 +24,17 @@ class Protocol {
 
   bool is_connected() const;
 
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed_clean = false;
   bool is_closed() const { return closed; }
+#endif
 
   // Reentrant closing
-  seastar::future<> close();
+  void close(bool dispatch_reset);
+  seastar::future<> close_clean(bool dispatch_reset) {
+    close(dispatch_reset);
+    return close_ready.get_future();
+  }
 
   virtual void start_connect(const entity_addr_t& peer_addr,
                              const entity_type_t& peer_type) = 0;

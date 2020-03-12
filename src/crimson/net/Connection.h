@@ -95,6 +95,8 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 #ifdef UNIT_TESTS_BUILT
   virtual bool is_closed() const = 0;
 
+  virtual bool is_closed_clean() const = 0;
+
   virtual bool peer_wins() const = 0;
 #endif
 
