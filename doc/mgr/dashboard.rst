@@ -271,6 +271,16 @@ commands::
 
   $ ceph dashboard ac-user-create <username> <password> administrator
 
+Accessing the Dashboard
+^^^^^^^^^^^^^^^^^^^^^^^
+
+You can now access the dashboard using your (JavaScript-enabled) web browser, by
+pointing it to any of the host names or IP addresses and the selected TCP port
+where a manager instance is running: e.g., ``http(s)://<$IP>:<$PORT>/``.
+
+You should then be greeted by the dashboard login page, requesting your
+previously defined username and password.
+
 .. _dashboard-enabling-object-gateway:
 
 Enabling the Object Gateway Management Frontend
@@ -615,16 +625,6 @@ in order to manage silences.
   The different behaviors of both methods are configured in a way that they
   should not disturb each other through annoying duplicated notifications
   popping up.
-
-Accessing the Dashboard
-^^^^^^^^^^^^^^^^^^^^^^^
-
-You can now access the dashboard using your (JavaScript-enabled) web browser, by
-pointing it to any of the host names or IP addresses and the selected TCP port
-where a manager instance is running: e.g., ``http(s)://<$IP>:<$PORT>/``.
-
-You should then be greeted by the dashboard login page, requesting your
-previously defined username and password.
 
 .. _dashboard-user-role-management:
 
