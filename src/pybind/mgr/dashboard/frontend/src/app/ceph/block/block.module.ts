@@ -32,9 +32,9 @@ import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './rbd-images/rbd-images.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
-import { RbdNamespaceFormComponent } from './rbd-namespace-form/rbd-namespace-form.component';
+import { RbdNamespaceFormModalComponent } from './rbd-namespace-form/rbd-namespace-form-modal.component';
 import { RbdNamespaceListComponent } from './rbd-namespace-list/rbd-namespace-list.component';
-import { RbdSnapshotFormComponent } from './rbd-snapshot-form/rbd-snapshot-form.component';
+import { RbdSnapshotFormModalComponent } from './rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.component';
 import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
@@ -44,8 +44,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
 @NgModule({
   entryComponents: [
     RbdDetailsComponent,
-    RbdNamespaceFormComponent,
-    RbdSnapshotFormComponent,
+    RbdNamespaceFormModalComponent,
+    RbdSnapshotFormModalComponent,
     RbdTrashMoveModalComponent,
     RbdTrashRestoreModalComponent,
     RbdTrashPurgeModalComponent,
@@ -78,10 +78,10 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     IscsiTargetListComponent,
     RbdDetailsComponent,
     RbdFormComponent,
-    RbdNamespaceFormComponent,
+    RbdNamespaceFormModalComponent,
     RbdNamespaceListComponent,
     RbdSnapshotListComponent,
-    RbdSnapshotFormComponent,
+    RbdSnapshotFormModalComponent,
     RbdTrashListComponent,
     RbdTrashMoveModalComponent,
     RbdImagesComponent,

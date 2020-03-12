@@ -14,11 +14,11 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
 
 @Component({
-  selector: 'cd-rbd-snapshot-form',
-  templateUrl: './rbd-snapshot-form.component.html',
-  styleUrls: ['./rbd-snapshot-form.component.scss']
+  selector: 'cd-rbd-snapshot-form-modal',
+  templateUrl: './rbd-snapshot-form-modal.component.html',
+  styleUrls: ['./rbd-snapshot-form-modal.component.scss']
 })
-export class RbdSnapshotFormComponent implements OnInit {
+export class RbdSnapshotFormModalComponent implements OnInit {
   poolName: string;
   namespace: string;
   imageName: string;

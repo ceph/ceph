@@ -25,7 +25,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
-import { RbdSnapshotFormComponent } from '../rbd-snapshot-form/rbd-snapshot-form.component';
+import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
@@ -169,7 +169,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   }
 
   private openSnapshotModal(taskName: string, snapName: string = null) {
-    this.modalRef = this.modalService.show(RbdSnapshotFormComponent);
+    this.modalRef = this.modalService.show(RbdSnapshotFormModalComponent);
     this.modalRef.content.poolName = this.poolName;
     this.modalRef.content.imageName = this.rbdName;
     this.modalRef.content.namespace = this.namespace;

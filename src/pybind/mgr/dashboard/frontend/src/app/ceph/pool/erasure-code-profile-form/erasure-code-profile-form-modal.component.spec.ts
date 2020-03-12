@@ -18,12 +18,12 @@ import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-prof
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { PoolModule } from '../pool.module';
-import { ErasureCodeProfileFormComponent } from './erasure-code-profile-form.component';
+import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-form-modal.component';
 
-describe('ErasureCodeProfileFormComponent', () => {
-  let component: ErasureCodeProfileFormComponent;
+describe('ErasureCodeProfileFormModalComponent', () => {
+  let component: ErasureCodeProfileFormModalComponent;
   let ecpService: ErasureCodeProfileService;
-  let fixture: ComponentFixture<ErasureCodeProfileFormComponent>;
+  let fixture: ComponentFixture<ErasureCodeProfileFormModalComponent>;
   let formHelper: FormHelper;
   let fixtureHelper: FixtureHelper;
   let data: {};
@@ -40,7 +40,7 @@ describe('ErasureCodeProfileFormComponent', () => {
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(ErasureCodeProfileFormComponent);
+    fixture = TestBed.createComponent(ErasureCodeProfileFormModalComponent);
     fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     formHelper = new FormHelper(component.form);
