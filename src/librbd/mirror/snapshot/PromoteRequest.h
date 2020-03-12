@@ -66,6 +66,9 @@ private:
    * CREATE_PROMOTE_SNAPSHOT <--------------------/
    *    |
    *    v
+   * DISABLE_NON_PRIMARY_FEATURE
+   *    |
+   *    v
    * RELEASE_EXCLUSIVE_LOCK (skip if not needed)
    *    |
    *    v
@@ -127,6 +130,9 @@ private:
 
   void create_promote_snapshot();
   void handle_create_promote_snapshot(int r);
+
+  void disable_non_primary_feature();
+  void handle_disable_non_primary_feature(int r);
 
   void release_exclusive_lock();
   void handle_release_exclusive_lock(int r);

@@ -27,6 +27,7 @@ namespace snapshot {
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 void PromoteRequest<I>::send() {
@@ -308,6 +309,40 @@ void PromoteRequest<I>::handle_create_promote_snapshot(int r) {
   if (r < 0) {
     lderr(cct) << "failed to create promote snapshot: " << cpp_strerror(r)
                << dendl;
+    finish(r);
+    return;
+  }
+
+  disable_non_primary_feature();
+}
+
+template <typename I>
+void PromoteRequest<I>::disable_non_primary_feature() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  // remove the non-primary feature flag so that the image can be
+  // R/W by standard RBD clients
+  librados::ObjectWriteOperation op;
+  cls_client::set_features(&op, 0U, RBD_FEATURE_NON_PRIMARY);
+
+  auto aio_comp = create_rados_callback<
+    PromoteRequest<I>,
+    &PromoteRequest<I>::handle_disable_non_primary_feature>(this);
+  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, aio_comp,
+                                          &op);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void PromoteRequest<I>::handle_disable_non_primary_feature(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to disable non-primary feature: "
+               << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
