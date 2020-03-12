@@ -103,6 +103,35 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Locking -->
+      <legend i18n>Locking</legend>
+      <table class="table table-striped table-bordered">
+        <tbody>
+          <tr>
+            <td i18n
+                class="bold w-25">Enabled</td>
+            <td class="w-75">{{ bucket.lock_enabled | booleanText }}</td>
+          </tr>
+          <ng-container *ngIf="bucket.lock_enabled">
+            <tr>
+              <td i18n
+                  class="bold">Mode</td>
+              <td>{{ bucket.lock_mode }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Days</td>
+              <td>{{ bucket.lock_retention_period_days }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Years</td>
+              <td>{{ bucket.lock_retention_period_years }}</td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
     </div>
   </tab>
 </tabset>
