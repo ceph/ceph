@@ -964,6 +964,12 @@ test_trash_purge_schedule() {
     expect_fail rbd trash purge schedule ls -p rbd2
     rbd trash purge schedule ls -p rbd2 -R | grep 'every 2d starting at 00:17'
     rbd trash purge schedule ls -p rbd2/ns1 -R | grep 'every 2d starting at 00:17'
+    test "$(rbd trash purge schedule ls -R -p rbd2/ns1 --format xml |
+        $XMLSTARLET sel -t -v '//schedules/schedule/pool')" = "-"
+    test "$(rbd trash purge schedule ls -R -p rbd2/ns1 --format xml |
+        $XMLSTARLET sel -t -v '//schedules/schedule/namespace')" = "-"
+    test "$(rbd trash purge schedule ls -R -p rbd2/ns1 --format xml |
+        $XMLSTARLET sel -t -v '//schedules/schedule/items/item/start_time')" = "00:17:00"
 
     for i in `seq 12`; do
         rbd trash purge schedule status --format xml |
