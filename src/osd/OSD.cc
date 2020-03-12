@@ -10320,9 +10320,6 @@ void OSDShard::register_and_wake_split_child(PG *pg)
 	epoch,
 	epoch,
 	NullEvt())));
-
-  std::lock_guard l{sdata_wait_lock};
-  sdata_cond.notify_one();
 }
 
 void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
