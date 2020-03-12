@@ -19,6 +19,7 @@ from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.service_spec import ServiceSpec
 from mgr_util import merge_dicts
 
 try:
@@ -343,7 +344,7 @@ class RookCluster(object):
                 raise
 
     def add_filesystem(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
@@ -492,10 +493,11 @@ class RookCluster(object):
                 new_cluster.spec.storage.nodes = ccl.NodesList()
 
             current_nodes = getattr(current_cluster.spec.storage, 'nodes', ccl.NodesList())
+            matching_host = drive_group.placement.pattern_matches_hosts(all_hosts)[0]
 
-            if drive_group.hosts(all_hosts)[0] not in [n.name for n in current_nodes]:
+            if matching_host not in [n.name for n in current_nodes]:
                 pd = ccl.NodesItem(
-                    name=drive_group.hosts(all_hosts)[0],
+                    name=matching_host,
                     config=ccl.Config(
                         storeType=drive_group.objectstore
                     )
@@ -513,7 +515,7 @@ class RookCluster(object):
             else:
                 for _node in new_cluster.spec.storage.nodes:
                     current_node = _node  # type: ccl.NodesItem
-                    if current_node.name == drive_group.hosts(all_hosts)[0]:
+                    if current_node.name == matching_host:
                         if block_devices:
                             if not hasattr(current_node, 'devices'):
                                 current_node.devices = ccl.DevicesList()
