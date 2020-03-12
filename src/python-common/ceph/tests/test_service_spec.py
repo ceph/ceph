@@ -36,7 +36,7 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         ('2 host1 host2', "PlacementSpec(count=2, hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
         ('label:foo', "PlacementSpec(label='foo')"),
         ('3 label:foo', "PlacementSpec(count=3, label='foo')"),
-        ('*', 'PlacementSpec(all_hosts=True)'),
+        ('*', "PlacementSpec(host_pattern='*')"),
     ])
 def test_parse_placement_specs(test_input, expected):
     ret = PlacementSpec.from_string(test_input)
