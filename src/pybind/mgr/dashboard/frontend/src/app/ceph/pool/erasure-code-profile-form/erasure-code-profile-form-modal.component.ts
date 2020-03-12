@@ -14,11 +14,11 @@ import { FinishedTask } from '../../../shared/models/finished-task';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 
 @Component({
-  selector: 'cd-erasure-code-profile-form',
-  templateUrl: './erasure-code-profile-form.component.html',
-  styleUrls: ['./erasure-code-profile-form.component.scss']
+  selector: 'cd-erasure-code-profile-form-modal',
+  templateUrl: './erasure-code-profile-form-modal.component.html',
+  styleUrls: ['./erasure-code-profile-form-modal.component.scss']
 })
-export class ErasureCodeProfileFormComponent implements OnInit {
+export class ErasureCodeProfileFormModalComponent implements OnInit {
   @Output()
   submitAction = new EventEmitter();
 

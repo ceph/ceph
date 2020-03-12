@@ -10,11 +10,11 @@ import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-h
 import { ApiModule } from '../../../shared/api/api.module';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { RbdNamespaceFormComponent } from './rbd-namespace-form.component';
+import { RbdNamespaceFormModalComponent } from './rbd-namespace-form-modal.component';
 
-describe('RbdNamespaceFormComponent', () => {
-  let component: RbdNamespaceFormComponent;
-  let fixture: ComponentFixture<RbdNamespaceFormComponent>;
+describe('RbdNamespaceFormModalComponent', () => {
+  let component: RbdNamespaceFormModalComponent;
+  let fixture: ComponentFixture<RbdNamespaceFormModalComponent>;
 
   configureTestBed({
     imports: [
@@ -25,12 +25,12 @@ describe('RbdNamespaceFormComponent', () => {
       ToastrModule.forRoot(),
       RouterTestingModule
     ],
-    declarations: [RbdNamespaceFormComponent],
+    declarations: [RbdNamespaceFormModalComponent],
     providers: [BsModalRef, BsModalService, AuthStorageService, i18nProviders]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(RbdNamespaceFormComponent);
+    fixture = TestBed.createComponent(RbdNamespaceFormModalComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

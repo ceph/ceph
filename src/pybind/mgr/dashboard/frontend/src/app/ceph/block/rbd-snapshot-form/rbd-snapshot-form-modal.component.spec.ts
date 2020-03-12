@@ -11,11 +11,11 @@ import { ApiModule } from '../../../shared/api/api.module';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { RbdSnapshotFormComponent } from './rbd-snapshot-form.component';
+import { RbdSnapshotFormModalComponent } from './rbd-snapshot-form-modal.component';
 
-describe('RbdSnapshotFormComponent', () => {
-  let component: RbdSnapshotFormComponent;
-  let fixture: ComponentFixture<RbdSnapshotFormComponent>;
+describe('RbdSnapshotFormModalComponent', () => {
+  let component: RbdSnapshotFormModalComponent;
+  let fixture: ComponentFixture<RbdSnapshotFormModalComponent>;
 
   configureTestBed({
     imports: [
@@ -27,12 +27,12 @@ describe('RbdSnapshotFormComponent', () => {
       ToastrModule.forRoot(),
       RouterTestingModule
     ],
-    declarations: [RbdSnapshotFormComponent],
+    declarations: [RbdSnapshotFormModalComponent],
     providers: [BsModalRef, BsModalService, AuthStorageService, i18nProviders]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(RbdSnapshotFormComponent);
+    fixture = TestBed.createComponent(RbdSnapshotFormModalComponent);
     component = fixture.componentInstance;
   });
 
