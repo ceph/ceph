@@ -11,14 +11,6 @@
         </button>
       </div>
       <div class="card-body">
-        <!--
-          ng2-tree can't be used here as it cannot handle the reloading of all nodes
-          without loosing all states of the current tree. The difference of both tree components is
-          that ng2-tree is defined and configured by each node where as angular-tree
-          is configured by a tree structure and consist of nodes that mainly hold data.
-          Angular-tree is a lot better for dynamically loaded trees. The downside is that it's not
-          possible to set individual icons for each node.
-        -->
         <tree-root *ngIf="nodes"
                    [nodes]="nodes"
                    [options]="treeOptions">
