@@ -296,7 +296,30 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 last_refresh=now,
             )
 
-        # FIXME: CephFilesystems
+        # CephFilesystems
+        all_fs = self.rook_cluster.rook_api_get(
+            "cephfilesystems/")
+        self.log.debug('CephFilesystems %s' % all_fs)
+        for fs in all_fs.get('items', []):
+            svc = 'mds.' + fs['metadata']['name']
+            if svc in spec:
+                continue
+            # FIXME: we are conflating active (+ standby) with count
+            active = fs['spec'].get('metadataServer', {}).get('activeCount', 1)
+            total_mds = active
+            if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
+                total_mds = active * 2
+            spec[svc] = orchestrator.ServiceDescription(
+                service_name=svc,
+                spec=orchestrator.ServiceSpec(
+                    svc,
+                    placement=orchestrator.PlacementSpec(count=active),
+                ),
+                size=total_mds,
+                container_image_name=image_name,
+                last_refresh=now,
+            )
+
         # FIXME: CephObjectstores
 
         for dd in self._list_daemons():
