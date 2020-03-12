@@ -450,7 +450,7 @@ void ProtocolV2::reset_session(bool full)
   }
 }
 
-seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
+seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange(bool is_connect)
 {
   // 1. prepare and send banner
   bufferlist banner_payload;
@@ -503,7 +503,7 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
       logger().debug("{} GOT banner: payload_len={}", conn, payload_len);
       INTERCEPT_CUSTOM(custom_bp_t::BANNER_PAYLOAD_READ, bp_type_t::READ);
       return read(payload_len);
-    }).then([this] (bufferlist bl) {
+    }).then([this, is_connect] (bufferlist bl) {
       // 4. process peer banner_payload and send HelloFrame
       auto p = bl.cbegin();
       uint64_t peer_supported_features;
@@ -526,13 +526,13 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
         logger().error("{} peer does not support all required features"
                        " required={} peer_supported={}",
                        conn, required_features, peer_supported_features);
-        abort_in_close(*this, false);
+        abort_in_close(*this, is_connect);
       }
       if ((supported_features & peer_required_features) != peer_required_features) {
         logger().error("{} we do not support all peer required features"
                        " peer_required={} supported={}",
                        conn, peer_required_features, supported_features);
-        abort_in_close(*this, false);
+        abort_in_close(*this, is_connect);
       }
       this->peer_required_features = peer_required_features;
       if (this->peer_required_features == 0) {
@@ -895,7 +895,7 @@ void ProtocolV2::execute_connecting()
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
-          return banner_exchange();
+          return banner_exchange(true);
         }).then([this] (entity_type_t _peer_type,
                         entity_addr_t _my_addr_from_peer) {
           if (conn.get_peer_type() != _peer_type) {
@@ -1295,6 +1295,7 @@ ProtocolV2::server_connect()
                       conn, *existing_conn,
                       static_cast<int>(existing_conn->protocol->proto_type));
         // should unregister the existing from msgr atomically
+        // NOTE: this is following async messenger logic, but we may miss the reset event.
         (void) existing_conn->close();
       } else {
         return handle_existing_connection(existing_conn);
@@ -1404,6 +1405,7 @@ ProtocolV2::server_reconnect()
                     "close existing and reset client.",
                     conn, *existing_conn,
                     static_cast<int>(existing_conn->protocol->proto_type));
+      // NOTE: this is following async messenger logic, but we may miss the reset event.
       (void) existing_conn->close();
       return send_reset(true);
     }
@@ -1503,7 +1505,7 @@ void ProtocolV2::execute_accepting()
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
-          return banner_exchange();
+          return banner_exchange(false);
         }).then([this] (entity_type_t _peer_type,
                         entity_addr_t _my_addr_from_peer) {
           ceph_assert(conn.get_peer_type() == 0);
