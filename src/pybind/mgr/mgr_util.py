@@ -51,7 +51,7 @@ class CephfsConnectionException(Exception):
         return "{0} ({1})".format(self.errno, self.error_str)
 
 
-class ConnectionPool(object):
+class CephfsConnectionPool(object):
     class Connection(object):
         def __init__(self, mgr, fs_name):
             self.fs = None
@@ -149,7 +149,7 @@ class ConnectionPool(object):
                     self.function(*self.args, **self.kwargs)
                 self.finished.set()
             except Exception as e:
-                logger.error("ConnectionPool.RTimer: %s", e)
+                logger.error("CephfsConnectionPool.RTimer: %s", e)
                 raise
 
     # TODO: make this configurable
@@ -161,8 +161,8 @@ class ConnectionPool(object):
         self.connections = {}
         self.lock = Lock()
         self.cond = Condition(self.lock)
-        self.timer_task = ConnectionPool.RTimer(
-            ConnectionPool.TIMER_TASK_RUN_INTERVAL,
+        self.timer_task = CephfsConnectionPool.RTimer(
+            CephfsConnectionPool.TIMER_TASK_RUN_INTERVAL,
             self.cleanup_connections)
         self.timer_task.start()
 
@@ -170,7 +170,7 @@ class ConnectionPool(object):
         with self.lock:
             logger.info("scanning for idle connections..")
             idle_fs = [fs_name for fs_name, conn in self.connections.items()
-                       if conn.is_connection_idle(ConnectionPool.CONNECTION_IDLE_INTERVAL)]
+                       if conn.is_connection_idle(CephfsConnectionPool.CONNECTION_IDLE_INTERVAL)]
             for fs_name in idle_fs:
                 logger.info("cleaning up connection for '{}'".format(fs_name))
                 self._del_fs_handle(fs_name)
@@ -189,7 +189,7 @@ class ConnectionPool(object):
                         # same name) via "ceph fs rm/new" mon command.
                         logger.warning("filesystem id changed for volume '{0}', reconnecting...".format(fs_name))
                         self._del_fs_handle(fs_name)
-                conn = ConnectionPool.Connection(self.mgr, fs_name)
+                conn = CephfsConnectionPool.Connection(self.mgr, fs_name)
                 conn.connect()
             except cephfs.Error as e:
                 # try to provide a better error string if possible
@@ -230,7 +230,7 @@ class CephfsClient(object):
     def __init__(self, mgr):
         self.mgr = mgr
         self.stopping = Event()
-        self.connection_pool = ConnectionPool(self.mgr)
+        self.connection_pool = CephfsConnectionPool(self.mgr)
 
     def shutdown(self):
         logger.info("shutting down")
