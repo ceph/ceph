@@ -761,6 +761,22 @@ def infer_fsid(func):
 
     return _infer_fsid
 
+def get_last_local_ceph_image():
+    """
+    :return: The most recent local ceph image (already pulled)
+    """
+    out, _, _ = call_throws(
+        [container_path, 'images',
+         '--filter', 'label=ceph=True',
+         '--format', '{{.Repository}} {{.Tag}}'])
+    out_lines = out.splitlines()
+    if len(out_lines) > 0:
+        repository, tag = out_lines[0].split()
+        r = '{}:{}'.format(repository, tag)
+        logger.info('Using recent ceph image %s' % r)
+        return r
+    return None
+
 def write_tmp(s, uid, gid):
     tmp_f = tempfile.NamedTemporaryFile(mode='w',
                                         prefix='ceph-tmp')
@@ -2158,7 +2174,7 @@ def command_deploy():
             daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
             if any([port_in_use(port) for port in daemon_ports]):
                 raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
-            elif args.image == DEFAULT_IMAGE:
+            elif args.image == DEFAULT_IMAGE or args.image == inferred_image:
                 raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
         # make sure provided config-json is sufficient
@@ -3783,9 +3799,18 @@ def _parse_args(av):
             if type_ in Monitoring.components:
                 args.image = Monitoring.components[type_]['image']
         if not args.image:
-            args.image = os.environ.get('CEPHADM_IMAGE', DEFAULT_IMAGE)
+            args.image = os.environ.get('CEPHADM_IMAGE')
 
     return args
+
+def _infer_image():
+    inferred = None
+    if not args.image:
+        inferred = get_last_local_ceph_image()
+        args.image = inferred
+    if not args.image:
+        args.image = DEFAULT_IMAGE
+    return inferred
 
 if __name__ == "__main__":
     # allow argv to be injected
@@ -3819,6 +3844,8 @@ if __name__ == "__main__":
         if not container_path and args.func != command_prepare_host:
             sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
             sys.exit(1)
+
+    inferred_image = _infer_image()
 
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
