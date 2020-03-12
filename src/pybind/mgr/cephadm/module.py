@@ -1979,7 +1979,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         before_osd_uuid_map = self.get_osd_uuid_map(only_up=True)
 
         split_cmd = cmd.split(' ')
-        _cmd = ['--config-and-keyring', '-', '--']
+        _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
         out, err, code = self._run_cephadm(
             host, 'osd', 'ceph-volume',
@@ -2077,7 +2077,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if daemon_type == 'mon':
                     ename = 'mon.'
                 else:
-                    ename = '%s.%s' % (daemon_type, daemon_id)
+                    ename = name_to_config_section(daemon_type + '.' + daemon_id)
                 ret, keyring, err = self.mon_command({
                     'prefix': 'auth get',
                     'entity': ename,
@@ -2094,7 +2094,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'config': config,
                 'keyring': keyring,
             }
-            extra_args.extend(['--config-and-keyring', '-'])
+            extra_args.extend(['--config-json', '-'])
 
             # osd deployments needs an --osd-uuid arg
             if daemon_type == 'osd':
