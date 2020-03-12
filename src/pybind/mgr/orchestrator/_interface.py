@@ -744,7 +744,6 @@ class Orchestrator(object):
                     }
         return features
 
-    @_hide_in_features
     def cancel_completions(self):
         # type: () -> None
         """
@@ -1542,7 +1541,15 @@ class OrchestratorClientMixin(Orchestrator):
             raise NoOrchestrator()
 
         mgr.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(mgr.module_name, o, meth, args, kwargs))
-        return mgr.remote(o, meth, *args, **kwargs)
+        try:
+            return mgr.remote(o, meth, *args, **kwargs)
+        except Exception as e:
+            if meth == 'get_feature_set':
+                raise  # self.get_feature_set() calls self._oremote()
+            f_set = self.get_feature_set()
+            if meth not in f_set or not f_set[meth]['available']:
+                raise NotImplementedError(f'{o} does not implement {meth}') from e
+            raise
 
     def _orchestrator_wait(self, completions):
         # type: (List[Completion]) -> None
