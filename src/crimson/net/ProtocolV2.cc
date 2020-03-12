@@ -62,8 +62,8 @@ void abort_protocol() {
   throw std::system_error(make_error_code(crimson::net::error::protocol_aborted));
 }
 
-void abort_in_close(crimson::net::ProtocolV2& proto) {
-  (void) proto.close();
+void abort_in_close(crimson::net::ProtocolV2& proto, bool dispatch_reset) {
+  proto.close(dispatch_reset);
   abort_protocol();
 }
 
@@ -413,8 +413,7 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
   if (conn.policy.lossy) {
     logger().info("{} {}: fault at {} on lossy channel, going to CLOSING -- {}",
                   conn, func_name, get_state_name(state), eptr);
-    dispatch_reset();
-    (void) close();
+    close(true);
   } else if (conn.policy.server ||
              (conn.policy.standby &&
               (!is_queued() && conn.sent.empty()))) {
@@ -430,17 +429,6 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
                   conn, func_name, get_state_name(state), eptr);
     execute_connecting();
   }
-}
-
-void ProtocolV2::dispatch_reset()
-{
-  (void) seastar::with_gate(pending_dispatch, [this] {
-    return dispatcher.ms_handle_reset(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  }).handle_exception([this] (std::exception_ptr eptr) {
-    logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
-    ceph_abort("unexpected exception from ms_handle_reset()");
-  });
 }
 
 void ProtocolV2::reset_session(bool full)
@@ -538,13 +526,13 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
         logger().error("{} peer does not support all required features"
                        " required={} peer_supported={}",
                        conn, required_features, peer_supported_features);
-        abort_in_close(*this);
+        abort_in_close(*this, false);
       }
       if ((supported_features & peer_required_features) != peer_required_features) {
         logger().error("{} we do not support all peer required features"
                        " peer_required={} supported={}",
                        conn, peer_required_features, supported_features);
-        abort_in_close(*this);
+        abort_in_close(*this, false);
       }
       this->peer_required_features = peer_required_features;
       if (this->peer_required_features == 0) {
@@ -668,8 +656,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
     });
   } catch (const crimson::auth::error& e) {
     logger().error("{} get_initial_auth_request returned {}", conn, e);
-    dispatch_reset();
-    abort_in_close(*this);
+    abort_in_close(*this, true);
     return seastar::now();
   }
 }
@@ -915,8 +902,7 @@ void ProtocolV2::execute_connecting()
             logger().warn("{} connection peer type does not match what peer advertises {} != {}",
                           conn, ceph_entity_type_name(conn.get_peer_type()),
                           ceph_entity_type_name(_peer_type));
-            dispatch_reset();
-            abort_in_close(*this);
+            abort_in_close(*this, true);
           }
           conn.set_ephemeral_port(_my_addr_from_peer.get_port(),
                                   SocketConnection::side_t::connector);
@@ -1128,7 +1114,7 @@ ProtocolV2::reuse_connection(
   // close this connection because all the necessary information is delivered
   // to the exisiting connection, and jump to error handling code to abort the
   // current state.
-  abort_in_close(*this);
+  abort_in_close(*this, false);
   return seastar::make_ready_future<next_step_t>(next_step_t::none);
 }
 
@@ -1172,8 +1158,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     logger().warn("{} server_connect:"
                   " existing connection {} is a lossy channel. Close existing in favor of"
                   " this connection", conn, *existing_conn);
-    existing_proto->dispatch_reset();
-    (void) existing_proto->close();
+    existing_proto->close(true);
 
     if (unlikely(state != state_t::ACCEPTING)) {
       logger().debug("{} triggered {} in execute_accepting()",
@@ -1573,7 +1558,7 @@ void ProtocolV2::execute_accepting()
         }).handle_exception([this] (std::exception_ptr eptr) {
           logger().info("{} execute_accepting(): fault at {}, going to CLOSING -- {}",
                         conn, get_state_name(state), eptr);
-          (void) close();
+          close(false);
         });
     });
 }
@@ -2116,7 +2101,7 @@ void ProtocolV2::execute_server_wait()
     }).handle_exception([this] (std::exception_ptr eptr) {
       logger().info("{} execute_server_wait(): fault at {}, going to CLOSING -- {}",
                     conn, get_state_name(state), eptr);
-      (void) close();
+      close(false);
     });
   });
 }
@@ -2141,11 +2126,6 @@ void ProtocolV2::trigger_close()
   protocol_timer.cancel();
 
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
-#ifdef UNIT_TESTS_BUILT
-  if (conn.interceptor) {
-    conn.interceptor->register_conn_closed(conn);
-  }
-#endif
 }
 
 } // namespace crimson::net

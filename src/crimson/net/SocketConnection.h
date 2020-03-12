@@ -77,6 +77,8 @@ class SocketConnection : public Connection {
   bool is_connected() const override;
 
 #ifdef UNIT_TESTS_BUILT
+  bool is_closed_clean() const override;
+
   bool is_closed() const override;
 
   bool peer_wins() const override;

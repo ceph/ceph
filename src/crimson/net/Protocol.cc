@@ -7,6 +7,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"
+#include "crimson/net/Dispatcher.h"
 #include "crimson/net/Socket.h"
 #include "crimson/net/SocketConnection.h"
 #include "msg/Message.h"
@@ -39,37 +40,60 @@ bool Protocol::is_connected() const
   return write_state == write_state_t::open;
 }
 
-seastar::future<> Protocol::close()
+void Protocol::close(bool dispatch_reset)
 {
   if (closed) {
     // already closing
     assert(close_ready.valid());
-    return close_ready.get_future();
+    return;
   }
 
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn_ref = conn.shared_from_this(), this] {
       logger().debug("{} closed!", conn);
+#ifdef UNIT_TESTS_BUILT
+      is_closed_clean = true;
+      if (conn.interceptor) {
+        conn.interceptor->register_conn_closed(conn);
+      }
+#endif
     };
-
-  trigger_close();
 
   // close_ready become valid only after state is state_t::closing
   assert(!close_ready.valid());
 
+  // atomic operations
+  trigger_close();
   if (socket) {
     socket->shutdown();
-    close_ready = pending_dispatch.close().finally([this] {
-      return socket->close();
-    }).finally(std::move(cleanup));
-  } else {
-    close_ready = pending_dispatch.close().finally(std::move(cleanup));
   }
-
   closed = true;
   set_write_state(write_state_t::drop);
+  auto gate_closed = pending_dispatch.close();
 
-  return close_ready.get_future();
+  // asynchronous operations
+  close_ready = seastar::when_all_succeed(
+    std::move(gate_closed).finally([this] {
+      if (socket) {
+        return socket->close();
+      }
+      return seastar::now();
+    }),
+    [this, dispatch_reset] {
+      if (dispatch_reset) {
+        // force ms_handle_reset() to be an asynchronous task to prevent
+        // internal state contamination.
+        return seastar::sleep(0s).then([this] {
+          return dispatcher.ms_handle_reset(
+              seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+        }).handle_exception([this] (std::exception_ptr eptr) {
+          logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
+          ceph_abort("unexpected exception from ms_handle_reset()");
+        });
+      }
+      return seastar::now();
+    }
+  ).finally(std::move(cleanup));
 }
 
 seastar::future<> Protocol::send(MessageRef msg)

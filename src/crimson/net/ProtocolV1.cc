@@ -377,7 +377,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", conn, eptr);
-          (void) close();
+          close(false);
         });
     });
 }
@@ -663,7 +663,7 @@ void ProtocolV1::start_accept(SocketRef&& sock,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
           logger().warn("{} accepting fault: {}", conn, eptr);
-          (void) close();
+          close(false);
         });
     });
 }
@@ -901,16 +901,13 @@ void ProtocolV1::execute_open()
           logger().warn("{} open fault: {}", conn, e);
           if (e.code() == error::protocol_aborted ||
               e.code() == std::errc::connection_reset) {
-            return dispatcher.ms_handle_reset(
-                seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-              .then([this] {
-                (void) close();
-              });
+            close(true);
+            return seastar::now();
           } else if (e.code() == error::read_eof) {
             return dispatcher.ms_handle_remote_reset(
                 seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
               .then([this] {
-                (void) close();
+                close(false);
               });
           } else {
             throw e;
@@ -918,7 +915,7 @@ void ProtocolV1::execute_open()
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the open state
           logger().warn("{} open fault: {}", conn, eptr);
-          (void) close();
+          close(false);
         });
     });
 }

@@ -63,6 +63,12 @@ bool SocketConnection::is_closed() const
   return protocol->is_closed();
 }
 
+bool SocketConnection::is_closed_clean() const
+{
+  assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_closed_clean;
+}
+
 #endif
 bool SocketConnection::peer_wins() const
 {
@@ -84,7 +90,7 @@ seastar::future<> SocketConnection::keepalive()
 seastar::future<> SocketConnection::close()
 {
   assert(seastar::engine().cpu_id() == shard_id());
-  return protocol->close();
+  return protocol->close_clean(false);
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)
