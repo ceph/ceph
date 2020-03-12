@@ -30,7 +30,7 @@ class Protocol {
 #endif
 
   // Reentrant closing
-  void close(bool dispatch_reset);
+  void close(bool dispatch_reset, std::optional<std::function<void()>> f_accept_new=std::nullopt);
   seastar::future<> close_clean(bool dispatch_reset) {
     close(dispatch_reset);
     return close_ready.get_future();

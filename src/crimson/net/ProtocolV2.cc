@@ -1158,14 +1158,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     logger().warn("{} server_connect:"
                   " existing connection {} is a lossy channel. Close existing in favor of"
                   " this connection", conn, *existing_conn);
-    existing_proto->close(true);
-
-    if (unlikely(state != state_t::ACCEPTING)) {
-      logger().debug("{} triggered {} in execute_accepting()",
-                     conn, get_state_name(state));
-      abort_protocol();
-    }
-    execute_establishing();
+    execute_establishing(existing_conn, true);
     return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   }
 
@@ -1289,6 +1282,7 @@ ProtocolV2::server_connect()
 
     SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
 
+    bool dispatch_reset = true;
     if (existing_conn) {
       if (existing_conn->protocol->proto_type != proto_t::v2) {
         logger().warn("{} existing connection {} proto version is {}, close existing",
@@ -1296,18 +1290,13 @@ ProtocolV2::server_connect()
                       static_cast<int>(existing_conn->protocol->proto_type));
         // should unregister the existing from msgr atomically
         // NOTE: this is following async messenger logic, but we may miss the reset event.
-        (void) existing_conn->close();
+        dispatch_reset = false;
       } else {
         return handle_existing_connection(existing_conn);
       }
     }
 
-    if (unlikely(state != state_t::ACCEPTING)) {
-      logger().debug("{} triggered {} in execute_accepting()",
-                     conn, get_state_name(state));
-      abort_protocol();
-    }
-    execute_establishing();
+    execute_establishing(existing_conn, dispatch_reset);
     return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   });
 }
@@ -1602,8 +1591,30 @@ seastar::future<> ProtocolV2::finish_auth()
 
 // ESTABLISHING
 
-void ProtocolV2::execute_establishing() {
+void ProtocolV2::execute_establishing(
+    SocketConnectionRef existing_conn, bool dispatch_reset) {
+  if (unlikely(state != state_t::ACCEPTING)) {
+    logger().debug("{} triggered {} before execute_establishing()",
+                   conn, get_state_name(state));
+    abort_protocol();
+  }
+
+  auto accept_me = [this] {
+    messenger.register_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
+    messenger.unaccept_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
+  };
+
   trigger_state(state_t::ESTABLISHING, write_state_t::delay, false);
+  if (existing_conn) {
+    existing_conn->protocol->close(dispatch_reset, std::move(accept_me));
+  } else {
+    accept_me();
+  }
+
   (void) seastar::with_gate(pending_dispatch, [this] {
     return dispatcher.ms_handle_accept(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
@@ -1611,12 +1622,7 @@ void ProtocolV2::execute_establishing() {
     logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
     ceph_abort("unexpected exception from ms_handle_accept()");
   });
-  messenger.register_conn(
-    seastar::static_pointer_cast<SocketConnection>(
-      conn.shared_from_this()));
-  messenger.unaccept_conn(
-    seastar::static_pointer_cast<SocketConnection>(
-      conn.shared_from_this()));
+
   execution_done = seastar::with_gate(pending_dispatch, [this] {
     return seastar::futurize_apply([this] {
       return send_server_ident();
