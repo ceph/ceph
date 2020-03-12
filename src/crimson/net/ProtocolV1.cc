@@ -377,7 +377,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", conn, eptr);
-          close(false);
+          close(true);
         });
     });
 }
@@ -466,7 +466,7 @@ seastar::future<stop_t> ProtocolV1::replace_existing(
     // will all be performed using v2 protocol.
     ceph_abort("lossless policy not supported for v1");
   }
-  (void) existing->close();
+  existing->protocol->close(true);
   return send_connect_reply_ready(reply_tag, std::move(authorizer_reply));
 }
 
@@ -583,6 +583,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
           logger().warn("{} existing {} proto version is {} not 1, close existing",
                         conn, *existing,
                         static_cast<int>(existing->protocol->proto_type));
+          // NOTE: this is following async messenger logic, but we may miss the reset event.
           (void) existing->close();
         } else {
           return handle_connect_with_existing(existing, std::move(authorizer_reply));
@@ -900,22 +901,17 @@ void ProtocolV1::execute_open()
         .handle_exception_type([this] (const std::system_error& e) {
           logger().warn("{} open fault: {}", conn, e);
           if (e.code() == error::protocol_aborted ||
-              e.code() == std::errc::connection_reset) {
+              e.code() == std::errc::connection_reset ||
+              e.code() == error::read_eof) {
             close(true);
             return seastar::now();
-          } else if (e.code() == error::read_eof) {
-            return dispatcher.ms_handle_remote_reset(
-                seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-              .then([this] {
-                close(false);
-              });
           } else {
             throw e;
           }
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the open state
           logger().warn("{} open fault: {}", conn, eptr);
-          close(false);
+          close(true);
         });
     });
 }
