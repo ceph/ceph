@@ -8,7 +8,7 @@ import logging
 import pickle
 import time
 from collections import namedtuple
-from functools import wraps, partialmethod
+from functools import wraps
 import uuid
 import datetime
 import copy
