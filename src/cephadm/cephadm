@@ -772,7 +772,9 @@ def get_last_local_ceph_image():
     out_lines = out.splitlines()
     if len(out_lines) > 0:
         repository, tag = out_lines[0].split()
-        return '{}:{}'.format(repository, tag)
+        r = '{}:{}'.format(repository, tag)
+        logger.info('Using recent ceph image %s' % r)
+        return r
     return None
 
 def write_tmp(s, uid, gid):
