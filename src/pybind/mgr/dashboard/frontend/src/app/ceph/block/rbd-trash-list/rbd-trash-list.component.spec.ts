@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -17,6 +18,7 @@ import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdTrashListComponent } from './rbd-trash-list.component';
 
 describe('RbdTrashListComponent', () => {
@@ -26,8 +28,14 @@ describe('RbdTrashListComponent', () => {
   let rbdService: RbdService;
 
   configureTestBed({
-    declarations: [RbdTrashListComponent],
-    imports: [SharedModule, HttpClientTestingModule, RouterTestingModule, ToastrModule.forRoot()],
+    declarations: [RbdTrashListComponent, RbdTabsComponent],
+    imports: [
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      TabsModule.forRoot(),
+      ToastrModule.forRoot()
+    ],
     providers: [TaskListService, i18nProviders]
   });
 
