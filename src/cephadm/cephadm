@@ -812,7 +812,7 @@ def try_convert_datetime(s):
 
     # In *all* cases, the 9 digit second precision is too much for
     # python's strptime.  Shorten it to 6 digits.
-    p = re.compile(r'(\.\d\d\d\d\d\d)\d\d\d')
+    p = re.compile(r'(\.[\d]{6})[\d]*')
     s = p.sub(r'\1', s)
 
     # replace trailling Z with -0000, since (on python 3.6.8) it won't parse
