@@ -212,6 +212,11 @@ AvlAllocator::AvlAllocator(CephContext* cct,
   cct(cct)
 {}
 
+AvlAllocator::~AvlAllocator()
+{
+  shutdown();
+}
+
 int64_t AvlAllocator::allocate(
   uint64_t want,
   uint64_t unit,
