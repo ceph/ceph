@@ -353,18 +353,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             sd.status = status
             sd.status_desc = p['phase']
 
-            if sd.daemon_type == "osd":
-                sd.daemon_id = "%s" % p['labels']["ceph-osd-id"]
-            elif sd.daemon_type == "mds":
-                pfx = "{0}-".format(p['labels']['rook_file_system'])
-                sd.daemon_id = p['labels']['ceph_daemon_id'].replace(pfx, '', 1)
-            elif sd.daemon_type == "mon":
-                sd.daemon_id = p['labels']["mon"]
-            elif sd.daemon_type == "mgr":
-                sd.daemon_id = p['labels']["mgr"]
-            elif sd.daemon_type == "nfs":
-                sd.daemon_id = p['labels']['instance']
-            elif sd.daemon_type == "rgw":
+            if 'ceph_daemon_id' in p['labels']:
                 sd.daemon_id = p['labels']['ceph_daemon_id']
             else:
                 # Unknown type -- skip it
