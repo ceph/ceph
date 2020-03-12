@@ -233,6 +233,9 @@ class CephfsClient(object):
         self.stopping = Event()
         self.connection_pool = CephfsConnectionPool(self.mgr)
 
+    def is_stopping(self):
+        return self.stopping.is_set()
+
     def shutdown(self):
         logger.info("shutting down")
         # first, note that we're shutting down
