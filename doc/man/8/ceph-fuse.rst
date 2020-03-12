@@ -82,4 +82,4 @@ See also
 fusermount(8),
 :doc:`ceph <ceph>`\(8)
 
-.. _Mount CephFS using FUSE: ../../../cephfs/fuse/
+.. _Mount CephFS using FUSE: ../../../cephfs/mount-using-fuse/
