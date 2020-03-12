@@ -6,6 +6,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_future.hh>
 
+#include "crimson/common/log.h"
 #include "Fwd.h"
 #include "SocketConnection.h"
 
@@ -62,17 +63,27 @@ class Protocol {
   const proto_t proto_type;
 
  protected:
+  template <typename Func>
+  void gated_dispatch(const char* what, Func&& func) {
+    (void) seastar::with_gate(pending_dispatch, std::forward<Func>(func)
+    ).handle_exception([this, what] (std::exception_ptr eptr) {
+      crimson::get_logger(ceph_subsys_ms).error(
+          "{} gated_dispatch() {} caught exception: {}", conn, what, eptr);
+      ceph_abort("unexpected exception from gated_dispatch()");
+    });
+  }
+
   Dispatcher &dispatcher;
   SocketConnection &conn;
 
   SocketRef socket;
-  seastar::gate pending_dispatch;
   AuthConnectionMetaRef auth_meta;
 
  private:
   bool closed = false;
   // become valid only after closed == true
   seastar::shared_future<> close_ready;
+  seastar::gate pending_dispatch;
 
 // the write state-machine
  public:

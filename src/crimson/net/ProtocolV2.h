@@ -80,6 +80,14 @@ class ProtocolV2 final : public Protocol {
 
   seastar::shared_future<> execution_done = seastar::now();
 
+  template <typename Func>
+  void gated_execute(const char* what, Func&& func) {
+    gated_dispatch(what, [this, &func] {
+      execution_done = seastar::futurize_apply(std::forward<Func>(func));
+      return execution_done.get_future();
+    });
+  }
+
   class Timer {
     double last_dur_ = 0.0;
     const SocketConnection& conn;
