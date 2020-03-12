@@ -4,6 +4,7 @@ import time
 from textwrap import dedent
 from teuthology.orchestra.run import CommandFailedError
 from teuthology import misc
+from io import BytesIO
 
 from teuthology.orchestra import remote as orchestra_remote
 from teuthology.orchestra import run
@@ -210,10 +211,10 @@ class KernelMount(CephFSMount):
             print(json.dumps(get_id_to_dir()))
             """)
 
-        output = self.client_remote.sh([
+        output = self.client_remote.run(args=[
             'sudo', 'python3', '-c', pyscript
-        ], timeout=(5*60))
-        client_id_to_dir = json.loads(output)
+        ], stdout=BytesIO(), timeout=(5*60))
+        client_id_to_dir = json.loads(output.stdout.getvalue().strip())
 
         try:
             return client_id_to_dir[self.client_id]
@@ -232,10 +233,10 @@ class KernelMount(CephFSMount):
             print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
-        output = self.client_remote.sh([
+        output = self.client_remote.run(args=[
             'sudo', 'python3', '-c', pyscript
-        ], timeout=(5*60))
-        return output
+        ], stdout=BytesIO(), timeout=(5*60))
+        return output.stdout.getvalue().strip()
 
     def get_global_id(self):
         """

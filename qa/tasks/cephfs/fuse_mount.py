@@ -444,9 +444,9 @@ print(find_socket("{client_name}"))
             client_name="client.{0}".format(self.client_id))
 
         # Find the admin socket
-        asok_path = self.client_remote.sh([
+        asok_path = self.client_remote.run(args=[
             'sudo', 'python3', '-c', pyscript
-        ], timeout=(15*60)).strip()
+        ], stdout=BytesIO(), timeout=(15*60)).stdout.getvalue().strip()
         log.info("Found client admin socket at {0}".format(asok_path))
 
         # Query client ID from admin socket
