@@ -1,10 +1,20 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, NgZone } from '@angular/core';
+import { Injectable } from '@angular/core';
 
-import { Observable } from 'rxjs';
-import { shareReplay } from 'rxjs/operators';
+import { Observable, timer } from 'rxjs';
+import { observeOn, shareReplay, switchMap } from 'rxjs/operators';
 
-export type FeatureTogglesMap = Record<string, boolean>;
+import { NgZoneSchedulerService } from './ngzone-scheduler.service';
+
+export class FeatureTogglesMap {
+  rbd = true;
+  mirroring = true;
+  iscsi = true;
+  cephfs = true;
+  rgw = true;
+  nfs = true;
+}
+export type Features = keyof FeatureTogglesMap;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
 
 @Injectable({
@@ -12,20 +22,15 @@ export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
 })
 export class FeatureTogglesService {
   readonly API_URL: string = 'api/feature_toggles';
-  readonly REFRESH_INTERVAL: number = 20000;
+  readonly REFRESH_INTERVAL: number = 30000;
   private featureToggleMap$: FeatureTogglesMap$;
 
-  constructor(private http: HttpClient, private zone: NgZone) {
-    this.featureToggleMap$ = this.http.get<FeatureTogglesMap>(this.API_URL).pipe(shareReplay(1));
-    this.zone.runOutsideAngular(() => {
-      window.setInterval(() => {
-        this.zone.run(() => {
-          this.featureToggleMap$ = this.http
-            .get<FeatureTogglesMap>(this.API_URL)
-            .pipe(shareReplay(1));
-        });
-      }, this.REFRESH_INTERVAL);
-    });
+  constructor(private http: HttpClient, protected ngZone: NgZoneSchedulerService) {
+    this.featureToggleMap$ = timer(0, this.REFRESH_INTERVAL, ngZone.leave).pipe(
+      switchMap(() => this.http.get<FeatureTogglesMap>(this.API_URL)),
+      shareReplay(1),
+      observeOn(ngZone.enter)
+    );
   }
 
   get(): FeatureTogglesMap$ {
