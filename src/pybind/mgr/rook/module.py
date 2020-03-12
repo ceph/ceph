@@ -4,7 +4,7 @@ import functools
 import os
 
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
 
 try:
     from typing import List, Dict, Optional, Callable, Any
@@ -264,9 +264,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         spec = {}
         spec['mon'] = orchestrator.ServiceDescription(
             service_name='mon',
-            spec=orchestrator.ServiceSpec(
+            spec=ServiceSpec(
                 'mon',
-                placement=orchestrator.PlacementSpec(
+                placement=PlacementSpec(
                     count=cl['spec'].get('mon', {}).get('count', 1),
                 ),
             ),
@@ -276,9 +276,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
         spec['mgr'] = orchestrator.ServiceDescription(
             service_name='mgr',
-            spec=orchestrator.ServiceSpec(
+            spec=ServiceSpec(
                 'mgr',
-                placement=orchestrator.PlacementSpec.from_string('count:1'),
+                placement=PlacementSpec.from_string('count:1'),
             ),
             size=1,
             container_image_name=image_name,
@@ -287,9 +287,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if not cl['spec'].get('crashCollector', {}).get('disable', False):
             spec['crash'] = orchestrator.ServiceDescription(
                 service_name='crash',
-                spec=orchestrator.ServiceSpec(
+                spec=ServiceSpec(
                     'crash',
-                    placement=orchestrator.PlacementSpec.from_string('all:true'),
+                    placement=PlacementSpec.from_string('all:true'),
                 ),
                 size=num_nodes,
                 container_image_name=image_name,
@@ -311,9 +311,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 total_mds = active * 2
             spec[svc] = orchestrator.ServiceDescription(
                 service_name=svc,
-                spec=orchestrator.ServiceSpec(
+                spec=ServiceSpec(
                     svc,
-                    placement=orchestrator.PlacementSpec(count=active),
+                    placement=PlacementSpec(count=active),
                 ),
                 size=total_mds,
                 container_image_name=image_name,
@@ -377,11 +377,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def add_mds(self, spec):
-        # type: (ServiceSpec) -> RookCompletion
-        return self._service_add_decorate('MDS', spec,
-                                       self.rook_cluster.add_filesystem)
-
     def add_rgw(self, spec):
         # type: (RGWSpec) -> RookCompletion
         return self._service_add_decorate('RGW', spec,
@@ -427,12 +422,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def apply_mds(self, spec):
         # type: (ServiceSpec) -> RookCompletion
-        num = spec.placement.count
-        return write_completion(
-            lambda: self.rook_cluster.update_mds_count(spec.service_id, num),
-            "Updating MDS server count in {0} to {1}".format(spec.service_id, num),
-            mgr=self
-        )
+        return self._service_add_decorate('MDS', spec,
+                                          self.rook_cluster.apply_filesystem)
 
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> RookCompletion
