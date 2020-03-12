@@ -10,3 +10,4 @@ tasks:
       RBD_MIRROR_INSTANCES: '4'
       RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
       RBD_MIRROR_CONFIG_KEY: '1'
+      RBD_IMAGE_FEATURES: 'layering,exclusive-lock'

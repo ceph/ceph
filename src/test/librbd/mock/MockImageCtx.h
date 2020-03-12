@@ -56,6 +56,8 @@ struct MockImageCtx {
       snap_ids(image_ctx.snap_ids),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
+      read_only_flags(image_ctx.read_only_flags),
+      read_only_mask(image_ctx.read_only_mask),
       clone_copy_on_read(image_ctx.clone_copy_on_read),
       lockers(image_ctx.lockers),
       exclusive_locked(image_ctx.exclusive_locked),
@@ -235,6 +237,8 @@ struct MockImageCtx {
 
   bool old_format;
   bool read_only;
+  uint32_t read_only_flags;
+  uint32_t read_only_mask;
 
   bool clone_copy_on_read;
 

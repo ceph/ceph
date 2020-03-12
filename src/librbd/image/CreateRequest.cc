@@ -544,7 +544,7 @@ void CreateRequest<I>::handle_object_map_resize(int r) {
 template<typename I>
 void CreateRequest<I>::fetch_mirror_mode() {
   if ((m_features & RBD_FEATURE_JOURNALING) == 0) {
-    complete(0);
+    mirror_image_enable();
     return;
   }
 

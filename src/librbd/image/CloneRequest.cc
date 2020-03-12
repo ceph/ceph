@@ -424,7 +424,10 @@ template <typename I>
 void CloneRequest<I>::get_mirror_mode() {
   ldout(m_cct, 15) << dendl;
 
-  if (!m_imctx->test_features(RBD_FEATURE_JOURNALING)) {
+  if (!m_non_primary_global_image_id.empty()) {
+    enable_mirror();
+    return;
+  } else if (!m_imctx->test_features(RBD_FEATURE_JOURNALING)) {
     close_child();
     return;
   }
@@ -455,15 +458,12 @@ void CloneRequest<I>::handle_get_mirror_mode(int r) {
                  << dendl;
 
     m_r_saved = r;
-    close_child();
-  } else {
-    if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL ||
-	!m_non_primary_global_image_id.empty()) {
-      enable_mirror();
-    } else {
-      close_child();
-    }
+  } else if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
+    enable_mirror();
+    return;
   }
+
+  close_child();
 }
 
 template <typename I>
