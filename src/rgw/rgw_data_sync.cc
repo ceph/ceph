@@ -1626,6 +1626,12 @@ public:
         drain_all();
         return set_cr_error(retcode);
       }
+      // clean up full sync index
+      yield {
+        const auto& pool = sync_env->svc->zone->get_zone_params().log_pool;
+        auto oid = full_data_sync_index_shard_oid(sc->source_zone.id, shard_id);
+        call(new RGWRadosRemoveCR(sync_env->store, {pool, oid}));
+      }
       // keep lease and transition to incremental_sync()
     }
     return 0;
