@@ -31,6 +31,18 @@ To clear this value use the command:
 Health checks
 =============
 
+CEPHADM_PAUSED
+--------------
+
+Cephadm background work has been paused with ``ceph orch pause``.  Cephadm
+will continue to perform passive monitoring activities (like checking
+host and daemon status), but it will not make any changes (like deploying
+or removing daemons).
+
+You can resume cephadm work with::
+
+  ceph orch resume
+
 CEPHADM_STRAY_HOST
 ------------------
 
