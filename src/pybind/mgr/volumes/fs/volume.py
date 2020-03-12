@@ -55,9 +55,6 @@ class VolumeClient(CephfsClient):
             self.cloner.queue_job(fs['mdsmap']['fs_name'])
             self.purge_queue.queue_job(fs['mdsmap']['fs_name'])
 
-    def is_stopping(self):
-        return self.stopping.is_set()
-
     def shutdown(self):
         # Overrides CephfsClient.shutdown()
         log.info("shutting down")
