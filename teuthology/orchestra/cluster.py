@@ -63,6 +63,17 @@ class Cluster(object):
         remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
         return [remote.run(**kwargs) for remote in remotes]
 
+    def sh(self, **kwargs):
+        """
+        Run a command on all the nodes in this cluster.
+
+        Goes through nodes in alphabetical order.
+
+        Returns a list of the command outputs correspondingly.
+        """
+        remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
+        return [remote.sh(**kwargs) for remote in remotes]
+
     def write_file(self, file_name, content, sudo=False, perms=None, owner=None):
         """
         Write text to a file on each node.
