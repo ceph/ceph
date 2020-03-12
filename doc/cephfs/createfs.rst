@@ -68,8 +68,8 @@ choose which to use when mounting.
 	- `Mount CephFS`_
 	- `Mount CephFS as FUSE`_
 
-.. _Mount CephFS: ../../cephfs/kernel
-.. _Mount CephFS as FUSE: ../../cephfs/fuse
+.. _Mount CephFS: ../../cephfs/mount-using-kernel-driver
+.. _Mount CephFS as FUSE: ../../cephfs/mount-using-fuse
 
 If you have created more than one file system, and a client does not
 specify a file system when mounting, you can control which file system
