@@ -93,11 +93,11 @@ class TimeoutExpired(Error):
 
 ##################################
 
-
 class Ceph(object):
     daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror',
                'crash')
 
+##################################
 
 class Monitoring(object):
     """Define the configs for the monitoring containers"""
@@ -157,6 +157,180 @@ class Monitoring(object):
         },
     }  # type: ignore
 
+##################################
+
+class NFSGanesha(object):
+    """Defines a NFS-Ganesha container"""
+
+    daemon_type = 'nfs'
+    entrypoint = '/usr/bin/ganesha.nfsd'
+    daemon_args = ['-F', '-L', 'STDERR']
+
+    required_files = ['ganesha.conf']
+
+    port_map = {
+        "nfs" : 2049,
+    }
+
+    def __init__(self,
+                 fsid,
+                 daemon_id,
+                 config_json,
+                 image=DEFAULT_IMAGE):
+        # type: (str, Union[int, str], Dict, str) -> None
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.image = image
+
+        def json_get(key, default=None, require=False):
+            if require and not key in config_json.keys():
+                raise Error('{} missing from config-json'.format(key))
+            return config_json.get(key, default)
+
+        # config-json options
+        self.pool = json_get('pool', require=True)
+        self.namespace = json_get('namespace')
+        self.files = json_get('files', {})
+
+        # validate the supplied args
+        self.validate()
+
+    @classmethod
+    def init(cls, fsid, daemon_id):
+        # type: (str, Union[int, str]) -> NFSGanesha
+        return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
+
+    @staticmethod
+    def port_in_use():
+        # type () -> None
+        for (srv, port) in NFSGanesha.port_map.items():
+            if port_in_use(port):
+                msg = 'TCP port {} required for {} is already in use'.format(port, srv)
+                raise Error(msg)
+
+    @staticmethod
+    def get_container_mounts(data_dir):
+        # type: (str) -> Dict[str, str]
+        mounts = dict()
+        mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
+        mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
+        mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha'
+        return mounts
+
+    @staticmethod
+    def get_container_envs():
+        # type: () -> List[str]
+        envs = [
+            'CEPH_CONF=%s' % ('/etc/ceph/ceph.conf')
+        ]
+        return envs
+
+    @staticmethod
+    def get_version(container_id):
+        # type(str) -> Optional[str]
+        version = None
+        out, err, code = call(
+            [container_path, 'exec', container_id,
+             NFSGanesha.entrypoint, '-v'])
+        if code == 0:
+            match = re.search(r'NFS-Ganesha Release\s*=\s*[V]*([\d.]+)', out)
+            if match:
+                version = match.group(1)
+        return version
+
+    def validate(self):
+        # type () -> None
+        if not is_fsid(self.fsid):
+            raise Error('not an fsid: %s' % self.fsid)
+        if not self.daemon_id:
+            raise Error('invalid daemon_id: %s' % self.daemon_id)
+        if not self.image:
+            raise Error('invalid image: %s' % self.image)
+
+        # check for the required files
+        if self.required_files:
+            for fname in self.required_files:
+                if fname not in self.files:
+                    raise Error('required file missing from config-json: %s' % fname)
+
+    def get_daemon_name(self):
+        # type: () -> str
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def get_container_name(self, desc=None):
+        # type: (Optional[str]) -> str
+        cname = 'ceph-%s-%s' % (self.fsid, self.get_daemon_name())
+        if desc:
+            cname = '%s-%s' % (cname, desc)
+        return cname
+
+    def get_file_content(self, fname):
+        # type: (str) -> str
+        """Normalize the json file content into a string"""
+        content = self.files.get(fname)
+        if isinstance(content, list):
+            content = '\n'.join(content)
+        return content
+
+    def create_daemon_dirs(self, data_dir, uid, gid):
+        # type: (str, int, int) -> None
+        """Create files under the container data dir"""
+        if not os.path.isdir(data_dir):
+            raise OSError('data_dir is not a directory: %s' % (data_dir))
+
+        logger.info('Creating ganesha config...')
+
+        # create the ganesha conf dir
+        config_dir = os.path.join(data_dir, 'etc/ganesha')
+        makedirs(config_dir, uid, gid, 0o755)
+
+        # populate files from the config-json
+        for fname in self.files:
+            config_file = os.path.join(config_dir, fname)
+            config_content = self.get_file_content(fname)
+            logger.info('Write file: %s' % (config_file))
+            with open(config_file, 'w') as f:
+                os.fchown(f.fileno(), uid, gid)
+                os.fchmod(f.fileno(), 0o600)
+                f.write(config_content)
+
+    def get_rados_grace_container(self, action):
+        # type: (str) -> CephContainer
+        """Container for a ganesha action on the grace db"""
+        entrypoint = '/usr/bin/ganesha-rados-grace'
+
+        assert self.pool
+        args=['--pool', self.pool]
+        if self.namespace:
+            args += ['--ns', self.namespace]
+        args += [action, self.get_daemon_name()]
+
+        data_dir = get_data_dir(self.fsid, self.daemon_type, self.daemon_id)
+        volume_mounts = self.get_container_mounts(data_dir)
+        envs = self.get_container_envs()
+
+        logger.info('Creating RADOS grace for action: %s' % (action))
+        c = CephContainer(
+            image=self.image,
+            entrypoint=entrypoint,
+            args=args,
+            volume_mounts=volume_mounts,
+            cname=self.get_container_name(desc='grace-%s' % (action)),
+            envs=envs
+        )
+        return c
+
+##################################
+
+def get_supported_daemons():
+    supported_daemons = list(Ceph.daemons)
+    supported_daemons.extend(Monitoring.components)
+    supported_daemons.append(NFSGanesha.daemon_type)
+    assert len(supported_daemons) == len(set(supported_daemons))
+    return supported_daemons
+
+##################################
+
 def attempt_bind(s, address, port):
     # type (str) -> None
     try:
@@ -175,7 +349,7 @@ def attempt_bind(s, address, port):
 def port_in_use(port_num):
     # type (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
-
+    logger.info('Verifying port %d ...' % (port_num))
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         attempt_bind(s, '0.0.0.0', port_num)
@@ -992,6 +1166,19 @@ def check_unit(unit_name):
         state = 'unknown'
     return (enabled, state, installed)
 
+def check_units(units, enabler=None):
+    # type: (List[str], Optional[Packager]) -> bool
+    for u in units:
+        (enabled, state, installed) = check_unit(u)
+        if enabled and state == 'running':
+            logger.info('Unit %s is enabled and running' % u)
+            return True
+        if enabler is not None:
+            if installed:
+                logger.info('Enabling unit %s' % u)
+                enabler.enable_service(u)
+    return False
+
 def get_legacy_config_fsid(cluster, legacy_dir=None):
     # type: (str, str) -> Optional[str]
     config_file = '/etc/ceph/%s.conf' % cluster
@@ -1048,6 +1235,9 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ["--cluster.peer={}".format(peer)]
+    elif daemon_type == NFSGanesha.daemon_type:
+        r += NFSGanesha.daemon_args
+
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
@@ -1058,12 +1248,14 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
     make_log_dir(fsid, uid=uid, gid=gid)
 
     if config:
-        with open(data_dir + '/config', 'w') as f:
+        config_path = os.path.join(data_dir, 'config')
+        with open(config_path, 'w') as f:
             os.fchown(f.fileno(), uid, gid)
             os.fchmod(f.fileno(), 0o600)
             f.write(config)
     if keyring:
-        with open(data_dir + '/keyring', 'w') as f:
+        keyring_path = os.path.join(data_dir, 'keyring')
+        with open(keyring_path, 'w') as f:
             os.fchmod(f.fileno(), 0o600)
             os.fchown(f.fileno(), uid, gid)
             f.write(keyring)
@@ -1106,6 +1298,10 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
                     os.fchown(f.fileno(), uid, gid)
                     os.fchmod(f.fileno(), 0o600)
                     f.write(content)
+
+    if daemon_type == NFSGanesha.daemon_type:
+        nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
+        nfs_ganesha.create_daemon_dirs(data_dir, uid, gid)
 
 def get_parm(option):
     # type: (str) -> Dict[str, str]
@@ -1219,6 +1415,11 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         elif daemon_type == 'alertmanager':
             mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/alertmanager:Z'
 
+    if daemon_type == NFSGanesha.daemon_type:
+        assert daemon_id
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+        mounts.update(NFSGanesha.get_container_mounts(data_dir))
+
     return mounts
 
 def get_container(fsid, daemon_type, daemon_id, privileged=False,
@@ -1242,7 +1443,14 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
     elif daemon_type in Monitoring.components:
         entrypoint = ''
         name = ''
+    elif daemon_type == NFSGanesha.daemon_type:
+        entrypoint = NFSGanesha.entrypoint
+        name = '%s.%s' % (daemon_type, daemon_id)
+    else:
+        entrypoint = ''
+        name = ''
 
+    ceph_args = [] # type: List[str]
     if daemon_type in Monitoring.components:
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         m = Monitoring.components[daemon_type]  # type: ignore
@@ -1257,13 +1465,15 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
             #'--memory',
             #metadata.get('memory', '4GB')
         ]
-        ceph_args = []
         container_args.extend(monitoring_args)
     elif daemon_type == 'crash':
         ceph_args = ['-n', name]
-    else:
+    elif daemon_type in Ceph.daemons:
         ceph_args = ['-n', name, '-f']
 
+    envs=[] # type: List[str]
+    if daemon_type == NFSGanesha.daemon_type:
+        envs.extend(NFSGanesha.get_container_envs())
 
     return CephContainer(
         image=args.image,
@@ -1272,6 +1482,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
+        envs=envs,
         privileged=privileged,
     )
 
@@ -1371,6 +1582,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
     # cmd
     data_dir = get_data_dir(fsid, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f:
+        # pre-start cmd(s)
         if daemon_type == 'osd':
             # osds have a pre-start step
             assert osd_fsid
@@ -1387,10 +1599,19 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
             )
             f.write(' '.join(prestart.run_cmd()) + '\n')
+        elif daemon_type == NFSGanesha.daemon_type:
+            # add nfs to the rados grace db
+            nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
+            prestart = nfs_ganesha.get_rados_grace_container('add')
+            f.write(' '.join(prestart.run_cmd()) + '\n')
+
+        # container run command
         f.write(' '.join(c.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.run.new',
                   data_dir + '/unit.run')
+
+    # post-stop command(s)
     with open(data_dir + '/unit.poststop.new', 'w') as f:
         if daemon_type == 'osd':
             assert osd_fsid
@@ -1406,6 +1627,11 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                                     daemon_id),
             )
+            f.write(' '.join(poststop.run_cmd()) + '\n')
+        elif daemon_type == NFSGanesha.daemon_type:
+            # remove nfs from the rados grace db
+            nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
+            poststop = nfs_ganesha.get_rados_grace_container('remove')
             f.write(' '.join(poststop.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.poststop.new',
@@ -1438,6 +1664,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
         call_throws(['systemctl', 'start', unit_name])
 
 def update_firewalld(daemon_type):
+    # type: (str) -> None
     if args.skip_firewalld:
         return
     cmd = find_executable('firewall-cmd')
@@ -1461,6 +1688,8 @@ def update_firewalld(daemon_type):
         fw_ports.append(9283)  # mgr/prometheus exporter
     elif daemon_type in Monitoring.port_map.keys():
         fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
+    elif daemon_type == NFSGanesha.daemon_type:
+        fw_services.append('nfs')
 
     for svc in fw_services:
         out, err, ret = call([cmd, '--permanent', '--query-service', svc])
@@ -1473,16 +1702,16 @@ def update_firewalld(daemon_type):
         else:
             logger.debug('firewalld service %s is enabled in current zone' % svc)
     for port in fw_ports:
-        port = str(port) + '/tcp'
-        out, err, ret = call([cmd, '--permanent', '--query-port', port])
+        tcp_port = str(port) + '/tcp'
+        out, err, ret = call([cmd, '--permanent', '--query-port', tcp_port])
         if ret:
-            logger.info('Enabling firewalld port %s in current zone...' % port)
-            out, err, ret = call([cmd, '--permanent', '--add-port', port])
+            logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
+            out, err, ret = call([cmd, '--permanent', '--add-port', tcp_port])
             if ret:
                 raise RuntimeError('unable to add port %s to current zone: %s' %
-                                   (port, err))
+                                   (tcp_port, err))
         else:
-            logger.debug('firewalld port %s is enabled in current zone' % port)
+            logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
     call_throws([cmd, '--reload'])
 
 def install_base_units(fsid):
@@ -1990,7 +2219,8 @@ def command_bootstrap():
     logger.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(fsid, 'mgr', mgr_id)
-    deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
+    deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid,
+                  config=config, keyring=mgr_keyring)
 
     # output files
     with open(args.output_keyring, 'w') as f:
@@ -2149,11 +2379,10 @@ def command_deploy():
     l = FileLock(args.fsid)
     l.acquire()
 
-    supported_daemons = list(Ceph.daemons)
-    supported_daemons.extend(Monitoring.components)
-
-    if daemon_type not in supported_daemons:
+    if daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % daemon_type)
+
+    logger.info('Deploying daemon %s.%s ...' % (daemon_type, daemon_id))
 
     if daemon_type in Ceph.daemons:
         (config, keyring) = get_config_and_keyring()
@@ -2161,7 +2390,7 @@ def command_deploy():
         make_var_run(args.fsid, uid, gid)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
-                      config, keyring,
+                      config=config, keyring=keyring,
                       osd_fsid=args.osd_fsid,
                       reconfig=args.reconfig)
 
@@ -2194,6 +2423,16 @@ def command_deploy():
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
+                      reconfig=args.reconfig)
+
+    elif daemon_type == NFSGanesha.daemon_type:
+        NFSGanesha.port_in_use()
+        (config, keyring) = get_config_and_keyring()
+        # TODO: extract ganesha uid/gid (997, 994) ?
+        (uid, gid) = extract_uid_gid()
+        c = get_container(args.fsid, daemon_type, daemon_id)
+        deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
+                      config=config, keyring=keyring,
                       reconfig=args.reconfig)
     else:
         raise Error("{} not implemented in command_deploy function".format(daemon_type))
@@ -2466,7 +2705,9 @@ def list_daemons(detail=True, legacy_dir=None):
                             start_stamp = try_convert_datetime(start)
                             if not version or '.' not in version:
                                 version = seen_versions.get(image_id, None)
-                            if not version:
+                            if daemon_type == NFSGanesha.daemon_type:
+                                version = NFSGanesha.get_version(container_id)
+                            elif not version:
                                 if daemon_type in Ceph.daemons:
                                     out, err, code = call(
                                         [container_path, 'exec', container_id,
@@ -2495,8 +2736,7 @@ def list_daemons(detail=True, legacy_dir=None):
                                         version = err.split(' ')[2]
                                         seen_versions[image_id] = version
                                 else:
-                                    logging.warning('not fetching version for unknown daemon type %s' % daemon_type)
-                                    pass
+                                    logging.warning('version for unknown daemon type %s' % daemon_type)
                         else:
                             vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
                             try:
@@ -2905,19 +3145,13 @@ def check_time_sync(enabler=None):
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
     ]
-    for u in units:
-        (enabled, state, installed) = check_unit(u)
-        if enabled and state == 'running':
-            logger.info('Time sync unit %s is enabled and running' % u)
-            return True
-        if enabler is not None:
-            if not enabled and installed:
-                logger.info('Enabling time sync unit %s' % u)
-                enabler.enable_service(u)
-    logger.warning('No time sync service is running; checked for %s' % units)
-    return False
+    if not check_units(units, enabler=None):
+        logger.warning('No time sync service is running; checked for %s' % units)
+        return False
+    return True
 
 def command_check_host():
+    # type: () -> None
     # caller already checked for docker/podman
     logger.info('podman|docker (%s) is present' % container_path)
 
@@ -2946,6 +3180,7 @@ def command_check_host():
 ##################################
 
 def command_prepare_host():
+    # type: () -> None
     logger.info('Verifying podman|docker is present...')
     pkg = None
     if not container_path:
@@ -2975,7 +3210,7 @@ def command_prepare_host():
             f.write(args.expect_hostname + '\n')
 
     logger.info('Repeating the final host check...')
-    return command_check_host()
+    command_check_host()
 
 ##################################
 
@@ -2988,9 +3223,7 @@ class CustomValidation(argparse.Action):
             raise argparse.ArgumentError(self,
                                          "must be of the format <type>.<id>. For example, osd.1 or prometheus.myhost.com")
 
-        daemons = list(Ceph.daemons)
-        daemons.extend(Monitoring.components.keys())
-
+        daemons = get_supported_daemons()
         if daemon_type not in daemons:
             raise argparse.ArgumentError(self,
                                          "name must declare the type of daemon e.g. "
