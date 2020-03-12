@@ -5575,12 +5575,31 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     ps->share_pg_info();
   }
 
+  bool need_acting_change = false;
   for (size_t i = 0; i < ps->want_acting.size(); i++) {
     int osd = ps->want_acting[i];
     if (!advmap.osdmap->is_up(osd)) {
       pg_shard_t osd_with_shard(osd, shard_id_t(i));
-      ceph_assert(ps->is_acting(osd_with_shard) || ps->is_up(osd_with_shard));
+      if (!ps->is_acting(osd_with_shard) && !ps->is_up(osd_with_shard)) {
+        psdout(10) << "Active stray osd." << osd << " in want_acting is down"
+                   << dendl;
+        need_acting_change = true;
+      }
     }
+  }
+  if (need_acting_change) {
+     psdout(10) << "Active need acting change, call choose_acting again"
+                << dendl;
+    // possibly because we re-add some strays into the acting set and
+    // some of them then go down in a subsequent map before we could see
+    // the map changing the pg temp.
+    // call choose_acting again to clear them out.
+    // note that we leave restrict_to_up_acting to false in order to
+    // not overkill any chosen stray that is still alive.
+    pg_shard_t auth_log_shard;
+    bool history_les_bound = false;
+    ps->remove_down_peer_info(advmap.osdmap);
+    ps->choose_acting(auth_log_shard, false, &history_les_bound, true);
   }
 
   /* Check for changes in pool size (if the acting set changed as a result,
