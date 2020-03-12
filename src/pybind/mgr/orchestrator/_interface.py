@@ -901,8 +901,8 @@ class Orchestrator(object):
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def create_osds(self, drive_groups):
-        # type: (List[DriveGroupSpec]) -> Completion
+    def create_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> Completion
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -910,13 +910,11 @@ class Orchestrator(object):
         of OsdSpec: other fields are advisory/extensible for any
         finer-grained OSD feature enablement (choice of backing store,
         compression/encryption, etc).
-
-        :param drive_groups: a list of DriveGroupSpec
-        :param all_hosts: TODO, this is required because the orchestrator methods are not composable
-                Probably this parameter can be easily removed because each orchestrator can use
-                the "get_inventory" method and the "drive_group.host_pattern" attribute
-                to obtain the list of hosts where to apply the operation
         """
+        raise NotImplementedError()
+
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> List[Completion]:
+        """ Update OSD cluster """
         raise NotImplementedError()
 
     def remove_osds(self, osd_ids: List[str],

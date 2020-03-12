@@ -1947,54 +1947,42 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 r[str(o['osd'])] = o['uuid']
         return r
 
-    def call_inventory(self, hosts, drive_groups):
-        def call_create(inventory):
-            return self._prepare_deployment(hosts, drive_groups, inventory)
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> List[orchestrator.Completion]:
+        completions: List[orchestrator.Completion] = list()
+        for spec in specs:
+            completions.extend(self._apply(spec))
+        return completions
 
-        return self.get_inventory().then(call_create)
+    def create_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> orchestrator.Completion
+        self.log.info("Processing DriveGroup {}".format(drive_group))
+        # 1) use fn_filter to determine matching_hosts
+        matching_hosts = drive_group.placement.pattern_matches_hosts([x for x in self.cache.get_hosts()])
+        # 2) Map the inventory to the InventoryHost object
 
-    def create_osds(self, drive_groups):
-        # type: (List[DriveGroupSpec]) -> AsyncCompletion
-        return self.get_hosts().then(lambda hosts: self.call_inventory(hosts, drive_groups))
+        def _find_inv_for_host(hostname: str, inventory_dict: dict):
+            # This is stupid and needs to be loaded with the host
+            for _host, _inventory in inventory_dict.items():
+                if _host == hostname:
+                    return _inventory
+            raise OrchestratorError("No inventory found for host: {}".format(hostname))
 
-    def _prepare_deployment(self,
-                            all_hosts,  # type: List[orchestrator.HostSpec]
-                            drive_groups,  # type: List[DriveGroupSpec]
-                            inventory_list  # type: List[orchestrator.InventoryHost]
-                            ):
-        # type: (...) -> orchestrator.Completion
-
-        for drive_group in drive_groups:
-            self.log.info("Processing DriveGroup {}".format(drive_group))
-            # 1) use fn_filter to determine matching_hosts
-            matching_hosts = drive_group.placement.pattern_matches_hosts([x.hostname for x in all_hosts])
-            # 2) Map the inventory to the InventoryHost object
-            # FIXME: lazy-load the inventory from a InventoryHost object;
-            #        this would save one call to the inventory(at least externally)
-
-            def _find_inv_for_host(hostname, inventory_list):
-                # This is stupid and needs to be loaded with the host
-                for _inventory in inventory_list:
-                    if _inventory.name == hostname:
-                        return _inventory
-                raise OrchestratorError("No inventory found for host: {}".format(hostname))
-
-            cmds = []
-            # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
-            for host in matching_hosts:
-                inventory_for_host = _find_inv_for_host(host, inventory_list)
-                drive_selection = selector.DriveSelection(drive_group, inventory_for_host.devices)
-                cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
-                if not cmd:
-                    self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
-                    continue
-                cmds.append((host, cmd))
-
-        return self._create_osds(cmds)
-
-    @async_map_completion
-    def _create_osds(self, host, cmd):
-        return self._create_osd(host, cmd)
+        ret = []
+        # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
+        self.log.debug(f"Checking matching hosts -> {matching_hosts}")
+        for host in matching_hosts:
+            inventory_for_host = _find_inv_for_host(host, self.cache.devices)
+            self.log.debug(f"Found inventory for host {inventory_for_host}")
+            drive_selection = selector.DriveSelection(drive_group, inventory_for_host)
+            self.log.debug(f"Found drive selection {drive_selection}")
+            cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
+            self.log.debug(f"translated to cmd {cmd}")
+            if not cmd:
+                self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
+                continue
+            ret_msg = self._create_osd(host, cmd)
+            ret.append(ret_msg)
+        return trivial_result(", ".join(ret))
 
     def _create_osd(self, host, cmd):
 
@@ -2221,6 +2209,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         create_fns = {
             'mon': self._create_mon,
             'mgr': self._create_mgr,
+            'osd': self.create_osds,
             'mds': self._create_mds,
             'rgw': self._create_rgw,
             'rbd-mirror': self._create_rbd_mirror,
@@ -2249,6 +2238,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             get_daemons_func=self.cache.get_daemons_by_service).place()
 
         r = False
+
+        if daemon_type == 'osd':
+            return False if create_func(spec) else True # type: ignore
 
         # sanity check
         if daemon_type in ['mon', 'mgr'] and len(hosts) < 1:
