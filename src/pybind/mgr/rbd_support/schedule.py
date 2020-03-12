@@ -497,7 +497,7 @@ class Schedules:
         result = {}
         for level_spec_id, schedule in self.schedules.items():
             ls = self.level_specs[level_spec_id]
-            if ls == parent or ls.is_child_of(parent):
+            if ls == parent or ls == level_spec or ls.is_child_of(level_spec):
                 result[level_spec_id] = {
                     'name' : schedule.name,
                     'schedule' : schedule.to_list(),
