@@ -85,7 +85,7 @@ TDIR=`mktemp -d -t test_rados_tool.XXXXXXXXXX` || die "mktemp failed"
 # ensure rados doesn't segfault without --pool
 run_expect_nosignal "$RADOS_TOOL" --snap "asdf" ls
 run_expect_nosignal "$RADOS_TOOL" --snapid "0" ls
-run_expect_nosignal "$RADOS_TOOL" --object_locator "asdf" ls
+run_expect_nosignal "$RADOS_TOOL" --object-locator "asdf" ls
 run_expect_nosignal "$RADOS_TOOL" --namespace "asdf" ls
 
 run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
