@@ -31,7 +31,7 @@ You can invoke cephadm in two ways:
 
        injected_argv = ['ls']
 
-   For reading stdin from the '--config-and-json -' argument,
+   For reading stdin from the '--config-json -' argument,
 
        injected_stdin = '...'
 """
@@ -1127,28 +1127,26 @@ def get_parm(option):
 
 def get_config_and_keyring():
     # type: () -> Tuple[str, str]
-    if args.config_and_keyring:
-        if args.config_and_keyring == '-':
-            try:
-                j = injected_stdin # type: ignore
-            except NameError:
-                j = sys.stdin.read()
-        else:
-            with open(args.config_and_keyring, 'r') as f:
-                j = f.read()
-        d = json.loads(j)
+    if 'config_json' in args and args.config_json:
+        d = get_parm(args.config_json)
         config = d.get('config')
         keyring = d.get('keyring')
-    else:
-        if args.key:
-            keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
-        elif args.keyring:
-            with open(args.keyring, 'r') as f:
-                keyring = f.read()
-        else:
-            raise Error('no keyring provided')
+
+    if 'config' in args and args.config:
         with open(args.config, 'r') as f:
             config = f.read()
+
+    if 'key' in args and args.key:
+        keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
+    elif 'keyring' in args and args.keyring:
+        with open(args.keyring, 'r') as f:
+            keyring = f.read()
+
+    if not config:
+        raise Error('no config provided')
+    elif not keyring:
+        raise Error('no keyring provided')
+
     return (config, keyring)
 
 def get_container_mounts(fsid, daemon_type, daemon_id,
@@ -2298,8 +2296,8 @@ def command_ceph_volume():
     tmp_config = None
     tmp_keyring = None
 
-    if args.config_and_keyring:
-        # note: this will always pull from args.config_and_keyring (we
+    if args.config_json:
+        # note: this will always pull from args.config_json (we
         # require it) and never args.config or args.keyring.
         (config, keyring) = get_config_and_keyring()
 
@@ -3565,7 +3563,7 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     parser_ceph_volume.add_argument(
-        '--config-and-keyring',
+        '--config-json',
         help='JSON file with config and (client.bootrap-osd) key')
     parser_ceph_volume.add_argument(
         'command', nargs='+',
@@ -3718,9 +3716,6 @@ def _get_parser():
     parser_deploy.add_argument(
         '--key',
         help='key for new daemon')
-    parser_deploy.add_argument(
-        '--config-and-keyring',
-        help='JSON file with config and keyrings for the daemon and crash agent')
     parser_deploy.add_argument(
         '--osd-fsid',
         help='OSD uuid, if creating an OSD container')
