@@ -1657,6 +1657,11 @@ public:
           drain_all();
           return retcode;
         }
+        // clean up full sync index
+        yield {
+          auto oid = full_sync_index_shard_oid(shard_id);
+          call(new RGWRadosRemoveCR(sync_env->store, {pool, oid}));
+        }
       }
 
       /* 
